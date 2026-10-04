@@ -240,7 +240,7 @@ test('a zero-length ICNS entry returns instead of hanging', async () => {
   });
 });
 
-test('the committed bundle exists to be checked', () => {
+test('the built bundle exists to be checked (run the root `npm run build` first: D529)', () => {
   assert.ok(
     jsFilesUnder(ASSETS).length > 0,
     `no JS chunks under ${ASSETS} — run \`npm run build\``,

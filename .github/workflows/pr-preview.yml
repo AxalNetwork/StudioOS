@@ -53,8 +53,8 @@ jobs:
         run: npm ci --prefix frontend
 
       # The same root build the production deploy runs (Vite + hashed-asset
-      # retention + OG prerender), so the preview is the PR's own bytes, not
-      # the committed docs/.
+      # retention + OG prerender), so the preview is the PR's own bytes.
+      # docs/ is not committed (D529); this is the only copy there is.
       - name: Build the SPA
         run: npm run build
 

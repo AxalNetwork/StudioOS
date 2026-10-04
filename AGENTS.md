@@ -134,9 +134,9 @@ documents it indexes.
     an allowed character set.
 - **Tests.** Run `npm run test:drift > drift.log 2>&1; echo EXIT=$?` and take
   the exit code from that echo, never through a pipe. Run the root
-  `npm run build` whenever `frontend/src` changes, because `docs/` is
-  committed. Mutation-check every new assertion both ways. No skipped or
-  disabled tests.
+  `npm run build` before the suite, because it reads the built SPA and
+  `docs/` is not committed (D529); never commit `docs/`. Mutation-check
+  every new assertion both ways. No skipped or disabled tests.
 - **Decisions.** Each PR records its decision as its own file,
   `documentation/architecture/decisions/D<n>.md`, headed `## D<n> — <title>`
   with the number from the issue, then runs

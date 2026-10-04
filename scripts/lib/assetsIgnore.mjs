@@ -46,7 +46,7 @@
 /** The file wrangler reads from the root of the assets directory. */
 export const ASSETS_IGNORE_FILENAME = '.assetsignore';
 
-/** The retention ledger `build-frontend.mjs` keeps in `docs/` (gitignored). */
+/** The retention ledger `build-frontend.mjs` keeps in `docs/` (the deploy caches it, D529). */
 export const RETENTION_LEDGER_FILENAME = '.asset-retention.json';
 
 /** The source-hash stamp `build-frontend.mjs` writes last (D103). */
@@ -67,7 +67,7 @@ export const ASSETS_IGNORE_ENTRIES = Object.freeze([
   }),
   Object.freeze({
     file: BUILD_STAMP_FILENAME,
-    reason: 'The frontend/src hash check-docs-fresh reads: build bookkeeping, never a page.',
+    reason: 'The frontend/src hash this build consumed: build bookkeeping, never a page.',
   }),
   Object.freeze({
     file: '_worker.js',

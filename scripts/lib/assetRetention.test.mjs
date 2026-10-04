@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planAssetRetention, seedFilesFor, SEED_COMMITTED_TREE_FLAG } from './assetRetention.mjs';
+import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG } from './assetRetention.mjs';
 
 test('first run seeds pre-existing assets so the live build is not dropped', () => {
   const prevFiles = ['index-OLD.js', 'vendor-OLD.js', 'style-OLD.css'];
@@ -191,7 +191,7 @@ test('D252: no seed plus a stale ledger behaves as before, keeping only the wind
   assert.deepEqual(new Set(plan.restore), new Set(['index-L3.js', 'index-L2.js']));
 });
 
-test('D252: the deploy flag seeds the committed tree, and its absence does not', () => {
+test('D252/D529: the deploy flag seeds the restored tree, and its absence does not', () => {
   const GEN = ['index-GEN.js'];
   const TREE = ['index-GEN.js', 'index-LAST-DEPLOY.js'];
   const savedCI = process.env.CI;
@@ -199,16 +199,16 @@ test('D252: the deploy flag seeds the committed tree, and its absence does not',
     // Without the flag, even under CI, the seed is the previous generation.
     process.env.CI = 'true';
     assert.deepEqual(seedFilesFor({ argv: [], prevGeneration: GEN }), GEN);
-    // With the flag, and no CI, the seed falls back to the whole committed tree.
+    // With the flag, and no CI, the seed falls back to the whole restored tree.
     delete process.env.CI;
-    assert.equal(seedFilesFor({ argv: [SEED_COMMITTED_TREE_FLAG], prevGeneration: GEN }), null);
+    assert.equal(seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: GEN }), null);
   } finally {
     if (savedCI === undefined) delete process.env.CI; else process.env.CI = savedCI;
   }
 
   const flagged = planAssetRetention({
     prevFiles: TREE,
-    seedFiles: seedFilesFor({ argv: [SEED_COMMITTED_TREE_FLAG], prevGeneration: GEN }),
+    seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: GEN }),
     newFiles: ['index-NEW.js'],
     now: 't1',
   });
@@ -226,8 +226,104 @@ test('D252: the deploy flag seeds the committed tree, and its absence does not',
 test('D252: only the production deploy workflow passes the flag', async () => {
   const { readFileSync } = await import('node:fs');
   const read = (f) => readFileSync(new URL(`../../.github/workflows/${f}`, import.meta.url), 'utf8');
-  assert.match(read('cloudflare-worker-deploy.yml'), /^\s+run: npm run build -- --seed-committed-tree$/m);
+  assert.match(read('cloudflare-worker-deploy.yml'), /^\s+run: npm run build -- --seed-restored-tree$/m);
   for (const f of ['ci.yml', 'pr-preview.yml', 'branch-provision.yml']) {
-    assert.doesNotMatch(read(f), /seed-committed-tree/, `${f} must not seed the committed tree`);
+    assert.doesNotMatch(read(f), /seed-(restored|committed)-tree/, `${f} must not seed a restored tree`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// D529 — docs/ is not committed. The deploy restores the last deploy's
+// docs/assets and ledger from its cache, then builds; these pin what that
+// restore buys, and what an empty store does.
+// ---------------------------------------------------------------------------
+
+const build = (tag, n = 3) => Array.from({ length: n }, (_, i) => `${tag}-${i}.js`);
+
+test('D529: with a saved previous build restored, the kept set is the last three builds', () => {
+  const [B0, B1, B2, B3] = ['B0', 'B1', 'B2', 'B3'].map((t) => build(t));
+  // What the last deploy saved: its ledger (newest first) and the files on disk.
+  const ledgerBuilds = [
+    { ts: 't2', files: B2 },
+    { ts: 't1', files: B1 },
+    { ts: 't0', files: B0 },
+  ];
+  const prevFiles = [...B2, ...B1, ...B0];
+  assert.equal(retentionStart({ prevFiles, ledgerBuilds }).restarted, false);
+
+  const plan = planAssetRetention({
+    prevFiles,
+    seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: [] }),
+    newFiles: B3,
+    ledgerBuilds,
+    retainBuilds: 3,
+    now: 't3',
+  });
+  assert.deepEqual(new Set(plan.keep), new Set([...B3, ...B2, ...B1]), 'the window is this build and the two before it');
+  assert.deepEqual(new Set(plan.restore), new Set([...B2, ...B1]), 'the two previous builds come back from the restored store');
+  assert.deepEqual(plan.missing, []);
+  assert.deepEqual(plan.nextLedger.builds.map((b) => b.ts), ['t3', 't2', 't1'], 'the saved ledger carries the window forward');
+  assert.ok(!plan.keep.some((f) => B0.includes(f)), 'the fourth build back ages out');
+});
+
+test('D529: a restored tree with no ledger is kept whole, as one previous build', () => {
+  const [B1, B2] = ['B1', 'B2'].map((t) => build(t));
+  const prevFiles = [...B1];
+  const start = retentionStart({ prevFiles, ledgerBuilds: [] });
+  assert.equal(start.restarted, false);
+  assert.match(start.line, /no ledger/);
+  const plan = planAssetRetention({
+    prevFiles,
+    seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: [] }),
+    newFiles: B2,
+    now: 't2',
+  });
+  assert.deepEqual(new Set(plan.keep), new Set([...B2, ...B1]));
+});
+
+test('D529: an empty store starts over, and says so', () => {
+  const B0 = build('B0');
+  const start = retentionStart({ prevFiles: [], ledgerBuilds: [] });
+  assert.equal(start.restarted, true);
+  assert.match(start.line, /retention restarted/);
+
+  const plan = planAssetRetention({
+    prevFiles: [],
+    seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: [] }),
+    newFiles: B0,
+    now: 't0',
+  });
+  assert.deepEqual(new Set(plan.keep), new Set(B0), 'the window holds this build only');
+  assert.deepEqual(plan.restore, []);
+  assert.deepEqual(plan.nextLedger.builds.map((b) => b.ts), ['t0']);
+});
+
+test('D529: a ledger with no files on disk is still a restart', () => {
+  // A cache that restored the ledger but not the assets has nothing to serve.
+  const start = retentionStart({ prevFiles: [], ledgerBuilds: [{ ts: 't0', files: build('B0') }] });
+  assert.equal(start.restarted, true);
+  assert.match(start.line, /retention restarted/);
+});
+
+test('D529: the deploy restores before it builds, and saves only after it ships', async () => {
+  const { readFileSync } = await import('node:fs');
+  const yml = readFileSync(new URL('../../.github/workflows/cloudflare-worker-deploy.yml', import.meta.url), 'utf8');
+  const deploy = yml.slice(yml.indexOf('\n  deploy:'), yml.indexOf('\n  schema-drift:'));
+  const at = (needle) => {
+    const i = deploy.indexOf(needle);
+    assert.ok(i >= 0, `the deploy job no longer has: ${needle}`);
+    return i;
+  };
+  const restore = at('actions/cache/restore@');
+  const buildStep = at('run: npm run build -- --seed-restored-tree');
+  const ship = at('wrangler deploy --config ../wrangler.toml --env production');
+  const save = at('actions/cache/save@');
+  assert.ok(restore < buildStep, 'restore the previous build before building');
+  assert.ok(buildStep < ship && ship < save, 'save only after the deploy step succeeded');
+  // Both name the same two paths, and the save key is unique per run.
+  for (const p of ['docs/assets', 'docs/.asset-retention.json']) {
+    assert.equal(deploy.split(p).length - 1 >= 2, true, `restore and save must both name ${p}`);
+  }
+  assert.match(deploy, /key: spa-assets-\$\{\{ github\.run_id \}\}/);
+  assert.match(deploy, /restore-keys: \|\s*\n\s*spa-assets-/);
 });

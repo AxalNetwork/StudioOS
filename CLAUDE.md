@@ -60,10 +60,14 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    a different asset build — the entry module 404'd and the boot watchdog
    spun on `?__reboot=` — and it is guarded by
    `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
-   `frontend/test/apex_route_coverage.test.mjs`. `docs/` is committed by hand
-   for review and for `scripts/check-docs-fresh.mjs`; the deploy workflow
-   rebuilds it from source at deploy time, so the committed bytes are what
-   reviewers read, not necessarily what ships
+   `frontend/test/apex_route_coverage.test.mjs`. **`docs/` is not committed**
+   (D529): it is gitignored, and every job that needs it builds it from
+   `frontend/src` — CI, the PR preview, branch provisioning and the deploy —
+   so reviewers read the source and the deploy ships that source's build. The
+   old-bundle window (the last three builds' hashed assets, so a tab opened
+   before a deploy keeps working) is carried by the deploy itself: it restores
+   the previous deploy's `docs/assets` and retention ledger from the Actions
+   cache before building and saves them after shipping
    (`documentation/operations/DEPLOY.md` §2.1). GitHub Pages and Cloudflare
    Pages are both decommissioned; the Worker is the only host.
 
@@ -78,7 +82,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
-| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
+| `docs/`               | Built frontend bundle, **not committed** (D529) — the Worker's `[assets]` directory, built by `npm run build`; its `_headers` sets the static security headers |
 
 **`documentation/` and `docs/` are different things.** `documentation/` is
 prose a person wrote; `docs/` is build output a person must never edit. The

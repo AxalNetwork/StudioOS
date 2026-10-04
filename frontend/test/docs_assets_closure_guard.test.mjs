@@ -83,14 +83,15 @@ test('the guard runs in test:guards and is documented', () => {
   assert.match(row, /self-check/, 'the README row dropped the self-check, which is why the guard is trustworthy');
 });
 
-test('it runs before the two checks that cost a bundle', () => {
+test('it runs before the check that costs a bundle', () => {
   const chain = JSON.parse(read('package.json')).scripts['test:guards'].split(' && ');
   const at = (name) => chain.findIndex((c) => c.includes(name));
   const me = at('check-docs-assets-closure');
   assert.ok(me > 0, 'the guard is not in the chain');
-  // `check-frontend-builds` runs the real bundler and `check-docs-fresh` hashes
-  // the whole source tree. A one-line finding should fail before either.
-  assert.ok(me < at('check-docs-fresh'), 'the guard must run before check-docs-fresh');
+  // `check-frontend-builds` runs the real bundler. A one-line finding should
+  // fail before it. (`check-docs-fresh`, the other costly check, was retired
+  // with the committed docs/ by D529.)
+  assert.equal(at('check-docs-fresh'), -1, 'check-docs-fresh is retired (D529)');
   assert.ok(me < at('check-frontend-builds'), 'the guard must run before check-frontend-builds');
 });
 

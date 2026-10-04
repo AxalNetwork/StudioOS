@@ -264,9 +264,9 @@ test('the static headers match the Worker middleware, except the deliberate Refe
   assert.equal(worker.get('referrer-policy'), 'no-referrer', 'the Worker keeps no-referrer for the API surface (NICE-SEC-01)');
 });
 
-test('the committed docs/ build ships _headers and no Pages entry script', () => {
+test('the built docs/ ships _headers and no Pages entry script (docs/ is built, not committed: D529)', () => {
   assert.ok(existsSync(resolve(root, 'docs/_headers')), 'docs/_headers is missing — rebuild docs/ with `npm run build`');
   for (const gone of ['docs/_worker.js', 'docs/404.html']) {
-    assert.ok(!existsSync(resolve(root, gone)), `${gone} is back in the committed build`);
+    assert.ok(!existsSync(resolve(root, gone)), `${gone} is back in the build`);
   }
 });

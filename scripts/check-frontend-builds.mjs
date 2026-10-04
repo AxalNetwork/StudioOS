@@ -28,9 +28,10 @@
  * instead of after it.
  *
  * IT NEVER WRITES TO `docs/`. `frontend/vite.config.js` sets
- * `outDir: ../docs` with `emptyOutDir: true`, and `docs/` is a COMMITTED build
- * artifact — a check that rewrote 602 tracked files as a side effect of
- * checking would be worse than the bug it catches. So the output goes to a
+ * `outDir: ../docs` with `emptyOutDir: true`, and `docs/` holds the build the
+ * rest of the suite reads (it is not committed since D529, but the full suite
+ * builds it first) — a check that wiped it as a side effect of checking would
+ * be worse than the bug it catches. So the output goes to a
  * fresh temp directory outside the repository, the path is asserted to be
  * outside it before the build runs, and the directory is removed afterwards.
  */
@@ -74,7 +75,7 @@ if (result.status !== 0) {
   console.error('  the only one that can see a parse error. The bundler output:\n');
   console.error([result.stdout, result.stderr].filter(Boolean).join('\n').trimEnd());
   console.error('\n  Fix the source. Do NOT run `npm run build` to reproduce it — that');
-  console.error('  rewrites the committed docs/ bundle. This check builds to a temp');
+  console.error('  rewrites your local docs/ bundle. This check builds to a temp');
   console.error('  directory; run it directly instead:');
   console.error('    node scripts/check-frontend-builds.mjs');
   process.exit(1);
