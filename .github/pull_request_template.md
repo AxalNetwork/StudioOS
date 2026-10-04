@@ -1,48 +1,46 @@
 <!--
-Thanks for sending a PR. Please fill in the sections below — the CI gates
-(drift check, gitleaks, CodeQL) will block merge regardless, but the human
-checklist catches the things linters can't.
+Fill in every section; write "None" where one does not apply. The task
+protocol is in AGENTS.md. This repository is public: no secrets, tokens,
+personal data or security-sensitive operational detail.
 -->
 
-## What & why
+## Objective
 
-<!-- One paragraph: what changes, why now, what user-visible behaviour shifts. -->
+<!-- What changes and why, in a sentence or two. -->
 
-## Scope
+Closes #<issue>
 
-- [ ] Production worker (`cloudflare-worker/`) — ⚠️ ships to axal.vc
-- [ ] Frontend SPA (`frontend/`) — ⚠️ ships with the Worker to axal.vc and app.axal.vc
-- [ ] Replit-dev backend (`backend/`) — ✅ never deployed, dev only
-- [ ] CI / infra (`.github/`, `wrangler.toml`, scripts)
-- [ ] Docs only (`README.md`, `CLAUDE.md`, `replit.md`)
+## Implementation
 
-## API drift
+<!-- How it works, and the choices a reviewer should check. -->
 
-- [ ] No new `/api/*` calls in `frontend/src/lib/api.js` **OR** all new calls
-      are mounted on a worker route in `cloudflare-worker/src/index.ts`
-- [ ] If a path is intentionally pending, added to `KNOWN_DRIFT_ALLOWLIST` in
-      `scripts/check-api-drift.mjs` with a task id
+## Files changed
 
-## Security checklist
+<!-- The main files, one line each, with what changed in them. -->
 
-- [ ] No secrets / tokens / private keys added to the repo (gitleaks will
-      catch most, but eyeball it too)
-- [ ] No new `dangerouslySetInnerHTML` without a sanitiser
-- [ ] Auth-changing routes still gate on `requireAuth` / `_check_project_*`
-      access helpers
-- [ ] Rate-limit bucket assigned for any new public endpoint
+## Testing
 
-## Production readiness (worker changes only)
+<!-- What ran, and its exit code: `npm run test:drift > drift.log 2>&1; echo EXIT=$?`.
+New assertions mutation-checked both ways. `docs/` rebuilt if `frontend/src` changed. -->
 
-- [ ] D1 schema change? Migration file added under `cloudflare-worker/sql/`
-- [ ] New `wrangler` secret? Documented in `../documentation/architecture/PRODUCTION.md` § 4
-- [ ] New binding (KV/R2/Queue/Vectorize)? Re-declared under
-      `[env.production.*]` in `wrangler.toml` (Wrangler v2 doesn't inherit)
+## Risks
 
-## Manual verification
+<!-- What could break, for whom, and how to roll it back. Say whether it ships
+to production: the Worker, the frontend build, a D1 migration, wrangler.toml
+(a new binding is re-declared under [env.production.*]; a new secret is
+documented in documentation/architecture/PRODUCTION.md § 4). Security: no
+secret in the diff, no new dangerouslySetInnerHTML without a sanitiser, auth
+gates kept, a rate-limit bucket for any new public endpoint. -->
 
-<!-- Paste curl output, screenshot, or a list of the steps you ran locally. -->
+## Dependencies
 
-## Rollback plan
+<!-- Issues and PRs this depends on or blocks, as #numbers. -->
 
-<!-- One line. e.g. "wrangler rollback <prev-deploy-id>" or "git revert <sha>". -->
+## Agent
+
+<!-- Slot and agent, for example `S05 · Codex`. Name the model only if your
+environment allows it. -->
+
+## Review requested
+
+<!-- Who should review. A significant PR gets an agent from another vendor. -->

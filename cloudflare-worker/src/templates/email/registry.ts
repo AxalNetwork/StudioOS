@@ -351,14 +351,12 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\n{{referrer_name}} invited you to join Axal. Sign up here — they'll be credited automatically: {{signup_url}}`,
     html: `<p>Hi {{name}},</p><p><strong>{{referrer_name}}</strong> invited you to join Axal.</p><p><a href="{{{signup_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Accept &amp; sign up</a></p>`,
   }),
-  // vars: name, amount, currency, payout_id, paid_at
-  referral_payout_paid: t({
-    key: 'referral_payout_paid', category: 'billing', severity: 'info',
-    replyTo: 'billing@axal.vc', alwaysSend: true,
-    subject: 'Referral payout sent — {{amount}} {{currency}}',
-    text: `Hi {{name}},\n\nA referral payout of {{amount}} {{currency}} was sent to your connected Stripe account on {{paid_at}}. Reference: {{payout_id}}`,
-    html: `<p>Hi {{name}},</p><p>A referral payout of <strong>{{amount}} {{currency}}</strong> was sent to your connected Stripe account on {{paid_at}}.</p><p style="font-family:ui-monospace,monospace;font-size:12px;color:#6b7280;">Reference: {{payout_id}}</p>`,
-  }),
+  // D333: `referral_payout_paid` removed. It dated from the referral-payouts
+  // backend, which `referralPayouts.ts` has already been deleted
+  // (`test/referral_submissions.test.ts` pins that it "must not return");
+  // nothing has called `send(..., 'referral_payout_paid', ...)` since, and
+  // confirming that was this task's job, not inventing a new call site to
+  // justify keeping it.
   // vars: name, advisor_name, start_time, join_url
   advisor_session_booked: t({
     key: 'advisor_session_booked', category: 'advisor', severity: 'info',
@@ -412,12 +410,12 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     key: 'spinout_admitted', category: 'spinout', severity: 'info',
     replyTo: 'support@axal.vc',
     subject: "You're in — welcome to the Spin-Out Lab ({{cohort_label}})",
-    text: `Hi {{name}},\n\nCongratulations — you've been admitted to the Spin-Out Lab ({{cohort_label}}).\n\nOver the next 28 days you'll go from idea to incorporated: customer discovery, MVP scope, venture-readiness scoring, and Delaware C-Corp formation — with advisors and warm investor introductions along the way.\n\nStart Week 1 here:\n{{lab_url}}\n\nSee you inside,\nThe Axal team`,
+    text: `Hi {{name}},\n\nCongratulations — you've been admitted to the Spin-Out Lab ({{cohort_label}}).\n\nOver the next 28 days you'll work the Lab's tools: customer discovery, MVP scope, venture-readiness scoring, and (if you need it) Delaware C-Corp formation — with matched advisors and warm investor introductions alongside you.\n\nStart Week 1 here:\n{{lab_url}}\n\nSee you inside,\nThe Axal team`,
     html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">You're in 🎉</h1>
 <p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, congratulations — you've been admitted to the <strong style="color:#111827;">Spin-Out Lab</strong> ({{cohort_label}}).</p>
 <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
   <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 6px;">The next 28 days</div>
-  <div style="font-size:14px;color:#111827;line-height:1.6;">Idea → customer discovery → MVP scope → venture-readiness score → Delaware C-Corp → warm investor introductions.</div>
+  <div style="font-size:14px;color:#111827;line-height:1.6;">Customer discovery, MVP scope, venture-readiness scoring, matched advisors and warm investor introductions — Delaware C-Corp formation if you need it, quiet if you already have an entity.</div>
 </div>
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px;">
   <a href="{{{lab_url}}}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Start Week 1</a>

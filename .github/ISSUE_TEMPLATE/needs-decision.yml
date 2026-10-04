@@ -1,0 +1,35 @@
+name: Needs decision
+description: A call only the owner can make.
+title: "Decision: "
+labels: ["needs-decision"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a call only the owner can make. The owner, or Session 1, answers on this issue. If the call blocks your own task, also set `state:blocked` and `needs-decision` on that task (`AGENTS.md`).
+
+        This repository is public. Leave out secrets, tokens, personal data and security-sensitive operational detail.
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision needed
+      description: The question, put so that one of the options below answers it.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: Each option, with what it costs and what it rules out.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested option
+      description: The option you would take, and why. Optional.
+  - type: input
+    id: waiting
+    attributes:
+      label: What waits on it
+      description: The issues or PRs that cannot finish until it is decided.

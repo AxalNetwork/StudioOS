@@ -74,3 +74,11 @@ count in a file. What it costs is said on the button: the label reads
 over a truncated list with no hint of the truncation is how a founder pastes
 twenty-five of two hundred rows into an investor update. Its escaping is
 `cloudflare-worker/src/services/csv.ts`'s, character for character.
+
+**`notificationTypes.js` — the notification `type` → label map.** `SettingsPage.jsx`'s
+notification matrix and the bell/`/inbox` row renderer (`NotificationList.jsx`)
+both need to turn a backend event key like `score_generated` into something a
+person reads; before this they only agreed by accident, because only the
+matrix had a label and the row rendered the raw key. `labelForType()` falls
+back to a titleised version of an unknown key rather than rendering blank, so
+a new `notify()` call site's events are legible immediately, label or not.

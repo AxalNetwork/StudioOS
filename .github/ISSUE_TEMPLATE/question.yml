@@ -1,0 +1,28 @@
+name: Question
+description: A question that stands on its own. A question about your own task goes on that task's issue.
+title: "Question: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A question about your own task goes in a STATUS comment on that task's issue (`AGENTS.md`). Use this form for a question that stands on its own.
+
+        This repository is public. Leave out secrets, tokens, personal data and security-sensitive operational detail.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: One question, asked so that it can be answered.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What you checked already, with links to files, issues or PRs.
+  - type: input
+    id: asker
+    attributes:
+      label: Slot and agent
+      description: Who is asking, for example S05 · Codex. Leave it empty if you are not an agent.

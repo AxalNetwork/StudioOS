@@ -52,10 +52,14 @@ test('exactly one Symbol("unavailable") across the Studio files, and every file 
   const decls = STUDIO_FILES.flatMap((f) => (read(f).match(/=\s*Symbol\(\s*['"]unavailable['"]\s*\)/g) || []).map(() => f));
   assert.deepEqual(decls, ['frontend/src/pages/admin/adminStudioOverview.js'],
     'a Studio file declares its own sentinel again, so its === checks can never match');
-  for (const f of ['AdminStudioHome.jsx', 'StudioPosture.jsx']) {
-    assert.match(read(`frontend/src/pages/admin/${f}`), /import\s*\{[^}]*\bUNAVAILABLE\b[^}]*\}\s*from\s*'\.\/adminStudioOverview'/,
-      `${f} does not take the shared sentinel`);
-  }
+  // RE-AIMED BY D512: the home page makes no read of its own any more, so it
+  // holds no sentinel at all — the property this protected (no second
+  // Symbol) is held by the count above. StudioPosture still reads, and still
+  // takes the shared one.
+  assert.match(read('frontend/src/pages/admin/StudioPosture.jsx'), /import\s*\{[^}]*\bUNAVAILABLE\b[^}]*\}\s*from\s*'\.\/adminStudioOverview'/,
+    'StudioPosture does not take the shared sentinel');
+  assert.doesNotMatch(read('frontend/src/pages/admin/AdminStudioHome.jsx'), /UNAVAILABLE|\bapi\./,
+    'the home page reads again, so it needs the shared sentinel back');
 });
 
 test('the overview renders Unreadable, not the not-recorded sentences, for every failed read', () => {

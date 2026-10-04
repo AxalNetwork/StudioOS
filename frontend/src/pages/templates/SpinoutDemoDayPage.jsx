@@ -264,7 +264,7 @@ export default function SpinoutDemoDayPage() {
           <SectionHeader
             eyebrow="What Is the Spin-Out Lab"
             headline="A 28-day venture sprint for founders who are ready to build."
-            sub="Not an accelerator. Not a course. A structured, advisor-guided program that takes you from idea to incorporated company in four weeks."
+            sub="Not an accelerator. Not a course. A structured, advisor-guided program through the Lab's working tools in four weeks — incorporation is one of them, not the whole arc."
           />
           <div className="rounded-3xl border-2 border-[#6D5BFF]/20 bg-white p-10 text-center">
             <p className="text-xl text-gray-700 leading-relaxed mb-6" style={DISPLAY_FONT}>

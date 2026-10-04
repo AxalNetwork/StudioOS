@@ -25,13 +25,47 @@
 // that would refuse. The session is HQ's. What the branch can do is raise a
 // concern, which is an escalation like any other (S9), so that is the one
 // action offered.
+//
+// THE CONCERN ARRIVES FILLED IN (D525). Since D445 the Approvals page reads
+// `?kind=` and `?subject=` and every Settings door passes them; this link
+// passed nothing, so the person had to retype what the bar had just told
+// them. The link is built with `approvalsHref`, the one helper the other doors
+// use, so the encoding and the 300-character cut are the page's own. The kind
+// is `other`: a concern about an HQ session is none of moderation, content or
+// seats. The subject names the session, the HQ actor and the reason — each
+// only when the redeem response carried it, the same rule the fields above
+// follow, so a missing actor is absent rather than "someone at HQ".
+//
+// AND IT ARRIVES FILLED IN FROM THE APPROVALS PAGE TOO. This bar is global
+// chrome, so it is still drawn on /branch/approvals, and from there the link
+// changes only the query string: React Router keeps the same BranchApprovals
+// instance, which copies `?kind=` and `?subject=` into state once, in its
+// `useState` initialisers, so a client-side navigation left the form as it
+// was (Codex's finding on #1044). From that one page the link therefore
+// reloads the document, which is the one way this file can force a fresh
+// form state without editing BranchApprovals.jsx (slot S06's file). The
+// proper fix — the page re-reading its query when it changes — is relayed on
+// #1031; once it lands, `reloadDocument` here is the line to drop.
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Eye } from 'lucide-react';
 import { activeSupportSession, timeLeftLabel } from '../lib/supportSession';
+import { approvalsHref } from '../lib/escalationPrefill';
+
+/** "HQ support session[ by <actor>][: <reason>]" — only what the session carries. */
+export function concernSubject(session) {
+  const parts = ['HQ support session'];
+  if (session.actorName) parts.push(`by ${session.actorName}`);
+  const head = parts.join(' ');
+  return session.reason ? `${head}: ${session.reason}` : head;
+}
+
+/** The one page where a client-side navigation to the link would change nothing. */
+export const APPROVALS_PATH = '/branch/approvals';
 
 export default function HqSupportSessionBar() {
   const [session, setSession] = useState(() => activeSupportSession());
+  const onApprovals = useLocation().pathname === APPROVALS_PATH;
 
   useEffect(() => {
     // One second, because the thing on screen is a countdown. `active()` clears
@@ -65,7 +99,8 @@ export default function HqSupportSessionBar() {
           · This session is HQ&rsquo;s and cannot be ended from here.
         </span>
         <Link
-          to="/branch/approvals"
+          to={approvalsHref({ kind: 'other', subject: concernSubject(session) })}
+          reloadDocument={onApprovals}
           className="font-medium underline underline-offset-2"
         >
           Raise a concern

@@ -392,20 +392,20 @@ test('every /admin route is reachable from navigation', () => {
     + orphans.join('\n  '));
 });
 
-test('the HQ-held walk does not reach spinout moderation; that door is Session 5', () => {
-  // The branch Approvals board links to the console. HQ-held Approvals
-  // (HeldApprovals) does not. A walk that starts from every sidebar treats
-  // the branch door as enough. This one does not: the HQ-held shells are
-  // admin and super_admin, and the one route they cannot reach that the
-  // branch shell can is the moderation console. HeldApprovals is Session 5's.
+test('the HQ-held walk reaches spinout moderation too (D506), and no route is reachable only from the branch', () => {
+  // The branch Approvals board links to the console (D442). HQ-held Approvals
+  // (HeldApprovals) did not until D506 made lane 4 its door. A walk that
+  // starts from every sidebar treats the branch door as enough; this one does
+  // not: the HQ-held shells are admin and super_admin, and before D506 the one
+  // route they could not reach that the branch shell could was the console.
   assert.equal(REACHED_BRANCH.has('/admin/spinout-moderation'), true);
-  assert.equal(REACHED_HQ.has('/admin/spinout-moderation'), false);
+  assert.equal(REACHED_HQ.has('/admin/spinout-moderation'), true);
   const onlyOnTheBranch = ADMIN
     .filter((r) => !r.redirect)
     .filter((r) => !EXEMPT_PATHS.has(r.path))
     .filter((r) => REACHED_BRANCH.has(r.path) && !REACHED_HQ.has(r.path))
     .map((r) => r.path);
-  assert.deepEqual(onlyOnTheBranch, ['/admin/spinout-moderation']);
+  assert.deepEqual(onlyOnTheBranch, []);
 });
 
 test('every in-page /admin link points at a registered route', () => {

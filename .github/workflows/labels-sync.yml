@@ -1,0 +1,76 @@
+name: Labels sync
+
+# Makes the repository's labels match .github/labels.yml (DECISIONS.md D503).
+# The agents' task protocol in AGENTS.md runs on these labels: `slot:SNN` is a
+# slot's work queue and `state:*` says where a task stands, so a label that is
+# missing is a queue nobody can see.
+#
+# WHAT IT DOES. For each entry it runs `gh label create --force`, which creates
+# a missing label and sets the colour and description of one that exists.
+#
+# WHAT IT NEVER DOES. Delete a label. An entry taken out of labels.yml leaves
+# its label on GitHub as it was, on every issue that carries it; removing one
+# is a decision for a person, made by hand.
+#
+# NO THIRD-PARTY ACTION. This job holds `issues: write`, so it runs only
+# actions/checkout and the tools ubuntu-latest ships: yq reads the file, and gh
+# writes the labels. Every value reaches the commands through `env:` and shell
+# variables, never through `${{ }}` inside `run:`, so nothing in the file is
+# ever parsed as shell.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: labels-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: create or update every declared label
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Create or update each label in .github/labels.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LABELS_FILE: .github/labels.yml
+        run: |
+          set -euo pipefail
+          count="$(yq -r 'length' "$LABELS_FILE")"
+          if ! [[ "$count" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error file=$LABELS_FILE::expected a non-empty list of labels, read a length of '$count'"
+            exit 1
+          fi
+          # Read and check every entry before the first write, so a bad entry
+          # changes nothing instead of leaving half the labels synced.
+          names=(); colors=(); descriptions=()
+          for ((i = 0; i < count; i++)); do
+            name="$(yq -r ".[$i].name" "$LABELS_FILE")"
+            color="$(yq -r ".[$i].color" "$LABELS_FILE")"
+            description="$(yq -r ".[$i].description" "$LABELS_FILE")"
+            if [[ -z "$name" || "$name" == "null" ]] \
+              || ! [[ "$color" =~ ^[0-9A-Fa-f]{6}$ ]] \
+              || [[ -z "$description" || "$description" == "null" ]]; then
+              echo "::error file=$LABELS_FILE::entry $((i + 1)) needs a name, a six-digit hex color and a description"
+              exit 1
+            fi
+            names+=("$name"); colors+=("$color"); descriptions+=("$description")
+          done
+          for ((i = 0; i < count; i++)); do
+            gh label create "${names[i]}" --color "${colors[i]}" --description "${descriptions[i]}" --force
+            echo "synced: ${names[i]}"
+          done
+          echo "$count labels in step with $LABELS_FILE"

@@ -275,7 +275,7 @@ async function token(userId: number, role: string): Promise<string> {
  * outcome a refusal may have.
  */
 async function draft(
-  db: any, who: { user: number }, surface: string, scopeKey?: string,
+  db: any, who: { user: number }, surface: string, scopeKey?: string, page?: unknown,
 ): Promise<{ status: number; prompt: string | null }> {
   let prompt: string | null = null;
   const AI = {
@@ -292,7 +292,11 @@ async function draft(
         Authorization: `Bearer ${await token(who.user, 'founder')}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(scopeKey === undefined ? { surface } : { surface, scope_key: scopeKey }),
+      body: JSON.stringify({
+        surface,
+        ...(scopeKey === undefined ? {} : { scope_key: scopeKey }),
+        ...(page === undefined ? {} : { page }),
+      }),
     }),
     { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db), AI } as any,
   );
@@ -302,7 +306,7 @@ async function draft(
 const statusOf = async (...a: Parameters<typeof draft>) => (await draft(...a)).status;
 
 const SURFACES = [
-  'build/this-week', 'build/roadmap', 'build/kpi',
+  'build/this-week', 'build/roadmap', 'build/kpi', 'build/retro',
   'raise/capital', 'raise/legal', 'raise/data-room', 'raise/liquidity',
   'grow/customers', 'grow/talent',
 ];
@@ -479,4 +483,164 @@ test('a gather never reads a record belonging to another founder', async () => {
         `${surface} handed the model a record from project ${foreign}`);
     }
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * D510 — the Friday retro, and every run recorded against its page
+ * ------------------------------------------------------------------ */
+
+/**
+ * A card with its clock set. `created`, `updated` and `due` are SQLite
+ * modifiers on 'now' (`'-12 days'`), so the week boundary is measured from
+ * the same clock the gather reads, with days of margin either side of it.
+ */
+function card(
+  db: any, pid: number, title: string, status: string,
+  when: { created: string; updated: string; due?: string },
+) {
+  db.prepare(
+    `INSERT INTO mvp_tasks (deal_id, title, status, created_at, updated_at, due_date)
+     VALUES (?, ?, ?, datetime('now', ?), datetime('now', ?), CASE WHEN ? IS NULL THEN NULL ELSE date('now', ?) END)`,
+  ).run(pid, title, status, when.created, when.updated, when.due ?? null, when.due ?? null);
+}
+
+test('D510: build/retro reads the week off the board, and only what the board records', async () => {
+  const db = freshDb();
+  // The fixture's own card was created and touched just now.
+  card(db, MY_PROJECT, 'Shipped card', 'done', { created: '-30 days', updated: '-2 days' });
+  card(db, MY_PROJECT, 'Quiet card', 'in_progress', { created: '-40 days', updated: '-20 days', due: '+10 days' });
+  card(db, MY_PROJECT, 'Late card', 'todo', { created: '-40 days', updated: '-12 days', due: '-3 days' });
+  card(db, MY_PROJECT, 'Done late card', 'done', { created: '-40 days', updated: '-15 days', due: '-5 days' });
+  // Another founder's late card: the past-due read is its own statement, and
+  // the fixture's cards carry no due date, so only this proves it is scoped.
+  card(db, THEIR_PROJECT, 'Their late card', 'todo', { created: '-40 days', updated: '-12 days', due: '-3 days' });
+
+  const { status, prompt } = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.equal(status, 201);
+  const p = String(prompt);
+  assert.match(p, /The board holds 5 cards: 2 done, 1 in progress, 2 todo\./, 'the board count is not this board');
+  assert.match(p, new RegExp(`Touched this week: Card for ${MY_PROJECT} — now todo; added this week;`));
+  assert.match(p, /Touched this week: Shipped card — now done; added \d{4}-\d{2}-\d{2}; last touched \d{4}-\d{2}-\d{2}; no due date recorded/);
+  assert.doesNotMatch(p, /Touched this week: (Quiet card|Late card|Done late card)/,
+    'a card untouched for over a week was read as this week');
+  assert.match(p, /Past due and still open: Late card — todo; was due \d{4}-\d{2}-\d{2}; last touched/);
+  assert.doesNotMatch(p, /Past due and still open: (Done late card|Quiet card|Shipped card)/,
+    'a finished card, or one not yet due, was called late');
+  assert.doesNotMatch(p, /Their late card/, 'another founder’s card reached the model');
+  // What the board does not record reaches the model as a fact, and the
+  // instruction forbids the counts the canvas's fixture makes from it.
+  assert.match(p, /NO MOVE HISTORY IS STORED/);
+  assert.match(p, /never say how many times a card moved, slipped or carried over, and never say when a card was finished/);
+  assert.match(p, /Never name an owner, give a cause or state a decision/);
+});
+
+test('D510: a capped list says how many it left out, and never reads as complete', async () => {
+  // Raised in review on PR 1033: the past-due read stops at 20 while the
+  // instruction said "name every open card that is past its due date", so a
+  // board with more would have reached the model as a complete list. Each
+  // read now counts its whole match, and the material says what was cut.
+  const db = freshDb();
+  for (let i = 0; i < 21; i++) {
+    card(db, MY_PROJECT, `Overdue ${i}`, 'todo', { created: '-40 days', updated: '-12 days', due: `-${i + 2} days` });
+  }
+  const one = String((await draft(db, MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.equal((one.match(/Past due and still open:/g) || []).length, 20);
+  assert.match(one, /1 more open card is past its due date and not listed here: only the 20 longest overdue are\./);
+  // The cut is the least overdue: the longest overdue are the ones listed.
+  assert.match(one, /Past due and still open: Overdue 20 — /);
+  assert.doesNotMatch(one, /Past due and still open: Overdue 0 — /);
+
+  card(db, MY_PROJECT, 'Overdue 21', 'todo', { created: '-40 days', updated: '-12 days', due: '-23 days' });
+  card(db, MY_PROJECT, 'Overdue 22', 'todo', { created: '-40 days', updated: '-12 days', due: '-24 days' });
+  for (let i = 0; i < 44; i++) {
+    card(db, MY_PROJECT, `Busy ${i}`, 'in_progress', { created: '-30 days', updated: '-1 days' });
+  }
+  const many = String((await draft(db, MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.match(many, /3 more open cards are past their due date and not listed here: only the 20 longest overdue are\./);
+  // The fixture's own card and 44 more were touched this week: 45, 40 listed.
+  assert.equal((many.match(/Touched this week:/g) || []).length, 40);
+  assert.match(many, /5 more cards were touched this week and are not listed here: only the 40 most recently touched are\./);
+  assert.match(many, /Where the material says more cards are not listed, say how many, and never present a list as complete when it is not\./);
+
+  // Within the caps nothing claims a cut.
+  const few = String((await draft(freshDb(), MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.doesNotMatch(few, /not listed here/);
+});
+
+test('D510: a card touched an hour before the week, written as ISO, is outside it', async () => {
+  // D124/D125: SQLite compares TEXT, and on one date an ISO string sorts above
+  // a space-separated one ('T' beats ' '), so a bare `updated_at >=` would
+  // count this card as this week's. Every writer of `mvp_tasks.updated_at`
+  // emits SQL format today; the wrap is what keeps the window right if one
+  // ever does not. (In the first hour after UTC midnight the two sides fall on
+  // different dates and a bare compare happens to agree, so this guards the
+  // other twenty-three.)
+  const db = freshDb();
+  db.prepare(`INSERT INTO mvp_tasks (deal_id, title, status, created_at, updated_at)
+              VALUES (?, 'Iso card', 'in_progress', datetime('now', '-30 days'),
+                      strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days', '-1 hours'))`).run(MY_PROJECT);
+  const { prompt } = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.doesNotMatch(String(prompt), /Touched this week: Iso card/, 'an ISO timestamp outside the week was read as inside it');
+});
+
+test('D510: a quiet week is said, and an empty board is nothing to draft', async () => {
+  const db = freshDb();
+  db.prepare(`UPDATE mvp_tasks SET created_at = datetime('now', '-30 days'), updated_at = datetime('now', '-20 days') WHERE deal_id = ?`)
+    .run(MY_PROJECT);
+  const quiet = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.equal(quiet.status, 201, 'a board with cards and a quiet week was refused');
+  assert.match(String(quiet.prompt), /No card was touched in the seven days to \d{4}-\d{2}-\d{2}\./);
+  assert.doesNotMatch(String(quiet.prompt), /Touched this week:/);
+
+  db.prepare('DELETE FROM mvp_tasks WHERE deal_id = ?').run(MY_PROJECT);
+  const empty = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.equal(empty.status, 409, 'an empty board was drafted over');
+  assert.equal(empty.prompt, null, 'an empty board reached the model');
+});
+
+// Migration 319's shape, which the router's own bootstrap mirrors. Created
+// here rather than left to that bootstrap, so the assertion below reads the
+// declared table and not whatever a safety net happened to build.
+const USAGE_DDL = "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT)";
+const draftRuns = (db: any) => db.prepare(
+  `SELECT user_id, surface FROM ai_usage_logs WHERE task = 'workspace_explain' ORDER BY id`,
+).all() as Array<{ user_id: number; surface: string | null }>;
+
+test('D510: every draft run records the page it was asked from', async () => {
+  for (const surface of SURFACES) {
+    const db = freshDb();
+    db.exec(USAGE_DDL);
+    const { status } = await draft(db, MINE, surface, String(MY_PROJECT), '/build');
+    assert.equal(status, 201, `${surface} did not draft`);
+    const runs = draftRuns(db);
+    assert.equal(runs.length, 1, `${surface} wrote ${runs.length} usage rows for one run`);
+    assert.equal(runs[0].user_id, MINE.user);
+    // The page, never the draft key: the rail groups "This page this month"
+    // on the path it stands on, and no reader stands on `build/retro`.
+    assert.equal(runs[0].surface, '/build', `${surface}'s run did not record its page`);
+  }
+});
+
+test('D510: a run with no page, or one that is not a plain app path, records NULL', async () => {
+  for (const page of [undefined, '', 'build/retro', 'https://example.test/build', '/build?x=1', '/build#a', 42]) {
+    const db = freshDb();
+    db.exec(USAGE_DDL);
+    await draft(db, MINE, 'build/retro', String(MY_PROJECT), page);
+    const runs = draftRuns(db);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].surface, null, `${JSON.stringify(page)} was recorded as a page`);
+  }
+  // One page, not two: the trailing slash is the router's to strip.
+  const db = freshDb();
+  db.exec(USAGE_DDL);
+  await draft(db, MINE, 'build/retro', String(MY_PROJECT), '/build/');
+  assert.equal(draftRuns(db)[0].surface, '/build');
+});
+
+test('D510: a refused draft never reaches the model, so it records no run', async () => {
+  const db = freshDb();
+  db.exec(USAGE_DDL);
+  const { status } = await draft(db, MINE, 'build/retro', String(THEIR_PROJECT), '/build');
+  assert.equal(status, 409);
+  assert.deepEqual(draftRuns(db), [], 'a refused draft was recorded as a run against the page');
 });
