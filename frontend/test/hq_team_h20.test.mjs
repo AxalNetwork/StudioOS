@@ -168,8 +168,10 @@ test('the canvas notes that describe a platform that does not exist do not reach
   assert.match(plain, /On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side\./);
   // The card describes the notice and does not say the person WAS told: the
   // branch's `target_notified` is false when the inbox refused the notice, and
-  // HQ's route drops the field, so the card has no delivery fact to assert.
-  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search: the branch sends them a security notice when you authorise the session, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored; HQ’s route does not pass it on, so this card cannot say whether they were told\./);
+  // that is a fact about one session. D530 — re-aimed: HQ's route passes it on
+  // now, so the card points at the Support form, which says what was reported.
+  assert.match(plain, /An account on a branch, opened with Support in the Team table’s branch search: the branch sends them a security notice when you authorise the session, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored, and the Support form shows what it reported once the session is authorised\./);
+  assert.doesNotMatch(plain, /does not pass it on/, 'the card still says HQ\'s route drops the report');
   assert.doesNotMatch(plain, /not told/, 'the card still says some account is not told');
   assert.doesNotMatch(plain, /branch search, is told/, 'the card asserts a branch account was told, which HQ cannot know');
   assert.match(plain, /The successor and the former holder are both notified, in the app and by email\./);
@@ -261,17 +263,20 @@ test('D507: a branch account is told at authorisation, and the card and the tabl
   assert.ok(!TABLE_RAW.includes('not told'), 'the Team table (source or comment) still says the person is not told');
   assert.ok(!TABLE_RAW.includes('no notice reaches'), 'the Team table still says no notice reaches the person');
   const table = TABLE.replace(/\s+/g, ' ');
-  // Attempt-neutral: the form describes the notice and what is and is not
-  // reported, and never asserts the person was told — `target_notified` is
-  // false when the branch's inbox refused the notice, and HQ's route drops it.
-  assert.match(table, /The branch records the authorisation and sends the person a security notice, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored; HQ&rsquo;s route does not pass it on, so this form cannot say whether the person was told\./,
-    'the Support form does not say what the branch sends and what is not reported');
+  // Attempt-neutral before the session: the form describes the notice and says
+  // it will show what the branch reports. D530 — re-aimed: HQ's route passes
+  // `target_notified` on, and the outcome line (hq_support_told_d530) says
+  // Told, Not told or Not recorded from it, never asserting more.
+  assert.match(table, /The branch records the authorisation and sends the person a security notice, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened\. The branch reports whether that notice was stored, and this form shows what it reported once the session is authorised\./,
+    'the Support form does not say what the branch sends and that it shows what was reported');
+  assert.doesNotMatch(table, /does not pass it on/, 'the Support form still says HQ\'s route drops the report');
   assert.doesNotMatch(table, /The person is told/, 'the Support form asserts the person was told, which HQ cannot know');
-  assert.match(table, /the branch sends the person a security notice when the session is authorised, and whether it was stored is not reported here\./,
+  assert.match(table, /the branch sends the person a security notice when the session is authorised, and the Support form shows whether it was stored\./,
     'the table footer does not describe the notice');
   assert.doesNotMatch(table, /the person is told/, 'the table footer asserts the person was told');
   assert.match(TABLE_RAW, /The branch tells the\s*\* person \(D441, said here since D507\)/, 'the header comment does not say the branch tells the person');
-  assert.match(TABLE_RAW, /never says the person was\s*\* told\./, 'the header comment no longer records that the form claims no delivery');
+  assert.match(TABLE_RAW, /HQ's\s*\* route passes it on now/, 'the header comment does not record that the route reports it (D530)');
+  assert.match(TABLE_RAW, /it never reads a missing value as told\./, 'the header comment no longer records that a missing report is not told');
 
   // The branch route: the notice is sent after the authorisation is recorded,
   // as a security notice in the app and by email, naming the 30 minutes, and
@@ -295,11 +300,12 @@ test('D507: a branch account is told at authorisation, and the card and the tabl
   assert.match(tell, /for \$\{SUPPORT_SESSION_MINUTES\} minutes\./, 'the notice no longer names how long the session lasts');
   assert.match(ops, /export const SUPPORT_SESSION_MINUTES = 30;/, 'the card and the form say 30 minutes; the branch enforces something else');
 
-  // HQ's own route answers without the branch's `target_notified`, which is why
-  // the form says delivery is not reported here. If the route starts passing
-  // it through, the form can say whether the notice reached them: re-aim both.
+  // D530 — re-aimed: HQ's own route passes the branch's `target_notified` on,
+  // unchanged when it is a boolean and null otherwise, and the form says what
+  // it says. The route test (branch_support_session_d259) runs all three.
   const hq = codeOnly(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_support_sessions.ts'), 'utf8'));
-  assert.ok(!hq.includes('target_notified'), 'HQ\'s route now passes target_notified through; the form\'s "not reported here" is stale');
+  assert.match(hq, /target_notified: typeof offer\?\.target_notified === 'boolean' \? offer\.target_notified : null,/,
+    'HQ\'s route no longer passes the branch\'s target_notified on as reported');
 });
 
 test('D249: the role override takes demote\'s bar, tells the person, and the card says so only while the route does', () => {

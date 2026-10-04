@@ -113,7 +113,9 @@ documents it indexes.
 
 - **Worker first.** Production is the Worker in `cloudflare-worker/`; build
   there first. `backend/` (FastAPI) is never deployed. Never add a method to
-  `frontend/src/lib/api.js` without a mounted Worker route.
+  `frontend/src/lib/api.js`, or to a module under `frontend/src/lib/api/`,
+  without a mounted Worker route. A new API domain goes in its own module
+  there, re-exported by one line in `api.js`'s alphabetical block (D527).
 - **Migrations.** A migration is a new file under
   `cloudflare-worker/sql/migrations/`, with the number the issue gives you.
   Never edit an applied migration, and never create a trigger by hand.
