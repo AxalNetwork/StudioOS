@@ -449,6 +449,149 @@ const STATUS_PILL = {
 /** The SLA band the server derived. Never recomputed here — one definition. */
 const SLA_LABEL = { ok: null, due_soon: 'due within 24h', past: 'past SLA' };
 
+export const DUE_UNRECORDED =
+  'This raise has no due time on the list, so the band is not a clock.';
+export const HQ_UID_UNRECORDED =
+  'HQ has not given this raise a reference. The branch\'s own id is not HQ\'s.';
+
+/** Counts for the kind chips. A zero is how many of that kind this list holds. */
+export function escalationKindChips(items) {
+  const counts = new Map();
+  for (const it of items) {
+    const kind = typeof it?.kind === 'string' && it.kind ? it.kind : '';
+    const prev = counts.get(kind);
+    counts.set(kind, prev === undefined ? 1 : prev + 1);
+  }
+  const extras = [...counts.keys()].filter((k) => k && !KIND_VALUES.includes(k));
+  return [
+    { kind: 'all', label: 'All', count: items.length },
+    ...[...KIND_VALUES, ...extras].map((kind) => ({
+      kind,
+      label: KIND_LABEL[kind] || kind,
+      count: counts.has(kind) ? counts.get(kind) : items.filter((it) => it.kind === kind).length,
+    })),
+  ];
+}
+
+export function escalationsForKind(items, kind) {
+  if (!kind || kind === 'all') return items;
+  return items.filter((it) => it.kind === kind);
+}
+
+/**
+ * The To-HQ list (canvas S9). Kind chips filter it. `due_at` sits beside the
+ * band the server derived. `hq_uid` is HQ's reference. The answer stays the
+ * one decision already on the row.
+ */
+export function ToHqRaisedList({ items, kind = 'all', onKind, retryingId, onRetry }) {
+  const chips = escalationKindChips(items);
+  const shown = escalationsForKind(items, kind);
+  return (
+    <div>
+      <div role="group" aria-label="Escalation kind" data-testid="branch-escalation-kind-chips" className="mb-2 flex flex-wrap gap-1.5">
+        {chips.map((chip) => {
+          const pressed = chip.kind === (kind || 'all');
+          return (
+            <button
+              key={chip.kind || 'blank'}
+              type="button"
+              aria-pressed={pressed ? 'true' : 'false'}
+              data-testid="branch-escalation-kind-chip"
+              data-kind={chip.kind}
+              onClick={() => onKind?.(chip.kind)}
+              className={pressed
+                ? 'rounded-full border border-slate-700 bg-slate-700 px-2 py-0.5 text-[10.5px] font-bold text-white dark:border-slate-300 dark:bg-slate-300 dark:text-slate-900'
+                : 'rounded-full border border-axal-hairline bg-white px-2 py-0.5 text-[10.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-slate-900 dark:text-gray-100'}
+            >
+              {chip.label}{' '}
+              <span className="font-mono">{chip.count}</span>
+            </button>
+          );
+        })}
+      </div>
+      {shown.length === 0 ? (
+        <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="branch-escalation-kind-empty">
+          None of this kind on this list. The lane was read; this kind is not among the rows.
+        </p>
+      ) : (
+        <ul className="space-y-2" data-testid="branch-escalation-list">
+          {shown.map((it) => (
+            <li key={it.id} className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[12px] font-bold">{it.subject}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-axal-faint">
+                    <span className={`${PILL} border border-axal-hairline`} data-testid="branch-escalation-kind">
+                      {KIND_LABEL[it.kind] || it.kind}
+                    </span>
+                    {it.hq_uid
+                      ? <span className="font-mono" data-testid="branch-escalation-hq-uid">{it.hq_uid}</span>
+                      : (
+                        <span data-testid="branch-escalation-hq-uid">
+                          <Unrecorded reason={HQ_UID_UNRECORDED}>Not recorded</Unrecorded>
+                        </span>
+                      )}
+                    <span>
+                      raised {it.created_at}
+                      {it.raised_by_name ? ` · ${it.raised_by_name}` : ''}
+                      {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
+                    </span>
+                    {it.due_at
+                      ? <span data-testid="branch-escalation-due">due {it.due_at}</span>
+                      : (
+                        <span data-testid="branch-escalation-due">
+                          <Unrecorded reason={DUE_UNRECORDED}>Not recorded</Unrecorded>
+                        </span>
+                      )}
+                  </div>
+                  {it.detail
+                    ? <p className="mt-1 text-[12px] leading-relaxed text-axal-muted" data-testid="branch-escalation-detail">{it.detail}</p>
+                    : (
+                      <p className="mt-1 text-[12px]" data-testid="branch-escalation-detail">
+                        <Unrecorded reason="This raise was sent with a subject and no detail.">No detail</Unrecorded>
+                      </p>
+                    )}
+                  {it.subject_ref && (
+                    <EscalationAbout subjectRef={it.subject_ref} relation={it.relation} />
+                  )}
+                </div>
+                <span className={STATUS_PILL[it.status] || STATUS_PILL.open}>{it.status}</span>
+              </div>
+              {it.status === 'undelivered' && (
+                <div className="mt-2">
+                  <p className="text-[11.5px] leading-relaxed text-red-700 dark:text-red-300">
+                    This has not reached HQ, so it is not on their queue. {it.delivery_error}
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-2 rounded-lg border border-red-300 px-2.5 py-1 text-[11px] font-bold text-red-800 hover:bg-red-50 disabled:opacity-50 dark:border-red-500/40 dark:text-red-200"
+                    disabled={retryingId === it.id}
+                    onClick={() => onRetry?.(it.id)}
+                  >
+                    {retryingId === it.id ? 'Sending…' : 'Retry'}
+                  </button>
+                </div>
+              )}
+              {it.answer && (
+                <div className="mt-2 rounded-lg border border-axal-hairline bg-white p-2.5 dark:bg-slate-900">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
+                    HQ&rsquo;s decision
+                  </div>
+                  <p className="mt-1 text-[12.5px] leading-relaxed">{it.answer}</p>
+                  <p className="mt-1 text-[10.5px] text-axal-faint">
+                    {it.answered_by_name || 'Axal VC HQ'} · {it.answered_at}
+                    {it.pushed_at ? ` · received ${it.pushed_at}` : ''}
+                  </p>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /**
  * Where each lane is actually decided (D130).
  *
@@ -596,6 +739,7 @@ export default function BranchApprovals({ user }) {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [retryingId, setRetryingId] = useState(null);
+  const [hqKind, setHqKind] = useState('all');
   const [layout, setLayout] = useState('list');
   const [picked, setPicked] = useState(() => new Set());
   const [reviewerId, setReviewerId] = useState('');
@@ -887,93 +1031,24 @@ export default function BranchApprovals({ user }) {
         )}
 
         {items.length > 0 && (
-          <ul className="space-y-2" data-testid="branch-escalation-list">
-            {items.map((it) => (
-              <li
-                key={it.id}
-                className="rounded-xl border border-axal-hairline bg-axal-ground p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[12px] font-bold">{it.subject}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-axal-faint">
-                      <span className={`${PILL} border border-axal-hairline`} data-testid="branch-escalation-kind">
-                        {KIND_LABEL[it.kind] || it.kind}
-                      </span>
-                      <span>
-                        raised {it.created_at}
-                        {it.raised_by_name ? ` · ${it.raised_by_name}` : ''}
-                        {it.sla && SLA_LABEL[it.sla] ? ` · ${SLA_LABEL[it.sla]}` : ''}
-                      </span>
-                    </div>
-                    {it.detail
-                      ? <p className="mt-1 text-[12px] leading-relaxed text-axal-muted" data-testid="branch-escalation-detail">{it.detail}</p>
-                      : (
-                        <p className="mt-1 text-[12px]" data-testid="branch-escalation-detail">
-                          <Unrecorded reason="This raise was sent with a subject and no detail.">No detail</Unrecorded>
-                        </p>
-                      )}
-                    {/* D208 — the item it was raised about, in the words HQ
-                        received. D275 — led by what the raise is to it:
-                        "Localises" or "Changes", or "About" with the relation
-                        stated as not recorded on a row raised before it was. */}
-                    {it.subject_ref && (
-                      <EscalationAbout subjectRef={it.subject_ref} relation={it.relation} />
-                    )}
-                  </div>
-                  <span className={STATUS_PILL[it.status] || STATUS_PILL.open}>{it.status}</span>
-                </div>
-
-                {/* NOT DELIVERED IS ITS OWN STATE, with the reason, because the
-                    branch holds this row and HQ does not — nothing may count
-                    it as an escalation HQ has. */}
-                {it.status === 'undelivered' && (
-                  <div className="mt-2">
-                    <p className="text-[11.5px] leading-relaxed text-red-700 dark:text-red-300">
-                      This has not reached HQ, so it is not on their queue. {it.delivery_error}
-                    </p>
-                    <button
-                      type="button"
-                      className="mt-2 rounded-lg border border-red-300 px-2.5 py-1 text-[11px] font-bold text-red-800 hover:bg-red-50 disabled:opacity-50 dark:border-red-500/40 dark:text-red-200"
-                      disabled={retryingId === it.id}
-                      onClick={() => {
-                        setRetryingId(it.id);
-                        api.branchEscalationRetry(it.id).then(() => {
-                          setRetryingId(null);
-                          load();
-                        }, (e) => {
-                          reportError('branch-escalation-retry', e);
-                          setRetryingId(null);
-                          load();
-                        });
-                      }}
-                    >
-                      {retryingId === it.id ? 'Sending…' : 'Retry'}
-                    </button>
-                  </div>
-                )}
-
-                {/* `bg-white dark:bg-slate-900`, not an `axal-` token: the
-                    declared set is ground/hairline/ink/muted/faint and the
-                    first draft invented `axal-surface`, which Tailwind v4
-                    mints as nothing at all. The token guard caught it. */}
-                {it.answer && (
-                  <div className="mt-2 rounded-lg border border-axal-hairline bg-white p-2.5 dark:bg-slate-900">
-                    <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
-                      HQ&rsquo;s decision
-                    </div>
-                    <p className="mt-1 text-[12.5px] leading-relaxed">{it.answer}</p>
-                    <p className="mt-1 text-[10.5px] text-axal-faint">
-                      {it.answered_by_name || 'Axal VC HQ'} · {it.answered_at}
-                      {it.pushed_at ? ` · received ${it.pushed_at}` : ''}
-                    </p>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
+          <ToHqRaisedList
+            items={items}
+            kind={hqKind}
+            onKind={setHqKind}
+            retryingId={retryingId}
+            onRetry={(id) => {
+              setRetryingId(id);
+              api.branchEscalationRetry(id).then(() => {
+                setRetryingId(null);
+                load();
+              }, (e) => {
+                reportError('branch-escalation-retry', e);
+                setRetryingId(null);
+                load();
+              });
+            }}
+          />
         )}
-
         {/* THE SHAPE, STATED. A reader who expects a conversation should learn
             here that there is not one, rather than by looking for a reply box
             that does not exist. */}

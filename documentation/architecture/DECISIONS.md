@@ -40288,6 +40288,18 @@ walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
 
+## D475
+
+**Branch Approvals: the To-HQ list shows the due time, HQ's reference, and kind chips.** Issue #1028. No migration. `rpc/branchOps.ts` is not edited.
+
+**What the drawer was missing.** `branchEscalations` already selects `due_at` and `hq_uid`. The list showed the SLA band and not the due time, and it did not show HQ's reference. It now shows `due_at` beside the band, and `hq_uid` when the row has one. Either field absent is Not recorded, with the reason, not a blank and not the branch's own id standing in for HQ's.
+
+**Kind chips.** All, and each kind this page can name, with the count of rows of that kind on the list. A chip sets `aria-pressed` and filters the list. A kind with no rows counts zero because the list was read and held none, and the empty filter says that. It does not say the lane is empty.
+
+**Left as they were.** The answer stays one decision (D112, D470). `BranchCommunity.jsx` still says "four consoles" and "three of the four" beside five cards; that file is slot S04's. `HqSupportSessionBar.jsx` still links "Raise a concern" to `/branch/approvals` with no query; that file is slot S05's. Neither is edited here.
+
+**Tests.** `frontend/test/branch_approvals_to_hq_d475.test.mjs`.
+
 ## D480
 
 **HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
