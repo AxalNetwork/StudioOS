@@ -33,6 +33,14 @@
  * still reports 399. So this builds the story for real, in the same SQLite
  * engine D1 is, and takes the set difference of object NAMES in both directions.
  *
+ * AND COLUMNS (D359). Names alone let a column through: one added by hand, or
+ * by a runtime `ALTER TABLE … ADD COLUMN`, changes no name, so this step stayed
+ * green over it. On every table both sides have, it also compares the columns
+ * and their declared types, both directions. Production's columns are read
+ * from the `sql` the same query already returns, executed into a scratch
+ * database, so there is no second round trip; a table whose DDL will not
+ * execute fails the step as unreadable rather than passing uncompared.
+ *
  * WHERE IT RUNS: the deploy workflow, AFTER the deploy step. A disagreement
  * here means the repo can no longer rebuild the database it operates — worth a
  * red workflow — but it does not make the worker that just shipped unsafe, so
@@ -106,6 +114,86 @@ export function objectNames(db) {
   return new Set(
     rows.filter((r) => !ENGINE_OWNED.test(r.name)).map((r) => `${r.type}:${r.name}`),
   );
+}
+
+/** A declared column type as a comparison key: trimmed, one space, upper case. */
+export const typeKey = (t) => String(t ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+
+/**
+ * A database's columns, keyed `table.column` in lower case (SQLite compares
+ * both names case-insensitively), each with its declared type, NOT NULL and
+ * default. Engine-owned tables are excluded, as they are from `objectNames`.
+ *
+ * One `pragma_table_info` join, so it costs one query however many tables
+ * there are — the guards that call it stay fast (D359).
+ */
+export function columnsOf(db) {
+  const rows = db.prepare(
+    'SELECT m.name AS tbl, p.name AS col, p.type AS type, p."notnull" AS nn, p.dflt_value AS dflt '
+    + "FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table' ORDER BY m.name, p.cid",
+  ).all();
+  const out = new Map();
+  for (const r of rows) {
+    if (ENGINE_OWNED.test(r.tbl)) continue;
+    const key = `${r.tbl.toLowerCase()}.${r.col.toLowerCase()}`;
+    out.set(key, { key, table: r.tbl, column: r.col, type: typeKey(r.type), notnull: r.nn ? 1 : 0, dflt: r.dflt ?? null });
+  }
+  return out;
+}
+
+/**
+ * The columns of the tables a set of `sqlite_master` rows describes, read by
+ * executing each table's own DDL into a scratch database — production's rows
+ * already carry `sql`, so this needs no second query and no pragma D1 might
+ * refuse. A table whose DDL is missing or will not execute is returned in
+ * `unreadable`, never dropped: a table this cannot read is a table whose
+ * columns nobody compared.
+ */
+export function columnsFromDdl(rows) {
+  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
+  const unreadable = [];
+  for (const r of rows) {
+    if (r.type !== 'table' || ENGINE_OWNED.test(r.name)) continue;
+    if (!r.sql) { unreadable.push(`table:${r.name} — no DDL`); continue; }
+    try {
+      db.exec(String(r.sql));
+    } catch (error) {
+      unreadable.push(`table:${r.name} — ${String(error?.message || error)}`);
+    }
+  }
+  return { columns: columnsOf(db), unreadable };
+}
+
+/**
+ * The column difference between two `columnsOf` maps, over the tables BOTH
+ * have — a table one side lacks entirely is already a name difference, and
+ * listing its every column again would bury it.
+ *
+ *   missing — a column `live` has and `baseline` lacks (a hand-added column);
+ *   extra   — a column `baseline` has and `live` lacks;
+ *   retyped — a column both have whose declared type differs.
+ */
+export function compareColumns(baseline, live) {
+  const tablesOf = (m) => new Set([...m.values()].map((c) => c.table.toLowerCase()));
+  const lt = tablesOf(live);
+  const bt = tablesOf(baseline);
+  const shared = (c) => lt.has(c.table.toLowerCase()) && bt.has(c.table.toLowerCase());
+  const byKey = (a, b) => a.key.localeCompare(b.key);
+  const missing = [...live.values()].filter((c) => shared(c) && !baseline.has(c.key)).sort(byKey);
+  const extra = [...baseline.values()].filter((c) => shared(c) && !live.has(c.key)).sort(byKey);
+  const retyped = [...live.values()]
+    .filter((c) => baseline.has(c.key) && baseline.get(c.key).type !== c.type)
+    .map((c) => ({ key: c.key, baseline: baseline.get(c.key).type, live: c.type }))
+    .sort(byKey);
+  return { missing, extra, retyped, ok: !missing.length && !extra.length && !retyped.length };
+}
+
+/** A column as the statement that would add it, so a red run is a paste. */
+export function addColumnDdl(c) {
+  const type = c.type ? ` ${c.type}` : '';
+  const nn = c.notnull ? ' NOT NULL' : '';
+  const dflt = c.dflt != null ? ` DEFAULT ${c.dflt}` : '';
+  return `ALTER TABLE ${c.table} ADD COLUMN ${c.column}${type}${nn}${dflt};`;
 }
 
 /**
@@ -212,11 +300,15 @@ function liveObjects() {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const later = postCutoffMigrations().map((m) => m.sql);
-  const baseline = baselineObjects(readFileSync(resolve(process.cwd(), BASELINE), 'utf8'), later);
+  const fresh = buildFresh(readFileSync(resolve(process.cwd(), BASELINE), 'utf8'), later);
+  const baseline = objectNames(fresh);
   const { names: live, rows: liveRows } = liveObjects();
   const { missing, extra, ok } = compareObjects(baseline, live);
+  const baseCols = columnsOf(fresh);
+  const { columns: liveCols, unreadable } = columnsFromDdl(liveRows);
+  const cols = compareColumns(baseCols, liveCols);
 
-  if (!ok) {
+  if (!ok || !cols.ok || unreadable.length) {
     console.error('✖ check-baseline-drift: the committed baseline no longer matches production.');
     if (missing.length) {
       console.error(`\n  On production, absent from ${BASELINE} (${missing.length}):`);
@@ -233,15 +325,38 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       for (const n of extra.slice(0, 40)) console.error(`    ${n}`);
       if (extra.length > 40) console.error(`    … and ${extra.length - 40} more`);
     }
+    // COLUMNS, on the tables both sides have (D359). Comparing names alone let a
+    // column added by hand, or by a runtime ALTER, through on every run.
+    if (cols.missing.length) {
+      console.error(`\n  Columns on production, absent from ${BASELINE} (${cols.missing.length}) —`);
+      console.error('  as the statements that would declare them:\n');
+      for (const c of cols.missing.slice(0, 40)) console.error(`    ${addColumnDdl(c)}`);
+      if (cols.missing.length > 40) console.error(`    … and ${cols.missing.length - 40} more`);
+    }
+    if (cols.extra.length) {
+      console.error(`\n  Columns in ${BASELINE}, absent from production (${cols.extra.length}):`);
+      for (const c of cols.extra.slice(0, 40)) console.error(`    ${c.table}.${c.column} ${c.type}`);
+      if (cols.extra.length > 40) console.error(`    … and ${cols.extra.length - 40} more`);
+    }
+    if (cols.retyped.length) {
+      console.error(`\n  Columns whose declared type differs (${cols.retyped.length}):`);
+      for (const c of cols.retyped.slice(0, 40)) console.error(`    ${c.key}: baseline ${c.baseline || '(none)'}, production ${c.live || '(none)'}`);
+      if (cols.retyped.length > 40) console.error(`    … and ${cols.retyped.length - 40} more`);
+    }
+    if (unreadable.length) {
+      console.error(`\n  Production tables whose columns could not be read, so were not compared (${unreadable.length}):`);
+      for (const u of unreadable.slice(0, 40)) console.error(`    ${u}`);
+    }
     console.error(
       '\nTHE DEPLOYED WORKER AND THE DATABASE ARE FINE. What has broken is the\n' +
       "repo's ability to rebuild the schema it operates: a new environment would\n" +
       'not come up matching production. Usual causes, in order of likelihood:\n' +
-      '  · a runtime `CREATE … IF NOT EXISTS` in cloudflare-worker/src created an\n' +
-      '    object no migration declares — the first request to reach it did (D235:\n' +
-      '    admin_publications, 2026-09-24). Declare it in a new migration, copied\n' +
-      '    from the runtime statement; check-runtime-schema-declared.mjs exists so\n' +
-      '    this is caught before a merge rather than here, after a deploy;\n' +
+      '  · a runtime `CREATE … IF NOT EXISTS` or `ALTER TABLE … ADD COLUMN` in\n' +
+      '    cloudflare-worker/src created an object or column no migration declares —\n' +
+      '    the first request to reach it did (D235: admin_publications, 2026-09-24).\n' +
+      '    Declare it in a new migration, copied from the runtime statement;\n' +
+      '    check-runtime-schema-declared.mjs exists so this is caught before a merge\n' +
+      '    rather than here, after a deploy;\n' +
       '  · something was applied to production by hand and never written down;\n' +
       '  · a migration above the cutoff does not do what production shows;\n' +
       "  · schema_baseline.sql was edited rather than re-dumped (that is exactly\n" +
@@ -254,7 +369,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   console.log(
     `✓ check-baseline-drift: baseline + ${later.length} post-cutoff migration(s) `
-    + `reproduces production exactly (${baseline.size} objects, engine-owned names `
-    + 'excluded on both sides).',
+    + `reproduces production exactly (${baseline.size} objects and ${baseCols.size} columns with their `
+    + 'declared types, engine-owned names excluded on both sides).',
   );
 }

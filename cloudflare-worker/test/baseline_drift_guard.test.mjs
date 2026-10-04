@@ -11,8 +11,15 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import {
+  addColumnDdl,
   baselineObjects,
+  buildFresh,
+  columnsFromDdl,
+  columnsOf,
+  compareColumns,
   compareObjects,
   missingDdl,
   rowsFromWranglerJson,
@@ -124,4 +131,93 @@ test('a red run prints the DDL of what production has and the repo lacks, so the
   ]);
   // Only what is missing is printed, and type is part of the identity.
   assert.deepEqual(missingDdl(rows, ['index:company_sources']), ['-- index:company_sources: production returned no DDL for it']);
+});
+
+// ---------------------------------------------------------------------------
+// Columns (D359). Comparing names alone let a column added by hand, or by a
+// runtime ALTER, through every run: it changes no name.
+
+/** Production's `sqlite_master` rows for a database built from `sql`. */
+const rowsOf = (sql) => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(sql);
+  return db.prepare("SELECT type, name, sql FROM sqlite_master WHERE type IN ('table','index','trigger','view')").all();
+};
+
+test('columns are read with their declared types, including one a later ALTER added', () => {
+  const cols = columnsOf(buildFresh(
+    'CREATE TABLE Widgets (id INTEGER PRIMARY KEY AUTOINCREMENT, name text  not null);',
+    ["ALTER TABLE Widgets ADD COLUMN note TEXT DEFAULT 'x';"],
+  ));
+  assert.deepEqual([...cols.keys()], ['widgets.id', 'widgets.name', 'widgets.note'],
+    'keys are table.column in lower case, and engine-owned sqlite_sequence is not read');
+  assert.equal(cols.get('widgets.name').type, 'TEXT', 'a type is compared upper case');
+  assert.equal(cols.get('widgets.name').notnull, 1);
+  assert.equal(cols.get('widgets.note').dflt, "'x'");
+});
+
+test('a column production has and the repo lacks is drift, though every name matches', () => {
+  // The kind of drift #971 found as whole tables (four company_* tables made by
+  // hand), one level down: a column added by hand to a declared table.
+  const repo = 'CREATE TABLE company_sources (id INTEGER PRIMARY KEY, url TEXT);';
+  const live = rowsOf(`${repo} ALTER TABLE company_sources ADD COLUMN fetched_at TEXT NOT NULL DEFAULT '';`);
+  assert.equal(compareObjects(baselineObjects(repo), new Set(live.map((r) => `${r.type}:${r.name}`))).ok, true,
+    'the names agree, which is why the old step passed');
+  const { columns, unreadable } = columnsFromDdl(live);
+  assert.deepEqual(unreadable, []);
+  const r = compareColumns(columnsOf(buildFresh(repo)), columns);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.missing.map((c) => c.key), ['company_sources.fetched_at']);
+  assert.deepEqual(r.extra, []);
+  assert.deepEqual(r.retyped, []);
+  // And the red run prints the statement that declares it, which runs.
+  const ddl = addColumnDdl(r.missing[0]);
+  assert.equal(ddl, "ALTER TABLE company_sources ADD COLUMN fetched_at TEXT NOT NULL DEFAULT '';");
+  const fixed = buildFresh(repo, [ddl]);
+  assert.equal(compareColumns(columnsOf(fixed), columns).ok, true, 'pasting the printed statement closes the drift');
+});
+
+test('columns are compared in both directions, and a changed type is drift', () => {
+  const cols = (sql) => columnsOf(buildFresh(sql));
+  const extra = compareColumns(cols('CREATE TABLE t (id INTEGER, ghost TEXT);'), cols('CREATE TABLE t (id INTEGER);'));
+  assert.deepEqual(extra.extra.map((c) => c.key), ['t.ghost']);
+  assert.deepEqual(extra.missing, []);
+  assert.equal(extra.ok, false);
+
+  const retyped = compareColumns(cols('CREATE TABLE t (id INTEGER, amount INTEGER);'), cols('CREATE TABLE t (id INTEGER, amount REAL);'));
+  assert.deepEqual(retyped.retyped, [{ key: 't.amount', baseline: 'INTEGER', live: 'REAL' }]);
+  assert.equal(retyped.ok, false);
+
+  // Case and spacing in a name or a type are not drift: SQLite ignores both.
+  assert.equal(compareColumns(cols('CREATE TABLE T (Id integer,  N  varchar(10));'),
+    cols('CREATE TABLE t (id INTEGER, n VARCHAR(10));')).ok, true);
+});
+
+test('a table only one side has is a name difference, not a list of its columns', () => {
+  const r = compareColumns(columnsOf(buildFresh('CREATE TABLE a (id INTEGER);')),
+    columnsOf(buildFresh('CREATE TABLE a (id INTEGER); CREATE TABLE b (id INTEGER, x TEXT);')));
+  assert.equal(r.ok, true, 'table:b is already reported by compareObjects');
+});
+
+test("production's columns come from its own DDL; a table that cannot be read is reported, never skipped", () => {
+  const rows = [
+    ...rowsOf('CREATE TABLE t (id INTEGER PRIMARY KEY, n TEXT); CREATE INDEX idx_t ON t(n);'),
+    { type: 'table', name: '_cf_KV', sql: 'CREATE TABLE _cf_KV (key TEXT PRIMARY KEY, value BLOB)' },
+    { type: 'table', name: 'no_ddl', sql: null },
+    { type: 'table', name: 'broken', sql: 'CREATE TABLE broken (' },
+  ];
+  const { columns, unreadable } = columnsFromDdl(rows);
+  assert.deepEqual([...columns.keys()], ['t.id', 't.n'], 'the index is not a table and _cf_KV is engine-owned');
+  assert.equal(unreadable.length, 2);
+  assert.match(unreadable[0], /^table:no_ddl — no DDL/);
+  assert.match(unreadable[1], /^table:broken — /);
+});
+
+test('the step itself compares columns, and an unreadable table fails it', () => {
+  // The decision half is tested above; this pins that the deploy step calls it.
+  const src = readFileSync(new URL('../../scripts/check-baseline-drift.mjs', import.meta.url), 'utf8');
+  const main = src.slice(src.indexOf('if (import.meta.url ==='));
+  assert.match(main, /columnsFromDdl\(liveRows\)/);
+  assert.match(main, /compareColumns\(baseCols, liveCols\)/);
+  assert.match(main, /if \(!ok \|\| !cols\.ok \|\| unreadable\.length\)/);
 });
