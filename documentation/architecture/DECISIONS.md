@@ -40090,6 +40090,12 @@ and the row is Session 4's to add.
   date, the flows not cut, the mark form unwired, the runway rule reading the
   health snapshot, the chase op back to unbuilt, the export dropping the
   date.
+- Both typechecks, `check-sql-migrations`, `check-sqlite-dialect`,
+  `check-sql-prepare`, `check-timestamp-comparisons`,
+  `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
+  `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
+  Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
+  probe.
 
 ## D465
 
@@ -40146,7 +40152,8 @@ Session 2's file, so the page names it instead of mounting a band that would
 
 **DD sign-off: who returned the verdict, recorded at write.** Wave 8,
 Session 17, item 7 (the sign-off half). Migration 339
-(`dd_sections.signed_off_by`).
+(`dd_sections.signed_off_by`). Owned by slot S08 since issue #1024, which
+re-verified it under D515. The corrections are made in place below.
 
 The Due Diligence canvas's report draws a Sign-off column per section — who
 returned the verdict and when. The signer was derivable from
@@ -40160,8 +40167,9 @@ the column existed renders unrecorded, never a guessed signer.
 
 **Held, and why:** the Blocking column. The canvas's blocking-section rule (a
 blocking section cannot carry an open flag at IC) overlaps Session 15's T6
-(the IC panel/console), so the split is being agreed with Session 15 before
-either side builds it — recorded here so the gap is named rather than silent.
+(the IC panel/console). The split is now part of #1023 (corrected under
+D515; this sentence used to say it "is being agreed with Session 15"),
+recorded here so the gap is named rather than silent.
 The section-weighting editor is the owner's call (a per-fund template
 versioning decision) and stays unbuilt past its line.
 
@@ -40170,6 +40178,9 @@ versioning decision) and stays unbuilt past its line.
   failures all pre-existing on main and reproduced there in isolation
   (`capital_call_ledger.test.ts`, Session 9's area; two in
   `trust_center_d432.test.ts`, Session 15's D432 merge). Reported, untouched.
+  Whether those three really fail on main is #996's question. On the main
+  D515 measured (3ca9d291), `npm run test:drift` exits 0 with none of them
+  failing.
   New tests: `dd_signoff` (3, worker — the reviewer path, the admin override,
   the pre-column section) and `dd_signoff_column` (3, frontend).
 - 4 mutations, all caught on non-zero exit with a `not ok` line (unique
@@ -40182,7 +40193,31 @@ versioning decision) and stays unbuilt past its line.
   `check-runtime-schema-declared`, `check-decision-ids`, `check-folder-docs`,
   `check-api-drift`, `test:guards`, `lint:undef`, `check-dark-mode` exit 0.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
-  probe.
+  probe. (`check-docs-fresh` has since been retired by D529: `docs/` is no
+  longer committed.)
+
+### RE-VERIFIED (D515, issue #1024)
+- Merge history. #915 squash-merged Session 17's branch rather than
+  cherry-picking 837ad855d9 onto fresh main. The six files it shipped are
+  byte-identical to that commit's patch. A merge of main into the PR head
+  (21b5da25a) dropped D464's closing VERIFIED bullet, and D515 restores it
+  word for word from f125bbcdb. The ~580 `docs/` files the squash replaced
+  no longer exist in the tree: D529 stopped committing `docs/`, so main
+  tracks none and every deploy builds from source.
+- Migration 339 reached production D1. In "Cloudflare Worker deploy" run
+  36415122841 for 6683ef5a1, "Apply pending D1 migrations" logged `applying
+  339_dd_section_signoff.sql … applied` (11:21:36–11:21:39Z, 1 pending, 315
+  skipped) before "Deploy to Cloudflare Worker" started (11:21:39Z).
+- The four mutations above, re-run on 3ca9d291: all caught. Two were caught
+  only by a regex over source text: the page inventing a signer, and the
+  report omitting the sign-off. The case read dropping the signer's name
+  passes the frontend regex and is caught by the worker test alone.
+  - The report is now rendered for real: `dd_signoff.test.ts` calls
+    `renderReportHtml` with a signed section, a section completed before
+    the column existed, and a section with no verdict. It also checks that
+    the signer's name is escaped. 4 of 4 mutations on it are caught.
+  - The page's pin stays source text, because the case page loads in
+    effects.
 
 ## D470
 
@@ -41385,6 +41420,87 @@ alone.
 **Next.** Slot S06 can retire `/branch`.
 
 No migration.
+
+## D515
+
+**Unfinished edges: #865's LOW and NIT findings measured and closed, and
+D466 re-verified as merged.** Wave 9, items 1 and 6; issue #1024, slot S08
+(moved from S16). No migration.
+
+**Item 1: #865's findings, measured on main (3ca9d291).**
+- **The stored version winning over a live one: fixed, and pinned.**
+  `GET /deployments` sends `version_display`, which prefers the live
+  `deploy_version` when the branch answered ok.
+  `deployments_last_version_d452.test.ts` drives the route for real. The
+  mutation "stored preferred over a live ok one" is caught there.
+- **The overlay copy: fixed here.** It promised "public name and mark",
+  while the panel draws a colour swatch and reads no logo, even though the
+  brand kit stores one (`mark_r2_key`). The copy now says "public name and
+  brand colour", and only when a colour is recorded. The white-label panel
+  (`WhiteLabelPanel`) and the licence-shell block (`LicenceShellNotice`)
+  are exported components, so they are rendered in tests: the overlay
+  itself loads in effects.
+- **The clash box's buttons in dark mode: pass, no change.** The buttons
+  are `text-red-200` on `bg-red-950/40`. Measured with Tailwind's red-200,
+  red-950 and the dark page grounds, the contrast is 12.2:1 over gray-900,
+  13.3:1 over gray-950 and 13.6:1 over black, against WCAG AA's 4.5:1.
+- **`hq_licences_polish_d452.test.mjs`: rewritten to pin behaviour.** Every
+  test used to match source text. They now cover:
+  - `deployVersionDisplay`, `filterByKind` and `utcDay` / `utcMinute`, run
+    for real;
+  - `TerritoryEditor`'s clash actions, rendered: Open the holder only with
+    a uid to open, Remove from list, your own country not counted, an
+    unheld one not counted;
+  - the white-label panel, rendered, with and without a recorded colour.
+  The kind filter both ledgers drew inline is now `lib/licenceKind.js`. An
+  unknown filter value shows nothing rather than everything.
+- **NIT, `BranchHealthLive`.** It is now `Pick<BranchHealth, …>` from
+  `rpc/branchOps.ts`, a type-only import that leaves S09's file
+  unedited, so a field renamed there fails the typecheck here.
+- **NIT, the health stamps.** `last_health_at` is UTC and was printed bare
+  on HQ's Platform page (`day()`) and Admin · Licences (`slice(0, 10)`).
+  Both now print the stamp with "UTC" (`lib/utcStamp.js`), and an
+  unparseable value prints nothing.
+- **The deploy version line** is one component (`components/DeployVersion`)
+  on both pages, so its "Not recorded" state is drawn the same way and can
+  be rendered.
+- **D457's four mutations, which D457 never recorded.** On main, 2 of the 4
+  were caught:
+  - caught: the Detail un-keyed again; the stored version preferred over a
+    live one;
+  - missed: a null version rendered as nothing, and a failed licence read
+    drawn in Axal's chrome. Their tests matched source text.
+
+  With `hq_licences_d457.test.mjs`'s two tests now rendering
+  `DeployVersion` and `LicenceShellNotice`, all 4 are caught.
+
+**Item 6: D466 as merged.** The details are recorded in place, in D466's
+new RE-VERIFIED block:
+- the six shipped files are byte-identical to 837ad855d9;
+- D464's closing VERIFIED bullet, dropped by 21b5da25a, is restored from
+  f125bbcdb (D464 now matches that commit exactly);
+- `docs/` is no longer tracked (D529), so the replaced build files are
+  gone;
+- migration 339 applied before the deploy in run 36415122841;
+- D466's text is corrected: the owner slot, #996 for the three failures it
+  called pre-existing, #1023 for the Blocking split, and `check-docs-fresh`
+  retired;
+- its report pin, a regex, now has a rendered test.
+
+**Guards.**
+- `frontend/test/hq_licences_polish_d452.test.mjs` (5 tests, rewritten).
+- `frontend/test/hq_licences_d457.test.mjs`: 2 of its 4 tests now render.
+- `cloudflare-worker/test/dd_signoff.test.ts`: one new test, which renders
+  the report.
+- Mutation-checked both ways:
+  - 16 of 16 caught across item 1: D457's four, plus twelve on this
+    change's rules and renders;
+  - 4 of 4 caught on the report test;
+  - D466's own four re-run and caught.
+
+  Each was compared against a clean baseline run, every file was restored
+  and checked by sha256, and every catch gave a non-zero exit and a
+  `not ok` line.
 
 ## D519
 

@@ -33,6 +33,7 @@ import { fanOut, coverage, withRegistry, type BranchResult } from '../services/b
 import { loadBranchActionMirror, parseRange } from '../services/analyticsReports';
 import { BRANCH_CODE_RE } from '../util/branch';
 import { refusalBody } from '../util/refusal';
+import type { BranchHealth } from '../rpc/branchOps';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -56,13 +57,16 @@ type DeploymentRow = {
   last_health_at: string | null; last_health_ok: number | null; last_version: string | null;
 };
 
-/** Payload from each branch's `health` RPC (D452 — includes deploy_version). */
-type BranchHealthLive = {
-  ok: boolean;
-  licence_status: string | null;
-  licence_pushed_at: string | null;
-  deploy_version?: string | null;
-};
+/**
+ * Payload from each branch's `health` RPC (D452 — includes deploy_version).
+ *
+ * D515: derived from `BranchHealth` in `rpc/branchOps.ts` (the branch's own
+ * declaration) rather than restated, so a field renamed there fails the
+ * typecheck here. `deploy_version` stays optional on this side: a branch
+ * deployed before D452 answers without it.
+ */
+type BranchHealthLive = Pick<BranchHealth, 'ok' | 'licence_status' | 'licence_pushed_at'>
+  & Partial<Pick<BranchHealth, 'deploy_version'>>;
 
 // POST /api/admin/licences/:uid/deploy
 r.post('/licences/:uid/deploy', async (c) => {
