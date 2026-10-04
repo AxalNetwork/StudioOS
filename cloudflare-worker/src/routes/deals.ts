@@ -3,6 +3,8 @@ import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { investorActiveCompany } from './_investorProjectScope';
+import { openConditionsOnDeal } from './ic';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
 import { buildZip } from '../util/zip';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
@@ -556,9 +558,11 @@ deals.get('/transfers', async (c) => {
   const rows = String(user.role) === 'investor'
     ? await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
-             t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name
+             t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
+             t.company_id, cp.company_name AS company_name
         FROM deal_transfers t
         LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN company_profiles cp ON cp.id = t.company_id
         LEFT JOIN deals d ON d.id = t.deal_id
         LEFT JOIN projects p ON p.id = d.project_id
        WHERE t.deal_id IN (
@@ -568,14 +572,16 @@ deals.get('/transfers', async (c) => {
        ORDER BY t.recorded_at DESC LIMIT 500`
     : await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
-             t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name
+             t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
+             t.company_id, cp.company_name AS company_name
         FROM deal_transfers t
         LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN company_profiles cp ON cp.id = t.company_id
         LEFT JOIN deals d ON d.id = t.deal_id
         LEFT JOIN projects p ON p.id = d.project_id
        ORDER BY t.recorded_at DESC LIMIT 500`;
   await sql.end();
-  return c.json({ items: rows });
+  return c.json({ items: (rows as any[]).map(withFirm) });
 });
 
 deals.get('/:id', async (c) => {
@@ -1042,14 +1048,50 @@ deals.get('/:id/activity', async (c) => {
 // nobody signed off.
 // ---------------------------------------------------------------------------
 
-/** The open-condition count on a deal — the wire's gate. */
-async function openConditionsForDeal(env: any, dealId: number): Promise<number> {
-  const row = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM ic_conditions cond
-       JOIN ic_decisions d ON d.id = cond.ic_decision_id
-      WHERE d.deal_id = ? AND cond.status = 'open'`
-  ).bind(dealId).first().catch(() => null);
-  return Number(row?.n) || 0;
+/**
+ * D467 — THE FIRM A TRANSFER IS RECORDED FOR (migration 340).
+ *
+ * `deals` carries no company, so the firm comes from the caller, and it is
+ * only ever a firm the caller can be shown to act for:
+ *   - the VERIFIED active company (`activeCompanyFor` checks the switcher's
+ *     header against `user_company_links`; a forged or stale id is null);
+ *   - otherwise their only firm, when they belong to exactly one — there is
+ *     nothing to choose between, so this is not a guess;
+ *   - a caller in several firms who has not chosen one is REFUSED, never
+ *     filed under the first link or the primary one;
+ *   - a caller in no firm records NULL, which reads as "Firm not recorded".
+ */
+/**
+ * A transfer row with its firm stated. A NULL `company_id` — every row written
+ * before migration 340, and any recorded by a caller in no firm — is "not
+ * recorded", never a firm (and never the recorder's firm today).
+ */
+function withFirm(row: any): any {
+  if (!row) return row;
+  const recorded = row.company_id != null;
+  return {
+    ...row,
+    company_id: recorded ? Number(row.company_id) : null,
+    company_name: recorded ? (row.company_name ?? null) : null,
+    firm_not_recorded: recorded ? null : 'No firm is recorded for this transfer.',
+  };
+}
+
+async function transferFirm(c: any, user: User): Promise<{ companyId: number | null } | { refuse: Response }> {
+  const active = await activeCompanyFor(c, user);
+  if (active != null) return { companyId: active };
+  const links = await c.env.DB.prepare(
+    'SELECT DISTINCT company_id FROM user_company_links WHERE user_id = ? AND company_id IS NOT NULL LIMIT 2'
+  ).bind(user.id).all();
+  const ids = ((links?.results || []) as Array<{ company_id: number }>).map((r) => Number(r.company_id));
+  if (ids.length === 0) return { companyId: null };
+  if (ids.length === 1) return { companyId: ids[0] };
+  return {
+    refuse: c.json({
+      error: 'transfer_firm_required',
+      message: 'You belong to more than one firm. Choose the firm this transfer is for in the company switcher, then record it again. Nothing was recorded.',
+    }, 400),
+  };
 }
 
 deals.get('/:id/transfers', async (c) => {
@@ -1059,11 +1101,13 @@ deals.get('/:id/transfers', async (c) => {
   const { sql } = ctx;
   const rows = await sql`
     SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
-           t.recorded_by, t.recorded_at, u.name AS recorded_by_name
+           t.recorded_by, t.recorded_at, u.name AS recorded_by_name,
+           t.company_id, cp.company_name AS company_name
       FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
+      LEFT JOIN company_profiles cp ON cp.id = t.company_id
      WHERE t.deal_id = ${id} ORDER BY t.recorded_at DESC`;
   await sql.end();
-  return c.json({ items: rows });
+  return c.json({ items: (rows as any[]).map(withFirm) });
 });
 
 deals.post('/:id/transfers', async (c) => {
@@ -1079,13 +1123,36 @@ deals.post('/:id/transfers', async (c) => {
   // THE GATE. An open condition refuses the transfer — a condition that lived
   // only in the minutes is a condition nobody enforces, and this is where it
   // is enforced.
-  const open = await openConditionsForDeal(c.env, id);
-  if (open > 0) {
+  //
+  // D467: the count the caller is told is the conditions they may see
+  // (`icDecisionScope`). Another firm's open condition still refuses the wire,
+  // but the refusal names no count and no firm. A failed read refuses too: it
+  // used to be read as 0 and let the transfer through.
+  let gate: { visible: number; hidden: number };
+  try {
+    gate = await openConditionsOnDeal(c.env, user, id);
+  } catch (e) {
+    await sql.end();
+    console.error('[deals] transfer gate read failed:', (e as Error)?.message);
+    return c.json({
+      error: 'transfer_gate_unreadable',
+      message: 'The deal’s IC conditions could not be read, so the transfer was not recorded. Try again in a moment.',
+    }, 503);
+  }
+  if (gate.visible > 0) {
+    const open = gate.visible;
     await sql.end();
     return c.json({
       error: 'open_conditions_block_transfer',
       message: `${open} open IC condition${open === 1 ? '' : 's'} on this deal. Resolve ${open === 1 ? 'it' : 'them'} in the commit room before recording a transfer.`,
       open_conditions: open,
+    }, 409);
+  }
+  if (gate.hidden > 0) {
+    await sql.end();
+    return c.json({
+      error: 'open_conditions_block_transfer',
+      message: 'An open IC condition on this deal, on a decision you cannot see, blocks the transfer. Its committee resolves it in the commit room.',
     }, 409);
   }
 
@@ -1100,16 +1167,20 @@ deals.post('/:id/transfers', async (c) => {
   const reference = data?.reference != null ? String(data.reference).trim().slice(0, 200) || null : null;
   const note = data?.note != null ? String(data.note).trim().slice(0, 2000) || null : null;
   const phoneVerified = data?.phone_verified === true ? 1 : 0;
+  const firm = await transferFirm(c, user);
+  if ('refuse' in firm) { await sql.end(); return firm.refuse; }
   const uid = newUid();
   const ins = await c.env.DB.prepare(
-    `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso()).run();
+    `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId).run();
   await sql.end();
   const row = await c.env.DB.prepare(
-    `SELECT t.*, u.name AS recorded_by_name FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by WHERE t.id = ?`
+    `SELECT t.*, u.name AS recorded_by_name, cp.company_name AS company_name
+       FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
+       LEFT JOIN company_profiles cp ON cp.id = t.company_id WHERE t.id = ?`
   ).bind((ins as any).meta?.last_row_id).first<any>();
-  return c.json({ item: row }, 201);
+  return c.json({ item: withFirm(row) }, 201);
 });
 
 /** The checklist a deal's closing runs on, with its items — or null. */

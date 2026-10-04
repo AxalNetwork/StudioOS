@@ -40184,6 +40184,93 @@ versioning decision) and stays unbuilt past its line.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
 
+## D467
+
+**IC decisions are scoped by firm, and a recorded transfer carries the firm
+that made it.** Wave 9, item 7, the first of three; issue #1018, slot S08
+(moved from S16). Migration 340. No new route and no new `api.js` method.
+Session 1 decided this on the owner's behalf. If the owner strikes it, IC
+reads fall back to author-and-voters only, and the transfer's firm column
+stays unwritten.
+
+**The decision.** D461–D464 left open whose IC work a member may see. The
+answer is the firm. `icDecisionScope` (`services/tenancyScope.ts`) already
+admits three callers: a decision's author, its voters, and members of the
+firm in `ic_decisions.company_id` (migration 219, which excludes the NULL
+branch). D467 records that as the decided rule.
+
+**Every IC read and write was checked against it.**
+- In `routes/ic.ts`, the list, the detail, the update, the vote, adding a
+  condition, resolving a condition and the conditions list all go through
+  the scope. So do `scopedDecisions` and the commit room's decisions.
+- The dashboard's IC count reads only decisions the caller wrote or voted
+  on, which is narrower than the scope.
+- One IC read did not go through it: the wire gate in
+  `routes/deals.ts`. It counted every firm's open conditions on the deal
+  and returned that count in its 409, so a partner learned how many open
+  conditions another firm's committee had on a shared deal.
+  - The count is now `openConditionsOnDeal` in `ic.ts`, read through
+    `icDecisionScope`, which is why it lives in that file.
+  - Another firm's open condition still refuses the wire, so the fraud
+    gate is not weakened. That refusal names no count and no text, only
+    that a decision the caller cannot see blocks it.
+  - A failed gate read used to be caught into 0, which let the transfer
+    through. It now refuses with `503 transfer_gate_unreadable`.
+- Not changed, and asked on #1018: the commit room picks "the latest
+  meeting on this deal" for its attendee counts and minutes without
+  checking that meeting's firm. That block sits in the IC panel's lines
+  (the roster and quorum), which this slot does not edit.
+
+**Transfers carry their firm (migration 340).** `deal_transfers` gains a
+nullable `company_id`, added by `ALTER`, with no backfill.
+`POST /deals/:id/transfers` stamps a firm only when the caller can be
+shown to act for it:
+- the verified active company (`activeCompanyFor` checks the switcher's
+  header against `user_company_links`);
+- otherwise the caller's only firm. With one membership there is nothing
+  to choose between, so this is not a guess.
+- A caller in several firms who has not chosen one gets `400
+  transfer_firm_required`, and nothing is written. A forged or stale
+  header counts as not chosen.
+- A caller in no firm writes NULL.
+
+Both reads (`GET /deals/transfers` and `GET /deals/:id/transfers`) and the
+write's response return `company_id` and `company_name` from
+`company_profiles`. A row with no firm, which includes every row written
+before migration 340, gets `firm_not_recorded: "No firm is recorded for
+this transfer."` and is never given a firm. The Closing zone's Wires view
+does not show the firm yet: that page is not this issue's file.
+
+Nothing creates `deal_transfers` at runtime, so D235 needs no matching
+runtime declaration.
+
+**Ported, not this PR's own.** `check-folder-docs` is red on main because
+`documentation/architecture/decisions/` holds 10 files and is not in
+`DOCUMENTED`. This PR carries the same one-line fix as #1093 and #1092, and
+it becomes a no-op once either merges.
+
+**Guards.**
+- `cloudflare-worker/test/deal_transfer_firm_d467.test.ts` has 10 tests.
+  They drive the real `deals` router against real SQLite, with migrations
+  335 and 340 themselves executed. They cover:
+  - the column added nullable, with no backfill;
+  - one firm, several firms (no choice, a forged choice, a verified
+    choice) and no firm;
+  - both reads for a recorded firm and for a row with none;
+  - the gate: the caller's own count, another firm's conditions withheld
+    from the refusal, both at once, and a failed read refusing.
+- On the code as it was, 8 of the 10 fail. The other 2 are controls: the
+  migration itself, and the caller's own count, which was already right.
+- `deal_closing_money.test.ts` keeps its 8 tests. Its fixture gains the
+  tables the gate now reads through, and the column.
+- Mutation-checked both ways: 16 of 16 caught, each with a non-zero exit
+  and a `not ok` line, and every file was restored and checked by sha256.
+  The mutations restore every firm branch, guessing among several firms,
+  dropping the refusal, writing NULL, inventing a firm name, dropping the
+  not-recorded sentence from either read, unscoping the gate (with its
+  binds intact), counting another firm's conditions, failing open on a
+  failed read, and a NOT NULL column.
+
 ## D470
 
 **Gap-map leftovers, up to the owner's line.** Wave 9 item 7. Items 4 and 5
