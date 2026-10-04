@@ -39401,20 +39401,17 @@ is removed.
 
 ## D454
 
-**HQ · Contracts draws the doc-type registry from the code maps.** Wave 8,
-Session 16, item 5. No migration; one new read route and matching `api.js`
-method.
+**HQ · Contracts — first read of the code catalog (superseded in place by D480).**
+Wave 8, Session 16, item 5. The first pass exposed `GET /api/admin/contracts/doc-types`
+from `admin_contracts.ts` and presented it as a finished registry. D480 corrects that:
+usage counting, the D1 store, publish, and the hub UI were still missing; the read
+moved to `/api/admin/contracts/registry/*`.
 
-**Registry.** `GET /api/admin/contracts/doc-types` returns the four governance
-layers and every entry in `CONTRACT_DOC_TYPES` with title, layer, party roles,
-and usage from documents + e-sign (shared with `/templates`). HQ · Contracts
-renders it read-only above the template library; cross-tenant oversight stays
-Not recorded (U1).
+**What D454 still names truthfully.** The code maps (`CONTRACT_DOC_TYPES`, `TEMPLATES`,
+party roles) remain the bootstrap catalog; `/templates` still shares
+`buildTemplateCatalog` for party roles and layer descriptions.
 
-**`/templates`.** Each catalog row now includes `party_roles` and
-`layer_description` via the same builder — no second definition.
-
-**Tests.** `hq_contracts_doc_type_d454.test.mjs`;
+**Tests.** `hq_contracts_doc_type_d454.test.mjs` (re-aimed at the registry router);
 `admin_contracts_doc_types_d454.test.ts`.
 
 ## D455
@@ -40044,6 +40041,35 @@ The cut is the same byte: the `<` in front of `data-dc-script`. The test
 walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
+
+## D480
+
+**HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
+Wave 9, Session 16, item 5. Migration **332** (`contract_doc_type_registry`).
+
+**Usage (HIGH).** Template usage is counted from the four-source union via
+`contractTemplateUsage.ts`: migrated `documents` rows are excluded, and alias spellings
+(`nda_3way_v1`, `investor_nda_v1`, `partner_msa_v1`, …) map to one catalog key.
+`/templates/store` reuses the same loader — not a third SQL count.
+
+**Registry (HIGH).** New router `admin_contract_doc_registry.ts`, mounted at
+`/api/admin/contracts/registry` before the contracts catch-all. Reads: hub + `doc-types`.
+Writes: `POST …/draft` (HQ authoring), `POST …/:doc_type/publish` behind
+`requireSuperAdminWriteBar` with a typed reason (≥10 characters) and
+`logAdminAction('registry.type.publish', …)`.
+
+**UI.** HQ · Contracts draws X1 health tiles, four layer cards with OVERLAP flags,
+outside-layer rows, WorkerRail coverage lines, and X2 five-step “New doc type” → Save draft.
+Two owner decisions stay named on screen and in API payloads: canvas layers
+(PLATFORM / VENTURE / FUND / ENGAGEMENT) vs code layers (`gp` / `fund` / `portfolio` /
+`compliance`), and whether the registry governs `esignOriginators.ts` — neither is invented.
+
+**Routes (pre-existing).** `GET /pairwise-ndas` and `GET /partner-deals` register before
+`GET /:uid`. List union rows carry `valid_until` (pairwise) and `expires_at` (partner deals);
+null elsewhere. Admin › Contracts pairwise/partner tabs render a failed read as Unreadable.
+
+**Tests.** `contract_template_usage_d480.test.ts`, `admin_contract_doc_registry_d480.test.ts`,
+`hq_contracts_x1_d480.test.mjs`; D454 tests re-aimed.
 
 ## D490
 
