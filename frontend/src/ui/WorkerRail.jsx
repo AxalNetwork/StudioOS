@@ -1,5 +1,6 @@
-import { useCallback, useContext, useEffect, useId, useState } from 'react';
-import { PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react';
+import { useCallback, useContext, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { PanelRightClose, PanelRightOpen, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { Link, UNSAFE_LocationContext, useInRouterContext } from 'react-router-dom';
 import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
@@ -191,6 +192,132 @@ function RootLink({ to, children, ...rest }) {
  * would report the same average twenty times and call it per-page data.
  */
 const WORKSPACE_SURFACE = 'workspace';
+
+/**
+ * D405 — THE RAIL ON A PHONE: canvas M5, "persistent panel → FAB + bottom
+ * sheet". Below 1024px there is no room for a 284pt column beside a 390pt
+ * screen, so the panel becomes a floating button whose badge always states the
+ * mode, and a tap opens the same blocks in a sheet with the page still visible
+ * above it. Nothing in the rail changes its meaning on the smaller screen: the
+ * usage meter keeps its three states (loading, Unreadable, the figure) because
+ * it is the same JSX, not a phone copy of it.
+ *
+ * WHERE IT SITS. `calc(var(--mobile-tabbar-h, 0px) + 16px)` from the bottom:
+ * the tab bar (D425) defines that height while it draws, and a page with no
+ * bar falls back to 16px. Inline rather than in the stylesheet so the one
+ * number that has to agree with the bar is visible where the button is.
+ *
+ * PORTALLED TO <body>, AFTER MOUNT. The shell's rail slot is `hidden xl:block`,
+ * and a fixed button inside a `display: none` parent never draws. The portal
+ * waits for the first effect, so a server render (and every render test of a
+ * page that mounts a rail) draws no button and needs no document.
+ *
+ * HOW IT CLOSES — the More sheet's four ways, so a reader learns one sheet:
+ * the backdrop, a swipe down past RAIL_SWIPE_DISMISS_PX, Escape, and its close
+ * button. A route change and a widening past 1024px close it too, because the
+ * sheet belongs to the page it was opened on and the panel takes over above
+ * the breakpoint. Every one of those is an event on the reducer below, which
+ * is what the tests drive: this repository renders without a DOM, so the
+ * reducer is how a close can be proved rather than grepped for.
+ */
+export const RAIL_SWIPE_DISMISS_PX = 60;
+/** The FAB's offset from the bottom: above the tab bar when one draws. */
+export const RAIL_FAB_BOTTOM = 'calc(var(--mobile-tabbar-h, 0px) + 16px)';
+const RAIL_DESKTOP_QUERY = '(min-width: 1024px)';
+
+const SHEET_CLOSERS = new Set(['backdrop', 'escape', 'close', 'route', 'desktop']);
+
+export function railSheetReducer(state, event) {
+  if (event?.type === 'open') return state.open ? state : { open: true };
+  if (!state.open) return state;
+  if (SHEET_CLOSERS.has(event?.type)) return { open: false };
+  if (event?.type === 'swipe') {
+    const dy = Number(event.dy);
+    return Number.isFinite(dy) && dy > RAIL_SWIPE_DISMISS_PX ? { open: false } : state;
+  }
+  return state;
+}
+
+/**
+ * The floating button. The badge is the canvas's mode signal — filled when a
+ * fill mode is on, hollow for Manual — and the label says the same in words,
+ * because a coloured dot alone tells a screen reader nothing.
+ */
+export function RailFab({ workspace, aiOn, onOpen, buttonRef, controls, style }) {
+  const mode = aiOn ? 'AI on' : 'Manual';
+  return (
+    <button
+      type="button"
+      ref={buttonRef}
+      className="fwr-fab"
+      onClick={onOpen}
+      aria-haspopup="dialog"
+      aria-controls={controls}
+      aria-label={`Open Worker AI · ${workspace} · ${mode}`}
+      data-mode={aiOn ? 'ai' : 'manual'}
+      data-testid="button-worker-rail-fab"
+      style={{ ...style, bottom: RAIL_FAB_BOTTOM }}
+    >
+      <Sparkles size={22} aria-hidden="true" />
+      <i className="fwr-fab-badge" data-mode={aiOn ? 'ai' : 'manual'} aria-hidden="true" />
+    </button>
+  );
+}
+
+/**
+ * The sheet. A real dialog — `aria-modal`, labelled by its title, focus on
+ * its close button while open — over a backdrop that is itself a button, as
+ * the More sheet's is. `onEvent` takes the reducer's events.
+ */
+export function RailSheet({ id, workspace, onEvent, closeRef, style, children }) {
+  const titleId = `${id}-title`;
+  const drag = useRef(null);
+  const onTouchStart = (e) => { drag.current = e.touches?.[0]?.clientY ?? null; };
+  const onTouchEnd = (e) => {
+    const start = drag.current;
+    drag.current = null;
+    const end = e.changedTouches?.[0]?.clientY;
+    if (start != null && end != null) onEvent({ type: 'swipe', dy: end - start });
+  };
+  return (
+    <div className="fwr-sheet-layer" data-testid="worker-rail-sheet">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label={`Close Worker AI · ${workspace}`}
+        className="fwr-sheet-backdrop"
+        onClick={() => onEvent({ type: 'backdrop' })}
+        data-testid="button-worker-rail-sheet-backdrop"
+      />
+      <div
+        id={id}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="fwr fwr-sheet"
+        style={style}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        <div className="fwr-sheet-grab" aria-hidden="true" />
+        <div className="fwr-sheet-head">
+          <h2 id={titleId} className="fwr-title-text">Worker AI · {workspace}</h2>
+          <button
+            type="button"
+            ref={closeRef}
+            className="fwr-toggle fwr-sheet-close"
+            onClick={() => onEvent({ type: 'close' })}
+            data-testid="button-worker-rail-sheet-close"
+          >
+            <X size={18} aria-hidden="true" />
+            <span className="fwr-sr">Close Worker AI</span>
+          </button>
+        </div>
+        <div className="fwr-sheet-scroll">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 export default function WorkerRail({
   workspace,
@@ -392,40 +519,49 @@ export default function WorkerRail({
   // the light and dark pair, so the cascade still decides the theme and this
   // only supplies the values.
   const accent = ACCENT[role] || ACCENT.founder;
+  const accentStyle = {
+    '--fwr-accent-light': accent.deep,
+    '--fwr-accent-soft-light': accent.tint,
+    '--fwr-accent-dark': accent.deepDark,
+    '--fwr-accent-soft-dark': accent.tintDark,
+  };
 
-  return (
-    <aside
-      className={`fwr ${className}`.trim()}
-      aria-label={`Worker AI controls · ${workspace}`}
-      data-collapsed={collapsed ? 'true' : 'false'}
-      data-testid={testId}
-      style={{
-        '--fwr-accent-light': accent.deep,
-        '--fwr-accent-soft-light': accent.tint,
-        '--fwr-accent-dark': accent.deepDark,
-        '--fwr-accent-soft-dark': accent.tintDark,
-      }}
-    >
-      <div className="fwr-title">
-        <span className="fwr-title-text">Worker AI · {workspace}</span>
-        <button
-          type="button"
-          className="fwr-toggle"
-          onClick={toggle}
-          aria-expanded={!collapsed}
-          aria-controls={bodyId}
-          title={collapsed ? `Show the Worker AI rail for ${workspace}` : `Collapse the Worker AI rail for ${workspace}`}
-          data-testid="button-worker-rail-toggle"
-        >
-          {collapsed
-            ? <PanelRightOpen size={14} aria-hidden="true" />
-            : <PanelRightClose size={14} aria-hidden="true" />}
-          <span className="fwr-sr">
-            {collapsed ? 'Show the Worker AI rail' : 'Collapse the Worker AI rail'}
-          </span>
-        </button>
-      </div>
+  // D405 — the phone form (canvas M5). See the note above `railSheetReducer`.
+  const [sheet, dispatchSheet] = useReducer(railSheetReducer, { open: false });
+  const sheetId = `${useId()}-worker-rail-sheet`;
+  const fabRef = useRef(null);
+  const sheetCloseRef = useRef(null);
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => { setPortalReady(typeof document !== 'undefined'); }, []);
+  // The sheet belongs to the page it was opened on.
+  useEffect(() => { dispatchSheet({ type: 'route' }); }, [pathname]);
+  // Above the breakpoint the panel takes over, so an open sheet closes.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(RAIL_DESKTOP_QUERY);
+    const onChange = () => { if (mq.matches) dispatchSheet({ type: 'desktop' }); };
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  // Escape closes; focus moves into the sheet on open and back to the button
+  // on close, as the More sheet does.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (sheet.open) {
+      sheetCloseRef.current?.focus();
+      const onKey = (e) => { if (e.key === 'Escape') dispatchSheet({ type: 'escape' }); };
+      document.addEventListener('keydown', onKey);
+      wasOpen.current = true;
+      return () => document.removeEventListener('keydown', onKey);
+    }
+    if (wasOpen.current) {
+      wasOpen.current = false;
+      fabRef.current?.focus();
+    }
+    return undefined;
+  }, [sheet.open]);
 
+  const body = (
       <div className="fwr-body" id={bodyId}>
         <section className="fwr-block">
           <span>Mode</span>
@@ -816,6 +952,57 @@ export default function WorkerRail({
           </div>
         </footer>
       </div>
+  );
+
+  return (
+    <>
+    <aside
+      className={`fwr ${className}`.trim()}
+      aria-label={`Worker AI controls · ${workspace}`}
+      data-collapsed={collapsed ? 'true' : 'false'}
+      data-testid={testId}
+      style={accentStyle}
+    >
+      <div className="fwr-title">
+        <span className="fwr-title-text">Worker AI · {workspace}</span>
+        <button
+          type="button"
+          className="fwr-toggle"
+          onClick={toggle}
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          title={collapsed ? `Show the Worker AI rail for ${workspace}` : `Collapse the Worker AI rail for ${workspace}`}
+          data-testid="button-worker-rail-toggle"
+        >
+          {collapsed
+            ? <PanelRightOpen size={14} aria-hidden="true" />
+            : <PanelRightClose size={14} aria-hidden="true" />}
+          <span className="fwr-sr">
+            {collapsed ? 'Show the Worker AI rail' : 'Collapse the Worker AI rail'}
+          </span>
+        </button>
+      </div>
+
+      {!sheet.open && body}
     </aside>
+    {portalReady && createPortal(
+      <>
+        <RailFab
+          workspace={workspace}
+          aiOn={!!modeChoice && fillsOn}
+          onOpen={() => dispatchSheet({ type: 'open' })}
+          buttonRef={fabRef}
+          controls={sheetId}
+          style={accentStyle}
+        />
+        {sheet.open && (
+          <RailSheet id={sheetId} workspace={workspace} onEvent={dispatchSheet} closeRef={sheetCloseRef} style={accentStyle}>
+            {body}
+          </RailSheet>
+        )}
+      </>,
+      document.body,
+    )}
+    </>
   );
 }

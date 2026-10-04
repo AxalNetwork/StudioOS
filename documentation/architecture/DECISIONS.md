@@ -37065,6 +37065,72 @@ here computes or draws a margin.
   - the api method dropping the page
   - the Unreadable hidden
 
+## D405
+
+**The Worker AI rail on a phone: a floating button and a bottom sheet (canvas
+M5, issue #993).** No migration.
+
+**What M5 asks for.** A 284pt rail does not fit beside a 390pt screen. Below
+1024px the panel becomes a floating button whose badge always states the mode,
+and a tap opens a sheet. The page stays visible above the sheet, and the usage
+meter comes along unchanged.
+
+**What changed** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **Below 1024px the in-flow panel is hidden** (`aside.fwr { display: none }`).
+  Until now the host pages stacked it under the body.
+- **The floating button.** `RailFab` sits at
+  `calc(var(--mobile-tabbar-h, 0px) + 16px)` from the bottom, set inline so the
+  one number that must agree with the tab bar (D425) sits where the button is
+  declared. A page with no bar falls back to 16px.
+- **The badge.** It is filled (green) when a fill mode is on and hollow for
+  Manual. The button's label says the same in words.
+- **The sheet.** `RailSheet` is a labelled dialog (`aria-modal`) holding the
+  rail's own body, the same JSX as the panel and not a phone copy. So the
+  usage meter keeps its three states — loading, Unreadable, the figure — and
+  never shows a made-up zero. The body renders in the panel or in the sheet,
+  never both.
+- **Closing.** The sheet closes the four ways the tab bar's More sheet does:
+  the backdrop, a swipe down past 60px, Escape, and its close button. A route
+  change and a widening past 1024px close it too. Focus moves to the close
+  button on open and back to the button on close.
+- **Portalled to `<body>`, after mount.** The shell's rail slot is
+  `hidden xl:block`, and a fixed button inside a `display: none` parent never
+  draws. Waiting for the first effect also keeps every server render, and every
+  render test of a page with a rail, free of a document.
+
+**Built against the variable.** The tab bar's mount in the shell is D504's
+(slot S05). The button reads `--mobile-tabbar-h`, which is set while a bar
+draws.
+
+**Tests.** `frontend/test/worker_rail_mobile_d405.test.mjs` has 9 tests. The
+repository renders without a DOM, so every open and close goes through
+`railSheetReducer`, the one place the component decides it. The button and the
+sheet are rendered with react-dom/server. The tests cover:
+
+- the button's position;
+- the mode badge and its label;
+- the dialog's labelling, close button, backdrop and content;
+- open, and each of the five closers;
+- the swipe threshold, downward only;
+- a closed sheet ignoring every closer;
+- no button in a server render;
+- the breakpoint rules in the stylesheet.
+
+Eleven mutations were each caught:
+
+- the offset ignoring the tab bar;
+- the inline style losing `bottom`;
+- the badge always reading Manual;
+- Escape not closing;
+- a swipe of any length closing;
+- a closed sheet opening on a stray event;
+- the dialog losing `aria-modal`;
+- the portal rendering before mount;
+- the panel still drawing on a phone;
+- the button showing on desktop;
+- the sheet dropping the rail's content.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a

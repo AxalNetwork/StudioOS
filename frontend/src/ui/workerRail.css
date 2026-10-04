@@ -373,3 +373,66 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 /* The menu cards sit on the rail's own paper, which is darker than the page. */
 .dark .fwr-model { background: transparent; }
 .dark .fwr-meter i.fwr-over { background: #f87171; }
+
+/*
+ * D405 — THE PHONE FORM, canvas M5: a floating button and a bottom sheet in
+ * place of the panel, below 1024px only. The panel and the button are never
+ * on screen together: above the breakpoint the button is hidden, below it the
+ * in-flow panel is. The button's `bottom` is set inline by RailFab so it reads
+ * the tab bar's height (`--mobile-tabbar-h`) where the button is declared.
+ *
+ * The button and the sheet are portalled to <body>, outside `.fwr`, so they
+ * read the accent pair the component passes inline rather than `--fwr-accent`.
+ */
+.fwr-fab,
+.fwr-sheet-layer { display: none; }
+
+@media (max-width: 1023.98px) {
+  aside.fwr { display: none; }
+
+  .fwr-fab {
+    position: fixed; right: 16px; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    width: 56px; height: 56px; border-radius: 18px; border: 0;
+    color: #fff; background: var(--fwr-accent-light, #6d28d9);
+    box-shadow: 0 5px 18px rgba(24, 24, 27, .24);
+    cursor: pointer;
+  }
+  .fwr-fab:focus-visible { outline: 2px solid var(--fwr-accent-light, #6d28d9); outline-offset: 3px; }
+  /* The mode badge: filled for an AI mode, hollow for Manual — the canvas's
+     one signal, and the button's label says it in words. */
+  .fwr-fab-badge {
+    position: absolute; top: 7px; right: 7px;
+    width: 11px; height: 11px; border-radius: 999px;
+    border: 2px solid #fff; background: transparent;
+  }
+  .fwr-fab-badge[data-mode="ai"] { background: #10b981; }
+
+  .fwr-sheet-layer { display: block; position: fixed; inset: 0; z-index: 50; }
+  .fwr-sheet-backdrop {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    border: 0; padding: 0; cursor: default; background: rgba(24, 24, 27, .38);
+  }
+  .fwr-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    max-height: 85vh;
+    background: var(--fwr-paper);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -6px 30px rgba(24, 24, 27, .2);
+    padding: 9px 16px 0;
+  }
+  .fwr-sheet-grab { width: 38px; height: 4px; border-radius: 999px; background: #d4d2dc; margin: 0 auto 10px; flex: none; }
+  .fwr-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; }
+  .fwr-sheet-head .fwr-title-text { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+  .fwr-sheet-close { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  /* The body scrolls inside the sheet, and its last line clears the home
+     indicator. */
+  .fwr-sheet-scroll {
+    flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; min-height: 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.dark .fwr-fab { background: var(--fwr-accent-dark, #a78bfa); color: #1a1822; }
+.dark .fwr-fab-badge { border-color: #1a1822; }
+.dark .fwr-sheet-grab { background: #4a4655; }
