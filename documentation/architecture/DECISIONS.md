@@ -41170,8 +41170,9 @@ exception for that exact test finding, not a path or rule allowlist;
 
 Completion merges the current main, including D529's CI build-before-check
 workflow, and rebuilds `docs/` from lockfile-installed frontend dependencies.
-The rebuilt output is committed for this PR as explicitly requested in #1012's
-owner handoff, an exception to D529's newer default of leaving it untracked.
+The owner's newer S1 comment on PR #970 supersedes the original instruction
+to commit that build: `docs/` stays untracked under D529. The local build is
+used for validation, and CI builds its own copy from the PR's source.
 
 Verification covers authenticated ticket creation, persistence of permission
 errors, recovery after permission repair, non-admin exclusion, explicit opt-in,

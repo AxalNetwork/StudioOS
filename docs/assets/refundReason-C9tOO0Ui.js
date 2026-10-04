@@ -1,1 +1,0 @@
-function e(e){return typeof e==`string`&&e.trim().length>=12}export{e as t};
