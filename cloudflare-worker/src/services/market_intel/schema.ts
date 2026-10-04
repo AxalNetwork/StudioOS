@@ -44,6 +44,10 @@ export async function ensureMarketIntelSchema(env: Env): Promise<void> {
        UNIQUE(sector, geo, period_key, dimension)
      )`,
     `CREATE INDEX IF NOT EXISTS idx_mi_idx_sector_period ON market_intel_indexes(sector, period_key)`,
+    // D538 / migration 379 — 'live' on index rows computed from live rows
+    // only. ALTER raises "duplicate column" on re-run; the loop treats that
+    // as a no-op.
+    `ALTER TABLE market_intel_indexes ADD COLUMN basis TEXT`,
     `CREATE TABLE IF NOT EXISTS market_intel_quota (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        source_key TEXT NOT NULL,

@@ -26,6 +26,7 @@ import { stripTrailingSlashes } from '../../util/url';
 import { sendNotificationEmail } from '../email';
 import { periodKey } from './scoring';
 import { ensureMarketIntelSchema } from './schema';
+import { liveIndexSql, liveRowSql } from './liveRows';
 
 export type Cadence = 'weekly' | 'monthly';
 
@@ -408,7 +409,7 @@ export async function sendMarketIntelDigests(
       const r: any = await env.DB.prepare(
         `SELECT sector, period_key, value
            FROM market_intel_indexes
-          WHERE dimension = 'composite' AND geo = 'global'
+          WHERE dimension = 'composite' AND geo = 'global' AND ${liveIndexSql()}
             AND sector IN (${sectorPlaceholders})
             AND period_key IN (?, ?)`,
       ).bind(...sectorList, currentMonthKey, priorMonth).all();
@@ -445,8 +446,7 @@ export async function sendMarketIntelDigests(
              FROM market_intel_rows
             WHERE sector = ?
               AND ts > ?
-              AND citation_url IS NOT NULL
-              AND citation_url != ''
+              AND ${liveRowSql()}
             ORDER BY ts DESC
             LIMIT 5`,
         ).bind(w.sector, watermark).all();

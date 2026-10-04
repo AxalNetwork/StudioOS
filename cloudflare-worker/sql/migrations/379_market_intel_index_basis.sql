@@ -1,0 +1,18 @@
+-- D538 (#1078) — which market-intelligence index rows were computed from live data.
+--
+-- Until D538 the aggregator stored each connector's synthetic stub rows in
+-- production whenever its MI_FLAG_<KEY> setting was not `live`, and every
+-- source's was not: on 4 October 2026 all 237,372 rows of market_intel_rows
+-- were stubs, and the 504 rows of market_intel_indexes were computed from them.
+-- A stub row can be told apart by its citation (services/market_intel/liveRows.ts);
+-- an index row has no citation, so it needs this column.
+--
+-- From D538 the aggregator computes indexes from live rows only and writes
+-- basis = 'live'. The column is nullable with no default and no backfill: the
+-- rows written before it genuinely have no live basis, and every read filters
+-- on basis = 'live', so they are never shown. Removing them is a separate
+-- decision for the owner.
+--
+-- Not re-runnable (SQLite has no ADD COLUMN IF NOT EXISTS); the migration
+-- ledger stops the replay.
+ALTER TABLE market_intel_indexes ADD COLUMN basis TEXT;

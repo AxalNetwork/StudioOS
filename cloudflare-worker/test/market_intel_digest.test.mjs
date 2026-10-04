@@ -89,11 +89,16 @@ async function loadDigest({ sendNotificationEmail, periodKey, ensureMarketIntelS
     while (i > 0 && s.charCodeAt(i - 1) === 47 /* '/' */) i--;
     return i === s.length ? s : s.slice(0, i);
   };
+  // `liveIndexSql` / `liveRowSql` (D538) are the real predicates, imported
+  // from the module digest.ts imports them from, so the SQL under test is
+  // the SQL that ships.
+  const { liveIndexSql, liveRowSql } = await import('../src/services/market_intel/liveRows.ts');
   const factory = new Function(
     'sendNotificationEmail', 'periodKey', 'ensureMarketIntelSchema', 'stripTrailingSlashes',
+    'liveIndexSql', 'liveRowSql',
     `${outputText}; return __mod;`,
   );
-  return factory(sendNotificationEmail, periodKey, ensureMarketIntelSchema, stripTrailingSlashes);
+  return factory(sendNotificationEmail, periodKey, ensureMarketIntelSchema, stripTrailingSlashes, liveIndexSql, liveRowSql);
 }
 
 /* ------------------------------------------------------------------ */

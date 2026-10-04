@@ -20,6 +20,7 @@ import { listSources, isLive } from './registry';
 import { compositeHeadline, composeSectorScores, periodKey, WINDOW_DAYS } from './scoring';
 import { bumpQuota, isExhausted, markRateLimited } from './quota';
 import { writeKv } from './cache';
+import { liveRowSql, LIVE_INDEX_BASIS } from './liveRows';
 
 /** Canonical sector universe. Connectors normalise to one of these. */
 export const SECTORS = [
@@ -148,15 +149,23 @@ interface IndexRow {
   source_count: number;
 }
 
-/** Read recent rows + recompute every (sector, dimension) composite. */
-export async function recomputeIndexes(env: Env): Promise<{ sectors: number; rows_written: number }> {
+/**
+ * Read recent LIVE rows + recompute every (sector, dimension) composite.
+ *
+ * D538: stub rows are never read here (`liveRowSql`), a dimension no live
+ * row contributes to is not written, and every row written carries
+ * `basis = 'live'` so the read side can tell it from the stub-derived
+ * indexes written before D538. For the current period, a dimension that has
+ * lost its live data loses its row too, so a stale figure cannot linger.
+ */
+export async function recomputeIndexes(env: Env): Promise<{ sectors: number; rows_written: number; rows_cleared: number }> {
   const sources = new Map(listSources().map((s) => [s.key, s] as const));
   const period = periodKey();
   const cutoff = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString();
 
   const allRows = (await env.DB.prepare(
     `SELECT source_key, sector, geo, metric_key, metric_value, ts
-       FROM market_intel_rows WHERE ts >= ?`
+       FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()}`
   ).bind(cutoff).all<{ source_key: string; sector: string; geo: string; metric_key: string; metric_value: number; ts: string }>()).results || [];
 
   // Group rows by sector for the composer.
@@ -168,39 +177,58 @@ export async function recomputeIndexes(env: Env): Promise<{ sectors: number; row
   }
 
   const writes: IndexRow[] = [];
+  const cleared: Array<{ sector: string; dimension: Dimension | 'composite' }> = [];
   const now = new Date();
   for (const sector of SECTORS) {
     const rows = bySector.get(sector) || [];
     const scores = composeSectorScores({ rows, sources, now });
     const dims: Dimension[] = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
     for (const d of dims) {
-      writes.push({ sector, geo: 'global', period_key: period, dimension: d, value: scores[d].value, source_count: scores[d].source_count });
+      const v = scores[d].value;
+      if (v == null) { cleared.push({ sector, dimension: d }); continue; }
+      writes.push({ sector, geo: 'global', period_key: period, dimension: d, value: v, source_count: scores[d].source_count });
     }
+    const headline = compositeHeadline(scores);
+    if (headline == null) { cleared.push({ sector, dimension: 'composite' }); continue; }
     writes.push({
       sector, geo: 'global', period_key: period, dimension: 'composite',
-      value: compositeHeadline(scores), source_count: rows.length,
+      value: headline, source_count: rows.length,
     });
   }
 
-  if (writes.length === 0) return { sectors: 0, rows_written: 0 };
-
-  const stmts = writes.map((w) =>
-    env.DB.prepare(
-      `INSERT INTO market_intel_indexes (sector, geo, period_key, dimension, value, source_count, computed_at)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(sector, geo, period_key, dimension) DO UPDATE SET
-         value = excluded.value,
-         source_count = excluded.source_count,
-         computed_at = excluded.computed_at`
-    ).bind(w.sector, w.geo, w.period_key, w.dimension, w.value, w.source_count)
-  );
-  await env.DB.batch(stmts);
+  const stmts = [
+    ...cleared.map((x) =>
+      env.DB.prepare(
+        `DELETE FROM market_intel_indexes
+          WHERE sector = ? AND geo = 'global' AND period_key = ? AND dimension = ?`
+      ).bind(x.sector, period, x.dimension)
+    ),
+    ...writes.map((w) =>
+      env.DB.prepare(
+        `INSERT INTO market_intel_indexes (sector, geo, period_key, dimension, value, source_count, computed_at, basis)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
+         ON CONFLICT(sector, geo, period_key, dimension) DO UPDATE SET
+           value = excluded.value,
+           source_count = excluded.source_count,
+           computed_at = excluded.computed_at,
+           basis = excluded.basis`
+      ).bind(w.sector, w.geo, w.period_key, w.dimension, w.value, w.source_count, LIVE_INDEX_BASIS)
+    ),
+  ];
+  if (stmts.length > 0) await env.DB.batch(stmts);
 
   // Persist the warm KV snapshot the /sector-compass route falls back to
   // when the edge cache misses. Written via the shared `writeKv` helper so
   // the prefix matches the read path. Do NOT bust here — the compute is
-  // already the freshest snapshot we have.
-  await writeKv(env, 'compass:global', { period_key: period, computed_at: new Date().toISOString(), rows: writes });
+  // already the freshest snapshot we have. The key is versioned (D538) so a
+  // snapshot of stub-derived indexes written before D538 is never read.
+  await writeKv(env, COMPASS_KV_KEY, { period_key: period, computed_at: new Date().toISOString(), rows: writes });
 
-  return { sectors: SECTORS.length, rows_written: writes.length };
+  return { sectors: SECTORS.length, rows_written: writes.length, rows_cleared: cleared.length };
 }
+
+/**
+ * KV key of the warm sector-compass snapshot. `:live` since D538: the old
+ * `compass:global` snapshot held stub-derived indexes and must never be read.
+ */
+export const COMPASS_KV_KEY = 'compass:global:live';
