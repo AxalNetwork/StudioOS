@@ -39753,6 +39753,98 @@ complete statement and recording a dispute write matching audit rows.
 allowed on a suspended licence; paid-in-full shown on an incomplete row; void
 without a reason; full payment accepted on a floor statement.
 
+## D459
+
+**HQ Support: one SLA band rule, both SLA tables named, the mirror lag
+derived, and the relation confirmed (issue #1017, slot S07, from S16).** No
+migration.
+
+**One band rule.** `services/slaWindow.ts` is the only place that defines the
+due-soon window and the boundary.
+- The window is `min(24h, limit / 2)`.
+- `bandForRemaining` is past once the limit is behind (`remaining < 0`), due
+  soon while `remaining <= window`, and on time otherwise.
+- Tickets (`ticketSlaBand`) and escalations (`slaBand`, now through
+  `escalationSlaBand` with the kind's window) both call it.
+- `approvalSources.ts` re-exports its `SLA_DUE_SOON_HOURS`. No file defines
+  the window a second time.
+
+What this fixes:
+- A 24-hour P1 ticket, and a 24-hour moderation escalation, read due soon from
+  their first hour. They could never be on time. Now they are due soon for
+  their last 12 hours.
+- The two functions disagreed at the boundary (`>` against `<=`). They now
+  agree at every remaining time, and a test sweeps four limits in half-hour
+  steps to prove it.
+- `support_sla_d455.test.ts` asserts `ticketSlaBand(5, 24) === 'ok'` again.
+  Commit b1f0027b had changed it to `(0, 24)` to fit the code.
+- The page says "due soon" instead of a fixed "due within 24h".
+
+**Two tables, named.** Tickets band against P1/P2/P3 (24/48/96h).
+Escalations carry a `due_at` stamped from their kind's hours (`SLA_HOURS`:
+moderation 24, the rest 72). They are different promises, so the panel shows
+both instead of mapping one onto the other.
+- `slaPolicyBody()` sends each row with its due-soon window.
+- The mapping line is built from `ticketPriorityTier`.
+- "Set here · inherited by every subsidiary" is now "Fixed in code · the same
+  on every subsidiary". Nothing on the page edits the hours.
+
+**The mirror lag, derived.** Filing a ticket writes `out:create:ticket-<id>`
+to `ticket_sync_events` in the same request. `readSyncLag` averages
+event-minus-ticket `created_at` over tickets filed in the last 24 hours, to
+the second, and also reports the longest.
+- A ticket with no create event is counted as `unmeasured`, and is never
+  averaged as zero.
+- A backfill event (`out:backfill:…`) is not a lag.
+- No measured ticket: Not recorded, with the reason.
+- An unreadable event log costs the lag alone, not the counts beside it.
+- The ROUTE_MAP row (Support Security · Super) says so now. It had claimed the
+  strip read `ticket_sync_events` before anything did.
+
+**The relation: already fixed on main, confirmed.** `openEscalationSummary`
+selects `relation`, and `escalationQueue` passes it to the page. D275's tests
+cover it. No change.
+
+**LOW and NIT findings:**
+- **Bands.** The three buckets outside H22's queues now send `bands: null`
+  instead of zeros nobody counted. An undated ticket is counted as `undated`,
+  so a queue's bands sum to its count.
+- **Panel loading.** The panel says "Reading the ticket types…" while the
+  read is pending. It no longer shows Unreadable.
+- **Taxonomy SQL.** It uses `GROUP BY 1`, so a blank type folds into `task`.
+  It binds `...OPEN_TICKET_STATUSES`, and drops `|| 0`.
+- **Dead code and coverage.** `TICKET_TAXONOMY_TYPES` is deleted (nothing read
+  it). The taxonomy read gets a coverage line.
+- **Comments and fixtures.** "Five reads" is now six, in both comments. The
+  D204 fixture's 44-hour medium ticket marked due soon (impossible for P3) is
+  now a high (P2) ticket.
+- **Tests.** The source-regex test in `hq_support_sla_d455.test.mjs` is
+  replaced by render tests.
+
+**Not changed.** `services/githubSync.ts` is not touched.
+
+**Tests.**
+- `support_sla_band_d459.test.ts`: 9 tests.
+- `support_sla_d455.test.ts`: 2 assertions restored or extended.
+- `support_queues_d204.test.ts`: the lag measured from create events, Not
+  recorded without one, and unreadable without the log.
+- `hq_support_sla_d455.test.mjs`: 5 render tests.
+
+Thirteen mutations were run, and each fails at least one test:
+- a flat 24h window, so `(5, 24)` is not ok;
+- `<` instead of `<=`;
+- the escalation boundary restated;
+- escalations on a flat window;
+- the lag joined on `ticket_id`, which takes in backfill events;
+- a missing event averaged as zero;
+- no events read as a lag of 0;
+- zeros for an uncounted bucket;
+- undated tickets dropped;
+- `GROUP BY type`;
+- the escalation table dropped;
+- Unreadable while loading;
+- the undated count not drawn.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences

@@ -37,7 +37,7 @@ import { SignJWT } from 'jose';
 import supportRoute, { ESCALATIONS_UNREADABLE } from '../src/routes/admin_hq_support.ts';
 import {
   OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING, SUPPORT_LIST_LIMIT, SYNC_WINDOW_HOURS,
-  SYNC_UNREADABLE, SYNC_LAG_REASON, TICKETS_UNREADABLE, DEPLOYMENTS_UNREADABLE, MATRIX_REASONS,
+  SYNC_UNREADABLE, SYNC_LAG_NONE, SYNC_LAG_UNREADABLE, TICKETS_UNREADABLE, DEPLOYMENTS_UNREADABLE, MATRIX_REASONS,
   TICKET_PERSONAS, personaOf, ticketBacklog, summariseTickets,
 } from '../src/services/supportQueues.ts';
 import { OPEN_ESCALATION_CEILING, openEscalations, openEscalationSummary } from '../src/rpc/hqOps.ts';
@@ -99,7 +99,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
   };
 }
 
-type Omit = 'hq_escalations' | 'licence_deployments' | 'm273' | 'tickets';
+type Omit = 'hq_escalations' | 'licence_deployments' | 'm273' | 'tickets' | 'ticket_sync_events';
 
 function freshDb(omit: Omit[] = []) {
   const db = new DatabaseSync(':memory:', {
@@ -109,6 +109,7 @@ function freshDb(omit: Omit[] = []) {
   for (const t of ['users', 'super_admins', 'user_sessions', 'licence_admins', 'territory_licences']) db.exec(ddl(t));
   db.exec('CREATE UNIQUE INDEX idx_licence_admins_user ON licence_admins(user_id);');
   if (!omit.includes('tickets')) db.exec(ddl('tickets'));
+  if (!omit.includes('ticket_sync_events')) db.exec(ddl('ticket_sync_events'));
   for (const f of MIGRATIONS) {
     if (f.startsWith('258_') && omit.includes('licence_deployments')) continue;
     if (f.startsWith('259_') && omit.includes('hq_escalations')) continue;
@@ -221,6 +222,17 @@ function seed(db: InstanceType<typeof DatabaseSync>, omit: Omit[] = []) {
       s.run('failed', '-2 hours', 2);
       s.run('synced', '-30 hours', 4); // outside the 24-hour window
       s.run('not_configured', '-10 minutes', 5);
+    }
+    if (!omit.includes('ticket_sync_events')) {
+      // D459: ticket 1 reached GitHub 30 seconds after it was filed. Ticket 2's
+      // event is a backfill, which measures the backfill, not the filing, so it
+      // is not a lag. Every other ticket filed in the window has no event.
+      const ev = db.prepare(
+        `INSERT INTO ticket_sync_events (ticket_id, direction, event_key, created_at)
+         VALUES (?, 'outbound', ?, datetime('now', ?, ?))`,
+      );
+      ev.run(1, 'out:create:ticket-1', '-18 hours', '+30 seconds');
+      ev.run(2, 'out:backfill:ticket-2', '-3 hours', '+5 seconds');
     }
   }
   return db;
@@ -379,13 +391,30 @@ test('the matrix: HQ first, a row per licence, and every blank cell says why', a
   assert.equal(orphan.escalations.value, 1);
 });
 
-test('the mirror strip counts the last day from each ticket, and does not invent a lag', async () => {
+test('the mirror strip counts the last day from each ticket, and derives the lag only from create events', async () => {
   const { body } = await getSupport(envFor(seed(freshDb())));
+  // Eight tickets were filed in the last 24 hours (1, 2, 5, 6, 7, 9, 10, 11).
+  // Only ticket 1 has a create event; ticket 2's backfill is not a lag, and the
+  // other six have none, so seven are left out rather than averaged as zero.
   assert.deepEqual(body.sync, {
     available: true, window_hours: SYNC_WINDOW_HOURS,
     synced: 1, failed: 1, not_configured: 1,
-    lag: { value: null, reason: SYNC_LAG_REASON },
+    lag: { value: 30, unit: 'seconds', measured: 1, unmeasured: 7, max: 30 },
   });
+});
+
+test('no mirror event in the window: the lag is Not recorded with its reason, never zero', async () => {
+  const db = seed(freshDb());
+  db.exec("DELETE FROM ticket_sync_events WHERE event_key LIKE 'out:create:%'");
+  const { body } = await getSupport(envFor(db));
+  assert.deepEqual(body.sync.lag, { value: null, reason: SYNC_LAG_NONE, unmeasured: 8 });
+  assert.equal(body.sync.synced, 1, 'the counts beside it are untouched');
+});
+
+test('no mirror event log: the lag alone is unreadable, and the counts still stand', async () => {
+  const { body } = await getSupport(envFor(seed(freshDb(['ticket_sync_events']), ['ticket_sync_events'])));
+  assert.deepEqual(body.sync.lag, { value: null, reason: SYNC_LAG_UNREADABLE });
+  assert.deepEqual([body.sync.available, body.sync.synced, body.sync.failed], [true, 1, 1]);
 });
 
 test('the window the strip names is the window its statement counts', () => {
