@@ -256,6 +256,13 @@ work_values 4, archetype 6, axal_fit 8, which makes about 23 answers to
   uncovered axes, so this changes the "confident" flag, not the order
   questions are asked in.
 
+  **Built by D519.** `computeProfilingCompletion` checks it. "Every trait"
+  means every trait the bank asks about, and every live bank asks all four.
+  The module lists the traits still unanswered in `uncovered_traits`. While
+  the floor is met but a trait is unanswered, the bar holds at 99% and the
+  overall figure stays below 100. Classification and `ENGINE_VERSION` are
+  unchanged, so no displayed archetype moves.
+
 Banks grow in Sessions 8–11 (reverse-keyed and situational items), but the floors
 do not. A larger bank is headroom for re-asking and adaptivity, not a longer
 survey.
