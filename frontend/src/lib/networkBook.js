@@ -41,3 +41,40 @@ export function isCold(row, now = Date.now()) {
 export function organizationOf(row) {
   return String(row?.organization || row?.company || row?.firm || '').trim();
 }
+
+/**
+ * Ties whose recorded last touch (the log's MAX) is past the cold window.
+ * A tie with no touch is unknown, not cold. Founder readers keep `isCold`,
+ * which reads `last_activity_at` and is a different column.
+ */
+export function coldView(rows, now = Date.now()) {
+  return (rows || []).filter((row) => {
+    const days = daysSince(row?.last_interaction_at, now);
+    return days !== null && days > COLD_AFTER_DAYS;
+  });
+}
+
+/** Days since the coldest tie's last touch, or null when none are cold. */
+export function coldestDays(rows, now = Date.now()) {
+  const cold = coldView(rows, now);
+  if (!cold.length) return null;
+  return Math.max(...cold.map((row) => daysSince(row.last_interaction_at, now)));
+}
+
+/**
+ * A date-only reminder (`YYYY-MM-DD`) is due on the viewer's calendar day,
+ * not at the end of that UTC day. An ISO instant is due when that instant
+ * has passed.
+ */
+export function reminderDue(remindAt, now = Date.now(), timeZone = 'UTC') {
+  if (remindAt == null || remindAt === '') return false;
+  const s = String(remindAt).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const local = new Intl.DateTimeFormat('en-CA', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(now));
+    return local >= s;
+  }
+  const at = new Date(s).getTime();
+  return Number.isFinite(at) && at <= now;
+}

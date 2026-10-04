@@ -41158,6 +41158,24 @@ alone.
 
 No migration.
 
+## D513
+
+**Investor relationship book: void a touch, refuse a bad date, show a write failure.** Issue #1015. Migration **343**.
+
+**Void.** The recorder voids one of their touches (`POST /relationships/:id/interactions/:uid/void`). `voided_at` / `voided_by` are migration 343; 338 is not edited. The book's `MAX(interacted_at)` skips voided rows and skips a touch recorded by someone who is not a party.
+
+**Dates.** A touch or a reminder accepts `YYYY-MM-DD` or a zoned ISO instant. Anything else is `date_unparseable` (an unparseable touch with a note is no longer stored as now). A touch in the future is `date_in_future`. A year outside 1990–2100 is `date_absurd`. A reminder may be in the future — that is what a reminder is. A date-only reminder is stored as the calendar day; the desk treats it as due on the viewer's local day (`reminderDue`), tested for Tokyo and Los Angeles at the same instant.
+
+**Book.** `coldView` / `coldestDays` in `networkBook.js` are the cold rule. `isCold` and the founder readers are unchanged. Going cold replaces a high strength on the row. The Coldest tile names the oldest cold touch, or says it is not recorded. The header counts the rows on screen. Write failures render on the relationships zone. Notes say they are kept to 2,000 (touch, private note) or 500 (reminder) characters.
+
+**Admin.** A non-party admin who uses the bypass is recorded with `logAdminAction` (`partnernet_admin_bypass`). Their touch does not move last-touched.
+
+**Already fixed, confirmed.** The backdating field and the header's coverage wording shipped with D490. The Set reminders comment matches the code (D307).
+
+**Relayed, not edited.** Slot S11 still says there is no interaction date in `RelationshipsZone.jsx`, `advisorZoneFilters.js`, and `advisor_network_zones.test.mjs`. Slot S14 still says strength, notes and reminders are not recorded in `founderZoneActions.js` and `FounderNetworkDesk.jsx`.
+
+**Tests.** `partnernet_book_d513.test.ts`, `network_book_d513.test.mjs`. The D465 calendar-reminder pin now expects the calendar day.
+
 ## D520
 
 **The four `company_*` research tables production holds are declared in the
