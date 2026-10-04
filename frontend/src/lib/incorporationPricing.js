@@ -11,6 +11,18 @@
 export const PAID_STATUSES = ['paid', 'packet_processing', 'packet_ready'];
 
 /**
+ * D367 — what a paid order's screens may say about the packet. After payment
+ * the Worker only moves the order to `packet_processing`; nothing assembles a
+ * packet, emails a link or files with the state, and nothing sets
+ * `packet_ready` (which step does is the owner's open decision on #998). So
+ * no screen spins "Processing", says a packet is being prepared, or marks
+ * documents prepared or a filing started for these two statuses.
+ */
+export const PACKET_NOT_BUILT_STATUSES = ['paid', 'packet_processing'];
+export const PACKET_NOT_BUILT =
+  'Payment is confirmed. The formation packet has not been built yet, and nothing has been filed with the state.';
+
+/**
  * Integer cents → a display string. The only place a cents amount becomes a
  * decimal; everything before it stays an integer (D362).
  */

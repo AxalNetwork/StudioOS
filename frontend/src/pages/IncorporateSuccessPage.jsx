@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, FileText, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
+import { PACKET_NOT_BUILT } from '../lib/incorporationPricing';
 
 const POLL_MS = 3000;
 const MAX_POLLS = 60;
@@ -111,7 +112,7 @@ export default function IncorporateSuccessPage() {
                 <p className="text-sm text-gray-600 mt-1">
                   {status.status === 'packet_ready'
                     ? 'Your signing packet is ready. A link has been emailed to you. Please check your inbox and spam folder.'
-                    : 'Your payment is confirmed. We’re preparing your signing packet and will email you a link once it’s ready.'}
+                    : PACKET_NOT_BUILT}
                 </p>
               </div>
             </div>

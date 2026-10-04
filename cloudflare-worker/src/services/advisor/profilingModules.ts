@@ -45,8 +45,15 @@ export interface ProfilingModuleSpec {
    * Distinct axes / dimensions / traits / rubric categories we want covered.
    * Reported for transparency and used to steer adaptive follow-ups toward the
    * gaps; it does NOT gate `confident` (a thin bank could never satisfy it).
+   * The archetype module has its own coverage gate, `everyTrait` below.
    */
   targetCoverage: number;
+  /**
+   * PROFILING_V2 §4 (D519): the module is confident only once every trait the
+   * bank asks about has at least one answer, in addition to the floor. Six
+   * answers on one trait say nothing about the other three.
+   */
+  everyTrait?: boolean;
   /** One-line rationale surfaced in the module tooltip / docs. */
   rationale: string;
 }
@@ -78,7 +85,8 @@ export const PROFILING_MODULES: Record<ProfilingSectionKey, ProfilingModuleSpec>
     label: PROFILING_SECTION_LABELS.archetype,
     floor: 6,
     targetCoverage: 4, // all 4 trait axes, then extra probes average in
-    rationale: 'Enough trait signal to classify the user into a role archetype.',
+    everyTrait: true,
+    rationale: 'Enough trait signal, on every trait, to classify the user into a role archetype.',
   },
   axal_fit: {
     key: 'axal_fit',
@@ -124,10 +132,20 @@ export interface ModuleCompletion {
   /** Distinct coverage keys answered vs the module's target. */
   coverage: number;
   target_coverage: number;
-  /** 0..100, capped — answered/required. */
+  /**
+   * 0..100, capped — answered/required. Held at 99 while the floor is met but
+   * a trait is still unanswered, so a bar never reads full on a module that
+   * is not confident.
+   */
   percent: number;
-  /** answered ≥ required. */
+  /** answered ≥ required, and for the archetype every trait answered (§4). */
   confident: boolean;
+  /**
+   * Archetype only: the traits the bank asks about that have no answer yet,
+   * in bank order. Empty once every trait is answered. Absent on the other
+   * modules.
+   */
+  uncovered_traits?: string[];
 }
 
 export interface ProfilingCompletion {
@@ -181,7 +199,22 @@ export function computeProfilingCompletion(
       const ck = coverageKeyForQuestion(q);
       if (ck) coverKeys.add(ck);
     }
-    const percent = required > 0 ? Math.min(100, Math.round((answeredCount / required) * 100)) : 100;
+    // §4: the traits this bank asks about, and the ones still unanswered. A
+    // trait the bank never asks cannot gate it (an unreachable target would
+    // be a fabricated one); every live bank asks all four.
+    let uncovered: string[] | undefined;
+    if (spec.everyTrait) {
+      const offered: string[] = [];
+      for (const q of qs) {
+        const t = q.measures?.archetype_trait;
+        if (t && !offered.includes(t)) offered.push(t);
+      }
+      const answeredTraits = new Set(answeredIds.map((q) => q.measures?.archetype_trait).filter(Boolean));
+      uncovered = offered.filter((t) => !answeredTraits.has(t));
+    }
+    const confident = answeredCount >= required && (uncovered?.length ?? 0) === 0;
+    const raw = required > 0 ? Math.min(100, Math.round((answeredCount / required) * 100)) : 100;
+    const percent = confident ? raw : Math.min(raw, 99);
     modules.push({
       key,
       label: spec.label,
@@ -191,11 +224,13 @@ export function computeProfilingCompletion(
       coverage: coverKeys.size,
       target_coverage: Math.min(spec.targetCoverage, available),
       percent,
-      confident: answeredCount >= required,
+      confident,
+      ...(uncovered ? { uncovered_traits: uncovered } : {}),
     });
     // Overall uses capped contribution so over-answering one module can't mask
-    // a neglected one.
-    answeredScore += Math.min(answeredCount, required);
+    // a neglected one, and a module short of confidence stays one short, so
+    // the overall figure cannot read 100 while `complete` is false.
+    answeredScore += confident ? required : Math.min(answeredCount, required - 1);
     requiredScore += required;
   }
 

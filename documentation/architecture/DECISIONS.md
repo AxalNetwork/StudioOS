@@ -33487,6 +33487,71 @@ and trigger but not the archetype, because admins see aggregates only (§7.9).
     `recordChangeEvents`. `from_slug` is NOT NULL under `INSERT OR IGNORE`,
     so the database drops that row anyway.
 
+## D359
+
+**The schema guards compare columns, not only table names (issue #999,
+Session 7).** `scripts/check-runtime-schema-declared.mjs` (D235) and deploy
+step 9, `scripts/check-baseline-drift.mjs`, both compared the set of object
+names and nothing else. A column changes no name, so one added at runtime by
+an `ALTER TABLE … ADD COLUMN`, or added to production by hand, passed both.
+
+**What changed.**
+
+- `check-baseline-drift.mjs` exports `columnsOf` (one `pragma_table_info`
+  join: every column with its declared type, NOT NULL and default, keyed
+  `table.column` in lower case), `columnsFromDdl`, `compareColumns` and
+  `addColumnDdl`. Step 9 now also compares the columns and declared types of
+  every table both sides have, in both directions, plus type changes.
+  Production's columns are read by executing the `sql` its existing
+  `sqlite_master` query already returns into a scratch database, so there
+  is no second round trip and no reliance on a pragma D1 might refuse. A
+  table whose DDL is missing or will not execute fails the step as
+  unreadable; it is never skipped. A red run prints each missing column as
+  the `ALTER TABLE … ADD COLUMN` that declares it. A table only one side has
+  stays a name difference and its columns are not listed again.
+- `check-runtime-schema-declared.mjs` reads the columns of the fresh build
+  before and after its fixed point. A column the runtime DDL adds is a new
+  finding, `column-creatable`, naming the column, its type and the
+  statements that add it. A column removed or retyped is `column-removed`.
+- The runtime ledger gains a third kind, `columns`: an undeclared column
+  waiting on its migration, keyed `table.column` with the type it adds. It
+  is re-proved on every run. A different type fails, and so does a column
+  nothing adds any more or that a migration now declares (`stale-columns`).
+  An undeclared table, index, trigger or view still cannot be ledgered.
+
+**What it found on the first run.** `services/referralCommissions.ts`
+(`ensureClawbackColumns`) adds `commissions.reversed_amount_cents INTEGER`
+and `commissions.reversed_at TIMESTAMP`. No migration declares them. The
+function returns early in production, and its comment says production owns
+the columns via migration. Read as the code stands, a fresh build lacks
+both columns, and so may production, while the clawback `UPDATE` writes
+them. Both are ledgered under `columns` until the issue gives a migration
+number to declare them. This PR adds no migration.
+
+**Kept fast.** Each guard adds one pragma join per database. The runtime
+guard's run is unchanged in shape: 1103 statements, two passes, now also
+over 5872 columns.
+
+**Tests.** Ten new tests across `baseline_drift_guard.test.mjs` and
+`runtime_schema_declared_d235.test.ts`, plus column assertions added to
+three existing ones. On the previous guards the baseline suite cannot import
+the new exports, and the runtime suite fails six tests: every new column
+test, the extended fixed-point fixture and the real-tree test. They cover a hand-added column on a `company_*`-style table that
+every name comparison passes, both directions, a type change, case and
+spacing not counting as drift, unreadable DDL, a runtime `ADD COLUMN` alone,
+inside a loop, already declared, and recorded under the right and the wrong
+type. Each was mutation-checked by breaking the guard eight ways: ignore
+types, skip upper-casing, compare one direction only, drop the shared-table
+filter, swallow unreadable DDL, skip the runtime column comparison, ledger
+on any type, and never report stale. Every mutation fails at least one test.
+The existing fixed-point fixture now also reports the column its index
+needs (`a.extra`), which the old guard missed.
+
+**Not done.** Step 9 needs a Cloudflare token, so the production half could
+not run from the PR. The first deploy after merge is the first column
+comparison against production, and any hand-made column drift shows up
+there as a red step 9.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and
@@ -34114,6 +34179,106 @@ figure:
   The mutations restore each original zero and drop each reason. They also
   break the controls the other way: a recorded count dropped to null, and
   a readable empty store refused.
+## D367
+
+**The four unfinished Lab-tools pieces D360–D365 filed: three built, and
+the formation packet's build put to the owner.** Wave 8, Session 8, issue
+#998. Worker and frontend; no migration, no new route, no new `api.js`
+method.
+
+**1. The formation packet (needs the owner's decision).** After payment,
+`startIncorporationPacket` only moves the order from `paid` to
+`packet_processing`. Nothing assembles a packet, emails a link or files
+with the state, and nothing in the Worker sets `packet_ready` or `filed`.
+The screens claimed otherwise:
+- a spinning "Processing packet" or "Preparing documents" badge;
+- "We're preparing your signing packet and will email you a link";
+- "filing started";
+- the Lab tracker's "Documents prepared ✓" for `packet_processing`.
+
+Who builds and files the packet, and what moves an order on, is the
+owner's call, asked on #998. It is not built here. What is built is the
+part that waits on no one: the screens stop claiming it.
+- `lib/incorporationPricing.js` holds `PACKET_NOT_BUILT_STATUSES` (`paid`,
+  `packet_processing`) and one sentence: payment is confirmed, the packet
+  has not been built yet, and nothing has been filed with the state.
+- The badge reads "Paid · packet not built", with no spinner.
+- The success page and the Incorporate page show the sentence. The
+  Incorporate page now says "formation ordered" instead of "filing
+  started".
+- On the Lab Incorporate page, `packet_processing` completes no step. A
+  ready packet is "Documents prepared" (step 1), not a state submission.
+  The tracker shows the sentence, and the status says "Paid · not filed".
+  "Filed" waits on a status that nothing records yet.
+
+**2. The Deck share sheet.**
+- Each expiry button used to mint a new link and leave the one on screen
+  live. `POST /decks/:id/share` now returns the link's row `id`.
+  `replaceDeckShare` (`lib/deckShareViews.js`) works in this order:
+  - it mints the new link first, so a failed mint leaves the shown link
+    alone, and the sheet says it still works;
+  - it then withdraws the previous link through
+    `DELETE /decks/:id/shares/:shareId`;
+  - a failed withdrawal, or a link with no id, is said in the sheet. It is
+    never assumed.
+- Only an expiry change replaces a link. Opening the sheet issues a fresh
+  link and withdraws nothing, because a link from an earlier visit may
+  already have been sent.
+- The sheet says that each choice withdraws the link shown above.
+- Copy used to say "Copied" even when the clipboard was blocked. It now
+  says "Copied" only after the write succeeds. Otherwise it says "Copy was
+  blocked — select the link and copy it by hand", as the Cap Table sheet
+  already did.
+
+**3. `normalizeInputs` (Cap Table).**
+- A figure the scenario does not hold now stays null. That covers founder
+  shares, SAFE amounts, round pre-money and investment, and the option
+  pool. They used to become 0, or 10% for the pool, and the next Save
+  wrote that invented figure back.
+- A new `known()` treats null, undefined and `''` as not recorded. The
+  page's `num()` reads `Number(null)` and `Number('')` as 0. A recorded 0
+  stays 0.
+- The page shows "Not recorded", "Shares not recorded" and similar, and
+  the pool field is empty with a "Not recorded" placeholder.
+- `notRecordedInputs` lists each missing figure. Preview and Save refuse
+  with that list before any request, because the engine would read a
+  missing pool as 0%.
+- The D360 guard's allowlist loses the exemptions these lines needed, so
+  the zeros cannot return.
+
+**4. The metrics `snapshot_date` default.**
+- `POST /progress/metrics/:projectId` used to stamp a missing date with
+  today and store any string as the date. The founder Build desk sent no
+  date at all.
+- A missing date is now `400 snapshot_date_required`. A date that is not a
+  real `YYYY-MM-DD` day (`calendarDate`) is `400 snapshot_date_invalid`.
+  Nothing is written in either case.
+- The Build desk shows an "As of" date, today by default, which the
+  founder can change. It sends that date.
+- The Revenue page and the Metrics page already send a date.
+
+**Guards.**
+- `cloudflare-worker/test/lab_unfinished_d367.test.ts` has 6 tests. It
+  drives the real progress and decks routers against real SQLite, with
+  migration 249 executed. It pins:
+  - the refusals, with no row written;
+  - the date as sent;
+  - `calendarDate`;
+  - a share's returned id being the row that `DELETE` then withdraws,
+    leaving only its replacement live.
+- `frontend/test/lab_unfinished_d367.test.mjs` has 11 tests:
+  - `replaceDeckShare`, `normalizeInputs` and `notRecordedInputs` run for
+    real;
+  - the render paths are pinned as source text, bounded to their blocks.
+- On the code as it was, both files fail (the exports they need do not
+  exist), and so does the tightened D360 guard.
+- Mutation-checked both ways: 37 of 37 caught. Each gave a non-zero exit
+  and a `not ok` line, and every file was restored and checked by sha256.
+  The mutations restore each original behaviour: the today default, the
+  unvalidated date, the missing id, mint-after-revoke, "Copied" on a
+  blocked clipboard, every `?? 0` and the 10% pool, the spinner, the
+  promises, and the step marks. They also break the controls the other
+  way: a valid date refused, and a recorded zero pool read as missing.
 
 ## D370
 
@@ -41166,6 +41331,65 @@ alone.
 
 No migration.
 
+## D519
+
+**Profiling: the archetype module is confident only when every trait is
+answered (issue #1000, Session 7).** Spec §4 in `PROFILING_V2.md` says the
+archetype module is confident only once every trait has at least one answer,
+in addition to the floor of six. `profilingModules.ts` checked the floor
+alone. Adaptive gap-filling met the rule in queue order, and #956's test
+checked it only there. Any other order of answers could break it. The
+investor bank shows this: its archetype module opens with five builder
+items, so its first six questions in bank order touch two traits, and the
+old rule called that confident.
+
+**What changed** (`services/advisor/profilingModules.ts`):
+
+- The archetype spec carries `everyTrait: true`. `computeProfilingCompletion`
+  works out the traits the bank asks about and the ones still unanswered.
+  The module is confident when `answered ≥ required` and none are
+  unanswered.
+- **"Every trait" means every trait the bank asks about.** A trait a bank
+  never asks would be an unreachable target, which the module's honest
+  denominators exist to avoid. Every live bank (founder, investor, partner,
+  advisor) asks all four, and a test pins that.
+- The archetype module reports `uncovered_traits`, in bank order. The other
+  modules do not carry the field.
+- When the floor is met but a trait is still unanswered, `percent` holds at
+  99. The module's share of the overall figure also stays one short of its
+  floor. So neither the bar nor the overall figure reads 100 while
+  `confident` or `complete` is false.
+- Adaptive selection needed no change. A module short of a trait is no
+  longer confident, so the queue keeps it, and gap-filling puts the missing
+  traits first.
+
+**No engine bump.** Classification, trait scores and `ENGINE_VERSION`
+(`profiling-v2.1`) are unchanged. The rule changes only the completion flag
+and what the queue keeps, so §7.8's hysteresis is not bypassed and no
+displayed archetype moves. The persona and evolution suites
+(`profile_scoring_v2_d357`, `fit_advisor_coach_bank_v2`, the founder and
+partner bank tests) pass unchanged.
+
+**Tests** (`profilingModules.test.ts`). Six new tests, and all six fail on
+the previous module:
+
+- six investor answers on two traits are not confident, with
+  `['connector','operator']` listed and the bar at 99;
+- in every bank, the floor reached without three traits is not confident,
+  and one answer per missing trait makes it confident;
+- every trait answered below the floor is still not confident;
+- the overall figure cannot read 100 while a trait is unanswered;
+- the queue asks a missing trait first;
+- a trait the bank never asks does not gate the module.
+
+The existing "every module to its floor → complete" test answered the first
+six archetype questions in bank order, which encoded the old rule. It now
+answers one per trait first. Mutation-checked six ways, and each mutation
+fails at least one test: drop the trait gate, drop the floor, drop the 99
+cap, drop the overall cap, require all four canonical traits instead of
+those offered, and report `uncovered_traits` on every module. Dropping the
+trait gate fails four tests.
+
 ## D520
 
 **The four `company_*` research tables production holds are declared in the
@@ -41209,6 +41433,73 @@ four statements.
 **What it does not do.** It wires no feature to the tables and converts no
 money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
+
+## D523 — The DR drill restores in chunks
+
+**The drill's restore imports the backup as a series of small files instead of
+one.** Issue #1007, slot S09. No migration, no route.
+
+**What happened.** The 2026-10-01 drill (run 36862064332) passed the secrets
+check, the R2 download and the upload, then failed at the restore. wrangler's
+remote `d1 execute --file` of the whole export into the throwaway EU database
+ended `✘ [ERROR] {"D1_RESET_DO":true}` 1.4 seconds after the upload, exit
+code 2. No run has ever restored a backup.
+
+**Why D1 resets.** wrangler (4.145 in that run, 4.147 read for this entry)
+uploads the file to D1, starts ingestion, then polls; the error is what
+D1's import reports when the Durable Object behind the database is reset
+before the import finishes. wrangler does nothing jurisdiction-specific on
+this path, and both versions take it unchanged. Cloudflare's tracker carries
+the same error on whole-dump imports (workers-sdk #7554, #9503), and #7554
+records the reason D1 gave: "Durable Object's isolate exceeded its memory
+limit and was reset". #9503's file ran locally and reset remotely, so the
+statements were importable and the size of one import was the problem.
+What this repo cannot see is the export's size or shape, because a session
+reads no backup. Of the issue's five candidates: the size is the one the
+public cases share; the EU jurisdiction and the wrangler version change
+nothing on this path; and a statement shape D1 cannot import would end in an
+SQL error, not a reset. So the fix is smaller imports. If a chunk still fails,
+the drill now says which one and what kind of statements it held.
+
+**What changed.**
+- `scripts/dr-drill-split.mjs` (new) splits the export into chunk files of at
+  most `DR_DRILL_CHUNK_BYTES` (default 1,000,000 bytes) in three phases:
+  - schema: every `CREATE TABLE`, in the export's order.
+  - data: every row, grouped by table, parent tables first (ordered from the
+    `REFERENCES` clauses), then `sqlite_sequence`. Each data chunk starts with
+    `PRAGMA defer_foreign_keys=TRUE;`, the export's own first line, because
+    a deferral lasts one import and each chunk is its own import. A table
+    stays in one chunk unless it is bigger than a chunk by itself.
+  - post: indexes, views and triggers. They run after the data so restoring
+    a row never fires a trigger; the backup already holds what the triggers
+    wrote.
+  It drops the export's PRAGMAs, any transaction control (D1 refuses it) and
+  any statement on D1's internal `_cf_*` tables, and counts what it dropped.
+  It prints counts and byte sizes only. A parse error reports a byte offset,
+  never the text there.
+- `scripts/dr-drill.sh` step 3 runs the splitter and imports each chunk with
+  its own `wrangler d1 execute --remote --file`. It logs each chunk's phase,
+  statement count, bytes and statements over D1's 100 KB statement limit, then
+  wrangler's "Executed N queries" count. It stops at the first failed chunk
+  with exit 2. wrangler's output is captured and never shown, because a D1
+  error can quote the statement it failed on and the Actions log is public.
+  The drill prints only the error codes it finds there (`D1_*`, `SQLITE_*`,
+  the memory-limit phrase).
+- `frontend/test/dr_drill_d263.test.mjs` gains ten tests. The splitter's
+  chunks are replayed in real `node:sqlite` with foreign keys on, one
+  transaction per chunk the way D1 imports a file, and must reproduce every
+  row of the export run whole. Its fixture is built so that only the
+  deferral and the parent-first order let it import, and so that the export's
+  own order fails. The drill tests check: one import per chunk, in phase
+  order; the whole export never imported in one call; a failed chunk ending
+  the restore with its chunk number and `D1_RESET_DO`; and no backup text in
+  the drill's output, even when wrangler's error quotes it.
+
+**What it does not do.** `scripts/restore-d1.sh`, the operator's restore,
+still imports a backup as one file and so would meet the same reset. D167
+recorded that the drill re-implements the import rather than calling it.
+Moving the operator script onto the splitter is its own task. A session cannot
+dispatch the drill: the owner's run of `dr-drill.yml` is what proves the fix.
 
 ## D524 — Recover tickets missing from GitHub and report issue-write failures
 

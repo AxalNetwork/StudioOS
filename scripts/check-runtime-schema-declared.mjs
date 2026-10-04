@@ -8,7 +8,8 @@
  * declaration. When it is, the first request that reaches it in production
  * creates an object `schema_baseline.sql` plus the post-cutoff migrations does
  * not build, and deploy step 9 (`check-baseline-drift.mjs`, which compares
- * object NAMES in both directions) fails on every deploy after that.
+ * object names, and since D359 columns, in both directions) fails on every
+ * deploy after that.
  *
  * IT HAPPENED. D190 left `admin_publications` to its D95 bootstrap on purpose,
  * because the bootstrap heals a missing table. It does. It first ran in
@@ -27,6 +28,12 @@
  * names before and after. Executing rather than parsing is the point: whether
  * `CREATE INDEX … ON capital_calls(deal_id)` can run depends on a column the
  * baseline may or may not have, which no regex knows and SQLite does.
+ *
+ *   AND THE COLUMNS (D359). Names alone missed the commonest runtime DDL in the
+ *   tree: an `ADD COLUMN` that succeeds adds no name, so a bootstrap could give
+ *   production a column no migration declares and pass. The columns of every
+ *   table, with their declared types, are now read before and after the fixed
+ *   point as well; one the run adds, removes or retypes is a finding.
  *
  *   ONLY STATEMENTS THAT ADD. CREATE of a table, index, trigger or view;
  *   `ADD COLUMN`; and the two renames. Never a DROP and never DML: a drop can
@@ -77,16 +84,21 @@
  * the drop-and-recreate idiom `routes/partnernet.ts` uses for its view.
  * Anything else is opaque.
  *
- * THE LEDGER, `scripts/runtime-schema-declared-baseline.json`, holds two kinds
- * and never a third:
+ * THE LEDGER, `scripts/runtime-schema-declared-baseline.json`, holds three
+ * kinds and never a fourth:
  *   refused — a runtime CREATE naming an object no migration declares that
  *             SQLite refuses on the fresh build. Nothing is created today, but
  *             the day the refusal stops it becomes a CREATABLE, so each entry
  *             carries the refusal SQLite gives and the check re-proves it.
  *   opaque  — per file, how many statements this check could not model, and
  *             why that is safe.
- * CREATABLE IS NEVER LEDGERABLE. There is no entry that makes a runtime-only
- * object acceptable; declare it in a migration, copied from the runtime
+ *   columns — a column a runtime `ADD COLUMN` adds to the fresh build, keyed
+ *             `table.column`, with the declared type it adds and why. It is
+ *             a gap waiting on its migration, not an acceptance: the entry
+ *             is re-proved on every run (same column, same type) and fails as
+ *             stale the moment a migration declares the column.
+ * A CREATABLE OBJECT IS NEVER LEDGERABLE. There is no entry that makes a
+ * runtime-only table, index, trigger or view acceptable; declare it in a migration, copied from the runtime
  * statement, which is what migration 287 did for the thirteen this check found
  * the first time it ran. Stale entries fail in both directions.
  */
@@ -95,7 +107,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { splitStatements } from '../cloudflare-worker/test/_baseline.mjs';
 import { balanced, maskCode, sqlExpressions } from './check-schema-pair-drift.mjs';
-import { buildFresh, objectNames, postCutoffMigrations } from './check-baseline-drift.mjs';
+import {
+  buildFresh, columnsOf, compareColumns, objectNames, postCutoffMigrations,
+} from './check-baseline-drift.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_DIR = path.join(ROOT, 'cloudflare-worker', 'src');
@@ -113,6 +127,7 @@ const CREATE_INDEX = new RegExp(String.raw`^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(IF\s
 const CREATE_VIEW = new RegExp(String.raw`^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?VIEW\s+(IF\s+NOT\s+EXISTS\s+)?${NAME}[\s(][\s\S]*\bAS\b`, 'i');
 const CREATE_TRIGGER = new RegExp(String.raw`^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?TRIGGER\s+(IF\s+NOT\s+EXISTS\s+)?${NAME}\s[\s\S]*\bON\s+${NAME}`, 'i');
 const ALTER_ADD = new RegExp(String.raw`^ALTER\s+TABLE\s+${NAME}\s+ADD\s`, 'i');
+const ALTER_ADD_COLUMN = new RegExp(String.raw`^ALTER\s+TABLE\s+${NAME}\s+ADD\s+(?:COLUMN\s+)?${NAME}`, 'i');
 const ALTER_RENAME_TABLE = new RegExp(String.raw`^ALTER\s+TABLE\s+${NAME}\s+RENAME\s+TO\s+${NAME}\s*$`, 'i');
 const ALTER_RENAME_COLUMN = new RegExp(String.raw`^ALTER\s+TABLE\s+${NAME}\s+RENAME\s+(?:COLUMN\s+)?${NAME}\s+TO\s+${NAME}\s*$`, 'i');
 const DROP = new RegExp(String.raw`^DROP\s+(TABLE|INDEX|VIEW|TRIGGER)\s+(?:IF\s+EXISTS\s+)?${NAME}\s*$`, 'i');
@@ -479,8 +494,10 @@ export function analyse({ truth, db, harvest }) {
     ...harvest.columns.map((c) => c.sql),
     ...harvest.renames.map((r) => r.sql),
   ];
+  const colsBefore = columnsOf(db);
   const run = simulate(db, statements);
   const after = new Set([...objectNames(db)].map((n) => n.toLowerCase()));
+  const colDiff = compareColumns(colsBefore, columnsOf(db));
 
   const sites = new Map();
   for (const c of harvest.creates) {
@@ -493,6 +510,22 @@ export function analyse({ truth, db, harvest }) {
   const creatable = [...after].filter((n) => !lower.has(n)).sort()
     .map((k) => ({ key: k, where: whereOf(k) }));
   const removed = [...lower].filter((n) => !after.has(n)).sort();
+
+  // Columns the run added to a table the fresh build already had (a table it
+  // created is a `creatable` above, columns and all), with the ALTERs that add
+  // each one.
+  const addSites = new Map();
+  for (const c of harvest.columns) {
+    const m = ALTER_ADD_COLUMN.exec(c.sql);
+    if (!m) continue;
+    const k = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`;
+    if (!addSites.has(k)) addSites.set(k, []);
+    if (!addSites.get(k).includes(c.where)) addSites.get(k).push(c.where);
+  }
+  const columnsAdded = colDiff.missing
+    .map((c) => ({ key: c.key, type: c.type, where: addSites.get(c.key) || [] }));
+  const columnsRemoved = colDiff.extra.map((c) => c.key);
+  const columnsRetyped = colDiff.retyped;
 
   const renameBase = execCreates.length + harvest.columns.length;
   const fired = harvest.renames.filter((_, i) => run.ok[renameBase + i]);
@@ -550,8 +583,12 @@ export function analyse({ truth, db, harvest }) {
       drops: harvest.drops.length,
       files: new Set([...harvest.creates, ...harvest.drops].map((c) => c.file)).size,
     },
+    columnsCompared: colsBefore.size,
     creatable,
     removed,
+    columnsAdded,
+    columnsRemoved,
+    columnsRetyped,
     fired,
     refused: [...refusedMap.values()].sort((a, b) => a.key.localeCompare(b.key)),
     opaque,
@@ -565,6 +602,7 @@ export function judge(verdict, ledger) {
   const problems = [];
   const refusedLedger = ledger.refused ?? {};
   const opaqueLedger = ledger.opaque ?? {};
+  const columnsLedger = ledger.columns ?? {};
 
   for (const c of verdict.creatable) {
     problems.push({
@@ -574,6 +612,25 @@ export function judge(verdict, ledger) {
   }
   for (const n of verdict.removed) {
     problems.push({ kind: 'removed', text: `${n} — the fresh build has it and a runtime statement takes it away` });
+  }
+  const added = new Map((verdict.columnsAdded ?? []).map((c) => [c.key, c]));
+  for (const c of added.values()) {
+    const entry = columnsLedger[c.key];
+    if (entry && entry.type === c.type) continue;
+    problems.push({
+      kind: 'column-creatable',
+      text: `${c.key} ${c.type} — the fresh build lacks it and ${c.where.join(', ') || 'a runtime statement'} adds it`
+        + (entry ? ` (the ledger records type "${entry.type}")` : ''),
+    });
+  }
+  for (const k of verdict.columnsRemoved ?? []) {
+    problems.push({ kind: 'column-removed', text: `${k} — the fresh build has it and a runtime statement takes it away` });
+  }
+  for (const r of verdict.columnsRetyped ?? []) {
+    problems.push({ kind: 'column-removed', text: `${r.key} — declared ${r.baseline}, a runtime statement leaves it ${r.live}` });
+  }
+  for (const k of Object.keys(columnsLedger)) {
+    if (!added.has(k)) problems.push({ kind: 'stale-columns', text: k });
   }
   for (const r of verdict.fired) {
     problems.push({ kind: 'renamed', text: `${r.from} → ${r.to} — ${r.where} fires against the fresh build` });
@@ -631,6 +688,9 @@ export function findings(root = ROOT) {
 const HEADINGS = {
   creatable: 'A runtime statement can CREATE an object the fresh build does not have',
   removed: 'A runtime statement can REMOVE an object the fresh build has',
+  'column-creatable': 'A runtime statement can ADD a column the fresh build does not have',
+  'column-removed': 'A runtime statement can remove or retype a column the fresh build has',
+  'stale-columns': 'Ledger columns that no runtime statement adds any more — a migration declares them, or the statement is gone',
   renamed: 'A runtime rename FIRES against the fresh build',
   refused: 'A runtime CREATE names an object no migration declares, and SQLite refuses it today',
   'refusal-changed': 'A recorded refusal now fails for a different reason',
@@ -650,6 +710,13 @@ const ADVICE = {
   removed: 'Step 9 fails in the other direction the first time it runs. A rename or drop at\n'
     + 'runtime exists to carry a legacy database forward; on the schema the repo builds it\n'
     + 'must find nothing to act on.',
+  'column-creatable': 'Wherever the statement runs, that database gains a column a fresh build lacks, and\n'
+    + 'deploy step 9 (check-baseline-drift, which compares columns since D359) reports it.\n'
+    + 'Declare the column in a NEW migration, copied from the runtime ALTER. Until the\n'
+    + 'migration has a number, record it under `columns` in\n'
+    + 'scripts/runtime-schema-declared-baseline.json with the type it adds and why.',
+  'column-removed': 'Declare the shape the runtime statement leaves in a migration, or delete the statement.',
+  'stale-columns': 'Delete them — the gap they recorded is closed.',
   renamed: 'Declare the renamed shape in a migration so the fresh build already has it; the\n'
     + 'runtime rename then finds nothing to rename, which is its job.',
   refused: 'Nothing is created today, but the day the refusal stops — a column added, a quote\n'
@@ -684,8 +751,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(
     `✓ check-runtime-schema-declared: ${verdict.statements} runtime DDL statements `
     + `(${verdict.counts.creates} create, ${verdict.counts.columns} add-column, ${verdict.counts.renames} rename) `
-    + `run to a fixed point in ${verdict.passes} passes over the fresh build's ${verdict.truthSize} objects — `
-    + 'none can create or remove a name it lacks or has '
-    + `(${verdict.refused.length} refused and ${opaqueStatements} opaque on record).`,
+    + `run to a fixed point in ${verdict.passes} passes over the fresh build's ${verdict.truthSize} objects `
+    + `and ${verdict.columnsCompared} columns — none can create or remove a name or column it lacks or has `
+    + `(${verdict.refused.length} refused, ${opaqueStatements} opaque and ${verdict.columnsAdded.length} column(s) awaiting a migration on record).`,
   );
 }

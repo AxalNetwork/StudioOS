@@ -6,6 +6,7 @@ import {
   AlertTriangle, Sparkles, Scale, DollarSign, Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { PACKET_NOT_BUILT } from '../lib/incorporationPricing';
 import AxalCheckout from '../components/AxalCheckout';
 import { useIncorporationStatus } from '../hooks/useIncorporationStatus';
 import IncorporationStatusBadge from '../components/IncorporationStatusBadge';
@@ -610,13 +611,13 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
           <CheckCircle2 className="text-emerald-600 flex-shrink-0 mt-0.5" size={20} />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-emerald-900 flex items-center flex-wrap gap-2 dark:text-emerald-200">
-              Payment received — {jurisdiction?.label} filing started
+              Payment received — {jurisdiction?.label} formation ordered
               <IncorporationStatusBadge status={status} timedOut={false} />
             </div>
             <div className="text-xs text-emerald-800 mt-0.5 dark:text-emerald-300">
               {isReady
                 ? 'Your founder document set is ready. Open Legal to view your documents.'
-                : "We're preparing your founder document set now. It'll appear under your startup in Legal shortly, and your receipt is in Billing."}
+                : `${PACKET_NOT_BUILT} Your receipt is in Billing.`}
             </div>
           </div>
         </div>

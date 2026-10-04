@@ -53,7 +53,7 @@ import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spi
 import LabPageShell from '../components/spinout/LabPageShell';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
-import { PAID_STATUSES, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
+import { PACKET_NOT_BUILT, PACKET_NOT_BUILT_STATUSES, PAID_STATUSES, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -302,7 +302,11 @@ export default function SpinoutLabIncorporatePage() {
 
   const orderStatus = order?.status || null;
   // Filing progress index: how many vertical steps are DONE.
-  const filingDone = !paid ? 0 : orderStatus === 'packet_ready' ? 2 : orderStatus === 'packet_processing' ? 1 : docsAllDone ? 1 : 0;
+  // D367: `packet_processing` is set at payment and builds nothing, so it
+  // marks no step done. A ready packet is "Documents prepared" (step 1), not
+  // a state submission; nothing in the Worker records a submission yet.
+  const filingDone = !paid ? 0 : orderStatus === 'packet_ready' || docsAllDone ? 1 : 0;
+  const packetNotBuilt = paid && PACKET_NOT_BUILT_STATUSES.includes(orderStatus);
   const filingSteps = [
     ['Documents prepared', 'Formation package generated and reviewed', 'Ready'],
     [`Submitted to ${juris.state}`, 'Filed with Secretary of State', 'Est. same day'],
@@ -781,6 +785,9 @@ export default function SpinoutLabIncorporatePage() {
       {/* State filing tracker */}
       <div className={`${CARD} p-5 ${dim}`} data-testid="filing-card">
         <div className={`${LBL} mb-4`}>State filing tracker</div>
+        {packetNotBuilt && (
+          <p className="text-[12px] text-gray-600 dark:text-gray-300 mb-3" data-testid="filing-packet-not-built">{PACKET_NOT_BUILT}</p>
+        )}
         <div className="flex flex-col">
           {filingSteps.map((f, i) => (
             <div key={f.title} className="grid grid-cols-[26px_1fr_auto] gap-3.5 items-start pb-4">
@@ -897,7 +904,7 @@ export default function SpinoutLabIncorporatePage() {
                 <div className="text-[24px] font-extrabold mt-1" data-testid="investor-entity-name">{legalName}</div>
                 <div className="text-[13px] text-violet-100/70 mt-0.5">{ENTITIES[selected].name} · State of {juris.state}</div>
                 <div className="flex flex-wrap gap-6 mt-4">
-                  <div><div className="text-[11px] text-gray-400">Status</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? (filingDone >= 2 ? 'Filed' : 'Filing') : 'Pre-formation'}</div></div>
+                  <div><div className="text-[11px] text-gray-400">Status</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? (filingDone >= 2 ? 'Filed' : 'Paid · not filed') : 'Pre-formation'}</div></div>
                   <div><div className="text-[11px] text-gray-400">EIN</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? 'Pending' : '—'}</div></div>
                   <div><div className="text-[11px] text-gray-400">Registered agent</div><div className="text-[14px] font-mono font-semibold mt-0.5">Not recorded</div></div>
                 </div>

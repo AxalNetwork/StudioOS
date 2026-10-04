@@ -251,8 +251,52 @@ test('an index created only after a later ADD COLUMN is found by running to a fi
   const { problems } = run('CREATE TABLE a (id INTEGER);', {
     [F]: 'db.exec("CREATE INDEX IF NOT EXISTS ix ON a(extra)");\ndb.exec("ALTER TABLE a ADD COLUMN extra TEXT");',
   });
-  assert.deepEqual(problems.map((p) => p.kind), ['creatable']);
+  assert.deepEqual(problems.map((p) => p.kind), ['creatable', 'column-creatable']);
   assert.match(problems[0].text, /^index:ix /);
+  assert.match(problems[1].text, /^a\.extra TEXT /, 'the column the index needs is itself undeclared (D359)');
+});
+
+// ---------------------------------------------------------------------------
+// Columns (D359) — an ADD COLUMN that succeeds adds no name, so comparing names
+// alone let it through
+
+test('a runtime ADD COLUMN the fresh build lacks fails, naming the column, its type and the statement', () => {
+  const { problems, verdict } = run('CREATE TABLE a (id INTEGER);',
+    { [F]: 'await env.DB.exec("ALTER TABLE a ADD COLUMN extra INTEGER NOT NULL DEFAULT 0");' });
+  assert.deepEqual(problems.map((p) => p.kind), ['column-creatable']);
+  assert.equal(problems[0].text,
+    'a.extra INTEGER — the fresh build lacks it and cloudflare-worker/src/fixture/a.ts:1 adds it');
+  assert.deepEqual(verdict.creatable, [], 'no name changed — the old check saw nothing here');
+});
+
+test('a runtime ADD COLUMN of a declared column is a safety net and passes', () => {
+  const { problems, verdict } = run('CREATE TABLE a (id INTEGER, extra INTEGER);',
+    { [F]: 'await env.DB.exec("ALTER TABLE a ADD COLUMN extra INTEGER");' });
+  assert.deepEqual(problems, []);
+  assert.equal(verdict.statements, 1, 'the statement was harvested and run — the pass is not vacuous');
+  assert.equal(verdict.columnsCompared, 2);
+});
+
+test('an undeclared column passes only while the ledger records that column with that type', () => {
+  const base = 'CREATE TABLE a (id INTEGER);';
+  const src = { [F]: 'db.exec("ALTER TABLE a ADD COLUMN extra TEXT");' };
+  assert.deepEqual(run(base, src, { columns: { 'a.extra': { type: 'TEXT', reason: 'fixture' } } }).kinds, []);
+  assert.deepEqual(run(base, src, { columns: { 'a.extra': { type: 'INTEGER', reason: 'fixture' } } }).kinds,
+    ['column-creatable'], 'recorded with a different type, it fails');
+  assert.deepEqual(run(base, {}, { columns: { 'a.extra': { type: 'TEXT', reason: 'fixture' } } }).kinds,
+    ['stale-columns'], 'once nothing adds it, the entry is stale');
+  assert.deepEqual(run('CREATE TABLE a (id INTEGER, extra TEXT);', src,
+    { columns: { 'a.extra': { type: 'TEXT', reason: 'fixture' } } }).kinds,
+  ['stale-columns'], 'once a migration declares it, the entry is stale');
+});
+
+test('a loop of ADD COLUMNs is checked column by column', () => {
+  const src = `for (const [col, type] of [['kept', 'TEXT'], ['added', 'REAL']]) {
+    await env.DB.exec(\`ALTER TABLE a ADD COLUMN \${col} \${type}\`);
+  }`;
+  const { problems } = run('CREATE TABLE a (id INTEGER, kept TEXT);', { [F]: src });
+  assert.deepEqual(problems.map((p) => p.text),
+    ['a.added REAL — the fresh build lacks it and cloudflare-worker/src/fixture/a.ts:2 (loop) adds it']);
 });
 
 test('a refusal on record passes only while SQLite still gives that refusal', () => {
@@ -362,12 +406,22 @@ test('the tree passes: no runtime statement can create or remove a name the fres
   assert.ok(verdict.statements > 500, `only ${verdict.statements} runtime DDL statements were harvested`);
   assert.deepEqual(verdict.creatable, []);
   assert.deepEqual(verdict.refused.map((r: any) => r.key), Object.keys(ledger.refused).sort());
+  // Columns are compared too, over the whole fresh build (D359).
+  assert.ok(verdict.columnsCompared > 5000, `only ${verdict.columnsCompared} columns were compared`);
+  assert.deepEqual(verdict.columnsAdded.map((c: any) => c.key), Object.keys(ledger.columns).sort());
+  assert.deepEqual(verdict.columnsRemoved, []);
+  assert.deepEqual(verdict.columnsRetyped, []);
 });
 
 test('every ledger entry carries what it records and a reviewed reason', () => {
   const ledger = JSON.parse(readFileSync(LEDGER, 'utf8'));
   for (const [k, e] of Object.entries<any>(ledger.refused)) {
     assert.ok(typeof e.refusal === 'string' && e.refusal.length > 5, `${k} records no refusal text`);
+    assert.ok(typeof e.reason === 'string' && e.reason.length > 40, `${k} records no reviewed reason`);
+  }
+  for (const [k, e] of Object.entries<any>(ledger.columns)) {
+    assert.match(k, /^[a-z_]\w*\.[a-z_]\w*$/, `${k} is not table.column`);
+    assert.ok(typeof e.type === 'string' && e.type.length > 0, `${k} records no type`);
     assert.ok(typeof e.reason === 'string' && e.reason.length > 40, `${k} records no reviewed reason`);
   }
   for (const [f, e] of Object.entries<any>(ledger.opaque)) {
