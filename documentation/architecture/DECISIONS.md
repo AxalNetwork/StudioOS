@@ -40184,6 +40184,58 @@ versioning decision) and stays unbuilt past its line.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
 
+## D468
+
+**A recusal is final.** Wave 9, item 7, the second of three; issue #1019,
+slot S08 (moved from S16). No migration. Session 1 decided this on the
+owner's behalf, from the questions D461–D464 name. If the owner strikes it,
+the vote endpoint goes back to upserting, and a member may un-recuse by
+voting.
+
+**The defect.** D461 made `recused` a vote value with its declaration
+required as the rationale, and the tally counts it beside the
+yes/no/abstain denominator. But `POST /api/ic/:uid/vote` upserted
+(`ON CONFLICT(ic_decision_id, user_id) DO UPDATE`). A member who recused
+could later vote yes, no or abstain on the same decision, or recuse again
+with a different declaration. The declared conflict then vanished from the
+record and the denominator.
+
+**What changed.**
+- The upsert carries the guard itself:
+  `DO UPDATE … WHERE ic_votes.vote <> 'recused'`. A recused row is never
+  updated, so two racing requests cannot get past it the way they could
+  past a separate read.
+- When the write changes no row, the request is refused with
+  `409 recusal_is_final` and a sentence: the recusal and its declaration
+  stand.
+- If a driver does not report `meta.changes`, the stored row is read back
+  rather than assuming the write landed.
+- A refused vote writes no decision-journal draft, because the refusal
+  returns before the journal step.
+- Voting first and recusing later is still allowed: that is a member
+  declaring a conflict they learned of. An ordinary change of vote is
+  unchanged.
+
+**Guards.**
+- `cloudflare-worker/test/ic_recusal_final_d468.test.ts` has 5 tests. They
+  drive the real `ic` router against real SQLite. They cover:
+  - recuse then yes, with the stored vote, the declaration and the tally
+    unchanged;
+  - no, abstain and a fresh declaration, each refused;
+  - no journal draft from a refused vote;
+  - a driver with no row count;
+  - controls: changing a vote, and recusing after voting.
+- On the code as it was, 4 of the 5 fail. The control passes.
+- Mutation-checked both ways: 7 of 7 caught, each with a non-zero exit and
+  a `not ok` line, and the file was restored and checked by sha256. The
+  mutations:
+  - drop the guard;
+  - guard the wrong value;
+  - never refuse;
+  - refuse everything;
+  - skip the read-back, or make it refuse a first recusal;
+  - rename the code.
+
 ## D470
 
 **Gap-map leftovers, up to the owner's line.** Wave 9 item 7. Items 4 and 5

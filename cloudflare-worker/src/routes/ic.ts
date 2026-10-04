@@ -630,11 +630,33 @@ r.post('/:uid/vote', async (c) => {
         message: 'A recusal records the conflict it declares. Write the declaration as the rationale.',
       }, 400);
     }
-    await c.env.DB.prepare(
+    // D468 — A RECUSAL IS FINAL. The member declared a conflict and left the
+    // denominator; a later yes/no/abstain (or a fresh recusal rewriting the
+    // declaration) would erase that record, and an upsert used to do exactly
+    // that. The guard is IN the upsert (`WHERE ic_votes.vote <> 'recused'`),
+    // so two requests racing cannot slip past a separate read: a recused row
+    // is never updated, and zero changed rows is the refusal. Voting first and
+    // recusing later is still allowed — that is a member declaring a conflict.
+    const write = await c.env.DB.prepare(
       `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
        VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at`
+       ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at
+        WHERE ic_votes.vote <> 'recused'`
     ).bind(d.id, user.id, vote, rationale, nowIso()).run();
+    // D1 reports `meta.changes`; if a driver ever did not, the stored row is
+    // read back rather than assuming the write landed.
+    const changed = (write as any)?.meta?.changes;
+    const refused = typeof changed === 'number'
+      ? changed === 0
+      : (await c.env.DB.prepare('SELECT vote, rationale FROM ic_votes WHERE ic_decision_id = ? AND user_id = ?')
+          .bind(d.id, user.id).first<{ vote: string; rationale: string | null }>()
+          .then((row) => row?.vote === 'recused' && (vote !== 'recused' || row.rationale !== rationale)));
+    if (refused) {
+      return c.json({
+        error: 'recusal_is_final',
+        message: 'You recused yourself from this decision. A recusal is final: it and its declaration stand, and no later vote is recorded.',
+      }, 409);
+    }
     // First vote moves a draft into the voting stage.
     if (d.status === 'draft') {
       await c.env.DB.prepare("UPDATE ic_decisions SET status='voting', updated_at=? WHERE id=?").bind(nowIso(), d.id).run();
