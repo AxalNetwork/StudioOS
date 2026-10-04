@@ -63,6 +63,7 @@ const DOCUMENTED = new Map([
   ['design/incoming',                 'Claude Design exports waiting to be integrated'],
   ['design/canvases',                 'the 107 canvases, sorted by whether a route exists'],
   ['documentation/architecture',      'the maintained architecture set'],
+  ['documentation/architecture/decisions', 'one file per decision from D526 on; DECISIONS.md keeps D1 to D525'],
   ['documentation/audits',            'dated snapshots — true on their date only'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],

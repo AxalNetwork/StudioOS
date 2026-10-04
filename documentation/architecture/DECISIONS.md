@@ -40184,6 +40184,67 @@ versioning decision) and stays unbuilt past its line.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
 
+## D469
+
+**Only an admin changes a deal's amount through `PUT /deals/:id`.** Wave 9,
+item 7, the third of three; issue #1020, slot S08 (moved from S16). No
+migration. Session 1 decided this on the owner's behalf, from the questions
+D461–D464 name. If the owner strikes it, a partner can again rewrite a
+deal's amount, and an admin's edits leave no audit trail.
+
+**The defect.** `PUT /deals/:id` is gated by `requireRole('partner')`,
+which admits partners and admins. Both could rewrite `deals.amount`, and
+nothing recorded an admin changing a deal that was not theirs.
+
+**What changed.**
+- **A partner's `amount` is REFUSED, not dropped:** `403
+  deal_amount_admin_only`, with a sentence. A dropped field reads to the
+  caller as a saved one. The refusal runs before anything else in the
+  request is written, so status, notes and the stage event are untouched.
+  The only screen that calls this route, the Deals page's terms editor,
+  never sends `amount`.
+- Status, partner and notes keep the partner gate.
+- An admin's edit to a deal that is not theirs goes through
+  `logAdminAction` as `deal_update_by_admin`. "Theirs" means the deal's
+  `lead_partner_id` is the admin. A deal with another lead partner, or with
+  none, is someone else's. The audit row carries:
+  - the deal;
+  - its lead partner;
+  - the fields sent;
+  - the amount before and after, when the amount moved.
+  An admin editing their own deal is not acting on someone else's behalf
+  and leaves no row.
+
+**Open: D463's term fields.** The issue says "term edits" in its title and
+names the amount in its decision. Whether target raise, minimum check,
+valuation cap, carry and fee (or every D463 field) follow the same rule is
+asked on #1020 as options A, B and C. The slot's pick is B: the money terms
+join the amount, and the descriptive fields stay with partners. Until it
+is answered, the terms keep today's partner gate, which is option A's
+behaviour.
+
+**Guards.**
+- `cloudflare-worker/test/deal_amount_admin_d469.test.ts` has 6 tests. They
+  drive the real `deals` router against real SQLite, on D463's fixture plus
+  `activity_logs`. They cover:
+  - a partner's amount refused and not written;
+  - the refusal landing before any other write;
+  - status, partner and notes still working for a partner, with no audit
+    row;
+  - an admin's amount written and audited, with before and after;
+  - any admin edit to someone else's deal audited;
+  - an admin's own deal not audited.
+- On the code as it was, 4 of the 6 fail. The other 2 are controls.
+- Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and
+  a `not ok` line, and the file was restored and checked by sha256. The
+  mutations:
+  - drop the refusal;
+  - treat everyone, or no one, as admin;
+  - silently drop the amount instead of refusing;
+  - never audit, or always audit;
+  - lose the amount before;
+  - lose the fields.
+
 ## D470
 
 **Gap-map leftovers, up to the owner's line.** Wave 9 item 7. Items 4 and 5

@@ -9,6 +9,7 @@ import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
 import { newUid, nowIso } from './_t13t14t15_helpers';
+import { logAdminAction } from '../services/adminAudit';
 
 const deals = new Hono<{ Bindings: Env }>();
 
@@ -600,8 +601,22 @@ deals.put('/:id', async (c) => {
   const data = await c.req.json();
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, status, stage_changed_at FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+
+  // D469 — THE AMOUNT CHANGES ONLY FOR AN ADMIN. `requireRole('partner')`
+  // admits partners and admins, and both could rewrite a deal's amount here.
+  // A partner's `amount` is REFUSED, before anything else in the request is
+  // written, rather than silently dropped: a dropped field reads to the
+  // caller as a saved one. Status, partner and notes keep the partner gate.
+  const isAdminCaller = String((user as any)?.role) === 'admin';
+  if (data.amount !== undefined && !isAdminCaller) {
+    await sql.end();
+    return c.json({
+      error: 'deal_amount_admin_only',
+      message: 'Only an admin changes a deal’s amount. Nothing in this request was saved.',
+    }, 403);
+  }
 
   if (data.status !== undefined) {
     if (!DEAL_STATUSES.includes(String(data.status))) {
@@ -660,6 +675,22 @@ deals.put('/:id', async (c) => {
   // The source is free text for the same reason it is at draft: the taxonomy
   // is the owner's call.
   if (data.source !== undefined) await sql`UPDATE deals SET source = ${data.source ? String(data.source).trim().slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+
+  // D469 — an admin's edit to a deal that is not theirs (its lead partner is
+  // someone else, or nobody) is recorded through logAdminAction: which deal,
+  // which fields, and the amount before and after when it moved.
+  if (isAdminCaller) {
+    const before = rows[0] as any;
+    if (Number(before.lead_partner_id) !== Number((user as any).id)) {
+      const fields = Object.keys(data || {}).filter((k) => data[k] !== undefined).sort();
+      await logAdminAction(c.env, Number((user as any).id), String((user as any).email || ''), 'deal_update_by_admin', {
+        deal_id: id,
+        lead_partner_id: before.lead_partner_id ?? null,
+        fields,
+        ...(data.amount !== undefined ? { amount_from: before.amount ?? null, amount_to: data.amount } : {}),
+      });
+    }
+  }
 
   const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
