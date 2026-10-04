@@ -21,7 +21,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync, chmodSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, chmodSync, existsSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { planRestore, splitStatements, chunkText, DEFER_FK, D1_STATEMENT_LIMIT } from '../../scripts/dr-drill-split.mjs';
 import { resolve, join } from 'node:path';
