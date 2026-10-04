@@ -3,7 +3,8 @@
  *
  * `api.statementDraw` and `api.statementUpdate` existed with no caller since
  * D266 filed them. This holds the draw editor, HQ entry actions, payload
- * validation, and page wiring.
+ * validation, and page wiring. D514 holds the draw: the editor test became the
+ * hold test, and issue and payment carry their new labels.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,8 +13,10 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
+import { renderedText } from './_renderedText.mjs';
 import {
-  StatementDrawEditor,
+  StatementDrawHeld,
+  STATEMENT_DRAW_HELD,
   StatementActions,
   statementDrawPayload,
   statementPaidPayload,
@@ -56,27 +59,23 @@ test('paid and dispute payloads refuse what the worker would refuse', () => {
   const ok = statementPaidPayload({ amountText: '0.35', note: 'wire', owedCents: 3500 });
   assert.equal(ok.body.paid_cents, 35);
   assert.ok(statementDisputePayload({ amountText: '', note: 'why' }).error);
+  assert.deepEqual(statementDisputePayload({ amountText: '0', note: '' }).body, { disputed_cents: 0 }, 'D514: 0 clears a dispute');
   assert.ok(statementDisputePayload({ amountText: '1', note: '' }).error);
   assert.equal(statementDisputePayload({ amountText: '10', note: 'disputed fee' }).body.disputed_cents, 1000);
 });
 
-test('the draw editor lists drawable licences and names re-draw limits', () => {
-  const h = renderToStaticMarkup(
-    React.createElement(StatementDrawEditor, {
-      licences: LICENCES,
-      currentPeriod: '2026-Q3',
-      onDraw: async () => ({}),
-    }),
-  );
-  assert.match(h, /Draw draft/);
-  assert.match(text(h), /France/);
-  assert.doesNotMatch(text(h), /Untermed/);
-  assert.match(text(h), /Re-drawing replaces a draft only/);
+test('D514 — the draw editor is replaced by the hold sentence', () => {
+  const h = renderToStaticMarkup(React.createElement(StatementDrawHeld));
+  assert.ok(renderedText(h).includes(STATEMENT_DRAW_HELD), renderedText(h));
+  assert.match(STATEMENT_DRAW_HELD, /held for the owner's decision/);
+  assert.match(STATEMENT_DRAW_HELD, /brief item 7/);
+  assert.doesNotMatch(h, /<form|<select|Draw draft/, 'the draw form is back');
 });
 
 test('statement actions expose issue, void, and HQ entry forms', () => {
   const stmt = {
     uid: 'st_1', status: 'draft', owed_cents: 3500, currency: 'EUR',
+    complete: true, unreported_streams: 0, estimated_streams: 0,
   };
   const h = renderToStaticMarkup(
     React.createElement(StatementActions, {
@@ -84,16 +83,16 @@ test('statement actions expose issue, void, and HQ entry forms', () => {
       onUpdate: async () => ({}),
     }),
   );
-  assert.match(text(h), /Issue to subsidiary/);
-  assert.match(text(h), /Record payment/);
+  assert.match(text(h), /Mark as issued/);
+  assert.match(text(h), /Set total paid/);
   assert.match(text(h), /Record dispute/);
   assert.match(h, /data-testid="hq-statement-actions-st_1"/);
 });
 
 test('the page calls the statement api methods and reloads the ledger', () => {
-  assert.match(PAGE, /api\.statementDraw\(/);
   assert.match(PAGE, /api\.statementUpdate\(/);
-  assert.match(PAGE, /StatementDrawEditor/);
+  assert.match(PAGE, /<StatementDrawHeld \/>/);
+  assert.doesNotMatch(PAGE, /api\.statementDraw\(/, 'D514 holds the draw: the page must not call it');
   assert.match(PAGE, /StatementActions/);
   assert.match(PAGE, /loadStatements\(\)/, 'a draw or update re-reads the ledger');
   assert.match(API, /statementDraw:/);
