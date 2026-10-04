@@ -30,6 +30,7 @@ because only Session 1 makes a task ready.
 | `state:blocked` | Blocked; the STATUS comment says on what |
 | `state:review` | Draft PR open; CI and review |
 | `needs-decision` | Waiting on the owner's call |
+| `needs-design` | Waiting on a Claude Design canvas for a screen |
 
 1. **Pull.** Take the oldest open issue labelled with your slot and
    `state:ready`, one task at a time. Over the REST API that is
@@ -43,6 +44,10 @@ because only Session 1 makes a task ready.
    `state:review` and post a STATUS comment with the PR link.
 4. **Blocked.** Set `state:blocked`, plus `needs-decision` when the call is
    the owner's. Put the question in a STATUS comment, then take another task.
+   Give the owner lettered options (A, B, C) and say which one you would
+   pick, so that one letter answers it. When only part of the task waits,
+   build the rest: that PR says `Part of #<issue>` instead of
+   `Closes #<issue>`, so the issue stays open for the part that waits.
 5. **Finish.** Fix CI and review comments until everything is green. Never
    merge, never mark a PR ready for review, and never push to `main` or to
    another slot's branch. The owner merges.
@@ -75,6 +80,35 @@ Each STATUS state goes with one label, and you change both at the same time:
 
 The slot posts `DONE` once, after the owner merges the PR. If the slot has
 moved on by then, Session 1 posts it when it confirms the deploy.
+
+### Owner answers
+
+Every time you check your queue, read the new comments on your own issues
+labelled `needs-decision` or `state:blocked`. An answer is a comment by the
+owner account that does not start with `S1:` and carries no STATUS block, for
+example a plain `A`. Read it against the options in your question.
+
+An answer settles the question. Remove `needs-decision`, set
+`state:in-progress`, post a STATUS that says what the owner chose, and finish
+the task on that basis. Session 1 also relays each answer it finds, as an
+`S1:` comment on the same issue.
+
+### Missing UI
+
+When a task needs a screen and no canvas under `design/` covers it, don't
+invent the layout:
+
+1. Add `needs-design` to the issue. Post a STATUS whose `questions:` describe
+   the screen: its route, who sees it, what each part shows and from which
+   store, and its empty, `Not recorded` and `Unreadable` states.
+2. Meanwhile, build everything that does not depend on the layout: the Worker
+   routes, the data and the tests.
+3. Session 1 turns the description into a Claude Design canvas, from what the
+   platform actually records, and links it on the issue for the owner.
+4. Once the owner approves the canvas, Session 1 commits its export under
+   `design/incoming/`, removes `needs-design` and sets `state:ready`.
+5. Build the screen to the canvas, at desktop and phone widths. The PR says
+   where the build departs from the canvas, and why.
 
 ### Who gives instructions
 
