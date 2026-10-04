@@ -89,12 +89,14 @@ const EXPIRY_OPTS = [
 ];
 
 /** Share sheet: real read-only link + QR + expiry. */
-export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChange, onClose, viewLimit = null }) {
+export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChange, onClose, viewLimit = null, notice = '' }) {
   const [copied, setCopied] = useState(false);
+  const [copyBlocked, setCopyBlocked] = useState(false);
   const [qr, setQr] = useState('');
   const timer = useRef(null);
 
   useEffect(() => {
+    setCopyBlocked(false); // a new link has not been copied, or blocked, yet
     if (!open || !url) { setQr(''); return; }
     let alive = true;
     QRCode.toDataURL(url, { margin: 1, width: 240, errorCorrectionLevel: 'M' })
@@ -109,9 +111,18 @@ export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChan
 
   const copy = async () => {
     if (!url) return;
-    try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked */ }
-    setCopied(true);
+    // D367: "Copied" only when the clipboard took it. A blocked clipboard
+    // used to report "Copied" anyway, and the founder sent nothing.
     clearTimeout(timer.current);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      setCopied(false);
+      setCopyBlocked(true);
+      return;
+    }
+    setCopyBlocked(false);
+    setCopied(true);
     timer.current = setTimeout(() => setCopied(false), 1600);
   };
 
@@ -166,6 +177,16 @@ export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChan
             </div>
           </div>
 
+          {copyBlocked && (
+            <p className="text-[12px] text-rose-700 dark:text-rose-300" data-testid="share-copy-blocked">
+              Copy was blocked — select the link and copy it by hand.
+            </p>
+          )}
+
+          {notice && (
+            <p className="text-[12px] text-gray-600 dark:text-gray-300" data-testid="share-replace-notice">{notice}</p>
+          )}
+
           {!busy && url && (
             <p className="text-[12px] text-gray-600 dark:text-gray-300 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 px-3 py-2" data-testid="share-view-limit">
               {viewLimitCopy(viewLimit) || 'The server did not say how many times this link opens.'}
@@ -176,7 +197,7 @@ export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChan
             <div>
               <div className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Link expires</div>
               <div className="text-[11.5px] text-gray-400 dark:text-gray-500" data-testid="share-expiry-cap">
-                Each choice issues a new link. No link lasts longer than 30 days.
+                Each choice issues a new link and withdraws the one shown above. No link lasts longer than 30 days.
               </div>
             </div>
             <div className="flex gap-1.5">

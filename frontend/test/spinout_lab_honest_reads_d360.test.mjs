@@ -65,7 +65,9 @@ test('no `|| 0` or `?? 0` stands in for a figure on the seven pages', () => {
     // Normalizing an EDITABLE input to a number the founder then sees and
     // edits is not a read figure; those lines are named here one by one so a
     // new `|| 0` on a displayed figure cannot slip in beside them.
-    const allowed = hits.filter((l) => !/normalizeInputs|option_pool_pct: num\(e\.target\.value\)|num\(form\.|num\(f\?\.shares\)|num\(s\?\.amount\)|num\(r\?\.(pre_money|investment)\)|Number\(x\?\.pct\)|Number\(pcts\[i\]\)|Number\(r\) \|\| 0/.test(l));
+    // D367 removed normalizeInputs' zeros and the pool field's, so their
+    // exemptions are gone too: only the add-row forms remain.
+    const allowed = hits.filter((l) => !/num\(form\.|Number\(x\?\.pct\)|Number\(pcts\[i\]\)|Number\(r\) \|\| 0/.test(l));
     assert.deepEqual(allowed, [], `${name} still coerces a figure to zero:\n${allowed.join('\n')}`);
   }
 });

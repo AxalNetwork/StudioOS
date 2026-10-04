@@ -17,3 +17,5 @@
 .kpi-actions span{font-size:11px;color:#6c6574}
 .dark .stage-grid>div.is-unbacked{background:#2a2529;border-color:#4a4038}.dark .roadmap-pill{background:#2b2634;color:#ded7e5;border-color:#484050}
 .dark .kpi-grid input{background:#221d2b;border-color:#423b4b;color:#f0ecf5}.dark .kpi-grid>div.is-derived{background:#231f2c}.dark .kpi-actions span{color:#b7aebe}
+.kpi-asof{display:inline-flex;align-items:center;gap:6px;font:700 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.07em;text-transform:uppercase;color:#7b7488}.kpi-asof input{padding:6px 8px;border:1px solid #e2e1e8;border-radius:7px;background:#fff;color:#24212a;font:600 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:none}
+.dark .kpi-asof{color:#b7aebe}.dark .kpi-asof input{background:#221d2b;border-color:#423b4b;color:#f0ecf5}

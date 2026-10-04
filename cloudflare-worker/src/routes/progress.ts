@@ -1954,6 +1954,14 @@ progress.get('/metrics/:projectId', async (c) => {
   return c.json({ items, snapshots: items });
 });
 
+/** D367: `YYYY-MM-DD` that names a real calendar day, or null. */
+export function calendarDate(raw: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.toISOString().slice(0, 10) === raw ? raw : null;
+}
+
 progress.post('/metrics/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
@@ -1963,8 +1971,18 @@ progress.post('/metrics/:projectId', async (c) => {
   ensureCanEdit(project, user);
   await ensureProjectMetricsSchema(c.env);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
-  const dateRaw = String(body?.snapshot_date || '').trim();
-  const snapshotDate = dateRaw || new Date().toISOString().slice(0, 10);
+  // D367 — THE DATE IS THE CALLER'S, NEVER TODAY BY DEFAULT. A snapshot's
+  // date is the period its figures describe. Defaulting a missing one to
+  // today stamped a period nobody chose (the Build desk sent none), so a
+  // missing or unreal date is now refused and nothing is written.
+  const dateRaw = String(body?.snapshot_date ?? '').trim();
+  if (!dateRaw) {
+    return c.json({ detail: { code: 'snapshot_date_required', message: 'Choose the date these figures describe. Nothing was saved.' } }, 400);
+  }
+  const snapshotDate = calendarDate(dateRaw);
+  if (!snapshotDate) {
+    return c.json({ detail: { code: 'snapshot_date_invalid', message: 'The snapshot date must be a real date written YYYY-MM-DD. Nothing was saved.' } }, 400);
+  }
   const mrr = numOrNull(body?.mrr);
   let arr = numOrNull(body?.arr);
   if (arr == null && mrr != null) arr = mrr * 12;
