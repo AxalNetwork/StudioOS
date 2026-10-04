@@ -1,0 +1,1 @@
+var e=({isActive:e})=>e?`is-active`:void 0;export{e as t};

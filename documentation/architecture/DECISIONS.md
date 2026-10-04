@@ -41168,6 +41168,11 @@ in `cloudflare-worker/test/ticket_creation_recovery.test.ts`, rule
 exception for that exact test finding, not a path or rule allowlist;
 `.gitleaks.toml` is unchanged and no real credential is recorded.
 
+Completion merges the current main, including D529's CI build-before-check
+workflow, and rebuilds `docs/` from lockfile-installed frontend dependencies.
+The rebuilt output is committed for this PR as explicitly requested in #1012's
+owner handoff, an exception to D529's newer default of leaving it untracked.
+
 Verification covers authenticated ticket creation, persistence of permission
 errors, recovery after permission repair, non-admin exclusion, explicit opt-in,
 overlapping retries and submissions, expired claims, and the batch bound.

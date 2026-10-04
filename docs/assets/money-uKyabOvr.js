@@ -1,0 +1,1 @@
+function e(e,t){let n=(Number(e)||0)/100;try{return new Intl.NumberFormat(void 0,{style:`currency`,currency:(t||`usd`).toUpperCase()}).format(n)}catch{return`$${n.toFixed(2)}`}}export{e as t};
