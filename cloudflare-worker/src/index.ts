@@ -182,6 +182,7 @@ import branchInvitationRoutes from './routes/branch_invitations';
 import branchSupportSessionRoutes from './routes/branch_support_sessions';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminCreditRules from './routes/admin_credit_rules';
+import adminTicketReviews from './routes/admin_ticket_reviews';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
@@ -896,6 +897,9 @@ app.route('/api/admin/super-admins', adminSuperAdmins);
 // D540 — the credit reward rules and their grants. Super-admin-only, and
 // before the catch-all like the rest of the HQ tier.
 app.route('/api/admin/credit-rules', adminCreditRules);
+// D544 — the review queue for feature requests and suggested tasks.
+// Super-admin-only, before the catch-all.
+app.route('/api/admin/ticket-reviews', adminTicketReviews);
 // HQ · Home — the franchisor's overview. Super-admin-only, mounted before
 // the catch-all like everything else in the HQ tier.
 app.route('/api/admin/hq', adminHq);
