@@ -20,13 +20,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readRoutesSource } from './_routesSource.mjs';
 
 // Resolve from this file, not the cwd: the drift suite runs every test from
 // the repo root while `npm test` in frontend/ runs them from there, and a
 // cwd-relative path silently reads the wrong tree in one of the two.
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
-const appSrc = readFileSync(resolve(root, 'src/App.jsx'), 'utf8');
+// D528 — App.jsx plus every module under frontend/src/routes/, so a zone route
+// declared in a module is registered as far as this guard is concerned.
+const appSrc = readRoutesSource(resolve(root, '..'));
 const configSrc = readFileSync(resolve(root, 'src/workspaces/shellConfig.js'), 'utf8');
 
 /** Every `path="…"` registered in App.jsx. */

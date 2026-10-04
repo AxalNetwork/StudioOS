@@ -29,6 +29,8 @@ import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { FOUNDER_FULL_BLEED } from '../src/sidebarConfig.js';
 import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const src = codeOnly(read('frontend/src/sidebarConfig.js'));
@@ -40,7 +42,7 @@ const targets = rows.map((r) => r.to);
 const labels = rows.map((r) => r.label);
 
 const bar = codeOnly(read('frontend/src/pages/founder/FounderWorkspaceTabs.jsx'));
-const app = codeOnly(read('frontend/src/App.jsx'));
+const app = codeOnly(readRoutesSource());
 const tabsTo = (p) => bar.includes(`to: '${p}'`);
 
 test('the canvas rows are present, in the canvas order', () => {

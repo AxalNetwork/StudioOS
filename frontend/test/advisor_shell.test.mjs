@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const src = codeOnly(read('frontend/src/sidebarConfig.js'));
@@ -72,7 +74,7 @@ test('Practice owns the whole advisory subtree, and the workspace tabs to all of
 });
 
 test('canonical deep links remain registered even when not sidebar rows', () => {
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   for (const path of [
     '/advisor/advisory/opportunities',
     '/advisor/advisory/clients',
@@ -96,7 +98,7 @@ test('Expertise owns the canonical advisor profile destination', () => {
   // of this row's ownership and is now retired — it coupled the storefront to
   // booking and was broken at both, so the two halves went to the buckets that
   // work: storefront to Expertise, booking to Practice.
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   assert.match(advisor, /\{ to: '\/expertise', icon: UserCircle, label: 'Expertise'/);
   assert.match(advisor, /match: \['\/expertise', '\/advisors'\]/,
     'the Expertise row no longer claims a path that redirects elsewhere');
@@ -130,7 +132,7 @@ test('Advisor-only framing is isolated from shared roles', () => {
   assert.match(network, /role === 'advisor'/);
   assert.match(signals, /mode === 'advisor'/);
   assert.match(read('frontend/src/ui/SidebarNav.jsx'), /advisorAccent/);
-  assert.doesNotMatch(read('frontend/src/App.jsx'), /<Route path="\/advisor"/);
+  assert.doesNotMatch(readRoutesSource(), /<Route path="\/advisor"/);
 });
 
 test('Home is /studio, no role root invented', () => {
@@ -183,7 +185,7 @@ test('every advisor workspace row lands inside its own bucket', () => {
   assert.deepEqual(prefixes, ['/practice', '/cohorts', '/expertise', '/network', '/research'],
     'the advisor shell no longer declares these five buckets');
 
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   for (const prefix of prefixes) {
     const row = rows.find((r) => r.to === prefix);
     assert.ok(row, `no advisor row points at ${prefix}`);
@@ -217,7 +219,7 @@ test('every advisor bucket route carries the Worker AI rail', () => {
   // Network and Research reach the advisor through the shared shells, which
   // have passed a rail since the founder pass. What was missing was the route:
   // bare /network gave an advisor NetworkPage with no shell at all.
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   assert.match(app, /effectiveRole === 'advisor' \? <NetworkWorkspace role="advisor" \/>/,
     'bare /network must give an advisor the zone shell, not the bare page');
   assert.match(app, /researchRole === 'advisor' \|\| researchRole === 'partner'/,
@@ -312,7 +314,7 @@ test('the advisor preview boundary is stated, and covers every surface that rend
   // indistinguishable from a broken link and was reported as one; and it
   // covered /advisor/advisory/* and /office-hours while /practice/* and
   // /expertise/* rendered the same two components ungated.
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   // WAS `advisorRolePreview ? <AdvisorPreviewNotice /> : component`. The notice
   // now sits ABOVE the component instead of replacing it — see the block at the
   // foot of this test for why, and for what that does NOT give up.
