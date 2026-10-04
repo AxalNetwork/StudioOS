@@ -334,7 +334,9 @@ export function ProRataPanel({ projectId, onError }) {
                     {Number(h.prior_stake_pct).toFixed(2)}%
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100">
-                    {money(h.entitlement)}
+                    {h.entitlement == null
+                      ? <span>Not recorded{h.entitlement_not_recorded && <span className="block text-[10px] font-normal text-gray-500">{h.entitlement_not_recorded}</span>}</span>
+                      : money(h.entitlement)}
                     {h.scaled && h.entitlement_raw != null && (
                       <div className="text-[10px] text-amber-600 dark:text-amber-400">scaled from {moneyShort(h.entitlement_raw)}</div>
                     )}
@@ -349,7 +351,9 @@ export function ProRataPanel({ projectId, onError }) {
                       className="w-28 px-2 py-1 text-xs text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 disabled:opacity-40 tabular-nums" />
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-gray-600 dark:text-gray-400">
-                    {h.post_round_stake_pct == null ? '—' : `${h.post_round_stake_pct.toFixed(2)}%`}
+                    {h.post_round_stake_pct == null
+                      ? <span>Not recorded{h.post_round_stake_not_recorded && <span className="block text-[10px] text-gray-500">{h.post_round_stake_not_recorded}</span>}</span>
+                      : `${h.post_round_stake_pct.toFixed(2)}%`}
                   </td>
                   <td className="px-3 py-2.5">
                     <select value={h.state} onChange={(e) => patch(h.id, { state: e.target.value })}

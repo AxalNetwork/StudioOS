@@ -34107,6 +34107,78 @@ Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and a
 `not ok` line, and the file was restored and checked by sha256. The first
 mutation is the original swallow, so the test fails on the code as it was.
 
+## D366
+
+**The Lab tools' Worker reads stop turning a missing or unread value into
+zero.** Wave 8, Session 8, issue #997. D360, D364 and D365 each filed one of
+these and left it. Worker and frontend; no migration, no new route, no new
+`api.js` method.
+
+**The defects.** Each was a `|| 0`, a `?? 0` or a `.catch(() => [])` on a
+figure:
+- `GET /captable/equity-plan` caught a failed SELECT on either Carta table
+  into an empty list. The Cap Table card then said "No pools or grants
+  recorded" about a read that never happened (D364).
+- `GET /contacts/raise-pro-rata` computed against `target_amount || 0`,
+  `pre_money || 0` and `taking_amount || 0`. A round with no target showed
+  every entitlement as $0. A round with no pre-money, or an undecided
+  holder, got a post-round stake built on a zero nobody recorded (D360,
+  D364).
+- The brand page DTOs sent `views_count || 0` (the single page) and
+  `?? 0` (the page list), so a page with no stored count read "0 views"
+  (D360).
+- The Stripe import's success body sent `mrr ?? 0` and `customers ?? 0`
+  (D365).
+
+**What changed.**
+- **Equity plan.** Both SELECTs sit in one `try`. A failure is
+  `refuse(c, 500, { code: 'equity_plan_read_failed', … })`:
+  - our sentence says it is not a claim that none are recorded;
+  - SQLite's text goes to the log, never into the body;
+  - no list rides on the refusal.
+
+  A readable empty store is still 200 with empty lists. Both callers
+  already handle the refusal: the Lab Cap Table card shows `Unreadable`
+  (only a 404 hides it), and the Cap Table equity panel shows its error
+  line.
+- **Pro-rata.** A value the round does not record is null, with a reason
+  sentence beside it:
+  - With no target, each holder's `entitlement` and `entitlement_raw` are
+    null, with `entitlement_not_recorded` saying why. The result's
+    `round_size`, `entitlement_total` and `rule` are null too, because no
+    reconciliation is claimed over entitlements nobody computed.
+  - `post_round_stake_pct` is null when the prior stake, the pre-money, the
+    target or the holder's cheque is not recorded. The first missing one is
+    named in `post_round_stake_not_recorded`.
+  - A holder who waived or expired takes nothing, which is a recorded fact,
+    so their stake is still computed.
+  - The Lab Capital card and the Raise pro-rata panel print "Not recorded"
+    with that reason under it, where they used to print "—" or $0.
+- **Brand.** Both DTOs return `views_count` as stored, null included. The
+  Lab Brand page card says "Views not recorded" and the Brand Builder says
+  "Pageviews not recorded". A stored 0 is still 0.
+- **Stripe import.** The body sends `mrr` and `customers` only when each is
+  a finite number, and null otherwise. The sync's success path always
+  returns both, so no screen changes. The line now cannot invent a figure
+  if that path ever changes.
+
+**Guards.**
+- `cloudflare-worker/test/lab_honesty_zeros_d366.test.ts` has 9 tests. It
+  drives the real captable, contacts and brand routers against real SQLite.
+  The equity-plan failure is injected at the adapter for each table's
+  SELECT, so auth runs unmocked. The Stripe line is pinned as source text,
+  because the real sync never returns a missing figure on success.
+- `frontend/test/lab_honesty_zeros_d366.test.mjs` has 5 tests. They pin
+  the four screens' "Not recorded" branches and the Cap Table's 500 →
+  `Unreadable` path as source text, bounded to their blocks.
+- On the code as it was, 7 of the 9 Worker tests and all 5 frontend tests
+  fail. The two that pass are the controls: an empty equity store and a
+  recorded view count.
+- Mutation-checked both ways: 23 of 23 caught. Each gave a non-zero exit
+  and a `not ok` line, and every file was restored and checked by sha256.
+  The mutations restore each original zero and drop each reason. They also
+  break the controls the other way: a recorded count dropped to null, and
+  a readable empty store refused.
 ## D367
 
 **The four unfinished Lab-tools pieces D360–D365 filed: three built, and
@@ -39567,20 +39639,17 @@ is removed.
 
 ## D454
 
-**HQ · Contracts draws the doc-type registry from the code maps.** Wave 8,
-Session 16, item 5. No migration; one new read route and matching `api.js`
-method.
+**HQ · Contracts — first read of the code catalog (superseded in place by D480).**
+Wave 8, Session 16, item 5. The first pass exposed `GET /api/admin/contracts/doc-types`
+from `admin_contracts.ts` and presented it as a finished registry. D480 corrects that:
+usage counting, the D1 store, publish, and the hub UI were still missing; the read
+moved to `/api/admin/contracts/registry/*`.
 
-**Registry.** `GET /api/admin/contracts/doc-types` returns the four governance
-layers and every entry in `CONTRACT_DOC_TYPES` with title, layer, party roles,
-and usage from documents + e-sign (shared with `/templates`). HQ · Contracts
-renders it read-only above the template library; cross-tenant oversight stays
-Not recorded (U1).
+**What D454 still names truthfully.** The code maps (`CONTRACT_DOC_TYPES`, `TEMPLATES`,
+party roles) remain the bootstrap catalog; `/templates` still shares
+`buildTemplateCatalog` for party roles and layer descriptions.
 
-**`/templates`.** Each catalog row now includes `party_roles` and
-`layer_description` via the same builder — no second definition.
-
-**Tests.** `hq_contracts_doc_type_d454.test.mjs`;
+**Tests.** `hq_contracts_doc_type_d454.test.mjs` (re-aimed at the registry router);
 `admin_contracts_doc_types_d454.test.ts`.
 
 ## D455
@@ -40210,6 +40279,35 @@ The cut is the same byte: the `<` in front of `data-dc-script`. The test
 walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
+
+## D480
+
+**HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
+Wave 9, Session 16, item 5. Migration **332** (`contract_doc_type_registry`).
+
+**Usage (HIGH).** Template usage is counted from the four-source union via
+`contractTemplateUsage.ts`: migrated `documents` rows are excluded, and alias spellings
+(`nda_3way_v1`, `investor_nda_v1`, `partner_msa_v1`, …) map to one catalog key.
+`/templates/store` reuses the same loader — not a third SQL count.
+
+**Registry (HIGH).** New router `admin_contract_doc_registry.ts`, mounted at
+`/api/admin/contracts/registry` before the contracts catch-all. Reads: hub + `doc-types`.
+Writes: `POST …/draft` (HQ authoring), `POST …/:doc_type/publish` behind
+`requireSuperAdminWriteBar` with a typed reason (≥10 characters) and
+`logAdminAction('registry.type.publish', …)`.
+
+**UI.** HQ · Contracts draws X1 health tiles, four layer cards with OVERLAP flags,
+outside-layer rows, WorkerRail coverage lines, and X2 five-step “New doc type” → Save draft.
+Two owner decisions stay named on screen and in API payloads: canvas layers
+(PLATFORM / VENTURE / FUND / ENGAGEMENT) vs code layers (`gp` / `fund` / `portfolio` /
+`compliance`), and whether the registry governs `esignOriginators.ts` — neither is invented.
+
+**Routes (pre-existing).** `GET /pairwise-ndas` and `GET /partner-deals` register before
+`GET /:uid`. List union rows carry `valid_until` (pairwise) and `expires_at` (partner deals);
+null elsewhere. Admin › Contracts pairwise/partner tabs render a failed read as Unreadable.
+
+**Tests.** `contract_template_usage_d480.test.ts`, `admin_contract_doc_registry_d480.test.ts`,
+`hq_contracts_x1_d480.test.mjs`; D454 tests re-aimed.
 
 ## D490
 
