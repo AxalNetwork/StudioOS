@@ -161,8 +161,12 @@ test('the bar clears the home indicator and the notch, and never covers the page
   const css = read('frontend/src/components/mobileTabBar.css');
   assert.match(css, /\.mtb \{\s*padding-bottom: env\(safe-area-inset-bottom, 0px\);/);
   assert.match(css, /--mobile-tabbar-h: calc\(56px \+ env\(safe-area-inset-bottom, 0px\)\);/);
-  assert.match(css, /:root\[data-mobile-tabbar="on"\] \[data-app-main\] \{\s*padding-bottom: var\(--mobile-tabbar-h\);/,
+  // The clearance is on the scroll container (`<main data-app-scroll>`, D504),
+  // not on the content block inside it: the footer follows that block, so
+  // padding the block left the footer under the bar at the end of the scroll.
+  assert.match(css, /:root\[data-mobile-tabbar="on"\] \[data-app-scroll\] \{\s*padding-bottom: var\(--mobile-tabbar-h\);/,
     'the last row of a page sits under the bar');
+  assert.doesNotMatch(css, /\[data-app-main\] \{/, 'padding the content block leaves the footer after it under the bar');
   assert.match(css, /@media \(max-width: 1023\.98px\)/, 'the page is padded for a bar on desktop, where none shows');
   // The attribute that padding keys off is set only while a bar is drawn.
   const src = codeOnly(read('frontend/src/components/MobileTabBar.jsx'));

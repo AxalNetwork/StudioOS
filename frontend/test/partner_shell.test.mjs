@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const src = codeOnly(read('frontend/src/sidebarConfig.js'));
@@ -93,7 +95,7 @@ test('canonical Partner deep links are owned by the correct workspace', () => {
 
 test('collapsed Pipeline and Offers sections remain reachable from Partner tabs', () => {
   const bars = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   const routeLine = (path) => app.split('\n').find(
     (line) => line.includes(`path="${path}"`) && line.includes('<Route'),
   );

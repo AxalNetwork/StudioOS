@@ -101,9 +101,11 @@ never existed. Start at the README of whatever folder you land in.
 - **New features must be implemented in `cloudflare-worker/src/routes/` first.**
   FastAPI ports in `backend/app/api/routes/` are an optional dev convenience
   for fast local iteration; they are not the production behaviour.
-- **Do not add a `/api/*` method to `frontend/src/lib/api.js`** without a
-  matching worker route in `cloudflare-worker/src/index.ts`. The drift smoke
-  test (`npm run test:drift`) enforces this on every PR.
+- **Do not add a `/api/*` method to `frontend/src/lib/api.js`, or to a module
+  under `frontend/src/lib/api/`,** without a matching worker route in
+  `cloudflare-worker/src/index.ts`. A new API domain goes in its own module
+  there, re-exported by one line in `api.js`'s alphabetical block (D527). The
+  drift smoke test (`npm run test:drift`) enforces both on every PR.
 - **Do not modify `wrangler.toml`'s `main` field** — it points at the worker
   entry. FastAPI is not deployable on Workers.
 - **D1 schema changes go in `cloudflare-worker/sql/`** as new migration
