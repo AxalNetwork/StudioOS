@@ -41,6 +41,7 @@ STARTED_EPOCH=$(date -u +%s)
 STARTED_AT=$(date -u +%FT%TZ)
 LATEST_KEY=""
 DB_CREATED=0
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 log() { echo "[dr-drill] $*"; }
 page() {
@@ -156,11 +157,45 @@ STEP="restore"
 log "downloading + restoring backup into ${TARGET_DB}"
 TMP=$(mktemp -d)
 wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql" --remote
+log "backup downloaded: $(wc -c < "${TMP}/backup.sql") bytes"
 
-if ! wrangler d1 execute "${TARGET_DB}" --remote --file "${TMP}/backup.sql"; then
-  log "FATAL: restore failed"
+# D523 — THE RESTORE IMPORTS IN CHUNKS. One remote import of the whole export
+# ended `{"D1_RESET_DO":true}` 1.4 s after the upload (run 36862064332): D1
+# reset the Durable Object behind the throwaway database mid-import, which is
+# how Cloudflare's tracker reports whole-dump imports too big for the object.
+# scripts/dr-drill-split.mjs cuts the export into schema, data (parent tables
+# first, each chunk deferring foreign keys) and post (indexes, views,
+# triggers) chunks of at most DR_DRILL_CHUNK_BYTES, and each chunk is its own
+# import, so a failure names the chunk that failed. Every line logged here is
+# a count or a size; backup content is never printed.
+CHUNK_BYTES="${DR_DRILL_CHUNK_BYTES:-1000000}"
+if ! SPLIT_SUMMARY=$(node "${REPO_ROOT}/scripts/dr-drill-split.mjs" "${TMP}/backup.sql" "${TMP}/chunks" "${CHUNK_BYTES}"); then
+  log "FATAL: could not split the backup into import chunks"
   exit 2
 fi
+log "split (chunk budget ${CHUNK_BYTES} bytes): ${SPLIT_SUMMARY}"
+CHUNK_TOTAL=$(wc -l < "${TMP}/chunks/manifest.tsv")
+CHUNK_N=0
+# The manifest is read on fd 3 so nothing wrangler reads from stdin eats it.
+while IFS=$'\t' read -r CHUNK_FILE CHUNK_PHASE CHUNK_STMTS CHUNK_SIZE CHUNK_OVER <&3; do
+  CHUNK_N=$(( CHUNK_N + 1 ))
+  log "chunk ${CHUNK_N}/${CHUNK_TOTAL} (${CHUNK_PHASE}): ${CHUNK_STMTS} statements, ${CHUNK_SIZE} bytes, ${CHUNK_OVER} over D1's 100 KB statement limit"
+  # wrangler's output is captured, not shown: a D1 error can quote the
+  # statement it failed on, which is backup content, and this log is public.
+  # Only its error codes and its "Executed N queries" counts are printed.
+  if ! wrangler d1 execute "${TARGET_DB}" --remote --file "${CHUNK_FILE}" > "${TMP}/chunk.log" 2>&1; then
+    CODES=$(grep -oE 'D1_[A-Z_]+|SQLITE_[A-Z_]+|exceeded its memory limit|D1 reset before execute completed|File could not be uploaded|did not upload successfully' "${TMP}/chunk.log" | sort -u | paste -sd ' ' - || true)
+    log "FATAL: restore failed at chunk ${CHUNK_N}/${CHUNK_TOTAL} (${CHUNK_PHASE}); wrangler's error codes: ${CODES:-none recognised (its full output is withheld because it can quote backup SQL)}"
+    exit 2
+  fi
+  EXECUTED=$(grep -oE 'Executed [0-9]+ queries in [0-9.]+ms \([0-9]+ rows read, [0-9]+ rows written\)' "${TMP}/chunk.log" | head -1 || true)
+  log "chunk ${CHUNK_N}/${CHUNK_TOTAL} imported: ${EXECUTED:-no count reported}"
+done 3< "${TMP}/chunks/manifest.tsv"
+if [[ "${CHUNK_N}" -ne "${CHUNK_TOTAL}" || "${CHUNK_N}" -lt 1 ]]; then
+  log "FATAL: imported ${CHUNK_N} of ${CHUNK_TOTAL} chunks"
+  exit 2
+fi
+log "restore ok: ${CHUNK_N} chunks imported"
 
 # ---------- 4. Smoke test ------------------------------------------
 STEP="smoke"
@@ -198,7 +233,6 @@ log "schema smoke ok (${#REQUIRED_TABLES[@]} required tables present)"
 # suite never touches the restored database, the workflow never ran `npm ci`
 # for it, and it re-ran every repo test on each drill. What proves the restore
 # is 4a and 4b above, against the restored database itself.
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # 4d. Preview-worker validation against restored DB.
 # True environment validation per spec: deploy the worker to a fresh
