@@ -199,6 +199,8 @@ export interface Env {
   // Shared secret used to verify inbound GitHub webhook deliveries
   // (X-Hub-Signature-256). Set via the admin GitHub panel or wrangler.
   GITHUB_WEBHOOK_SECRET?: string;
+  // D542 — GitHub logins whose bounty labels the webhook acts on (services/bugBounties.ts).
+  BOUNTY_GRANTERS?: string;
   PERSONA_API_KEY?: string;
   SUMSUB_API_KEY?: string;
   // LinkedIn — used by routes/linkedin.ts (Refer & Earn → "Sign in with
