@@ -1,6 +1,6 @@
 /**
- * `sourceTreeHash` — what `docs/.build-source` records, and what
- * `check-docs-fresh` compares against.
+ * `sourceTreeHash` — what `docs/.build-source` records (D103; its reader,
+ * `check-docs-fresh`, was retired by D529).
  *
  * The properties that matter are not "it hashes bytes" but the ways a naive
  * implementation goes wrong: `readdirSync` order is unspecified so two machines

@@ -33,7 +33,7 @@ import {
   RETENTION_LEDGER_FILENAME,
   assetsIgnoreText,
 } from './lib/assetsIgnore.mjs';
-import { planAssetRetention, seedFilesFor, SEED_COMMITTED_TREE_FLAG } from './lib/assetRetention.mjs';
+import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG } from './lib/assetRetention.mjs';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
 const RETAIN_BUILDS = Number(process.env.ASSET_RETAIN_BUILDS || 3);
@@ -77,12 +77,16 @@ function readLedgerBuilds(p) {
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
 const ledgerBuilds = readLedgerBuilds(ledgerPath);
+// D529: docs/ is not committed, so what is on disk here is whatever the job
+// restored (the production deploy) or nothing (every other job). Say which.
+console.log(retentionStart({ prevFiles, ledgerBuilds }).line);
 
 // …and the shell that references them, because it is what says which of those
-// assets belong to the PREVIOUS generation rather than to one long dead. The
-// ledger is gitignored, so CI and every fresh clone take the no-ledger path on
-// every run; seeding the whole committed tree there is what made `docs/assets`
-// grow monotonically. See lib/assetGeneration.mjs.
+// assets belong to the PREVIOUS generation rather than to one long dead. A
+// local rebuild over a previous local build takes this path when its ledger is
+// gone; seeding the whole tree there is what once made `docs/assets` grow
+// monotonically. See lib/assetGeneration.mjs. (The production deploy restores
+// assets and ledger but no shells, D529, so its seed comes from the flag.)
 //
 // EVERY shell, not just `docs/index.html`. The build prerenders ~34 route
 // shells, and a route-specific one can name a chunk the root never does; a
@@ -115,7 +119,7 @@ const prevGeneration = [...prevGenerationSet];
 if (prevFiles.length > 0) {
   console.log(
     `[build] previous generation: ${prevGeneration.length} of ${prevFiles.length} `
-    + 'asset(s) reachable from a committed shell',
+    + 'asset(s) reachable from a shell on disk',
   );
 }
 const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'axal-assets-'));
@@ -138,12 +142,12 @@ if (newFiles.length === 0) {
   process.exit(1);
 }
 
-// The production deploy passes SEED_COMMITTED_TREE_FLAG (D252): there the seed
-// is every committed asset, because the generation production serves is the
-// last deploy's, not necessarily the committed shells'.
+// The production deploy passes SEED_RESTORED_TREE_FLAG (D252, D529): there the
+// seed is every asset it restored from the last deploy, because that is what
+// production is serving.
 const seedFiles = seedFilesFor({ argv: process.argv.slice(2), prevGeneration });
 if (seedFiles === null) {
-  console.log(`[build] ${SEED_COMMITTED_TREE_FLAG}: seeding all ${prevFiles.length} committed asset(s)`);
+  console.log(`[build] ${SEED_RESTORED_TREE_FLAG}: seeding all ${prevFiles.length} restored asset(s)`);
 }
 
 const plan = planAssetRetention({
@@ -205,23 +209,10 @@ fs.writeFileSync(ignorePath, assetsIgnoreText());
 // 7. Stamp docs/ with the source this build consumed — LAST, so a stamp only
 //    ever describes a build that finished.
 //
-// WHY A SEPARATE FILE RATHER THAN A KEY IN THE RETENTION LEDGER. The obvious
-// home is `docs/.asset-retention.json`, which is already written on every
-// build — but it is **gitignored** on purpose (see `.gitignore`: 45 KB that
-// churns wholesale), so CI never sees it and a stamp inside it would answer
-// nobody. This file is one line and changes only when the source does.
-//
-// WHAT IT IS FOR. `scripts/check-docs-fresh.mjs` asks whether the committed
-// docs/ is the build of the current frontend/src. Until now it could only ask
-// which commit was newer, and that proxy is wrong in both directions: commit
-// docs/ without rebuilding and it says fresh forever, while a comment-only or
-// type-only source edit emits a BYTE-IDENTICAL bundle — the minifier strips
-// comments, tsc erases types — leaving nothing to `git add` and a gate its own
-// printed fix could not satisfy, because `git commit` on an empty change
-// refuses. #207's PR is where that surfaced (D103).
-//
-// It is a hash, so it is also the thing that gives that no-op build a diff to
-// commit; the gate below it stays satisfiable either way.
+// It records which frontend/src a docs/ was built from, so a build found on
+// disk can be traced to its source. It was the input to check-docs-fresh,
+// retired with the committed docs/ by D529; docs/.assetsignore keeps it off
+// both hosts (D271).
 fs.writeFileSync(stampPath, `${sourceTreeHash(path.join(root, 'frontend', 'src'))}\n`);
 
 console.log(

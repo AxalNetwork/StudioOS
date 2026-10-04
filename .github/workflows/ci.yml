@@ -91,6 +91,11 @@ jobs:
         run: npm ci
       - name: Install root deps
         run: npm ci || npm install --no-audit --no-fund
+      # docs/ is not committed (D529), and part of the suite reads the built
+      # SPA (check-docs-assets-closure, the tests that open docs/), so build
+      # it first — the same root build the deploy runs.
+      - name: Build the SPA
+        run: npm run build
       - run: npm run test:drift
 
   # -------------------------------------------------------------------------
@@ -114,40 +119,28 @@ jobs:
   # Open Graph / social-preview gate.
   #
   # Guards the "every axal.vc link previews with the same wrong image" class of
-  # regression. Validates the committed docs/ build. Those are the bytes a
-  # reviewer reads, not by themselves the bytes a crawler actually receives:
-  # both production hosts are served by the `studioos` Worker's [assets] copy of
-  # docs/, which cloudflare-worker-deploy.yml rebuilds from source at deploy
-  # time. The freshness step below is what makes the committed build and the
-  # shipped one the same build; given that, these checks catch a route that
-  # stopped being prerendered, an og:image pointing at a file that does not
-  # exist, a relative image URL, or a card that is not 1200x630.
+  # regression. docs/ is not committed (D529), so this job builds it from the
+  # PR's source with the same root build the deploy runs, then checks those
+  # bytes: a route that stopped being prerendered, an og:image pointing at a
+  # file that does not exist, a relative image URL, or a card that is not
+  # 1200x630. Checking the PR's own build is what the old freshness step only
+  # approximated.
   # -------------------------------------------------------------------------
   og-tags:
     name: open graph metadata
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # REQUIRED, not an optimisation. check-docs-fresh compares the newest
-          # commit touching frontend/src against the newest touching docs/, and
-          # the default depth-1 clone has exactly one commit — both resolve to
-          # it, the comparison is trivially true, and the step below passed on
-          # every run for as long as it has existed. `lfs-gate` sets the same
-          # flag for the same class of reason.
-          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
-      # The three checks below all read the COMMITTED docs/ bytes, which are
-      # what a crawler receives only when they match the source the deploy
-      # rebuilds from. If docs/ is behind frontend/src they are
-      # validating an old build and passing, so assert freshness first. Strict
-      # here (unlike the local warning) because this job can rebuild from the
-      # lockfile if it needs to.
-      - name: Committed docs/ build is current
-        run: node scripts/check-docs-fresh.mjs --strict
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        run: npm ci --prefix frontend
+      - name: Build the SPA
+        run: npm run build
       - name: Prerendered routes are current
         run: node scripts/prerender-og.mjs --check
       - name: Card images are current

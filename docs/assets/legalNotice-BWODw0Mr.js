@@ -1,1 +1,0 @@
-var e=`© 2026 Axal VC. Platform operated by Axal VC Management LLC. Brand and platform IP owned by Axal VC Holdings LLC. All rights reserved.`,t=[{to:`/terms`,label:`Terms of Service`},{to:`/privacy`,label:`Privacy Policy`}];export{e as n,t};

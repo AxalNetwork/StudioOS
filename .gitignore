@@ -19,35 +19,19 @@ yarn-error.log*
 .npm/
 .yarn/
 
-# Vite / build output. `docs/` IS committed — the Cloudflare Worker serves it
-# from its `[assets]` binding on both axal.vc and app.axal.vc, and the og-tags
-# CI job validates the committed bytes (CLAUDE.md fact 4; GitHub Pages and the
-# Cloudflare Pages mirror are both decommissioned, DECISIONS.md D36).
-# docs/
+# Vite / build output. `docs/` is NOT committed (D529): the Cloudflare Worker
+# serves it from its `[assets]` binding on both axal.vc and app.axal.vc, and
+# every job that needs it builds it from `frontend/` first — the deploy, the PR
+# preview, branch provisioning and the CI jobs that read it (CLAUDE.md fact 4).
+# Run the root `npm run build` to produce it locally. The static security
+# headers come from `frontend/public/_headers`, built to `docs/_headers`.
+#
+# The old-bundle window no longer rides on a committed tree either: the
+# production deploy restores the last deploy's `docs/assets` and retention
+# ledger (`docs/.asset-retention.json`) from an `actions/cache` entry before it
+# builds, and saves them after it ships (`cloudflare-worker-deploy.yml`, D529).
+/docs/
 .vite/
-
-# ...except the asset-retention ledger, which is per-build local state rather
-# than anything a crawler, a reviewer or a check reads. Only
-# `scripts/build-frontend.mjs` touches it, and `planAssetRetention` handles its
-# absence deliberately: with no ledger it seeds a synthetic prior build, so no
-# client holding the previous shell breaks.
-#
-# WORTH KNOWING, because intent and reality differ here: the window is
-# ASSET_RETAIN_BUILDS=3, but a deploy rebuilds `docs/` in a fresh checkout, so
-# without a committed ledger it only ever sees that one synthetic entry — the
-# effective window on production is one build, not three.
-#
-# THIS NOTE USED TO CALL THAT "the safe direction (it prunes less, never
-# more)". Pruning less, never more, turned out to be the defect: the seed was
-# every file on disk, so each no-ledger build re-kept the whole accumulated
-# tree and the committed set could only grow. It reached 964 files against a
-# clean build's 597 before D183 narrowed the seed to the PREVIOUS GENERATION —
-# the closure of the committed shells over the chunk graph, derivable from
-# `docs/` alone (`scripts/lib/assetGeneration.mjs`). The effective no-ledger
-# window is two builds now, and it is bounded. Committing the ledger would buy
-# the third at the cost of a 45 KB file churning wholesale on every rebuild; it
-# stays a deliberate trade rather than an oversight.
-docs/.asset-retention.json
 
 # ---- Python ----
 __pycache__/

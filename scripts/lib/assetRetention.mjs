@@ -130,19 +130,21 @@ export function planAssetRetention({
 }
 
 /**
- * The flag the production deploy passes to seed the WHOLE committed
- * `docs/assets` rather than the previous generation (task 351, D252).
+ * The flag the production deploy passes to seed EVERYTHING it restored into
+ * `docs/assets` rather than the previous generation (task 351, D252; renamed
+ * from `--seed-committed-tree` by D529).
  *
- * The deploy rebuilds `docs/` from source, and the generation production is
- * serving is the one the LAST deploy uploaded, which is not necessarily the
- * one the committed shells describe (`docs/` is committed by hand). Seeding
- * the committed tree keeps every generation still committed; the deploy never
- * commits its build back, so this cannot grow `docs/assets` (D183).
+ * `docs/` is no longer committed (D529). The deploy starts from an empty
+ * `docs/`, restores the last deploy's `docs/assets` and retention ledger from
+ * its `actions/cache` entry, and builds over them. What it restored is what
+ * production is serving now, so with no ledger to say which build each file
+ * came from, all of it is seeded as one prior build. With a ledger (the normal
+ * case) the ledger decides, and the window is the last `retainBuilds` builds.
  *
  * It is a flag the workflow passes, never `CI`: every CI job and the PR
  * preview set `CI`, and none of them uploads to production.
  */
-export const SEED_COMMITTED_TREE_FLAG = '--seed-committed-tree';
+export const SEED_RESTORED_TREE_FLAG = '--seed-restored-tree';
 
 /**
  * @param {object} opts
@@ -151,5 +153,42 @@ export const SEED_COMMITTED_TREE_FLAG = '--seed-committed-tree';
  * @returns {string[] | null} the seed; null means "fall back to prevFiles"
  */
 export function seedFilesFor({ argv = [], prevGeneration = [] } = {}) {
-  return argv.includes(SEED_COMMITTED_TREE_FLAG) ? null : prevGeneration;
+  return argv.includes(SEED_RESTORED_TREE_FLAG) ? null : prevGeneration;
+}
+
+/**
+ * Whether this build has anything to carry the old-bundle window forward from
+ * (D529), and the line the build log prints either way.
+ *
+ * `docs/` is not committed, so a build starts from whatever the job put there:
+ * the production deploy restores the last deploy's assets and ledger from its
+ * cache; every other job starts empty. An empty start is not an error — a
+ * first deploy, or a cache entry GitHub evicted, must still ship — but on the
+ * deploy it means a tab opened before this deploy can 404 its chunks until a
+ * reload, so the log says so in words a reader can find: "retention
+ * restarted".
+ *
+ * @param {object} opts
+ * @param {string[]} opts.prevFiles     asset files on disk before the build
+ * @param {Array<{files:string[]}>} opts.ledgerBuilds  the ledger found on disk
+ * @returns {{ restarted: boolean, line: string }}
+ */
+export function retentionStart({ prevFiles = [], ledgerBuilds = [] } = {}) {
+  const files = Array.isArray(prevFiles) ? prevFiles.length : 0;
+  const builds = Array.isArray(ledgerBuilds)
+    ? ledgerBuilds.filter((b) => b && Array.isArray(b.files)).length
+    : 0;
+  if (files === 0) {
+    return {
+      restarted: true,
+      line: '[build] retention restarted: no previous build in docs/ to carry forward '
+        + '(first build, or the saved one was not restored), so the window holds this build only.',
+    };
+  }
+  return {
+    restarted: false,
+    line: builds > 0
+      ? `[build] retention continues: ${files} asset(s) on disk from ${builds} previous build(s) in the ledger.`
+      : `[build] retention continues: ${files} asset(s) on disk, no ledger; they are seeded as one previous build.`,
+  };
 }

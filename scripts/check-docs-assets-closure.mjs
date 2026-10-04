@@ -99,7 +99,7 @@ function main() {
   if (!fs.existsSync(ASSETS)) {
     fail([
       '✖ check-docs-assets-closure: docs/assets/ does not exist.',
-      '  docs/ is a committed build artifact — run `npm run build` from the repo root.',
+      '  docs/ is build output and is not committed (D529) — run `npm run build` from the repo root.',
     ]);
   }
 

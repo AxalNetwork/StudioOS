@@ -21,7 +21,7 @@ Closes #<issue>
 ## Testing
 
 <!-- What ran, and its exit code: `npm run test:drift > drift.log 2>&1; echo EXIT=$?`.
-New assertions mutation-checked both ways. `docs/` rebuilt if `frontend/src` changed. -->
+New assertions mutation-checked both ways. `docs/` is built, never committed (D529). -->
 
 ## Risks
 
