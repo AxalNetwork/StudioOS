@@ -18,6 +18,9 @@ export default function MarketIntelPage() {
   const [rounds, setRounds] = useState([]);
   const [benchmarks, setBenchmarks] = useState(null);
   const [conviction, setConviction] = useState([]);
+  // D538: what each legacy endpoint says it does not record, and why. These
+  // five reads served figures written into the Worker; they now say so.
+  const [notRecorded, setNotRecorded] = useState({});
   const [enriched, setEnriched] = useState([]);
   const [loadError, setLoadError] = useState('');
   const [tab, setTab] = useState('compass');
@@ -41,6 +44,13 @@ export default function MarketIntelPage() {
       setRounds(r.rounds || []);
       setBenchmarks(b);
       setConviction(c.high_conviction_plays || []);
+      setNotRecorded({
+        pulse: reasonOf(p?.signals_not_recorded),
+        macro: reasonOf(m?.sectors_not_recorded),
+        rounds: reasonOf(r?.not_recorded),
+        benchmarks: reasonOf(b?.not_recorded),
+        conviction: reasonOf(c?.high_conviction_not_recorded),
+      });
     }).catch((error) => {
       setLoadError((current) => current || error?.message || 'Market intelligence is temporarily unavailable.');
     });
@@ -232,6 +242,7 @@ export default function MarketIntelPage() {
               </ul>
             </div>
           )}
+          {pulse.length === 0 && notRecorded.pulse && <NotRecordedPanel what="Sector pulse" reason={notRecorded.pulse} testId="mi-pulse-not-recorded" />}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pulse.map((s, i) => (
               <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
@@ -277,14 +288,14 @@ export default function MarketIntelPage() {
                 Exit Environment
                 <InfoTip text="Are IPO and M&A windows open? When closed, distributions slow and LPs stop recycling capital." />
               </h3>
-              <p className="text-sm text-gray-700 dark:text-gray-300">{macro.exit_environment}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{macro.exit_environment ?? `Not recorded · ${notRecorded.macro || 'No source records this yet'}`}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5 dark:text-gray-100">
                 Interest Rate Impact
                 <InfoTip text="Higher rates compress growth multiples. Watch this when pricing late-stage rounds." />
               </h3>
-              <p className="text-sm text-gray-700 dark:text-gray-300">{macro.interest_rate_impact}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{macro.interest_rate_impact ?? `Not recorded · ${notRecorded.macro || 'No source records this yet'}`}</p>
             </div>
           </div>
 
@@ -318,6 +329,7 @@ export default function MarketIntelPage() {
               </table>
             </div>
           )}
+          {(macro.sectors || []).length === 0 && notRecorded.macro ? <NotRecordedPanel what="Sector P/E, growth and IPO windows" reason={notRecorded.macro} testId="mi-macro-not-recorded" /> : (
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             <table className="w-full text-sm">
               <thead>
@@ -357,6 +369,7 @@ export default function MarketIntelPage() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
@@ -369,6 +382,7 @@ export default function MarketIntelPage() {
           {enriched.length > 0 && (
             <FocusProjectCompetitorsBlock projects={enriched} />
           )}
+        {rounds.length === 0 && notRecorded.rounds ? <NotRecordedPanel what="Private rounds" reason={notRecorded.rounds} testId="mi-rounds-not-recorded" /> : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <table className="w-full text-sm">
             <thead>
@@ -395,6 +409,7 @@ export default function MarketIntelPage() {
             </tbody>
           </table>
         </div>
+        )}
         </div>
       )}
 
@@ -421,7 +436,9 @@ export default function MarketIntelPage() {
               </div>
             </div>
           ))}
-          {conviction.length === 0 && <p className="text-gray-600 text-sm">No high-conviction plays identified yet.</p>}
+          {conviction.length === 0 && (notRecorded.conviction
+            ? <NotRecordedPanel what="High-conviction plays" reason={notRecorded.conviction} testId="mi-conviction-not-recorded" />
+            : <p className="text-gray-600 text-sm">No high-conviction plays identified yet.</p>)}
         </div>
       )}
 
@@ -442,7 +459,8 @@ export default function MarketIntelPage() {
       {tab === 'citations' && <CitationsTab user={user} />}
       {tab === 'watchlist' && <WatchlistTab user={user} />}
 
-      {tab === 'studio' && benchmarks && (
+      {tab === 'studio' && notRecorded.benchmarks && <NotRecordedPanel what="Studio benchmarks" reason={notRecorded.benchmarks} testId="mi-benchmarks-not-recorded" />}
+      {tab === 'studio' && benchmarks && !notRecorded.benchmarks && (
         <div className="space-y-6">
           <TabExplainer text="How our studio is performing against the targets we set with LPs. Operations metrics measure speed; decision-gate metrics measure judgment; post-spin-out metrics measure outcomes." />
           <div>
@@ -791,6 +809,24 @@ function TrendStrip({ trend }) {
   );
 }
 
+/** D538: `{ recorded: false, reason }` → the reason, or null. */
+function reasonOf(part) {
+  return part && part.recorded === false && typeof part.reason === 'string' && part.reason.trim() ? part.reason : null;
+}
+
+/**
+ * D538: a part the Worker says it does not record, with its reason. Never a
+ * zero and never an empty table that reads as "nothing happened".
+ */
+function NotRecordedPanel({ what, reason, testId }) {
+  return (
+    <div data-testid={testId} className="rounded-xl border border-dashed border-gray-300 bg-white p-5 text-sm dark:border-gray-700 dark:bg-gray-900">
+      <p className="font-semibold text-gray-900 dark:text-gray-100">{what}: Not recorded</p>
+      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{reason}</p>
+    </div>
+  );
+}
+
 function BenchmarkCard({ label, value, target }) {
   const empty = value == null || value === '' || value === 'null' || (typeof value === 'string' && value.includes('null'));
   return (
@@ -1085,7 +1121,21 @@ function LockPill({ required }) {
   );
 }
 
+/**
+ * D538: a 0–100 score, or "Not recorded" when no live source records it.
+ * The lenses used to receive a neutral 50 for every sector with no data and
+ * draw it as a reading; the Worker now sends null with the reason.
+ */
+function Score({ value, reason, digits = 0, className = '' }) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return <span className={`text-gray-400 font-normal ${className}`} title={reason || 'No live source yet for this sector'}>Not recorded</span>;
+  }
+  const shown = digits ? value.toFixed(digits) : Math.round(value);
+  return <span className={className}>{shown}</span>;
+}
+
 function MiniBar({ value }) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return <div className="h-1.5 bg-gray-100 rounded" aria-hidden="true" />;
   const v = Math.max(0, Math.min(100, Math.round(value)));
   const tone = v >= 70 ? 'bg-emerald-500' : v >= 50 ? 'bg-violet-500' : v >= 30 ? 'bg-amber-500' : 'bg-red-500';
   return (
@@ -1101,7 +1151,11 @@ function MiniBar({ value }) {
 // available (free callers).
 function compassReasoning(s) {
   if (!s.dimensions) return 'Composite-only view — upgrade for the dimensional drivers.';
-  const dims = Object.entries(s.dimensions).map(([k, v]) => ({ k, v: v.value, n: v.source_count }));
+  // D538: only dimensions a live source records take part in the reasoning.
+  const dims = Object.entries(s.dimensions)
+    .map(([k, v]) => ({ k, v: v.value, n: v.source_count }))
+    .filter((d) => typeof d.v === 'number' && Number.isFinite(d.v));
+  if (dims.length === 0) return s.composite_reason || 'No live source yet for this sector.';
   const top = [...dims].sort((a, b) => b.v - a.v).slice(0, 2);
   const bottom = [...dims].sort((a, b) => a.v - b.v)[0];
   const drivers = top.filter((d) => d.v >= 55).map((d) => `${d.k} (${Math.round(d.v)})`);
@@ -1131,7 +1185,9 @@ function SectorCompassTab({ user }) {
     return () => { cancelled = true; };
   }, []);
   const full = isFullLensCaller(user);
-  const sortedPicks = data?.sectors ? [...data.sectors].sort((a, b) => b.composite - a.composite).slice(0, 5) : [];
+  // D538: only sectors with a live composite can be picked or ranked.
+  const sortedPicks = data?.sectors ? data.sectors.filter((x) => typeof x.composite === 'number').sort((a, b) => b.composite - a.composite).slice(0, 5) : [];
+  const noLiveSector = data?.sectors && !data.sectors.some((x) => typeof x.composite === 'number');
   return (
     <div className="space-y-4">
       <TabExplainer text="The Sector Compass ranks every tracked sector on a 0–100 composite — demand, supply, capital, talent, research, and sentiment, decayed by recency. Free callers see the headline composite; Growth+ unlocks the dimensional breakdown plus the 'why this sector is moving' reasoning." />
@@ -1140,8 +1196,9 @@ function SectorCompassTab({ user }) {
       {data && (
         <>
           <div className="text-[11px] text-gray-500">
-            Period {data.period_key} · computed {new Date(data.computed_at).toLocaleString()} · {data.lens === 'full' ? 'full lens' : 'free composite'}
+            Period {data.period_key} · {data.computed_at ? `computed ${new Date(data.computed_at).toLocaleString()}` : 'no live index computed yet'} · {data.lens === 'full' ? 'full lens' : 'free composite'}
           </div>
+          {noLiveSector && <NotRecordedPanel what="Sector composites" reason={data.sectors.find((x) => x.composite_reason)?.composite_reason || 'No live source yet for this sector'} testId="mi-compass-not-recorded" />}
           {sortedPicks.length > 0 && (
             <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-4">
               <div className="text-[10px] uppercase tracking-widest text-violet-700 font-semibold mb-2">Top Sector Picks This Period</div>
@@ -1166,7 +1223,7 @@ function SectorCompassTab({ user }) {
               <div key={s.sector} className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{s.sector}</h3>
-                  <span className="text-2xl font-bold text-violet-600">{Math.round(s.composite)}</span>
+                  <Score value={s.composite} reason={s.composite_reason} className="text-2xl font-bold text-violet-600" />
                 </div>
                 <MiniBar value={s.composite} />
                 <div className="mt-2 flex items-center justify-between gap-2">
@@ -1180,7 +1237,7 @@ function SectorCompassTab({ user }) {
                         <li key={k} className="flex items-center justify-between gap-2">
                           <span className="text-gray-600 capitalize w-20">{k}</span>
                           <div className="flex-1"><MiniBar value={v.value} /></div>
-                          <span className="text-gray-700 font-medium w-8 text-right dark:text-gray-300">{Math.round(v.value)}</span>
+                          <Score value={v.value} reason={v.reason} className="text-gray-700 font-medium w-20 text-right dark:text-gray-300" />
                         </li>
                       ))}
                     </ul>
@@ -1241,6 +1298,7 @@ function SectorCitationsDrill({ sector, dimensionFilter }) {
 }
 
 function founderReason(p) {
+  if (typeof p.opportunity_gap !== 'number') return p.reason || 'No live source yet for this sector.';
   if (p.opportunity_gap > 10) return `Strong demand-supply gap (+${p.opportunity_gap.toFixed(0)}) — early movers can land before incumbents respond.`;
   if (p.opportunity_gap > 0) return `Modest gap (+${p.opportunity_gap.toFixed(0)}) — viable for a focused team with a sharp wedge.`;
   if (p.opportunity_gap < -10) return `Crowded supply (${p.opportunity_gap.toFixed(0)}) — only enter with a 10× differentiator.`;
@@ -1258,7 +1316,8 @@ function FounderLensTab({ user: _user }) {
       .catch((e) => { if (!cancelled) setErr(e); });
     return () => { cancelled = true; };
   }, []);
-  const top = data?.picks ? data.picks.slice(0, 5) : [];
+  // D538: a sector without a live demand and supply reading has no gap.
+  const top = data?.picks ? data.picks.filter((p) => typeof p.opportunity_gap === 'number').slice(0, 5) : [];
   return (
     <div className="space-y-4">
       <TabExplainer text="Founder Lens highlights the biggest opportunity gaps — sectors where market demand is racing ahead of supply. Click any row to drill into the recent funding actors, hiring velocity, patent filings and research output rows that drive the score." />
@@ -1301,11 +1360,11 @@ function FounderLensTab({ user: _user }) {
                 <React.Fragment key={p.sector}>
                   <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setOpenSector(openSector === p.sector ? null : p.sector)}>
                     <td className="px-4 py-2 text-gray-900 font-medium dark:text-gray-100">{p.sector}</td>
-                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(p.composite)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(p.demand)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(p.supply)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300"><Score value={p.composite} reason={p.reason} /></td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300"><Score value={p.demand} reason={p.reason} /></td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300"><Score value={p.supply} reason={p.reason} /></td>
                     <td className={`px-4 py-2 text-right font-semibold ${p.opportunity_gap > 5 ? 'text-emerald-600' : p.opportunity_gap < -5 ? 'text-red-600' : 'text-gray-700'}`}>
-                      {p.opportunity_gap > 0 ? '+' : ''}{p.opportunity_gap.toFixed(1)}
+                      {typeof p.opportunity_gap === 'number' && p.opportunity_gap > 0 ? '+' : ''}<Score value={p.opportunity_gap} reason={p.reason} digits={1} />
                     </td>
                     <td className="px-4 py-2 text-right">
                       <ChevronDown size={14} className={`inline text-gray-400 transition-transform ${openSector === p.sector ? 'rotate-180' : ''}`} />
@@ -1337,7 +1396,8 @@ function InvestorLensTab({ user }) {
       .catch((e) => { if (!cancelled) setErr(e); });
     return () => { cancelled = true; };
   }, []);
-  const top = data?.ranked ? data.ranked.slice(0, 5) : [];
+  // D538: a sector without a live capital and sentiment reading has no score.
+  const top = data?.ranked ? data.ranked.filter((s) => typeof s.score === 'number').slice(0, 5) : [];
   // Institutional investors get a "print quarterly report" affordance.
   // Real PDF generation is server-side (out of scope here); this uses the
   // browser's native print dialog so users can save-as-PDF on demand.
@@ -1380,7 +1440,7 @@ function InvestorLensTab({ user }) {
                 <div className="flex-1">
                   <span className="font-semibold text-gray-900 dark:text-gray-100">{s.sector}</span>{' '}
                   <span className="text-blue-600 font-bold">{s.score.toFixed(1)}</span>
-                  <div className="text-gray-700 dark:text-gray-300">Capital {Math.round(s.capital)} · Sentiment {Math.round(s.sentiment)} · Composite {Math.round(s.composite)}</div>
+                  <div className="text-gray-700 dark:text-gray-300">Capital <Score value={s.capital} /> · Sentiment <Score value={s.sentiment} /> · Composite <Score value={s.composite} /></div>
                 </div>
               </li>
             ))}
@@ -1405,10 +1465,10 @@ function InvestorLensTab({ user }) {
                 <React.Fragment key={s.sector}>
                   <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setOpenSector(openSector === s.sector ? null : s.sector)}>
                     <td className="px-4 py-2 text-gray-900 font-medium dark:text-gray-100">{s.sector}</td>
-                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(s.capital)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(s.sentiment)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(s.composite)}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-violet-600">{s.score.toFixed(1)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300"><Score value={s.capital} reason={s.reason} /></td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300"><Score value={s.sentiment} reason={s.reason} /></td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300"><Score value={s.composite} reason={s.reason} /></td>
+                    <td className="px-4 py-2 text-right font-semibold text-violet-600"><Score value={s.score} reason={s.reason} digits={1} /></td>
                     <td className="px-4 py-2 text-right">
                       <ChevronDown size={14} className={`inline text-gray-400 transition-transform ${openSector === s.sector ? 'rotate-180' : ''}`} />
                     </td>
@@ -1468,6 +1528,7 @@ function GeographyLensTab({ user: _user }) {
       <TabExplainer text="Geography Lens projects the composite onto regions as a sector × region heat grid. Today the aggregator emits a single 'global' band, so each region inherits the global composite — per-country rollups land as additional connectors come online." />
       {err && <MIError err={err} fallbackTier="professional" />}
       {!err && !data && <div className="text-sm text-gray-500">Loading geography lens…</div>}
+      {data && sectors.length === 0 && <NotRecordedPanel what="Geography composites" reason={globalBand?.not_recorded?.reason || 'No live source yet for this sector'} testId="mi-geography-not-recorded" />}
       {data && sectors.length > 0 && (
         <>
           <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">

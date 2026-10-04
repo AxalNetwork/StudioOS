@@ -49,7 +49,7 @@ function walk(dir, exts) {
 }
 
 /** Column names that denote an amount of currency. */
-const MONEY = /(^|_)(amount|price|cost|revenue|mrr|arr|burn|payout|commission|earnings|spend|budget|salary|proceeds|principal|valuation|commitment|contributed|called|distributed|nav|balance|market_cap|hourly_rate|gross_profit|ebitda|net_income|cash|debt)(_|$)|_usd$|_cents$|_dollars$/i;
+const MONEY = /(^|_)(amount|price|cost|revenue|mrr|arr|burn|payout|commission|earnings|spend|budget|salary|proceeds|principal|valuation|commitment|contributed|called|distributed|nav|balance|market_cap|hourly_rate|gross_profit|ebitda|net_income|cash|debt|funding_total)(_|$)|_usd$|_cents$|_dollars$/i;
 
 /**
  * Suffixes that turn a money word into something else entirely. `distributed_at`

@@ -542,7 +542,10 @@ test('a money word is not the same as an amount of money', () => {
   // The classifier over-matched in both directions before these exclusions.
   for (const yes of ['amount', 'amount_cents', 'price_usd', 'mrr', 'monthly_burn_usd',
                      'called_capital', 'nav', 'cash_balance', 'market_cap', 'hourly_rate',
-                     'gross_profit', 'ebitda', 'net_income', 'cash', 'debt']) {
+                     'gross_profit', 'ebitda', 'net_income', 'cash', 'debt',
+                     // D531: research_company_directory's total raised, a REAL
+                     // amount production holds, which no other word matched.
+                     'funding_total']) {
     assert.ok(isMoney(yes), `${yes} should read as money`);
   }
   for (const no of [

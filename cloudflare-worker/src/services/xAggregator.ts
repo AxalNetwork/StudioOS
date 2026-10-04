@@ -16,6 +16,7 @@
  */
 import type { Env } from '../types';
 import { splitIntoThread, tweetLength } from './xClient';
+import { liveIndexSql } from './market_intel/liveRows';
 
 const K_MIN = 5;
 
@@ -80,7 +81,7 @@ async function safeHasMIChart(env: Env, periodStart: string): Promise<boolean> {
   try {
     const r = await env.DB.prepare(
       `SELECT COUNT(*) AS n FROM market_intel_indexes
-       WHERE datetime(computed_at) >= datetime(?)`,
+       WHERE datetime(computed_at) >= datetime(?) AND ${liveIndexSql()}`,
     ).bind(periodStart).first<{ n: number }>();
     return Number(r?.n ?? 0) > 0;
   } catch {
