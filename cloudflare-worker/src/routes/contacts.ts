@@ -991,31 +991,50 @@ r.get('/raise-pro-rata', async (c) => {
       `SELECT * FROM raise_pro_rata WHERE round_id = ? ORDER BY prior_stake_pct DESC, id`,
     ).bind(round.id).all<any>();
     const stored = rows.results || [];
-    const result = computeProRata(
-      stored.map((h: any) => ({
+    // D366: a figure the round does not record is null with its reason, never
+    // a 0 fed into the arithmetic. A round with no target has no entitlement
+    // (target × stake); a post-round stake needs the pre-money, the target and
+    // what the holder takes. A holder who waived or expired takes nothing, which
+    // is a recorded fact; an undecided holder's cheque is not recorded yet.
+    const known = (v: any): number | null => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+    const target = known(round.target_amount) != null && Number(round.target_amount) > 0 ? Number(round.target_amount) : null;
+    const preMoney = known(round.pre_money) != null && Number(round.pre_money) > 0 ? Number(round.pre_money) : null;
+    const NO_TARGET = 'The round has no target amount on record, so no entitlement can be computed.';
+    const computed = computeProRata(
+      stored.filter((h: any) => known(h.prior_stake_pct) != null).map((h: any) => ({
         key: String(h.uid),
-        prior_stake_pct: Number(h.prior_stake_pct) || 0,
+        prior_stake_pct: Number(h.prior_stake_pct),
         taking: h.taking_amount == null ? null : Number(h.taking_amount),
         state: h.state,
       })),
-      Number(round.target_amount) || 0,
+      target ?? 0,
       round.pro_rata_reserved == null ? null : Number(round.pro_rata_reserved),
     );
+    const result = target == null
+      ? { ...computed, rows: computed.rows.map(r => ({ ...r, entitlement: null, entitlement_raw: null, scaled: false })),
+          round_size: null, entitlement_total: null, rule: null, entitlement_not_recorded: NO_TARGET }
+      : computed;
     // Stitch the computed entitlement onto each stored row.
-    const byKey = new Map(result.rows.map(x => [x.key, x]));
+    const byKey = new Map(result.rows.map((x: any) => [x.key, x]));
     const holders = stored.map((h: any) => {
-      const calc = byKey.get(String(h.uid));
+      const calc: any = byKey.get(String(h.uid));
+      const stake = known(h.prior_stake_pct);
+      const taking = h.taking_amount != null ? known(h.taking_amount)
+        : (h.state === 'waived' || h.state === 'expired') ? 0 : null;
+      const entitlementMissing = target == null ? NO_TARGET
+        : stake == null ? 'This holder\'s prior stake is not recorded.' : null;
+      const stakeMissing = stake == null ? 'This holder\'s prior stake is not recorded.'
+        : preMoney == null ? 'The round has no pre-money valuation on record.'
+        : target == null ? 'The round has no target amount on record.'
+        : taking == null ? 'This holder has not recorded what they are taking.' : null;
       return {
         ...h,
-        entitlement: calc?.entitlement ?? null,
-        entitlement_raw: calc?.entitlement_raw ?? null,
-        scaled: calc?.scaled ?? false,
-        post_round_stake_pct: postRoundStake(
-          Number(h.prior_stake_pct) || 0,
-          Number(h.taking_amount) || 0,
-          Number(round.pre_money) || 0,
-          Number(round.target_amount) || 0,
-        ),
+        entitlement: entitlementMissing ? null : calc?.entitlement ?? null,
+        entitlement_raw: entitlementMissing ? null : calc?.entitlement_raw ?? null,
+        scaled: entitlementMissing ? false : calc?.scaled ?? false,
+        entitlement_not_recorded: entitlementMissing,
+        post_round_stake_pct: stakeMissing ? null : postRoundStake(stake!, taking!, preMoney!, target!),
+        post_round_stake_not_recorded: stakeMissing,
       };
     });
     return c.json({ round, holders, result });

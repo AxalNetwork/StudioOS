@@ -60,7 +60,8 @@ test('the endpoint is scoped to the caller', () => {
   const w = read('cloudflare-worker/src/routes/captable.ts');
   const i = w.indexOf("captable.get('/equity-plan'");
   assert.ok(i > 0, 'GET /captable/equity-plan must exist');
-  const body = w.slice(i, i + 2600);
+  // Bounded to the handler (D366 lengthened it with its refusal branch).
+  const body = w.slice(i, w.indexOf("captable.post('/simulate'", i));
   assert.match(body, /requireAuth\(c\)/, 'must authenticate');
   // Both tables key on user_id and carry no project_id, so this is a per-account
   // view — every query must bind the caller.
@@ -75,7 +76,8 @@ test('totals are null when nothing is recorded, never a confident zero', () => {
   // The fund-honesty rule: an unset fiduciary fact reads "Not recorded", not 0.
   const w = read('cloudflare-worker/src/routes/captable.ts');
   const i = w.indexOf("captable.get('/equity-plan'");
-  const body = w.slice(i, i + 2600);
+  // Bounded to the handler (D366 lengthened it with its refusal branch).
+  const body = w.slice(i, w.indexOf("captable.post('/simulate'", i));
   assert.match(body, /poolRows\.length \? sum\(poolRows, 'shares_authorized'\) : null/);
   assert.match(body, /vestRows\.length \? totalGranted : null/);
 
@@ -88,7 +90,8 @@ test('no money column is introduced — these are share counts', () => {
   // endpoint must not quietly add a dollar figure that dodges the rule.
   const w = read('cloudflare-worker/src/routes/captable.ts');
   const i = w.indexOf("captable.get('/equity-plan'");
-  const body = w.slice(i, i + 2600);
+  // Bounded to the handler (D366 lengthened it with its refusal branch).
+  const body = w.slice(i, w.indexOf("captable.post('/simulate'", i));
   for (const bad of ['amount', 'price', '_usd', 'valuation']) {
     assert.ok(!body.includes(bad), `the equity-plan payload must not carry ${bad}`);
   }
