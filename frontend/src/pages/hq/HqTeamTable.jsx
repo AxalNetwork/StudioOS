@@ -57,9 +57,12 @@ import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
  * the reason, and that the session lasts 30 minutes once it is opened; the
  * form says so before anyone presses Begin. The notice is best-effort:
  * whether it was stored is a fact the branch reports (`target_notified`,
- * false when the inbox refused it) and HQ's own route drops before
- * answering, so the form describes the notice and never says the person was
- * told.
+ * false when the inbox refused it). Before D530 HQ's own route dropped it, so
+ * the form described the notice and never said the person was told. HQ's
+ * route passes it on now, and once the session is authorised the form says
+ * what the branch reported: Told, Not told, or Not recorded when the branch
+ * did not report it (a branch built before D441). `supportNoticeOutcome`
+ * holds the three sentences, and it never reads a missing value as told.
  */
 
 const RUNG = {
@@ -111,6 +114,40 @@ function supportRefusal(ex) {
 }
 
 /**
+ * D530 — what the branch reported about its security notice, as one line.
+ *
+ * `told` is HQ's route's `target_notified`, passed through as the branch sent
+ * it. Only `true` is "Told" and only `false` is "Not told"; anything else,
+ * including a missing field, is "Not recorded" with its reason, because a
+ * branch built before D441 does not report it. `true` means the notice was
+ * stored in their inbox on the branch, so the line says that and claims
+ * nothing about the email copy, which the branch does not report.
+ */
+export function supportNoticeOutcome(told) {
+  if (told === true) {
+    return { state: 'told', text: 'Told: the branch reports that its security notice was stored in their inbox there. Whether the email copy arrived is not reported.' };
+  }
+  if (told === false) {
+    return { state: 'not_told', text: 'Not told: the branch reports that its security notice could not be stored, so it sent them nothing. The session is authorised all the same.' };
+  }
+  return { state: 'not_recorded', text: 'Not recorded: the branch did not report whether its security notice was stored. A branch built before D441 does not report it.' };
+}
+
+/** D530 — the outcome line the Support form draws once a session is authorised. */
+export function SupportNoticeOutcome({ told }) {
+  const outcome = supportNoticeOutcome(told);
+  return (
+    <p
+      className={`text-[11.5px] ${outcome.state === 'not_told' ? 'text-rose-700 dark:text-rose-300' : 'text-axal-muted'}`}
+      data-testid="hq-team-support-told"
+      data-state={outcome.state}
+    >
+      {outcome.text}
+    </p>
+  );
+}
+
+/**
  * D260 — what a branch hit says about the account's KYC, access and Lab, as
  * the branch sent it. Read-only: acting on any of the three is the branch
  * admin's, on its own Admin Console, and HQ draws no control for it.
@@ -146,6 +183,8 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
   const [supportBusy, setSupportBusy] = useState(false);
   const [supportErr, setSupportErr] = useState('');
   const [supportUrl, setSupportUrl] = useState(null);
+  // D530 — the branch's `target_notified`, as HQ's route passed it on.
+  const [supportTold, setSupportTold] = useState(undefined);
   const canSupport = !viewAs && Number(hit.is_active) === 1;
   // D262 — AN ADMINISTRATOR IS UNBOUND, NOT MOVED. The branch refuses to move
   // one (`moveAccountOut`, D133) and says to unbind at HQ, so Move is not drawn
@@ -218,6 +257,7 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
               // same URL is also shown as a link below.
               window.open(res.open_url, '_blank', 'noopener');
               setSupportUrl(res.open_url);
+              setSupportTold(res?.target_notified);
             } catch (ex) {
               reportError('hq-team-support', ex);
               setSupportErr(supportRefusal(ex));
@@ -231,8 +271,8 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
             branch&rsquo;s own site. It needs your authenticator and a fresh step-up. The branch records
             the authorisation and sends the person a security notice, in the app and by email, with your
             name, your reason and that the session lasts 30 minutes once it is opened. The branch reports
-            whether that notice was stored; HQ&rsquo;s route does not pass it on, so this form cannot say
-            whether the person was told.
+            whether that notice was stored, and this form shows what it reported once the session is
+            authorised.
           </p>
           <label className="text-[11px] text-axal-muted">
             Reason (at least 10 characters). It is recorded here and on the branch.
@@ -245,6 +285,7 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
               <a className="font-bold text-axal-violet underline dark:text-violet-300" href={supportUrl} target="_blank" rel="noopener noreferrer">open the session</a>.
             </p>
           )}
+          {supportUrl && <SupportNoticeOutcome told={supportTold} />}
           <button type="submit" disabled={supportBusy || supportReason.trim().length < 10} className="justify-self-start rounded-md bg-axal-violet px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-50">
             {supportBusy ? 'Opening…' : 'Begin'}
           </button>
@@ -797,7 +838,7 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         It needs a step-up and TOTP; a refusal names the reason. HQ-held rows have no source branch,
         so they are not movable from this table. Support opens a session on an active branch account,
         on that branch&rsquo;s own site, with the same step-up and a reason; the branch sends the person a
-        security notice when the session is authorised, and whether it was stored is not reported here.
+        security notice when the session is authorised, and the Support form shows whether it was stored.
         An administrator&rsquo;s hit shows Unbind instead of Move: an administrator is unbound, not moved,
         and Unbind removes the role and deactivates the account on that branch, with the same step-up and a reason.
       </p>

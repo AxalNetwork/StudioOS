@@ -40415,6 +40415,150 @@ Four malformed files were refused before any call: a five-digit colour, an
 empty list, a missing description, and a bad second entry after a good first.
 actionlint, with shellcheck, reports nothing.
 
+## D504
+
+**The phone's tab bar is mounted by the shell, the shell clears the status
+bar, and the `FOUNDER_FULL_BLEED` comment stops calling three redirects
+pages.** Issue #985, slot S05. No migration, no route, no `api.js` change.
+
+**What was true on main (`f701a32f5`).** D425 shipped `MobileTabBar`, its
+plan (`lib/mobileTabs.js`) and its tests, and left the mount to the shell
+because `App.jsx`'s mobile chrome is Session 5's. Nothing mounted it: phones
+had a tested bar and no bottom navigation. `index.html` already asked for
+`viewport-fit=cover` (D425), so the installed app drew under a phone's status
+bar with a header that did not pad for it. The comment over
+`FOUNDER_FULL_BLEED` still said bare `/build/discovery`, `/execution` and
+`/signals` "keep rendering the same desk"; since D422 each is a
+`<Navigate replace>` for a founder.
+
+**What changed.**
+- **The mount** (`App.jsx`): one import, one element — `<MobileTabBar
+  role={shellRole} />` right after the drawer's backdrop, inside the same flex
+  container as the aside, so the drawer (z-50) still covers it. The role is
+  the shell's as resolved by `shellRoleFor`, without the sidebar's
+  `|| 'founder'` fallback: the sidebar defaults because a nav with no rows is
+  a broken screen; the bar must not, because a viewer with no role would get
+  a founder's tabs. The bar renders nothing for a licence whose plan is not
+  built (`mobilePlan` returns null), which D425 already pins.
+- **The shell's root** (`<div className="flex flex-col h-screen …">`) pads
+  by `env(safe-area-inset-top, 0px)`, once, and the header keeps its fixed
+  56px (`h-14`). The first draft padded the header and made its height a
+  minimum; the third pass below says why that moved.
+- **The tab bar's clearance** is on the scroll container, `<main
+  data-app-scroll>`, not on the content block inside it (third pass, below).
+- **The comment** over `FOUNDER_FULL_BLEED` (`sidebarConfig.js`) says what
+  D422 made true: the three bare routes redirect to `/validate`, `/build` and
+  `/research`, render a page only with `?mode=workspace` (the editors D422
+  kept), and `/build/team?mode=workspace` is the Team workspace (D435). They
+  stay listed because the editor each still mounts keeps the desk's width.
+
+**Guard.** `frontend/test/mobile_tab_bar_mount_d504.test.mjs`, 6 tests (the
+fourth is the footer's and the sixth the cookie banner's, both below): the
+bar is imported and mounted once, right after the backdrop, with the resolved
+role and no founder default while the sidebar keeps its own; the real
+component renders for a founder with `lg:hidden` and renders nothing for an
+undefined or null role; the shell root reserves the top inset once, every
+strip and the header render inside it, the header is a fixed 56px with no
+inset of its own, and the viewport asks for cover; the comment describes the
+redirects and `App.jsx` really does redirect each of the three for a founder.
+`founder_shell`, `apex_route_coverage`: green unchanged;
+`mobile_tab_bar_d425` re-aimed at the scroll container (below).
+
+**Mutations: 9 run, 9 caught** against the first draft — each a non-zero
+exit with a `not ok` line, anchors unique, bytes proven changed, sources
+restored from a sha256-checked snapshot: the bar not mounted; mounted twice;
+the role defaulted to founder; mounted away from the drawer; the header's top
+inset dropped; the header back to a fixed 56px; the bar drawn for a viewer
+with no role; the bar drawn at every width; the stale comment back. The two
+header mutations tested the pin the third pass replaced; their cover is the
+12-run list below.
+
+**Browser probe, recorded and not a gate:** `docs/` served with the SPA
+fallback, `/studio` as a founder. At 390×844 the bar is drawn once at the
+bottom (57px tall, "Studio Build Raise Grow More"), `data-mobile-tabbar="on"`
+is set and the page's main column pads 56px; More opens the sheet with
+"Spin-Out Lab · Validate · Network · Research · Messages · Trust · Company
+Settings". At 1280×900 the same element is `display: none`. As an investor at
+phone width no bar is drawn and the root attribute is absent. (That pass
+read the first draft's header inset; the third pass below reads the root's.)
+
+**The cookie banner clears the bar** (S1 on #985, which added
+`CookieConsent.jsx` to this task's files after the first probe found the
+banner over the bar: a fixed z-50 card at `bottom-4`, above the bar's z-30,
+so until it was answered the first tap on a tab landed on the banner). The
+card's bottom is now `calc(var(--mobile-tabbar-h, 0px) + 16px)`, the
+variable D425 left for exactly this: set on `<html>` only while a bar is
+drawn and only below 1024px, so the card is 16px above the bar on a phone and
+16px off the bottom, as before, everywhere else. The `0px` fallback is
+load-bearing: `var(--x)` with no fallback is an invalid value, which would
+drop the rule and pin the card to the very bottom off a phone. The guard's
+fifth test pins the inline offset and its fallback, the absence of a
+Tailwind `bottom-*` class that would fight it, the card still `fixed z-50`,
+the variable still carrying the bar's height, and the rendered undecided
+banner carrying the offset. Mutations, both ways: 6 run, 6 caught — the
+banner back to `bottom-4` with no offset (the code before this); the offset
+without its fallback; the offset and `bottom-4` both kept; the offset
+reduced to the bar height alone; the card no longer fixed; the variable no
+longer carrying the bar's height. Probe, second pass: at 390×844 as a
+founder with no cookie decision the banner's bottom edge sits above the
+bar's top edge and a tap on the Build tab navigates with the banner still
+open; at 1280×900 the banner's computed bottom is 16px.
+
+**Third pass: the inset moves to the shell's root, the header's height is
+fixed again, and the clearance moves to the scroll container** (three Codex
+findings on #1039, each verified from the code before it was changed).
+- *The first bar under the status bar.* The first draft put the inset on the
+  header. On an admin's phone `PortalSwitcher` renders before the header, and
+  the support, impersonation and branch-status strips before that, so the
+  first interactive bar sat under the status bar and the inset opened a gap
+  between the strips and the header. The inset is now on the shell's root
+  column, once: whichever bar is first sits below it. The inset strip shows
+  the root's `bg-gray-50`, not the first bar's colour, because the root
+  cannot know which bar is first.
+- *The header's minimum.* `min-h-14` with the inset as padding is border-box:
+  a 20px inset left a 36px row. Moot once the inset is on the root; the header
+  is back to the `h-14` it had before this decision.
+- *The footer under the bar.* D425 padded `[data-app-main]`, the content
+  block, so as not to touch the shell's markup; the footer renders after that
+  block inside `<main>`, so at the end of the scroll its Terms and Privacy row
+  sat under the bar. `<main>` is now marked `data-app-scroll` and
+  `mobileTabBar.css` pads that instead; the footer is the last thing in the
+  scroll container, so it ends above the bar, and the content block no longer
+  carries a second clearance under the footer. Two D425 files joined the task
+  for this: `mobileTabBar.css` (the selector and its comment) and
+  `mobile_tab_bar_d425.test.mjs` (its pin re-aimed at the scroll container,
+  and one line that the content block is no longer padded). No open issue or
+  PR owned either.
+The guard's third test pins the root's inset, that it is reserved exactly
+once (a second one, on the header say, is a gap of two insets), that the
+strips and the header render inside the root, and the header's fixed
+`h-14` with neither `min-h-14` nor an inset; its fourth test pins
+`data-app-scroll` on the one `<main>` with `overflow-y-auto`, the footer
+after `[data-app-main]` inside it, the CSS rule on the scroll container and
+no rule left on the content block. **Mutations, both ways: 12 run, 12
+caught** (same discipline): the inset dropped from the root; the inset back
+on the header alone (the first draft); the inset on root and header both;
+the header back to `min-h-14` with the inset (the first draft's row);
+`min-h-14` with no inset; a strip rendered before the root; the scroll
+container unmarked; the mark moved onto the content block; the footer moved
+out of the scroll container; the CSS rule back on the content block (D425's);
+the rule removed; both rules at once. Probe, third pass, recorded and not a
+gate: at 390×844 as a founder the root's inline `padding-top` is the inset
+expression (0 in a headless browser), the header is 56px at the top, `<main>`
+computes `padding-bottom: 56px` and `[data-app-main]` its own 16px, and the
+footer's bottom edge is at 788px against the bar's top at 787px: the 1px is
+the bar's hairline border, which D425's `--mobile-tabbar-h` (`56px` plus the
+bottom inset) does not count, and the footer's links sit 16px above its edge.
+As an admin previewing the founder shell the first bar is `PortalSwitcher`,
+at the top of the root, and the header 56px below it at 168px. With a
+stand-in inset of 20px set on the root by the probe (headless Chromium
+reports none), the first bar starts at 20px in both sessions and the header
+is still 56px. At 1280×900 `<main>` pads 0 and the footer ends at the
+viewport's bottom. The 1px border short-count in D425's variable is relayed
+to S1, not changed here.
+
+`frontend/src` moved, so `docs/` is rebuilt.
+
 ## D505
 
 **The partner sidebar stops naming the retired `/partner/operations/*`
@@ -41101,3 +41245,89 @@ route fails, one whose verb the Worker does not answer fails, one with a route
 passes, a module missing from the re-export block is reported (with the line
 to add), and the block rejects a ghost, a duplicate, a malformed line and the
 wrong order. Each was mutation-checked both ways.
+
+## D530
+
+**HQ's support-session route passes the branch's `target_notified` through,
+and the HQ Team Support form says what the branch reported once the session
+is authorised: Told, Not told, or Not recorded.** Issue #1059, slot S02,
+found by slot S05 on #1043 (D507). No migration, no new route, no `api.js`
+change. `frontend/src` moved, so `docs/` is rebuilt.
+
+**What was true on main (`b3b9752d5`).** The branch's `openSupportSession`
+(D441) records the authorisation, calls `notify()`, and returns
+`target_notified`: `true` when the security notice was stored in the
+person's inbox there, `false` when it could not be stored, in which case the
+session is authorised all the same (`branch_invitation_d441.test.ts`). HQ's
+route, `POST /api/admin/branches/:code/support-session` in
+`routes/admin_support_sessions.ts`, answered `{ branch, target, expires_at,
+open_url }` and dropped the field, so D507 had to word the card, the form and
+the footer as "cannot say whether the person was told", and recorded the drop
+as found, not fixed.
+
+**What the route answers now.** `target_notified` is the branch's value when
+it is a boolean and `null` otherwise. A missing field (a branch Worker built
+before D441) and a malformed one (`'yes'`, `1`, `{}`) both become `null`,
+"not reported". Nothing defaults it to `true`: whether the person was told is
+a fact only the branch holds, so HQ never supplies one of its own.
+
+**What the form says.** `supportNoticeOutcome` in `HqTeamTable.jsx` holds the
+three sentences and `SupportNoticeOutcome` draws them under the "Opened in a
+new tab" line, once the route has answered:
+- `true`: "Told: the branch reports that its security notice was stored in
+  their inbox there. Whether the email copy arrived is not reported." `true`
+  means `notify()` returned an inbox row; the email is dispatched separately
+  and its arrival is not reported, so the line claims nothing about it.
+- `false`: "Not told: the branch reports that its security notice could not
+  be stored, so it sent them nothing. The session is authorised all the
+  same." Drawn in the warning colour, because the operator is now in an
+  account whose holder has not been told.
+- anything else: "Not recorded: the branch did not report whether its
+  security notice was stored. A branch built before D441 does not report
+  it." The reason is part of the line, as the honesty rule asks.
+Only `true` reads as told. The state starts `undefined`, is set from
+`res?.target_notified` in the same success branch as the URL, and is drawn
+only once there is a URL, so no line appears before a session exists. D507's
+attempt-neutral wording stays on the card, the pre-submit paragraph and the
+footer: each still describes the notice as the branch sends it, and now says
+the Support form shows what the branch reported, instead of saying it cannot.
+
+**Pins re-aimed, never loosened.** D507 left a pin that failed the day HQ's
+route passed the field on, so its sentences would be re-aimed with it.
+`hq_team_h20.test.mjs` now holds the card, the form paragraph, the footer and
+both header comments to their new sentences and keeps each free of the old
+"does not pass it on" and "not reported here", and its route assertion reads
+the pass-through line instead of the field's absence. Its bans stand
+unchanged: "not told" anywhere in `HqTeamTable.jsx`, "is not told" on the
+card, and "is told" / "The person is told" on the card, the form and the
+footer. The ban on "not told" is a case-sensitive match on the lowercase
+phrase, written against the stale claim that a branch account is never told,
+so the outcome line's capitalised "Not told:" passes it. That line is drawn
+only when the branch reports exactly that, and "Told:" contains none of the
+banned phrases.
+
+**Guard.** `cloudflare-worker/test/branch_support_session_d259.test.ts`
+gains 2 tests through the bundled Worker with a stubbed branch: `true` and
+`false` reach HQ's answer unchanged; a branch that sends no field is answered
+with the key present and `null`, and `'yes'`, `'true'`, `1`, `0`, `null` and
+`{}` are each answered `null`. `frontend/test/hq_support_told_d530.test.mjs`,
+5 tests: the three sentences; nine non-boolean values each giving "Not
+recorded" with its reason and never "Told"; the line rendered for every
+value, with the warning colour only on "Not told"; and the form's wiring read
+as source (initial `undefined`, set from `res?.target_notified` beside
+`setSupportUrl`, written from nowhere else, drawn once and only behind
+`supportUrl`). The two worker tests fail on main's route.
+
+**Mutations: 22 run, 22 caught** (non-zero exit and a `not ok` line each;
+anchors unique; bytes proven changed; sources restored from a sha256-checked
+snapshot): the route passing the raw field; defaulting a missing field to
+`true`; dropping the field, as on main; coercing truthy values to `true`;
+reading a missing field as `false`; the helper reading any truthy value as
+told; the helper reading `0` as not told; the told and not-told states
+swapped; the not-recorded reason dropped; the told line claiming the email
+was delivered; "authorised all the same" dropped; every state drawn in the
+warning colour; `data-state` pinned to `told`; the form never storing the
+answer; the form storing `true` whatever the answer; the state starting as
+`true`; the line drawn before a session opens; the line drawn from the URL
+instead of the answer; and the card, the form paragraph, the footer and the
+header comment each put back to their D507 wording.
