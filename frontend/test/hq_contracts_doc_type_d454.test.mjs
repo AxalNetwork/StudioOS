@@ -13,7 +13,7 @@ import { DocTypeRegistry, groupDocTypesByLayer, UNAVAILABLE } from '../src/pages
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(raw('frontend/src/pages/hq/ContractsPage.jsx'));
 const API = codeOnly(raw('frontend/src/lib/api.js'));
-const ROUTE = raw('cloudflare-worker/src/routes/admin_contracts.ts');
+const ROUTE = raw('cloudflare-worker/src/routes/admin_contract_doc_registry.ts');
 
 const SAMPLE = {
   type_count: 2,
@@ -24,7 +24,7 @@ const SAMPLE = {
   ],
 };
 
-test('groupDocTypesByLayer keeps the four layers in canvas order', () => {
+test('groupDocTypesByLayer keeps the four code layers in Contracts X1 order', () => {
   const g = groupDocTypesByLayer(SAMPLE.items, [{ id: 'fund', label: 'Fund level' }, { id: 'gp', label: 'GP level' }]);
   assert.deepEqual(g.map((x) => x.id), ['gp', 'fund']);
   assert.equal(g[0].items.length, 1);
@@ -49,12 +49,12 @@ test('an unreadable registry is not an empty one', () => {
 });
 
 test('the page wires the doc-types endpoint and names oversight honestly', () => {
-  assert.match(PAGE, /api\.adminContractDocTypes\(\)/);
+  assert.match(PAGE, /api\.adminContractRegistryHub\(\)/);
   assert.match(PAGE, /DocTypeRegistry/);
   assert.match(PAGE, /Cross-tenant oversight/);
   assert.match(PAGE, /Unrecorded/);
   assert.doesNotMatch(PAGE, /registry the canvas draws above it has no store/);
   assert.match(API, /adminContractDocTypes:/);
-  assert.match(ROUTE, /adminContracts\.get\('\/doc-types'/);
+  assert.match(ROUTE, /registry\.get\('\/doc-types'/);
   assert.match(ROUTE, /party_roles:/);
 });

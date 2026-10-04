@@ -1458,7 +1458,10 @@ export default function SpinoutLabBrandPage() {
                         <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
                         <div className="text-[11px] text-gray-400 truncate">{tpl?.label || p.template}</div>
                         <div className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                          <b className="text-gray-800 dark:text-gray-200">{p.views_count}</b> views · <b className="text-gray-800 dark:text-gray-200">{subs}</b> subs{p.updated_at ? ` · ${timeAgo(p.updated_at)}` : ''}
+                          {/* D366: a page with no stored count says so, never "0 views". */}
+                          {p.views_count == null
+                            ? <span data-testid={`page-views-unrecorded-${p.id}`} title="This page has no view count on record.">Views not recorded · </span>
+                            : <><b className="text-gray-800 dark:text-gray-200">{p.views_count}</b> views · </>}<b className="text-gray-800 dark:text-gray-200">{subs}</b> subs{p.updated_at ? ` · ${timeAgo(p.updated_at)}` : ''}
                         </div>
 
                         {/* The page's real public address. Previously the

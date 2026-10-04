@@ -35,6 +35,7 @@ import {
   safeHarbourStatus, triggerChecklist, commonToPreferredRatio, type TriggerKind,
 } from '../services/valuation409a';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -284,15 +285,27 @@ function isUniqueViolation(err: unknown): boolean {
  */
 captable.get('/equity-plan', async (c) => {
   const user = await requireAuth(c);
-  const pools = await c.env.DB.prepare(
-    `SELECT id, name, shares_authorized, shares_issued, shares_available, source, updated_at
-       FROM cap_table_option_pools WHERE user_id = ? ORDER BY name`,
-  ).bind(user.id).all<any>().catch(() => ({ results: [] as any[] }));
-  const vesting = await c.env.DB.prepare(
-    `SELECT id, holder_id, security_id, start_date, cliff_months, total_months,
-            total_shares, vested_shares, source, updated_at
-       FROM cap_table_vesting WHERE user_id = ? ORDER BY start_date DESC`,
-  ).bind(user.id).all<any>().catch(() => ({ results: [] as any[] }));
+  // D366: a failed SELECT is a refusal, never an empty plan. "No pools or
+  // grants recorded" is only said when both stores were actually read.
+  let pools: { results?: any[] };
+  let vesting: { results?: any[] };
+  try {
+    pools = await c.env.DB.prepare(
+      `SELECT id, name, shares_authorized, shares_issued, shares_available, source, updated_at
+         FROM cap_table_option_pools WHERE user_id = ? ORDER BY name`,
+    ).bind(user.id).all<any>();
+    vesting = await c.env.DB.prepare(
+      `SELECT id, holder_id, security_id, start_date, cliff_months, total_months,
+              total_shares, vested_shares, source, updated_at
+         FROM cap_table_vesting WHERE user_id = ? ORDER BY start_date DESC`,
+    ).bind(user.id).all<any>();
+  } catch (e) {
+    return refuse(c, 500, {
+      code: 'equity_plan_read_failed',
+      message: 'Your option pools and vesting grants could not be read. This is not a claim that none are recorded; try again in a moment.',
+      raw: e,
+    });
+  }
 
   const poolRows = pools.results || [];
   const vestRows = vesting.results || [];

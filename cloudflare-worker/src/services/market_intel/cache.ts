@@ -17,12 +17,17 @@ import type { Env } from '../../types';
 export const CACHE_TTL_SECONDS = 6 * 60 * 60;
 export const KV_TTL_SECONDS = 24 * 60 * 60;
 const KV_PREFIX = 'cache:mi:';
+/** Bump when a cached market-intel response shape or basis changes (D538: 'live'). */
+export const EDGE_CACHE_VERSION = 'live';
 
 /** Build a Cache API key from the incoming Request + tier. */
 export function cacheKey(req: Request, tier: string): Request {
   const url = new URL(req.url);
   // Fold tier into the key so per-tier projections can't cross-pollute.
   url.searchParams.set('__tier', tier);
+  // D538: versioned so a response cached before the live-only read (one
+  // built from stub-derived indexes) is never served from the edge again.
+  url.searchParams.set('__v', EDGE_CACHE_VERSION);
   return new Request(url.toString(), { method: 'GET' });
 }
 

@@ -1183,11 +1183,16 @@ decks.post('/:id/share', async (c) => {
   const viewLimit = Math.min(100, Math.max(1, Number(body?.view_limit) || 1));
   const token = await mintSignedToken(c.env, `deck:${id}:v${row.version}`, ttlSeconds, user.email || null);
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  await c.env.DB.prepare(
+  const ins = await c.env.DB.prepare(
     `INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, view_limit, view_count, created_by)
      VALUES (?, ?, ?, ?, 0, ?)`
   ).bind(id, await sha256Hex(token), expiresAt, viewLimit, Number(user.id) || null).run();
+  // D367 — the link's row id, so the sheet that minted it can withdraw it
+  // (DELETE /:id/shares/:shareId) when the founder replaces it. Null if the
+  // driver did not report one; the sheet then says it could not withdraw.
+  const shareId = Number(ins?.meta?.last_row_id) || null;
   return c.json({
+    id: shareId,
     token, expires_in_seconds: ttlSeconds, expires_at: expiresAt,
     view_limit: viewLimit,
     // Canonical share URL per Task #53 spec is /share/deck/<token>; the

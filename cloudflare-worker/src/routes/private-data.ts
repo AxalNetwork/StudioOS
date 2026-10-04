@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { MARKET_PULSE, STUDIO_BENCHMARKS } from './market_intel';
+import { notRecorded, NOT_RECORDED_REASONS } from './market_intel';
 
 const privateData = new Hono<{ Bindings: Env }>();
 
@@ -28,17 +28,18 @@ privateData.get('/market/private-signals', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return c.json({ error: 'Insufficient permissions' }, 403);
 
-  const signals = MARKET_PULSE.map(s => {
-    let conviction = 'neutral';
-    if (s.sentiment === 'Aggressive' && s.multiple > 20) conviction = 'aggressive';
-    else if (s.sentiment === 'Wait-and-See' || s.multiple < 15) conviction = 'wait-and-see';
-    return { sector: s.sector, revenue_multiple: s.multiple, sentiment: s.sentiment, conviction, hiring_signal: s.hiring_surge, technographic_signal: s.technographic_signal, gap_opportunity: s.gap_opportunity };
+  // D538 (#1078): these signals and benchmarks were figures written into
+  // routes/market_intel.ts (sector multiples, sentiment, hiring claims,
+  // fifteen studio benchmarks) that nothing recorded. They are not recorded,
+  // so the route says so; a "global conviction" read off them is not drawn.
+  return c.json({
+    global_conviction: null,
+    signals: [],
+    signals_not_recorded: notRecorded(NOT_RECORDED_REASONS.sector_signals),
+    studio_benchmarks: null,
+    studio_benchmarks_not_recorded: notRecorded(NOT_RECORDED_REASONS.studio_benchmarks),
+    updated_at: new Date().toISOString(),
   });
-
-  const aggressive = signals.filter(s => s.conviction === 'aggressive').length;
-  const cautious = signals.filter(s => s.conviction === 'wait-and-see').length;
-
-  return c.json({ global_conviction: aggressive > cautious ? 'Aggressive' : 'Wait-and-See', signals, studio_benchmarks: STUDIO_BENCHMARKS, updated_at: new Date().toISOString() });
 });
 
 privateData.get('/portfolio/metrics', async (c) => {

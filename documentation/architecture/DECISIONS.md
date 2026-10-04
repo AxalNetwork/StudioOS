@@ -34107,6 +34107,179 @@ Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and a
 `not ok` line, and the file was restored and checked by sha256. The first
 mutation is the original swallow, so the test fails on the code as it was.
 
+## D366
+
+**The Lab tools' Worker reads stop turning a missing or unread value into
+zero.** Wave 8, Session 8, issue #997. D360, D364 and D365 each filed one of
+these and left it. Worker and frontend; no migration, no new route, no new
+`api.js` method.
+
+**The defects.** Each was a `|| 0`, a `?? 0` or a `.catch(() => [])` on a
+figure:
+- `GET /captable/equity-plan` caught a failed SELECT on either Carta table
+  into an empty list. The Cap Table card then said "No pools or grants
+  recorded" about a read that never happened (D364).
+- `GET /contacts/raise-pro-rata` computed against `target_amount || 0`,
+  `pre_money || 0` and `taking_amount || 0`. A round with no target showed
+  every entitlement as $0. A round with no pre-money, or an undecided
+  holder, got a post-round stake built on a zero nobody recorded (D360,
+  D364).
+- The brand page DTOs sent `views_count || 0` (the single page) and
+  `?? 0` (the page list), so a page with no stored count read "0 views"
+  (D360).
+- The Stripe import's success body sent `mrr ?? 0` and `customers ?? 0`
+  (D365).
+
+**What changed.**
+- **Equity plan.** Both SELECTs sit in one `try`. A failure is
+  `refuse(c, 500, { code: 'equity_plan_read_failed', … })`:
+  - our sentence says it is not a claim that none are recorded;
+  - SQLite's text goes to the log, never into the body;
+  - no list rides on the refusal.
+
+  A readable empty store is still 200 with empty lists. Both callers
+  already handle the refusal: the Lab Cap Table card shows `Unreadable`
+  (only a 404 hides it), and the Cap Table equity panel shows its error
+  line.
+- **Pro-rata.** A value the round does not record is null, with a reason
+  sentence beside it:
+  - With no target, each holder's `entitlement` and `entitlement_raw` are
+    null, with `entitlement_not_recorded` saying why. The result's
+    `round_size`, `entitlement_total` and `rule` are null too, because no
+    reconciliation is claimed over entitlements nobody computed.
+  - `post_round_stake_pct` is null when the prior stake, the pre-money, the
+    target or the holder's cheque is not recorded. The first missing one is
+    named in `post_round_stake_not_recorded`.
+  - A holder who waived or expired takes nothing, which is a recorded fact,
+    so their stake is still computed.
+  - The Lab Capital card and the Raise pro-rata panel print "Not recorded"
+    with that reason under it, where they used to print "—" or $0.
+- **Brand.** Both DTOs return `views_count` as stored, null included. The
+  Lab Brand page card says "Views not recorded" and the Brand Builder says
+  "Pageviews not recorded". A stored 0 is still 0.
+- **Stripe import.** The body sends `mrr` and `customers` only when each is
+  a finite number, and null otherwise. The sync's success path always
+  returns both, so no screen changes. The line now cannot invent a figure
+  if that path ever changes.
+
+**Guards.**
+- `cloudflare-worker/test/lab_honesty_zeros_d366.test.ts` has 9 tests. It
+  drives the real captable, contacts and brand routers against real SQLite.
+  The equity-plan failure is injected at the adapter for each table's
+  SELECT, so auth runs unmocked. The Stripe line is pinned as source text,
+  because the real sync never returns a missing figure on success.
+- `frontend/test/lab_honesty_zeros_d366.test.mjs` has 5 tests. They pin
+  the four screens' "Not recorded" branches and the Cap Table's 500 →
+  `Unreadable` path as source text, bounded to their blocks.
+- On the code as it was, 7 of the 9 Worker tests and all 5 frontend tests
+  fail. The two that pass are the controls: an empty equity store and a
+  recorded view count.
+- Mutation-checked both ways: 23 of 23 caught. Each gave a non-zero exit
+  and a `not ok` line, and every file was restored and checked by sha256.
+  The mutations restore each original zero and drop each reason. They also
+  break the controls the other way: a recorded count dropped to null, and
+  a readable empty store refused.
+## D367
+
+**The four unfinished Lab-tools pieces D360–D365 filed: three built, and
+the formation packet's build put to the owner.** Wave 8, Session 8, issue
+#998. Worker and frontend; no migration, no new route, no new `api.js`
+method.
+
+**1. The formation packet (needs the owner's decision).** After payment,
+`startIncorporationPacket` only moves the order from `paid` to
+`packet_processing`. Nothing assembles a packet, emails a link or files
+with the state, and nothing in the Worker sets `packet_ready` or `filed`.
+The screens claimed otherwise:
+- a spinning "Processing packet" or "Preparing documents" badge;
+- "We're preparing your signing packet and will email you a link";
+- "filing started";
+- the Lab tracker's "Documents prepared ✓" for `packet_processing`.
+
+Who builds and files the packet, and what moves an order on, is the
+owner's call, asked on #998. It is not built here. What is built is the
+part that waits on no one: the screens stop claiming it.
+- `lib/incorporationPricing.js` holds `PACKET_NOT_BUILT_STATUSES` (`paid`,
+  `packet_processing`) and one sentence: payment is confirmed, the packet
+  has not been built yet, and nothing has been filed with the state.
+- The badge reads "Paid · packet not built", with no spinner.
+- The success page and the Incorporate page show the sentence. The
+  Incorporate page now says "formation ordered" instead of "filing
+  started".
+- On the Lab Incorporate page, `packet_processing` completes no step. A
+  ready packet is "Documents prepared" (step 1), not a state submission.
+  The tracker shows the sentence, and the status says "Paid · not filed".
+  "Filed" waits on a status that nothing records yet.
+
+**2. The Deck share sheet.**
+- Each expiry button used to mint a new link and leave the one on screen
+  live. `POST /decks/:id/share` now returns the link's row `id`.
+  `replaceDeckShare` (`lib/deckShareViews.js`) works in this order:
+  - it mints the new link first, so a failed mint leaves the shown link
+    alone, and the sheet says it still works;
+  - it then withdraws the previous link through
+    `DELETE /decks/:id/shares/:shareId`;
+  - a failed withdrawal, or a link with no id, is said in the sheet. It is
+    never assumed.
+- Only an expiry change replaces a link. Opening the sheet issues a fresh
+  link and withdraws nothing, because a link from an earlier visit may
+  already have been sent.
+- The sheet says that each choice withdraws the link shown above.
+- Copy used to say "Copied" even when the clipboard was blocked. It now
+  says "Copied" only after the write succeeds. Otherwise it says "Copy was
+  blocked — select the link and copy it by hand", as the Cap Table sheet
+  already did.
+
+**3. `normalizeInputs` (Cap Table).**
+- A figure the scenario does not hold now stays null. That covers founder
+  shares, SAFE amounts, round pre-money and investment, and the option
+  pool. They used to become 0, or 10% for the pool, and the next Save
+  wrote that invented figure back.
+- A new `known()` treats null, undefined and `''` as not recorded. The
+  page's `num()` reads `Number(null)` and `Number('')` as 0. A recorded 0
+  stays 0.
+- The page shows "Not recorded", "Shares not recorded" and similar, and
+  the pool field is empty with a "Not recorded" placeholder.
+- `notRecordedInputs` lists each missing figure. Preview and Save refuse
+  with that list before any request, because the engine would read a
+  missing pool as 0%.
+- The D360 guard's allowlist loses the exemptions these lines needed, so
+  the zeros cannot return.
+
+**4. The metrics `snapshot_date` default.**
+- `POST /progress/metrics/:projectId` used to stamp a missing date with
+  today and store any string as the date. The founder Build desk sent no
+  date at all.
+- A missing date is now `400 snapshot_date_required`. A date that is not a
+  real `YYYY-MM-DD` day (`calendarDate`) is `400 snapshot_date_invalid`.
+  Nothing is written in either case.
+- The Build desk shows an "As of" date, today by default, which the
+  founder can change. It sends that date.
+- The Revenue page and the Metrics page already send a date.
+
+**Guards.**
+- `cloudflare-worker/test/lab_unfinished_d367.test.ts` has 6 tests. It
+  drives the real progress and decks routers against real SQLite, with
+  migration 249 executed. It pins:
+  - the refusals, with no row written;
+  - the date as sent;
+  - `calendarDate`;
+  - a share's returned id being the row that `DELETE` then withdraws,
+    leaving only its replacement live.
+- `frontend/test/lab_unfinished_d367.test.mjs` has 11 tests:
+  - `replaceDeckShare`, `normalizeInputs` and `notRecordedInputs` run for
+    real;
+  - the render paths are pinned as source text, bounded to their blocks.
+- On the code as it was, both files fail (the exports they need do not
+  exist), and so does the tightened D360 guard.
+- Mutation-checked both ways: 37 of 37 caught. Each gave a non-zero exit
+  and a `not ok` line, and every file was restored and checked by sha256.
+  The mutations restore each original behaviour: the today default, the
+  unvalidated date, the missing id, mint-after-revoke, "Copied" on a
+  blocked clipboard, every `?? 0` and the 10% pool, the spinner, the
+  promises, and the step marks. They also break the controls the other
+  way: a valid date refused, and a recorded zero pool read as missing.
+
 ## D370
 
 **LP money moves only when the fund's general partner of record records it,
@@ -39466,20 +39639,17 @@ is removed.
 
 ## D454
 
-**HQ · Contracts draws the doc-type registry from the code maps.** Wave 8,
-Session 16, item 5. No migration; one new read route and matching `api.js`
-method.
+**HQ · Contracts — first read of the code catalog (superseded in place by D480).**
+Wave 8, Session 16, item 5. The first pass exposed `GET /api/admin/contracts/doc-types`
+from `admin_contracts.ts` and presented it as a finished registry. D480 corrects that:
+usage counting, the D1 store, publish, and the hub UI were still missing; the read
+moved to `/api/admin/contracts/registry/*`.
 
-**Registry.** `GET /api/admin/contracts/doc-types` returns the four governance
-layers and every entry in `CONTRACT_DOC_TYPES` with title, layer, party roles,
-and usage from documents + e-sign (shared with `/templates`). HQ · Contracts
-renders it read-only above the template library; cross-tenant oversight stays
-Not recorded (U1).
+**What D454 still names truthfully.** The code maps (`CONTRACT_DOC_TYPES`, `TEMPLATES`,
+party roles) remain the bootstrap catalog; `/templates` still shares
+`buildTemplateCatalog` for party roles and layer descriptions.
 
-**`/templates`.** Each catalog row now includes `party_roles` and
-`layer_description` via the same builder — no second definition.
-
-**Tests.** `hq_contracts_doc_type_d454.test.mjs`;
+**Tests.** `hq_contracts_doc_type_d454.test.mjs` (re-aimed at the registry router);
 `admin_contracts_doc_types_d454.test.ts`.
 
 ## D455
@@ -40110,6 +40280,35 @@ walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
 
+## D480
+
+**HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
+Wave 9, Session 16, item 5. Migration **332** (`contract_doc_type_registry`).
+
+**Usage (HIGH).** Template usage is counted from the four-source union via
+`contractTemplateUsage.ts`: migrated `documents` rows are excluded, and alias spellings
+(`nda_3way_v1`, `investor_nda_v1`, `partner_msa_v1`, …) map to one catalog key.
+`/templates/store` reuses the same loader — not a third SQL count.
+
+**Registry (HIGH).** New router `admin_contract_doc_registry.ts`, mounted at
+`/api/admin/contracts/registry` before the contracts catch-all. Reads: hub + `doc-types`.
+Writes: `POST …/draft` (HQ authoring), `POST …/:doc_type/publish` behind
+`requireSuperAdminWriteBar` with a typed reason (≥10 characters) and
+`logAdminAction('registry.type.publish', …)`.
+
+**UI.** HQ · Contracts draws X1 health tiles, four layer cards with OVERLAP flags,
+outside-layer rows, WorkerRail coverage lines, and X2 five-step “New doc type” → Save draft.
+Two owner decisions stay named on screen and in API payloads: canvas layers
+(PLATFORM / VENTURE / FUND / ENGAGEMENT) vs code layers (`gp` / `fund` / `portfolio` /
+`compliance`), and whether the registry governs `esignOriginators.ts` — neither is invented.
+
+**Routes (pre-existing).** `GET /pairwise-ndas` and `GET /partner-deals` register before
+`GET /:uid`. List union rows carry `valid_until` (pairwise) and `expires_at` (partner deals);
+null elsewhere. Admin › Contracts pairwise/partner tabs render a failed read as Unreadable.
+
+**Tests.** `contract_template_usage_d480.test.ts`, `admin_contract_doc_registry_d480.test.ts`,
+`hq_contracts_x1_d480.test.mjs`; D454 tests re-aimed.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor
@@ -40357,6 +40556,35 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D500
+
+**A support ticket's persona stays its requester's standing now.** The owner's
+call on #973 (decision 345), answered A on 2026-10-04 at 09:53Z. It confirms
+D204's judgement call 1. There is no write-time stamp, no migration and no code
+change. Migration 346, held for option B, is released unused.
+
+**Checked on `main` (88299b07c).**
+- `personaOf()` in `services/supportQueues.ts` sorts a requester, first match
+  wins: no account, `not_on_record`; a closed account, `account_closed`; bound
+  in `licence_admins`, `admin_product`; `role = 'admin'` with no licence,
+  `hq_staff`; anyone else, `hq_held`.
+- Every persona is read over open tickets. The queues and `buildTenantMatrix`
+  both take `readOpenTickets`, which filters on the open statuses. Nothing asks
+  for the persona of a ticket that is no longer open.
+- The HQ Support page already says so (`HqSupportPage.jsx:765`): "A ticket is
+  sorted by its requester's standing now. Nothing stamps it when it is filed,
+  so an administrator demoted since has moved queue."
+
+**What it costs.** An open ticket can change lane while it is being worked, if
+its requester is demoted or detached (D134's window, D145's terminate), and
+nothing records the persona a ticket was filed under.
+
+**When to revisit.** When the first reader needs a persona for a ticket that is
+no longer open, for example persona-based reporting on closed tickets. The stamp
+is then added in the same change as that reader, from the same rules as
+`personaOf()`. Tickets filed before it stay unstamped rather than gain an
+invented history.
 
 ## D503
 
@@ -41176,6 +41404,65 @@ No migration.
 
 **Tests.** `partnernet_book_d513.test.ts`, `network_book_d513.test.mjs`. The D465 calendar-reminder pin now expects the calendar day.
 
+## D519
+
+**Profiling: the archetype module is confident only when every trait is
+answered (issue #1000, Session 7).** Spec §4 in `PROFILING_V2.md` says the
+archetype module is confident only once every trait has at least one answer,
+in addition to the floor of six. `profilingModules.ts` checked the floor
+alone. Adaptive gap-filling met the rule in queue order, and #956's test
+checked it only there. Any other order of answers could break it. The
+investor bank shows this: its archetype module opens with five builder
+items, so its first six questions in bank order touch two traits, and the
+old rule called that confident.
+
+**What changed** (`services/advisor/profilingModules.ts`):
+
+- The archetype spec carries `everyTrait: true`. `computeProfilingCompletion`
+  works out the traits the bank asks about and the ones still unanswered.
+  The module is confident when `answered ≥ required` and none are
+  unanswered.
+- **"Every trait" means every trait the bank asks about.** A trait a bank
+  never asks would be an unreachable target, which the module's honest
+  denominators exist to avoid. Every live bank (founder, investor, partner,
+  advisor) asks all four, and a test pins that.
+- The archetype module reports `uncovered_traits`, in bank order. The other
+  modules do not carry the field.
+- When the floor is met but a trait is still unanswered, `percent` holds at
+  99. The module's share of the overall figure also stays one short of its
+  floor. So neither the bar nor the overall figure reads 100 while
+  `confident` or `complete` is false.
+- Adaptive selection needed no change. A module short of a trait is no
+  longer confident, so the queue keeps it, and gap-filling puts the missing
+  traits first.
+
+**No engine bump.** Classification, trait scores and `ENGINE_VERSION`
+(`profiling-v2.1`) are unchanged. The rule changes only the completion flag
+and what the queue keeps, so §7.8's hysteresis is not bypassed and no
+displayed archetype moves. The persona and evolution suites
+(`profile_scoring_v2_d357`, `fit_advisor_coach_bank_v2`, the founder and
+partner bank tests) pass unchanged.
+
+**Tests** (`profilingModules.test.ts`). Six new tests, and all six fail on
+the previous module:
+
+- six investor answers on two traits are not confident, with
+  `['connector','operator']` listed and the bar at 99;
+- in every bank, the floor reached without three traits is not confident,
+  and one answer per missing trait makes it confident;
+- every trait answered below the floor is still not confident;
+- the overall figure cannot read 100 while a trait is unanswered;
+- the queue asks a missing trait first;
+- a trait the bank never asks does not gate the module.
+
+The existing "every module to its floor → complete" test answered the first
+six archetype questions in bank order, which encoded the old rule. It now
+answers one per trait first. Mutation-checked six ways, and each mutation
+fails at least one test: drop the trait gate, drop the floor, drop the 99
+cap, drop the overall cap, require all four canonical traits instead of
+those offered, and report `uncovered_traits` on every module. Dropping the
+trait gate fails four tests.
+
 ## D520
 
 **The four `company_*` research tables production holds are declared in the
@@ -41219,6 +41506,73 @@ four statements.
 **What it does not do.** It wires no feature to the tables and converts no
 money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
+
+## D523 — The DR drill restores in chunks
+
+**The drill's restore imports the backup as a series of small files instead of
+one.** Issue #1007, slot S09. No migration, no route.
+
+**What happened.** The 2026-10-01 drill (run 36862064332) passed the secrets
+check, the R2 download and the upload, then failed at the restore. wrangler's
+remote `d1 execute --file` of the whole export into the throwaway EU database
+ended `✘ [ERROR] {"D1_RESET_DO":true}` 1.4 seconds after the upload, exit
+code 2. No run has ever restored a backup.
+
+**Why D1 resets.** wrangler (4.145 in that run, 4.147 read for this entry)
+uploads the file to D1, starts ingestion, then polls; the error is what
+D1's import reports when the Durable Object behind the database is reset
+before the import finishes. wrangler does nothing jurisdiction-specific on
+this path, and both versions take it unchanged. Cloudflare's tracker carries
+the same error on whole-dump imports (workers-sdk #7554, #9503), and #7554
+records the reason D1 gave: "Durable Object's isolate exceeded its memory
+limit and was reset". #9503's file ran locally and reset remotely, so the
+statements were importable and the size of one import was the problem.
+What this repo cannot see is the export's size or shape, because a session
+reads no backup. Of the issue's five candidates: the size is the one the
+public cases share; the EU jurisdiction and the wrangler version change
+nothing on this path; and a statement shape D1 cannot import would end in an
+SQL error, not a reset. So the fix is smaller imports. If a chunk still fails,
+the drill now says which one and what kind of statements it held.
+
+**What changed.**
+- `scripts/dr-drill-split.mjs` (new) splits the export into chunk files of at
+  most `DR_DRILL_CHUNK_BYTES` (default 1,000,000 bytes) in three phases:
+  - schema: every `CREATE TABLE`, in the export's order.
+  - data: every row, grouped by table, parent tables first (ordered from the
+    `REFERENCES` clauses), then `sqlite_sequence`. Each data chunk starts with
+    `PRAGMA defer_foreign_keys=TRUE;`, the export's own first line, because
+    a deferral lasts one import and each chunk is its own import. A table
+    stays in one chunk unless it is bigger than a chunk by itself.
+  - post: indexes, views and triggers. They run after the data so restoring
+    a row never fires a trigger; the backup already holds what the triggers
+    wrote.
+  It drops the export's PRAGMAs, any transaction control (D1 refuses it) and
+  any statement on D1's internal `_cf_*` tables, and counts what it dropped.
+  It prints counts and byte sizes only. A parse error reports a byte offset,
+  never the text there.
+- `scripts/dr-drill.sh` step 3 runs the splitter and imports each chunk with
+  its own `wrangler d1 execute --remote --file`. It logs each chunk's phase,
+  statement count, bytes and statements over D1's 100 KB statement limit, then
+  wrangler's "Executed N queries" count. It stops at the first failed chunk
+  with exit 2. wrangler's output is captured and never shown, because a D1
+  error can quote the statement it failed on and the Actions log is public.
+  The drill prints only the error codes it finds there (`D1_*`, `SQLITE_*`,
+  the memory-limit phrase).
+- `frontend/test/dr_drill_d263.test.mjs` gains ten tests. The splitter's
+  chunks are replayed in real `node:sqlite` with foreign keys on, one
+  transaction per chunk the way D1 imports a file, and must reproduce every
+  row of the export run whole. Its fixture is built so that only the
+  deferral and the parent-first order let it import, and so that the export's
+  own order fails. The drill tests check: one import per chunk, in phase
+  order; the whole export never imported in one call; a failed chunk ending
+  the restore with its chunk number and `D1_RESET_DO`; and no backup text in
+  the drill's output, even when wrangler's error quotes it.
+
+**What it does not do.** `scripts/restore-d1.sh`, the operator's restore,
+still imports a backup as one file and so would meet the same reset. D167
+recorded that the drill re-implements the import rather than calling it.
+Moving the operator script onto the splitter is its own task. A session cannot
+dispatch the drill: the owner's run of `dr-drill.yml` is what proves the fix.
 
 ## D524 — Recover tickets missing from GitHub and report issue-write failures
 

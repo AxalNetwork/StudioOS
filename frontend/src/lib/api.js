@@ -1878,8 +1878,16 @@ export const api = {
   },
   adminContractStats: () => request('/admin/contracts/stats'),
   adminContractTemplates: () => request('/admin/contracts/templates'),
-  // D454 — code registry (layer, parties, usage) for HQ · Contracts.
-  adminContractDocTypes: () => request('/admin/contracts/doc-types'),
+  // D454 / D480 — doc-type registry for HQ · Contracts (D1 store + code catalog).
+  adminContractDocTypes: () => request('/admin/contracts/registry/doc-types'),
+  adminContractRegistryHub: () => request('/admin/contracts/registry'),
+  adminContractRegistrySaveDraft: (body) =>
+    request('/admin/contracts/registry/draft', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminContractRegistryPublish: (docType, body) =>
+    request(`/admin/contracts/registry/${encodeURIComponent(docType)}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
   adminContractTemplateUsage: (docType, params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
     return request(`/admin/contracts/templates/${encodeURIComponent(docType)}/usage${q ? `?${q}` : ''}`);

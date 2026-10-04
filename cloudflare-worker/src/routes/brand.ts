@@ -382,7 +382,9 @@ function rowToLanding(row: any) {
     palette_accent: row.palette_accent || null,
     font_pairing: row.font_pairing || null,
     published: !!row.published,
-    views_count: row.views_count || 0,
+    // D366: a count the row does not hold is null (the page says "Not
+    // recorded"), never a zero view count.
+    views_count: row.views_count == null ? null : Number(row.views_count),
     audience_customer_headline: row.audience_customer_headline || null,
     audience_customer_body: row.audience_customer_body || null,
     audience_customer_cta: row.audience_customer_cta || null,
@@ -1208,7 +1210,7 @@ brand.get('/landing/by-project/:pid/pages', async (c) => {
     ...r,
     page_slug: r.page_slug || 'home',
     published: !!r.published,
-    views_count: r.views_count ?? 0,
+    views_count: r.views_count == null ? null : Number(r.views_count), // D366: never a made-up 0
   }));
   return c.json({ pages });
 });

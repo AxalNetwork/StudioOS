@@ -23,6 +23,9 @@ function contribution(metric_value: number, weight: number, decay: number): numb
   return v * 100 * weight * decay;
 }
 
+/** One dimension's score: `value` is null when no row contributed. */
+export interface DimensionScore { value: number | null; source_count: number }
+
 interface AccumIn {
   rows: CommonRow[];
   sources: Map<string, SourceDescriptor>;
@@ -31,11 +34,12 @@ interface AccumIn {
 
 /**
  * Returns a map of dimension → 0..100 composite score for one sector,
- * plus the source-count contributing to each dimension. Missing
- * dimensions get a neutral 50 with source_count=0 so the UI never
- * breaks on a sparse sector.
+ * plus the source-count contributing to each dimension. A dimension no
+ * row contributes to has NO value (`null`, source_count 0) — D538. It
+ * used to get a neutral 50, a figure nobody recorded, and every screen
+ * drew it as a reading.
  */
-export function composeSectorScores({ rows, sources, now }: AccumIn): Record<Dimension, { value: number; source_count: number }> {
+export function composeSectorScores({ rows, sources, now }: AccumIn): Record<Dimension, DimensionScore> {
   const dims: Dimension[] = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
   const numer: Record<string, number> = {};
   const denom: Record<string, number> = {};
@@ -55,19 +59,26 @@ export function composeSectorScores({ rows, sources, now }: AccumIn): Record<Dim
     }
   }
 
-  const out = {} as Record<Dimension, { value: number; source_count: number }>;
+  const out = {} as Record<Dimension, DimensionScore>;
   for (const d of dims) {
-    const v = denom[d] > 0 ? Math.round((numer[d] / denom[d]) * 1000) / 10 : 50;
-    out[d] = { value: v, source_count: counts[d].size };
+    const v = denom[d] > 0 ? Math.round((numer[d] / denom[d]) * 1000) / 10 : null;
+    out[d] = { value: v, source_count: v == null ? 0 : counts[d].size };
   }
   return out;
 }
 
-/** Composite-of-composites. Equal-weighted across dimensions. */
-export function compositeHeadline(scores: Record<Dimension, { value: number }>): number {
+/**
+ * Composite-of-composites, equal-weighted across the dimensions that HAVE a
+ * value. `null` when none does: an average of nothing is not 50 (D538).
+ */
+export function compositeHeadline(scores: Record<Dimension, { value: number | null }>): number | null {
   const dims: Dimension[] = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
-  const sum = dims.reduce((s, d) => s + (scores[d]?.value ?? 50), 0);
-  return Math.round((sum / dims.length) * 10) / 10;
+  const recorded = dims
+    .map((d) => scores[d]?.value)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  if (recorded.length === 0) return null;
+  const sum = recorded.reduce((s, v) => s + v, 0);
+  return Math.round((sum / recorded.length) * 10) / 10;
 }
 
 /** YYYY-MM period key (UTC) for the supplied date. */

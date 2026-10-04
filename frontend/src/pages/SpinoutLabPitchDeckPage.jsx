@@ -38,7 +38,7 @@ import { api, refusalError } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { Unreadable } from '../ui';
-import { SHARE_STATE_LABEL, summarizeDeckShares } from '../lib/deckShareViews';
+import { SHARE_STATE_LABEL, replaceDeckShare, summarizeDeckShares } from '../lib/deckShareViews';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
 import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
@@ -90,6 +90,10 @@ export default function SpinoutLabPitchDeckPage() {
   const [shareUrl, setShareUrl] = useState('');
   const [expiryHours, setExpiryHours] = useState(24);
   const [shareViewLimit, setShareViewLimit] = useState(null);
+  // D367: the link the sheet is showing ({ deckId, id }), so an expiry change
+  // can withdraw it, and what the sheet says about that withdrawal.
+  const shownLink = useRef(null);
+  const [shareNotice, setShareNotice] = useState('');
   // Views of this deck's share links: loading | none (no deck yet) | ready | failed.
   const [views, setViews] = useState({ status: 'loading', summary: null });
 
@@ -247,18 +251,34 @@ export default function SpinoutLabPitchDeckPage() {
   };
   useEffect(() => { loadViews(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [projectId]);
 
-  const onShare = async (hours = expiryHours) => {
+  // Opening the sheet issues a fresh link and withdraws nothing: a link from an
+  // earlier visit may already be in an investor's inbox. Changing the expiry
+  // REPLACES the link on screen (D367), so that one is withdrawn.
+  const onShare = async (hours = expiryHours, { replace = false } = {}) => {
     if (!projectId) return;
-    setShareOpen(true); setSharing(true); setError('');
+    setShareOpen(true); setSharing(true); setError(''); setShareNotice('');
+    const previous = replace ? shownLink.current : null;
+    if (!replace) { shownLink.current = null; setShareUrl(''); }
     try {
       const deck = await ensureDeck();
-      const r = await api.deckShare(deck.id, { expires_in_hours: hours });
+      const { next: r, notice } = await replaceDeckShare({
+        mint: () => api.deckShare(deck.id, { expires_in_hours: hours }),
+        revoke: (deckId, shareId) => api.deckRevokeShare(deckId, shareId),
+        previous,
+      });
       const path = r?.share_path || (r?.token && `/share/deck/${r.token}`);
       setShareUrl(r?.url || (path ? `${window.location.origin}${path}` : ''));
       setShareViewLimit(Number.isInteger(r?.view_limit) ? r.view_limit : null);
+      shownLink.current = { deckId: deck.id, id: Number.isInteger(r?.id) ? r.id : null };
+      setShareNotice(notice || '');
       loadViews();
     } catch (e) {
-      setShareOpen(false);
+      if (replace && previous) {
+        // The mint failed: the link on screen was not touched and still works.
+        setShareNotice('A new link could not be issued, so the link above is unchanged and still works.');
+      } else {
+        setShareOpen(false);
+      }
       setError(e?.message || 'Share failed');
       reportError('SpinoutLabPitchDeckPage:share', e);
     } finally {
@@ -266,7 +286,7 @@ export default function SpinoutLabPitchDeckPage() {
     }
   };
 
-  const changeExpiry = (hours) => { setExpiryHours(hours); onShare(hours); };
+  const changeExpiry = (hours) => { setExpiryHours(hours); onShare(hours, { replace: true }); };
 
   // ---- states --------------------------------------------------------------
   if (projectLoading) {
@@ -557,6 +577,7 @@ export default function SpinoutLabPitchDeckPage() {
         expiryHours={expiryHours}
         onExpiryChange={changeExpiry}
         viewLimit={shareViewLimit}
+        notice={shareNotice}
         onClose={() => setShareOpen(false)}
       />
     </LabPageShell>

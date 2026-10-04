@@ -61,6 +61,8 @@ const HORIZONS = [
 
 const WEEK_MS = 7 * 86400000;
 const clean = (value) => String(value || '').trim();
+// The browser's own calendar day, as YYYY-MM-DD (en-CA formats that way).
+const localToday = () => new Date().toLocaleDateString('en-CA');
 const dateRange = () => {
   const start = new Date();
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
@@ -401,6 +403,9 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence
  */
 function KpiEntry({ projectId, latest, previous, summary, onSaved }) {
   const [form, setForm] = useState({ mrr: '', paying_accounts: '', net_burn: '' });
+  // D367: the snapshot's date is chosen here, on screen. The Worker no longer
+  // stamps a missing date with today, so the desk sends the one shown.
+  const [asOf, setAsOf] = useState(() => localToday());
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const fields = [
@@ -411,9 +416,10 @@ function KpiEntry({ projectId, latest, previous, summary, onSaved }) {
   const save = async () => {
     const entries = Object.entries(form).filter(([, value]) => clean(value) !== '');
     if (!entries.length) { setNote('Enter at least one figure before saving.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(clean(asOf))) { setNote('Choose the date these figures describe before saving.'); return; }
     setBusy(true); setNote('');
     try {
-      await api.createMetricsSnapshot(projectId, Object.fromEntries(entries.map(([key, value]) => [key, Number(value)])));
+      await api.createMetricsSnapshot(projectId, { snapshot_date: clean(asOf), ...Object.fromEntries(entries.map(([key, value]) => [key, Number(value)])) });
       setForm({ mrr: '', paying_accounts: '', net_burn: '' });
       setNote('Saved as a new snapshot.');
       onSaved();
@@ -441,6 +447,10 @@ function KpiEntry({ projectId, latest, previous, summary, onSaved }) {
       <div className="is-derived"><span>Runway</span><strong>{summary?.runway_months == null ? 'Not recorded' : `${Number(summary.runway_months).toFixed(1)} mo`}</strong><small>Derived from cash and burn — not entered</small></div>
     </div>
     <div className="kpi-actions">
+      <label className="kpi-asof">
+        <span>As of</span>
+        <input type="date" data-testid="input-kpi-as-of" value={asOf} aria-label="Date these figures describe" onChange={(event) => setAsOf(event.target.value)} />
+      </label>
       <button type="button" data-testid="button-save-kpi" disabled={busy || !projectId} onClick={save}>{busy ? 'Saving…' : 'Save snapshot'}</button>
       {note ? <span data-testid="text-kpi-note">{note}</span> : null}
     </div>

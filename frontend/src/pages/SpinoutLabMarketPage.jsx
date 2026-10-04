@@ -133,7 +133,11 @@ export function matchSectorRow(rows, sector) {
     });
     if (hit) return { row: hit, exact: true };
   }
-  const top = [...rows].sort((a, b) => (b.composite || 0) - (a.composite || 0))[0];
+  // D538: the fallback "current leader" is only a sector with a live
+  // composite. With none recorded there is no leader to show; an unrecorded
+  // sector used to arrive as a neutral 50 and could be crowned by default.
+  const recorded = rows.filter((r) => typeof r.composite === 'number' && Number.isFinite(r.composite));
+  const top = [...recorded].sort((a, b) => b.composite - a.composite)[0];
   return top ? { row: top, exact: false } : null;
 }
 
@@ -639,7 +643,8 @@ export default function SpinoutLabMarketPage() {
 
   const derived = useMemo(() => {
     const sectorMatch = matchSectorRow(compass?.sectors, project?.sector);
-    const picks = (lens?.picks || []).slice(0, 3);
+    // D538: only sectors whose demand-supply gap a live source records.
+    const picks = (lens?.picks || []).filter((p) => typeof p.opportunity_gap === 'number').slice(0, 3);
     const srcRows = sources?.sources || [];
     const liveCount = srcRows.filter((s) => s.live).length;
     const citRows = citations?.rows || [];
@@ -993,7 +998,7 @@ export default function SpinoutLabMarketPage() {
               <div className={`${LBL} mb-1`}>Segment signal · founder lens</div>
               <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3.5">The aggregator&rsquo;s strongest founder-opportunity segments this period.</p>
               {picks.length === 0 ? (
-                <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">No segment data this period.</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center" data-testid="market-segments-not-recorded">Not recorded · {(lens?.picks || []).find((p) => p.reason)?.reason || 'No live source yet for this sector'}</p>
               ) : (
                 <div className="flex flex-col gap-3">
                   {picks.map((p) => {
@@ -1073,17 +1078,19 @@ export default function SpinoutLabMarketPage() {
               ) : (
                 <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
                   <div className="flex items-baseline gap-2 mb-3">
-                    <span className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">{Math.round(sectorMatch.row.composite)}</span>
-                    <span className="text-[11px] text-gray-400 dark:text-gray-500">composite / 100</span>
+                    {typeof sectorMatch.row.composite === 'number' ? <>
+                      <span className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">{Math.round(sectorMatch.row.composite)}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500">composite / 100</span>
+                    </> : <span className="text-sm font-semibold text-gray-500 dark:text-gray-400" data-testid="market-dynamics-not-recorded">Not recorded · {sectorMatch.row.composite_reason || 'No live source yet for this sector'}</span>}
                   </div>
                   <div className="flex flex-col gap-2">
                     {Object.entries(sectorMatch.row.dimensions || {}).map(([k, d]) => (
                       <div key={k} className="flex items-center gap-2.5">
                         <span className="text-[11px] text-gray-500 dark:text-gray-400 w-[70px] flex-none">{DIM_LABELS[k] || k}</span>
                         <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                          <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(100, Math.round(d.value))}%` }} />
+                          {typeof d.value === 'number' ? <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(100, Math.round(d.value))}%` }} /> : null}
                         </div>
-                        <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 w-8 text-right">{Math.round(d.value)}</span>
+                        <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 w-20 text-right" title={typeof d.value === 'number' ? undefined : (d.reason || 'No live source yet for this sector')}>{typeof d.value === 'number' ? Math.round(d.value) : 'Not recorded'}</span>
                       </div>
                     ))}
                   </div>

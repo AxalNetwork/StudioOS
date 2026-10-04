@@ -7,6 +7,7 @@ import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
+import { usageFromContractRows } from '../services/contractTemplateUsage';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -24,7 +25,7 @@ type ContractDownloadResult =
 
 const adminContracts = new Hono<{ Bindings: Env }>();
 
-const TEMPLATE_LAYERS: Record<string, { label: string; description: string }> = {
+export const TEMPLATE_LAYERS: Record<string, { label: string; description: string }> = {
   gp: { label: 'Internal Management (GP Level)', description: 'Governance, partner economics, and decision-making framework' },
   fund: { label: 'Fund Formation (LP Level)', description: 'Capital raising, investor agreements, and fund structure' },
   portfolio: { label: 'Investment Execution (Portfolio Level)', description: 'Templates used when investing into startups' },
@@ -104,12 +105,12 @@ export const DOC_TYPE_PARTY_ROLES: Record<string, ReadonlyArray<PartyRole>> = {
   aml_kyc: ['axal'],
 };
 
-function partyRolesFor(docType: string | null | undefined): ReadonlyArray<PartyRole> {
+export function partyRolesFor(docType: string | null | undefined): ReadonlyArray<PartyRole> {
   if (!docType) return [];
   return DOC_TYPE_PARTY_ROLES[docType] || [];
 }
 
-const TEMPLATES: Record<string, { title: string; layer: string }> = {
+export const TEMPLATES: Record<string, { title: string; layer: string }> = {
   operating_agreement: { title: 'Operating Agreement (LLC)', layer: 'gp' },
   carried_interest: { title: 'Carried Interest / Partnership Agreement', layer: 'gp' },
   ic_charter: { title: 'Investment Committee Charter', layer: 'gp' },
@@ -207,6 +208,10 @@ interface UnifiedContract {
   // bounded by the page size, not the table size.
   void_reason?: string;
   voided_at?: string | null;
+  /** Pairwise NDAs only — null when the source records no end date. */
+  valid_until?: string | null;
+  /** Partner deals only — null when absent. */
+  expires_at?: string | null;
 }
 
 function decorateDocType<T extends UnifiedContract>(row: T): T {
@@ -403,6 +408,8 @@ async function loadPairwiseNdaContracts(sql: ReturnType<typeof getSQL>): Promise
     source: 'pairwise_nda',
     raw_status: String(r.status || '').toLowerCase(),
     can_resend: false,
+    valid_until: r.valid_until ?? null,
+    expires_at: null,
   }));
 }
 
@@ -428,7 +435,7 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise
     rows = await sql`
       SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
              d.granted_tier_founder, d.granted_tier_investor,
-             d.status, d.created_at,
+             d.status, d.created_at, d.expires_at,
              u.email AS partner_email, u.name AS partner_name
         FROM partner_deals d
         LEFT JOIN users u ON u.id = d.user_id
@@ -466,11 +473,13 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise
       source: 'partner_deal',
       raw_status: String(r.status || '').toLowerCase(),
       can_resend: false,
+      valid_until: null,
+      expires_at: r.expires_at ?? null,
     });
   });
 }
 
-async function loadAllContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+export async function loadAllContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
   // Task #3 — true 4-source union: legacy documents + e-sign envelopes
   // (live signing) + pairwise NDAs (Y-1) + partner deals (X-1). Each
   // loader returns rows already normalised to UnifiedContract; failures
@@ -635,30 +644,13 @@ adminContracts.get('/stats', async (c) => {
   }
 });
 
-async function loadTemplateUsage(sql: ReturnType<typeof getSQL>) {
-  const contractTypes = Array.from(CONTRACT_DOC_TYPES);
-  const [docs, envs]: [any[], any[]] = await Promise.all([
-    sql.unsafe(
-      `SELECT template_name, doc_type, created_at FROM documents
-        WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
-      contractTypes,
-    ),
-    sql`SELECT document_type, created_at FROM esign_envelopes`,
-  ]);
-  const usage = new Map<string, number>();
-  const lastUsed = new Map<string, string>();
-  const bump = (key: string | null | undefined, when: string | null | undefined) => {
-    if (!key) return;
-    usage.set(key, (usage.get(key) || 0) + 1);
-    const prev = lastUsed.get(key);
-    if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
-  };
-  for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
-  for (const e of envs) bump(e.document_type, e.created_at);
-  return { usage, lastUsed };
+export async function loadTemplateUsage(sql: ReturnType<typeof getSQL>) {
+  const catalogKeys = new Set(Object.keys(TEMPLATES));
+  const rows = await loadAllContracts(sql);
+  return usageFromContractRows(rows, catalogKeys);
 }
 
-function buildTemplateCatalog(usage: Map<string, number>, lastUsed: Map<string, string>) {
+export function buildTemplateCatalog(usage: Map<string, number>, lastUsed: Map<string, string>) {
   return Object.entries(TEMPLATES).map(([k, v]) => ({
     key: k,
     title: v.title,
@@ -671,23 +663,6 @@ function buildTemplateCatalog(usage: Map<string, number>, lastUsed: Map<string, 
     last_used_at: lastUsed.get(k) || null,
   }));
 }
-
-// GET /api/admin/contracts/doc-types — the code registry HQ · Contracts draws (D454).
-// What a contract may *be* lives in CONTRACT_DOC_TYPES + TEMPLATES + party roles;
-// usage is counted from documents + esign like the template catalog.
-adminContracts.get('/doc-types', async (c) => {
-  await requireAdmin(c);
-  const sql = getSQL(c.env);
-  try {
-    const { usage, lastUsed } = await loadTemplateUsage(sql);
-    const items = buildTemplateCatalog(usage, lastUsed);
-    items.sort((a, b) => a.layer.localeCompare(b.layer) || a.title.localeCompare(b.title));
-    const layers = Object.entries(TEMPLATE_LAYERS).map(([id, meta]) => ({ id, ...meta }));
-    return c.json({ layers, items, type_count: items.length });
-  } finally {
-    await sql.end();
-  }
-});
 
 // GET /api/admin/contracts/templates — catalog with usage counts.
 // Counts come from BOTH `documents.template_name|doc_type` and
@@ -794,6 +769,80 @@ async function loadVoidReason(
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Task #5 (Z) — Pairwise NDAs tab (literal path BEFORE /:uid).
+// ---------------------------------------------------------------------------
+adminContracts.get('/pairwise-ndas', async (c) => {
+  await requireAdmin(c);
+  const statusFilter = (c.req.query('status') || '').toLowerCase();
+  const intermediaryFilter = (c.req.query('intermediary') || '').toLowerCase();
+  const sql = getSQL(c.env);
+  try {
+    let rows: any[] = [];
+    try {
+      rows = await sql`
+        SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
+               p.nda_envelope_uuid, p.status, p.valid_until,
+               p.created_at, p.updated_at,
+               ua.email AS party_a_email, ua.name AS party_a_name,
+               ub.email AS party_b_email, ub.name AS party_b_name,
+               e.envelope_uuid AS envelope_uuid, e.status AS envelope_status
+          FROM pairwise_ndas p
+          LEFT JOIN users ua ON ua.id = p.party_a_user_id
+          LEFT JOIN users ub ON ub.id = p.party_b_user_id
+          LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
+         ORDER BY p.created_at DESC
+         LIMIT 500
+      `;
+    } catch (e) {
+      console.warn('[admin_contracts] pairwise_ndas query failed', e);
+      return c.json({ items: [], note: 'pairwise_ndas table not present on this environment' });
+    }
+    if (statusFilter) rows = rows.filter(r => String(r.status || '').toLowerCase() === statusFilter);
+    if (intermediaryFilter) rows = rows.filter(r => String(r.intermediary || '').toLowerCase() === intermediaryFilter);
+    return c.json({ items: rows });
+  } finally {
+    await sql.end();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 (Z) — Partner Deals tab (literal path BEFORE /:uid).
+// ---------------------------------------------------------------------------
+adminContracts.get('/partner-deals', async (c) => {
+  await requireAdmin(c);
+  const dealType = (c.req.query('deal_type') || '').toLowerCase();
+  const sql = getSQL(c.env);
+  try {
+    let rows: any[] = [];
+    try {
+      rows = await sql`
+        SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
+               d.granted_tier_founder, d.granted_tier_investor,
+               d.status, d.created_at, d.expires_at,
+               u.email AS partner_email, u.name AS partner_name,
+               (SELECT COUNT(*) FROM partner_referral_redemptions r
+                 WHERE r.partner_deal_id = d.id) AS redemption_count
+          FROM partner_deals d
+          LEFT JOIN users u ON u.id = d.user_id
+         ORDER BY d.created_at DESC
+         LIMIT 500
+      `;
+    } catch (e: any) {
+      console.error('admin partner-deals:', e?.message);
+      return c.json({ items: [], note: `partner deals unavailable: ${e?.message || 'query failed'}` });
+    }
+    if (dealType) rows = rows.filter(r => String(r.deal_type || '').toLowerCase() === dealType);
+    const items = rows.map(r => ({
+      ...r,
+      granted_tiers: [r.granted_tier_founder, r.granted_tier_investor].filter(Boolean).join(', ') || null,
+    }));
+    return c.json({ items });
+  } finally {
+    await sql.end();
+  }
+});
 
 // GET /api/admin/contracts/:uid — detail (UNION-aware).
 adminContracts.get('/:uid', async (c) => {
@@ -1177,107 +1226,6 @@ adminContracts.post('/:uid/download-url', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Task #5 (Z) — Pairwise NDAs tab.
-// Surfaces the founder ↔ investor NDA pairs from `pairwise_ndas`
-// (created by Y-1) joined to user emails on both sides + the underlying
-// envelope for "Open contract" deep-links.
-// ---------------------------------------------------------------------------
-adminContracts.get('/pairwise-ndas', async (c) => {
-  await requireAdmin(c);
-  // Task #5 (Z) — optional ?status= filter
-  // (pending|partially_signed|active|expired|revoked) and ?intermediary=
-  // filter (relation context, e.g. `axal`, `direct`, `<partner_uid>`).
-  const statusFilter = (c.req.query('status') || '').toLowerCase();
-  const intermediaryFilter = (c.req.query('intermediary') || '').toLowerCase();
-  const sql = getSQL(c.env);
-  try {
-    let rows: any[] = [];
-    try {
-      rows = await sql`
-        SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
-               p.nda_envelope_uuid, p.status, p.valid_until,
-               p.created_at, p.updated_at,
-               ua.email AS party_a_email, ua.name AS party_a_name,
-               ub.email AS party_b_email, ub.name AS party_b_name,
-               e.envelope_uuid AS envelope_uuid, e.status AS envelope_status
-          FROM pairwise_ndas p
-          LEFT JOIN users ua ON ua.id = p.party_a_user_id
-          LEFT JOIN users ub ON ub.id = p.party_b_user_id
-          LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
-         ORDER BY p.created_at DESC
-         LIMIT 500
-      `;
-    } catch (e) {
-      // Table may not be present yet on older deployments — surface
-      // empty rather than 500 so the tab renders an "empty state".
-      console.warn('[admin_contracts] pairwise_ndas query failed', e);
-      return c.json({ items: [], note: 'pairwise_ndas table not present on this environment' });
-    }
-    if (statusFilter) rows = rows.filter(r => String(r.status || '').toLowerCase() === statusFilter);
-    if (intermediaryFilter) rows = rows.filter(r => String(r.intermediary || '').toLowerCase() === intermediaryFilter);
-    return c.json({ items: rows });
-  } finally {
-    await sql.end();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Task #5 (Z) — Partner Deals tab.
-// Surfaces the X-1 `partner_deals` table (deal type, term, granted tiers,
-// status, redemption count). Returns an empty list — gracefully — until
-// X-1 lands the table so this endpoint is safe to ship now.
-// ---------------------------------------------------------------------------
-adminContracts.get('/partner-deals', async (c) => {
-  await requireAdmin(c);
-  // Task #5 (Z) — optional ?deal_type= filter chip.
-  const dealType = (c.req.query('deal_type') || '').toLowerCase();
-  const sql = getSQL(c.env);
-  try {
-    let rows: any[] = [];
-    try {
-      // Every column name in the previous version of this query was wrong.
-      // `partner_deals` (migration 028) has `user_id`, not `partner_user_id`;
-      // `granted_tier_founder` / `granted_tier_investor`, not a `granted_tiers`
-      // column; and no `updated_at` at all. Redemptions live in
-      // `partner_referral_redemptions` keyed by `partner_deal_id` — nothing
-      // named `partner_deal_redemptions` has ever existed. So the query threw
-      // on the first unknown identifier, the catch below returned an empty
-      // list with a note blaming the one table that IS present, and this
-      // admin table has shown zero rows for its whole life.
-      rows = await sql`
-        SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
-               d.granted_tier_founder, d.granted_tier_investor,
-               d.status, d.created_at,
-               u.email AS partner_email, u.name AS partner_name,
-               (SELECT COUNT(*) FROM partner_referral_redemptions r
-                 WHERE r.partner_deal_id = d.id) AS redemption_count
-          FROM partner_deals d
-          LEFT JOIN users u ON u.id = d.user_id
-         ORDER BY d.created_at DESC
-         LIMIT 500
-      `;
-    } catch (e: any) {
-      // Report what actually failed. The previous note asserted a specific
-      // cause ("partner_deals table not yet present") that was false, which is
-      // why nobody chased the empty table for as long as it stood.
-      console.error('admin partner-deals:', e?.message);
-      return c.json({ items: [], note: `partner deals unavailable: ${e?.message || 'query failed'}` });
-    }
-    if (dealType) rows = rows.filter(r => String(r.deal_type || '').toLowerCase() === dealType);
-    // The UI renders one "Granted Tiers" cell; the table stores the founder
-    // and investor grants separately. Joined here rather than in SQL so the
-    // "neither is set" case stays a null the cell can render as an em dash.
-    const items = rows.map(r => ({
-      ...r,
-      granted_tiers: [r.granted_tier_founder, r.granted_tier_investor].filter(Boolean).join(', ') || null,
-    }));
-    return c.json({ items });
-  } finally {
-    await sql.end();
-  }
-});
-
-// ---------------------------------------------------------------------------
 // Task #5 (Z) — Legal templates catalog.
 // Lists the static markdown templates shipped under
 // `cloudflare-worker/src/templates/legal/*.md` so the admin
@@ -1326,24 +1274,7 @@ adminContracts.get('/templates/store', async (c) => {
 
   const sql = getSQL(c.env);
   try {
-    const [docs, envs]: [any[], any[]] = await Promise.all([
-      sql.unsafe(
-        `SELECT template_name, doc_type, created_at FROM documents
-          WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
-        Array.from(CONTRACT_DOC_TYPES),
-      ),
-      sql`SELECT document_type, created_at FROM esign_envelopes`,
-    ]);
-    const usage = new Map<string, number>();
-    const lastUsed = new Map<string, string>();
-    const bump = (key: string | null | undefined, when: string | null | undefined) => {
-      if (!key) return;
-      usage.set(key, (usage.get(key) || 0) + 1);
-      const prev = lastUsed.get(key);
-      if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
-    };
-    for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
-    for (const e of envs) bump(e.document_type, e.created_at);
+    const { usage, lastUsed } = await loadTemplateUsage(sql);
 
     const out = items.map((t) => ({
       ...t,
