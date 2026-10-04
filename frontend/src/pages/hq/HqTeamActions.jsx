@@ -44,8 +44,9 @@ import { Card } from '../../ui';
  * the test reads that notice so the sentence cannot outlive it. The note
  * describes the notice and does not say the person WAS told: the branch
  * reports whether the notice was stored (`target_notified`, false when the
- * inbox refused it) and HQ's own route drops that field, so this card has
- * no fact to assert.
+ * inbox refused it), and that fact belongs to one session, not to this card.
+ * Since D530 HQ's route passes it on, and the Support form says what the
+ * branch reported for the session it opened, so the card points there.
  *
  * ONE ROW IS NOT HQ'S, AND IT SAYS SO RATHER THAN MOVING. "View as a role shell"
  * is offered to every admin — HQ, the holder and a branch admin alike — by the
@@ -80,7 +81,7 @@ export const HQ_ONLY_ACTIONS = [
     key: 'impersonate',
     name: 'Impersonate — including other admins',
     hq: true,
-    gate: `A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side. An account on a branch, opened with Support in the Team table’s branch search: the branch sends them a security notice when you authorise the session, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened. The branch reports whether that notice was stored; HQ’s route does not pass it on, so this card cannot say whether they were told.`,
+    gate: `A typed reason of at least 10 characters, your authenticator and a fresh step-up. The session lasts 30 minutes; Extend adds 30 more for a new reason, up to ${SUPPORT_SESSION_CEILING_HOURS} hours from when it opened, and not in the day after an account recovery. Opening one as another admin is the Super Admin’s alone — as anyone else, it is every admin’s power. On an HQ-held account the person is told when it opens, in the app and by email, with your name and your reason; there is no banner on their side. An account on a branch, opened with Support in the Team table’s branch search: the branch sends them a security notice when you authorise the session, in the app and by email, with your name, your reason and that the session lasts 30 minutes once it is opened. The branch reports whether that notice was stored, and the Support form shows what it reported once the session is authorised.`,
     where: 'View As on an admin’s row in the directory below.',
     recorded: 'Yes — the session, its reason and when it ended, under Impersonations; each extension, with its reason, in the audit log.',
   },
