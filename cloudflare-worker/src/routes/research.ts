@@ -3758,7 +3758,7 @@ research.get('/fund-directory', async (c) => {
   try {
     query = parseDirectoryQuery((k) => c.req.query(k));
   } catch (e) {
-    if (e instanceof DirectoryQueryError) return c.json({ detail: e.message, field: e.field }, 400);
+    if (e instanceof DirectoryQueryError) return c.json({ detail: e.reason, field: e.field }, 400);
     throw e;
   }
   try {

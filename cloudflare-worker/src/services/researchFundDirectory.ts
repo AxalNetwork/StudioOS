@@ -44,9 +44,11 @@ export const SORTS: Readonly<Record<string, string>> = {
   '-size': `(source_name = '${EUR_SOURCE}' AND fund_size_cents IS NOT NULL) DESC, fund_size_cents DESC, name COLLATE NOCASE, uid`,
 };
 
+/** A bad query value. `reason` is a sentence this file wrote, safe for a refusal body (D278). */
 export class DirectoryQueryError extends Error {
   field: string;
-  constructor(field: string, message: string) { super(message); this.field = field; }
+  reason: string;
+  constructor(field: string, reason: string) { super(reason); this.field = field; this.reason = reason; }
 }
 
 export interface DirectoryQuery {
