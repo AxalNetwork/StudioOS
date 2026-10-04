@@ -41137,6 +41137,50 @@ four statements.
 money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
 
+## D524 — Recover tickets missing from GitHub and report issue-write failures
+
+**PR #970; completion tracked by #1012, slot S18.** Filing a Studio support
+ticket saves it locally before attempting to create its GitHub issue. A token
+without Issues read/write permission leaves the saved ticket unlinked. A
+configured token or a successful metadata read does not prove issue creation.
+
+The Help Center ticket list now exposes the existing admin-only backfill as
+**Create missing GitHub issues**, in batches of at most 25. It reports errors
+and the remaining count, while page loads and periodic refreshes remain
+read-only toward missing issues. The API requires the explicit boolean
+`backfill: true`. Atomic claims using the existing sync status and attempt
+timestamp protect concurrent retries and submissions; an interrupted claim
+expires after five minutes. This is not exactly-once delivery across a lost
+GitHub response or failed D1 link write: inspect the source marker before
+retrying an ambiguous outcome.
+
+GitHub Sync replaces the misleading green **Connected config** badge with
+unverified, verified, or failed issue creation based on the write test. A
+permission failure explains how to grant Issues read/write and links to ticket
+recovery. The owner confirmed that granting this permission restored production
+issue creation; the application change does not itself grant credentials any
+permission. No migration or new API route is introduced.
+
+The completion also adds one finding fingerprint to `.gitleaksignore` for the
+synthetic test secret introduced by commit `4335b06fcf2231342ebe76e853398142586fdc03`
+in `cloudflare-worker/test/ticket_creation_recovery.test.ts`, rule
+`generic-api-key`, line 12. The existing exception is preserved. This is an
+exception for that exact test finding, not a path or rule allowlist;
+`.gitleaks.toml` is unchanged and no real credential is recorded.
+
+Completion merges the current main, including D529's CI build-before-check
+workflow, and rebuilds `docs/` from lockfile-installed frontend dependencies.
+The owner's newer S1 comment on PR #970 supersedes the original instruction
+to commit that build: `docs/` stays untracked under D529. The local build is
+used for validation, and CI builds its own copy from the PR's source.
+
+Verification covers authenticated ticket creation, persistence of permission
+errors, recovery after permission repair, non-admin exclusion, explicit opt-in,
+overlapping retries and submissions, expired claims, and the batch bound.
+Frontend tests cover recovery controls and write-test status. Completion runs
+the root frontend build, Open Graph checks, `check-decision-ids`, and the full
+`test:drift` suite; results are reported on #1012 and PR #970.
+
 ## D525
 
 **The HQ support bar's "Raise a concern" arrives at Branch · Approvals with

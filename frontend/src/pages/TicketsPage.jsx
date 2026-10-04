@@ -225,10 +225,30 @@ function TicketDetail({ ticketId, onBack }) {
   );
 }
 
+export function TicketGithubRecovery({ isAdmin, pending, configured, busy, onRetry }) {
+  if (!isAdmin || !pending) return null;
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+      <p>{pending} saved ticket{pending === 1 ? ' has' : 's have'} no GitHub issue.</p>
+      <p className="mt-1">
+        Check the token in <a href="/admin?tab=github" className="underline">Admin Console → GitHub Sync</a> using Test issue creation.
+        {' '}Once that passes, retry here to create up to 25 missing issues. Ticket titles and descriptions will be sent to the configured GitHub repository.
+      </p>
+      {configured === false && <p className="mt-1">Configure GitHub Sync before retrying.</p>}
+      <button type="button" disabled={busy || configured !== true} onClick={onRetry}
+        className="mt-3 rounded-lg bg-violet-600 px-4 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50">
+        {busy ? 'Retrying…' : 'Create missing GitHub issues'}
+      </button>
+    </div>
+  );
+}
+
 export default function TicketsPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [, setSyncing] = useState(false);
+  const [githubConfigured, setGithubConfigured] = useState(null);
+  const [retrying, setRetrying] = useState(false);
   const [showForm, setShowForm] = useState(false);
   // Task #103 — the ticket id in the URL now opens the ticket.
   //
@@ -267,10 +287,32 @@ export default function TicketsPage() {
     api.syncTickets()
       .then(data => {
         if (data.tickets) setTickets(data.tickets);
+        setGithubConfigured(data.github_configured === true);
       })
       .catch(() => {})
       .finally(() => setSyncing(false));
   }, []);
+
+  const retryGithub = async () => {
+    if (!isAdmin || retrying) return;
+    setRetrying(true);
+    try {
+      const data = await api.syncTickets({ backfill: true });
+      if (data.tickets) setTickets(data.tickets);
+      setGithubConfigured(data.github_configured === true);
+      const errors = data.backfill_errors || [];
+      setSyncNotice({
+        tone: errors.length ? 'warn' : 'info',
+        text: `Created ${data.backfilled || 0} GitHub issues. ${data.unsynced_count} tickets still need an issue.`
+          + (errors.length ? ` GitHub reported: ${errors[0].error}. Check GitHub Sync before retrying.` : '')
+          + (!data.github_configured ? ' GitHub Sync is not configured.' : ''),
+      });
+    } catch (e) {
+      setSyncNotice({ tone: 'warn', text: e?.message || 'Could not retry GitHub sync.' });
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -385,6 +427,9 @@ export default function TicketsPage() {
       </div>
 
       <div className="space-y-6">
+      <TicketGithubRecovery isAdmin={isAdmin}
+        pending={tickets.filter(t => !t.github_issue_number).length}
+        configured={githubConfigured} busy={retrying} onRetry={retryGithub} />
       {showForm && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
           <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Submit a Support Ticket</h2>
