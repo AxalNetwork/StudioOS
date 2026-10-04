@@ -40,10 +40,20 @@ import { logAdminAction } from '../services/adminAudit';
 const r = new Hono<{ Bindings: Env }>();
 
 const str = (v: unknown, max = 500): string => String(v ?? '').trim().slice(0, max);
-const cents = (v: unknown): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
-};
+
+/**
+ * D514 — an amount an operator typed is a whole number of minor units, 0 or
+ * more, or it is refused. It used to go through a clamp that turned anything
+ * unreadable into 0, which records "nothing paid" or clears a dispute without
+ * anybody asking for either (D228 applied the same rule to the ceiling).
+ */
+const typedCents = (v: unknown): number | null =>
+  (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
+
+/** One sentence for every place that used to promise a re-draw after a void. */
+export const NO_REDRAW_AFTER_VOID =
+  'A period holds one statement, and one past draft cannot be drawn again, voided or not: '
+  + 'correct it with the paid and disputed entries, or void it and say why.';
 
 /**
  * The licence's own name, joined in on READ only.
@@ -162,7 +172,7 @@ r.post('/statements/draw', async (c) => {
       return c.json({
         error: 'licence_not_active',
         message: `${licence.licence_ref} is ${licence.status}, so no new statement can be drawn for it. `
-          + 'Reactivate the licence first, or void an existing draft if the period should not be claimed.',
+          + 'Reactivate the licence first.',
       }, 409);
     }
 
@@ -177,14 +187,13 @@ r.post('/statements/draw', async (c) => {
     }
 
     const existing = await c.env.DB.prepare(
-      'SELECT uid, status FROM subsidiary_statements WHERE licence_uid = ? AND period = ?',
-    ).bind(licenceUid, period).first<{ uid: string; status: string }>();
+      'SELECT uid, status, paid_cents, disputed_cents FROM subsidiary_statements WHERE licence_uid = ? AND period = ?',
+    ).bind(licenceUid, period).first<{ uid: string; status: string; paid_cents: number; disputed_cents: number }>();
     if (existing && existing.status !== 'draft') {
       return c.json({
         error: 'already_issued',
         message: `The ${period} statement for ${licence.licence_ref} is ${existing.status}. `
-          + 'Re-drawing it would restate a figure the subsidiary has already been given; void it '
-          + 'and draw a new one if the terms have changed.',
+          + 'Re-drawing it would restate a figure that has left draft. ' + NO_REDRAW_AFTER_VOID,
         uid: existing.uid,
         status: existing.status,
       }, 409);
@@ -226,6 +235,18 @@ r.post('/statements/draw', async (c) => {
     });
 
     const drawn = drawStatement(figures, licence.revenue_share_bps, licence.currency || 'EUR');
+
+    // D514 — A RE-DRAW KEEPS WHAT WAS PAID AND DISPUTED (the upsert below leaves
+    // both alone), so a re-draw to a smaller owed figure would leave more paid
+    // and disputed than owed. Refused, rather than silently clamped.
+    const recorded = existing ? (Number(existing.paid_cents) || 0) + (Number(existing.disputed_cents) || 0) : 0;
+    if (existing && recorded > drawn.owed_cents) {
+      return c.json({
+        error: 'recorded_above_owed',
+        message: `The draft already records ${recorded} minor units paid and disputed, more than the `
+          + `${drawn.owed_cents} this draw would claim. Lower the paid or disputed entry first.`,
+      }, 409);
+    }
     const asOf = reported.length
       ? reported.map((x) => x.reported_at).sort().slice(-1)[0]
       : null;
@@ -296,20 +317,35 @@ r.patch('/statements/:uid', async (c) => {
     const writes: D1PreparedStatement[] = [];
     const now = nowIso();
     const complete = statementComplete(row);
-    let voidNoteForAudit: string | null = null;
-    let auditPaidInFull = false;
+    // D514 — every action this PATCH carries gets its own audit row, not only
+    // the first one an `else if` chain happened to reach.
+    const actions: Array<{ action: string; amounts: Record<string, number>; note?: string }> = [];
+
+    let paid = Number(row.paid_cents) || 0;
+    let disputed = Number(row.disputed_cents) || 0;
+    if (b?.paid_cents !== undefined) {
+      const v = typedCents(b.paid_cents);
+      if (v === null) {
+        return c.json({ error: 'bad_amount', message: 'paid_cents must be a whole number of minor units, 0 or more.' }, 400);
+      }
+      paid = v;
+    }
+    if (b?.disputed_cents !== undefined) {
+      const v = typedCents(b.disputed_cents);
+      if (v === null) {
+        return c.json({ error: 'bad_amount', message: 'disputed_cents must be a whole number of minor units, 0 or more.' }, 400);
+      }
+      disputed = v;
+    }
 
     if (b?.paid_cents !== undefined) {
-      const paid = cents(b.paid_cents);
       // OVERPAYMENT IS REFUSED RATHER THAN RECORDED. It is almost always a
-      // figure typed into the wrong row, and a statement showing more paid
-      // than owed is a reconciliation problem nobody notices until a quarter
-      // later. The operator can void and re-draw if the owed figure is wrong.
+      // figure typed into the wrong row.
       if (paid > row.owed_cents) {
         return c.json({
           error: 'over_payment',
-          message: `${paid} cents is more than the ${row.owed_cents} this statement claims. `
-            + 'If the owed figure is wrong, void the statement and draw it again.',
+          message: `${paid} minor units is more than the ${row.owed_cents} this statement claims. `
+            + 'Check the row; if the owed figure itself is wrong, note it in a dispute or void the statement and say why.',
         }, 409);
       }
       // A FLOOR SETTLED AS A TOTAL. Recording the full owed figure on an
@@ -317,11 +353,20 @@ r.patch('/statements/:uid', async (c) => {
       if (row.owed_cents > 0 && paid === row.owed_cents && !complete) {
         return c.json({
           error: 'incomplete_statement',
-          message: 'This owed figure is a floor — some streams were not fully reported. '
-            + 'Record a partial payment or void and re-draw once reporting is complete; '
-            + 'it cannot be marked paid in full.',
+          message: 'This owed figure is a floor: some streams were not reported or were estimated. '
+            + 'It cannot be marked paid in full; record what was received as a partial total.',
         }, 409);
       }
+    }
+    // D514 — PAID AND DISPUTED TOGETHER NEVER EXCEED OWED. A dispute was
+    // unbounded, and paid was accepted over a standing dispute.
+    if ((b?.paid_cents !== undefined || b?.disputed_cents !== undefined) && paid + disputed > row.owed_cents) {
+      return c.json({
+        error: 'over_owed',
+        message: `Paid (${paid}) and disputed (${disputed}) together would exceed the ${row.owed_cents} minor units this statement claims.`,
+      }, 409);
+    }
+    if (b?.paid_cents !== undefined) {
       writes.push(
         c.env.DB.prepare(
           `UPDATE subsidiary_statements
@@ -329,12 +374,11 @@ r.patch('/statements/:uid', async (c) => {
             WHERE uid = ?`,
         ).bind(paid, str(b?.paid_note, 300) || null, admin.id, paid > 0 ? now : null, now, uid),
       );
+      actions.push({ action: 'subsidiary_statement_payment_total', amounts: { paid_cents: paid, owed_cents: row.owed_cents } });
     }
     if (b?.disputed_cents !== undefined) {
-      const disputed = cents(b.disputed_cents);
       const note = str(b?.dispute_note, 500);
-      // A DISPUTE WITHOUT A REASON IS NOT A DISPUTE. It is the one field on
-      // this row that a subsidiary will later ask HQ to justify.
+      // A DISPUTE WITHOUT A REASON IS NOT A DISPUTE. Clearing one (0) needs none.
       if (disputed > 0 && !note) {
         return c.json({ error: 'dispute_note_required', message: 'A disputed amount must say why.' }, 400);
       }
@@ -343,64 +387,65 @@ r.patch('/statements/:uid', async (c) => {
           `UPDATE subsidiary_statements
               SET disputed_cents = ?, dispute_note = ?, updated_at = ?
             WHERE uid = ?`,
-        ).bind(disputed, note || null, now, uid),
+        ).bind(disputed, disputed > 0 ? note : null, now, uid),
       );
+      actions.push(disputed > 0
+        ? { action: 'subsidiary_statement_dispute', amounts: { disputed_cents: disputed }, note }
+        : { action: 'subsidiary_statement_dispute_cleared', amounts: { disputed_cents: 0 } });
     }
     if (b?.status !== undefined) {
       const next = str(b.status, 20);
       if (!['draft', 'issued', 'paid', 'void'].includes(next)) {
         return c.json({ error: 'bad_status' }, 400);
       }
+      let note: string | undefined;
       if (next === 'void') {
-        voidNoteForAudit = str(b?.void_note, 500);
-        if (voidNoteForAudit.length < 10) {
+        note = str(b?.void_note, 500);
+        if (note.length < 10) {
           return c.json({
             error: 'void_note_required',
             message: 'Voiding a statement must say why — at least ten characters.',
           }, 400);
         }
       }
-      if (next === 'paid' && !complete) {
+      // D514 — A FLOOR IS NOT ISSUED. Issuing locks the period, and every
+      // statement today is drawn over unreported or estimated streams, so one
+      // click used to send a floor out as if it were the claim.
+      if ((next === 'paid' || next === 'issued') && !complete) {
         return c.json({
           error: 'incomplete_statement',
-          message: 'This owed figure is a floor — some streams were not fully reported. '
-            + 'It cannot be marked paid in full until reporting is complete or the statement is voided.',
+          message: next === 'issued'
+            ? 'This owed figure is a floor: some streams were not reported or were estimated. '
+              + 'It cannot be marked as issued until every stream is reported in full.'
+            : 'This owed figure is a floor: some streams were not reported or were estimated. '
+              + 'It cannot be marked paid in full.',
         }, 409);
       }
-      if (next === 'paid' && complete) auditPaidInFull = true;
       writes.push(
         c.env.DB.prepare(
           `UPDATE subsidiary_statements SET status = ?, updated_at = ? WHERE uid = ?`,
         ).bind(next, now, uid),
       );
+      const statusAction: Record<string, string> = {
+        void: 'subsidiary_statement_void', paid: 'subsidiary_statement_paid',
+        issued: 'subsidiary_statement_issued', draft: 'subsidiary_statement_draft',
+      };
+      actions.push({ action: statusAction[next], amounts: { owed_cents: row.owed_cents }, ...(note ? { note } : {}) });
     }
     if (!writes.length) return c.json({ error: 'nothing_to_update' }, 400);
 
     await c.env.DB.batch(writes);
 
-    if (voidNoteForAudit) {
-      await logAdminAction(c.env, admin.id, admin.email, 'subsidiary_statement_void', {
+    for (const a of actions) {
+      await logAdminAction(c.env, admin.id, admin.email, a.action, {
         statement_uid: uid,
+        uid,
         licence_uid: row.licence_uid,
         period: row.period,
-        void_note: voidNoteForAudit,
-        prior_status: row.status,
-      });
-    } else if (auditPaidInFull) {
-      await logAdminAction(c.env, admin.id, admin.email, 'subsidiary_statement_paid', {
-        statement_uid: uid,
-        licence_uid: row.licence_uid,
-        period: row.period,
-        owed_cents: row.owed_cents,
+        from_status: row.status,
         currency: row.currency,
-      });
-    } else if (b?.disputed_cents !== undefined && cents(b.disputed_cents) > 0) {
-      await logAdminAction(c.env, admin.id, admin.email, 'subsidiary_statement_dispute', {
-        statement_uid: uid,
-        licence_uid: row.licence_uid,
-        period: row.period,
-        disputed_cents: cents(b.disputed_cents),
-        dispute_note: str(b?.dispute_note, 500),
+        amounts: a.amounts,
+        ...(a.note ? { note: a.note } : {}),
       });
     }
 
@@ -464,7 +509,7 @@ r.put('/promo-ceilings/:uid', async (c) => {
     const period = str(b?.period, 10) || quarterKey(new Date());
     if (!PERIOD_RE.test(period)) return c.json({ error: 'bad_period', message: 'period must be YYYY-Qn' }, 400);
     // D228 — A CEILING IS A FIGURE SOMEBODY TYPED, SO AN UNREADABLE ONE IS
-    // REFUSED, NOT STORED AS ZERO. `cents()` clamps and coerces, which is right
+    // REFUSED, NOT STORED AS ZERO. A clamp that coerces (`cents()`, removed in D514) is right
     // for a reported stream and wrong here: a missing or mistyped
     // `ceiling_cents` became a stored ceiling of 0 — a branch told it may issue
     // nothing — and the route answered 200. Integer minor units, 0 or more;
