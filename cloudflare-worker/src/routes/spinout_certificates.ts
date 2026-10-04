@@ -119,12 +119,16 @@ app.post('/certificates', async (c) => {
     const row = await c.env.DB
       .prepare(`SELECT ${OWNER_COLS} FROM spinout_certificates WHERE user_id = ? AND status = 'issued'`)
       .bind(userId).first<any>();
+    // D541 — the graduation bonus, once, when the certificate is issued.
+    let graduationCredit: unknown = null;
     if (outcome === 'issued') {
       await logAdminAction(c.env, user.id, user.email, 'spinout_certificate_issued', {
         target_user_id: userId, certificate_id: row?.id ?? null, credential_id: row?.credential_id ?? null,
       });
+      const { creditLabGraduation } = await import('../services/labMilestoneCredits');
+      graduationCredit = await creditLabGraduation(c.env, userId);
     }
-    return c.json({ certificate: row, outcome, already_issued: outcome === 'already_issued' }, outcome === 'issued' ? 201 : 200);
+    return c.json({ certificate: row, outcome, already_issued: outcome === 'already_issued', graduation_credit: graduationCredit }, outcome === 'issued' ? 201 : 200);
   }
 
   const conferredAt = String(body.conferred_at || '').slice(0, 10);
@@ -169,7 +173,10 @@ app.post('/certificates', async (c) => {
   await logAdminAction(c.env, user.id, user.email, 'spinout_certificate_issued', {
     target_user_id: userId, certificate_id: row?.id ?? null, credential_id: credentialId, manual: true,
   });
-  return c.json({ certificate: row }, 201);
+  // D541 — a hand-issued certificate pays the bonus on the same terms.
+  const { creditLabGraduation } = await import('../services/labMilestoneCredits');
+  const graduationCredit = await creditLabGraduation(c.env, userId);
+  return c.json({ certificate: row, graduation_credit: graduationCredit }, 201);
 });
 
 app.get('/certificates', async (c) => {
