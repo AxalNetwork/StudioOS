@@ -41137,6 +41137,73 @@ four statements.
 money column. The ledger grows by twelve, which is the honest record of
 production rather than a new choice of dialect.
 
+## D523 — The DR drill restores in chunks
+
+**The drill's restore imports the backup as a series of small files instead of
+one.** Issue #1007, slot S09. No migration, no route.
+
+**What happened.** The 2026-10-01 drill (run 36862064332) passed the secrets
+check, the R2 download and the upload, then failed at the restore. wrangler's
+remote `d1 execute --file` of the whole export into the throwaway EU database
+ended `✘ [ERROR] {"D1_RESET_DO":true}` 1.4 seconds after the upload, exit
+code 2. No run has ever restored a backup.
+
+**Why D1 resets.** wrangler (4.145 in that run, 4.147 read for this entry)
+uploads the file to D1, starts ingestion, then polls; the error is what
+D1's import reports when the Durable Object behind the database is reset
+before the import finishes. wrangler does nothing jurisdiction-specific on
+this path, and both versions take it unchanged. Cloudflare's tracker carries
+the same error on whole-dump imports (workers-sdk #7554, #9503), and #7554
+records the reason D1 gave: "Durable Object's isolate exceeded its memory
+limit and was reset". #9503's file ran locally and reset remotely, so the
+statements were importable and the size of one import was the problem.
+What this repo cannot see is the export's size or shape, because a session
+reads no backup. Of the issue's five candidates: the size is the one the
+public cases share; the EU jurisdiction and the wrangler version change
+nothing on this path; and a statement shape D1 cannot import would end in an
+SQL error, not a reset. So the fix is smaller imports. If a chunk still fails,
+the drill now says which one and what kind of statements it held.
+
+**What changed.**
+- `scripts/dr-drill-split.mjs` (new) splits the export into chunk files of at
+  most `DR_DRILL_CHUNK_BYTES` (default 1,000,000 bytes) in three phases:
+  - schema: every `CREATE TABLE`, in the export's order.
+  - data: every row, grouped by table, parent tables first (ordered from the
+    `REFERENCES` clauses), then `sqlite_sequence`. Each data chunk starts with
+    `PRAGMA defer_foreign_keys=TRUE;`, the export's own first line, because
+    a deferral lasts one import and each chunk is its own import. A table
+    stays in one chunk unless it is bigger than a chunk by itself.
+  - post: indexes, views and triggers. They run after the data so restoring
+    a row never fires a trigger; the backup already holds what the triggers
+    wrote.
+  It drops the export's PRAGMAs, any transaction control (D1 refuses it) and
+  any statement on D1's internal `_cf_*` tables, and counts what it dropped.
+  It prints counts and byte sizes only. A parse error reports a byte offset,
+  never the text there.
+- `scripts/dr-drill.sh` step 3 runs the splitter and imports each chunk with
+  its own `wrangler d1 execute --remote --file`. It logs each chunk's phase,
+  statement count, bytes and statements over D1's 100 KB statement limit, then
+  wrangler's "Executed N queries" count. It stops at the first failed chunk
+  with exit 2. wrangler's output is captured and never shown, because a D1
+  error can quote the statement it failed on and the Actions log is public.
+  The drill prints only the error codes it finds there (`D1_*`, `SQLITE_*`,
+  the memory-limit phrase).
+- `frontend/test/dr_drill_d263.test.mjs` gains ten tests. The splitter's
+  chunks are replayed in real `node:sqlite` with foreign keys on, one
+  transaction per chunk the way D1 imports a file, and must reproduce every
+  row of the export run whole. Its fixture is built so that only the
+  deferral and the parent-first order let it import, and so that the export's
+  own order fails. The drill tests check: one import per chunk, in phase
+  order; the whole export never imported in one call; a failed chunk ending
+  the restore with its chunk number and `D1_RESET_DO`; and no backup text in
+  the drill's output, even when wrangler's error quotes it.
+
+**What it does not do.** `scripts/restore-d1.sh`, the operator's restore,
+still imports a backup as one file and so would meet the same reset. D167
+recorded that the drill re-implements the import rather than calling it.
+Moving the operator script onto the splitter is its own task. A session cannot
+dispatch the drill: the owner's run of `dr-drill.yml` is what proves the fix.
+
 ## D524 — Recover tickets missing from GitHub and report issue-write failures
 
 **PR #970; completion tracked by #1012, slot S18.** Filing a Studio support
