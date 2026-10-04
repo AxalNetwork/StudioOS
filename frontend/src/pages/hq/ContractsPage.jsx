@@ -3,7 +3,7 @@ import { FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { LegalPanel } from '../AdminPage';
-import { Unrecorded, Unreadable } from '../../ui';
+import { Unrecorded, Unreadable, WorkerRail } from '../../ui';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -17,27 +17,87 @@ const PARTY_LABEL = {
   axal: 'Axal VC',
 };
 
+const LAYER_CODE_LABEL = {
+  gp: 'GP',
+  fund: 'FUND',
+  portfolio: 'PORTFOLIO',
+  compliance: 'COMPLIANCE',
+};
+
+function formatLastUsed(at) {
+  if (at == null || at === '') return '';
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString();
+}
+
 /**
- * Group registry rows by governance layer for the canvas layout (H10 / Contracts).
+ * Group registry rows by governance layer (Contracts · Super X1 — four code layers).
  */
 export function groupDocTypesByLayer(items, layers) {
   const layerMeta = new Map((layers || []).map((l) => [l.id, l]));
   const buckets = new Map(LAYER_ORDER.map((id) => [id, []]));
+  const outside = [];
   for (const row of items || []) {
     const id = row.layer || 'gp';
-    if (!buckets.has(id)) buckets.set(id, []);
-    buckets.get(id).push(row);
+    if (buckets.has(id)) buckets.get(id).push(row);
+    else outside.push(row);
   }
-  return LAYER_ORDER.filter((id) => (buckets.get(id) || []).length).map((id) => ({
+  const groups = LAYER_ORDER.filter((id) => (buckets.get(id) || []).length).map((id) => ({
     id,
     label: layerMeta.get(id)?.label || id,
     description: layerMeta.get(id)?.description || '',
     items: buckets.get(id) || [],
   }));
+  if (outside.length) {
+    groups.push({
+      id: '_outside',
+      label: 'Outside the four code layers',
+      description: 'Counted in the header total — not dropped because the layer name does not match gp / fund / portfolio / compliance.',
+      items: outside,
+    });
+  }
+  return groups;
+}
+
+function RegistryTypeCard({ row }) {
+  return (
+    <div
+      className="rounded-lg border border-axal-hairline bg-white p-2.5 dark:border-gray-700 dark:bg-gray-900"
+      data-testid={`registry-card-${row.doc_type}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[11.5px] font-bold leading-snug text-axal-ink dark:text-white">{row.title}</div>
+          <div className="font-mono text-[9.5px] text-axal-faint">{row.doc_type}</div>
+        </div>
+        {row.overlap ? (
+          <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wide text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+            OVERLAP
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {(row.party_roles || []).map((r) => (
+          <span
+            key={r}
+            className="rounded-full bg-axal-hairline px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-axal-ink dark:bg-gray-800 dark:text-gray-100"
+          >
+            {PARTY_LABEL[r] || r}
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-[9.5px] leading-relaxed text-axal-muted dark:text-gray-300">
+        {typeof row.usage_count === 'number' ? `${row.usage_count} uses` : 'Uses unreadable'}
+        {formatLastUsed(row.last_used_at) ? ` · last ${formatLastUsed(row.last_used_at)}` : ''}
+        {row.registry_status === 'draft' ? ' · draft in store' : ''}
+      </p>
+    </div>
+  );
 }
 
 /**
- * D454 — read-only doc-type registry above the template library (code-defined, not D1).
+ * D480 — doc-type registry hub (X1 layer cards + table fallback).
  */
 export function DocTypeRegistry({ data, onRetry }) {
   const groups = useMemo(
@@ -58,108 +118,289 @@ export function DocTypeRegistry({ data, onRetry }) {
     );
   }
 
+  const decisions = data.decisions || {};
+  const overlapItems = (data.items || []).filter((r) => r.overlap);
+
   return (
     <div className="space-y-4" data-testid="hq-doc-type-registry">
       <p className="text-[11.5px] leading-relaxed text-axal-muted">
-        {data.type_count} contract types are declared in code — layer, title and party roles — with usage counted
-        from documents and e-sign envelopes. Adding a type still means editing the worker registry; this panel
-        does not author new types.
+        {data.type_count} registered types across the code layers, with usage from the four-source contract union
+        (documents without migrated duplicates, e-sign, pairwise NDAs, partner deals). The D1 store holds drafts and
+        published overrides; Publish is step-up gated and audited as <span className="font-mono text-[10px]">registry.type.publish</span>.
       </p>
-      {groups.map((g) => (
-        <section key={g.id} className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
-          <div className="mb-2">
-            <h2 className="text-[13px] font-extrabold tracking-tight text-axal-ink dark:text-white">{g.label}</h2>
-            {g.description && (
-              <p className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">{g.description}</p>
-            )}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[12px]">
-              <thead>
-                <tr className="border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
-                  <th className="py-1.5 pr-3">Type</th>
-                  <th className="py-1.5 pr-3">Parties</th>
-                  <th className="py-1.5 pr-3 text-right">Uses</th>
-                  <th className="py-1.5">Last used</th>
-                </tr>
-              </thead>
-              <tbody>
-                {g.items.map((row) => (
-                  <tr key={row.doc_type} className="border-b border-axal-hairline/60">
-                    <td className="py-2 pr-3">
-                      <div className="font-semibold">{row.title}</div>
-                      <div className="font-mono text-[10px] text-axal-faint">{row.doc_type}</div>
-                    </td>
-                    <td className="py-2 pr-3">
-                      <div className="flex flex-wrap gap-1">
-                        {(row.party_roles || []).map((r) => (
-                          <span
-                            key={r}
-                            className="rounded-full bg-axal-hairline px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-axal-muted"
-                          >
-                            {PARTY_LABEL[r] || r}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-2 pr-3 text-right tabular-nums font-semibold">{row.usage_count ?? 0}</td>
-                    <td className="py-2 text-[11px] text-axal-faint tabular-nums">
-                      {row.last_used_at ? new Date(row.last_used_at).toLocaleDateString() : 'Not yet'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-[11px] leading-relaxed text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+        <p className="font-bold">Owner decisions still open (D480)</p>
+        <ul className="mt-1 list-disc space-y-1 pl-4">
+          <li>
+            Canvas layers ({(decisions.canvas_layers || []).join(', ')}) vs code layers ({(decisions.code_layers || []).join(', ')}):
+            {' '}
+            <span className="font-semibold">pending owner decision — not mapped in this build.</span>
+          </li>
+          <li>
+            Whether the registry governs <span className="font-mono">services/esignOriginators.ts</span>:
+            {' '}
+            <span className="font-semibold">pending owner decision.</span>
+          </li>
+        </ul>
+      </div>
+
+      {data.health?.length ? (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="registry-health-tiles">
+          {data.health.map((h) => (
+            <div key={h.id} className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700 dark:bg-gray-900">
+              <div className="text-[8.5px] font-extrabold uppercase tracking-[.08em] text-axal-faint">{h.label}</div>
+              <div className="mt-1 text-xl font-extrabold tabular-nums text-axal-ink dark:text-white">{h.value}</div>
+              <p className="mt-1 text-[10px] leading-relaxed text-axal-muted">{h.note}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4" data-testid="registry-layer-cards">
+        {groups.filter((g) => g.id !== '_outside').map((g) => (
+          <section key={g.id} className="rounded-xl border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="rounded bg-axal-hairline px-2 py-0.5 text-[9px] font-extrabold tracking-wide text-axal-ink dark:bg-gray-800 dark:text-white">
+                {LAYER_CODE_LABEL[g.id] || g.id}
+              </span>
+              <span className="text-[10px] font-bold tabular-nums text-axal-muted">{g.items.length} types</span>
+            </div>
+            {g.description ? (
+              <p className="mb-2 text-[10px] leading-relaxed text-axal-faint">{g.description}</p>
+            ) : null}
+            <div className="grid gap-2">
+              {g.items.map((row) => (
+                <RegistryTypeCard key={row.doc_type} row={row} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {overlapItems.length ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+          <p className="text-[12px] font-bold text-amber-950 dark:text-amber-100">Overlapping party roles in the same layer</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
+            {overlapItems.map((r) => r.title).join(' · ')} — compare before merging types in the store.
+          </p>
+        </div>
+      ) : null}
+
+      {groups.filter((g) => g.id === '_outside').map((g) => (
+        <section key={g.id} className="rounded-xl border border-dashed border-axal-hairline p-3">
+          <h3 className="text-[12px] font-extrabold">{g.label}</h3>
+          <p className="text-[10px] text-axal-faint">{g.description}</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">{g.items.map((row) => <RegistryTypeCard key={row.doc_type} row={row} />)}</div>
         </section>
       ))}
     </div>
   );
 }
 
+const DRAFT_STEPS = ['Title & slug', 'Layer', 'Party roles', 'Required fields', 'Review'];
+
+function RegistryEditorModal({ open, onClose, onSaved }) {
+  const [step, setStep] = useState(0);
+  const [docType, setDocType] = useState('');
+  const [title, setTitle] = useState('');
+  const [layer, setLayer] = useState('portfolio');
+  const [partyRoles, setPartyRoles] = useState(['founder', 'axal']);
+  const [requiredFields, setRequiredFields] = useState(['effective_date']);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setStep(0);
+    setError('');
+  }, [open]);
+
+  if (!open) return null;
+
+  const toggleRole = (role) => {
+    setPartyRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
+  };
+
+  const saveDraft = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await api.adminContractRegistrySaveDraft({
+        doc_type: docType,
+        title,
+        layer,
+        party_roles: partyRoles,
+        required_fields: requiredFields,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e?.message || 'Draft could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" data-testid="registry-editor-modal">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-axal-hairline bg-white p-4 shadow-xl dark:bg-gray-900">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Registry editor · X2</p>
+            <h2 className="text-lg font-extrabold text-axal-ink dark:text-white">New doc type</h2>
+          </div>
+          <button type="button" className="text-sm text-axal-muted" onClick={onClose}>Close</button>
+        </div>
+        <p className="mt-1 text-[11px] text-axal-muted">Step {step + 1} of {DRAFT_STEPS.length}: {DRAFT_STEPS[step]}</p>
+
+        {step === 0 ? (
+          <div className="mt-3 space-y-2">
+            <label className="block text-[11px] font-bold">Friendly title</label>
+            <input className="w-full rounded-lg border border-axal-hairline px-3 py-2 text-sm dark:bg-gray-800" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <label className="block text-[11px] font-bold">Slug (doc_type)</label>
+            <input className="w-full rounded-lg border border-axal-hairline px-3 py-2 font-mono text-sm dark:bg-gray-800" value={docType} onChange={(e) => setDocType(e.target.value)} placeholder="ip_assignment_agreement" />
+          </div>
+        ) : null}
+        {step === 1 ? (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {LAYER_ORDER.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setLayer(id)}
+                className={`rounded-lg border px-2 py-2 text-[11px] font-bold ${layer === id ? 'border-axal-violet bg-axal-violet/10' : 'border-axal-hairline'}`}
+              >
+                {LAYER_CODE_LABEL[id]}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {step === 2 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {Object.keys(PARTY_LABEL).map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => toggleRole(role)}
+                className={`rounded-full px-3 py-1 text-[11px] font-bold ${partyRoles.includes(role) ? 'bg-axal-violet text-white' : 'bg-axal-hairline text-axal-muted'}`}
+              >
+                {PARTY_LABEL[role]}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {step === 3 ? (
+          <div className="mt-3">
+            <label className="block text-[11px] font-bold">Required merge fields (one per line)</label>
+            <textarea
+              className="mt-1 w-full rounded-lg border border-axal-hairline px-3 py-2 font-mono text-xs dark:bg-gray-800"
+              rows={5}
+              value={requiredFields.join('\n')}
+              onChange={(e) => setRequiredFields(e.target.value.split('\n').map((s) => s.trim()).filter(Boolean))}
+            />
+          </div>
+        ) : null}
+        {step === 4 ? (
+          <div className="mt-3 space-y-1 text-[11px] text-axal-muted">
+            <p><span className="font-bold text-axal-ink dark:text-white">{title || '—'}</span> · <span className="font-mono">{docType || '—'}</span></p>
+            <p>Layer: {layer} · Roles: {partyRoles.join(', ') || '—'}</p>
+            <p>Publish later requires TOTP, step-up, and a typed reason (≥10 characters).</p>
+          </div>
+        ) : null}
+
+        {error ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
+
+        <div className="mt-4 flex flex-wrap justify-between gap-2">
+          <button type="button" className="text-sm text-axal-muted" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>Back</button>
+          {step < DRAFT_STEPS.length - 1 ? (
+            <button type="button" className="rounded-lg bg-axal-violet px-3 py-2 text-sm font-bold text-white" onClick={() => setStep((s) => s + 1)}>Next</button>
+          ) : (
+            <button type="button" disabled={saving} className="rounded-lg bg-axal-violet px-3 py-2 text-sm font-bold text-white" onClick={saveDraft}>
+              {saving ? 'Saving…' : 'Save draft'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
- * HQ · Contracts — doc-type registry (D454) and the master template library (Legal panel).
+ * HQ · Contracts — registry hub (D480) and master template library.
  */
 export default function HqContractsPage() {
   const [registry, setRegistry] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const loadRegistry = useCallback(() => {
     setRegistry(null);
-    api.adminContractDocTypes()
+    api.adminContractRegistryHub()
       .then(setRegistry, (e) => {
-        reportError('hq-contracts-doc-types', e);
+        reportError('hq-contracts-registry', e);
         setRegistry(UNAVAILABLE);
       });
   }, []);
 
   useEffect(() => { loadRegistry(); }, [loadRegistry]);
 
+  const coverage = registry && registry !== UNAVAILABLE && registry.coverage ? registry.coverage : [];
+  const rail = (
+    <WorkerRail
+      workspace="Contracts"
+      role="super_admin"
+      stance="Registry + library"
+      note="This rail summarises registered doc types and live contract counts from the union read. It does not send envelopes or publish types — publish is a separate step-up action audited as registry.type.publish."
+      coverage={coverage}
+      coverageNote={registry === UNAVAILABLE
+        ? 'The registry could not be read — this is not a claim that no contract types exist.'
+        : (registry === null ? 'Loading the registry…' : undefined)}
+      unavailable={[
+        ['Cross-tenant oversight', 'No contract row names the subsidiary it belongs to (U1).'],
+        ['Canvas ↔ code layer map', 'PLATFORM / VENTURE / FUND / ENGAGEMENT vs gp / fund / portfolio / compliance — pending owner decision.'],
+        ['e-sign originators', 'Whether this registry governs esignOriginators.ts — pending owner decision.'],
+      ]}
+      data-testid="hq-contracts-rail"
+    />
+  );
+
   return (
-    <div className="space-y-5" data-testid="hq-contracts-page">
-      <header>
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-          <FileText size={13} /> HQ · Contracts
-        </div>
-        <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Contracts</h1>
-        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-          The doc-type registry names what a contract may be; the template library below holds versioned bodies
-          tenants instantiate. Cross-tenant oversight: <Unrecorded /> — no contract row names the subsidiary it
-          belongs to (U1).
-        </p>
-      </header>
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-contracts-page">
+      <div className="space-y-5">
+        <header>
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+            <FileText size={13} /> HQ · Contracts
+          </div>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Contracts</h1>
+          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
+            The doc-type registry names what a contract may be; the template library below holds versioned bodies
+            tenants instantiate. Cross-tenant oversight: <Unrecorded /> — no contract row names the subsidiary it
+            belongs to (U1).
+          </p>
+        </header>
 
-      <section className="rounded-xl border border-axal-hairline bg-white p-4 dark:bg-gray-900">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <h2 className="text-[14.5px] font-extrabold tracking-tight">Doc-type registry</h2>
-          <span className="text-[11px] text-axal-faint">read-only · code-defined</span>
-        </div>
-        <DocTypeRegistry data={registry} onRetry={loadRegistry} />
-      </section>
+        <section className="rounded-xl border border-axal-hairline bg-white p-4 dark:bg-gray-900">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-[14.5px] font-extrabold tracking-tight">Doc-type registry</h2>
+            <button
+              type="button"
+              className="rounded-lg bg-[#881337] px-3 py-1.5 text-[11px] font-extrabold text-white"
+              data-testid="registry-new-doc-type"
+              onClick={() => setEditorOpen(true)}
+            >
+              New doc type
+            </button>
+          </div>
+          <DocTypeRegistry data={registry} onRetry={loadRegistry} />
+        </section>
 
-      <section>
-        <h2 className="mb-2 text-[14.5px] font-extrabold tracking-tight">Master template library</h2>
-        <LegalPanel />
-      </section>
+        <section>
+          <h2 className="mb-2 text-[14.5px] font-extrabold tracking-tight">Master template library</h2>
+          <LegalPanel />
+        </section>
+      </div>
+      <div className="mt-6 lg:mt-0">{rail}</div>
+      <RegistryEditorModal open={editorOpen} onClose={() => setEditorOpen(false)} onSaved={loadRegistry} />
     </div>
   );
 }

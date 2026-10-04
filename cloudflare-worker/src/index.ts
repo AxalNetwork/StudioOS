@@ -79,6 +79,7 @@ import admin from './routes/admin';
 import adminBilling from './routes/admin_billing';
 import adminPromos from './routes/admin_promos';
 import adminContracts from './routes/admin_contracts';
+import adminContractDocRegistry from './routes/admin_contract_doc_registry';
 // Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
 import adminForms from './routes/admin_forms';
 import adminIntegrationKeys from './routes/admin_integration_keys';
@@ -768,6 +769,8 @@ app.route('/api/activity', activity);
 // in the Access app AND admin traffic must be routed to the gated host, or the
 // admin API goes down again.
 
+// D480 — registry store before the contracts catch-all (/:uid shadowing).
+app.route('/api/admin/contracts/registry', adminContractDocRegistry);
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
 app.route('/api/admin/contracts', adminContracts);
