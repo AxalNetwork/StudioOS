@@ -34107,6 +34107,107 @@ Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and a
 `not ok` line, and the file was restored and checked by sha256. The first
 mutation is the original swallow, so the test fails on the code as it was.
 
+## D367
+
+**The four unfinished Lab-tools pieces D360–D365 filed: three built, and
+the formation packet's build put to the owner.** Wave 8, Session 8, issue
+#998. Worker and frontend; no migration, no new route, no new `api.js`
+method.
+
+**1. The formation packet (needs the owner's decision).** After payment,
+`startIncorporationPacket` only moves the order from `paid` to
+`packet_processing`. Nothing assembles a packet, emails a link or files
+with the state, and nothing in the Worker sets `packet_ready` or `filed`.
+The screens claimed otherwise:
+- a spinning "Processing packet" or "Preparing documents" badge;
+- "We're preparing your signing packet and will email you a link";
+- "filing started";
+- the Lab tracker's "Documents prepared ✓" for `packet_processing`.
+
+Who builds and files the packet, and what moves an order on, is the
+owner's call, asked on #998. It is not built here. What is built is the
+part that waits on no one: the screens stop claiming it.
+- `lib/incorporationPricing.js` holds `PACKET_NOT_BUILT_STATUSES` (`paid`,
+  `packet_processing`) and one sentence: payment is confirmed, the packet
+  has not been built yet, and nothing has been filed with the state.
+- The badge reads "Paid · packet not built", with no spinner.
+- The success page and the Incorporate page show the sentence. The
+  Incorporate page now says "formation ordered" instead of "filing
+  started".
+- On the Lab Incorporate page, `packet_processing` completes no step. A
+  ready packet is "Documents prepared" (step 1), not a state submission.
+  The tracker shows the sentence, and the status says "Paid · not filed".
+  "Filed" waits on a status that nothing records yet.
+
+**2. The Deck share sheet.**
+- Each expiry button used to mint a new link and leave the one on screen
+  live. `POST /decks/:id/share` now returns the link's row `id`.
+  `replaceDeckShare` (`lib/deckShareViews.js`) works in this order:
+  - it mints the new link first, so a failed mint leaves the shown link
+    alone, and the sheet says it still works;
+  - it then withdraws the previous link through
+    `DELETE /decks/:id/shares/:shareId`;
+  - a failed withdrawal, or a link with no id, is said in the sheet. It is
+    never assumed.
+- Only an expiry change replaces a link. Opening the sheet issues a fresh
+  link and withdraws nothing, because a link from an earlier visit may
+  already have been sent.
+- The sheet says that each choice withdraws the link shown above.
+- Copy used to say "Copied" even when the clipboard was blocked. It now
+  says "Copied" only after the write succeeds. Otherwise it says "Copy was
+  blocked — select the link and copy it by hand", as the Cap Table sheet
+  already did.
+
+**3. `normalizeInputs` (Cap Table).**
+- A figure the scenario does not hold now stays null. That covers founder
+  shares, SAFE amounts, round pre-money and investment, and the option
+  pool. They used to become 0, or 10% for the pool, and the next Save
+  wrote that invented figure back.
+- A new `known()` treats null, undefined and `''` as not recorded. The
+  page's `num()` reads `Number(null)` and `Number('')` as 0. A recorded 0
+  stays 0.
+- The page shows "Not recorded", "Shares not recorded" and similar, and
+  the pool field is empty with a "Not recorded" placeholder.
+- `notRecordedInputs` lists each missing figure. Preview and Save refuse
+  with that list before any request, because the engine would read a
+  missing pool as 0%.
+- The D360 guard's allowlist loses the exemptions these lines needed, so
+  the zeros cannot return.
+
+**4. The metrics `snapshot_date` default.**
+- `POST /progress/metrics/:projectId` used to stamp a missing date with
+  today and store any string as the date. The founder Build desk sent no
+  date at all.
+- A missing date is now `400 snapshot_date_required`. A date that is not a
+  real `YYYY-MM-DD` day (`calendarDate`) is `400 snapshot_date_invalid`.
+  Nothing is written in either case.
+- The Build desk shows an "As of" date, today by default, which the
+  founder can change. It sends that date.
+- The Revenue page and the Metrics page already send a date.
+
+**Guards.**
+- `cloudflare-worker/test/lab_unfinished_d367.test.ts` has 6 tests. It
+  drives the real progress and decks routers against real SQLite, with
+  migration 249 executed. It pins:
+  - the refusals, with no row written;
+  - the date as sent;
+  - `calendarDate`;
+  - a share's returned id being the row that `DELETE` then withdraws,
+    leaving only its replacement live.
+- `frontend/test/lab_unfinished_d367.test.mjs` has 11 tests:
+  - `replaceDeckShare`, `normalizeInputs` and `notRecordedInputs` run for
+    real;
+  - the render paths are pinned as source text, bounded to their blocks.
+- On the code as it was, both files fail (the exports they need do not
+  exist), and so does the tightened D360 guard.
+- Mutation-checked both ways: 37 of 37 caught. Each gave a non-zero exit
+  and a `not ok` line, and every file was restored and checked by sha256.
+  The mutations restore each original behaviour: the today default, the
+  unvalidated date, the missing id, mint-after-revoke, "Copied" on a
+  blocked clipboard, every `?? 0` and the 10% pool, the spinner, the
+  promises, and the step marks. They also break the controls the other
+  way: a valid date refused, and a recorded zero pool read as missing.
+
 ## D370
 
 **LP money moves only when the fund's general partner of record records it,

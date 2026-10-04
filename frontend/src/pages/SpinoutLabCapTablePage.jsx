@@ -58,6 +58,9 @@ const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:t
 const INPUT = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 py-1.5 text-[12.5px] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500/40';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+// D367: like num, but null, undefined and '' are "not recorded", never 0
+// (Number(null) and Number('') are both 0).
+const known = (v) => (v == null || (typeof v === 'string' && v.trim() === '') ? null : num(v));
 /** Sum of the values that are numbers. A missing value adds nothing rather
  *  than being coerced into a zero that then reads as a recorded figure. */
 const sumKnown = (values) => values.map(num).filter((v) => v !== null).reduce((a, v) => a + v, 0);
@@ -90,18 +93,45 @@ const FILTERS = [
   { id: 'preferred', label: 'Investors' },
 ];
 
-const DEFAULT_INPUTS = { founders: [], option_pool_pct: 10, safes: [], rounds: [] };
+const DEFAULT_INPUTS = { founders: [], option_pool_pct: null, safes: [], rounds: [] };
 
-/** Normalize scenario inputs into a fully-shaped editable object. */
+/**
+ * Normalize scenario inputs into a fully-shaped editable object.
+ *
+ * D367: a figure the scenario does not hold stays null. It used to become 0
+ * (founder shares, SAFE amounts, round pre-money and investment) or 10 (the
+ * option pool), and the next Save wrote that invented figure back over the
+ * scenario. The page says "Not recorded" and Preview/Save refuse until the
+ * founder enters it (see notRecordedInputs).
+ */
 export function normalizeInputs(raw) {
   const src = raw && typeof raw === 'object' ? raw : {};
   return {
-    founders: Array.isArray(src.founders) ? src.founders.map((f) => ({ name: String(f?.name || ''), shares: num(f?.shares) ?? 0 })) : [],
-    option_pool_pct: num(src.option_pool_pct) ?? 10,
-    safes: Array.isArray(src.safes) ? src.safes.map((s) => ({ name: String(s?.name || ''), amount: num(s?.amount) ?? 0, cap: num(s?.cap), discount: num(s?.discount) })) : [],
-    rounds: Array.isArray(src.rounds) ? src.rounds.map((r) => ({ name: String(r?.name || ''), pre_money: num(r?.pre_money) ?? 0, investment: num(r?.investment) ?? 0, post_round_pool_pct: num(r?.post_round_pool_pct) })) : [],
+    founders: Array.isArray(src.founders) ? src.founders.map((f) => ({ name: String(f?.name || ''), shares: known(f?.shares) })) : [],
+    option_pool_pct: known(src.option_pool_pct),
+    safes: Array.isArray(src.safes) ? src.safes.map((s) => ({ name: String(s?.name || ''), amount: known(s?.amount), cap: num(s?.cap), discount: num(s?.discount) })) : [],
+    rounds: Array.isArray(src.rounds) ? src.rounds.map((r) => ({ name: String(r?.name || ''), pre_money: known(r?.pre_money), investment: known(r?.investment), post_round_pool_pct: num(r?.post_round_pool_pct) })) : [],
   };
 }
+
+/**
+ * D367: every figure the engine needs that the scenario does not record, as
+ * the sentences the page shows. Empty when Preview and Save may run. The
+ * engine would read a missing pool as 0%, so nothing is sent until each is
+ * entered.
+ */
+export function notRecordedInputs(inputs) {
+  const out = [];
+  if (known(inputs?.option_pool_pct) === null) out.push('the option pool %');
+  for (const f of inputs?.founders || []) if (known(f?.shares) === null) out.push(`${f?.name || 'a founder'}'s shares`);
+  for (const sf of inputs?.safes || []) if (known(sf?.amount) === null) out.push(`the amount of SAFE ${sf?.name || '(unnamed)'}`);
+  for (const r of inputs?.rounds || []) {
+    if (known(r?.pre_money) === null) out.push(`${r?.name || 'a round'}'s pre-money`);
+    if (known(r?.investment) === null) out.push(`${r?.name || 'a round'}'s investment`);
+  }
+  return out;
+}
+const notRecordedSentence = (missing) => `Not recorded: ${missing.join(', ')}. Enter ${missing.length === 1 ? 'it' : 'each'} before previewing or saving; nothing was sent.`;
 
 /** Group a ledger by TYPE_META.group → [{group, pct, dot}]. */
 export function groupLedger(ledger) {
@@ -218,6 +248,8 @@ export default function SpinoutLabCapTablePage() {
 
   const runPreview = async () => {
     if (busy) return;
+    const missing = notRecordedInputs(inputs);
+    if (missing.length) { setError(notRecordedSentence(missing)); return; }
     setBusy('preview');
     setError('');
     try {
@@ -239,9 +271,11 @@ export default function SpinoutLabCapTablePage() {
       setError('The saved cap table could not be read, so saving is blocked — reload the page first.');
       return;
     }
+    const snapshot = inputsRef.current;
+    const missing = notRecordedInputs(snapshot);
+    if (missing.length) { setError(notRecordedSentence(missing)); return; }
     setBusy('save');
     setError('');
-    const snapshot = inputsRef.current;
     try {
       const saved = await api.createCapTableScenario({
         name: scenario?.name || `${project.name || 'Startup'} cap table`,
@@ -616,7 +650,7 @@ export default function SpinoutLabCapTablePage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50 truncate">{f.name || '—'}</div>
-                        <div className="text-[10.5px] text-gray-400">{fmtShares(f.shares)} shares{row ? ` · ${fmtPct(row.pct)} FD` : ''}</div>
+                        <div className="text-[10.5px] text-gray-400">{known(f.shares) === null ? 'Shares not recorded' : `${fmtShares(f.shares)} shares`}{row ? ` · ${fmtPct(row.pct)} FD` : ''}</div>
                       </div>
                       {unread.trackers ? (
                         <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300" title="The 83(b) trackers could not be read. Reload to try again." data-testid={`badge-83b-${i}`}>
@@ -676,7 +710,7 @@ export default function SpinoutLabCapTablePage() {
                     {inputs.safes.map((s, i) => (
                       <tr key={`${s.name}-${i}`} className="border-t border-gray-100 dark:border-gray-800" data-testid={`safe-row-${i}`}>
                         <td className="py-2 pr-3 text-[12.5px] font-semibold text-gray-900 dark:text-gray-50">{s.name || '—'}</td>
-                        <td className="py-2 pr-3 text-[12px] text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtMoney(s.amount)}</td>
+                        <td className="py-2 pr-3 text-[12px] text-right tabular-nums text-gray-700 dark:text-gray-200">{known(s.amount) === null ? 'Not recorded' : fmtMoney(s.amount)}</td>
                         <td className="py-2 pr-3 text-[12px] text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtMoney(s.cap)}</td>
                         <td className="py-2 pr-3 text-[12px] text-right tabular-nums text-gray-700 dark:text-gray-200">{num(s.discount) ? `${Math.round(s.discount * 100)}%` : '—'}</td>
                         <td className="py-2 text-[12px] font-bold text-right tabular-nums text-gray-900 dark:text-gray-50">
@@ -722,7 +756,7 @@ export default function SpinoutLabCapTablePage() {
               <div className="flex flex-wrap gap-1.5 my-2">
                 {inputs.rounds.map((r, i) => (
                   <span key={`${r.name}-${i}`} className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300" data-testid={`round-chip-${i}`}>
-                    {r.name} · {fmtMoney(r.investment)} @ {fmtMoney(r.pre_money)} pre
+                    {r.name} · {known(r.investment) === null ? 'investment not recorded' : fmtMoney(r.investment)} @ {known(r.pre_money) === null ? 'pre-money not recorded' : `${fmtMoney(r.pre_money)} pre`}
                     {canEdit && (
                       <button type="button" data-testid={`button-remove-round-${i}`}
                         onClick={() => markDirty({ ...inputs, rounds: inputs.rounds.filter((_, ri) => ri !== i) })}
@@ -838,9 +872,10 @@ export default function SpinoutLabCapTablePage() {
             <div className="flex items-center gap-2">
               <input
                 type="number" min="0" max="50" step="1"
-                value={inputs.option_pool_pct}
+                value={inputs.option_pool_pct ?? ''}
+                placeholder="Not recorded"
                 disabled={!canEdit}
-                onChange={(e) => markDirty({ ...inputs, option_pool_pct: num(e.target.value) ?? 0 })}
+                onChange={(e) => markDirty({ ...inputs, option_pool_pct: known(e.target.value) })}
                 data-testid="input-pool-pct"
                 className={`${INPUT} !w-20 text-right`}
               />

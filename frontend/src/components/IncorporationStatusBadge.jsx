@@ -9,19 +9,21 @@ const STATUS_MAP = {
     iconCls: 'text-gray-400',
     spin: false,
   },
+  // D367: nothing builds the packet after payment yet, so neither status
+  // spins or claims documents are being prepared (see PACKET_NOT_BUILT).
   paid: {
-    label: 'Preparing documents',
-    icon: Loader2,
+    label: 'Paid · packet not built',
+    icon: Clock,
     cls: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
     iconCls: 'text-blue-500',
-    spin: true,
+    spin: false,
   },
   packet_processing: {
-    label: 'Processing packet',
-    icon: Loader2,
+    label: 'Paid · packet not built',
+    icon: Clock,
     cls: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
     iconCls: 'text-blue-500',
-    spin: true,
+    spin: false,
   },
   packet_ready: {
     label: 'Documents ready',

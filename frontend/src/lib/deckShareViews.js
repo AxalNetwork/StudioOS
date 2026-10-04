@@ -84,3 +84,34 @@ export function summarizeDeckShares(engagement, nowMs = Date.now()) {
     lastViewedAt: engagement.last_viewed_at || null,
   };
 }
+
+/** D367: what the sheet says when the link it showed could not be withdrawn. */
+export const PREVIOUS_LINK_LIVE =
+  'The previous link could not be withdrawn, so it still works until it expires or is used. Withdraw it in the link list below.';
+export const PREVIOUS_LINK_WITHDRAWN = 'The previous link was withdrawn.';
+
+/**
+ * D367 — replace the link the share sheet is showing with a new one.
+ *
+ * Changing the expiry used to mint a new link and leave the one on screen
+ * live, so every click left another working link behind. Now the new link is
+ * minted FIRST (a failed mint throws and leaves the shown link alone, still
+ * live, which is the truth), then the previous one is withdrawn through
+ * `DELETE /decks/:id/shares/:shareId`. A withdrawal that fails, or a previous
+ * link with no id to withdraw, is said, never assumed.
+ *
+ * `previous` is `{ deckId, id }` for the link shown, or null when there is none.
+ */
+export async function replaceDeckShare({ mint, revoke, previous }) {
+  const next = await mint();
+  if (!previous) return { next, withdrawn: null, notice: null };
+  if (!Number.isInteger(previous.id) || !Number.isInteger(previous.deckId)) {
+    return { next, withdrawn: false, notice: PREVIOUS_LINK_LIVE };
+  }
+  try {
+    await revoke(previous.deckId, previous.id);
+    return { next, withdrawn: true, notice: PREVIOUS_LINK_WITHDRAWN };
+  } catch {
+    return { next, withdrawn: false, notice: PREVIOUS_LINK_LIVE };
+  }
+}
