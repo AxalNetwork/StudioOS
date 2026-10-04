@@ -431,8 +431,8 @@ test('D361 patch: company acknowledgment and tax-return copy dates are stored an
 });
 
 test('D361: every column ensureSection83bSchema can add is declared by a migration (D235)', async () => {
-  // check-runtime-schema-declared compares object NAMES, so a runtime
-  // ADD COLUMN with no migration behind it passes that guard. This one reads
+  // check-runtime-schema-declared compared only object NAMES until D359, so a
+  // runtime ADD COLUMN with no migration behind it passed that guard. This one reads
   // the columns the safety net adds and finds each in a migration file.
   const { readFileSync, readdirSync } = await import('node:fs');
   const { resolve } = await import('node:path');

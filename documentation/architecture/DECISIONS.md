@@ -33487,6 +33487,71 @@ and trigger but not the archetype, because admins see aggregates only (§7.9).
     `recordChangeEvents`. `from_slug` is NOT NULL under `INSERT OR IGNORE`,
     so the database drops that row anyway.
 
+## D359
+
+**The schema guards compare columns, not only table names (issue #999,
+Session 7).** `scripts/check-runtime-schema-declared.mjs` (D235) and deploy
+step 9, `scripts/check-baseline-drift.mjs`, both compared the set of object
+names and nothing else. A column changes no name, so one added at runtime by
+an `ALTER TABLE … ADD COLUMN`, or added to production by hand, passed both.
+
+**What changed.**
+
+- `check-baseline-drift.mjs` exports `columnsOf` (one `pragma_table_info`
+  join: every column with its declared type, NOT NULL and default, keyed
+  `table.column` in lower case), `columnsFromDdl`, `compareColumns` and
+  `addColumnDdl`. Step 9 now also compares the columns and declared types of
+  every table both sides have, in both directions, plus type changes.
+  Production's columns are read by executing the `sql` its existing
+  `sqlite_master` query already returns into a scratch database, so there
+  is no second round trip and no reliance on a pragma D1 might refuse. A
+  table whose DDL is missing or will not execute fails the step as
+  unreadable; it is never skipped. A red run prints each missing column as
+  the `ALTER TABLE … ADD COLUMN` that declares it. A table only one side has
+  stays a name difference and its columns are not listed again.
+- `check-runtime-schema-declared.mjs` reads the columns of the fresh build
+  before and after its fixed point. A column the runtime DDL adds is a new
+  finding, `column-creatable`, naming the column, its type and the
+  statements that add it. A column removed or retyped is `column-removed`.
+- The runtime ledger gains a third kind, `columns`: an undeclared column
+  waiting on its migration, keyed `table.column` with the type it adds. It
+  is re-proved on every run. A different type fails, and so does a column
+  nothing adds any more or that a migration now declares (`stale-columns`).
+  An undeclared table, index, trigger or view still cannot be ledgered.
+
+**What it found on the first run.** `services/referralCommissions.ts`
+(`ensureClawbackColumns`) adds `commissions.reversed_amount_cents INTEGER`
+and `commissions.reversed_at TIMESTAMP`. No migration declares them. The
+function returns early in production, and its comment says production owns
+the columns via migration. Read as the code stands, a fresh build lacks
+both columns, and so may production, while the clawback `UPDATE` writes
+them. Both are ledgered under `columns` until the issue gives a migration
+number to declare them. This PR adds no migration.
+
+**Kept fast.** Each guard adds one pragma join per database. The runtime
+guard's run is unchanged in shape: 1103 statements, two passes, now also
+over 5872 columns.
+
+**Tests.** Ten new tests across `baseline_drift_guard.test.mjs` and
+`runtime_schema_declared_d235.test.ts`, plus column assertions added to
+three existing ones. On the previous guards the baseline suite cannot import
+the new exports, and the runtime suite fails six tests: every new column
+test, the extended fixed-point fixture and the real-tree test. They cover a hand-added column on a `company_*`-style table that
+every name comparison passes, both directions, a type change, case and
+spacing not counting as drift, unreadable DDL, a runtime `ADD COLUMN` alone,
+inside a loop, already declared, and recorded under the right and the wrong
+type. Each was mutation-checked by breaking the guard eight ways: ignore
+types, skip upper-casing, compare one direction only, drop the shared-table
+filter, swallow unreadable DDL, skip the runtime column comparison, ledger
+on any type, and never report stale. Every mutation fails at least one test.
+The existing fixed-point fixture now also reports the column its index
+needs (`a.extra`), which the old guard missed.
+
+**Not done.** Step 9 needs a Cloudflare token, so the production half could
+not run from the PR. The first deploy after merge is the first column
+comparison against production, and any hand-made column drift shows up
+there as a red step 9.
+
 ## D360
 
 **The Spin-Out Lab's capital and legal tools say when a read failed, and

@@ -1,5 +1,5 @@
 {
-  "note": "Runtime DDL in cloudflare-worker/src that check-runtime-schema-declared.mjs records rather than fails. `refused` lists objects a runtime CREATE names that no migration declares and that SQLite refuses on the fresh build; each entry is re-proved on every run, so the day a refusal stops (a column added, a quote fixed) the entry fails as `refusal-changed` and the object must be declared or its statement deleted. `opaque` counts statements per file that the check cannot expand, each read by hand. The check refuses stale entries in both directions: a ledger of known gaps is only worth reading if every line is still true (D235).",
+  "note": "Runtime DDL in cloudflare-worker/src that check-runtime-schema-declared.mjs records rather than fails. `refused` lists objects a runtime CREATE names that no migration declares and that SQLite refuses on the fresh build; each entry is re-proved on every run, so the day a refusal stops (a column added, a quote fixed) the entry fails as `refusal-changed` and the object must be declared or its statement deleted. `opaque` counts statements per file that the check cannot expand, each read by hand. `columns` lists columns a runtime ADD COLUMN adds to the fresh build, keyed table.column with the declared type it adds; each is a gap waiting on its migration, re-proved on every run, and stale the moment a migration declares it (D359). The check refuses stale entries in both directions: a ledger of known gaps is only worth reading if every line is still true (D235).",
   "resolve_with": "node --no-warnings scripts/check-runtime-schema-declared.mjs",
   "refused": {
     "index:idx_cc_deal": {
@@ -27,6 +27,16 @@
     "cloudflare-worker/src/util/usersRoleRebuild.ts": {
       "statements": 4,
       "reason": "The atomic rebuild of users under its own name, in one batch: copy to a temporary table, DROP users, re-create users from a DDL string built at runtime, copy back, drop the temporary table. The temporary name exists only inside the batch and users exists before and after it, so the rebuild changes a column constraint, never the set of object names step 9 compares."
+    }
+  },
+  "columns": {
+    "commissions.reversed_amount_cents": {
+      "type": "INTEGER",
+      "reason": "services/referralCommissions.ts:43 adds it in dev and preview only (ensureClawbackColumns returns early when ENVIRONMENT is production, and its comment says production owns the column via migration). No migration declares it, so a fresh build and, read as the code stands, production lack a column the clawback UPDATE writes. Declaring it needs a migration number from the issue; found by D359's column comparison on 2026-10-04."
+    },
+    "commissions.reversed_at": {
+      "type": "TIMESTAMP",
+      "reason": "services/referralCommissions.ts:44 adds it in dev and preview only (ensureClawbackColumns returns early when ENVIRONMENT is production, and its comment says production owns the column via migration). No migration declares it, so a fresh build and, read as the code stands, production lack a column the clawback UPDATE writes. Declaring it needs a migration number from the issue; found by D359's column comparison on 2026-10-04."
     }
   }
 }
