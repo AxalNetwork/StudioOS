@@ -151,7 +151,7 @@ export const FUND_FOCUS_RULES: Readonly<Record<string, readonly string[]>> = {
   'ai': ['ai'], 'ai/ml': ['ai'], 'ml': ['ai'], 'machine learning': ['ai'],
   'deep learning': ['ai'], 'enterprise ai': ['ai'], 'vertical ai': ['ai'], 'b2b ai': ['ai'],
   'computer vision': ['ai'], 'ai infrastructure': ['ai', 'cloud-infrastructure'],
-  'fintech': ['fintech'], 'b2b fintech': ['fintech'], 'banking': ['fintech'], 'regtech': ['fintech'],
+  'fintech': ['fintech'], 'b2b fintech': ['fintech'], 'payments': ['payments'], 'embedded finance': ['fintech'], 'banking': ['fintech'], 'regtech': ['fintech'],
   'consumer finance': ['fintech'], 'finance': ['fintech'],
   'insurtech': ['insurance'], 'insurance': ['insurance'],
   'industry 4.0 / robotics': ['manufacturing', 'robotics'], 'industry 4.0': ['manufacturing'],
@@ -294,6 +294,28 @@ export function mapFundFocus(raw: string | null | undefined, ov?: Overrides): Ma
   }
   if (targets.size === 0) return UNMAPPED(value, unmatched);
   return { raw: value, targets: [...targets].sort(), method: 'rule', rule: 'FUND_FOCUS_RULES', unmatched };
+}
+
+/**
+ * A signal's `tags` (a JSON array) → every market its tags name, through the
+ * same token dictionary as fund focus. `signals.sector` is a broad
+ * stock-market sector ("Technology") and is never matched to a market.
+ */
+export function mapSignalTags(tagsJson: string | null | undefined): Mapping {
+  const raw = String(tagsJson ?? '');
+  let tags: unknown = [];
+  try { tags = JSON.parse(raw || '[]'); } catch { return UNMAPPED(raw); }
+  if (!Array.isArray(tags)) return UNMAPPED(raw);
+  const targets = new Set<string>();
+  const unmatched: string[] = [];
+  for (const t of tags) {
+    if (typeof t !== 'string' || !t.trim()) continue;
+    const hit = FUND_FOCUS_RULES[normalizeLabel(t)];
+    if (hit) hit.forEach((s) => targets.add(s));
+    else unmatched.push(t);
+  }
+  if (targets.size === 0) return UNMAPPED(raw, unmatched);
+  return { raw, targets: [...targets].sort(), method: 'rule', rule: 'FUND_FOCUS_RULES', unmatched };
 }
 
 function placePieces(value: string): string[] {
