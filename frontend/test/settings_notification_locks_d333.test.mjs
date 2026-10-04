@@ -21,16 +21,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const src = codeOnly(fs.readFileSync(
   path.join(__dirname, '../src/pages/SettingsPage.jsx'), 'utf8',
 ));
+// D336 moved the matrix to one module. The lock is a property of those
+// objects, so it is asserted there, and the table behaviour stays on the page.
+const types = codeOnly(fs.readFileSync(
+  path.join(__dirname, '../src/lib/notificationTypes.js'), 'utf8',
+));
 
 test('capital_call_issued and agreement_ready_to_sign declare a locked email channel', () => {
-  const ccMatch = src.match(/key:\s*'capital_call_issued'[^}]*}/);
-  const sigMatch = src.match(/key:\s*'agreement_ready_to_sign'[^}]*}/);
+  const ccMatch = types.match(/key:\s*'capital_call_issued'[^}]*}/);
+  const sigMatch = types.match(/key:\s*'agreement_ready_to_sign'[^}]*}/);
   assert.ok(ccMatch, 'capital_call_issued event entry not found');
   assert.ok(sigMatch, 'agreement_ready_to_sign event entry not found');
   assert.match(ccMatch[0], /lockedChannels:\s*\[\s*'email'\s*\]/, 'capital call email channel is not locked');
   assert.match(sigMatch[0], /lockedChannels:\s*\[\s*'email'\s*\]/, 'signature email channel is not locked');
   // capital_call_paid is deliberately NOT locked — only the issuance notice is.
-  const paidMatch = src.match(/key:\s*'capital_call_paid'[^}]*}/);
+  const paidMatch = types.match(/key:\s*'capital_call_paid'[^}]*}/);
   assert.ok(paidMatch);
   assert.doesNotMatch(paidMatch[0], /lockedChannels/, 'capital_call_paid should stay user-toggleable');
 });
