@@ -52,10 +52,13 @@ import { fileURLToPath } from 'node:url';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
+import { readRoutesSource, lazyImports, conflictingLazyImports } from './_routesSource.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
-const APP = read('frontend/src/App.jsx');
+// D528 — App.jsx plus every module under frontend/src/routes/, so an /admin
+// route declared in a module needs a door like any other.
+const APP = readRoutesSource(root);
 
 /* ------------------------------------------------------------------ *
  * The route table
@@ -111,9 +114,15 @@ const resolveFile = (rel) => {
 };
 
 const FILE_OF = new Map();
-for (const m of APP.matchAll(/const (\w+) = lazy\(\(\) => import\('\.\/([^']+)'\)\)/g)) {
-  const f = resolveFile(`frontend/src/${m[2]}`);
-  if (f) FILE_OF.set(m[1], f);
+// One table across App.jsx and the route modules (D528), keyed by the bare
+// component name — which is sound only while one name means one page. The
+// helper reports a name two sources declare for different pages, and the
+// first test below fails on one, so a module cannot make this table scan
+// the wrong file (Codex on #1062).
+const LAZY_CONFLICTS = conflictingLazyImports(root);
+for (const { name, target } of lazyImports(root)) {
+  const f = resolveFile(target);
+  if (f) FILE_OF.set(name, f);
 }
 for (const m of APP.matchAll(/^import (\w+) from '\.\/([^']+)'/gm)) {
   if (FILE_OF.has(m[1])) continue;
@@ -364,6 +373,17 @@ const REDIRECTS = ADMIN.filter((r) => r.redirect).map((r) => r.path);
  * Tests
  * ------------------------------------------------------------------ */
 
+test('one lazy component name means one page across App.jsx and the route modules, so FILE_OF scans the right file', () => {
+  // The table above is flat on purpose: every reader of a route's component
+  // keys by the bare name. A module declaring `SettingsPage` for a page other
+  // than App.jsx's would overwrite the entry and this file would walk the
+  // wrong page's links — a door it does not have, or an orphan hidden by one
+  // it does. The helper reports such a pair with both files.
+  assert.deepEqual(LAZY_CONFLICTS, [],
+    `a lazy component name is declared for two different pages; rename one:\n  ${JSON.stringify(LAZY_CONFLICTS)}`);
+  assert.ok(FILE_OF.size >= 200, `the lazy-import table parsed to ${FILE_OF.size} entries`);
+});
+
 test('the route parser finds every /admin route in App.jsx', () => {
   // A route this parser misses is a route the guard silently has no opinion
   // about — the exact failure mode of a block-bounded scan, which would lose
@@ -392,20 +412,20 @@ test('every /admin route is reachable from navigation', () => {
     + orphans.join('\n  '));
 });
 
-test('the HQ-held walk does not reach spinout moderation; that door is Session 5', () => {
-  // The branch Approvals board links to the console. HQ-held Approvals
-  // (HeldApprovals) does not. A walk that starts from every sidebar treats
-  // the branch door as enough. This one does not: the HQ-held shells are
-  // admin and super_admin, and the one route they cannot reach that the
-  // branch shell can is the moderation console. HeldApprovals is Session 5's.
+test('the HQ-held walk reaches spinout moderation too (D506), and no route is reachable only from the branch', () => {
+  // The branch Approvals board links to the console (D442). HQ-held Approvals
+  // (HeldApprovals) did not until D506 made lane 4 its door. A walk that
+  // starts from every sidebar treats the branch door as enough; this one does
+  // not: the HQ-held shells are admin and super_admin, and before D506 the one
+  // route they could not reach that the branch shell could was the console.
   assert.equal(REACHED_BRANCH.has('/admin/spinout-moderation'), true);
-  assert.equal(REACHED_HQ.has('/admin/spinout-moderation'), false);
+  assert.equal(REACHED_HQ.has('/admin/spinout-moderation'), true);
   const onlyOnTheBranch = ADMIN
     .filter((r) => !r.redirect)
     .filter((r) => !EXEMPT_PATHS.has(r.path))
     .filter((r) => REACHED_BRANCH.has(r.path) && !REACHED_HQ.has(r.path))
     .map((r) => r.path);
-  assert.deepEqual(onlyOnTheBranch, ['/admin/spinout-moderation']);
+  assert.deepEqual(onlyOnTheBranch, []);
 });
 
 test('every in-page /admin link points at a registered route', () => {

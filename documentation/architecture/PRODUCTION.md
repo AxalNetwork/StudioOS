@@ -101,14 +101,13 @@ responses come from `docs/_headers` (built from `frontend/public/_headers`,
 read natively by Workers static assets), and `scripts/check-spa-live.mjs`
 asserts them on every shell route after a deploy.
 
-`docs/` is still committed by hand, for review and for
-`scripts/check-docs-fresh.mjs`. **No workflow commits it** — `ci.yml` builds
-the frontend to typecheck it and then *validates* that the committed `docs/`
-matches, but never writes the directory back — while the deploy workflow
-*rebuilds* it from source at deploy time, so the committed bytes are what
-reviewers read, not necessarily what ships (DEPLOY.md §2.1). Run the build at
-the REPO ROOT (`npm run build`, which also prerenders the crawlable routes)
-and commit the result in the same PR as the source change.
+`docs/` is **not committed** (D529). It is gitignored, and every job that
+needs it builds it from `frontend/src` at the REPO ROOT (`npm run build`, which
+also prerenders the crawlable routes): CI's full suite and Open Graph check,
+the PR preview, branch provisioning and the deploy. The deploy restores the
+previous deploy's `docs/assets` and retention ledger from the Actions cache
+before it builds, so a tab opened before the deploy keeps its chunks
+(DEPLOY.md §2.1).
 
 ### FastAPI (dev only)
 

@@ -21,6 +21,17 @@ import SafeMount from './components/SafeMount';
 import AxalLogo from './components/AxalLogo';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
+// ── Route modules (D528) ──────────────────────────────────────────────────
+// A NEW area's routes live in frontend/src/routes/<area>.jsx, not here: this
+// file changed in 109 of the last 624 commits and any two PRs that add a page
+// collide in it. One import per module, alphabetical by file name, and one
+// composition line per module in the block of the same name inside the Routes
+// element below. The 409 routes already here stay here (156 tests read this
+// file by path, and several slice it at the Routes element's opening tag, so
+// that tag is not written in prose here). See frontend/src/routes/README.md;
+// routes_modules_d528.test.mjs fails the build for a module that is not wired in.
+// (no modules yet)
+// ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
   Shield,
@@ -34,6 +45,10 @@ import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+// D504 — the phone's tab bar (D425), mounted by the shell beside the drawer's
+// backdrop. It takes the shell role AS RESOLVED, never the sidebar's
+// `|| 'founder'` default: a viewer with no role gets no bar.
+import MobileTabBar from './components/MobileTabBar';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
@@ -41,6 +56,7 @@ import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
+import { disablePush } from './lib/pwa';
 import { readStoredReason, clearStoredReason } from './lib/impersonationBar';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -1016,7 +1032,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
     <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+      {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
+          under a phone's status bar. The shell's root reserves the top inset,
+          not the header: on an admin's phone `PortalSwitcher` and the support,
+          impersonation and branch-status strips render BEFORE the header, so
+          an inset on the header alone left the first interactive bar under the
+          status bar (Codex on #1039). Here, whichever bar is first sits below
+          it, and every bar keeps its own height. `env(…, 0px)` is 0 on every
+          screen without an inset. */}
+      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
             sets (the operator is a row in HQ's database this deployment cannot
@@ -1215,10 +1239,22 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           {sidebarOpen && (
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
+          {/* D504 — the phone's tab bar (D425): four tabs and More below 1024px,
+              built from the sidebar's own rows. The role is the shell's as
+              resolved, without the sidebar's `|| 'founder'` fallback, so a
+              viewer with no role gets no bar. The bar renders nothing for a
+              licence whose plan is not built yet (`mobilePlan` returns null). */}
+          <MobileTabBar role={shellRole} />
 
           {/* A COLUMN, so the footer stays at the bottom on short pages while
-              still following long page content inside the scroll container. */}
+              still following long page content inside the scroll container.
+              `data-app-scroll` is where the phone tab bar's clearance goes
+              (mobileTabBar.css, D504): the footer is the last thing in this
+              container, so padding the content block above it (`[data-app-main]`,
+              as D425 did) left the footer's Terms and Privacy row under the bar
+              at the end of the scroll. */}
           <main
+            data-app-scroll
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
@@ -1896,6 +1932,28 @@ function AppInner() {
   // The httpOnly auth cookie is untouched by clearing localStorage, so the
   // server-side revoke below still runs over the cookie.
   const clearSession = useCallback(async () => {
+    // Codex review on D334: this never revoked a push subscription, so an
+    // endpoint enabled under one account kept receiving THAT account's
+    // notifications on this device after sign-out — `getPushState()` only
+    // checks whether the browser has any subscription at all, and the next
+    // account to sign in on the same device sees push already "on" and never
+    // calls `enablePush()` to re-home it to its own `user_id`.
+    //
+    // A FOLLOW-UP REVIEW CAUGHT THE FIRST FIX HERE TOO: it awaited
+    // `disablePush()` (behind a 3s race) before any of the synchronous local
+    // teardown below — `setUser(null)` and the token/user wipe included. A
+    // stalled service worker, subscription lookup or unsubscribe request
+    // held up ALL of it for up to 3s, and a tab closed during that stall
+    // kept both the local token and the server cookie alive: still signed
+    // in on the next visit. So this no longer awaits `disablePush()` at
+    // all — the token is captured now (it's about to be removed below) and
+    // handed to `disablePush` explicitly, so the revocation can finish
+    // fully in the background without the local teardown waiting on it or
+    // on the token still being in `localStorage` by the time its own
+    // `await`s resolve.
+    const tokenForPushRevoke = localStorage.getItem('token');
+    disablePush({ authToken: tokenForPushRevoke }).catch(() => { /* best-effort, never blocks sign-out */ });
+
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('realUser');
@@ -2152,6 +2210,15 @@ function AppInner() {
       || ['leads', 'interviews', 'insights'].includes(new URLSearchParams(location.search).get('tab')));
   const founderExecutionEditor = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') === 'workspace';
+
+  // D528 — the first route module (frontend/src/routes/<area>.jsx) adds, right
+  // here, what every module gets from this file's closures, so a route in a
+  // module is gated by the same `guard`, `hqOnly` and `authOnly` as one
+  // written here, never by a copy of them:
+  //   const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
+  // It is not declared until then: with no module to read it, it is a dead
+  // variable, and routes_modules_d528.test.mjs holds it absent without a
+  // module and present, in exactly that shape, with one.
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
@@ -2709,6 +2776,14 @@ function AppInner() {
       {/* Every role, `exploring` included: an application decision is a
           notification, and the person waiting on one holds no other role. */}
       <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
+      {/* D336 — `/notifications` has never been this page's address (D144
+          put the panel at `/inbox`), but the bell's own settings link reads
+          `/account/notifications` and the Settings tab is `#notifications`;
+          either one typed as a bare path, or an old bookmark from before
+          `/inbox` existed, should still land somewhere real rather than the
+          404 page. */}
+      <Route path="/notifications" element={<Navigate to="/inbox" replace />} />
+      <Route path="/notifications/*" element={<Navigate to="/inbox" replace />} />
       <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
@@ -3228,6 +3303,12 @@ function AppInner() {
       <Route path="/lp/investor" element={<InvestorDealflowHomePage />} />
       <Route path="/lp/partner" element={<PartnerPartnershipHomePage />} />
       <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
+      {/* ── Route modules (D528) ── one line per frontend/src/routes/<area>.jsx,
+          alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in
+          the block of the same name at the top of this file. Above the
+          catch-all, so a module's routes are matched before it. */}
+      {/* (no modules yet) */}
+      {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
           other route (public, alias, or guarded) does. */}
       <Route path="*" element={<NotFoundPage />} />

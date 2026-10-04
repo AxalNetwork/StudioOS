@@ -6,11 +6,13 @@
  *
  * `--mobile-tabbar-h` is the bar's full height, inset included, set only while
  * a bar is drawn (MobileTabBar puts `data-mobile-tabbar` on <html>) and only
- * below 1024px, where the bar shows. The app's scroll container is <main>, and
- * `[data-app-main]` is the content inside it, so padding that element keeps the
- * last row of every page above the bar without touching the shell's markup.
- * A floating button above the bar (the rail's, on the canvas's M5) sits at
- * `calc(var(--mobile-tabbar-h) + 16px)`.
+ * below 1024px, where the bar shows. The app's scroll container is <main>,
+ * marked `data-app-scroll` by the shell (D504); padding it keeps the last
+ * thing in the scroll — the footer, after every page's content — above the
+ * bar. D425 padded `[data-app-main]`, the content block inside the scroll
+ * container, which left the footer that follows it under the bar at the end
+ * of the scroll. A floating button above the bar (the rail's, on the canvas's
+ * M5) sits at `calc(var(--mobile-tabbar-h) + 16px)`.
  */
 /* Fixed elements ignore the body's side insets (index.css), so the bar and
    the sheet carry their own. */
@@ -31,7 +33,7 @@
     --mobile-tabbar-h: calc(56px + env(safe-area-inset-bottom, 0px));
   }
 
-  :root[data-mobile-tabbar="on"] [data-app-main] {
+  :root[data-mobile-tabbar="on"] [data-app-scroll] {
     padding-bottom: var(--mobile-tabbar-h);
   }
 }

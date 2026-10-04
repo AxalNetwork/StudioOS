@@ -20,14 +20,16 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { bucketsFor, bucketForPath, zoneForPath } from '../src/workspaces/shellConfig.js';
+import { readRoutesSource } from './_routesSource.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const appSrc = readFileSync(resolve(here, '../src/App.jsx'), 'utf8');
+// D528 — App.jsx plus every module under frontend/src/routes/, so a zone route
+// in a module is held to the same role contract as one in App.jsx.
+const appSrc = readRoutesSource(resolve(here, '../..'));
 
 const ROLES = ['founder', 'investor', 'advisor', 'partner'];
 

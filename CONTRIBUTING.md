@@ -138,8 +138,8 @@ public point-in-time).
 - **Adding R2 keys, KYC docs, signed contracts, or any user upload** to
   the repo, LFS or otherwise.
 - **Committing build outputs** that don't already exist in the repo.
-  `docs/assets/`, `dist-deploy/`, and `assets/` are grandfathered (GH
-  Pages serves `docs/`); don't add new ones.
+  `dist-deploy/` and `assets/` are grandfathered; don't add new ones.
+  (`docs/` is build output and is not committed at all, D529.)
 
 ## Where to ask
 

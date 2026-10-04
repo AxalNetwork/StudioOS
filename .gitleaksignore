@@ -1,0 +1,13 @@
+# D334 — one finding, not one commit. gitleaks' generic-api-key rule
+# correctly flagged a hardcoded VAPID_PRIVATE_KEY literal in
+# cloudflare-worker/test/webpush_d335.test.ts as introduced in commit
+# 9080925048. That key pair was generated solely for this test (Node's
+# crypto.generateKeyPairSync, run locally, never used anywhere else) and
+# never matched any real VAPID key — nothing to rotate. The test now
+# generates its key pair at run time via crypto.subtle instead, so no
+# commit after this one carries the literal. This entry is scoped to the
+# exact finding fingerprint rather than the whole commit, because that
+# commit also introduces webpush.ts, notifications.ts, types.ts and
+# migration 302 — a whole-commit allowlist entry would hide a real finding
+# in any of those too.
+9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33

@@ -541,7 +541,8 @@ test('the column guard unions competing definitions, which is why it cannot see 
 test('a money word is not the same as an amount of money', () => {
   // The classifier over-matched in both directions before these exclusions.
   for (const yes of ['amount', 'amount_cents', 'price_usd', 'mrr', 'monthly_burn_usd',
-                     'called_capital', 'nav', 'cash_balance', 'market_cap', 'hourly_rate']) {
+                     'called_capital', 'nav', 'cash_balance', 'market_cap', 'hourly_rate',
+                     'gross_profit', 'ebitda', 'net_income', 'cash', 'debt']) {
     assert.ok(isMoney(yes), `${yes} should read as money`);
   }
   for (const no of [
@@ -555,6 +556,8 @@ test('a money word is not the same as an amount of money', () => {
     'principal_key',        // a security principal
     'revenue_range',        // a band label
     'revenue_notes',        // prose
+    'revenue_growth',       // a growth rate (company_financials, migration 370)
+    'ebitda_margin',        // a margin beside the ebitda amount (migration 370)
   ]) {
     assert.ok(!isMoney(no), `${no} should not read as money`);
   }

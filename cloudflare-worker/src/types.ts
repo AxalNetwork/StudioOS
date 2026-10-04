@@ -87,6 +87,18 @@ export interface Env {
   GMAIL_CLIENT_ID?: string;
   GMAIL_CLIENT_SECRET?: string;
   GMAIL_REFRESH_TOKEN?: string;
+  // D335 — Web Push (RFC 8291/8292). Both halves of one ECDSA P-256 key pair,
+  // raw-uncompressed-point base64url (the shape `crypto.subtle` imports
+  // directly and the shape a browser's PushManager.subscribe expects for
+  // `applicationServerKey`). Absent in dev/preview — `/push/vapid-key`
+  // answers `{ public_key: null }` rather than defaulting to a shared key,
+  // since a push payload is encrypted to this key and a placeholder would
+  // silently fail every send.
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  // mailto: contact Apple/Google's push services may reach on abuse — RFC
+  // 8292 requires the VAPID JWT to carry one.
+  VAPID_SUBJECT?: string;
   // Calendar OAuth — Google + Microsoft 365. Optional; absent providers
   // are treated as unavailable at runtime. MICROSOFT_TENANT_ID defaults
   // to "common" when unset.

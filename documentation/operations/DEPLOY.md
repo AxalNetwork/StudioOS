@@ -118,11 +118,9 @@ print warnings on success, and a grep for "error" or "fail" will lie to you in
 both directions.
 
 ```bash
-# The full suite. Redirect, then read the code — never pipe this through grep.
-npm run test:drift > /tmp/drift.log 2>&1; echo "test:drift exit=$?"
-
-# The committed bundle matches the committed source.
-node scripts/check-docs-fresh.mjs --strict; echo "docs-fresh exit=$?"
+# The full suite reads the built SPA, and docs/ is not committed (D529):
+# build first. Redirect, then read the code — never pipe this through grep.
+npm run build && npm run test:drift > /tmp/drift.log 2>&1; echo "test:drift exit=$?"
 
 # Which migration files are not safely re-runnable.
 npm run d1:audit
@@ -148,13 +146,27 @@ is the one-time `--baseline` in [§4(b)](#4-if-a-migration-fails). Any other
 wrangler failure is raised, not swallowed — a connection or auth error will
 never be reported to you as "nothing has been applied".
 
-### 2.1 `check-docs-fresh` must be green *before* you deploy
+### 2.1 `docs/` is built at deploy time, never committed (D529)
 
-`npm run deploy` runs `npm run build` first, so the bundle that ships is one
-built at deploy time — not the `docs/` bytes committed and reviewed in the PR.
-If those two differ, you ship something nobody reviewed. `check-docs-fresh
---strict` is what catches the difference, and it is only meaningful *before*
-the deploy rebuilds over it.
+`docs/` is gitignored. Every job that needs it builds it from `frontend/src`:
+CI (the full suite and the Open Graph check), the PR preview, branch
+provisioning, and the deploy. What a reviewer reads is the source; what ships
+is that source's build, so there is no second copy to drift from it, and
+`check-docs-fresh` (which compared the two) is retired.
+
+The old-bundle window rides on a cache instead of a committed tree. A tab
+opened before a deploy still asks for the previous build's hashed chunks, so
+`scripts/build-frontend.mjs` keeps the last three builds' assets in
+`docs/assets`. `cloudflare-worker-deploy.yml` restores the previous successful
+deploy's `docs/assets` and retention ledger from the `spa-assets-` entry in the
+Actions cache before it builds, and saves them after `wrangler deploy`
+succeeds. When there is nothing to restore (the first deploy, or an entry
+GitHub evicted after seven days unused) the deploy still ships, the build log
+says `retention restarted`, and the run carries a warning: a tab opened before
+that deploy may need one reload.
+
+A hand deploy with `npm run deploy` builds over whatever `docs/` holds on your
+machine. With no previous build there it restarts retention the same way.
 
 ### 2.2 New bindings go in both tables
 

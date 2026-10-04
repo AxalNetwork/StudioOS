@@ -2,8 +2,11 @@
 /**
  * API ↔ Worker drift check.
  *
- * Statically analyses `frontend/src/lib/api.js` against the production worker
+ * Statically analyses `frontend/src/lib/api.js` and every domain module under
+ * `frontend/src/lib/api/` (D527) against the production worker
  * (`cloudflare-worker/src/index.ts` + everything it mounts) and fails on drift.
+ * It also fails when api.js's re-export block does not name exactly the
+ * modules on disk, in alphabetical order.
  *
  * Why static and not curl-based?
  * - The production worker runs on Cloudflare; we don't always have a deployed
@@ -56,12 +59,19 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
+import {
+  API_MODULES_DIR_REL,
+  classifyCalls,
+  clientSources,
+  extractClientCalls,
+  listModules,
+  reexportProblems,
+} from './lib/apiModules.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, '..');
 
-const API_FILE = resolve(ROOT, 'frontend/src/lib/api.js');
 const WORKER_SRC = resolve(ROOT, 'cloudflare-worker/src');
 const WORKER_FILE = resolve(WORKER_SRC, 'index.ts');
 const ROUTES_DIR = resolve(WORKER_SRC, 'routes');
@@ -123,37 +133,9 @@ function declaresIdent(src, ident) {
   return false;
 }
 
-// ---------------------------------------------------------------------------
-// Path normalisation. Both sides collapse to the same shape so they compare:
-//   worker  /projects/:id{[0-9]+}/spinout-deck  ->  /projects/:p/spinout-deck
-//   spa     /projects/${id}/spinout-deck        ->  /projects/:p/spinout-deck
-//
-// A `${...}` NOT preceded by '/' is a query/suffix interpolation
-// (`/organizations${qs}`), not a path segment, so it is dropped rather than
-// turned into a segment that would never match.
-// ---------------------------------------------------------------------------
-function stripInterpolation(s) {
-  let out = '';
-  let depth = 0;
-  for (let i = 0; i < s.length; i++) {
-    if (depth === 0 && s[i] === '$' && s[i + 1] === '{') { depth = 1; i++; out += out.endsWith('/') ? ':p' : ''; continue; }
-    if (depth > 0) {
-      if (s[i] === '{') depth++;
-      else if (s[i] === '}') depth--;
-      continue;
-    }
-    out += s[i];
-  }
-  return out;
-}
-
-function normalizePath(p) {
-  return stripInterpolation(p)
-    .split('?')[0]
-    .replace(/:[A-Za-z_]\w*\{[^}]*\}/g, ':p') // Hono regex-constrained params
-    .replace(/:[A-Za-z_]\w*/g, ':p')
-    .replace(/\/+$/, '');
-}
+// Path normalisation, client-call extraction and matching live in
+// ./lib/apiModules.mjs (D527), so they can be tested on sources that are not
+// the real api.js — and so the same code reads the lib/api/ modules.
 
 // ---------------------------------------------------------------------------
 // Worker side — resolve the full (METHOD, path) route table.
@@ -252,59 +234,6 @@ function buildRouteTable() {
  * `{ method: 'POST' }` argument after it. That is how four POST endpoints came
  * out looking like GETs.
  */
-function readLiteral(src, i) {
-  const quote = src[i];
-  if (quote !== '`' && quote !== "'" && quote !== '"') return null;
-  let value = '';
-  let depth = 0; // template-interpolation nesting
-  for (let j = i + 1; j < src.length; j++) {
-    const ch = src[j];
-    if (ch === '\\') { value += ch + src[j + 1]; j++; continue; }
-    if (quote === '`') {
-      if (depth === 0 && ch === '$' && src[j + 1] === '{') { depth = 1; value += '${'; j++; continue; }
-      if (depth > 0) {
-        // Skip the interpolation wholesale, including any nested literal.
-        if (ch === '{') depth++;
-        else if (ch === '}') { depth--; value += depth === 0 ? '}' : ''; continue; }
-        else if (ch === '`' || ch === "'" || ch === '"') {
-          const inner = readLiteral(src, j);
-          if (inner) { j = inner.end; continue; }
-        }
-        continue;
-      }
-    }
-    if (ch === quote) return { value, end: j };
-    if (quote !== '`' && ch === '\n') return null; // unterminated
-    value += ch;
-  }
-  return null;
-}
-
-function extractClientCalls(src) {
-  const calls = [];
-  const re = /\brequest\s*\(\s*/g;
-  let m;
-  while ((m = re.exec(src)) !== null) {
-    const lit = readLiteral(src, m.index + m[0].length);
-    if (!lit || !lit.value.startsWith('/')) continue;
-    // Options object, if any: everything up to the matching close brace.
-    let method = 'GET';
-    const after = src.slice(lit.end + 1);
-    const opts = after.match(/^\s*,\s*\{/);
-    if (opts) {
-      let depth = 0;
-      let k = opts[0].length - 1;
-      for (; k < after.length; k++) {
-        if (after[k] === '{') depth++;
-        else if (after[k] === '}') { depth--; if (depth === 0) break; }
-      }
-      const found = after.slice(0, k + 1).match(/method:\s*['"](\w+)['"]/);
-      if (found) method = found[1].toUpperCase();
-    }
-    calls.push({ method, path: lit.value });
-  }
-  return calls;
-}
 
 // ---------------------------------------------------------------------------
 // Response-shape — error envelopes the SPA can actually read.
@@ -364,27 +293,13 @@ function findEnvelopeViolations() {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-const apiSrc = readFileSync(API_FILE, 'utf8');
+// D527 — api.js and every domain module under lib/api/. A call cannot hide
+// from this check by living in a module instead of api.js.
+const sources = clientSources(ROOT);
+const reexport = reexportProblems(sources[0].src, listModules(resolve(ROOT, API_MODULES_DIR_REL)));
 const { routes, mounts, unresolved } = buildRouteTable();
-const calls = extractClientCalls(apiSrc);
-
-const exact = new Set(routes.map(([v, p]) => `${v} ${normalizePath(p)}`));
-const anyVerb = new Set(routes.filter((r) => r[0] === 'ALL').map((r) => normalizePath(r[1])));
-const pathOnly = new Set(routes.map((r) => normalizePath(r[1])));
-
-const missingRoute = new Set();
-const missingMethod = new Set();
-const allowlisted = new Set();
-
-for (const { method, path } of calls) {
-  const full = normalizePath('/api' + path);
-  if (exact.has(`${method} ${full}`) || anyVerb.has(full)) continue;
-  if ([...KNOWN_DRIFT_ALLOWLIST].some((a) => path === a || path.startsWith(a + '/'))) {
-    allowlisted.add(`${method} ${full}`);
-    continue;
-  }
-  (pathOnly.has(full) ? missingMethod : missingRoute).add(`${method} ${full}`);
-}
+const calls = sources.flatMap(({ src }) => extractClientCalls(src));
+const { missingRoute, missingMethod, allowlisted } = classifyCalls(calls, routes, KNOWN_DRIFT_ALLOWLIST);
 
 const { violations: envelopeViolations, checked: errorResponses } = findEnvelopeViolations();
 
@@ -430,7 +345,7 @@ const baseline = existsSync(BASELINE_FILE)
   ? JSON.parse(readFileSync(BASELINE_FILE, 'utf8'))
   : { missing_route: [], missing_method: [], error_envelope: [] };
 
-console.log(`[drift] SPA calls examined:      ${calls.length}`);
+console.log(`[drift] SPA calls examined:      ${calls.length} (api.js + ${sources.length - 1} lib/api/ module${sources.length === 2 ? '' : 's'})`);
 console.log(`[drift] Worker routes resolved:  ${routes.length} (from ${mounts.length} mounts)`);
 console.log(`[drift] Error responses checked: ${errorResponses}`);
 console.log(`[drift] Known-pending (allowlisted): ${allowlisted.size}`);
@@ -443,6 +358,11 @@ if (unresolved.length) {
 }
 
 let failed = false;
+if (reexport.length) {
+  failed = true;
+  console.error(`\n❌ api.js re-export block disagrees with frontend/src/lib/api/ (${reexport.length}):\n`);
+  for (const x of reexport) console.error(`   - ${x}`);
+}
 const SECTIONS = [
   ['missing_route', 'SPA calls with NO worker route'],
   ['missing_method', 'Worker has the path but not this HTTP method'],
@@ -469,7 +389,7 @@ if (failed) {
   console.error(
     '\nFix one of:\n' +
       '  1. Add the route to the worker under cloudflare-worker/src/routes/ (preferred — production parity).\n' +
-      '  2. Remove the call from frontend/src/lib/api.js (if dead code).\n' +
+      '  2. Remove the call from frontend/src/lib/api.js or its lib/api/ module (if dead code).\n' +
       '  3. For an error response: include an `error` (or `detail`/`message`) key so the\n' +
       "     user sees the real reason instead of \"Request failed\".\n" +
       '  4. Only as a last resort, add a KNOWN_DRIFT_ALLOWLIST entry in this script with a\n' +

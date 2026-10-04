@@ -60,10 +60,14 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    a different asset build — the entry module 404'd and the boot watchdog
    spun on `?__reboot=` — and it is guarded by
    `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
-   `frontend/test/apex_route_coverage.test.mjs`. `docs/` is committed by hand
-   for review and for `scripts/check-docs-fresh.mjs`; the deploy workflow
-   rebuilds it from source at deploy time, so the committed bytes are what
-   reviewers read, not necessarily what ships
+   `frontend/test/apex_route_coverage.test.mjs`. **`docs/` is not committed**
+   (D529): it is gitignored, and every job that needs it builds it from
+   `frontend/src` — CI, the PR preview, branch provisioning and the deploy —
+   so reviewers read the source and the deploy ships that source's build. The
+   old-bundle window (the last three builds' hashed assets, so a tab opened
+   before a deploy keeps working) is carried by the deploy itself: it restores
+   the previous deploy's `docs/assets` and retention ledger from the Actions
+   cache before building and saves them after shipping
    (`documentation/operations/DEPLOY.md` §2.1). GitHub Pages and Cloudflare
    Pages are both decommissioned; the Worker is the only host.
 
@@ -78,15 +82,16 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
-| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
+| `docs/`               | Built frontend bundle, **not committed** (D529) — the Worker's `[assets]` directory, built by `npm run build`; its `_headers` sets the static security headers |
 
 **`documentation/` and `docs/` are different things.** `documentation/` is
 prose a person wrote; `docs/` is build output a person must never edit. The
 repo root once held 38 loose markdown files — they all live under
 `documentation/` now, and `frontend/test/repo_layout.test.mjs` fails the build
-if a seventh appears at the root (six stay because a tool reads them from
-there: this file, `replit.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`
-and `CHANGELOG.md`).
+if an eighth appears at the root (seven stay because a tool reads them from
+there: this file, `AGENTS.md` (read by Codex, Cursor and other agents),
+`replit.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md` and
+`CHANGELOG.md`).
 
 **Every folder that carries weight explains itself.** There is a `README.md` in
 each significant directory saying what lives there and the rule for adding to
@@ -100,15 +105,25 @@ never existed. Start at the README of whatever folder you land in.
 - **New features must be implemented in `cloudflare-worker/src/routes/` first.**
   FastAPI ports in `backend/app/api/routes/` are an optional dev convenience
   for fast local iteration; they are not the production behaviour.
-- **Do not add a `/api/*` method to `frontend/src/lib/api.js`** without a
-  matching worker route in `cloudflare-worker/src/index.ts`. The drift smoke
-  test (`npm run test:drift`) enforces this on every PR.
+- **Do not add a `/api/*` method to `frontend/src/lib/api.js`, or to a module
+  under `frontend/src/lib/api/`,** without a matching worker route in
+  `cloudflare-worker/src/index.ts`. A new API domain goes in its own module
+  there, re-exported by one line in `api.js`'s alphabetical block (D527). The
+  drift smoke test (`npm run test:drift`) enforces both on every PR.
 - **Do not modify `wrangler.toml`'s `main` field** — it points at the worker
   entry. FastAPI is not deployable on Workers.
 - **D1 schema changes go in `cloudflare-worker/sql/`** as new migration
   files, applied via `wrangler d1 execute studioos-db --file=...`. Mirror the
   same change in `backend/app/models/migrations.py` only if you need dev
   parity for a feature you're actively iterating on.
+- **Work is handed out as GitHub issues.** Read `AGENTS.md` before you take
+  one. It covers slots, the `state:*` labels, STATUS comments, and who gives
+  instructions.
+- **A new decision is its own file.** From D526 on, each decision is
+  `documentation/architecture/decisions/D<n>.md`, with the number its issue
+  gives. `DECISIONS.md` keeps D1 to D525 and takes no new entries.
+  `node scripts/check-decision-ids.mjs` reads both places and fails on a
+  number used twice.
 
 ## Why this doc exists
 
@@ -122,8 +137,9 @@ If a doc disagrees with this file, **this file wins** — fix the doc.
 
 Everything else worth reading is indexed in
 [documentation/README.md](documentation/README.md): the architecture set
-(`CODEBASE_MAP`, `ROUTE_MAP`, `DECISIONS`, `GOTCHAS`) under
-`documentation/architecture/`; dated snapshots under `documentation/audits/`,
-which are true as of their date and are **not** maintained afterwards — never
+(`CODEBASE_MAP`, `ROUTE_MAP`, `DECISIONS` with the per-decision files in
+`decisions/` from D526 on, `GOTCHAS`) under `documentation/architecture/`;
+dated snapshots under `documentation/audits/`, which are true as of their
+date and are **not** maintained afterwards — never
 treat an audit finding as a live bug without re-checking the code; runbooks
 under `documentation/operations/`; positioning under `documentation/product/`.

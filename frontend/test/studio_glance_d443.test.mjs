@@ -102,4 +102,13 @@ test('the loader lives in the overview module, and the home page is not the call
   assert.match(overview, /loadStudioGlance\(/);
   assert.match(decide, /glancesFromStudioGlance\(/);
   assert.match(overview, /glancesFromStudioGlance\(/);
+  // RE-AIMED BY D512: "the home page is not the caller" now holds outright.
+  // It makes none of the four branch reads, and passes none of their props.
+  const home = read('frontend/src/pages/admin/AdminStudioHome.jsx').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const call of ['branchHome', 'myLicence', 'branchTemplates', 'branchInsights']) {
+    assert.ok(!home.includes(`api.${call}(`), `the home page calls api.${call} again`);
+  }
+  for (const prop of ['home', 'licence', 'templates', 'insights']) {
+    assert.ok(!home.includes(` ${prop}={`), `the home page passes ${prop} again`);
+  }
 });

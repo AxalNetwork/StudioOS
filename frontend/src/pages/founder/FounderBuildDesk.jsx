@@ -129,7 +129,7 @@ export default function FounderBuildDesk() {
   const [reloadKey, setReloadKey] = useState(0);
   const [fillsOn] = useAssistMode('Build');
   // The cost before a run (D424): the founder's own average for the task the
-  // three bands run, read only while they are drawn.
+  // desk's bands run (four since D510's retro), read only while they are drawn.
   const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
   // `/projects` is retired (task #101) and this desk inherited the one thing it
   // could do that nothing else can: create a startup. `?new=1` opens the form,
@@ -331,6 +331,21 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, cadence
       </section>
       <section className="build-card" id="build-2"><SectionHead icon={Route} title="Operating cadence" meta={loading ? 'Reading cadence' : cadenceLabel(cadence)} />
         {loading ? <Skeleton rows={2} /> : <Cadence cadence={cadence} onRetry={onRetry} />}
+        {/* A3's "Friday retro gets a draft summary from the board's own
+            history" (D510). It reads the board, not the cadence store, so it
+            is drawn whatever the ritual read returned. */}
+        {fillsOn && projectId ? <ZoneDraft
+          surface="build/retro"
+          scopeKey={String(projectId)}
+          ai={ai}
+          accent="violet"
+          label="Proposal · retro summary"
+          run="Draft a retro summary"
+          accept="Accept the summary"
+          empty="Nothing proposed yet. Eadwyn will read this week on your board — the cards touched in the last seven days and the open ones past their due date — and summarise it for your Friday retro."
+          nothingToDraft="There are no cards on this board to summarise yet."
+          foot="The board keeps no history of its moves, so the summary never says how often a card moved."
+        /> : null}
         <Link data-testid="link-open-cadence" className="manage-link" to={links.cadence} state={navigationState}>Open cadence <ChevronRight size={14} /></Link>
       </section>
     </div>
@@ -442,9 +457,11 @@ function KpiEntry({ projectId, latest, previous, summary, onSaved }) {
  * The artboard's `Mon 9:00` has no column behind it — a ritual stores a weekday
  * and a frequency, never a time — so the time is not drawn.
  *
- * THE FRIDAY RETRO DRAFT IS NAMED, NOT DRAWN. The artboard promises a retro
- * summary "from the board's own history"; no draft surface for it exists in
- * `DRAFT_SURFACES`, so a button here would be a control that does nothing.
+ * THE FRIDAY RETRO DRAFT IS THE BAND UNDER THIS CARD, not part of it (D510).
+ * The artboard promises a retro summary "from the board's own history", and
+ * `build/retro` in `DRAFT_SURFACES` drafts it from the board; this component
+ * reads the rituals and says nothing about it. It used to say no retro draft
+ * surface existed, which was true until that entry landed.
  */
 function Cadence({ cadence, onRetry }) {
   if (cadence === null) return <Unreadable what="The operating cadence" claim="This is not a sign that no ritual is scheduled." onRetry={onRetry} />;
@@ -455,7 +472,7 @@ function Cadence({ cadence, onRetry }) {
   return <>
     {rituals.length ? <div className="cadence-list" data-testid="list-desk-rituals">{rituals.slice(0, 4).map((ritual) => <div className="cadence-row" key={ritual.id}><strong>{clean(ritual.name) || kindLabel(ritual.kind)}</strong><span>{scheduleLabel(ritual)}</span></div>)}</div>
       : <div className="cadence-empty"><Route size={20} /><strong>No ritual is scheduled yet</strong><p>Schedule a Monday plan, a standup or a Friday retro on the cadence page; nothing is assumed to run until it is filed there.</p></div>}
-    <p className="build-source">{adherence == null ? 'No run has been logged as done or missed, so there is no adherence to report.' : `${adherence}% of logged runs were held · ${cadence.stats.runs_recorded} run${cadence.stats.runs_recorded === 1 ? '' : 's'} recorded.`} A drafted retro summary is not offered here: no retro draft surface exists yet, so none is drawn.</p>
+    <p className="build-source">{adherence == null ? 'No run has been logged as done or missed, so there is no adherence to report.' : `${adherence}% of logged runs were held · ${cadence.stats.runs_recorded} run${cadence.stats.runs_recorded === 1 ? '' : 's'} recorded.`}</p>
   </>;
 }
 function cadenceLabel(cadence) {

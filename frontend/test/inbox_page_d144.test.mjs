@@ -109,7 +109,10 @@ test('rows render their title, body, type and age, and mark unread visibly', () 
   const html = renderToStaticMarkup(React.createElement(NotificationList, { items: ROWS, onItemClick: () => {} }));
   assert.match(html, /An escalation is past its SLA/);
   assert.match(html, /Contract signed/);
-  assert.match(html, /hq_escalation_sla_breached/, 'the type is shown, which is how a reader tells two alike titles apart');
+  // D336 — the row now shows a human label for the type (notificationTypes.js),
+  // not the raw backend key; this type has no entry in that map, so it falls
+  // back to a titleised version of it rather than rendering blank.
+  assert.match(html, /Hq Escalation Sla Breached/, 'the type is shown, which is how a reader tells two alike titles apart');
   assert.match(html, /fr raised/, 'a body renders when present');
   // Exactly one unread tint, for the one unread row.
   const tints = html.split('bg-violet-50/40').length - 1;

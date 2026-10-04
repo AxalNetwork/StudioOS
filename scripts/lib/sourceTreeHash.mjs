@@ -14,8 +14,8 @@
  * and a Linux one agree.
  *
  * Used by `scripts/build-frontend.mjs` to stamp `docs/.build-source` with the
- * source it built from, and by `scripts/check-docs-fresh.mjs` to ask whether
- * the committed `docs/` is that build. See D103.
+ * source it built from (D103). `scripts/check-docs-fresh.mjs` compared it with
+ * the committed `docs/` until D529 stopped committing `docs/` and retired it.
  *
  * NOT `docs/.asset-retention.json`, which this comment claimed until D113
  * corrected it. That file is gitignored on purpose — 45 KB that churns

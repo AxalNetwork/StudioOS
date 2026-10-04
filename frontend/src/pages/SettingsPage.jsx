@@ -15,6 +15,7 @@ import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/brow
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
 import { Unreadable, Unrecorded } from '../ui';
+import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
@@ -128,25 +129,9 @@ const JURISDICTIONS = [
   { code: 'VG', name: 'British Virgin Islands' },
 ];
 
-const NOTIFICATION_EVENTS = [
-  { key: 'deal_assigned', label: 'New deal assigned to me' },
-  { key: 'pipeline_status_change', label: 'Pipeline status changes' },
-  { key: 'capital_call_issued', label: 'Capital call issued' },
-  { key: 'capital_call_paid', label: 'Capital call marked paid' },
-  { key: 'agreement_ready_to_sign', label: 'Agreement ready to sign' },
-  { key: 'kyc_status_change', label: 'KYC status updates' },
-  { key: 'mentions_and_comments', label: 'Mentions & comments' },
-  { key: 'ticket_update', label: 'Ticket updates' },
-  { key: 'deal_stage_change', label: 'Deal stage changes' },
-  { key: 'score_generated', label: 'New score generated for your startup' },
-  { key: 'contract_signed', label: 'Contract fully signed' },
-  { key: 'advisor_session_booked', label: 'Advisor session booked' },
-  { key: 'dd_report_ready', label: 'Due-diligence report ready' },
-  { key: 'vote_threshold_reached', label: 'Pipeline vote threshold reached' },
-  { key: 'followed_entity_news', label: 'News from people & startups I follow' },
-  { key: 'weekly_digest', label: 'Weekly digest' },
-  { key: 'product_announcements', label: 'Product announcements' },
-];
+// D336 — `NOTIFICATION_EVENTS` and `PARTNER_NOTIFICATION_EVENTS` live in
+// `../lib/notificationTypes` so the bell and `/inbox` label a type the same
+// way this matrix does. D333's locked email channels are on those objects.
 
 // Channel keys are the canonical names used by services/notify.{py,ts}.
 // `inapp` is kept as an alias-only column for legacy `notification_prefs`
@@ -157,16 +142,6 @@ const NOTIFICATION_CHANNELS = [
   { key: 'slack', label: 'Slack' },
   // SMS column reserved — wired in the table as disabled until Twilio is provisioned.
   { key: 'sms', label: 'SMS', disabled: true, hint: 'Coming soon' },
-];
-
-// Partner-only events — surfaced as a sub-section so partners can wire deal-flow
-// and mandate-relevant alerts independently of the core event grid.
-const PARTNER_NOTIFICATION_EVENTS = [
-  { key: 'partner_high_score_deal', label: 'New deal scores above your threshold' },
-  { key: 'partner_pipeline_activity', label: 'Founder activity on watched deals' },
-  { key: 'partner_capital_call_due', label: 'Capital call due in 7 days' },
-  { key: 'partner_match_recommendation', label: 'New partner match' },
-  { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
 ];
 
 // Wave 2 — notification presets.
@@ -2945,7 +2920,16 @@ function NotificationsSection({ data, patch }) {
       : { ...c, disabled: true, hint: 'Connect Slack first' };
   }), [slackConnected]);
 
+  const lockedEvent = (eventKey) => {
+    const ev = NOTIFICATION_EVENTS.find((e) => e.key === eventKey)
+      || PARTNER_NOTIFICATION_EVENTS.find((e) => e.key === eventKey);
+    return ev?.lockedChannels || [];
+  };
+
   const setEvent = (eventKey, channel, value) => {
+    // Defense in depth: a locked channel ignores the write even if some
+    // other path (preset apply, a stale click) tries to flip it off.
+    if (lockedEvent(eventKey).includes(channel)) return;
     const cur = { ...(prefs[eventKey] || {}) };
     cur[channel] = value;
     // Keep `inapp`/`in_app` mirrored so the new bell subsystem and any
@@ -2986,12 +2970,15 @@ function NotificationsSection({ data, patch }) {
             <tr key={ev.key} className="border-b border-gray-100 dark:border-gray-800">
               <td className="px-2 py-2 text-gray-800 dark:text-gray-200">{ev.label}</td>
               {channels.map(c => {
-                const checked = !!prefs[ev.key]?.[c.key];
+                const locked = (ev.lockedChannels || []).includes(c.key);
+                const checked = locked || !!prefs[ev.key]?.[c.key];
+                const disabled = !!c.disabled || locked;
+                const title = locked ? 'Always sent — this notification cannot be turned off' : (c.disabled ? c.hint : undefined);
                 return (
                   <td key={c.key} className="text-center px-2 py-2">
-                    <input type="checkbox" checked={checked} disabled={!!c.disabled}
+                    <input type="checkbox" checked={checked} disabled={disabled}
                       onChange={e => setEvent(ev.key, c.key, e.target.checked)}
-                      title={c.disabled ? c.hint : undefined}
+                      title={title}
                       className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500 disabled:opacity-40 disabled:cursor-not-allowed" />
                   </td>
                 );
@@ -3012,7 +2999,11 @@ function NotificationsSection({ data, patch }) {
       ...(data.role === 'partner' ? PARTNER_NOTIFICATION_EVENTS.map((e) => e.key) : []),
     ];
     const next = { ...prefs };
-    for (const k of keys) next[k] = { ...(prefs[k] || {}), ...preset.apply(k) };
+    for (const k of keys) {
+      const applied = { ...(prefs[k] || {}), ...preset.apply(k) };
+      for (const lockedChannel of lockedEvent(k)) applied[lockedChannel] = true;
+      next[k] = applied;
+    }
     patch({ notification_prefs: next });
   };
 

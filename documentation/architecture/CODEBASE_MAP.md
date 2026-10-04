@@ -80,12 +80,11 @@ guards: `founder_portal_removed.test.mjs`, `spinouts_page_removed.test.mjs`,
 
 ### 1.4 `docs/` — SPA build output
 
-`docs/` is the committed Vite build output (`frontend/vite.config.js:43-44`:
+`docs/` is the Vite build output (`frontend/vite.config.js`:
 `outDir: ../docs`, `emptyOutDir: true`) and is served as Worker Static Assets
-(`[assets] directory = "./docs"`). Never hand-edited: staleness is enforced by
-`scripts/check-docs-fresh.mjs`, a commit-based check (last commit touching
-`frontend/src` vs. last commit touching `docs/`), run inside `test:guards` and
-again as `--strict` in the `og-tags` CI job.
+(`[assets] directory = "./docs"`). It is not committed (D529): every job that
+needs it runs the root `npm run build` first, so there is no committed copy to
+go stale. Never hand-edited.
 
 ### 1.5 `scripts/`
 
@@ -435,8 +434,8 @@ test:drift = test:frontend         # 37 files, frontend/test/*.test.mjs
 `test:guards` runs, in order:
 `check-api-drift.mjs`, `check-sql-unsafe.mjs`, `check-tail-consumer.mjs`,
 `check-advisor-bank-drift.mjs`, `check-statemachine-coverage.mjs`,
-`check-deck-templates.mjs`, `check-deck-payload-wiring.mjs`,
-`check-docs-fresh.mjs`.
+`check-deck-templates.mjs`, `check-deck-payload-wiring.mjs`
+(`check-docs-fresh.mjs` was retired by D529).
 
 Other suites: `test:decks` (6 deck tests), `test:e2e` (Playwright).
 

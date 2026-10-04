@@ -2,6 +2,14 @@ import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
 
+// D527 — API domain modules. A new API domain goes in its own file,
+// lib/api/<domain>.js, and is re-exported here with ONE line, kept in
+// alphabetical order, so unrelated features stop colliding at the bottom of
+// this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
+// block does not name exactly the files in lib/api/.
+// api-modules:begin
+// api-modules:end
+
 const BASE = '/api';
 
 /**
@@ -4572,10 +4580,6 @@ export const api = {
   pushOneToExternal: (kind, sourceId) =>
     request(`/calendar/push/${kind}/${sourceId}`, { method: 'POST' }),
 
-  // Per-user Cal.com key (advisor-only)
-  attachMyCalcomKey: (data) =>
-    request('/calendar/me/calcom', { method: 'POST', body: JSON.stringify(data) }),
-
   // ---------- Co-founder matching (Task #38) ----------
   cofounderMe: () => request('/cofounder/me'),
   cofounderUpsertMe: (data) =>
@@ -4798,8 +4802,14 @@ export const api = {
   pushVapidKey: () => request('/notifications/push/vapid-key'),
   pushSubscribe: (sub) =>
     request('/notifications/push/subscribe', { method: 'POST', body: JSON.stringify(sub) }),
-  pushUnsubscribe: (data) =>
-    request('/notifications/push/unsubscribe', { method: 'POST', body: JSON.stringify(data) }),
+  // Codex review (D334, P2): sign-out captures the token before clearing it
+  // and passes it through here explicitly, because by the time the caller
+  // (`disablePush`) reaches this call, `request()`'s own `localStorage`
+  // read would already see it removed. `headers` merges in after
+  // `getAuthHeaders()` in `request()`, so an explicit Authorization here
+  // overrides that lookup rather than racing it.
+  pushUnsubscribe: (data, opts = {}) =>
+    request('/notifications/push/unsubscribe', { method: 'POST', body: JSON.stringify(data), headers: opts.headers }),
   pushSubscriptions: () => request('/notifications/push/subscriptions'),
   pushTest: () => request('/notifications/push/test', { method: 'POST' }),
 
@@ -4995,8 +5005,12 @@ export const api = {
     // page about one record never shows a draft written about another.
     zoneDrafts: (surface, scopeKey) => request(`/research/drafts?surface=${encodeURIComponent(surface)}${
       scopeKey !== undefined ? `&scope_key=${encodeURIComponent(scopeKey)}` : ''}`),
-    zoneDraftRun: (surface, scopeKey) => request('/research/drafts', {
-      method: 'POST', body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}) }),
+    // `page` is the app path the band sits on (D510). The worker records it as
+    // the run's `surface`, as the rail's read-back does (D404), so a band's
+    // runs count towards "This page this month"; it is a path, never content.
+    zoneDraftRun: (surface, scopeKey, page) => request('/research/drafts', {
+      method: 'POST',
+      body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}), ...(page ? { page } : {}) }),
     }),
     // Accept, having optionally edited first — one write, because editing then
     // accepting is the same act with a different body.

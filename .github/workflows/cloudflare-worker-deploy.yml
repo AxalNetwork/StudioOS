@@ -13,7 +13,8 @@ name: Cloudflare Worker deploy
 # step. Who serves a host is settled by this job's closing "Deployed studioos
 # triggers" lines. The static security headers on SPA responses come from
 # docs/_headers, built with the SPA below and asserted live by
-# post-deploy-smoke.yml.
+# post-deploy-smoke.yml. docs/ is not committed (D529): this job builds it,
+# over the previous deploy's assets restored from the actions cache.
 #
 # Migrations run FIRST, through the same runner `npm run deploy`'s predeploy
 # hook uses. This job used to call `wrangler deploy` directly, which is one of
@@ -58,11 +59,37 @@ jobs:
       - name: Install Worker dependencies
         run: npm ci --prefix cloudflare-worker
 
-      # --seed-committed-tree (D252): keep every committed asset, not only the
-      # committed shells' generation, because production serves the LAST
-      # deploy's build. Only this workflow passes it; CI and previews do not.
+      # D529 — docs/ IS NOT COMMITTED, SO THE OLD-BUNDLE WINDOW COMES FROM
+      # HERE. A tab opened before this deploy still asks for the previous
+      # build's hashed chunks; scripts/build-frontend.mjs keeps the last three
+      # builds' assets in docs/assets, but only if the previous ones are on
+      # disk when it runs. This restores what the last successful deploy saved
+      # (its docs/assets and retention ledger) into the empty docs/ the
+      # checkout leaves. `restore-keys` picks the newest `spa-assets-` entry.
+      #
+      # A miss (the first run, or an entry GitHub evicted after 7 days unused)
+      # is not a failure: the deploy still ships, and the build log says
+      # "retention restarted". The warning below says it in the run summary.
+      - name: Restore the previous deploy's assets
+        id: retention
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            spa-assets-
+
+      - name: Say when retention restarted
+        if: steps.retention.outputs.cache-matched-key == ''
+        run: echo "::warning::No saved build to restore (first deploy, or the cache entry was evicted). Retention restarted - tabs opened before this deploy may need a reload."
+
+      # --seed-restored-tree (D252, D529): seed everything restored above, not
+      # only one generation, because production serves the LAST deploy's
+      # build. Only this workflow passes it; CI and previews do not.
       - name: Build production SPA
-        run: npm run build -- --seed-committed-tree
+        run: npm run build -- --seed-restored-tree
 
       # A failure here fails the deploy: the new worker must never start
       # against an old schema. The runner refuses a ledger it cannot read and
@@ -108,6 +135,17 @@ jobs:
           done
           echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
           exit 1
+
+      # D529 — only after the deploy above succeeded (a failed step skips
+      # this one), save what production now serves for the next deploy to
+      # restore. One entry per run; the restore takes the newest by prefix.
+      - name: Save the deployed assets for the next deploy
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
 
   # Step 9 as its own job (D253). It still runs only after HQ's deploy, and it
   # still turns the workflow red on a disagreement, but it no longer shares a
@@ -166,10 +204,10 @@ jobs:
   # No `secret put` either: a branch's secrets were put at provisioning and
   # persist across deploys.
   #
-  # THE SPA IS REBUILT HERE with D252's --seed-committed-tree rather than
-  # handed over from the deploy job: an artifact of ~800 files buys nothing
-  # the committed tree does not already hold, and a branch serves the same
-  # SPA HQ does.
+  # THE SPA IS REBUILT HERE with D252's --seed-restored-tree rather than
+  # handed over from the deploy job, over the assets the deploy job just
+  # saved (D529): a branch serves the same SPA HQ does, with the same window.
+  # This job restores but never saves; only HQ's deploy writes the entry.
   #
   # One branch failing does not stop the others. The job summary names each
   # outcome, and the job goes red if any failed.
@@ -206,9 +244,20 @@ jobs:
         if: steps.list.outputs.codes != ''
         run: npm ci --prefix cloudflare-worker
 
+      - name: Restore the assets HQ's deploy saved
+        if: steps.list.outputs.codes != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            spa-assets-
+
       - name: Build the SPA
         if: steps.list.outputs.codes != ''
-        run: npm run build -- --seed-committed-tree
+        run: npm run build -- --seed-restored-tree
 
       - name: Render, migrate and deploy each branch
         if: steps.list.outputs.codes != ''

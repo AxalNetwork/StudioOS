@@ -30,7 +30,7 @@ nothing here is served.
 | What is blocked, and on what? | [architecture/UNRESOLVED_ITEMS.md](architecture/UNRESOLVED_ITEMS.md) |
 | Why was this routed that way with nobody asked? | [architecture/ASSUMPTIONS_LOG.md](architecture/ASSUMPTIONS_LOG.md) |
 | Who serves the frontend, and how did it get that way? | [architecture/PRODUCTION.md](architecture/PRODUCTION.md) for today — the Worker, on both `axal.vc` and `app.axal.vc`. [architecture/CLOUDFLARE-CUTOVER.md](architecture/CLOUDFLARE-CUTOVER.md) and [architecture/CLOUDFLARE-PAGES-MIGRATION.md](architecture/CLOUDFLARE-PAGES-MIGRATION.md) are the superseded 2026-08 records of how the apex left GitHub Pages, sat on Cloudflare Pages for one day, and came to the Worker. |
-| Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) |
+| Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) for D1–D525, and one file per decision from D526 on in [architecture/decisions/](architecture/decisions/) |
 | How do archetype, skills and values profiling work, and how do they change over time? | [architecture/PROFILING_V2.md](architecture/PROFILING_V2.md) — the Profiling v2 spec (D356) that Sessions 7–15 build against. |
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
 | How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |
@@ -64,14 +64,16 @@ first 1,000 daily users.
 
 ## Files deliberately left at the repo root
 
-Six, each because a tool or a convention expects to find it there:
+Seven, each because a tool or a convention expects to find it there:
 
 - `CLAUDE.md` — read by Claude Code from the root
+- `AGENTS.md` — read by Codex, Cursor and other agents from the root; the task
+  protocol every agent follows (D503)
 - `replit.md` — read by Replit from the root
 - `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — GitHub surfaces these from the
   root (or `.github/`) and nowhere else
 - `CHANGELOG.md` — conventional root location
 
-`frontend/test/repo_layout.test.mjs` fails the build if a seventh appears, so
+`frontend/test/repo_layout.test.mjs` fails the build if an eighth appears, so
 the root cannot quietly refill with the 38 files this folder was created to
 hold.

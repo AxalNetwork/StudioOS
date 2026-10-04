@@ -27,8 +27,9 @@
  *
  * THE CADENCE CARD WAS THE THIRD, AND IT WAS WRONG. It said "no cadence store"
  * while migration 250 and `/api/founder/cadence` served `/build/cadence` beside
- * it. It reads the rituals now (D420); only the retro draft stays unbuilt, and
- * the card says so.
+ * it. It reads the rituals now (D420). The retro draft stayed unbuilt, and the
+ * card said so, until `build/retro` gave it a surface (D510); it is a band
+ * under the card now, and the sentence is gone.
  *
  * EVERY FIGURE IS STILL THE READER'S OWN. The artboard's `4 commitments · 1 at
  * risk`, its `$21,412` and its `Amara` are its fixture's; the page prints none
@@ -196,14 +197,22 @@ test('the out-of-range flag needs two snapshots and a real move', () => {
   assert.ok(!/\+31%/.test(page), 'the artboard’s own figure is on the page');
 });
 
-test('the three proposal bands are mounted, off by default, and allow-listed', () => {
+test('A3’s three proposal bands and its retro band are mounted, off by default, and allow-listed', () => {
   const bands = [...A3.matchAll(/class="propb">([^<]+)</g)].map((m) => m[1]);
   assert.deepEqual(bands, ['Proposal · Monday plan', 'Proposal · tradeoff, reasoned', 'Out of range · explain this?']);
+  // D510 — THE FOURTH IS A3'S OWN PROMISE, drawn under the cadence card. A3
+  // states it in a sentence rather than a `propb` block; the integrated Build
+  // canvas draws it as a band, and its label is that canvas's.
+  assert.match(A3, /Friday retro gets a draft summary from the board's own history/, 'A3 no longer promises the retro draft');
+  const RETRO = /aiLabel:'([^']*retro[^']*)'/.exec(raw('design/canvases/integrated/Pages · Founder Build.dc.html'))?.[1];
+  assert.equal(RETRO, 'Proposal · retro summary', 'the integrated Build canvas no longer labels the retro band');
   const mounted = [...page.matchAll(/<ZoneDraft\b[\s\S]*?label="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(mounted, bands, 'the desk no longer carries A3’s three bands, in its order');
+  assert.deepEqual(mounted.filter((label) => label !== RETRO), bands, 'the desk no longer carries A3’s three bands, in its order');
+  assert.deepEqual(mounted, [bands[0], RETRO, bands[1], bands[2]],
+    'the retro band is not between the week and the roadmap, where the cadence card sits');
 
   const surfaces = [...page.matchAll(/<ZoneDraft\s+surface="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(surfaces, ['build/this-week', 'build/roadmap', 'build/kpi']);
+  assert.deepEqual(surfaces, ['build/this-week', 'build/retro', 'build/roadmap', 'build/kpi']);
   // CONFIG FOLLOWS A MOUNT. Five `ZoneDraft` mounts once sat with no
   // `DRAFT_SURFACES` entry behind them and failed silently on every press.
   for (const surface of surfaces) {
@@ -212,9 +221,10 @@ test('the three proposal bands are mounted, off by default, and allow-listed', (
   // OFF UNTIL THE FOUNDER TURNS IT ON. Every run spends their own budget
   // against their own cap.
   assert.match(page, /const \[fillsOn\] = useAssistMode\('Build'\);/);
-  assert.equal((page.match(/\{fillsOn && projectId \? <ZoneDraft/g) || []).length, 3,
+  assert.equal((page.match(/\{fillsOn && projectId \? <ZoneDraft/g) || []).length, 4,
     'a band renders without the assist mode being on, or without a project to scope it to');
-  assert.equal((page.match(/accent="violet"/g) || []).length, 3,
+  assert.equal((page.match(/<ZoneDraft\b/g) || []).length, 4, 'a band is mounted outside the gate');
+  assert.equal((page.match(/accent="violet"/g) || []).length, 4,
     'a founder band is drawing in the Partner palette');
 });
 
@@ -222,7 +232,8 @@ test('every founder draft surface scopes to a project the caller owns', () => {
   // `/research/drafts` authorises on `requireAuth` alone and delegates scoping
   // to each surface, so a gather that forgets is a cross-account read.
   const table = worker.slice(worker.indexOf('const DRAFT_SURFACES'));
-  for (const surface of ['build/this-week', 'build/roadmap', 'build/kpi']) {
+  for (const surface of ['build/this-week', 'build/retro', 'build/roadmap', 'build/kpi']) {
+    assert.ok(table.includes(`'${surface}': {`), `${surface} has no DRAFT_SURFACES entry`);
     const body = table.slice(table.indexOf(`'${surface}': {`));
     const gather = body.slice(body.indexOf('gather:'), body.indexOf('\n  },'));
     assert.match(gather, /const pid = await founderProject\(c, userId, scope\);/,
@@ -298,10 +309,18 @@ test('the cadence card reads the rituals the cadence page files', () => {
     'the cadence page grew its own schedule phrase again');
   // ADHERENCE IS THE SERVER'S, and null is said, never printed as 0%.
   assert.match(card, /adherence == null \? 'No run has been logged as done or missed/);
-  // THE RETRO DRAFT IS NAMED AS UNBUILT rather than drawn as a dead button.
-  assert.match(card, /no retro draft surface exists yet, so none is drawn/);
-  assert.ok(!raw('cloudflare-worker/src/routes/research.ts').includes("'build/cadence': {") || /<ZoneDraft\s+surface="build\/cadence"/.test(page),
-    'a cadence draft surface now exists — mount it and drop the sentence that says it does not');
+  // THE RETRO DRAFT WAS NAMED AS UNBUILT while no surface existed (D420), and
+  // is mounted now that one does (D510). The two move together: the sentence
+  // that denied the surface goes in the same change that draws the band, and
+  // the band is in the cadence card, not elsewhere on the desk.
+  assert.ok(worker.includes("\n  'build/retro': {"), 'the retro band has no DRAFT_SURFACES entry');
+  assert.doesNotMatch(page, /no retro draft surface exists/i, 'the card still denies a retro surface that exists');
+  const cadenceCard = page.slice(page.indexOf('id="build-2"'), page.indexOf('id="build-3"'));
+  assert.match(cadenceCard, /\{fillsOn && projectId \? <ZoneDraft\s+surface="build\/retro"/,
+    'the retro band is not in the cadence card, or is drawn without the switch');
+  // It reads the board, not the ritual store, so the ritual read's state does
+  // not decide whether it is drawn: it sits outside `Cadence`, not inside it.
+  assert.doesNotMatch(card, /<ZoneDraft/, 'the retro band was drawn inside the ritual read');
   assert.match(css, /(^|\})\.cadence-row\{/, 'the ritual rows have no light-mode style');
   assert.match(css, /\.dark \.cadence-row\{/, 'the ritual rows have no dark-mode style');
 });

@@ -5,12 +5,10 @@ authority on where production runs and how the repository is laid out: where
 any other document disagrees with it, it wins. `documentation/README.md`
 indexes everything else.
 
-- **Rebuild `docs/` whenever you change anything under `frontend/src`**, a
-  comment or a README included. Run the root `npm run build` after your last
-  edit there and commit `docs/` with the change. Never run a bare `vite build`
-  and never edit `docs/` by hand: it is build output, and
-  `check-docs-fresh --strict` fails a PR whose `docs/` was not built from its
-  own `frontend/src`.
+- **Never commit `docs/`.** It is build output and is gitignored (D529): CI,
+  the PR preview and the deploy each build it from `frontend/src`. Run the root
+  `npm run build` locally before the full suite, which reads the built SPA.
+  Never run a bare `vite build` and never edit `docs/` by hand.
 - **Run the full suite and read its exit code**:
   `npm run test:drift > drift.log 2>&1; echo EXIT=$?`. Never pipe it — a pipe
   reports the last command's status, not the suite's — and never grep its
