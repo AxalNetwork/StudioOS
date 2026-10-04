@@ -975,9 +975,10 @@ spinoutLab.get('/stats', async (c) => {
 // derives the cohort a new application lands in from the wall clock in
 // `COHORT_TZ` and nothing else — no table is read — so the brief's dates are
 // correct on a database that has never run the cohort migrations. Only `places`
-// touches D1, through the shared `getCohortSizeSettings`, which falls back to
-// the product default; that default IS the operative number when nobody has
-// overridden it, so returning it is the true answer rather than a stand-in.
+// touches D1, through the shared settings read: a key nobody set answers the
+// product default, which IS the operative number. A read that FAILS is not
+// that (D511): `places` is then null and `places_unreadable` says why, so the
+// pages print "could not be read" rather than a count nobody set.
 //
 // NOTHING ELSE ON THE BRIEF COMES FROM HERE. The tracks, the tools, the gates,
 // the jurisdictions and the deliverables are the programme's own description,
@@ -986,7 +987,7 @@ spinoutLab.get('/stats', async (c) => {
 // values nobody measures and nobody edits.
 spinoutLab.get('/brief', async (c) => {
   const nowMs = Date.now();
-  const { resolveApplicationTarget, monthLabel, getCohortSizeSettings } =
+  const { resolveApplicationTarget, monthLabel, readCohortSizeSettings } =
     await import('../services/cohortApplications');
   // From `cohortTiming`, which DECLARES it — `cohortApplications` imports the
   // constant but does not re-export it, so destructuring it there is undefined.
@@ -996,7 +997,8 @@ spinoutLab.get('/brief', async (c) => {
   // between a close and the next month's opening. The brief then has no cohort
   // to name, and says so rather than naming the wrong one.
   const cohortOpen = t.ok;
-  const { max } = await getCohortSizeSettings(c.env);
+  const settings = await readCohortSizeSettings(c.env);
+  const max = settings ? settings.max : null;
   return c.json({
     brief: {
       generated_at: new Date(nowMs).toISOString(),
@@ -1015,6 +1017,7 @@ spinoutLab.get('/brief', async (c) => {
     // reader outside America/New_York is told which midnight the deadline is.
     zone: COHORT_TZ,
     applications_open: cohortOpen,
+    places_unreadable: settings === null,
   });
 });
 

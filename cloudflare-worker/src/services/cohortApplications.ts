@@ -151,21 +151,51 @@ export async function ensureCohortAppSchema(env: Env): Promise<void> {
 // Settings, events, ledger-deduped notifications
 // ---------------------------------------------------------------------------
 
+/**
+ * D511 — the cohort size settings could not be read. Thrown by
+ * `getCohortSizeSettings` instead of answering the defaults: a default handed
+ * back for a failed read is a number nobody set, and its callers used to act
+ * on it — postponing a cohort against a minimum, or printing the places.
+ */
+export class CohortSettingsUnreadable extends Error {
+  readonly code = 'cohort_settings_unreadable';
+  constructor(cause?: unknown) {
+    super('The cohort size settings could not be read.');
+    (this as any).cause = cause;
+  }
+}
+
+/**
+ * The minimum and maximum cohort size. A key no admin has set answers its
+ * product default (`DEFAULT_MIN_COHORT_SIZE` / `DEFAULT_MAX_COHORT_SIZE`): that
+ * default IS the operative number until someone overrides it. A read that
+ * FAILS is different, and throws `CohortSettingsUnreadable` (D511).
+ */
 export async function getCohortSizeSettings(env: Env): Promise<{ min: number; max: number }> {
   let min = DEFAULT_MIN_COHORT_SIZE;
   let max = DEFAULT_MAX_COHORT_SIZE;
+  let rs: { results?: Array<{ key: string; value: string }> };
   try {
-    const rs = await env.DB.prepare(
+    rs = await env.DB.prepare(
       `SELECT key, value FROM cohort_settings WHERE key IN ('min_cohort_size', 'max_cohort_size')`,
     ).all<{ key: string; value: string }>();
-    for (const r of rs.results || []) {
-      const n = Number(r.value);
-      if (!Number.isFinite(n) || n < 0) continue;
-      if (r.key === 'min_cohort_size') min = n;
-      if (r.key === 'max_cohort_size') max = n;
-    }
-  } catch { /* table not yet migrated */ }
+  } catch (e) {
+    console.error('[cohort-apps] cohort_settings unreadable', (e as Error)?.message);
+    throw new CohortSettingsUnreadable(e);
+  }
+  for (const r of rs.results || []) {
+    const n = Number(r.value);
+    if (!Number.isFinite(n) || n < 0) continue;
+    if (r.key === 'min_cohort_size') min = n;
+    if (r.key === 'max_cohort_size') max = n;
+  }
   return { min, max };
+}
+
+/** The settings, or null when they could not be read — for a caller that says "Unreadable". */
+export async function readCohortSizeSettings(env: Env): Promise<{ min: number; max: number } | null> {
+  // `getCohortSizeSettings` throws nothing but `CohortSettingsUnreadable`.
+  try { return await getCohortSizeSettings(env); } catch { return null; }
 }
 
 export async function logCycleEvent(
@@ -288,7 +318,12 @@ export async function runCohortApplicationsTick(env: Env, now: Date): Promise<vo
 
   try { await remindBeforeClose(env, nowMs); } catch (e) { console.error('[cohort-apps] reminders failed', e); }
   try { await closeExpiredWindows(env, nowMs); } catch (e) { console.error('[cohort-apps] close failed', e); }
-  try { await evaluateCapacity(env, nowMs); } catch (e) { console.error('[cohort-apps] capacity failed', e); }
+  try { await evaluateCapacity(env, nowMs); } catch (e) {
+    console.error('[cohort-apps] capacity failed', e);
+    // D511 — capacity could not be checked against a minimum anyone read, so
+    // nothing is activated on this tick either.
+    if (e instanceof CohortSettingsUnreadable) return;
+  }
   try { await activateDueCycles(env, nowMs); } catch (e) { console.error('[cohort-apps] activation failed', e); }
 }
 
@@ -364,7 +399,21 @@ async function evaluateCapacity(env: Env, nowMs: number): Promise<void> {
   const rs = await env.DB.prepare(
     `SELECT * FROM cohort_cycles WHERE app_status = 'reviewing' AND start_at <= ?`,
   ).bind(horizon).all<AppCycleRow>();
-  const { min } = await getCohortSizeSettings(env);
+  // D511 — no minimum, no capacity check. Each due cycle's history says why,
+  // and the error goes up so the tick skips activation too: activating a
+  // cycle whose capacity was never checked is acting on a number nobody read.
+  let min: number;
+  try {
+    ({ min } = await getCohortSizeSettings(env));
+  } catch (e) {
+    if (e instanceof CohortSettingsUnreadable) {
+      for (const cyc of rs.results || []) {
+        await logCycleEvent(env, cyc.id, 'capacity_unreadable',
+          'The minimum cohort size could not be read, so the capacity check did not run and the cycle was not activated. The next tick tries again.');
+      }
+    }
+    throw e;
+  }
   for (const cyc of rs.results || []) {
     const key = `apps_capacity:${cyc.id}`;
     const claim = await claimOrResumeJob(env, 'apps_capacity', cyc.id, null, key);

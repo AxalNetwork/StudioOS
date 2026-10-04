@@ -41344,6 +41344,93 @@ route and no new `api.js` method.
   and catches it, except in the first hour after UTC midnight, when both
   sides fall on different dates and a bare compare happens to agree.
 
+## D511
+
+**Spin-Out Lab: a cohort-size read that fails is reported, not defaulted, and
+the branch freeze reaches certificates.** Issue #992, slot S08 (moved from S18,
+originally S10). Items 1 and 2. Item 3, graduate access to the Lab tools, waits
+on the owner's A/B/C on #992 and is not built here. No migration.
+
+**What was true on main (`5201db161`).**
+- **The cohort size read.** `getCohortSizeSettings`
+  (`services/cohortApplications.ts`) caught any failed read of
+  `cohort_settings` and answered `DEFAULT_MIN_COHORT_SIZE` /
+  `DEFAULT_MAX_COHORT_SIZE`, and its three callers acted on that number:
+  - the cron's capacity check postponed or passed cycles against the minimum,
+    and the activation that follows it in the same tick admitted the approved
+    applicants;
+  - `GET /admin/cohort/applications` judged every cycle's `meets_minimum`
+    against it;
+  - the public `GET /spinout-lab/brief` printed it as `places`.
+- **The admin console.** `AdminCohortApplications.jsx` added a typed
+  `{ min: 1, max: 25 }` of its own whenever no settings arrived.
+- **Certificates.** The certificate admin writes (`POST /certificates`,
+  `/certificates/:id/revoke`, `/certificates/backfill`) check
+  `role === 'admin'` themselves, not through `requireAdmin`. So neither D135's
+  HQ compliance freeze nor `requireBranchNotSuspended` reached them, and a
+  suspended branch could still issue and revoke credentials.
+
+**What changed.**
+- **The read.** `getCohortSizeSettings` throws `CohortSettingsUnreadable`
+  when the read fails. A key no admin has set still answers its product
+  default, which is the operative number. `cohort_settings` is in the schema
+  baseline and in migration 157, so a database without it is a read that
+  fails, not "nothing set". `readCohortSizeSettings` returns null instead of
+  throwing, for callers that say "Unreadable".
+- **The cron.** With no minimum read, the capacity check runs on no cycle. It
+  writes a `capacity_unreadable` event to each due cycle's history, and the
+  tick skips activation, so no cycle is postponed or started on a number
+  nobody read. The next tick tries again.
+- **`GET /admin/cohort/applications`.** It sends `settings: null`,
+  `settings_unreadable: true` and `meets_minimum: null` on every cycle.
+- **The console.** It holds no typed default. The size button reads "Min ·
+  Max unreadable", and each cycle's pill reads "N approved · minimum
+  unreadable", in neither the pass nor the fail colour (`SizeSettingsLabel`,
+  `MinimumPill`).
+- **`GET /spinout-lab/brief`.** It sends `places: null` and
+  `places_unreadable: true`; the other five facts need no table and still
+  load. The Lab pages already treated a null `places` as a failed read
+  (`useCohortPlaces`, D385).
+- **Certificates.** The three certificate admin writes call
+  `requireBranchNotSuspended` after the admin check, the order D107 uses, so
+  a suspended branch gets 423 and the registry is unchanged. Reads, the
+  owner's own sharing toggle and public verification are unchanged. Revoking
+  freezes with issuing: FREEZE_RULE keeps takedowns open, but a revocation is
+  not a takedown of the branch's own content. It changes a graduate's
+  credential on the public verification page. S7's Locked "Programs" row
+  (`lib/branchFreeze.js`) now says certificates cannot be issued or revoked,
+  as `branch_shell_s7_s13` requires of every new gate.
+
+**Not built: item 3.** A graduate is bounced from the Lab tool routes, because
+graduation clears `spinout_lab_active` and the routes require it, while
+`featureUnlocked` tells them they have every tool (D381, "Filed, not fixed").
+No decision records intended graduate access. S1's question on #992 offers:
+- A. full access (S1's pick);
+- B. read-only;
+- C. no access.
+
+**Verified.**
+- `cloudflare-worker/test/lab_gates_d511.test.ts` (6 tests) runs the real
+  tick, the admin overview and the certificate routes over baseline tables,
+  with a failed `cohort_settings` read injected at the adapter. It covers:
+  - a failed read throwing, and an unset key answering its default;
+  - a due cycle neither postponed nor activated, with its history saying why,
+    and the same tick activating once the minimum reads;
+  - the overview's nulls;
+  - 423 on issue, hand issue, revoke and backfill on a suspended branch, with
+    nothing written, and an active branch still issuing and revoking.
+- `spinout_brief_d141.test.ts`:
+  - its "no setting" fixture is now an empty `cohort_settings`, as every real
+    database has;
+  - a new test pins `places: null` and `places_unreadable` on a failed read;
+  - the response's key list gains `places_unreadable`.
+- `frontend/test/cohort_settings_unreadable_d511.test.mjs` (4 tests) renders
+  the label and the pill.
+- `spinout_lab_intro.test.mjs` pins the new read in `/brief`.
+- Mutations: 14 run. 13 were caught. The one survivor was an
+  `instanceof` branch in `readCohortSizeSettings` that no throw could reach,
+  and that branch was removed.
+
 ## D512
 
 **Task #995: Admin Studio's home drops its four legacy reads.**

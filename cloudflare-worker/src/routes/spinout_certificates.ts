@@ -21,7 +21,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireBranchNotSuspended } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logAdminAction } from '../services/adminAudit';
 
@@ -94,6 +94,9 @@ export function credentialRefFor(cohortLabel: string | null, conferredAt: string
 app.post('/certificates', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // D511 — a suspended branch issues and revokes nothing (D135's freeze).
+  // After the admin check, as every other frozen write does (D107).
+  await requireBranchNotSuspended(c);
   await ensureTables(c.env);
 
   const body = await c.req.json().catch(() => ({} as any));
@@ -220,6 +223,9 @@ app.get('/certificates', async (c) => {
 app.post('/certificates/:id/revoke', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // D511 — a suspended branch issues and revokes nothing (D135's freeze).
+  // After the admin check, as every other frozen write does (D107).
+  await requireBranchNotSuspended(c);
   await ensureTables(c.env);
   const id = Number(c.req.param('id'));
   const body = await c.req.json().catch(() => ({} as any));
@@ -263,6 +269,9 @@ app.post('/certificates/:id/revoke', async (c) => {
 app.post('/certificates/backfill', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // D511 — a suspended branch issues and revokes nothing (D135's freeze).
+  // After the admin check, as every other frozen write does (D107).
+  await requireBranchNotSuspended(c);
   await ensureTables(c.env);
   const body = (await c.req.json().catch(() => ({}))) as { limit?: unknown };
   const { backfillCertificates } = await import('../services/certificateIssuance');
