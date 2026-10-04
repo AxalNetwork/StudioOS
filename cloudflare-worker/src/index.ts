@@ -145,6 +145,7 @@ import decks from './routes/decks';
 import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
 import research from './routes/research';
+import researchOverview from './routes/research_overview';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -971,6 +972,8 @@ app.route('/api/deck-reviewer', deckReviewer);
 // answered only from it. Every read is scoped `WHERE owner_user_id = ?`, and
 // its vectors are deliberately unreachable from /api/search: see the
 // VALID_TYPES comment in routes/search.ts.
+// D536 — mounted before /api/research so its one path is never shadowed.
+app.route('/api/research/overview', researchOverview);
 app.route('/api/research', research);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
