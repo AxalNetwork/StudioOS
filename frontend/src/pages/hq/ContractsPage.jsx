@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { parseSqlUtc } from '../../lib/deckShares';
 import { LegalPanel } from '../AdminPage';
 import { Unrecorded, Unreadable, WorkerRail } from '../../ui';
 
@@ -26,9 +25,10 @@ const LAYER_CODE_LABEL = {
 };
 
 function formatLastUsed(at) {
-  if (!at) return 'Not yet';
-  const d = parseSqlUtc(at);
-  return d ? d.toLocaleDateString() : 'Not yet';
+  if (at == null || at === '') return '';
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString();
 }
 
 /**
@@ -89,7 +89,7 @@ function RegistryTypeCard({ row }) {
       </div>
       <p className="mt-2 text-[9.5px] leading-relaxed text-axal-muted dark:text-gray-300">
         {typeof row.usage_count === 'number' ? `${row.usage_count} uses` : 'Uses unreadable'}
-        {row.last_used_at ? ` · last ${formatLastUsed(row.last_used_at)}` : ''}
+        {formatLastUsed(row.last_used_at) ? ` · last ${formatLastUsed(row.last_used_at)}` : ''}
         {row.registry_status === 'draft' ? ' · draft in store' : ''}
       </p>
     </div>
@@ -269,7 +269,7 @@ function RegistryEditorModal({ open, onClose, onSaved }) {
                 key={id}
                 type="button"
                 onClick={() => setLayer(id)}
-                className={`rounded-lg border px-2 py-2 text-[11px] font-bold ${layer === id ? 'border-axal-accent bg-axal-accent/10' : 'border-axal-hairline'}`}
+                className={`rounded-lg border px-2 py-2 text-[11px] font-bold ${layer === id ? 'border-axal-violet bg-axal-violet/10' : 'border-axal-hairline'}`}
               >
                 {LAYER_CODE_LABEL[id]}
               </button>
@@ -283,7 +283,7 @@ function RegistryEditorModal({ open, onClose, onSaved }) {
                 key={role}
                 type="button"
                 onClick={() => toggleRole(role)}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold ${partyRoles.includes(role) ? 'bg-axal-accent text-white' : 'bg-axal-hairline text-axal-muted'}`}
+                className={`rounded-full px-3 py-1 text-[11px] font-bold ${partyRoles.includes(role) ? 'bg-axal-violet text-white' : 'bg-axal-hairline text-axal-muted'}`}
               >
                 {PARTY_LABEL[role]}
               </button>
@@ -314,9 +314,9 @@ function RegistryEditorModal({ open, onClose, onSaved }) {
         <div className="mt-4 flex flex-wrap justify-between gap-2">
           <button type="button" className="text-sm text-axal-muted" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>Back</button>
           {step < DRAFT_STEPS.length - 1 ? (
-            <button type="button" className="rounded-lg bg-axal-accent px-3 py-2 text-sm font-bold text-white" onClick={() => setStep((s) => s + 1)}>Next</button>
+            <button type="button" className="rounded-lg bg-axal-violet px-3 py-2 text-sm font-bold text-white" onClick={() => setStep((s) => s + 1)}>Next</button>
           ) : (
-            <button type="button" disabled={saving} className="rounded-lg bg-axal-accent px-3 py-2 text-sm font-bold text-white" onClick={saveDraft}>
+            <button type="button" disabled={saving} className="rounded-lg bg-axal-violet px-3 py-2 text-sm font-bold text-white" onClick={saveDraft}>
               {saving ? 'Saving…' : 'Save draft'}
             </button>
           )}

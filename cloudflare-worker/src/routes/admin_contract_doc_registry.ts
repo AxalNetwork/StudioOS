@@ -23,6 +23,28 @@ import {
 const CODE_LAYER_ORDER = ['gp', 'fund', 'portfolio', 'compliance'] as const;
 const CANVAS_LAYERS = ['PLATFORM', 'VENTURE', 'FUND', 'ENGAGEMENT'] as const;
 
+/** Hub catalog row. A store-only type may be draft or published; both use source `store`. */
+type RegistryHubItem = {
+  key: string;
+  title: string;
+  doc_type: string;
+  layer: string;
+  layer_label: string;
+  layer_description: string;
+  party_roles: readonly string[];
+  usage_count: number;
+  last_used_at: string | null;
+  required_fields?: string[];
+  draft?: {
+    title: string;
+    layer: string;
+    party_roles: string[];
+    required_fields: string[];
+  };
+  registry_status: 'published' | 'draft' | 'code';
+  source: 'store' | 'code';
+};
+
 export const REGISTRY_PUBLISH_REASON_MIN = 10;
 
 const registry = new Hono<{ Bindings: Env }>();
@@ -60,7 +82,7 @@ async function buildHubPayload(env: Env) {
 
     const codeItems = buildTemplateCatalog(usage, lastUsed);
     const storeByType = new Map(storeRows.map((r) => [r.doc_type, r]));
-    const merged = codeItems.map((row) => {
+    const merged: RegistryHubItem[] = codeItems.map((row) => {
       const stored = storeByType.get(row.doc_type);
       if (stored && stored.status === 'published') {
         return {
@@ -102,8 +124,8 @@ async function buildHubPayload(env: Env) {
         usage_count: usage.get(s.doc_type) || 0,
         last_used_at: lastUsed.get(s.doc_type) || null,
         required_fields: s.required_fields,
-        registry_status: s.status,
-        source: 'store' as const,
+        registry_status: s.status === 'published' ? 'published' : 'draft',
+        source: 'store',
       });
     }
 
@@ -198,9 +220,13 @@ registry.post('/draft', async (c) => {
       admin.id,
     );
     return c.json({ ok: true }, 201);
-  } catch (e: any) {
-    const status = e?.status || 400;
-    return c.json({ error: e?.message || 'draft_save_failed', code: e?.code || 'draft_save_failed' }, status);
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code === 'invalid_doc_type' ? 'invalid_doc_type' : 'draft_save_failed';
+    const message = code === 'invalid_doc_type'
+      ? 'A doc type slug is lowercase letters, digits and underscores, starting with a letter.'
+      : 'The draft could not be saved.';
+    console.warn('[contract-doc-registry] draft save failed', code);
+    return c.json({ error: message, code }, 400);
   }
 });
 
