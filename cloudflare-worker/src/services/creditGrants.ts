@@ -135,6 +135,15 @@ export async function grantCredits(env: Env, args: {
     return { status: 'refused', code: 'invalid_request', message: 'A grant needs a user, a reward rule and a source.' };
   }
 
+  // A SOURCE ALREADY PAID IS ANSWERED FIRST. Whether the rule is still on,
+  // what it pays now and who the recipient is today can all change after a
+  // grant; a retry of a paid source must still read `already_granted`, or a
+  // webhook or job would treat a processed event as failed and retry forever.
+  const paid = await env.DB.prepare(
+    `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
+  ).bind(userId, sourceRef).first<{ id: number }>();
+  if (paid) return { status: 'already_granted', ledger_id: Number(paid.id), rule_key: ruleKey };
+
   const rule = await env.DB.prepare(
     'SELECT key, credits, usd_value_cents, active FROM credit_reward_rules WHERE key = ?',
   ).bind(ruleKey).first<{ key: string; credits: number; usd_value_cents: number; active: number }>();
