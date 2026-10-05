@@ -7,7 +7,11 @@
  * The hours are fixed here and inherited by every subsidiary — the canvas's
  * P1/P2/P3 table — not editable on this page.
  */
-export type SlaBand = 'ok' | 'due_soon' | 'past';
+import { OPEN_TICKET_STATUSES } from './supportQueues';
+import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS, type SlaBand } from './slaWindow';
+
+export type { SlaBand };
+export { SLA_DUE_SOON_HOURS };
 
 export const HQ_TICKET_SLA_HOURS = { P1: 24, P2: 48, P3: 96 } as const;
 
@@ -31,21 +35,33 @@ export function ticketPriorityTier(priority: string): SupportSlaTier {
   return 'P3';
 }
 
-/** Same due-soon window escalations use: within 24h of the limit. */
-export const SLA_DUE_SOON_HOURS = 24;
+/** The priorities a ticket is filed with, in the order the mapping line reads them. */
+const TICKET_PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const;
 
 /**
- * Band from age and a limit in hours. Returns null when age is unknown.
+ * "urgent → P1 · high → P2 · medium and low → P3", built from `ticketPriorityTier`
+ * so the sentence the panel shows cannot drift from the rule the bands use.
+ */
+export function ticketMappingText(): string {
+  const byTier = new Map<SupportSlaTier, string[]>();
+  for (const p of TICKET_PRIORITIES) {
+    const t = ticketPriorityTier(p);
+    byTier.set(t, [...(byTier.get(t) || []), p]);
+  }
+  return [...byTier].map(([t, ps]) => `${ps.join(' and ')} → ${t}`).join(' · ');
+}
+
+/**
+ * Band from age and a limit in hours (D459). Returns null when age is unknown.
+ * The window and the boundary are `slaWindow.ts`'s, the same ones escalations use.
  */
 export function ticketSlaBand(
   ageHours: number | null,
   limitHours: number,
-  dueSoonHours = SLA_DUE_SOON_HOURS,
+  dueSoonHours = dueSoonWindowHours(limitHours),
 ): SlaBand | null {
   if (ageHours === null || !Number.isFinite(ageHours)) return null;
-  if (ageHours > limitHours) return 'past';
-  if (ageHours > limitHours - dueSoonHours) return 'due_soon';
-  return 'ok';
+  return bandForRemaining(limitHours - ageHours, dueSoonHours);
 }
 
 export function ticketSlaBandForPriority(ageHours: number | null, priority: string): SlaBand | null {
@@ -53,18 +69,20 @@ export function ticketSlaBandForPriority(ageHours: number | null, priority: stri
   return ticketSlaBand(ageHours, HQ_TICKET_SLA_HOURS[tier]);
 }
 
-export function tallySlaBands(bands: Array<SlaBand | null>): { ok: number; due_soon: number; past: number } {
-  const out = { ok: 0, due_soon: 0, past: 0 };
+/**
+ * Tally a queue's bands. A ticket with no readable age has no band, and is
+ * counted as `undated` rather than left out, so the four always sum to the queue.
+ */
+export function tallySlaBands(bands: Array<SlaBand | null>): { ok: number; due_soon: number; past: number; undated: number } {
+  const out = { ok: 0, due_soon: 0, past: 0, undated: 0 };
   for (const b of bands) {
     if (b === 'ok') out.ok += 1;
     else if (b === 'due_soon') out.due_soon += 1;
     else if (b === 'past') out.past += 1;
+    else out.undated += 1;
   }
   return out;
 }
-
-/** Ticket types the product stores today (`tickets.type`). */
-export const TICKET_TAXONOMY_TYPES = ['bug', 'feature', 'task'] as const;
 
 export type TicketTaxonomyRow = { type: string; open: number };
 
@@ -76,17 +94,20 @@ export async function readOpenTicketTaxonomy(
   env: { DB: import('../types').Env['DB'] },
 ): Promise<{ available: true; items: TicketTaxonomyRow[] } | { available: false; reason: string }> {
   try {
-    // Literal `?` pair — same open statuses as `OPEN_TICKET_STATUSES` in supportQueues.ts.
+    // The `?` pair binds `OPEN_TICKET_STATUSES` itself, the one definition of
+    // open; its tuple type makes a third status a compile error here. GROUP BY 1
+    // groups by the folded type the row reports, not the raw column, so a blank
+    // type and 'task' are one row.
     const res = await env.DB.prepare(
       `SELECT COALESCE(NULLIF(TRIM(type), ''), 'task') AS type, COUNT(*) AS n
          FROM tickets
         WHERE status IN (?, ?)
-        GROUP BY type
+        GROUP BY 1
         ORDER BY n DESC, type ASC`,
-    ).bind('open', 'in_progress').all<{ type: string; n: number }>();
+    ).bind(...OPEN_TICKET_STATUSES).all<{ type: string; n: number }>();
     const items = (res.results || []).map((r) => ({
       type: String(r.type),
-      open: Number(r.n) || 0,
+      open: Number(r.n),
     }));
     return { available: true, items };
   } catch {

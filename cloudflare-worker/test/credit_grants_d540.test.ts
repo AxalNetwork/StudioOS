@@ -118,6 +118,21 @@ test('the amount is the rule\'s, read at grant time; an inactive or unknown rule
   assert.equal(balance(db, FOUNDER), 75);
 });
 
+test('a paid source answers already_granted even after its rule is switched off or the recipient changes role', async () => {
+  const { db, env } = setup();
+  const a = await grantCredits(env, { userId: FOUNDER, ruleKey: 'bug_low', sourceRef: 'ticket:50', actor: SYSTEM }) as any;
+  assert.equal(a.status, 'granted');
+  db.prepare("UPDATE credit_reward_rules SET active = 0 WHERE key = 'bug_low'").run();
+  const off = await grantCredits(env, { userId: FOUNDER, ruleKey: 'bug_low', sourceRef: 'ticket:50', actor: SYSTEM }) as any;
+  assert.deepEqual([off.status, off.ledger_id], ['already_granted', a.ledger_id], 'a retry of a paid event is not a failure');
+  db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(FOUNDER);
+  const staff = await grantCredits(env, { userId: FOUNDER, ruleKey: 'bug_low', sourceRef: 'ticket:50', actor: SYSTEM }) as any;
+  assert.equal(staff.status, 'already_granted');
+  const fresh = await grantCredits(env, { userId: FOUNDER, ruleKey: 'bug_low', sourceRef: 'ticket:51', actor: SYSTEM }) as any;
+  assert.equal(fresh.code, 'rule_inactive', 'a new source still meets the rule as it stands');
+  assert.equal(ledger(db, FOUNDER).length, 1);
+});
+
 test('staff and admin accounts are refused; the role is read, not trusted', async () => {
   const { db, env } = setup();
   for (const id of [ADMIN, SUPER, PARTNER]) {
@@ -266,12 +281,18 @@ test('a rule edit takes a reason, is logged from and to, and is the amount the n
     assert.equal(bad.body.error, 'invalid_credits', String(credits));
   }
   assert.equal((db.prepare("SELECT credits FROM credit_reward_rules WHERE key = 'bug_high'").get() as any).credits, 150);
+  const priced = await call(creditRules, env, 'PUT', '/bug_high', SUPER, { credits: 200, usd_value_cents: 15000, reason: REASON });
+  assert.equal(priced.status, 400, 'a dollar value that is not credits x US$1 is refused');
+  assert.equal(priced.body.error, 'usd_value_fixed');
+  assert.deepEqual({ ...(db.prepare("SELECT credits, usd_value_cents FROM credit_reward_rules WHERE key = 'bug_high'").get() as any) }, { credits: 150, usd_value_cents: 15000 });
+  const matched = await call(creditRules, env, 'PUT', '/bug_low', SUPER, { credits: 30, usd_value_cents: 3000, reason: REASON });
+  assert.equal(matched.status, 200, 'a matching value is accepted');
   const unknown = await call(creditRules, env, 'PUT', '/bug_critical', SUPER, { credits: 5, reason: REASON });
   assert.equal(unknown.status, 404);
   const r = await call(creditRules, env, 'PUT', `/${encodeURIComponent('lab:graduation')}`, SUPER, { credits: 300, reason: 'Owner raised the graduation bonus' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual([r.body.rule.credits, r.body.rule.usd_value_cents, r.body.rule.updated_by], [300, 30000, SUPER]);
-  const audit = logs(db, 'credit_rule_update');
+  const audit = logs(db, 'credit_rule_update').filter((l: any) => JSON.parse(l.details).rule_key === 'lab:graduation');
   assert.equal(audit.length, 1);
   const d = JSON.parse(audit[0].details);
   assert.deepEqual([d.rule_key, d.from.credits, d.to.credits, d.reason], ['lab:graduation', 250, 300, 'Owner raised the graduation bonus']);

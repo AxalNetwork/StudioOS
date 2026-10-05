@@ -28,7 +28,7 @@ import { laneCounts } from '../services/approvalSources';
 // function of a date, so importing it costs nothing and restating it would let
 // HQ's board and the branch's lane disagree about which items are late — with
 // both screens confident.
-import { slaBand } from './hqOps';
+import { escalationSlaBand } from './hqOps';
 // ONE COMPARISON FOR BOTH DIRECTIONS (D120). See `secret.ts`'s header for why
 // the digest and the refusals are shared rather than written twice.
 import { sha256Hex, verifySecret } from './secret';
@@ -814,7 +814,7 @@ export async function branchEscalations(
     // THE SAME BAND FUNCTION HQ USES, imported rather than restated — two
     // definitions of "past SLA" is how the two tiers come to disagree about
     // which items are late.
-    items: (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) })),
+    items: (rows.results || []).map((r) => ({ ...r, sla: escalationSlaBand(r, now) })),
   };
 }
 
