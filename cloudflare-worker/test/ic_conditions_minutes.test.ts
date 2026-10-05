@@ -209,8 +209,10 @@ test('a recused vote is counted beside the denominator, never in it', async () =
 
 test('the journal excludes a recusal, and drops the old vote’s shadow draft', async () => {
   const db = freshDb();
-  // Vote yes first: the auto-draft lands with the fallback thesis.
-  await call(author, `/${DEC}/vote`, { method: 'POST', body: { vote: 'yes' } }, db);
+  // Vote yes first: the auto-draft lands with the fallback thesis. A rationale
+  // is required since D494; one under three characters still takes the
+  // fallback thesis, so the draft carries nothing hand-written.
+  await call(author, `/${DEC}/vote`, { method: 'POST', body: { vote: 'yes', rationale: 'ok' } }, db);
   let rows = db.prepare('SELECT decision, thesis FROM decision_journal_entries').all() as any[];
   assert.equal(rows.length, 1);
   assert.equal(rows[0].decision, 'invest');
@@ -316,4 +318,30 @@ test('an unrecorded minutes state is reported, not an absent store', async () =>
   const room = await call(author, '/commit-room');
   assert.equal(room.body.minutes.available, true, 'the meeting is linked, so the store answers');
   assert.equal(room.body.minutes.recorded, false, 'no minutes are recorded yet — a state, not a gap');
+});
+
+// ── D494 (#1023): every vote records its reason ─────────────────────────────
+
+test('D494: an ordinary vote without a rationale is refused with its code, and records nothing', async () => {
+  const db = freshDb();
+  for (const body of [{ vote: 'yes' }, { vote: 'no', rationale: '   ' }, { vote: 'abstain', rationale: '' }]) {
+    const r = await call(author, `/${DEC}/vote`, { method: 'POST', body }, db);
+    assert.equal(r.status, 400, JSON.stringify(body));
+    assert.equal(r.body.error, 'rationale_required');
+  }
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM ic_votes').get() as any).n, 0, 'a refused vote writes no row');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM decision_journal_entries').get() as any).n, 0);
+  const ok = await call(author, `/${DEC}/vote`, { method: 'POST', body: { vote: 'yes', rationale: 'strong team' } }, db);
+  assert.equal(ok.status, 200);
+});
+
+test('D494: the commit room reports the rule as enforced, and still counts what was written', async () => {
+  const db = freshDb();
+  await call(author, `/${DEC}/vote`, { method: 'POST', body: { vote: 'yes', rationale: 'strong team' } }, db);
+  // A vote cast before D494, with no reason, is still counted as one without.
+  db.prepare(`INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
+              VALUES ((SELECT id FROM ic_decisions WHERE uid = ?), ?, 'no', NULL, '2026-09-01T00:00:00Z')`).run(DEC, COLLEAGUE);
+  const room = await call(author, '/commit-room', {}, db);
+  assert.equal(room.status, 200);
+  assert.deepEqual([room.body.rationale.enforced, room.body.rationale.recorded, room.body.rationale.total], [true, 1, 2]);
 });

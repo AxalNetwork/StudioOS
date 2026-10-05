@@ -8,6 +8,8 @@ zones: one record each, reached from a zone's list.
 | `AskZone.jsx` | Ask, over documents the caller uploaded. |
 | `LibraryZone.jsx` | Those documents. |
 | `MarketZone.jsx` | Markets. |
+| `MarketSectorProfile.jsx` | The sector route's entry point; an unmapped market keeps its existing profile. |
+| `SectorProfile.jsx` | D547: tracked sectors inside `WorkspaceShell`, monthly live indexes with gaps, source mix, countries, funds, sub-markets and recorded build opportunities. Old market links redirect through the D533 crosswalk. |
 | `BenchmarkingZone.jsx` | Investor benchmarking. Each metric links to its page. |
 | `BenchmarkDetail.jsx` | `/research/benchmarking/:uid`. One benchmark: two figures neither coloured as better, the base first, named constituents (migration 303) whose count is never forced to match n, and a restatement Accept writes as the reading. |
 | `benchmarkRead.js` | That page's tiles, draft and editor readings. A tracked row is Not recorded, never 0. |

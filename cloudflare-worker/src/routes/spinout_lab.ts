@@ -412,8 +412,21 @@ spinoutLab.get('/state', async (c) => {
     }
   } catch { /* service not available */ }
   const applicant = await loadApplicantBlock(c.env, user.id);
+  // D541 — what each milestone pays, and which have been paid. A failed read
+  // is said, never drawn as nothing earned.
+  let milestoneCredits: unknown = null;
+  let milestoneCreditsUnreadable = false;
+  try {
+    const { milestoneCreditsFor } = await import('../services/labMilestoneCredits');
+    milestoneCredits = await milestoneCreditsFor(c.env, user.id, String(user.role || ''));
+  } catch (e) {
+    console.warn('[spinout-lab] milestone credits unreadable', (e as Error).message);
+    milestoneCreditsUnreadable = true;
+  }
   const payload: Record<string, unknown> = {
     ...state, admitted, cohort, application, applicant,
+    milestone_credits: milestoneCredits,
+    milestone_credits_unreadable: milestoneCreditsUnreadable,
     cohort_timing: cohortTiming,
     application_window: applicationWindow,
     server_time: new Date().toISOString(),
@@ -770,10 +783,29 @@ spinoutLab.post('/milestone', async (c) => {
       }
     }
   } catch { /* gate unavailable (pre-migration) — legacy behavior */ }
+  // D541 — a milestone pays credits only when this call is the one that
+  // recorded it. recordMilestone's INSERT OR IGNORE says nothing about that,
+  // so look first; a read that fails counts as "already there" and pays
+  // nothing. Two racing calls can both see it absent — the grant's own
+  // source ref then pays it once.
+  const trimmed = (key ?? '').trim();
+  let existedBefore = true;
+  try {
+    existedBefore = !!(await c.env.DB.prepare(
+      'SELECT 1 AS x FROM spinout_lab_milestones WHERE user_id = ? AND milestone_key = ?',
+    ).bind(user.id, trimmed).first());
+  } catch (e) {
+    console.warn('[spinout-lab] milestone pre-read failed; no credit for this call', (e as Error).message);
+  }
   const sql = getSQL(c.env);
   const r = await recordMilestone(sql, user.id, key);
   await sql.end();
   if (!r.ok) return c.json({ error: r.error }, r.status);
+  let milestoneCredit: unknown = null;
+  if (!existedBefore && r.state.milestones.some((m) => m.key === trimmed)) {
+    const { creditLabMilestone } = await import('../services/labMilestoneCredits');
+    milestoneCredit = await creditLabMilestone(c.env, user.id, trimmed);
+  }
 
   // Graduation issues the credential. `incorporation_completed` is already
   // the definition of "graduated" everywhere else (public graduate list,
@@ -784,14 +816,22 @@ spinoutLab.post('/milestone', async (c) => {
   // finishing the program must not have their completion rejected because a
   // certificate insert failed. issueOnGraduation never throws and is
   // idempotent, and the backfill picks up anything it missed.
+  //
+  // D541 — the graduation bonus is paid when the certificate is issued, and
+  // only then; creditLabGraduation never throws.
+  let graduationCredit: unknown = null;
   if (key === 'incorporation_completed') {
     try {
       const { issueOnGraduation } = await import('../services/certificateIssuance');
-      await issueOnGraduation(c.env, user.id);
+      const outcome = await issueOnGraduation(c.env, user.id);
+      if (outcome === 'issued') {
+        const { creditLabGraduation } = await import('../services/labMilestoneCredits');
+        graduationCredit = await creditLabGraduation(c.env, user.id);
+      }
     } catch { /* issuance is best-effort — never blocks graduation */ }
   }
 
-  return c.json(r.state);
+  return c.json({ ...r.state, milestone_credit: milestoneCredit, graduation_credit: graduationCredit });
 });
 
 spinoutLab.post('/exit', async (c) => {
@@ -975,9 +1015,10 @@ spinoutLab.get('/stats', async (c) => {
 // derives the cohort a new application lands in from the wall clock in
 // `COHORT_TZ` and nothing else — no table is read — so the brief's dates are
 // correct on a database that has never run the cohort migrations. Only `places`
-// touches D1, through the shared `getCohortSizeSettings`, which falls back to
-// the product default; that default IS the operative number when nobody has
-// overridden it, so returning it is the true answer rather than a stand-in.
+// touches D1, through the shared settings read: a key nobody set answers the
+// product default, which IS the operative number. A read that FAILS is not
+// that (D511): `places` is then null and `places_unreadable` says why, so the
+// pages print "could not be read" rather than a count nobody set.
 //
 // NOTHING ELSE ON THE BRIEF COMES FROM HERE. The tracks, the tools, the gates,
 // the jurisdictions and the deliverables are the programme's own description,
@@ -986,7 +1027,7 @@ spinoutLab.get('/stats', async (c) => {
 // values nobody measures and nobody edits.
 spinoutLab.get('/brief', async (c) => {
   const nowMs = Date.now();
-  const { resolveApplicationTarget, monthLabel, getCohortSizeSettings } =
+  const { resolveApplicationTarget, monthLabel, readCohortSizeSettings } =
     await import('../services/cohortApplications');
   // From `cohortTiming`, which DECLARES it — `cohortApplications` imports the
   // constant but does not re-export it, so destructuring it there is undefined.
@@ -996,7 +1037,8 @@ spinoutLab.get('/brief', async (c) => {
   // between a close and the next month's opening. The brief then has no cohort
   // to name, and says so rather than naming the wrong one.
   const cohortOpen = t.ok;
-  const { max } = await getCohortSizeSettings(c.env);
+  const settings = await readCohortSizeSettings(c.env);
+  const max = settings ? settings.max : null;
   return c.json({
     brief: {
       generated_at: new Date(nowMs).toISOString(),
@@ -1015,6 +1057,7 @@ spinoutLab.get('/brief', async (c) => {
     // reader outside America/New_York is told which midnight the deadline is.
     zone: COHORT_TZ,
     applications_open: cohortOpen,
+    places_unreadable: settings === null,
   });
 });
 

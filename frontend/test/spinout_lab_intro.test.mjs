@@ -119,7 +119,8 @@ test('no seat count is typed: every one drawn is the stored cohort.places', () =
   // stays absent rather than becoming 0.
   assert.equal(cohortRecordFromBrief({ cohort: { name: 'November 2026', places: 24 } }).places, 24);
   assert.equal(cohortRecordFromBrief({ cohort: { name: 'November 2026', places: null } }).places, null);
-  assert.match(LAB_ROUTE, /const \{ max \} = await getCohortSizeSettings\(c\.env\);/);
+  // D511 — a failed read gives null (the hook's 'error'), never the default.
+  assert.match(LAB_ROUTE, /const settings = await readCohortSizeSettings\(c\.env\);\s*const max = settings \? settings\.max : null;/);
   assert.match(LAB_ROUTE, /places: max,/);
 });
 

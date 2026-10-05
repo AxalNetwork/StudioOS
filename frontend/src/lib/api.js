@@ -8,9 +8,11 @@ import { storeReason } from './impersonationBar';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/communityTasks.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
+export * from './api/researchSectors.js';
 // api-modules:end
 
 const BASE = '/api';
