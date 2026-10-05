@@ -24,7 +24,7 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 
 import security from '../src/routes/admin_security.ts';
-import { requireAuth } from '../src/auth.ts';
+import { requireAuth, JWT_EXPIRY_HOURS } from '../src/auth.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { revokeUserSession } from '../src/services/userSessions.ts';
 import {
@@ -78,10 +78,11 @@ function freshDb() {
     `INSERT INTO user_sessions (jti, user_id, user_agent, ip, factor, created_at, last_seen_at, revoked_at)
      VALUES (?, ?, ?, ?, 'password', datetime('now', ?), datetime('now', ?), ?)`,
   );
-  plainSess.run('jti-t1', TARGET, 'Mozilla/5.0 (Macintosh)', '203.0.113.7', '-2 days', '-1 hours', null);
-  plainSess.run('jti-t2', TARGET, 'Mozilla/5.0 (iPhone)', '203.0.113.8', '-3 days', '-2 hours', null);
-  plainSess.run('jti-o1', OTHER, 'Mozilla/5.0 (Windows)', '198.51.100.4', '-1 days', '-3 hours', null);
-  // Outside the window, and already revoked: neither is listed.
+  // Minted inside the token lifetime (JWT_EXPIRY_HOURS), so each can still be live.
+  plainSess.run('jti-t1', TARGET, 'Mozilla/5.0 (Macintosh)', '203.0.113.7', '-5 hours', '-1 hours', null);
+  plainSess.run('jti-t2', TARGET, 'Mozilla/5.0 (iPhone)', '203.0.113.8', '-6 hours', '-2 hours', null);
+  plainSess.run('jti-o1', OTHER, 'Mozilla/5.0 (Windows)', '198.51.100.4', '-20 hours', '-3 hours', null);
+  // Long expired, and already revoked: neither is listed.
   plainSess.run('jti-stale', OTHER, 'old', '198.51.100.5', '-60 days', '-40 days', null);
   plainSess.run('jti-gone', OTHER, 'gone', '198.51.100.6', '-2 days', '-1 hours', '2026-01-01 00:00:00');
   return db;
@@ -159,6 +160,44 @@ test('the list: active, unrevoked sessions in the window, the caller marked Curr
   assert.equal(t1.email, 'fran@example.com', 'a row must name its account');
   for (const row of r.body.rows) assert.ok(!('jti' in row), 'the token key went out on the wire');
   assert.equal(r.body.impersonations.available, true);
+});
+
+test('"active" is a token that could still open a door: a signed-out account and an expired token drop out of the list AND the counts', async () => {
+  const db = freshDb();
+  // Seen a minute ago but minted past the token lifetime: last_seen_at alone
+  // would call it active; its token died at created_at + JWT_EXPIRY_HOURS.
+  db.prepare(
+    `INSERT INTO user_sessions (jti, user_id, factor, created_at, last_seen_at)
+     VALUES ('jti-expired', ?, 'password', datetime('now', ?), datetime('now', '-1 minutes'))`,
+  ).run(OTHER, `-${JWT_EXPIRY_HOURS + 1} hours`);
+  const ids = async () => {
+    const r = await call(db, AS_SUPER, 'GET', '/sessions');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const o = await call(db, AS_SUPER, 'GET', '/overview');
+    assert.equal(o.status, 200, JSON.stringify(o.body));
+    assert.equal(o.body.sessions.available, true);
+    assert.equal(o.body.sessions.active, r.body.total, '/overview and the list disagree on what is active');
+    return { ids: r.body.rows.map((x: any) => x.id), total: r.body.total, body: r.body };
+  };
+
+  const before = await ids();
+  assert.ok(!before.ids.includes(idOf(db, 'jti-expired')), 'an expired token is listed as active');
+  assert.ok(before.ids.includes(idOf(db, 'jti-o1')), 'a live session dropped out of the list');
+  assert.ok(before.ids.includes(idOf(db, 'jti-t1')) && before.ids.includes(idOf(db, 'jti-t2')));
+  assert.equal(before.total, 5, 'the count holds an expired token');
+  assert.equal(before.body.token_hours, JWT_EXPIRY_HOURS);
+
+  // HQ's "Sign out account" — it writes users.jwt_min_iat and nothing else.
+  const f = await call(db, AS_SUPER, 'POST', `/force-reauth/${TARGET}`, { reason: REASON });
+  assert.equal(f.status, 200, JSON.stringify(f.body));
+  assert.equal(revokedAt(db, 'jti-t1'), null, 'fixture: force-reauth is expected to leave revoked_at alone');
+  assert.equal(await tokenWorks(db, TARGET, 'jti-t1'), false, 'fixture: the signed-out token still works');
+
+  const after = await ids();
+  assert.ok(!after.ids.includes(idOf(db, 'jti-t1')) && !after.ids.includes(idOf(db, 'jti-t2')),
+    'a signed-out account\'s sessions came back as active');
+  assert.ok(after.ids.includes(idOf(db, 'jti-o1')), 'another account\'s live session dropped out');
+  assert.equal(after.total, 3, 'the count still holds the signed-out account\'s sessions');
 });
 
 test('a plain admin reaches neither the list nor a write — and nothing moves', async () => {

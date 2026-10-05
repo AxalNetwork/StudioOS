@@ -22,7 +22,7 @@ const html = (C, props) => renderToStaticMarkup(React.createElement(C, props));
 const text = (C, props) => renderedText(html(C, props));
 
 const LIST = {
-  window_days: 30,
+  token_hours: 24,
   total: 3,
   expiry_minutes: 30,
   rows: [
@@ -44,7 +44,7 @@ test('the list renders every session with its acts; the caller\'s own reads Curr
   assert.match(t, /Fran Target/);
   assert.match(t, /olu@example\.com/, 'a row with no name must fall back to the address');
   assert.match(t, /no device recorded · no address recorded/, 'an absent device or address rendered blank');
-  assert.match(t, /3 active in 30 days, not revoked/);
+  assert.match(t, /3 active · token under 24h old, not revoked, account not signed out/);
   // Two actionable rows, each with Revoke and Sign out account; the current
   // row has neither, and no checkbox.
   // Counted on the buttons themselves: rendered text runs adjacent labels together.

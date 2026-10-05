@@ -60,8 +60,8 @@ import {
   IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat, selectJwt,
 } from '../auth';
 import {
-  listActiveSessions, listLiveImpersonations, revokeUserSession, endImpersonation,
-  SESSION_LIST_WINDOW_DAYS, SESSION_BULK_LIMIT,
+  listActiveSessions, countActiveSessions, listLiveImpersonations, revokeUserSession, endImpersonation,
+  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT,
 } from '../services/userSessions';
 import { loadTokenAnomalies } from '../services/tokenAnomalies';
 import { logAdminAction } from '../services/adminAudit';
@@ -79,7 +79,6 @@ import {
 const r = new Hono<{ Bindings: Env }>();
 
 const IMPERSONATION_LIMIT = 25;
-const SESSION_WINDOW_DAYS = 30;
 const MIN_REASON = 8;
 
 
@@ -290,16 +289,12 @@ r.get('/overview', async (c) => {
     impersonations = absent('The impersonation_sessions table could not be read on this database.');
   }
 
-  // Sessions: one row per JWT mint (routes/settings.ts). "Active" is a row not
-  // revoked and seen inside the window; a token's own expiry is not stored
-  // here, so the window is the honest bound.
-  let sessions: { available: true; active: number; window_days: number } | Absent;
+  // Sessions: one row per JWT mint (routes/settings.ts). "Active" is the
+  // list's own predicate (services/userSessions.ts): not revoked, token not
+  // past its lifetime, and not below the account's sign-out floor.
+  let sessions: { available: true; active: number; token_hours: number } | Absent;
   try {
-    const active = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM user_sessions
-        WHERE revoked_at IS NULL AND last_seen_at >= datetime('now', ?)`,
-    ).bind(`-${SESSION_WINDOW_DAYS} days`).first<{ n: number }>();
-    sessions = { available: true, active: Number(active?.n) || 0, window_days: SESSION_WINDOW_DAYS };
+    sessions = { available: true, active: await countActiveSessions(env), token_hours: SESSION_TOKEN_HOURS };
   } catch {
     sessions = absent('The user_sessions table could not be read on this database.');
   }
@@ -1030,7 +1025,7 @@ r.get('/sessions', async (c) => {
   }
 
   return c.json({
-    window_days: SESSION_LIST_WINDOW_DAYS,
+    token_hours: SESSION_TOKEN_HOURS,
     total: list.total,
     rows: list.rows,
     impersonations,

@@ -436,7 +436,7 @@ export function SessionsPanel({ list, onAct, onRetry }) {
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-axal-faint">
         <span data-testid="hq-sessions-count">
-          {num(list.total)} active in {list.window_days} days, not revoked
+          {num(list.total)} active · token under {list.token_hours}h old, not revoked, account not signed out
           {list.rows.length < list.total ? ` · newest ${num(list.rows.length)} shown` : ''}
         </span>
         <button
@@ -1135,7 +1135,7 @@ export default function HqSecurityPage() {
 
           <Zone title="Sessions and access" sub="each act recorded with its reason">
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `seen in ${sessions.window_days} days, not revoked` : (sessions?.reason || 'unreadable')} />
+              <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
               <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
               <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
               {/* D200 — this tile was `value={null}` under "no security_events".

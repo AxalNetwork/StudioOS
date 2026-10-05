@@ -40357,6 +40357,24 @@ typed reason of at least 8 characters.
 **Per-account sign-out.** Each row reaches D165's existing
 `POST /force-reauth/:userId`. It is not built a second time.
 
+**"Active" is a token that could still open a door.** The list, its total and
+the /overview "Active sessions" tile all use one predicate
+(`services/userSessions.ts`, `countActiveSessions` beside `listActiveSessions`),
+built from `getCurrentUser`'s own checks:
+
+- `revoked_at IS NULL`;
+- `created_at` within `JWT_EXPIRY_HOURS` (24, exported from `auth.ts`). No
+  expiry is stored on the row; the row is written just after the token is
+  signed, and nothing mints a longer session, so this keeps a row at most a
+  moment past its token and never drops a live one;
+- `created_at` (as epoch seconds) not below the account's `users.jwt_min_iat`.
+  "Sign out account" writes only that floor, so without this check a
+  signed-out account's sessions came back as active on the next reload.
+
+The first version of this decision bounded "active" by `revoked_at` and a
+30-day `last_seen_at` window. That kept tokens dead for weeks on the list, and
+the payloads' `window_days` is now `token_hours`.
+
 **Ending a support session sets `ended_at` and changes nothing else.** The row
 is never deleted, and `admin_user_id` and `context` are never rewritten, so
 `routes/branch_support_sessions.ts` still finds it. This matches
@@ -40396,8 +40414,8 @@ is never deleted, and `admin_user_id` and `context` are never rewritten, so
 renders that field instead of the hard-coded word "erasure".
 `dsr.kinds` names access and portability as not recorded, each with its reason.
 
-**Tests.** `hq_security_sessions_d481.test.ts` (18 tests) runs every route
-against baseline tables and reads the effects back. Eleven mutations were each
+**Tests.** `hq_security_sessions_d481.test.ts` (19 tests) runs every route
+against baseline tables and reads the effects back. Seventeen mutations were each
 caught, including:
 
 - a revoke with no audit row;
@@ -40405,7 +40423,9 @@ caught, including:
 - an anomaly count read from another table;
 - a failed read returned as an empty list;
 - ending a session by delete, or by rewriting `admin_user_id`;
-- a racing re-stamp.
+- a racing re-stamp;
+- the active predicate without the sign-out floor (list, count, or both),
+  without the expiry, or with a lifetime shorter than the token's.
 
 `hq_security_sessions_d481.test.mjs` (12 tests) renders the panel and the
 cards. Eight mutations were each caught.

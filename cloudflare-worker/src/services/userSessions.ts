@@ -28,10 +28,28 @@
  * Every statement below is a complete literal (scripts/check-sql-prepare.mjs).
  */
 import type { Env } from '../types';
-import { IMPERSONATION_CEILING_MINUTES } from '../auth';
+import { IMPERSONATION_CEILING_MINUTES, JWT_EXPIRY_HOURS } from '../auth';
 
-/** "Active" on the list is the same bound /overview counts with. */
-export const SESSION_LIST_WINDOW_DAYS = 30;
+/**
+ * "ACTIVE" MEANS A TOKEN THAT COULD STILL OPEN A DOOR — the list and every
+ * count use exactly this, and it is `getCurrentUser`'s own three checks:
+ *
+ *   1. `revoked_at IS NULL` — the per-session revoke.
+ *   2. Not expired. No expiry is stored on the row, so it is `created_at` (the
+ *      row is written right after the JWT is minted, so it stands for `iat`)
+ *      plus `JWT_EXPIRY_HOURS`, the ordinary lifetime `createJWT` signs with.
+ *      No session is minted longer (a support session is shorter), so this
+ *      can only keep a row a little past its token, never drop a live one.
+ *   3. Not below the account's floor: `getCurrentUser` refuses a token whose
+ *      `iat` is under `users.jwt_min_iat`, which is all a sign-out-everywhere
+ *      or HQ's "Sign out account" (`/force-reauth/:userId`) writes. Without
+ *      this, every session of a signed-out account came straight back as
+ *      active on the next reload.
+ *
+ * Before this the bound was `revoked_at` plus a 30-day `last_seen_at`
+ * window, which listed tokens dead for weeks.
+ */
+export const SESSION_TOKEN_HOURS = JWT_EXPIRY_HOURS;
 /** One page. The count beside it says how many rows the window holds. */
 export const SESSION_LIST_LIMIT = 200;
 /** "Revoke selected" in one request, at most. */
@@ -77,23 +95,20 @@ export type ImpersonationListRow = {
 export async function listActiveSessions(
   env: Env,
   currentJti: string | null,
-  windowDays: number = SESSION_LIST_WINDOW_DAYS,
   limit: number = SESSION_LIST_LIMIT,
 ): Promise<{ rows: SessionListRow[]; total: number }> {
-  const since = `-${windowDays} days`;
   const res = await env.DB.prepare(
     `SELECT s.id, s.user_id, s.jti, s.user_agent, s.ip, s.factor, s.created_at, s.last_seen_at,
             u.email, u.name, u.role
        FROM user_sessions s
        LEFT JOIN users u ON u.id = s.user_id
-      WHERE s.revoked_at IS NULL AND s.last_seen_at >= datetime('now', ?)
+      WHERE s.revoked_at IS NULL
+        AND s.created_at >= datetime('now', ?)
+        AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)
       ORDER BY s.last_seen_at DESC, s.id DESC
       LIMIT ?`,
-  ).bind(since, limit).all<Record<string, unknown>>();
-  const total = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM user_sessions
-      WHERE revoked_at IS NULL AND last_seen_at >= datetime('now', ?)`,
-  ).bind(since).first<{ n: number }>();
+  ).bind(`-${SESSION_TOKEN_HOURS} hours`, limit).all<Record<string, unknown>>();
+  const total = await countActiveSessions(env);
   const rows = (res.results || []).map((r) => ({
     id: Number(r.id),
     user_id: Number(r.user_id),
@@ -107,7 +122,26 @@ export async function listActiveSessions(
     last_seen_at: (r.last_seen_at as string) ?? null,
     is_current: !!currentJti && r.jti === currentJti,
   }));
-  return { rows, total: Number(total?.n) || 0 };
+  return { rows, total };
+}
+
+/**
+ * How many sessions are active, by the same predicate as the list (see
+ * `SESSION_TOKEN_HOURS`). /overview's tile and the list's total both read
+ * this, so the two cannot disagree. THROWS when `user_sessions` cannot be
+ * read; the caller says "unreadable" rather than printing a 0.
+ */
+export async function countActiveSessions(env: Env): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n
+       FROM user_sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+      WHERE s.revoked_at IS NULL
+        AND s.created_at >= datetime('now', ?)
+        AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)`,
+  ).bind(`-${SESSION_TOKEN_HOURS} hours`).first<{ n: number }>();
+  if (!row) throw new Error('user_sessions count returned no row');
+  return Number(row.n);
 }
 
 /**
