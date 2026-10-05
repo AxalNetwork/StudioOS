@@ -17,7 +17,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import {
   COMPANY_SECTOR_RULES, COUNTRY_ALIASES, FUND_FOCUS_RULES,
   listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector,
-  mapFundFocus, mapFundHq, marketSectorFor, normalizeLabel,
+  focusTokens, mapFundFocus, mapFundHq, mapSignalTags, marketSectorFor, normalizeLabel,
 } from '../src/services/researchTaxonomy.ts';
 import { SECTORS } from '../src/services/market_intel/aggregator.ts';
 
@@ -185,4 +185,23 @@ test('migration 376 runs twice without error (IF NOT EXISTS / OR IGNORE)', () =>
   db.exec(MIGRATION);
   const n = db.prepare('SELECT COUNT(*) AS n FROM research_market_sectors').get() as { n: number };
   assert.equal(n.n, 82);
+});
+
+test('a signal maps through its tags, never its broad sector; bad JSON stays unmapped', () => {
+  const m = mapSignalTags('["payments","cross-border","fintech"]');
+  assert.deepEqual([m.targets, m.method, m.unmatched], [['fintech', 'payments'], 'rule', ['cross-border']]);
+  assert.deepEqual(mapSignalTags('["vertical-saas"]').targets, []);
+  for (const raw of ['not json', '{"a":1}', '', null]) {
+    const u = mapSignalTags(raw);
+    assert.deepEqual([u.targets, u.method], [[], null], String(raw));
+  }
+});
+
+test('a focus list splits on " · " (migration 365) and on ", " (migration 378)', () => {
+  assert.deepEqual(focusTokens('Ed-Tech, E-Commerce, AI'), ['Ed-Tech', 'E-Commerce', 'AI']);
+  assert.deepEqual(focusTokens('B2B · Fintech'), ['B2B', 'Fintech']);
+  assert.deepEqual(focusTokens(null), []);
+  assert.deepEqual(mapFundFocus('Ed-Tech, E-Commerce, AI, Cybersecurity, Fintech').targets,
+    ['ai', 'cybersecurity', 'e-commerce', 'education', 'fintech']);
+  assert.deepEqual(mapFundFocus('Crypto, Web3, Blockchain').targets, ['web3-blockchain', 'web3-crypto']);
 });
