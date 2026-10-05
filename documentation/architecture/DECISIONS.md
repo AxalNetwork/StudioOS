@@ -40499,6 +40499,16 @@ walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
 
+## D474
+
+**Branch Contracts: Expiring soon, and Use template on the current library cards.** Issue #1027. No migration. `admin_contracts.ts` is not edited.
+
+**Expiring soon.** `GET /api/admin/contracts` now carries `valid_until` on pairwise NDAs and `expires_at` on partner deals. The strip on `/branch/contracts` is the next 90 days from those two fields. A row whose source records no end date is not in the strip, and the renewal cell says so. An end date already past, or further out than 90 days, stays on the row and is not called expiring. A failed list is Unreadable and draws no empty strip. E-sign envelopes and signed documents still record no end date. The list has no renewal date separate from a partner deal's expiry, and the strip says that rather than treating `expires_at` as a renewal.
+
+**Use template.** Each current card of the copy HQ pushed links to `/legal/send`. The send page, Remind, and Void are not this change: the link does not preselect a template, because that page only reads `envelope`. Archived versions are still absent from the copy. The page keeps rendering the server's `not_carried` reason and does not invent unusable cards.
+
+**Tests.** `frontend/test/branch_contracts_expiring_d474.test.mjs`.
+
 ## D480
 
 **HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
