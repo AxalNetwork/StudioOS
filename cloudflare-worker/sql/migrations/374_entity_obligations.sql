@@ -45,9 +45,17 @@ CREATE TABLE IF NOT EXISTS entity_obligations (
   -- A resolved row has its date; an open one has none.
   CHECK ((status = 'open') = (resolved_on IS NULL)),
   -- The same obligation is not entered twice for the same date, which is
-  -- also what makes seeding a pack idempotent.
+  -- also what makes seeding a pack idempotent. SQLite counts every NULL as
+  -- distinct here, so undated rows get their own index below.
   UNIQUE (entity_id, kind, title, due_date)
 );
 
 CREATE INDEX IF NOT EXISTS idx_entity_obligations_due
   ON entity_obligations(entity_id, status, due_date);
+
+-- An undated (event-driven) obligation is open at most once per entity, kind
+-- and title. Only the open one: once filed, the same event may be entered
+-- again when it recurs.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_obligations_undated_open
+  ON entity_obligations(entity_id, kind, title)
+  WHERE due_date IS NULL AND status = 'open';

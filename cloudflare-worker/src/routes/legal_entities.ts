@@ -456,10 +456,8 @@ async function resolveObligation(c: any, outcome: 'filed' | 'waived') {
   if (Number((results[0] as any)?.meta?.changes ?? 0) !== 1) {
     return refuse(c, 409, { code: 'already_resolved', message: 'This obligation was resolved by someone else first.' });
   }
-  await logAdminAction(c.env, user.id, user.email, `legal.entity.obligation_${outcome}`, {
-    entity_id: id, obligation_uid: uid, on, ...(nextUid ? { next_uid: nextUid } : {}),
-  });
   let opened = nextUid ? await obligationByUid(c.env, id, nextUid) : null;
+  let linkedUid = nextUid;
   if (nextUid && !opened) {
     // The next occurrence was already on the calendar (entered by hand, or
     // seeded), so the insert was ignored. Link the filed row to that one
@@ -467,10 +465,16 @@ async function resolveObligation(c: any, outcome: 'filed' | 'waived') {
     const existing = await c.env.DB.prepare(
       `SELECT uid FROM entity_obligations WHERE entity_id = ? AND kind = ? AND title = ? AND due_date = ?`,
     ).bind(id, row.kind, row.title, next).first();
+    linkedUid = existing?.uid ?? null;
     await c.env.DB.prepare(`UPDATE entity_obligations SET next_uid = ? WHERE id = ?`)
-      .bind(existing?.uid ?? null, row.id).run();
-    opened = existing?.uid ? await obligationByUid(c.env, id, existing.uid) : null;
+      .bind(linkedUid, row.id).run();
+    opened = linkedUid ? await obligationByUid(c.env, id, linkedUid) : null;
   }
+  // Recorded after the link is settled, so the log names the occurrence the
+  // filed row actually points at.
+  await logAdminAction(c.env, user.id, user.email, `legal.entity.obligation_${outcome}`, {
+    entity_id: id, obligation_uid: uid, on, ...(linkedUid ? { next_uid: linkedUid } : {}),
+  });
   const resolved = await obligationByUid(c.env, id, uid);
   const t = today();
   return c.json({ obligation: obligationOut(resolved, t), next: opened ? obligationOut(opened, t) : null });

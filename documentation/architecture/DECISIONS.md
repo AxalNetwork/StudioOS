@@ -38005,7 +38005,11 @@ ALTER, no transaction, no tenant column (the database is the branch, D245).
 - `status` is open, filed or waived, and `CHECK ((status = 'open') =
   (resolved_on IS NULL))`. A row is never deleted.
 - `UNIQUE (entity_id, kind, title, due_date)`: the same obligation is not
-  entered twice for one date, which also makes seeding idempotent.
+  entered twice for one date, which also makes seeding idempotent. SQLite
+  counts each NULL as distinct, so a partial unique index
+  (`idx_entity_obligations_undated_open`, on entity, kind and title where
+  `due_date IS NULL AND status = 'open'`) keeps an undated obligation open at
+  most once; once filed, the same event can be entered again.
 - `next_uid` links a filed row to the occurrence its filing opened.
 
 **The rules (`services/entityObligations.ts`).**
@@ -38039,7 +38043,8 @@ through `logAdminAction` with the entity id and obligation uid.
   next-occurrence insert runs only where that update wrote this request's
   `next_uid`. Filing a recurring obligation opens the next one in the same
   batch; if that occurrence is already on the calendar the filed row links to
-  the existing one. Waiving opens nothing.
+  the existing one, and the audit entry names that existing uid. Waiving opens
+  nothing.
 
 **The line it feeds.** `readFundsRegistry` gains `obligations_available`
 (and `obligations_reason`), and each fund `next_obligation`: the earliest

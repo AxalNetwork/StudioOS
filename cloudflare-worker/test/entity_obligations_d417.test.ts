@@ -128,6 +128,7 @@ test('D417: migration 374 stands alone — one new table and its index, no ALTER
   assert.ok(!/\bBEGIN\b|\bCOMMIT\b|DROP |\bRENAME\b|ALTER TABLE/i.test(sql));
   assert.deepEqual([...sql.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map((m) => m[1]), ['entity_obligations']);
   assert.deepEqual([...sql.matchAll(/CREATE INDEX IF NOT EXISTS (\w+)/g)].map((m) => m[1]), ['idx_entity_obligations_due']);
+  assert.deepEqual([...sql.matchAll(/CREATE UNIQUE INDEX IF NOT EXISTS (\w+)/g)].map((m) => m[1]), ['idx_entity_obligations_undated_open']);
   assert.ok(!/\btenant\b/i.test(sql));
 });
 
@@ -229,6 +230,22 @@ test('D417: entering one validates, refuses a duplicate, and is recorded', async
   assert.equal(JSON.parse(audits(db)[1].details).obligation_uid, ok.body.obligation.uid);
 });
 
+test('D417: an undated obligation is open once; once filed, the same event can be entered again', async () => {
+  const db = freshDb();
+  const ev = { kind: 'regulatory_filing', title: 'Form D amendment', cadence: 'event' };
+  const first = await call(db, ADMIN, 'POST', '/entities/2/obligations', ev);
+  assert.equal(first.status, 201, first.text);
+  const dup = await call(db, ADMIN, 'POST', '/entities/2/obligations', ev);
+  assert.equal(dup.status, 409, 'SQLite counts each NULL due_date as distinct');
+  assert.equal(dup.body.error, 'already_recorded');
+  assert.equal(count(db), 1);
+  const filed = await call(db, ADMIN, 'POST', `/entities/2/obligations/${first.body.obligation.uid}/file`, {});
+  assert.equal(filed.body.next, null, 'an event has no next date to open');
+  const again = await call(db, ADMIN, 'POST', '/entities/2/obligations', ev);
+  assert.equal(again.status, 201, again.text);
+  assert.equal(count(db), 2);
+});
+
 test('D417: seeding a pack refuses an unknown one, skips what needs a formation date, and is idempotent', async () => {
   const db = freshDb();
   const unknown = await call(db, ADMIN, 'POST', '/entities/2/obligations/pack', { pack: 'uk_ltd' });
@@ -292,6 +309,8 @@ test('D417: filing when the next occurrence is already on the calendar links to 
   assert.equal(filed.body.next.uid, b.body.obligation.uid);
   const stored = db.prepare('SELECT next_uid FROM entity_obligations WHERE uid = ?').get(a.body.obligation.uid) as any;
   assert.equal(stored.next_uid, b.body.obligation.uid);
+  const filedAudit = audits(db).find((x) => x.action === 'legal.entity.obligation_filed');
+  assert.equal(JSON.parse(filedAudit.details).next_uid, b.body.obligation.uid, 'the log names a uid no row has');
 });
 
 test('D417: a filing that loses a race to another is refused and opens no next occurrence', async () => {
