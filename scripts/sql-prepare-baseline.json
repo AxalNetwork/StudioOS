@@ -179,6 +179,7 @@
     "sql @ routes/infra.ts": 4,
     "srcSets.join(', ') @ routes/decks.ts": 1,
     "subjectScope.sql @ routes/admin_lp_applications.ts": 1,
+    "sums @ services/researchCompanyDirectory.ts": 1,
     "t @ services/profileExpansion.ts": 1,
     "t @ services/projectTrash.ts": 1,
     "table @ index.ts": 1,

@@ -58,6 +58,8 @@ function fixture(cos: Co[] = COS) {
   db.exec(creates('228_research_company_directory.sql'));
   db.exec(migration('375_research_company_directory_columns.sql'));
   db.exec(creates('370_company_research_tables.sql'));
+  db.exec(migration('229_research_market_directory.sql'));
+  db.exec(migration('376_research_taxonomy.sql'));
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'founder', 'Fin', 'fin@axal.example')`).run(USER);
   const ins = db.prepare(
     `INSERT INTO research_company_directory (uid, name, website, country, founded_year, sector, source_url, as_of,
@@ -121,8 +123,10 @@ test('paging: 25 by default, a total of every match, offset, and name order', as
 
 test('the current response fields are kept', async () => {
   const r = await get(fixture(), '/company-directory?limit=1');
-  assert.deepEqual(Object.keys(r.body.items[0]).sort(),
-    ['as_of', 'country', 'founded_year', 'name', 'sector', 'source_license', 'source_name', 'source_url', 'uid', 'website']);
+  const keys = Object.keys(r.body.items[0]);
+  for (const k of ['as_of', 'country', 'founded_year', 'name', 'sector', 'source_license', 'source_name', 'source_url', 'uid', 'website']) {
+    assert.ok(keys.includes(k), `${k} is gone`);
+  }
   for (const k of ['requested_sector', 'matched_terms', 'source', 'source_boundary']) assert.ok(k in r.body, `${k} is gone`);
 });
 
@@ -270,4 +274,97 @@ test('parseCompanyQuery refuses with a field and a sentence this file wrote', ()
   assert.throws(() => parseCompanyQuery((k) => ({ sort: 'size' } as any)[k]), (e: any) => e instanceof CompanyQueryError && e.field === 'sort');
   const q = parseCompanyQuery(() => undefined);
   assert.deepEqual([q.limit, q.offset, q.sort, q.has], [25, 0, 'name', []]);
+});
+
+// ---------------------------------------------------------------------------
+// #1079 follow-up: what the Companies and Company canvases read.
+// ---------------------------------------------------------------------------
+
+test('list rows carry the last round and employees, or null, never a zero', async () => {
+  const db = fixture();
+  db.prepare(`UPDATE research_company_directory SET last_funding_amount = 7000000, last_funding_currency = 'USD',
+                last_funding_date = '2026-03-01', last_funding_type = 'Series A', employee_growth_pct = 12.5 WHERE uid = 'acme'`).run();
+  const items = (await get(db, '/company-directory')).body.items;
+  const acme = items.find((i: any) => i.uid === 'acme');
+  assert.deepEqual([acme.last_funding_amount, acme.last_funding_currency, acme.last_funding_date, acme.last_funding_type],
+    [7000000, 'USD', '2026-03-01', 'Series A']);
+  assert.deepEqual([acme.employee_count, acme.employee_growth_pct, acme.employee_as_of], [120, 12.5, '2026-06-01']);
+  const bolt = items.find((i: any) => i.uid === 'bolt');
+  assert.deepEqual([bolt.last_funding_amount, bolt.employee_count], [null, null]);
+});
+
+test('coverage counts the whole directory, whatever the filter', async () => {
+  const db = fixture();
+  db.prepare(`UPDATE research_company_directory SET last_funding_amount = 1 WHERE uid = 'acme'`).run();
+  for (const path of ['/company-directory', '/company-directory?country=France&limit=1']) {
+    const c = (await get(db, path)).body.coverage;
+    assert.equal(c.of, 6, path);
+    assert.deepEqual(c.fields, { website: 6, country: 6, founded_year: 5, sector: 5, funding: 3, last_round: 1, revenue: 1, headcount: 1 }, path);
+  }
+});
+
+test('facets: sector labels with counts, the unlabelled count, countries with their code, and has counts', async () => {
+  const f = (await get(fixture(), '/company-directory?q=acme')).body.facets;
+  assert.deepEqual(f.sector_labels, [
+    { label: 'robotics', count: 2 },
+    { label: 'automotive industry', count: 1 },
+    { label: 'Robotics', count: 1 },
+    { label: 'software industry', count: 1 },
+  ]);
+  assert.equal(f.sector_none, 1);
+  assert.deepEqual(f.countries, [
+    { country: 'France', code: 'FR', count: 2 },
+    { country: 'Germany', code: 'DE', count: 3 },
+    { country: 'Spain', code: 'ES', count: 1 },
+  ]);
+  assert.deepEqual(f.has, { funding: 3, revenue: 1, headcount: 1 });
+});
+
+test('sector_label is exact, and sector_label=none keeps the companies with no label', async () => {
+  const db = fixture();
+  assert.deepEqual(uids((await get(db, '/company-directory?sector_label=robotics')).body), ['dyn', 'acme']);
+  assert.deepEqual(uids((await get(db, '/company-directory?sector_label=Robotics')).body), ['cog'], 'exact, as the facet lists it');
+  assert.deepEqual(uids((await get(db, '/company-directory?sector_label=robot')).body), [], 'not a substring');
+  const none = (await get(db, '/company-directory?sector_label=none')).body;
+  assert.deepEqual([uids(none), none.total], [['eta'], 1]);
+});
+
+test('country_code goes through the crosswalk, and a bad code is refused', async () => {
+  const db = fixture([...COS, { uid: 'ber', name: 'Berlin Co', country: 'Berlin' }]);
+  assert.deepEqual(uids((await get(db, '/company-directory?country_code=de')).body), ['acme', 'ber', 'cog', 'eta'], '"Berlin" maps to DE');
+  assert.deepEqual(uids((await get(db, '/company-directory?country_code=IT')).body), []);
+  const bad = await get(db, '/company-directory?country_code=DEU');
+  assert.deepEqual([bad.status, bad.body.field], [400, 'country_code']);
+});
+
+test('the company: tracked sector through the crosswalk, its country code, and both statuses', async () => {
+  const db = fixture();
+  db.prepare(`UPDATE research_company_directory SET competitor_status = 'tracked', diligence_status = NULL WHERE uid = 'bolt'`).run();
+  const bolt = (await get(db, '/company-directory/bolt')).body;
+  assert.deepEqual(bolt.tracked_sector, { status: 'ok', slug: 'autotech', name: 'AutoTech', method: 'rule', country_code: 'FR' });
+  assert.deepEqual([bolt.item.competitor_status, bolt.item.diligence_status], ['tracked', null]);
+  const eta = (await get(db, '/company-directory/eta')).body.tracked_sector;
+  assert.deepEqual([eta.status, eta.slug, eta.reason], ['not_recorded', null, 'Not recorded: this company has no sector label']);
+  const acme = (await get(db, '/company-directory/acme')).body.tracked_sector;
+  assert.deepEqual([acme.status, acme.reason], ['not_recorded', 'Not recorded: the crosswalk maps no market to this sector label']);
+  db.exec('DROP TABLE research_taxonomy_overrides');
+  const broken = await get(db, '/company-directory/bolt');
+  assert.equal(broken.status, 200);
+  assert.deepEqual([broken.body.tracked_sector.status, broken.body.tracked_sector.reason], ['unreadable', 'Unreadable']);
+});
+
+test('peers carry a total beyond the cap, same_country, and their own metrics', async () => {
+  const many: Co[] = [
+    { uid: 'self', name: 'Self', country: 'Germany', sector: 'robotics' },
+    { uid: 'p-de', name: 'Zulu DE', country: 'Germany', sector: 'robotics', employees: 40, employeesAsOf: '2026-01-01' },
+    ...Array.from({ length: 10 }, (_, k) => ({ uid: `x${k}`, name: `X ${k}`, country: 'Italy', sector: 'robotics' })),
+  ];
+  const p = (await get(fixture(many), '/company-directory/self')).body.peers;
+  assert.equal(p.total, 11, 'every peer is counted, not only the eight shown');
+  assert.equal(p.rows.length, PEER_LIMIT);
+  assert.deepEqual([p.rows[0].uid, p.rows[0].same_country, p.rows[0].employee_count], ['p-de', 1, 40]);
+  assert.equal(p.rows[1].same_country, 0);
+  assert.ok('last_funding_amount' in p.rows[0]);
+  const none = (await get(fixture(), '/company-directory/eta')).body.peers;
+  assert.equal(none.total, null, 'no sector: no total either');
 });
