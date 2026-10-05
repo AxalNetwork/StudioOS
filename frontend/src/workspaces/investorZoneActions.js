@@ -135,7 +135,9 @@ export const INVESTOR_ZONE_ACTIONS = {
     // A reason still, and a narrower one than "nothing on this desk sends
     // mail": a notice is logged per LP account when a call is issued, and the
     // overdue lines are listed on the page. What nobody builds is the chase.
-    { label: 'Send reminders', unbuilt: 'a notice is logged per LP account when a call is issued, but no reminder is drafted or sent for an overdue line from this desk', hover: 'Overdue lines are listed here; sending a reminder is not built yet.' },
+    // D553: a reminder for ONE line is now drafted on its row (Draft reminder)
+    // and logged as sent (Log as sent). Sending in bulk from here still is not.
+    { label: 'Send reminders', unbuilt: 'a notice is logged per LP account when a call is issued, and each line offers a reminder draft and a sent log; sending reminders in bulk is not built', hover: 'Draft a reminder on the line itself; bulk sending is not built.' },
     // Was "no wire schedule is stored to export" — true until migration 312's
     // receipts. It exports the wire trail the page shows.
     { label: 'Export wires', kind: 'export' },

@@ -68,9 +68,12 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // graduated out of `design/incoming/` that day with no row of their own, and
   // the eight canvases that arrived. Five canvases still carry none; D305
   // names them.
-  // 127 as of 2026-10-05 (D534, #1079). `Research · Companies` and
+  // 127 as of 2026-10-05 (D535, #1081 steps 4–5). `Research · Funds`, two rows:
+  // the directory at `/research/funds` and the fund profile at
+  // `/research/funds/catalog/:id`. S1 asked for the rows on the issue.
+  // 129 as of 2026-10-05 (D534, #1079). `Research · Companies` and
   // `Research · Company`, approved that day and built from `design/incoming/`.
-  assert.equal(recs.length, 127);
+  assert.equal(recs.length, 129);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);
