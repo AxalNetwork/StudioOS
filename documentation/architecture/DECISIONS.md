@@ -40684,6 +40684,78 @@ treated as accepted, and their subjects are told.
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
 
+## D494
+
+**Investor Deals, built to the owner's line: every IC vote records its
+reason, and the three unbuilt Deals ops name the decision each waits on.**
+This is the first of the four zone-family PRs for #1023 (the Deals family),
+slot S07, from S16. No migration.
+
+**Read against the code first.** D460 to D463 were read against main for
+the Deals family. These claims were checked through the tests each decision
+cites, which pass on this branch; they were not re-read line by line:
+- the Stage column reads `dealStage`, and a passed deal is neither listed nor
+  counted;
+- `recused` sits beside the tally, and a recusal needs its declaration;
+- the conditions store and the 409 that refuses a wire while a condition is
+  open;
+- the closing checklist with no seeded items, and the packet index of
+  executed envelopes;
+- `deals.source` and the partial-edit `PUT`.
+
+One sentence moved: D461 left a rationale on an ordinary vote as the owner's
+call, and #1023 settles it (below).
+
+**Every vote records its reason.** `POST /api/ic/:uid/vote` now refuses a
+yes, no or abstain vote whose rationale is missing or blank:
+- The response is 400 with code `rationale_required`, and no row is written.
+- A recusal keeps its own code, `recusal_requires_declaration`, which is
+  checked first.
+- The column stays nullable, because votes cast before now carry none and are
+  not rewritten.
+- The commit room reports `rationale.enforced: true`. Its Rationales tile
+  (`rationaleNote`) says the rule applies to every new vote, and explains any
+  shortfall as votes cast before the rule.
+- `ICDecisionPage`'s field reads "Rationale (required)", and its vote buttons
+  stay disabled until the field has text, with the reason on hover.
+- A rationale under three characters still drafts the journal entry with the
+  fallback thesis, unchanged.
+
+**The three unbuilt Deals ops, each built up to its decision.**
+- **Configure stages:** the columns are the deal record's stored status, the
+  one workflow every route and the IC hand-off read. Whether a firm may define
+  its own stage set is a decision about that workflow, not a missing form.
+- **New batch run:** `POST /api/scoring/score` scores the rubric answers sent
+  in the request body, and an investor holds none to send for a founder's
+  project. Where a batch's answers come from is the decision.
+- **Edit rubric:** the six weights are fixed in code. Who may edit them is
+  question 3 on #1023.
+
+Each op's `unbuilt` reason names its decision, and a customer-facing `hover:`
+(at most 120 characters) says it plainly.
+
+**Asked on #1023, not built, waiting on the answers:**
+- DD "Blocking" (question 1);
+- the `zone_saved_views` store behind "Save view" (question 2);
+- the section-weighting editor (question 3).
+
+**Coordinate.** #1096 (S16, D468) and #1094 (S16, D467) also edit
+`routes/ic.ts`. This PR adds one check beside the recusal check in the vote
+route and changes the commit room's `rationale` block.
+
+**Tests.**
+- `ic_conditions_minutes.test.ts` gains two tests: a blank, spaces-only or
+  missing rationale is refused and writes nothing; the room reports the rule
+  as enforced and counts a pre-rule vote as one without a reason.
+- `investor_deals_rationale_d494.test.mjs` adds two frontend tests on the
+  tile's note.
+- `investor_deals_id3.test.mjs`'s rationale pin is re-aimed at the enforced
+  rule.
+- Two fixtures that voted with no reason now carry one.
+- Five mutations, each caught: a blank vote accepted, spaces accepted as a
+  reason, the room saying unenforced, the shortfall left unexplained, and a
+  missing rule read as the old one.
+
 ## D500
 
 **A support ticket's persona stays its requester's standing now.** The owner's
