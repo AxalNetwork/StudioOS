@@ -37065,6 +37065,125 @@ here computes or draws a margin.
   - the api method dropping the page
   - the Unreadable hidden
 
+## D405
+
+**The Worker AI rail on a phone: a floating button and a bottom sheet (canvas
+M5, issue #993).** No migration.
+
+**What M5 asks for.** A 284pt rail does not fit beside a 390pt screen. Below
+1024px the panel becomes a floating button whose badge always states the mode,
+and a tap opens a sheet. The page stays visible above the sheet, and the usage
+meter comes along unchanged.
+
+**What changed** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **Below 1024px the in-flow panel is hidden** (`aside.fwr { display: none }`).
+  Until now the host pages stacked it under the body.
+- **The floating button.** `RailFab` sits at
+  `calc(var(--mobile-tabbar-h, 0px) + 16px)` from the bottom, set inline so the
+  one number that must agree with the tab bar (D425) sits where the button is
+  declared. A page with no bar falls back to 16px.
+- **The badge.** It is filled (green) when a fill mode is on and hollow for
+  Manual. The button's label says the same in words.
+- **The sheet.** `RailSheet` is a labelled dialog (`aria-modal`) holding the
+  rail's own body, the same JSX as the panel and not a phone copy. So the
+  usage meter keeps its three states — loading, Unreadable, the figure — and
+  never shows a made-up zero. The body renders in the panel or in the sheet,
+  never both.
+- **Closing.** The sheet closes the four ways the tab bar's More sheet does:
+  the backdrop, a swipe down past 60px, Escape, and its close button. A route
+  change and a widening past 1024px close it too. Focus moves to the close
+  button on open and back to the button on close.
+- **Portalled to `<body>`, after mount.** The shell's rail slot is
+  `hidden xl:block`, and a fixed button inside a `display: none` parent never
+  draws. Waiting for the first effect also keeps every server render, and every
+  render test of a page with a rail, free of a document.
+
+**Built against the variable.** The tab bar's mount in the shell is D504's
+(slot S05). The button reads `--mobile-tabbar-h`, which is set while a bar
+draws.
+
+**Tests.** `frontend/test/worker_rail_mobile_d405.test.mjs` has 9 tests. The
+repository renders without a DOM, so every open and close goes through
+`railSheetReducer`, the one place the component decides it. The button and the
+sheet are rendered with react-dom/server. The tests cover:
+
+- the button's position;
+- the mode badge and its label;
+- the dialog's labelling, close button, backdrop and content;
+- open, and each of the five closers;
+- the swipe threshold, downward only;
+- a closed sheet ignoring every closer;
+- no button in a server render;
+- the breakpoint rules in the stylesheet.
+
+Eleven mutations were each caught:
+
+- the offset ignoring the tab bar;
+- the inline style losing `bottom`;
+- the badge always reading Manual;
+- Escape not closing;
+- a swipe of any length closing;
+- a closed sheet opening on a stray event;
+- the dialog losing `aria-modal`;
+- the portal rendering before mount;
+- the panel still drawing on a phone;
+- the button showing on desktop;
+- the sheet dropping the rail's content.
+
+## D406
+
+**The collapsed rail's spine: the status dot and the vertical spend (issue
+#994).** No migration.
+
+**What the canvas asks for.** Founder Workspaces canvas, "Collapsed spine":
+"Keeps three facts alive: the advisor is on (green dot), which page-model is
+loaded (hover), and spend to date … Manual mode turns the dot grey and hides
+the meter — a founder who never wants AI sees a quiet strip, not a nag."
+
+**What is built: two of the three** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **The dot** reads the rail's real mode, the same value the Mode block and
+  the phone button (D405) read. It is green when a fill mode is on, grey for
+  Manual, and its label names the mode in words.
+- **The vertical spend** is the account's month-to-date figure from
+  `/api/ai/me/spend`, in four states that each look different:
+  - loading: an ellipsis;
+  - Unreadable: the request failed, or `recorded: false`;
+  - Not recorded: the log was read and holds no month figure;
+  - the figure itself.
+- None of the first three is ever drawn as $0.00. A real zero is a figure and
+  is drawn as one.
+- **In Manual the spend is not drawn**, as the canvas says.
+- **No hover model.** The page-model on hover is left out because the spine
+  names no model and no price; those belong to the expanded rail, where the
+  rate sits beside the model.
+- **Placement.** The spine sits between the label and the toggle, because the
+  collapsed title is a reversed column. The canvas's order follows: toggle,
+  dot and spend, then the turned label. It is desktop only, like the spine
+  itself.
+
+**Tests.** `frontend/test/worker_rail_spine_d406.test.mjs` has 9 tests,
+rendered with react-dom/server. They cover:
+
+- the dot in both modes;
+- each spend state, including a real zero;
+- each state having its own style;
+- Manual hiding the spend;
+- no model or price on the spine;
+- desktop only.
+
+Eight mutations were each caught:
+
+- the dot always on;
+- loading drawn as a zero;
+- Unreadable folded into Not recorded;
+- Not recorded drawn as $0.00;
+- the spend shown in Manual;
+- a state losing its style;
+- the spine always visible;
+- a real zero hidden.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
