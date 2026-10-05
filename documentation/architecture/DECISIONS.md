@@ -41431,6 +41431,23 @@ No decision records intended graduate access. S1's question on #992 offers:
   `instanceof` branch in `readCohortSizeSettings` that no throw could reach,
   and that branch was removed.
 
+**After review: one line per outage, not one per tick.** The cron retries
+every tick, so an outage lasting an hour wrote the same `capacity_unreadable`
+line into the cycle's history on every pass. The line is now written only
+when the cycle's latest event is not already `capacity_unreadable`. The check
+and the insert are one `INSERT … SELECT … WHERE`, so overlapping ticks cannot
+both add it. When anything else happens to the cycle in between, a later
+outage gets its own line.
+
+A new test in `lab_gates_d511.test.ts` runs three failed ticks, then adds an
+event, then runs one more failed tick. It expects 1 line after the three
+ticks and 2 after the fourth. It fails on the code before this change. 4 of
+4 mutations were caught:
+- no guard;
+- guard on any earlier line rather than the latest;
+- read the oldest event instead of the latest;
+- drop the bind.
+
 ## D512
 
 **Task #995: Admin Studio's home drops its four legacy reads.**

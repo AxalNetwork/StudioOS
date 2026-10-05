@@ -389,6 +389,9 @@ async function closeExpiredWindows(env: Env, nowMs: number): Promise<void> {
   }
 }
 
+const CAPACITY_UNREADABLE_DETAILS =
+  'The minimum cohort size could not be read, so the capacity check did not run and the cycle was not activated. The next tick tries again.';
+
 /** Below-minimum cycles postpone and roll everyone forward (unless forced). */
 async function evaluateCapacity(env: Env, nowMs: number): Promise<void> {
   // No lower bound on start_at: a cron that resumes late (even after the
@@ -402,14 +405,22 @@ async function evaluateCapacity(env: Env, nowMs: number): Promise<void> {
   // D511 — no minimum, no capacity check. Each due cycle's history says why,
   // and the error goes up so the tick skips activation too: activating a
   // cycle whose capacity was never checked is acting on a number nobody read.
+  // The cron retries every tick, so the line is written once per outage: only
+  // when the cycle's latest event is not already this one. The check and the
+  // write are one statement, so two overlapping ticks cannot both add it.
   let min: number;
   try {
     ({ min } = await getCohortSizeSettings(env));
   } catch (e) {
     if (e instanceof CohortSettingsUnreadable) {
       for (const cyc of rs.results || []) {
-        await logCycleEvent(env, cyc.id, 'capacity_unreadable',
-          'The minimum cohort size could not be read, so the capacity check did not run and the cycle was not activated. The next tick tries again.');
+        try {
+          await env.DB.prepare(
+            `INSERT INTO cohort_cycle_events (cohort_cycle_id, event_type, details, actor)
+             SELECT ?, 'capacity_unreadable', ?, 'scheduler'
+             WHERE COALESCE((SELECT event_type FROM cohort_cycle_events WHERE cohort_cycle_id = ? ORDER BY id DESC LIMIT 1), '') <> 'capacity_unreadable'`,
+          ).bind(cyc.id, CAPACITY_UNREADABLE_DETAILS, cyc.id).run();
+        } catch (logErr) { console.warn('[cohort-apps] event log failed', logErr); }
       }
     }
     throw e;

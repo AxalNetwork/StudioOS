@@ -119,6 +119,18 @@ test('the tick checks no capacity and activates nothing when the minimum cannot 
     'the cycle\'s history does not say why it did not move');
 });
 
+test('an outage that lasts many ticks is one line in the cycle\'s history, and a new outage is another', async () => {
+  const db = freshDb();
+  const cyc = dueCycle(db);
+  const unreadable = () => (db.prepare(`SELECT COUNT(*) AS n FROM cohort_cycle_events WHERE cohort_cycle_id = ? AND event_type = 'capacity_unreadable'`).get(cyc) as any).n;
+  for (let i = 0; i < 3; i++) await quiet(() => runCohortApplicationsTick({ DB: makeD1(db, true) } as any, NOW));
+  assert.equal(unreadable(), 1, 'every retry appended the same line');
+  // Something else happens to the cycle in between: the outage that follows is a new one.
+  db.prepare(`INSERT INTO cohort_cycle_events (cohort_cycle_id, event_type, details) VALUES (?, 'note', 'x')`).run(cyc);
+  await quiet(() => runCohortApplicationsTick({ DB: makeD1(db, true) } as any, NOW));
+  assert.equal(unreadable(), 2, 'a later outage went unrecorded');
+});
+
 test('with the minimum readable, the same tick checks capacity and activates', async () => {
   const db = freshDb();
   db.prepare(`INSERT INTO cohort_settings (key, value) VALUES ('min_cohort_size', '1')`).run();
