@@ -37131,6 +37131,59 @@ Eleven mutations were each caught:
 - the button showing on desktop;
 - the sheet dropping the rail's content.
 
+## D406
+
+**The collapsed rail's spine: the status dot and the vertical spend (issue
+#994).** No migration.
+
+**What the canvas asks for.** Founder Workspaces canvas, "Collapsed spine":
+"Keeps three facts alive: the advisor is on (green dot), which page-model is
+loaded (hover), and spend to date … Manual mode turns the dot grey and hides
+the meter — a founder who never wants AI sees a quiet strip, not a nag."
+
+**What is built: two of the three** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **The dot** reads the rail's real mode, the same value the Mode block and
+  the phone button (D405) read. It is green when a fill mode is on, grey for
+  Manual, and its label names the mode in words.
+- **The vertical spend** is the account's month-to-date figure from
+  `/api/ai/me/spend`, in four states that each look different:
+  - loading: an ellipsis;
+  - Unreadable: the request failed, or `recorded: false`;
+  - Not recorded: the log was read and holds no month figure;
+  - the figure itself.
+- None of the first three is ever drawn as $0.00. A real zero is a figure and
+  is drawn as one.
+- **In Manual the spend is not drawn**, as the canvas says.
+- **No hover model.** The page-model on hover is left out because the spine
+  names no model and no price; those belong to the expanded rail, where the
+  rate sits beside the model.
+- **Placement.** The spine sits between the label and the toggle, because the
+  collapsed title is a reversed column. The canvas's order follows: toggle,
+  dot and spend, then the turned label. It is desktop only, like the spine
+  itself.
+
+**Tests.** `frontend/test/worker_rail_spine_d406.test.mjs` has 9 tests,
+rendered with react-dom/server. They cover:
+
+- the dot in both modes;
+- each spend state, including a real zero;
+- each state having its own style;
+- Manual hiding the spend;
+- no model or price on the spine;
+- desktop only.
+
+Eight mutations were each caught:
+
+- the dot always on;
+- loading drawn as a zero;
+- Unreadable folded into Not recorded;
+- Not recorded drawn as $0.00;
+- the spend shown in Manual;
+- a state losing its style;
+- the spine always visible;
+- a real zero hidden.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a

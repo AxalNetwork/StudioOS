@@ -319,6 +319,66 @@ export function RailSheet({ id, workspace, onEvent, closeRef, style, children })
   );
 }
 
+/**
+ * D406 — THE COLLAPSED SPINE'S TWO FACTS: the status dot and the vertical
+ * spend (Founder Workspaces canvas, "Collapsed spine"). The canvas: "Keeps
+ * three facts alive: the advisor is on (green dot), which page-model is loaded
+ * (hover), and spend to date … Manual mode turns the dot grey and hides the
+ * meter — a founder who never wants AI sees a quiet strip, not a nag."
+ *
+ * TWO OF THE THREE. The page-model on hover is not drawn: the spine names no
+ * model and no price (#994), because the model belongs to the expanded rail,
+ * where its rate is shown beside it.
+ *
+ * THE DOT is the rail's real mode, the same value the expanded Mode block and
+ * the phone button's badge read: green when a fill mode is on, grey for
+ * Manual. Its label says which in words.
+ *
+ * THE SPEND is the account's month-to-date figure from `/api/ai/me/spend`, in
+ * four states that never look alike: loading (an ellipsis), Unreadable (the
+ * request failed, or the usage log could not be read), Not recorded (the log
+ * was read and holds no month figure), and the figure itself. None of the
+ * first three is ever drawn as $0.00. In Manual it is not drawn at all, as the
+ * canvas says, and the label on the spine still names the rail.
+ */
+export function spineSpend({ spend, loading, spendError }) {
+  if (loading) return { state: 'loading', text: '…', label: 'Usage this month: loading' };
+  if (spendError || spend?.recorded === false) {
+    return { state: 'unreadable', text: 'Unreadable', label: 'Usage this month could not be read' };
+  }
+  if (!spend || typeof spend?.month?.spend_usd !== 'number') {
+    return { state: 'not_recorded', text: 'Not recorded', label: 'Usage this month: not recorded' };
+  }
+  const text = formatSpend(spend.month.spend_usd);
+  return { state: 'figure', text, label: `Usage this month: ${text}` };
+}
+
+export function RailSpine({ aiOn, spendState }) {
+  return (
+    <div className="fwr-spine" data-testid="worker-rail-spine">
+      <i
+        className="fwr-spine-dot"
+        data-state={aiOn ? 'on' : 'off'}
+        role="img"
+        aria-label={aiOn ? 'AI on' : 'Manual'}
+        title={aiOn ? 'AI on' : 'Manual'}
+        data-testid="worker-rail-spine-dot"
+      />
+      {aiOn && spendState && (
+        <span
+          className="fwr-spine-spend"
+          data-state={spendState.state}
+          aria-label={spendState.label}
+          title={spendState.label}
+          data-testid="worker-rail-spine-spend"
+        >
+          {spendState.text}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function WorkerRail({
   workspace,
   role = 'founder',
@@ -965,6 +1025,12 @@ export default function WorkerRail({
     >
       <div className="fwr-title">
         <span className="fwr-title-text">Worker AI · {workspace}</span>
+        {/* D406 — between the label and the toggle, because the collapsed
+            title is a reversed column: the toggle draws on top, then the dot
+            and the spend, then the turned label, the canvas's order. */}
+        {collapsed && (
+          <RailSpine aiOn={!!modeChoice && fillsOn} spendState={spineSpend({ spend, loading, spendError })} />
+        )}
         <button
           type="button"
           className="fwr-toggle"

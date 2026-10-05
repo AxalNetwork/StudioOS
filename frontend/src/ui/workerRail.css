@@ -436,3 +436,30 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 .dark .fwr-fab { background: var(--fwr-accent-dark, #a78bfa); color: #1a1822; }
 .dark .fwr-fab-badge { border-color: #1a1822; }
 .dark .fwr-sheet-grab { background: #4a4655; }
+
+/*
+ * D406 — the collapsed spine's status dot and vertical spend. Desktop only,
+ * like the spine itself: below 1024px the rail is the phone button (D405).
+ * The four spend states are styled apart so none of the three that are not a
+ * figure can be read as one.
+ */
+.fwr-spine { display: none; }
+@media (min-width: 1024px) {
+  aside.fwr[data-collapsed="true"] .fwr-spine {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .fwr-spine-dot { width: 8px; height: 8px; border-radius: 999px; background: #a8a4b4; }
+  .fwr-spine-dot[data-state="on"] { background: #10b981; }
+  .fwr-spine-spend {
+    writing-mode: vertical-rl; transform: rotate(180deg);
+    font-size: 9px; letter-spacing: .05em; white-space: nowrap;
+    font-variant-numeric: tabular-nums; color: var(--fwr-muted);
+  }
+  .fwr-spine-spend[data-state="figure"] { color: var(--fwr-ink); font-weight: 700; }
+  .fwr-spine-spend[data-state="loading"] { color: var(--fwr-faint); }
+  .fwr-spine-spend[data-state="not_recorded"] { color: var(--fwr-faint); font-style: italic; }
+  .fwr-spine-spend[data-state="unreadable"] { color: #b91c1c; font-weight: 700; }
+}
+.dark .fwr-spine-dot { background: #6f6a80; }
+.dark .fwr-spine-dot[data-state="on"] { background: #34d399; }
+.dark .fwr-spine-spend[data-state="unreadable"] { color: #f87171; }
