@@ -46,6 +46,8 @@ function fixture(funds: Fund[] = FUNDS) {
                                jwt_min_iat INTEGER, name TEXT, email TEXT);`);
   db.exec(ddl('365_research_eurotech_fund_directory.sql'));
   db.exec(readFileSync(resolve(here, '../sql/migrations/376_research_taxonomy.sql'), 'utf8'));
+  // Steps 4–5: the facets label focus slugs with the market directory's names.
+  db.exec(ddl('229_research_market_directory.sql'));
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'founder', 'Fin', 'fin@axal.example')`).run(USER);
   const ins = db.prepare(
     `INSERT INTO research_fund_directory (uid, name, hq, fund_size_cents, fund_year, sector_focus, notable_lps,
