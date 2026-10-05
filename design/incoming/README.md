@@ -582,8 +582,10 @@ this folder's format: the shared runtime
 | `Research · Funds.dc.html` | `/research/funds`, `/research/funds/catalog/:id` | UPGRADE | #1081 |
 
 **How to build from them.**
-- Put each body inside `WorkspaceShell`, in the app's type and zone pills. Drop
-  the canvas's public top bar and its Space Grotesk headings.
+- Put each body inside `WorkspaceShell`, with its zone pills, in the app's
+  type: the signed-in app sets Space Grotesk on `body` through `--font-app`
+  (`html.app-type` in `frontend/src/index.css`), and figures take Roboto
+  Mono. Don't copy the canvas's own font rules, and drop its public top bar.
 - The figures drawn are 4 October counts. A screen prints the API's `total`,
   source and coverage, never a number copied from a canvas.
 - The 24px logo in each header is an artifact asset (`/_blob/…`) that no repo
