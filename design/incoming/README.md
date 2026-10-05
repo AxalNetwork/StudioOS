@@ -119,7 +119,7 @@ comparison they record is what the reports were about:
 
 | Canvas | Governs | Supersedes | Why it is here |
 | --- | --- | --- | --- |
-| `Pages · Founder Research.dc.html` | `/research/{ask,markets,companies,funds,library}` | — | Five zones, `PAGES` shape (ids fs1–fs5): `filters`, `ops`, four `adds` stat tiles, `head`/`rows` with status pills, and an AI-rail offer per zone. |
+| `Pages · Founder Research.dc.html` *(deleted 2026-10-05 — raw twin, D546)* | `/research/{ask,markets,companies,funds,library}` | — | Five zones, `PAGES` shape (ids fs1–fs5): `filters`, `ops`, four `adds` stat tiles, `head`/`rows` with status pills, and an AI-rail offer per zone. The processed copy in `canvases/integrated/` carries the same logic and markup; this one differed only by its runtime uuid, 35 inlined `@font-face` rules and the Claude Design badge, the #155 case. |
 | `Pages · Partner Offers.dc.html` *(deleted 2026-09-12 — duplicate)* | `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | **nothing — it was the same canvas** as the `integrated/` copy | Same shape. Its `ops` match what `partnerZoneActions.js` already carries; its `filters` do **not** exist in `partnerZoneFilters.js` at all — that table has no `offers/*` key, and that gap is still open. |
 | `Pages · Partner Pipeline.dc.html` *(deleted 2026-09-12 — duplicate)* | `/pipeline/{leads,proposals,negotiations,retainers,analytics}` | **nothing — it was the same canvas** as the `integrated/` copy | **The one that changes a standing decision**, and that decision is still open. See below; the canvas it describes is now only in `integrated/`. |
 | `Pages · Advisor Expertise.dc.html` | `/expertise/{profile,services,proof,thinking,visibility}` | the 2026-09-03 export in this folder | Newer export of the same surface, 54K against 39K. Its `h1` per zone is not the zone name — `Practice profile`, `Service ledger`, `Evidence`, `Published thinking`, `Surfaces & funnel` — and each zone has its own blurb, where the shipped pages print Visibility's on all five. |
@@ -561,3 +561,61 @@ about `expert_booking`, so if this file is ever re-exported saying something
 different, the note above stops being true out loud instead of quietly.
 
 See the `ROUTE_MAP.md` row for the rest.
+
+## Landed 2026-10-05 — the Research rebuild's seven canvases (D546)
+
+The owner asked on 2026-10-05 to "wire the wireframes". That approves the
+canvas #1079–#1082 cite, `https://claude.ai/artifact/NzuiaEyGymWqABC1kd8Nyj`,
+which Session 1 drew from what the platform records (AGENTS.md, "Missing UI").
+Its seven page files are committed here byte for byte. They were already in
+this folder's format: the shared runtime
+(`design/canvases/shared/support.js`) and no inlined fonts.
+
+| Canvas | Governs | Grade | Issue |
+| --- | --- | --- | --- |
+| `Research · Main.dc.html` | the overview panel on `/research` (founder desk, investor workspace, advisor and partner board) | UPGRADE | #1082 |
+| `Research · Companies.dc.html` | `/research/companies` | UPGRADE | #1079 |
+| `Research · Company.dc.html` | `/research/companies/company/:uid` | UPGRADE | #1079 |
+| `Research · Markets.dc.html` | `/research/markets` | UPGRADE | #1080 |
+| `Research · Sector.dc.html` | `/research/markets/sector/:slug`, one page per tracked sector | UPGRADE | #1080 |
+| `Research · Geography.dc.html` | `/research/geographies`, `/research/geographies/:code` | NEW | #1080 |
+| `Research · Funds.dc.html` | `/research/funds`, `/research/funds/catalog/:id` | UPGRADE | #1081 |
+
+**How to build from them.**
+- Put each body inside `WorkspaceShell`, in the app's type and zone pills. Drop
+  the canvas's public top bar and its Space Grotesk headings.
+- The figures drawn are 4 October counts. A screen prints the API's `total`,
+  source and coverage, never a number copied from a canvas.
+- The 24px logo in each header is an artifact asset (`/_blob/…`) that no repo
+  file resolves. `scripts/read-canvas.mjs` would have reported it rather than
+  inline it; nothing depends on it.
+- Each canvas draws its loading, no-result, `Not recorded` and `Unreadable`
+  states. Build all four.
+
+**The four pages the owner shared on 2026-10-04 are not new canvases.** Each is
+byte-identical to one already committed, for a route that is already built:
+Companies is `canvases/backlog/Pages · Company analysis`
+(`/research/companies/:id`), Funds is `canvases/integrated/Pages · Fund dossier`
+(`/research/funds/:uid`), Markets is `canvases/integrated/Pages · Market reading`
+(`/research/markets/:uid`) and the Research overview is this folder's
+`Founder Workspaces Canvas` (its A7 is `/research` for founders). They stay the
+reference for those routes. Two later pages drawn from #1077's prompt are one
+design in two layouts with their own sidebar and type; they are not committed.
+
+**Calls Session 1 made for the build (D546).**
+- The `/research` panel follows `Research · Main`, since A7 draws none of
+  #1082's zones.
+- The sector page is one per tracked sector (the twelve market-intelligence
+  sectors), because the six index series exist only per sector. Its
+  sub-markets are the taxonomy markets under it. A market slug that is not a
+  sector slug redirects to its sector's page; a market that maps to no
+  tracked sector keeps today's page.
+- Geographies get their own zone pill.
+- Named comparables on a market reading ("Add an engagement") stay unbuilt:
+  `ROUTE_MAP.md` records that choice, and no canvas changes it.
+- #1083's three questions and #1081's currency question stay with the owner.
+  Until they are answered, those parts of the screens print `Not recorded`
+  with the reason.
+
+Each build PR adds or updates its `ROUTE_MAP.md` row (pipeline step 5). A
+canvas leaves this folder for `canvases/integrated/` once its route is live.
