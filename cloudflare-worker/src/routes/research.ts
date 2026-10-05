@@ -33,6 +33,7 @@
  * D37 and `research_search_isolation.test.ts` are untouched.
  */
 import { Hono } from 'hono';
+import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
@@ -3444,6 +3445,17 @@ const DRAFT_SURFACES: Record<string, {
     ].join(' '),
     gather: (c, userId, scope) => fundMaterial(c.env, userId, scope),
     accept: (c, userId, scope, body) => writeBriefIntoNote(c.env, userId, scope, body),
+  },
+
+  // D553 (#1146) — I6's "Draft reminder" on a capital call line: one LP, one
+  // call. A DRAFT ONLY: there is no `accept` hook, so accepting it writes
+  // nothing and sends nothing. The GP sends it from wherever they send mail,
+  // then logs it on the fund's comms log ("Log as sent"). The gather is the
+  // licence and ownership gate: an investor who is the GP of record, or an
+  // admin; another fund's line gives nothing to draft.
+  'funds/calls': {
+    instruction: CALL_REMINDER_INSTRUCTION,
+    gather: (c, userId, scope) => callReminderMaterial(c.env, userId, scope),
   },
 };
 

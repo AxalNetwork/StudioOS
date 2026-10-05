@@ -11,6 +11,8 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { useManagedFund, FundPicker } from './managedFund';
+import ZoneDraft from '../../workspaces/ZoneDraft';
+import { reminderSubject } from './fundLpCommsModel';
 import {
   formatCents, parseDollarsToCents, percent, lineStateLabel, lineAge, kycLabel, linesFor, wireRows,
 } from './fundCallsModel';
@@ -53,6 +55,9 @@ export default function InvestorFundCalls() {
   const [wires, setWires] = useState({ status: 'loading', data: null });
   const [composer, setComposer] = useState(null);
   const [receipt, setReceipt] = useState(null);
+  // D553: one open follow-up per page — a reminder draft or a "Log as sent"
+  // form — on one LP's line.
+  const [followUp, setFollowUp] = useState(null);
 
   const load = useCallback(async () => {
     if (!fund) return;
@@ -133,6 +138,30 @@ export default function InvestorFundCalls() {
     }
   }
 
+  // ── D553: draft a reminder, then log it as sent ───────────────────────────
+  // The draft is Eadwyn's `funds/calls` surface over THIS line. Nothing is
+  // sent from here: the GP sends it themselves, then logs it, and the log keeps
+  // the subject and the date, never the message.
+  function openDraft(line) { setReceipt(null); setFollowUp({ lineId: line.id, mode: 'draft' }); }
+  function openLog(line) {
+    setReceipt(null);
+    setFollowUp({ lineId: line.id, mode: 'log', lpId: line.limited_partner_id, lp: line.lp_name, subject: reminderSubject(line), date: todayIso(), error: '', busy: false, logged: false });
+  }
+  async function saveLog(e) {
+    e.preventDefault();
+    if (!followUp.subject.trim()) { setFollowUp((f) => ({ ...f, error: 'A logged message needs its subject.' })); return; }
+    setFollowUp((f) => ({ ...f, busy: true, error: '' }));
+    try {
+      await api.fundsLogComm(fund.id, {
+        lp_id: followUp.lpId, kind: 'call_reminder', subject: followUp.subject.trim(),
+        sent_at: followUp.date, capital_call_id: followUp.lineId,
+      });
+      setFollowUp((f) => ({ ...f, busy: false, logged: true }));
+    } catch (err) {
+      setFollowUp((f) => ({ ...f, busy: false, error: err?.message || 'The message could not be logged.' }));
+    }
+  }
+
   const refresh = () => (managed.error ? managed.reload() : load());
   const busy = managed.loading || (Boolean(fund) && ledger.status === 'loading');
   const calledNote = summary && (percent(summary.called_cents, summary.committed_cents)
@@ -183,12 +212,14 @@ export default function InvestorFundCalls() {
           <span>{plural(shown.length, 'line')}</span></header>
         {filter === 'latest' && latest && <p className="if2-purpose">{latest.purpose ? `Purpose: ${latest.purpose}` : 'No purpose recorded'}{latest.issued_by_name ? ` · issued by ${latest.issued_by_name}` : ''} · {String(latest.created_at).slice(0, 10)}</p>}
         {shown.length === 0 ? <div className="i6-empty if2-empty"><div><strong>{filter === 'outstanding' ? 'Nothing is outstanding.' : 'No numbered call has been issued on this fund.'}</strong><p>{filter === 'outstanding' ? 'Every line issued on this fund is paid.' : 'New call previews the split before anything is written.'}</p></div></div>
-          : <LineTable lines={shown} showCall={filter !== 'latest'} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt} />}
+          : <LineTable lines={shown} showCall={filter !== 'latest'} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt}
+            followUp={followUp} setFollowUp={setFollowUp} onDraft={openDraft} onLog={openLog} onSaveLog={saveLog} />}
       </section>}
 
       {data?.unnumbered?.length > 0 && <section className="i6-card if2-ledger if2-legacy" data-testid="card-unnumbered-lines">
         <header><div><h2>Issued before calls were numbered</h2><span>Lines written before the call ledger. Their amounts were stored in dollars and are shown rounded to the cent; a line marked paid then has no receipt behind it.</span></div><span>{plural(data.unnumbered.length, 'line')}</span></header>
-        <LineTable lines={data.unnumbered} showCall={false} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt} />
+        <LineTable lines={data.unnumbered} showCall={false} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt}
+          followUp={followUp} setFollowUp={setFollowUp} onDraft={openDraft} onLog={openLog} onSaveLog={saveLog} />
       </section>}
       {data?.truncated && <p className="i6-footnote">This fund has more calls or lines than one read returns; the oldest are not shown, and the totals above cover only what was read.</p>}
 
@@ -202,7 +233,7 @@ export default function InvestorFundCalls() {
             </tbody></table></div>}
       </section>
     </>}
-    <footer className="i6-footnote">New call and Record receipt write to the fund’s ledger. Nothing on this page drafts a letter, sends a reminder or exports anything but the receipts it shows.</footer>
+    <footer className="i6-footnote">New call and Record receipt write to the fund’s ledger, and Log as sent writes the fund’s comms log. Draft reminder drafts a reminder for you to send yourself: nothing on this page sends one, or exports anything but the receipts it shows.</footer>
   </main><WorkerRail
     workspace="Fund"
     role="investor"
@@ -215,7 +246,7 @@ export default function InvestorFundCalls() {
     ]}
     coverageNote={'Every figure here is summed from call lines and receipts the worker returned; none is typed.'}
     unavailable={[
-      ['Reminder letters', 'Eadwyn drafts no reminder for this page yet, and nothing here sends one. Overdue lines are listed so a GP can follow up.'],
+      ['Reminder delivery', 'Eadwyn drafts a reminder for one LP’s line, and nothing here sends it. Log as sent records the subject and the date on the comms log, never the message.'],
       ['Notice delivery', 'Each LP with a platform account gets an in-app notice when a call is issued; no letter is sent and no delivery is tracked.'],
     ]}
   /></div>;
@@ -228,7 +259,7 @@ function residualSentence(call) {
   return `${base} The ${call.residual_cents}-cent residual sits on ${who}.`;
 }
 
-function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave }) {
+export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave, followUp = null, setFollowUp = () => {}, onDraft = () => {}, onLog = () => {}, onSaveLog = () => {} }) {
   return <div className="if2-table-wrap"><table><thead><tr>
     {showCall && <th>Call</th>}<th>LP</th><th className="right">Commitment</th><th className="right">Owed</th><th className="right">Received</th><th>State</th><th>Age</th><th />
   </tr></thead><tbody>
@@ -241,8 +272,37 @@ function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave }) {
         <td className="right">{money(line.received_cents)}</td>
         <td><span className={`if2-pill ${line.state}`}>{lineStateLabel(line)}</span></td>
         <td>{lineAge(line)}</td>
-        <td>{line.state !== 'paid' && <button type="button" className="if2-row-action" data-testid={`button-record-receipt-${line.id}`} onClick={() => onOpen(line)}>Record receipt</button>}</td>
+        <td>{line.state !== 'paid' && <>
+          <button type="button" className="if2-row-action" data-testid={`button-record-receipt-${line.id}`} onClick={() => onOpen(line)}>Record receipt</button>
+          <button type="button" className="if2-row-action" data-testid={`button-draft-reminder-${line.id}`} onClick={() => onDraft(line)}>Draft reminder</button>
+          <button type="button" className="if2-row-action" data-testid={`button-log-sent-${line.id}`} onClick={() => onLog(line)}>Log as sent</button>
+        </>}</td>
       </tr>,
+      followUp?.lineId === line.id && followUp.mode === 'draft' && <tr key={`${line.id}-draft`} className="if2-receipt-row"><td colSpan={showCall ? 8 : 7}>
+        <ZoneDraft
+          surface="funds/calls"
+          scopeKey={String(line.id)}
+          label="Proposal · a reminder to this LP"
+          accept="Accept draft"
+          run="Draft the reminder"
+          foot="A draft only. Nothing is sent: send it yourself, then Log as sent."
+          empty="A short reminder to this LP alone, stating what this line still owes and when it was due, as the ledger records it."
+          nothingToDraft="This line owes nothing, or it is not on a fund you operate, so there is nothing to remind about."
+        />
+        <button type="button" className="if2-row-action" onClick={() => setFollowUp(null)}>Close</button>
+      </td></tr>,
+      followUp?.lineId === line.id && followUp.mode === 'log' && <tr key={`${line.id}-log`} className="if2-receipt-row"><td colSpan={showCall ? 8 : 7}>
+        {followUp.logged
+          ? <p data-testid="status-comm-logged">Logged on the comms log: “{followUp.subject}”, sent {followUp.date}. <button type="button" onClick={() => setFollowUp(null)}>Close</button></p>
+          : <form className="if2-receipt" onSubmit={onSaveLog} data-testid="form-log-sent">
+            <span>Log a reminder sent to {followUp.lp || 'this LP'}</span>
+            <label>Subject<input data-testid="input-comm-subject" value={followUp.subject} maxLength={200} onChange={(e) => setFollowUp((f) => ({ ...f, subject: e.target.value }))} /></label>
+            <label>Sent on<input data-testid="input-comm-date" type="date" value={followUp.date} max={todayIso()} onChange={(e) => setFollowUp((f) => ({ ...f, date: e.target.value }))} /></label>
+            <button type="submit" data-testid="button-save-comm" disabled={followUp.busy}>{followUp.busy ? 'Logging…' : 'Log as sent'}</button>
+            <button type="button" onClick={() => setFollowUp(null)}>Cancel</button>
+            <p role={followUp.error ? 'alert' : undefined}>{followUp.error || 'The log keeps the subject and the date, never the message.'}</p>
+          </form>}
+      </td></tr>,
       receipt?.lineId === line.id && <tr key={`${line.id}-receipt`} className="if2-receipt-row"><td colSpan={showCall ? 8 : 7}>
         <form className="if2-receipt" onSubmit={onSave} data-testid="form-record-receipt">
           <span>Receipt from {receipt.lp || 'this LP'} · {money(receipt.outstanding)} outstanding</span>
