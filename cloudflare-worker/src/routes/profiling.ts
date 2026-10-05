@@ -6,6 +6,7 @@ import { notifyOnboardingChat } from '../services/realtime';
 import { createAndSendEnvelope } from './esign';
 import { hashEmail } from '../util/hashEmail';
 import { run as aiRouterRun } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 // Task #9 — 'exploring' holding state (side table + role-CHECK relax).
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
 
@@ -198,6 +199,7 @@ profiling.post('/chat', async (c) => {
   const result = await aiRouterRun(c.env, {
     task: CHAT_TASK,
     userId: authedUser.id,
+    surface: AI_SURFACE.onboardingChat,
     systemPrompt: SYSTEM_PROMPT,
     messages: chatMessages,
     maxTokens: 256,
@@ -291,6 +293,7 @@ ${transcript}`;
     const result = await aiRouterRun(c.env, {
       task: 'tool_call',
       userId: user.id,
+      surface: AI_SURFACE.onboardingChat,
       systemPrompt: 'You are a precise data-extraction engine. Output only valid JSON.',
       messages: [{ role: 'user', content: extractionPrompt }],
       maxTokens: 600,

@@ -39,6 +39,7 @@ import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
@@ -690,6 +691,7 @@ research.post('/ask', async (c) => {
     const out = await runAI(c.env, {
       task: 'research_ask',
       userId: user.id,
+      surface: AI_SURFACE.researchAsk,
       // `text` rather than `messages`: the router hashes it for the cache key
       // and this task is uncached, but the shape is what every non-chat task
       // uses. The instructions live in the prompt itself so the retrieved

@@ -119,13 +119,20 @@ export interface SafetyResult {
   category: string;
 }
 
-export async function classifyInput(env: Env, userId: number, text: string): Promise<SafetyResult> {
+/**
+ * `surface` is the page the screened message was sent from (D552), recorded on
+ * the safety run's own usage row so the guard's cost lands on that page rather
+ * than in the month's unattributed group. Required, not optional: a new caller
+ * has to say where it is, and `undefined` is a stated "no page".
+ */
+export async function classifyInput(env: Env, userId: number, text: string, surface: string | undefined): Promise<SafetyResult> {
   const trimmed = (text || '').trim();
   if (!trimmed) return { blocked: false, score: null, category: 'empty' };
   try {
     const r = await aiRouter.run(env, {
       task: 'safety',
       userId,
+      surface,
       text: trimmed.slice(0, 4000),
     });
     if (!r.ok) return { blocked: false, score: null, category: 'router_failed' };
