@@ -43,6 +43,18 @@ function Bar({ value, max }) {
   return <span className="block h-1.5 rounded-full bg-violet-100 dark:bg-violet-950"><span className="block h-1.5 rounded-full bg-violet-500" style={{ width: `${w}%` }} /></span>;
 }
 
+/**
+ * The table lists the first rows the API returns (50 at most); the counts and
+ * aggregates above cover every row. When the two differ, the page says so
+ * rather than letting the table pass for the whole list.
+ */
+export function ListedOf({ shown, total, noun, testId }) {
+  if (!(total > shown)) return null;
+  return <p data-testid={testId} className="mt-1 text-[11.5px] font-semibold text-amber-800 dark:text-amber-300">
+    The first {fmt(shown)} of {fmt(total)} {noun} are listed here; the counts above cover all {fmt(total)}.
+  </p>;
+}
+
 function Stat({ label, value, note, testId }) {
   return (
     <div data-testid={testId} className="rounded-xl border border-axal-hairline p-4 dark:border-gray-800">
@@ -136,6 +148,7 @@ export function GeographyBody({ data, role = 'founder' }) {
             <div className="overflow-x-auto">
               <h3 className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Top companies</h3>
               <p className="text-[11.5px] text-axal-muted">Largest by recorded headcount first; companies with no headcount follow by name.</p>
+              <ListedOf testId="geo-companies-listed" shown={data.companies.length} total={data.company_count} noun="companies" />
               <table className="mt-2 w-full min-w-[520px] text-left text-[12.5px]">
                 <thead>
                   <tr className="border-b border-axal-hairline text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-faint dark:border-gray-800">
@@ -198,6 +211,7 @@ export function GeographyBody({ data, role = 'founder' }) {
               </div>
             </div>
             <div className="mt-4 overflow-x-auto">
+              <ListedOf testId="geo-funds-listed" shown={data.funds.length} total={data.fund_count} noun="funds" />
               <table className="w-full min-w-[600px] text-left text-[12.5px]">
                 <thead>
                   <tr className="border-b border-axal-hairline text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-faint dark:border-gray-800">

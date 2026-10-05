@@ -67,7 +67,10 @@ test('the private tab: each state, and the totals the API sends', () => {
   assert.match(ok, /Not mapped to a tracked sector 1 markets · no index applies/);
   assert.match(ok, /Fintech \/ DeFi 2 markets · 910 companies/);
   const markup = html(h(PrivatePanel, { markets: ready(MARKETS) }));
-  assert.match(markup, /href="\/research\/markets\/sector\/fintech-defi"/, 'the group opens its sector page');
+  // Today's sector page resolves market slugs only, so a tracked-sector link
+  // would read "Market not found". It lands with #1139's per-sector page.
+  assert.doesNotMatch(markup, /href="\/research\/markets\/sector\/fintech-defi"/, 'a group links to a page that cannot resolve it');
+  assert.doesNotMatch(markup, /Open sector/);
   assert.match(markup, /href="\/research\/markets\/sector\/payments"/, 'a market opens its own page');
 });
 
@@ -104,7 +107,12 @@ test('where companies are based: totals from the API, unmapped said, failed read
   assert.match(text(h(WhereBased, { geos: unreadable })), /could not be read/);
   assert.match(text(h(WhereBased, { geos: ready({ total: 0, items: [] }) })), /No directory company has a country that maps yet/);
   const items = Array.from({ length: 14 }, (_, i) => ({ code: `C${i}`, name: `Country ${i}`, company_count: 20 - i, fund_count: 0 }));
-  const ok = text(h(WhereBased, { geos: ready({ total: 14, items, companies_unmapped: 4 }) }));
+  // A country with funds and no company is in /geographies but not in this card.
+  items.push({ code: 'FO', name: 'Funds Only', company_count: 0, fund_count: 9 });
+  const ok = text(h(WhereBased, { geos: ready({ total: 15, items, companies_unmapped: 4 }) }));
+  assert.doesNotMatch(ok, /Funds Only/);
+  assert.match(text(h(WhereBased, { geos: ready({ total: 1, items: [items.at(-1)], companies_unmapped: 0 }) })),
+    /No directory company has a country that maps yet/, 'fund-only countries are not a company footprint');
   const placed = items.reduce((s, k) => s + k.company_count, 0);
   assert.match(ok, new RegExp(`${placed + 4} companies in 14 countries, and 4 whose country does not map`));
   assert.match(ok, /2 more countries →/);
@@ -120,6 +128,9 @@ test('latest signals: illustrative seed signals say so; a failed read is not emp
   assert.match(seed, /Illustrative/);
   assert.match(seed, /Payments rails Financial Services · Europe · confidence 62% · updated 2026-10-01/);
   assert.match(seed, /1 of 10/);
+  assert.match(seed, /Top-ranked signals/);
+  assert.match(seed, /Ordered by the signals engine’s rank, not by date/);
+  assert.doesNotMatch(seed, /Latest signals/, 'the card is ranked, not by recency');
   const live = text(h(LatestSignals, { sigs: ready({ total: 1, data_state: 'live', signals: [{ id: 'a', title: 'T', sector: 'S', region: 'R' }] }) }));
   assert.doesNotMatch(live, /Illustrative/);
 });
@@ -273,4 +284,13 @@ test('Geographies is a zone pill beside Markets, and both routes are guarded lik
   const guard = "guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor'])";
   assert.ok(app.includes(`<Route path="/research/geographies" element={${guard}, <ResearchWorkspace`));
   assert.ok(app.includes(`<Route path="/research/geographies/:code" element={${guard}, <GeographyProfile`));
+});
+
+test('one country: a capped list says it is the first rows of the whole count', () => {
+  const many = { ...COUNTRY, fund_count: 344, company_count: 120 };
+  const t = text(h(GeographyBody, { data: many }));
+  assert.match(t, /The first 3 of 344 funds are listed here; the counts above cover all 344/);
+  assert.match(t, /The first 3 of 120 companies are listed here/);
+  const exact = text(h(GeographyBody, { data: { ...COUNTRY, fund_count: 3, company_count: 3 } }));
+  assert.doesNotMatch(exact, /are listed here/, 'a complete list carries no notice');
 });

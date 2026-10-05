@@ -171,7 +171,9 @@ export function PrivatePanel({ markets }) {
                     {g.markets.length} markets · {g.mapped ? `${fmt(g.companies)} companies` : 'no index applies'}
                   </span>
                 </span>
-                {g.mapped ? <Link to={`/research/markets/sector/${g.slug}`} className="text-[12.5px] font-semibold text-axal-violet">Open sector →</Link> : null}
+                {/* No "Open sector" link yet: today's sector page resolves market
+                    slugs only, so a tracked-sector slug reads "Market not found".
+                    The per-sector page is #1139's (D546); the link lands with it. */}
               </summary>
               <ul className="mt-1">{g.markets.map(row)}</ul>
             </details>
@@ -241,15 +243,21 @@ export function WhereBased({ geos }) {
   let body;
   if (geos.status === 'loading' && !geos.data) body = <Loading what="the countries" />;
   else if (geos.status === 'unreadable') body = <Unreadable what="The countries" claim="This is not a sign the companies have no location." onRetry={geos.reload} />;
-  else if (!geos.data?.total) body = <p className="text-[12.5px] text-axal-muted">No directory company has a country that maps yet.</p>;
   else {
-    const items = geos.data.items.slice(0, SHOWN);
-    const placed = geos.data.items.reduce((s, k) => s + k.company_count, 0);
+    // `/geographies` lists a country holding a company OR a fund, so its
+    // `total` overstates where companies are. This card counts and lists only
+    // the countries with at least one directory company.
+    const withCompanies = (geos.data?.items || []).filter((k) => k.company_count > 0);
+    if (withCompanies.length === 0) {
+      body = <p className="text-[12.5px] text-axal-muted">No directory company has a country that maps yet.</p>;
+    } else {
+    const items = withCompanies.slice(0, SHOWN);
+    const placed = withCompanies.reduce((s, k) => s + k.company_count, 0);
     const max = Math.max(...items.map((k) => k.company_count));
     body = (
       <>
         <p className="text-[12.5px] text-axal-muted">
-          {fmt(placed + (geos.data.companies_unmapped || 0))} companies in {fmt(geos.data.total)} countries
+          {fmt(placed + (geos.data.companies_unmapped || 0))} companies in {fmt(withCompanies.length)} countries
           {geos.data.companies_unmapped ? `, and ${fmt(geos.data.companies_unmapped)} whose country does not map` : ''}.
           The taxonomy’s companies carry no location, so this reads the company directory.
         </p>
@@ -262,10 +270,11 @@ export function WhereBased({ geos }) {
             </li>
           ))}
         </ul>
-        {geos.data.total > SHOWN ? <Link to="/research/geographies" className="mt-2 inline-block text-[12.5px] font-semibold text-axal-violet">{fmt(geos.data.total - SHOWN)} more countries →</Link> : null}
+        {withCompanies.length > SHOWN ? <Link to="/research/geographies" className="mt-2 inline-block text-[12.5px] font-semibold text-axal-violet">{fmt(withCompanies.length - SHOWN)} more countries →</Link> : null}
         <Caption>research_company_directory</Caption>
       </>
     );
+    }
   }
   return <Card data-testid="markets-where"><h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Where the directory’s companies are based</h2><div className="mt-2">{body}</div></Card>;
 }
@@ -312,9 +321,10 @@ export function LatestSignals({ sigs }) {
   return (
     <Card data-testid="markets-signals">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Latest signals</h2>
+        <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Top-ranked signals</h2>
         {total && shown ? <span className="text-[12px] text-axal-muted">{fmt(shown)} of {fmt(total)}</span> : null}
       </div>
+      <p className="mt-1 text-[11px] text-axal-faint">Ordered by the signals engine’s rank, not by date.</p>
       <div className="mt-2">{body}</div>
     </Card>
   );
