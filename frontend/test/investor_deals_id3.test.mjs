@@ -220,19 +220,16 @@ test('a vote IS opened and closed, so the ops row says the narrower true thing',
 });
 
 test('the rationale tile checks the artboard’s claim instead of repeating it', () => {
-  // The artboard says `Rationale required`. The column is nullable and the
-  // vote endpoint accepts a vote without one, so the page must report what was
-  // written rather than assert a rule that is not enforced.
+  // The artboard says `Rationale required`. Since D494 (#1023) the vote
+  // endpoint refuses a vote without one; the column stays nullable, so the
+  // tile still reports what was written, and the route says the rule is
+  // enforced. The refusal itself is pinned behaviourally in
+  // cloudflare-worker/test/ic_conditions_minutes.test.ts.
   assert.match(id3(), /Rationale required/, 'the artboard changed its claim');
-  const vote = handler("r.post('/:uid/vote'");
-  // The requirement is scoped to a recusal (its declaration), so a yes, no or
-  // abstain still lands without one — which is what the tile reports.
-  assert.match(vote, /vote === 'recused' && !rationale\?\.trim\(\)/,
-    'the only required rationale is the recusal’s declaration — the tile’s premise changed otherwise');
   const room = handler("r.get('/commit-room'");
-  assert.match(room, /enforced: false/, 'the route stopped saying the requirement is unenforced');
+  assert.match(room, /enforced: true/, 'the route stopped saying the requirement is enforced');
   assert.match(Z, /label="Rationales"/);
-  assert.match(Z, /a reason is recorded, not required/);
+  assert.match(Z, /rationaleNote\(room\.rationale\)/);
   // Blank-but-present is absent: a rationale of spaces is not a reason. BOTH
   // counters must agree — the running total and the per-decision summary — or
   // the strip and the table disagree about the same votes. A file-wide match

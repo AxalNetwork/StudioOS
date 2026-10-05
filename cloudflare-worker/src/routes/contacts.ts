@@ -90,8 +90,16 @@ type ContactRow = {
   name: string | null; email: string; cta: string | null; message: string | null;
   source: string | null; landing_page_id: number | null; status: string;
   promoted_to: string | null; promoted_ref_id: number | null; last_activity_at: string | null;
+  strength?: string | null; organization?: string | null;
   created_at: string; updated_at: string;
 };
+
+/** The canvas's strength set (D551, migration 386). NULL is "not recorded", never cool. */
+export const CONTACT_STRENGTHS = ['strong', 'warm', 'cool'] as const;
+const CONTACT_D551_COLUMNS = [
+  ['strength', `TEXT CHECK (strength IS NULL OR strength IN ('strong', 'warm', 'cool'))`],
+  ['organization', 'TEXT'],
+] as const;
 
 const ENSURED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
@@ -114,6 +122,9 @@ async function ensureSchema(env: Env): Promise<void> {
        -- utm_content} blob; referrer is the capturing page's document.referrer.
        utm_json TEXT,
        referrer TEXT,
+       -- Strength and organisation (migration 386, D551).
+       strength TEXT CHECK (strength IS NULL OR strength IN ('strong', 'warm', 'cool')),
+       organization TEXT,
        last_activity_at TEXT,
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -279,6 +290,18 @@ async function ensureSchema(env: Env): Promise<void> {
       }
     }
   } catch (e) { console.warn('[contacts] attribution bootstrap failed', e); }
+  // Strength and organisation (D551) — self-heal on an EXISTING contacts table.
+  // Canonical add is migration 386; same PRAGMA-guarded pattern as above.
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(contacts)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((x) => x.name));
+    for (const [col, decl] of CONTACT_D551_COLUMNS) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(`ALTER TABLE contacts ADD COLUMN ${col} ${decl}`).run(); }
+        catch (e) { console.warn('[contacts] ALTER contacts column failed (likely already applied)', col, e); }
+      }
+    }
+  } catch (e) { console.warn('[contacts] strength/organization bootstrap failed', e); }
   ENSURED.set(bindingKey(env), true);
 }
 
@@ -511,10 +534,22 @@ r.get('/', async (c) => {
     // template a lead signed up through ("Inbound leads · Brand & Pages").
     // Manually-added / invited contacts have no landing_page_id and come back
     // with NULL attribution — the UI treats that as "added directly".
+    // THE FOLLOW-UP ROLLUP (D551), in this one statement rather than one read
+    // per contact: the next open task's due date, how many tasks are open,
+    // and when the last reply was logged. A contact with none of them comes
+    // back with NULL / 0, which the pages read as "Not recorded" / "none open".
     const rows = await c.env.DB.prepare(
-      `SELECT c.*, lp.template_kit AS landing_template_kit, lp.name AS landing_page_name
+      `SELECT c.*, lp.template_kit AS landing_template_kit, lp.name AS landing_page_name,
+              ct.next_task_due AS next_task_due, COALESCE(ct.open_tasks, 0) AS open_tasks,
+              cr.last_reply_at AS last_reply_at
          FROM contacts c
          LEFT JOIN landing_pages lp ON lp.id = c.landing_page_id
+         LEFT JOIN (SELECT contact_id,
+                           MIN(CASE WHEN TRIM(COALESCE(due_date, '')) <> '' THEN due_date END) AS next_task_due,
+                           COUNT(*) AS open_tasks
+                      FROM contact_tasks WHERE done = 0 GROUP BY contact_id) ct ON ct.contact_id = c.id
+         LEFT JOIN (SELECT contact_id, MAX(created_at) AS last_reply_at
+                      FROM contact_replies GROUP BY contact_id) cr ON cr.contact_id = c.id
         WHERE ${where}
         ORDER BY COALESCE(c.last_activity_at, c.created_at) DESC LIMIT 500`
     ).bind(...params).all<ContactRow & { landing_template_kit: string | null; landing_page_name: string | null }>();
@@ -1233,7 +1268,31 @@ r.get('/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// PUT /api/contacts/:uid — update status / name / audience
+/**
+ * `strength` and `organization` from a PUT body (D551). A key that is absent
+ * leaves the stored value; `null` or `''` clears it. A strength outside the
+ * canvas's set is refused rather than dropped, so a typo never reads as a save.
+ */
+export function contactProfilePatch(body: any, row: { strength?: string | null; organization?: string | null }):
+  { strength: string | null; organization: string | null } | { error: string } {
+  let strength = row.strength ?? null;
+  if (body && Object.hasOwn(body, 'strength')) {
+    const v = body.strength == null ? '' : String(body.strength).trim().toLowerCase();
+    if (v === '') strength = null;
+    else if ((CONTACT_STRENGTHS as readonly string[]).includes(v)) strength = v;
+    else return { error: 'strength_invalid' };
+  }
+  let organization = row.organization ?? null;
+  if (body && Object.hasOwn(body, 'organization')) {
+    const v = body.organization == null ? '' : String(body.organization).trim().slice(0, 200);
+    organization = v === '' ? null : v;
+  }
+  return { strength, organization };
+}
+
+// PUT /api/contacts/:uid — update status / name / audience, and (D551) the
+// strength and organisation. Owner only: loadOwned refuses another founder's
+// contact with 403.
 r.put('/:uid', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
@@ -1248,9 +1307,11 @@ r.put('/:uid', async (c) => {
     let routed = row.routed_to;
     if (body.audience && CONTACT_AUDIENCES.includes(body.audience)) { audience = body.audience; routed = routeFor(audience); }
     const name = body.name !== undefined ? (body.name ? String(body.name).slice(0, 200) : null) : row.name;
+    const profile = contactProfilePatch(body, row);
+    if ('error' in profile) return c.json({ detail: 'strength must be strong, warm or cool', code: profile.error, field: 'strength' }, 400);
     await c.env.DB.prepare(
-      `UPDATE contacts SET status=?, audience=?, routed_to=?, name=?, last_activity_at=?, updated_at=? WHERE id=?`
-    ).bind(status, audience, routed, name, nowIso(), nowIso(), row.id).run();
+      `UPDATE contacts SET status=?, audience=?, routed_to=?, name=?, strength=?, organization=?, last_activity_at=?, updated_at=? WHERE id=?`
+    ).bind(status, audience, routed, name, profile.strength, profile.organization, nowIso(), nowIso(), row.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
     return c.json(fresh);
   } catch (e) { return mapError(c, e); }

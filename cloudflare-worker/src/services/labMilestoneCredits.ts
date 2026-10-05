@@ -1,0 +1,140 @@
+/**
+ * D541 — Spin-Out Lab milestones pay credits, through D540's `grantCredits`.
+ *
+ * WHO EARNS. An accepted cohort member: `user_spinout_flags.spinout_lab_admitted
+ * = 1`, the flag both acceptance paths set (the admin decision in
+ * routes/admin.ts and the cycle activation in services/cohortApplications.ts).
+ * `POST /spinout-lab/start` does not check it, so being in the Lab is not
+ * enough. A flag that cannot be read pays nothing. Staff are refused by
+ * `grantCredits` itself.
+ *
+ * WHAT PAYS. Each milestone's `lab:<milestone_key>` rule (migration 381); a
+ * milestone with no rule (week 1's required four) pays nothing. The source ref
+ * is `lab:<user_id>:<milestone_key>`, so a milestone pays once however many
+ * times it is recorded. #1102 pays "the first of" `advisor_meeting_booked` and
+ * `cofounder_request_sent`: the second one recorded is skipped.
+ *
+ * GRADUATION. `lab:graduation` is paid once, when the certificate is issued,
+ * and only to someone whose `incorporation_completed` was itself paid. That is
+ * #1102 question 4's pick A (only milestones completed from launch day earn)
+ * carried to the bonus: a certificate the backfill issues for a pre-launch
+ * graduate pays nothing, because their graduation milestone never did.
+ *
+ * NEVER THROWS. A grant is a side effect of recording a milestone or issuing a
+ * certificate; neither may fail because the grant did (D111). Each call
+ * returns what happened, and a failure is logged.
+ */
+import type { Env } from '../types';
+import { grantCredits, INELIGIBLE_ROLES, type GrantResult } from './creditGrants';
+
+export const LAB_ACTOR = { kind: 'system' as const, source: 'spinout_lab' };
+/** #1102: "the first of `advisor_meeting_booked` or `cofounder_request_sent`". */
+export const FIRST_OF: readonly string[] = ['advisor_meeting_booked', 'cofounder_request_sent'];
+
+export const labSourceRef = (userId: number, key: string) => `lab:${userId}:${key}`;
+
+export type LabCreditOutcome =
+  | GrantResult
+  | { status: 'skipped'; reason: 'not_accepted' | 'no_rule' | 'pair_already_paid' | 'graduation_not_paid' | 'error' };
+
+/** True only when the admission flag reads 1. Unreadable is not accepted. */
+export async function isAcceptedMember(env: Env, userId: number): Promise<boolean> {
+  try {
+    const row = await env.DB.prepare(
+      'SELECT spinout_lab_admitted FROM user_spinout_flags WHERE user_id = ?',
+    ).bind(userId).first<{ spinout_lab_admitted: number | null }>();
+    return Number(row?.spinout_lab_admitted ?? 0) === 1;
+  } catch (e) {
+    console.warn('[labCredits] admission flag unreadable; paying nothing', (e as Error).message);
+    return false;
+  }
+}
+
+async function hasGrant(env: Env, userId: number, sourceRef: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
+  ).bind(userId, sourceRef).first<{ id: number }>();
+  return !!row;
+}
+
+/** Pay a milestone that was just recorded for the first time. */
+export async function creditLabMilestone(env: Env, userId: number, key: string): Promise<LabCreditOutcome> {
+  try {
+    if (!(await isAcceptedMember(env, userId))) return { status: 'skipped', reason: 'not_accepted' };
+    if (FIRST_OF.includes(key)) {
+      const other = FIRST_OF.find((k) => k !== key)!;
+      if (await hasGrant(env, userId, labSourceRef(userId, other))) return { status: 'skipped', reason: 'pair_already_paid' };
+    }
+    const out = await grantCredits(env, {
+      userId, ruleKey: `lab:${key}`, sourceRef: labSourceRef(userId, key), actor: LAB_ACTOR,
+    });
+    if (out.status === 'refused' && out.code === 'rule_unknown') return { status: 'skipped', reason: 'no_rule' };
+    return out;
+  } catch (e) {
+    console.warn('[labCredits] milestone grant failed', key, (e as Error).message);
+    return { status: 'skipped', reason: 'error' };
+  }
+}
+
+/** Pay the graduation bonus, once, when a certificate has just been issued. */
+export async function creditLabGraduation(env: Env, userId: number): Promise<LabCreditOutcome> {
+  try {
+    if (!(await isAcceptedMember(env, userId))) return { status: 'skipped', reason: 'not_accepted' };
+    if (!(await hasGrant(env, userId, labSourceRef(userId, 'incorporation_completed')))) {
+      return { status: 'skipped', reason: 'graduation_not_paid' };
+    }
+    return await grantCredits(env, {
+      userId, ruleKey: 'lab:graduation', sourceRef: labSourceRef(userId, 'graduation'), actor: LAB_ACTOR,
+    });
+  } catch (e) {
+    console.warn('[labCredits] graduation grant failed', (e as Error).message);
+    return { status: 'skipped', reason: 'error' };
+  }
+}
+
+export type MilestoneCredit = { credits: number; usd_value_cents: number; earned: boolean; superseded: boolean };
+export type MilestoneCredits = {
+  eligible: boolean;
+  /** Why not, in a sentence the checklist prints; null when eligible. */
+  reason: string | null;
+  milestones: Record<string, MilestoneCredit>;
+};
+
+/**
+ * What each milestone pays this user, and which have been paid. `superseded`
+ * marks the half of the first-of pair that will not pay because the other
+ * did. Throws when a read fails: the caller says "unreadable", never "0".
+ */
+export async function milestoneCreditsFor(env: Env, userId: number, role: string): Promise<MilestoneCredits> {
+  const rules = await env.DB.prepare(
+    `SELECT key, credits, usd_value_cents FROM credit_reward_rules
+      WHERE substr(key, 1, 4) = 'lab:' AND active = 1 AND credits > 0`,
+  ).all<{ key: string; credits: number; usd_value_cents: number }>();
+  const prefix = `lab:${userId}:`;
+  const paid = await env.DB.prepare(
+    `SELECT g.source_ref FROM perk_credit_ledger g
+      WHERE g.user_id = ? AND g.kind = 'grant' AND substr(g.source_ref, 1, length(?)) = ?
+        AND NOT EXISTS (SELECT 1 FROM perk_credit_ledger r
+                         WHERE r.user_id = g.user_id AND r.kind = 'admin_adjust'
+                           AND r.source_ref = 'revoke:' || g.id)`,
+  ).bind(userId, prefix, prefix).all<{ source_ref: string }>();
+  const earned = new Set((paid.results || []).map((r) => r.source_ref.slice(prefix.length)));
+  const pairPaid = FIRST_OF.find((k) => earned.has(k)) ?? null;
+  const milestones: Record<string, MilestoneCredit> = {};
+  for (const r of rules.results || []) {
+    const key = r.key.slice(4);
+    milestones[key] = {
+      credits: Number(r.credits), usd_value_cents: Number(r.usd_value_cents),
+      earned: earned.has(key),
+      superseded: pairPaid !== null && FIRST_OF.includes(key) && key !== pairPaid,
+    };
+  }
+  const staff = INELIGIBLE_ROLES.has(String(role || '').toLowerCase());
+  const accepted = staff ? false : await isAcceptedMember(env, userId);
+  return {
+    eligible: !staff && accepted,
+    reason: staff ? 'Staff and admin accounts do not earn credits.'
+      : accepted ? null : 'Credits are earned once you are accepted into a cohort.',
+    milestones,
+  };
+}
