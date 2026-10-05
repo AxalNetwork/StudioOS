@@ -14,13 +14,13 @@
  * times it is recorded. #1102 pays "the first of" `advisor_meeting_booked` and
  * `cofounder_request_sent`: the second one recorded is skipped.
  *
- * THE PAIR SHARES ONE SOURCE REF (#1104 follow-up). Both halves are granted
- * under `lab:<user_id>:advisor_or_cofounder`, so the ledger's unique index on
- * (user_id, kind, source_ref) lets exactly one insert land when both are
- * recorded at once. A read-before-write check let both through: each request
- * saw no grant for the other half before either inserted. The row's
- * `rule_key` says which half paid. Grants made before this under the
- * per-milestone refs are still read as paying the pair.
+ * THE PAIR IS DECIDED INSIDE THE INSERT (#1104 follow-up). Each half passes
+ * the other's source ref to `grantCredits` as `unlessPaid`, which the ledger
+ * insert checks in the same statement, so two halves recorded at once land
+ * one grant. A read-before-write check here let both through. Each half keeps
+ * its own `lab:<user_id>:<key>` ref, the shape every earlier version wrote and
+ * reads, so rolling the Worker back cannot make it blind to a grant this one
+ * made (Workers roll back code, not D1).
  *
  * GRADUATION. `lab:graduation` is paid once, when the certificate is issued,
  * and only to someone whose `incorporation_completed` was itself paid. That is
@@ -39,11 +39,7 @@ export const LAB_ACTOR = { kind: 'system' as const, source: 'spinout_lab' };
 /** #1102: "the first of `advisor_meeting_booked` or `cofounder_request_sent`". */
 export const FIRST_OF: readonly string[] = ['advisor_meeting_booked', 'cofounder_request_sent'];
 
-/** The one source ref both halves of the first-of pair are granted under. */
-export const PAIR_REF_KEY = 'advisor_or_cofounder';
-
-export const labSourceRef = (userId: number, key: string) =>
-  `lab:${userId}:${FIRST_OF.includes(key) ? PAIR_REF_KEY : key}`;
+export const labSourceRef = (userId: number, key: string) => `lab:${userId}:${key}`;
 
 export type LabCreditOutcome =
   | GrantResult
@@ -73,23 +69,13 @@ async function hasGrant(env: Env, userId: number, sourceRef: string): Promise<bo
 export async function creditLabMilestone(env: Env, userId: number, key: string): Promise<LabCreditOutcome> {
   try {
     if (!(await isAcceptedMember(env, userId))) return { status: 'skipped', reason: 'not_accepted' };
-    const pair = FIRST_OF.includes(key);
-    if (pair) {
-      // A grant from before the shared ref, under either half's own ref.
-      for (const k of FIRST_OF) {
-        if (await hasGrant(env, userId, `lab:${userId}:${k}`)) return { status: 'skipped', reason: 'pair_already_paid' };
-      }
-    }
+    const other = FIRST_OF.includes(key) ? FIRST_OF.find((k) => k !== key)! : null;
     const out = await grantCredits(env, {
       userId, ruleKey: `lab:${key}`, sourceRef: labSourceRef(userId, key), actor: LAB_ACTOR,
+      unlessPaid: other ? labSourceRef(userId, other) : null,
     });
     if (out.status === 'refused' && out.code === 'rule_unknown') return { status: 'skipped', reason: 'no_rule' };
-    if (pair && out.status === 'already_granted') {
-      // The shared ref is taken: by this half recorded again, or by the other.
-      const row = await env.DB.prepare('SELECT rule_key FROM perk_credit_ledger WHERE id = ?')
-        .bind(out.ledger_id).first<{ rule_key: string | null }>();
-      if (row?.rule_key !== `lab:${key}`) return { status: 'skipped', reason: 'pair_already_paid' };
-    }
+    if (out.status === 'refused' && out.code === 'superseded') return { status: 'skipped', reason: 'pair_already_paid' };
     return out;
   } catch (e) {
     console.warn('[labCredits] milestone grant failed', key, (e as Error).message);
@@ -133,17 +119,13 @@ export async function milestoneCreditsFor(env: Env, userId: number, role: string
   ).all<{ key: string; credits: number; usd_value_cents: number }>();
   const prefix = `lab:${userId}:`;
   const paid = await env.DB.prepare(
-    `SELECT g.source_ref, g.rule_key FROM perk_credit_ledger g
+    `SELECT g.source_ref FROM perk_credit_ledger g
       WHERE g.user_id = ? AND g.kind = 'grant' AND substr(g.source_ref, 1, length(?)) = ?
         AND NOT EXISTS (SELECT 1 FROM perk_credit_ledger r
                          WHERE r.user_id = g.user_id AND r.kind = 'admin_adjust'
                            AND r.source_ref = 'revoke:' || g.id)`,
-  ).bind(userId, prefix, prefix).all<{ source_ref: string; rule_key: string | null }>();
-  // The pair's shared ref names neither half; its rule_key says which paid.
-  const earned = new Set((paid.results || []).map((r) => {
-    const key = r.source_ref.slice(prefix.length);
-    return key === PAIR_REF_KEY ? String(r.rule_key || '').slice(4) : key;
-  }));
+  ).bind(userId, prefix, prefix).all<{ source_ref: string }>();
+  const earned = new Set((paid.results || []).map((r) => r.source_ref.slice(prefix.length)));
   const pairPaid = FIRST_OF.find((k) => earned.has(k)) ?? null;
   const milestones: Record<string, MilestoneCredit> = {};
   for (const r of rules.results || []) {

@@ -154,25 +154,29 @@ test('both halves of the pair recorded at once: exactly one grant lands (#1104 f
   ]));
   assert.deepEqual([a.status, b.status].sort(), ['granted', 'skipped']);
   assert.equal((a.status === 'skipped' ? a : b as any).reason, 'pair_already_paid');
-  const g = grants(db, MEMBER);
-  assert.deepEqual(g.map((x: any) => [x.source_ref, x.delta]), [[`lab:${MEMBER}:advisor_or_cofounder`, 50]]);
-  // The half that paid reads as earned, the other as superseded.
   const paidKey = (a.status === 'granted' ? 'advisor_meeting_booked' : 'cofounder_request_sent');
+  // One grant, under the paying half's own ref: the shape every version writes
+  // and reads, so a rolled-back Worker still sees it.
+  const g = grants(db, MEMBER);
+  assert.deepEqual(g.map((x: any) => [x.source_ref, x.delta]), [[`lab:${MEMBER}:${paidKey}`, 50]]);
+  // The half that paid reads as earned, the other as superseded.
   const r = await quiet(() => call(spinoutLab, db, 'GET', '/state', MEMBER));
   assert.equal(r.body.milestone_credits.milestones[paidKey].earned, true);
   assert.equal(r.body.milestone_credits.milestones[paidKey === 'advisor_meeting_booked' ? 'cofounder_request_sent' : 'advisor_meeting_booked'].superseded, true);
 });
 
-test('the half that paid, granted again, reads already_granted; a pre-change grant still pays the pair', async () => {
+test('the half that paid, granted again, reads already_granted; a grant written by any version stops the other half', async () => {
   const db = freshDb();
   const env = envOf(db);
   assert.equal((await quiet(() => creditLabMilestone(env, MEMBER, 'advisor_meeting_booked'))).status, 'granted');
   assert.equal((await quiet(() => creditLabMilestone(env, MEMBER, 'advisor_meeting_booked'))).status, 'already_granted');
-  // GRAD was paid under the per-milestone ref this replaced.
+  assert.deepEqual(await quiet(() => creditLabMilestone(env, MEMBER, 'cofounder_request_sent')), { status: 'skipped', reason: 'pair_already_paid' });
+  // GRAD's half was paid by #1112's code, which wrote the same per-milestone ref.
   db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 50, 'grant', ?, 'lab:cofounder_request_sent')`)
     .run(GRAD, `lab:${GRAD}:cofounder_request_sent`);
   assert.deepEqual(await quiet(() => creditLabMilestone(env, GRAD, 'advisor_meeting_booked')), { status: 'skipped', reason: 'pair_already_paid' });
   assert.equal(grants(db, GRAD).length, 1);
+  assert.equal(grants(db, MEMBER).length, 1);
 });
 
 test('graduation: the certificate issued on the last milestone pays the bonus once', async () => {
