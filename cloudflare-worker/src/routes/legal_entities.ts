@@ -26,6 +26,10 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
+import {
+  OBLIGATION_KINDS, OBLIGATION_CADENCES, US_PACKS, isoDate, daysUntil, nextDue, packObligations,
+  type ObligationCadence, type UsPack,
+} from '../services/entityObligations';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -291,5 +295,190 @@ app.post('/entities/:id/funds', async (c) => {
   await logAdminAction(c.env, user.id, user.email, 'legal.entity.fund_linked', { entity_id: id, fund_id: fundId, as });
   return c.json({ ok: true, fund_id: fundId, as, entity_id: id });
 });
+
+
+// ── D417 · F2's filings calendar (migration 374) ─────────────────────────────
+//
+// Read by staff, written by an admin, every write recorded through
+// `logAdminAction` with the entity and the obligation's uid. A row is never
+// deleted: it is filed or waived, and filing a recurring one opens the next
+// occurrence. See services/entityObligations.ts for the rules.
+
+const MIN_REASON = 8;
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** One row as served: the stored columns plus days left on an open, dated one. */
+function obligationOut(r: any, on: string) {
+  return { ...r, days_left: r.status === 'open' && r.due_date ? daysUntil(r.due_date, on) : null };
+}
+
+async function obligationByUid(env: Env, entityId: number, uid: string) {
+  return env.DB.prepare(
+    `SELECT id, entity_id, uid, kind, title, cadence, due_date, status, resolved_on, resolution_note, next_uid,
+            source, pack_key, note, created_at, updated_at FROM entity_obligations WHERE uid = ? AND entity_id = ?`,
+  ).bind(uid, entityId).first<any>();
+}
+
+// GET /api/legal/entities/:id/obligations — the calendar (staff). Open ones
+// first, soonest first; then the resolved history, newest first.
+app.get('/entities/:id/obligations', async (c) => {
+  const user = await requireAuth(c);
+  if (!isStaff(user.role)) return c.json({ error: 'Forbidden' }, 403);
+  const id = positiveInt(c.req.param('id'));
+  if (!id || !(await entityById(c.env, id))) return notFound(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, kind, title, cadence, due_date, status, resolved_on, resolution_note, next_uid,
+            source, pack_key, note, created_at, updated_at FROM entity_obligations WHERE entity_id = ?
+      ORDER BY status <> 'open', CASE WHEN status = 'open' THEN due_date END IS NULL,
+               CASE WHEN status = 'open' THEN due_date END, resolved_on DESC, id DESC`,
+  ).bind(id).all<any>();
+  const on = today();
+  return c.json({ as_of: on, obligations: (rows.results || []).map((r) => obligationOut(r, on)) });
+});
+
+// POST /api/legal/entities/:id/obligations — enter one (admin).
+// { kind, title, cadence, due_date?, note? }. A dated cadence needs a real
+// date; only an event-driven obligation may have none.
+app.post('/entities/:id/obligations', async (c) => {
+  const { user, refused } = await requireAdmin(c);
+  if (refused) return refused;
+  const id = positiveInt(c.req.param('id'));
+  if (!id || !(await entityById(c.env, id))) return notFound(c);
+  const b = await body(c);
+  const kind = typeof b.kind === 'string' && (OBLIGATION_KINDS as readonly string[]).includes(b.kind) ? b.kind : null;
+  if (!kind) return refuse(c, 400, { code: 'kind_invalid', message: `An obligation kind is one of: ${OBLIGATION_KINDS.join(', ')}.` });
+  const title = textField(b.title);
+  if (!title) return refuse(c, 400, { code: 'title_required', message: `An obligation needs a title of at most ${TEXT_MAX} characters.` });
+  const cadence = typeof b.cadence === 'string' && (OBLIGATION_CADENCES as readonly string[]).includes(b.cadence)
+    ? b.cadence as ObligationCadence : null;
+  if (!cadence) return refuse(c, 400, { code: 'cadence_invalid', message: `A cadence is one of: ${OBLIGATION_CADENCES.join(', ')}.` });
+  const due = b.due_date == null || b.due_date === '' ? null : isoDate(b.due_date);
+  if (b.due_date != null && b.due_date !== '' && !due) {
+    return refuse(c, 400, { code: 'date_invalid', message: 'due_date is a calendar date, YYYY-MM-DD.', extra: { field: 'due_date' } });
+  }
+  if (!due && cadence !== 'event') {
+    return refuse(c, 400, { code: 'due_date_required', message: 'Only an event-driven obligation can be entered without a due date.' });
+  }
+  const note = textField(b.note);
+  if (note === false) return refuse(c, 400, { code: 'field_invalid', message: `note must be text of at most ${TEXT_MAX} characters.`, extra: { field: 'note' } });
+  const uid = crypto.randomUUID();
+  const res = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO entity_obligations (uid, entity_id, kind, title, cadence, due_date, source, note, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+  ).bind(uid, id, kind, title, cadence, due, note ?? null, user.id).run();
+  if (Number(res.meta?.changes ?? 0) !== 1) {
+    return refuse(c, 409, { code: 'already_recorded', message: 'This entity already has that obligation for that date.' });
+  }
+  await logAdminAction(c.env, user.id, user.email, 'legal.entity.obligation_added', { entity_id: id, obligation_uid: uid, kind });
+  const row = await obligationByUid(c.env, id, uid);
+  return c.json({ obligation: obligationOut(row, today()) }, 201);
+});
+
+// POST /api/legal/entities/:id/obligations/pack — seed a US pack (admin).
+// { pack: 'us_de_llc' | 'us_de_ccorp' }. Idempotent: an obligation already
+// on the calendar for its date is left alone. A rule dated from formation is
+// skipped, with its reason, when the entity records no formation date.
+app.post('/entities/:id/obligations/pack', async (c) => {
+  const { user, refused } = await requireAdmin(c);
+  if (refused) return refused;
+  const id = positiveInt(c.req.param('id'));
+  const entity = id ? await entityById(c.env, id) : null;
+  if (!entity) return notFound(c);
+  const b = await body(c);
+  const pack = typeof b.pack === 'string' && (US_PACKS as readonly string[]).includes(b.pack) ? b.pack as UsPack : null;
+  if (!pack) {
+    return refuse(c, 400, {
+      code: 'pack_unknown',
+      message: `The packs on file are ${US_PACKS.join(' and ')}. Another jurisdiction's pack is defined once at HQ, and that registry is not built yet.`,
+    });
+  }
+  const on = today();
+  const { rows, skipped } = packObligations(pack, on, isoDate(String(entity.incorporation_date ?? '').slice(0, 10)));
+  const added: string[] = [];
+  for (const r of rows) {
+    const uid = crypto.randomUUID();
+    const res = await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO entity_obligations (uid, entity_id, kind, title, cadence, due_date, source, pack_key, note, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, 'pack', ?, ?, ?)`,
+    ).bind(uid, id, r.kind, r.title, r.cadence, r.due_date, r.pack_key, r.note, user.id).run();
+    if (Number(res.meta?.changes ?? 0) === 1) added.push(uid);
+  }
+  await logAdminAction(c.env, user.id, user.email, 'legal.entity.obligations_seeded', {
+    entity_id: id, pack, added: added.length, skipped: skipped.length,
+  });
+  return c.json({ pack, added: added.length, already_on_calendar: rows.length - added.length, skipped });
+});
+
+/**
+ * File or waive one open obligation (admin). Both are guarded on `status =
+ * 'open'` so a second click, or a race, resolves it once. Filing a recurring
+ * one opens its next occurrence in the same batch.
+ */
+async function resolveObligation(c: any, outcome: 'filed' | 'waived') {
+  const { user, refused } = await requireAdmin(c);
+  if (refused) return refused;
+  const id = positiveInt(c.req.param('id'));
+  if (!id || !(await entityById(c.env, id))) return notFound(c);
+  const uid = c.req.param('uid');
+  const row = await obligationByUid(c.env, id, uid);
+  if (!row) return refuse(c, 404, { code: 'obligation_not_found', message: 'No obligation with that id is on this entity.' });
+  if (row.status !== 'open') {
+    return refuse(c, 409, { code: 'already_resolved', message: `This obligation was already ${row.status} on ${row.resolved_on}.` });
+  }
+  const b = await body(c);
+  const on = b.on == null || b.on === '' ? today() : isoDate(b.on);
+  if (!on) return refuse(c, 400, { code: 'date_invalid', message: 'on is a calendar date, YYYY-MM-DD.', extra: { field: 'on' } });
+  const noteRaw = typeof b.note === 'string' ? b.note.trim() : '';
+  if (outcome === 'waived' && noteRaw.length < MIN_REASON) {
+    return refuse(c, 400, { code: 'reason_required', message: `Waiving an obligation needs a reason of at least ${MIN_REASON} characters. It is stored with it.` });
+  }
+  const note = textField(b.note);
+  if (note === false) return refuse(c, 400, { code: 'field_invalid', message: `note must be text of at most ${TEXT_MAX} characters.`, extra: { field: 'note' } });
+
+  const next = outcome === 'filed' && row.due_date ? nextDue(row.due_date, row.cadence) : null;
+  const nextUid = next ? crypto.randomUUID() : null;
+  const stmts = [
+    c.env.DB.prepare(
+      `UPDATE entity_obligations
+          SET status = ?, resolved_on = ?, resolved_by = ?, resolution_note = ?, next_uid = ?, updated_at = datetime('now')
+        WHERE id = ? AND status = 'open'`,
+    ).bind(outcome, on, user.id, note ?? null, nextUid, row.id),
+  ];
+  if (next) {
+    // Only when the update above landed: it is the one that wrote this
+    // request's next_uid, so a request that lost a race opens nothing.
+    stmts.push(c.env.DB.prepare(
+      `INSERT OR IGNORE INTO entity_obligations (uid, entity_id, kind, title, cadence, due_date, source, pack_key, note, created_by)
+       SELECT ?, entity_id, kind, title, cadence, ?, source, pack_key, note, ? FROM entity_obligations WHERE id = ? AND next_uid = ?`,
+    ).bind(nextUid, next, user.id, row.id, nextUid));
+  }
+  const results = await c.env.DB.batch(stmts);
+  if (Number((results[0] as any)?.meta?.changes ?? 0) !== 1) {
+    return refuse(c, 409, { code: 'already_resolved', message: 'This obligation was resolved by someone else first.' });
+  }
+  await logAdminAction(c.env, user.id, user.email, `legal.entity.obligation_${outcome}`, {
+    entity_id: id, obligation_uid: uid, on, ...(nextUid ? { next_uid: nextUid } : {}),
+  });
+  let opened = nextUid ? await obligationByUid(c.env, id, nextUid) : null;
+  if (nextUid && !opened) {
+    // The next occurrence was already on the calendar (entered by hand, or
+    // seeded), so the insert was ignored. Link the filed row to that one
+    // rather than to a uid that names nothing.
+    const existing = await c.env.DB.prepare(
+      `SELECT uid FROM entity_obligations WHERE entity_id = ? AND kind = ? AND title = ? AND due_date = ?`,
+    ).bind(id, row.kind, row.title, next).first();
+    await c.env.DB.prepare(`UPDATE entity_obligations SET next_uid = ? WHERE id = ?`)
+      .bind(existing?.uid ?? null, row.id).run();
+    opened = existing?.uid ? await obligationByUid(c.env, id, existing.uid) : null;
+  }
+  const resolved = await obligationByUid(c.env, id, uid);
+  const t = today();
+  return c.json({ obligation: obligationOut(resolved, t), next: opened ? obligationOut(opened, t) : null });
+}
+
+// POST /api/legal/entities/:id/obligations/:uid/file — { on?, note? }
+app.post('/entities/:id/obligations/:uid/file', (c) => resolveObligation(c, 'filed'));
+// POST /api/legal/entities/:id/obligations/:uid/waive — { note (reason), on? }
+app.post('/entities/:id/obligations/:uid/waive', (c) => resolveObligation(c, 'waived'));
 
 export default app;
