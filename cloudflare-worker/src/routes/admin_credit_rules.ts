@@ -139,12 +139,16 @@ r.put('/:key', async (c) => {
     if (credits === null || credits > CREDITS_MAX) {
       return refuse(c, 400, { code: 'invalid_credits', message: `Credits must be a whole number from 0 to ${CREDITS_MAX}.` });
     }
-    // 1 credit = US$1 unless the Super Admin says otherwise for this rule.
-    const usdCents = body?.usd_value_cents === undefined
-      ? (body?.credits === undefined ? Number(before.usd_value_cents) : credits * 100)
-      : wholeNumber(body.usd_value_cents);
-    if (usdCents === null) {
-      return refuse(c, 400, { code: 'invalid_value', message: 'The dollar value must be a whole number of cents, 0 or more.' });
+    // 1 CREDIT = US$1, ALWAYS (#1101). The dollar value follows the credits
+    // and is never set on its own: the Perks balance and ledger convert at
+    // that one rate, so a rule worth anything else would show the same
+    // credits at two different prices. A value sent that disagrees is refused.
+    const usdCents = credits * 100;
+    if (body?.usd_value_cents !== undefined && wholeNumber(body.usd_value_cents) !== usdCents) {
+      return refuse(c, 400, {
+        code: 'usd_value_fixed',
+        message: `1 credit is US$1, so ${credits} credits are worth ${usdCents} cents. Change the credits; the value follows.`,
+      });
     }
     const active = body?.active === undefined ? Number(before.active) === 1 : body.active === true;
     if (body?.active !== undefined && typeof body.active !== 'boolean') {
