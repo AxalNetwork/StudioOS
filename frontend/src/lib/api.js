@@ -11,6 +11,7 @@ import { storeReason } from './impersonationBar';
 export * from './api/communityTasks.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
+export * from './api/researchSectors.js';
 // api-modules:end
 
 const BASE = '/api';
