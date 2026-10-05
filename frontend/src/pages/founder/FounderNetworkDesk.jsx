@@ -4,7 +4,10 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
-import { COLD_AFTER_DAYS, daysSince, isCold, organizationOf } from '../../lib/networkBook';
+import ZoneDraft from '../../workspaces/ZoneDraft';
+import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
+import { COLD_AFTER_DAYS, daysSince, followUp, isCold, organizationOf, strengthLabel } from '../../lib/networkBook';
 import { zonePillClass } from './deskZoneNav';
 import './founderNetworkDesk.css';
 
@@ -39,6 +42,10 @@ export default function FounderNetworkDesk() {
   const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  // THE SWITCH THE TWO BANDS WAIT FOR (D551). Until #1144 no draft surface
+  // read a founder's contacts, so this desk drew no switch (D424's `none`).
+  const [fillsOn] = useAssistMode('Network');
+  const ai = useAiSpend({ enabled: fillsOn });
 
   useEffect(() => {
     let live = true;
@@ -70,14 +77,15 @@ export default function FounderNetworkDesk() {
       <nav aria-label="Network desk sections">{SECTIONS.map(([label, to]) => <NavLink data-testid={`link-network-${label.toLowerCase()}-anchor`} key={label} to={to} className={zonePillClass}>{label}</NavLink>)}</nav>
     </header>
     {error && <div className="a6-error" data-testid="status-network-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-network" type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
-    <NetworkSections data={data} loading={initialLoading} state={state} />
+    <NetworkSections data={data} loading={initialLoading} state={state} fillsOn={fillsOn} ai={ai} />
   </div><WorkerRail
     workspace="Network"
     className="a6-rail"
-    stance="Read-only coverage"
-    // No `fills`, and the note says why (D424): no band on this desk drafts,
-    // so a switch here would change nothing — D17's dead control.
-    note={ASSIST_SURFACES.workspace.desks.Network.none}
+    stance="Drafts, never sends"
+    // The switch for the re-engagement and intro-email bands (D551). They
+    // draft and change nothing; sending stays a human click.
+    fills
+    note={ASSIST_SURFACES.workspace.desks.Network.fills}
     coverage={[
       `${data.relationships.length} explicit partner relationship${data.relationships.length === 1 ? '' : 's'}`,
       `${data.contacts.length} authorized contact${data.contacts.length === 1 ? '' : 's'}`,
@@ -86,7 +94,7 @@ export default function FounderNetworkDesk() {
         ? `${data.summary?.relationships_count ?? data.summary?.relationship_count} relationships reported by source`
         : 'Aggregate relationship count not recorded',
     ]}
-    footer="Read-only network coverage"
+    footer="Drafts only · nothing is sent"
   /></div></main>;
 }
 
@@ -122,24 +130,63 @@ function touchCell(value) {
   return <span className={cold ? 'is-cold' : undefined} data-testid={cold ? 'text-going-cold' : undefined}>{days === null ? 'Not recorded' : cold ? `${days} days · going cold` : date(value)}</span>;
 }
 
-function NetworkSections({ data, loading, state }) {
-  const pending = data.propositions.filter((item) => text(item.status).toLowerCase() === 'pending');
+/**
+ * The project the re-engagement band drafts for: the coldest contact's. The
+ * band writes one note, to the person longest without contact, and the
+ * surface is scoped to one project (`founderProject`), so it is that
+ * person's project — never a guess between two startups.
+ */
+export function coldestProject(contacts) {
+  const cold = contacts.filter((row) => isCold(row) && row.project_id != null);
+  if (!cold.length) return null;
+  cold.sort((a, b) => (daysSince(b.last_activity_at) ?? 0) - (daysSince(a.last_activity_at) ?? 0));
+  return String(cold[0].project_id);
+}
+
+/** Who should meet whom has no source: no store pairs two of a founder's contacts. */
+export const PAIRINGS_REASON = 'No store pairs two of your contacts: a match is recorded between you and one person, never between two third parties.';
+
+function NetworkSections({ data, loading, state, fillsOn = false, ai = null }) {
   const cold = [...data.relationships.map((row) => ({ last_activity_at: row.last_activity_at || row.last_touch_at })), ...data.contacts].filter((row) => isCold(row)).length;
+  const coldScope = coldestProject(data.contacts);
   const organizations = organizationRollup(data.contacts);
   return <div className="a6-sections">
     <section className="a6-card a6-relationships" id="a6-relationships"><Head title="Relationships" meta={`${countText(data.relationships.length + data.contacts.length, 'relationship')} · ${cold} going cold`} />
       {loading ? <Skeleton rows={4} /> : <><div className="a6-table a6-relation-head"><span>Person</span><span>Context</span><span>Strength</span><span>Last touch</span></div>
         {data.relationships.map((row, index) => <div className="a6-table a6-relationship-row" key={row.id || index} data-testid={`row-partner-relationship-${row.id || index}`}><strong>{text(row.other?.name) || 'Name not recorded'}<small>Partner relationship</small></strong><span>{text(row.relationship_type) || 'Not recorded'}</span><span>{finite(row.strength_score) ? String(row.strength_score) : 'Not recorded'}</span>{touchCell(row.last_activity_at || row.last_touch_at)}</div>)}
-        {data.contacts.map((row, index) => <div className="a6-table a6-relationship-row" key={row.id || row.email || index} data-testid={`row-authorized-contact-${row.id || index}`}><strong>{text(row.name) || text(row.email) || 'Name not recorded'}<small>Authorized contact</small></strong><span>{text(row.audience || row.routed_to || row.source) || 'Not recorded'}</span><span>Not scored</span>{touchCell(row.last_activity_at)}</div>)}
+        {data.contacts.map((row, index) => <div className="a6-table a6-relationship-row" key={row.id || row.email || index} data-testid={`row-authorized-contact-${row.id || index}`}><strong>{text(row.name) || text(row.email) || 'Name not recorded'}<small>{organizationOf(row) || 'Authorized contact'}</small></strong><span>{text(row.audience || row.routed_to || row.source) || 'Not recorded'}</span><span data-testid={`text-strength-${row.id || index}`}>{strengthLabel(row)}</span><span>{touchCell(row.last_activity_at)}<small>{followUp(row).text}</small></span></div>)}
         {!data.relationships.length && !data.contacts.length && <Empty title="No relationship records are available." body="Partner relationships and authorized contacts will appear here as separate record types." />}
-        <p className="a6-note">Going cold means more than {COLD_AFTER_DAYS} days since the last recorded activity. Strength, notes and reminders are not recorded against a contact, so none is shown.</p>
+        <p className="a6-note">Going cold means more than {COLD_AFTER_DAYS} days since the last recorded activity. Strength and organization are set on a contact in Relationships; a contact nobody has scored reads Not recorded.</p>
+        {fillsOn && coldScope ? <ZoneDraft
+          surface="network/re-engagement"
+          scopeKey={coldScope}
+          ai={ai}
+          accent="violet"
+          label="Proposal · re-engagement"
+          run="Draft a re-engagement note"
+          accept="Accept the note"
+          empty="Nothing proposed yet. Eadwyn will read the contacts going cold on this startup — how long since each was touched and what they last wrote — and draft one note to the person longest without contact."
+          nothingToDraft="Nobody on this startup is going cold."
+          foot="A note opens on what they last wrote, never on a check-in. Nothing is sent."
+        /> : null}
         <DeskLink testid="link-open-network-relationships" to={ZONE.Relationships} state={state}>Open relationships</DeskLink></>}
     </section>
     <div className="a6-pair"><section className="a6-card" id="a6-introductions"><Head title="Introductions" meta={countText(data.propositions.length, 'proposition')} />
       {loading ? <Skeleton rows={2} /> : <Propositions rows={data.propositions} empty="No introduction propositions are recorded." />}
+      {fillsOn ? <ZoneDraft
+        surface="network/intro-email"
+        ai={ai}
+        accent="violet"
+        label="Proposal · intro email"
+        run="Draft an intro email"
+        accept="Accept the email"
+        empty="Nothing proposed yet. Eadwyn will read the introductions you have accepted and the reasons each match recorded, and draft a forwardable email asking for the first."
+        nothingToDraft="No accepted introduction is in motion."
+        foot="Written from the match's recorded reasons only. Nothing is sent."
+      /> : null}
       <DeskLink testid="link-open-network-introductions" to={ZONE.Introductions} state={state}>Open introductions</DeskLink>
-    </section><section className="a6-card" id="a6-pairings"><Head title="Who should meet whom" meta="Recorded suggestions" />
-      {loading ? <Skeleton rows={2} /> : pending.length ? <Propositions rows={pending} /> : <Empty title="No pairwise suggestion is recorded." body="Available data can suggest a connection between you and a target, not between two third parties." />}
+    </section><section className="a6-card" id="a6-pairings"><Head title="Who should meet whom" meta="Not recorded" />
+      {loading ? <Skeleton rows={2} /> : <Empty title="Not recorded" body={PAIRINGS_REASON} />}
       <DeskLink testid="link-open-network-pairings" to={ZONE.Introductions} state={state}>Open introductions</DeskLink>
     </section></div>
     <section className="a6-card a6-organizations" id="a6-organizations"><Head title="Organizations" meta={`People-first lens · ${countText(organizations.length, 'organization')}`} />
