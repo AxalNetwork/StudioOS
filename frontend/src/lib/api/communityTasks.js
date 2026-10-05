@@ -4,5 +4,8 @@
 import { request } from '../api.js';
 
 export const communityTasksApi = {
-  list: () => request('/community-tasks'),
+  // `suggestionsBefore` is the previous page's `my_suggestions_next`.
+  list: (suggestionsBefore) => request(
+    suggestionsBefore ? `/community-tasks?suggestions_before=${encodeURIComponent(suggestionsBefore)}` : '/community-tasks',
+  ),
 };

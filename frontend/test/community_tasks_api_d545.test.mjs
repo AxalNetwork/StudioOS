@@ -26,5 +26,7 @@ test('communityTasksApi.list GETs /api/community-tasks and hands back the body',
     assert.equal(calls.length, 1);
     assert.match(calls[0].url, /\/api\/community-tasks$/);
     assert.equal(calls[0].method, 'GET');
+    await communityTasksApi.list(4521);
+    assert.match(calls[1].url, /\/api\/community-tasks\?suggestions_before=4521$/, 'the next page of suggestions');
   } finally { globalThis.fetch = origFetch; }
 });

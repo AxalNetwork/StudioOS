@@ -20,8 +20,8 @@ import { SignJWT } from 'jose';
 import communityTasks, { audienceFor } from '../src/routes/community_tasks.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const FOUNDER = 10, INVESTOR = 11, EXPLORING = 12, ADMIN = 1;
-const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [INVESTOR]: 'investor', [EXPLORING]: 'exploring', [ADMIN]: 'admin' };
+const FOUNDER = 10, INVESTOR = 11, EXPLORING = 12, ADMIN = 1, SUPER = 2;
+const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [INVESTOR]: 'investor', [EXPLORING]: 'exploring', [ADMIN]: 'admin', [SUPER]: 'admin' };
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const ddl = (name: string) => {
@@ -32,10 +32,12 @@ const ddl = (name: string) => {
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'tickets']) db.exec(ddl(t));
+  for (const t of ['users', 'tickets', 'super_admins']) db.exec(ddl(t));
   db.exec(read('cloudflare-worker/sql/migrations/383_community_tasks.sql'));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, `U${id}`, `u${id}@example.test`);
+  // SUPER is an admin with the elevation; ADMIN is a plain admin.
+  db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
   return db;
 }
 /** A task suggested by `user`, then decided as given. */
@@ -66,10 +68,10 @@ function makeD1(db: InstanceType<typeof DatabaseSync>, failOn?: RegExp) {
     },
   };
 }
-async function list(db: any, who: number, failOn?: RegExp) {
+async function list(db: any, who: number, failOn?: RegExp, query = '') {
   const jwt = await new SignJWT({ user_id: who, role: ROLE[who] }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
-  const res = await communityTasks.request('/', { headers: { Authorization: `Bearer ${jwt}` } },
+  const res = await communityTasks.request(`/${query}`, { headers: { Authorization: `Bearer ${jwt}` } },
     { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db, failOn) } as any);
   return { status: res.status, body: (await res.json().catch(() => null)) as any };
 }
@@ -91,14 +93,19 @@ test('a signed-in user sees the approved tasks for their persona and for everyon
   assert.deepEqual(inv.body.tasks.map((t: any) => t.title).sort(), ['For everyone', 'For investors']);
 });
 
-test('an exploring account reads the explorer audience; an admin sees every approved task', async () => {
+test('an exploring account reads the explorer audience; a Super Admin sees every approved task, a plain admin only those for all', async () => {
   const db = freshDb();
   task(db, FOUNDER, 'For explorers', { status: 'approved', audience: 'explorer' });
   task(db, FOUNDER, 'For founders', { status: 'approved', audience: 'founder' });
-  assert.deepEqual((await list(db, EXPLORING)).body.tasks.map((t: any) => t.title), ['For explorers']);
+  task(db, FOUNDER, 'For everyone', { status: 'approved', audience: 'all' });
+  assert.deepEqual((await list(db, EXPLORING)).body.tasks.map((t: any) => t.title).sort(), ['For everyone', 'For explorers']);
+  const sup = await list(db, SUPER);
+  assert.equal(sup.body.audience, 'admin');
+  assert.equal(sup.body.tasks.length, 3);
   const admin = await list(db, ADMIN);
-  assert.equal(admin.body.audience, 'admin');
-  assert.equal(admin.body.tasks.length, 2);
+  assert.equal(admin.status, 200);
+  assert.equal(admin.body.audience, 'all', 'a plain admin is not the reviewer');
+  assert.deepEqual(admin.body.tasks.map((t: any) => t.title), ['For everyone'], 'a plain admin read other personas\' tasks');
   assert.equal(audienceFor('admin'), null);
   assert.equal(audienceFor('lp'), null);
 });
@@ -128,6 +135,28 @@ test('nothing yet is an empty list; a failed read is a refusal, never an empty l
     assert.equal(r.body.error, 'community_tasks_unreadable');
     assert.equal('tasks' in r.body, false);
     assert.doesNotMatch(JSON.stringify(r.body), /disk I\/O/);
+  }
+});
+
+test('suggestion history pages by cursor: 100 a page, and the next page is named, never cut off', async () => {
+  const db = freshDb();
+  const ids: number[] = [];
+  for (let i = 0; i < 101; i++) ids.push(task(db, FOUNDER, `Idea ${i}`));
+  const first = await list(db, FOUNDER);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.my_suggestions.length, 100);
+  assert.equal(first.body.my_suggestions[0].id, ids[100], 'newest first');
+  assert.equal(first.body.my_suggestions_next, ids[1]);
+  const second = await list(db, FOUNDER, undefined, `?suggestions_before=${first.body.my_suggestions_next}`);
+  assert.deepEqual(second.body.my_suggestions.map((x: any) => x.id), [ids[0]], 'the oldest suggestion is reachable');
+  assert.equal(second.body.my_suggestions_next, null, 'the last page says so');
+  const exact = freshDb();
+  for (let i = 0; i < 100; i++) task(exact, FOUNDER, `Idea ${i}`);
+  assert.equal((await list(exact, FOUNDER)).body.my_suggestions_next, null, 'a full page that is also the last names no next page');
+  for (const bad of ['0', '-3', 'abc', '1.5']) {
+    const r = await list(db, FOUNDER, undefined, `?suggestions_before=${bad}`);
+    assert.equal(r.status, 400, bad);
+    assert.equal(r.body.error, 'bad_cursor');
   }
 });
 
