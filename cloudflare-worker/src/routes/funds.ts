@@ -21,6 +21,7 @@ import { clampLimit } from '../util/pagination';
 import { ensureFundGpColumns } from '../services/fundGpSchema';
 import { lpMembershipScope, lpSelfScope, fundGpScope, NO_ROWS } from '../services/tenancyScope';
 import { refuse } from '../util/refusal';
+import { CommsInputError, addCommunication, listCommunications, parseCommInput, parseLpType } from '../services/fundLpComms';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
@@ -816,6 +817,69 @@ funds.post('/:id/lps', async (c) => {
     });
   }
   return c.json({ ok: true, lp }, 201);
+});
+
+// ---------- D553 (#1146): LP type and the comms log ----------
+//
+// Every route here is `requireFundGp`: the fund's own GP (or an admin), so
+// another fund's LP is a 404 exactly as another fund is. Ids are bound,
+// never interpolated. The actor is the session's user, never a body field.
+
+funds.put('/:id/lps/:lpId/type', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const lpId = parseInt(c.req.param('lpId'), 10);
+  const { user } = await requireFundGp(c, fundId);
+  const body = await c.req.json().catch(() => ({} as any));
+  let lpType;
+  try { lpType = parseLpType(body?.lp_type); } catch (e) {
+    if (e instanceof CommsInputError) return refuse(c, 400, { code: e.code, message: e.reason });
+    throw e;
+  }
+  const r = await c.env.DB.prepare(
+    `UPDATE limited_partners SET lp_type = ?, updated_at = datetime('now') WHERE id = ? AND fund_id = ?`,
+  ).bind(lpType, lpId, fundId).run();
+  if (Number((r as any)?.meta?.changes ?? 0) === 0) return c.json({ error: 'LP not found' }, 404);
+  // The actor, written here rather than through `logActivity`, whose INSERT
+  // leaves `activity_logs.action` (NOT NULL) unset and is swallowed by its own
+  // try/catch, so it records nothing on a database built from the migrations.
+  await c.env.DB.prepare(
+    `INSERT INTO activity_logs (user_id, action, action_type, entity_type, entity_id, metadata)
+     VALUES (?, 'lp_type_set', 'lp_type_set', 'limited_partner', ?, ?)`,
+  ).bind(Number(user.id), String(lpId), JSON.stringify({ fund_id: fundId, lp_type: lpType })).run();
+  return c.json({ ok: true, id: lpId, lp_type: lpType });
+});
+
+funds.get('/:id/comms', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, fundId);
+  const lpRaw = c.req.query('lp');
+  const lpId = lpRaw === undefined || lpRaw === '' ? null : Number(lpRaw);
+  if (lpId !== null && (!Number.isInteger(lpId) || lpId <= 0)) {
+    return refuse(c, 400, { code: 'lp_invalid', message: 'lp must be an LP id.' });
+  }
+  try {
+    return c.json({ ok: true, ...(await listCommunications(c.env, fundId, lpId)) });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'comms_log_unreadable',
+      message: "This fund's comms log could not be read. Nothing here says nothing was sent; try again.",
+      raw: e,
+    });
+  }
+});
+
+funds.post('/:id/comms', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const { user } = await requireFundGp(c, fundId);
+  const body = await c.req.json().catch(() => ({} as any));
+  let input;
+  try { input = parseCommInput(body); } catch (e) {
+    if (e instanceof CommsInputError) return refuse(c, 400, { code: e.code, message: e.reason });
+    throw e;
+  }
+  const id = await addCommunication(c.env, fundId, Number(user.id), input);
+  if (id === null) return c.json({ error: 'LP or call line not found on this fund' }, 404);
+  return c.json({ ok: true, id, logged_by: Number(user.id) }, 201);
 });
 
 funds.post('/lps/:lpId/sign-lpa', async (c) => {
