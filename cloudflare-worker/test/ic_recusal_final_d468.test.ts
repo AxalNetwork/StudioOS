@@ -37,13 +37,19 @@ const MTG = 'mtg-alpha';
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-function makeD1(db: InstanceType<typeof DatabaseSync>, opts: { noChanges?: boolean } = {}) {
+function makeD1(db: InstanceType<typeof DatabaseSync>, opts: { noChanges?: boolean; afterPriorRead?: (() => void) | null } = {}) {
   return {
     prepare(sql: string) {
       let b: any[] = [];
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
-        async first() { return db.prepare(sql).get(...b) ?? null; },
+        async first() {
+          const row = db.prepare(sql).get(...b) ?? null;
+          // A competing request that commits between the vote route's read of
+          // the prior vote and its write.
+          if (opts.afterPriorRead && /^SELECT vote FROM ic_votes/.test(sql)) { const h = opts.afterPriorRead; opts.afterPriorRead = null; h(); }
+          return row;
+        },
         async all() { return { results: db.prepare(sql).all(...b) }; },
         async run() {
           const r = db.prepare(sql).run(...b);
@@ -156,7 +162,8 @@ async function token(userId: number, role: string): Promise<string> {
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 let NO_CHANGES = false;
-const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db, { noChanges: NO_CHANGES }) });
+let AFTER_PRIOR_READ: (() => void) | null = null;
+const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db, { noChanges: NO_CHANGES, afterPriorRead: AFTER_PRIOR_READ }) });
 
 type Who = { user: number; role: string };
 const author = { user: AUTHOR, role: 'investor' };
@@ -202,7 +209,7 @@ test('recuse, then vote yes: refused with recusal_is_final, and the stored vote 
 });
 
 test('no, abstain, or a fresh declaration after a recusal is refused the same way', async () => {
-  for (const [v, why] of [['no', 'x'], ['abstain', undefined], ['recused', 'a different declaration']] as const) {
+  for (const [v, why] of [['no', 'x'], ['abstain', undefined], ['recused', 'a different declaration'], ['recused', 'board seat at a competitor']] as const) {
     const db = freshDb();
     await vote(colleague, db, 'recused', 'board seat at a competitor');
     const r = await vote(colleague, db, v, why);
@@ -220,7 +227,7 @@ test('a refused vote writes no decision-journal draft', async () => {
   assert.equal(n, 0);
 });
 
-test('a driver that reports no row count is still refused (the stored row is read back)', async () => {
+test('a driver that reports no row count is still refused, an identical replay included (the prior vote is read first)', async () => {
   NO_CHANGES = true;
   try {
     const db = freshDb();
@@ -230,7 +237,27 @@ test('a driver that reports no row count is still refused (the stored row is rea
     assert.equal(r2.status, 409);
     assert.equal(r2.body.error, 'recusal_is_final');
     assert.equal(stored(db, COLLEAGUE).vote, 'recused');
+    // An identical replay leaves the stored row equal to the request, so only
+    // knowing the recusal was there BEFORE the write can refuse it.
+    const r3 = await vote(colleague, db, 'recused', 'angel in the company');
+    assert.equal(r3.status, 409, 'an identical replay of a recusal is refused too');
+    assert.equal(r3.body.error, 'recusal_is_final');
   } finally { NO_CHANGES = false; }
+});
+
+test('a recusal that lands between the read and the write still wins: the upsert never overwrites it', async () => {
+  const db = freshDb();
+  await vote(colleague, db, 'yes', 'team');
+  AFTER_PRIOR_READ = () => {
+    db.prepare(`UPDATE ic_votes SET vote = 'recused', rationale = 'raced declaration'
+                 WHERE user_id = ? AND ic_decision_id = (SELECT id FROM ic_decisions WHERE uid = ?)`).run(COLLEAGUE, DEC);
+  };
+  try {
+    const r = await vote(colleague, db, 'no', 'market');
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.equal(r.body.error, 'recusal_is_final');
+    assert.deepEqual({ ...stored(db, COLLEAGUE) }, { vote: 'recused', rationale: 'raced declaration' });
+  } finally { AFTER_PRIOR_READ = null; }
 });
 
 test('controls: a vote may still change, and a voter may still recuse after voting', async () => {

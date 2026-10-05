@@ -632,25 +632,29 @@ r.post('/:uid/vote', async (c) => {
     }
     // D468 — A RECUSAL IS FINAL. The member declared a conflict and left the
     // denominator; a later yes/no/abstain (or a fresh recusal rewriting the
-    // declaration) would erase that record, and an upsert used to do exactly
-    // that. The guard is IN the upsert (`WHERE ic_votes.vote <> 'recused'`),
-    // so two requests racing cannot slip past a separate read: a recused row
-    // is never updated, and zero changed rows is the refusal. Voting first and
-    // recusing later is still allowed — that is a member declaring a conflict.
-    const write = await c.env.DB.prepare(
-      `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at
-        WHERE ic_votes.vote <> 'recused'`
-    ).bind(d.id, user.id, vote, rationale, nowIso()).run();
-    // D1 reports `meta.changes`; if a driver ever did not, the stored row is
-    // read back rather than assuming the write landed.
-    const changed = (write as any)?.meta?.changes;
-    const refused = typeof changed === 'number'
-      ? changed === 0
-      : (await c.env.DB.prepare('SELECT vote, rationale FROM ic_votes WHERE ic_decision_id = ? AND user_id = ?')
-          .bind(d.id, user.id).first<{ vote: string; rationale: string | null }>()
-          .then((row) => row?.vote === 'recused' && (vote !== 'recused' || row.rationale !== rationale)));
+    // declaration, or the same one replayed) would erase or blur that record,
+    // and an upsert used to do exactly that. Voting first and recusing later
+    // is still allowed — that is a member declaring a conflict.
+    //
+    // Two checks, because each covers what the other cannot. The read BEFORE
+    // the write refuses any vote on a standing recusal, an identical replay
+    // included; a row compared AFTER the write cannot, because an identical
+    // replay leaves it equal to the request. The guard IN the upsert
+    // (`WHERE ic_votes.vote <> 'recused'`) covers a recusal that lands
+    // between that read and this write: the recused row is never updated, and
+    // zero changed rows is the refusal (D1 reports `meta.changes`).
+    const prior = await c.env.DB.prepare('SELECT vote FROM ic_votes WHERE ic_decision_id = ? AND user_id = ?')
+      .bind(d.id, user.id).first<{ vote: string }>();
+    let refused = prior?.vote === 'recused';
+    if (!refused) {
+      const write = await c.env.DB.prepare(
+        `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at
+          WHERE ic_votes.vote <> 'recused'`
+      ).bind(d.id, user.id, vote, rationale, nowIso()).run();
+      refused = (write as any)?.meta?.changes === 0;
+    }
     if (refused) {
       return c.json({
         error: 'recusal_is_final',
