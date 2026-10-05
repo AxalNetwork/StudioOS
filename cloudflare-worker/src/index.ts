@@ -147,6 +147,7 @@ import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
 import research from './routes/research';
 import researchOverview from './routes/research_overview';
+import researchMarkets from './routes/research_markets';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -182,6 +183,8 @@ import branchDeploymentRoutes from './routes/branch_deployment';
 import branchInvitationRoutes from './routes/branch_invitations';
 import branchSupportSessionRoutes from './routes/branch_support_sessions';
 import adminSuperAdmins from './routes/admin_super_admins';
+import adminCreditRules from './routes/admin_credit_rules';
+import adminTicketReviews from './routes/admin_ticket_reviews';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
@@ -893,6 +896,12 @@ app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
+// D540 — the credit reward rules and their grants. Super-admin-only, and
+// before the catch-all like the rest of the HQ tier.
+app.route('/api/admin/credit-rules', adminCreditRules);
+// D544 — the review queue for feature requests and suggested tasks.
+// Super-admin-only, before the catch-all.
+app.route('/api/admin/ticket-reviews', adminTicketReviews);
 // HQ · Home — the franchisor's overview. Super-admin-only, mounted before
 // the catch-all like everything else in the HQ tier.
 app.route('/api/admin/hq', adminHq);
@@ -977,6 +986,9 @@ app.route('/api/deck-reviewer', deckReviewer);
 // VALID_TYPES comment in routes/search.ts.
 // D536 — mounted before /api/research so its one path is never shadowed.
 app.route('/api/research/overview', researchOverview);
+// D533 — Research · Markets and · Geographies, read through the crosswalk in
+// services/researchTaxonomy.ts. Paths do not overlap research.ts's.
+app.route('/api/research', researchMarkets);
 app.route('/api/research', research);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
