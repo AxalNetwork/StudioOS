@@ -61,7 +61,8 @@ test('A6 flags going cold with the zone’s own definition', () => {
   }
   // THE DESK SHOWS IT on every row and counts it in the card's meta.
   assert.match(desk, /\{touchCell\(row\.last_activity_at \|\| row\.last_touch_at\)\}/, 'partner relationships are not flagged');
-  assert.match(desk, /<span>Not scored<\/span>\{touchCell\(row\.last_activity_at\)\}/, 'contacts are not flagged');
+  // D551 (#1144): a contact's strength is the one set on it, or Not recorded.
+  assert.match(desk, /\{strengthLabel\(row\)\}<\/span><span>\{touchCell\(row\.last_activity_at\)\}/, 'contacts are not flagged');
   assert.match(desk, /\$\{cold\} going cold/, 'the relationships card does not count who is going cold');
   // ORGANIZATIONS ARE THE RECORDED FIELD, never an email domain.
   assert.match(read('frontend/src/lib/networkBook.js'), /row\?\.organization \|\| row\?\.company \|\| row\?\.firm/);
@@ -70,5 +71,8 @@ test('A6 flags going cold with the zone’s own definition', () => {
 });
 test('A6 does not resurrect rejected fixture records or unsupported AI claims', () => {
   for (const forbidden of ['Marisol Vega', 'Dev Raman', 'Aoife Brennan', 'Priyanka Raghunathan', 'Tobias Ncube', 'Thornbury Capital', 'Latitude Seed', 'Kestrel Ventures', 'Verwood', 'Raghunathan Law', 'Accept draft', 'Send to connector', 'bge-m3', 'Gemma', 'Mistral', 'Llama', 'GPT-OSS', 'FLUX', 'DeepSeek', 'QwQ', 'Granite']) assert.ok(!desk.includes(forbidden), `${forbidden} must not be a fixture`);
-  assert.doesNotMatch(desk, /184 relationships|12 going cold|71 days|3 asked|2 offered|1 in motion|31 tracked|Re-engage|Follow up|Log a touch|Offer the intro|re-engagement proposal|\$14\.20|\$0\.0009/i);
+  // `Re-engage` is the canvas's fixture BUTTON. Since D551 (#1144) the desk has
+  // a real re-engagement band over `network/re-engagement`, so the word
+  // "re-engagement" is the band's own name, not a fixture.
+  assert.doesNotMatch(desk, /184 relationships|12 going cold|71 days|3 asked|2 offered|1 in motion|31 tracked|Re-engage(?!ment)|Follow up|Log a touch|Offer the intro|re-engagement proposal|\$14\.20|\$0\.0009/i);
 });
