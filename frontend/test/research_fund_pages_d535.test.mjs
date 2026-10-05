@@ -124,7 +124,7 @@ test('populated: coverage from the API, and stage "Not recorded" with its reason
   assert.match(text, /Funds with each field filled, of 2,616/);
   assert.match(text, /Size in euros1,001 \/ 2,616/);
   assert.match(text, /3 more funds hold a size from a list whose currency is not recorded/);
-  assert.match(text, new RegExp(`StageNot recorded${STAGE_REASON.replace(/\./g, '\\.')}`));
+  assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
 });
 
 test('populated: the filters, with counts and "not recorded" options', () => {
@@ -173,7 +173,7 @@ test('drawer: the fund\'s facts, stage and size "Not recorded" with reasons, rep
   });
   assert.match(text, /Fund details/);
   assert.match(text, /SizeNot recordedNot recorded: this list records no size in a known currency/);
-  assert.match(text, new RegExp(`StageNot recorded${STAGE_REASON.replace(/\./g, '\\.')}`));
+  assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
   assert.match(text, /EIF \/ EIFONot recordedWith no LPs listed, EIF and EIFO backing is unknown, not absent\./);
   assert.match(text, /Unreadable The reports could not be read\. This is not a fund with no reports\./);
   assert.match(text, /Add to my list/);
@@ -201,7 +201,7 @@ test('catalog profile: populated, with "Not recorded" sizes and stage, and an un
   const text = catalog({ fund, list: { loading: false, error: 'Unreadable', existing: null } });
   assert.match(text, /Zeta Deep Tech/);
   assert.match(text, /SizeNot recordedNot recorded: this list records no size in a known currency/);
-  assert.match(text, new RegExp(`StageNot recorded${STAGE_REASON.replace(/\./g, '\\.')}`));
+  assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
   assert.match(text, /Your list could not be read/);
   assert.doesNotMatch(text, /Add to my list/, 'no add while the list is unreadable: it might duplicate a row');
   const ok = catalog({ fund: { ...fund, data: { ...fund.data, item: ALPHA } }, list: { loading: false, error: null, existing: null } });
