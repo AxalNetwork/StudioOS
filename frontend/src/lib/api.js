@@ -8,6 +8,7 @@ import { storeReason } from './impersonationBar';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/communityTasks.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 // api-modules:end
@@ -3083,6 +3084,13 @@ export const api = {
     request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
   fundsSignLpa: (lpId) =>
     request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
+  // D553 (#1146): an LP's type (one of five, or null to clear), and the comms
+  // log — what was sent to which LP and when. The log stores no message body.
+  fundsSetLpType: (id, lpId, lp_type) =>
+    request(`/funds/${id}/lps/${lpId}/type`, { method: 'PUT', body: JSON.stringify({ lp_type }) }),
+  fundsCommsList: (id, lpId) => request(`/funds/${id}/comms${lpId ? `?lp=${encodeURIComponent(lpId)}` : ''}`),
+  fundsLogComm: (id, data) =>
+    request(`/funds/${id}/comms`, { method: 'POST', body: JSON.stringify(data) }),
   // Fund analytics over real D1 rows only. Metrics the schema cannot support
   // (NAV, RVPI, TVPI, IRR) come back null with a reason in `unavailable`; the
   // pages render "Not recorded" rather than an invented figure.

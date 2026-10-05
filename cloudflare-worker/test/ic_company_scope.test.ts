@@ -365,7 +365,7 @@ test('a colleague at the same firm sees it and can vote — a committee needs mo
   assert.deepEqual(uids(list.body), [DEC_A]);
 
   const db = freshDb();
-  const voted = await call(colleague, `/${DEC_A}/vote`, { method: 'POST', body: { vote: 'no' } }, db);
+  const voted = await call(colleague, `/${DEC_A}/vote`, { method: 'POST', body: { vote: 'no', rationale: 'valuation too rich' } }, db);
   assert.equal(voted.status, 200);
   assert.deepEqual(voted.body.tally, { yes: 1, no: 1, abstain: 0, recused: 0 });
 });

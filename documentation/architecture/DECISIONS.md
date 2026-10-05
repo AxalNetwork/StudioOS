@@ -37131,6 +37131,59 @@ Eleven mutations were each caught:
 - the button showing on desktop;
 - the sheet dropping the rail's content.
 
+## D406
+
+**The collapsed rail's spine: the status dot and the vertical spend (issue
+#994).** No migration.
+
+**What the canvas asks for.** Founder Workspaces canvas, "Collapsed spine":
+"Keeps three facts alive: the advisor is on (green dot), which page-model is
+loaded (hover), and spend to date … Manual mode turns the dot grey and hides
+the meter — a founder who never wants AI sees a quiet strip, not a nag."
+
+**What is built: two of the three** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **The dot** reads the rail's real mode, the same value the Mode block and
+  the phone button (D405) read. It is green when a fill mode is on, grey for
+  Manual, and its label names the mode in words.
+- **The vertical spend** is the account's month-to-date figure from
+  `/api/ai/me/spend`, in four states that each look different:
+  - loading: an ellipsis;
+  - Unreadable: the request failed, or `recorded: false`;
+  - Not recorded: the log was read and holds no month figure;
+  - the figure itself.
+- None of the first three is ever drawn as $0.00. A real zero is a figure and
+  is drawn as one.
+- **In Manual the spend is not drawn**, as the canvas says.
+- **No hover model.** The page-model on hover is left out because the spine
+  names no model and no price; those belong to the expanded rail, where the
+  rate sits beside the model.
+- **Placement.** The spine sits between the label and the toggle, because the
+  collapsed title is a reversed column. The canvas's order follows: toggle,
+  dot and spend, then the turned label. It is desktop only, like the spine
+  itself.
+
+**Tests.** `frontend/test/worker_rail_spine_d406.test.mjs` has 9 tests,
+rendered with react-dom/server. They cover:
+
+- the dot in both modes;
+- each spend state, including a real zero;
+- each state having its own style;
+- Manual hiding the spend;
+- no model or price on the spine;
+- desktop only.
+
+Eight mutations were each caught:
+
+- the dot always on;
+- loading drawn as a zero;
+- Unreadable folded into Not recorded;
+- Not recorded drawn as $0.00;
+- the spend shown in Manual;
+- a state losing its style;
+- the spine always visible;
+- a real zero hidden.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -39819,6 +39872,98 @@ complete statement and recording a dispute write matching audit rows.
 allowed on a suspended licence; paid-in-full shown on an incomplete row; void
 without a reason; full payment accepted on a floor statement.
 
+## D459
+
+**HQ Support: one SLA band rule, both SLA tables named, the mirror lag
+derived, and the relation confirmed (issue #1017, slot S07, from S16).** No
+migration.
+
+**One band rule.** `services/slaWindow.ts` is the only place that defines the
+due-soon window and the boundary.
+- The window is `min(24h, limit / 2)`.
+- `bandForRemaining` is past once the limit is behind (`remaining < 0`), due
+  soon while `remaining <= window`, and on time otherwise.
+- Tickets (`ticketSlaBand`) and escalations (`slaBand`, now through
+  `escalationSlaBand` with the kind's window) both call it.
+- `approvalSources.ts` re-exports its `SLA_DUE_SOON_HOURS`. No file defines
+  the window a second time.
+
+What this fixes:
+- A 24-hour P1 ticket, and a 24-hour moderation escalation, read due soon from
+  their first hour. They could never be on time. Now they are due soon for
+  their last 12 hours.
+- The two functions disagreed at the boundary (`>` against `<=`). They now
+  agree at every remaining time, and a test sweeps four limits in half-hour
+  steps to prove it.
+- `support_sla_d455.test.ts` asserts `ticketSlaBand(5, 24) === 'ok'` again.
+  Commit b1f0027b had changed it to `(0, 24)` to fit the code.
+- The page says "due soon" instead of a fixed "due within 24h".
+
+**Two tables, named.** Tickets band against P1/P2/P3 (24/48/96h).
+Escalations carry a `due_at` stamped from their kind's hours (`SLA_HOURS`:
+moderation 24, the rest 72). They are different promises, so the panel shows
+both instead of mapping one onto the other.
+- `slaPolicyBody()` sends each row with its due-soon window.
+- The mapping line is built from `ticketPriorityTier`.
+- "Set here · inherited by every subsidiary" is now "Fixed in code · the same
+  on every subsidiary". Nothing on the page edits the hours.
+
+**The mirror lag, derived.** Filing a ticket writes `out:create:ticket-<id>`
+to `ticket_sync_events` in the same request. `readSyncLag` averages
+event-minus-ticket `created_at` over tickets filed in the last 24 hours, to
+the second, and also reports the longest.
+- A ticket with no create event is counted as `unmeasured`, and is never
+  averaged as zero.
+- A backfill event (`out:backfill:…`) is not a lag.
+- No measured ticket: Not recorded, with the reason.
+- An unreadable event log costs the lag alone, not the counts beside it.
+- The ROUTE_MAP row (Support Security · Super) says so now. It had claimed the
+  strip read `ticket_sync_events` before anything did.
+
+**The relation: already fixed on main, confirmed.** `openEscalationSummary`
+selects `relation`, and `escalationQueue` passes it to the page. D275's tests
+cover it. No change.
+
+**LOW and NIT findings:**
+- **Bands.** The three buckets outside H22's queues now send `bands: null`
+  instead of zeros nobody counted. An undated ticket is counted as `undated`,
+  so a queue's bands sum to its count.
+- **Panel loading.** The panel says "Reading the ticket types…" while the
+  read is pending. It no longer shows Unreadable.
+- **Taxonomy SQL.** It uses `GROUP BY 1`, so a blank type folds into `task`.
+  It binds `...OPEN_TICKET_STATUSES`, and drops `|| 0`.
+- **Dead code and coverage.** `TICKET_TAXONOMY_TYPES` is deleted (nothing read
+  it). The taxonomy read gets a coverage line.
+- **Comments and fixtures.** "Five reads" is now six, in both comments. The
+  D204 fixture's 44-hour medium ticket marked due soon (impossible for P3) is
+  now a high (P2) ticket.
+- **Tests.** The source-regex test in `hq_support_sla_d455.test.mjs` is
+  replaced by render tests.
+
+**Not changed.** `services/githubSync.ts` is not touched.
+
+**Tests.**
+- `support_sla_band_d459.test.ts`: 9 tests.
+- `support_sla_d455.test.ts`: 2 assertions restored or extended.
+- `support_queues_d204.test.ts`: the lag measured from create events, Not
+  recorded without one, and unreadable without the log.
+- `hq_support_sla_d455.test.mjs`: 5 render tests.
+
+Thirteen mutations were run, and each fails at least one test:
+- a flat 24h window, so `(5, 24)` is not ok;
+- `<` instead of `<=`;
+- the escalation boundary restated;
+- escalations on a flat window;
+- the lag joined on `ticket_id`, which takes in backfill events;
+- a missing event averaged as zero;
+- no events read as a lag of 0;
+- zeros for an uncounted bucket;
+- undated tickets dropped;
+- `GROUP BY type`;
+- the escalation table dropped;
+- Unreadable while loading;
+- the undated count not drawn.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences
@@ -40354,6 +40499,16 @@ walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
 
+## D474
+
+**Branch Contracts: Expiring soon, and Use template on the current library cards.** Issue #1027. No migration. `admin_contracts.ts` is not edited.
+
+**Expiring soon.** `GET /api/admin/contracts` now carries `valid_until` on pairwise NDAs and `expires_at` on partner deals. The strip on `/branch/contracts` is the next 90 days from those two fields. A row whose source records no end date is not in the strip, and the renewal cell says so. An end date already past, or further out than 90 days, stays on the row and is not called expiring. A failed list is Unreadable and draws no empty strip. E-sign envelopes and signed documents still record no end date. The list has no renewal date separate from a partner deal's expiry, and the strip says that rather than treating `expires_at` as a renewal.
+
+**Use template.** Each current card of the copy HQ pushed links to `/legal/send`. The send page, Remind, and Void are not this change: the link does not preselect a template, because that page only reads `envelope`. Archived versions are still absent from the copy. The page keeps rendering the server's `not_carried` reason and does not invent unusable cards.
+
+**Tests.** `frontend/test/branch_contracts_expiring_d474.test.mjs`.
+
 ## D480
 
 **HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
@@ -40630,6 +40785,78 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D494
+
+**Investor Deals, built to the owner's line: every IC vote records its
+reason, and the three unbuilt Deals ops name the decision each waits on.**
+This is the first of the four zone-family PRs for #1023 (the Deals family),
+slot S07, from S16. No migration.
+
+**Read against the code first.** D460 to D463 were read against main for
+the Deals family. These claims were checked through the tests each decision
+cites, which pass on this branch; they were not re-read line by line:
+- the Stage column reads `dealStage`, and a passed deal is neither listed nor
+  counted;
+- `recused` sits beside the tally, and a recusal needs its declaration;
+- the conditions store and the 409 that refuses a wire while a condition is
+  open;
+- the closing checklist with no seeded items, and the packet index of
+  executed envelopes;
+- `deals.source` and the partial-edit `PUT`.
+
+One sentence moved: D461 left a rationale on an ordinary vote as the owner's
+call, and #1023 settles it (below).
+
+**Every vote records its reason.** `POST /api/ic/:uid/vote` now refuses a
+yes, no or abstain vote whose rationale is missing or blank:
+- The response is 400 with code `rationale_required`, and no row is written.
+- A recusal keeps its own code, `recusal_requires_declaration`, which is
+  checked first.
+- The column stays nullable, because votes cast before now carry none and are
+  not rewritten.
+- The commit room reports `rationale.enforced: true`. Its Rationales tile
+  (`rationaleNote`) says the rule applies to every new vote, and explains any
+  shortfall as votes cast before the rule.
+- `ICDecisionPage`'s field reads "Rationale (required)", and its vote buttons
+  stay disabled until the field has text, with the reason on hover.
+- A rationale under three characters still drafts the journal entry with the
+  fallback thesis, unchanged.
+
+**The three unbuilt Deals ops, each built up to its decision.**
+- **Configure stages:** the columns are the deal record's stored status, the
+  one workflow every route and the IC hand-off read. Whether a firm may define
+  its own stage set is a decision about that workflow, not a missing form.
+- **New batch run:** `POST /api/scoring/score` scores the rubric answers sent
+  in the request body, and an investor holds none to send for a founder's
+  project. Where a batch's answers come from is the decision.
+- **Edit rubric:** the six weights are fixed in code. Who may edit them is
+  question 3 on #1023.
+
+Each op's `unbuilt` reason names its decision, and a customer-facing `hover:`
+(at most 120 characters) says it plainly.
+
+**Asked on #1023, not built, waiting on the answers:**
+- DD "Blocking" (question 1);
+- the `zone_saved_views` store behind "Save view" (question 2);
+- the section-weighting editor (question 3).
+
+**Coordinate.** #1096 (S16, D468) and #1094 (S16, D467) also edit
+`routes/ic.ts`. This PR adds one check beside the recusal check in the vote
+route and changes the commit room's `rationale` block.
+
+**Tests.**
+- `ic_conditions_minutes.test.ts` gains two tests: a blank, spaces-only or
+  missing rationale is refused and writes nothing; the room reports the rule
+  as enforced and counts a pre-rule vote as one without a reason.
+- `investor_deals_rationale_d494.test.mjs` adds two frontend tests on the
+  tile's note.
+- `investor_deals_id3.test.mjs`'s rationale pin is re-aimed at the enforced
+  rule.
+- Two fixtures that voted with no reason now carry one.
+- Five mutations, each caught: a blank vote accepted, spaces accepted as a
+  reason, the room saying unenforced, the shortfall left unexplained, and a
+  missing rule read as the old one.
 
 ## D500
 
