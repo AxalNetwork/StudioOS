@@ -265,6 +265,28 @@ github.post('/webhook', async (c) => {
     const changed = newStatus !== ticket.status || newPriority !== ticket.priority || newType !== ticket.type;
     await sql`UPDATE tickets SET status = ${newStatus}, priority = ${newPriority}, type = ${newType}, github_labels = ${labelsSnap}, github_assignees = ${assigneesSnap}, github_updated_at = ${issueUpdatedAt}, updated_at = datetime('now') WHERE id = ${ticket.id}`;
 
+    // D542 follow-up — every bounty decision the platform acts on is recorded
+    // with the GitHub login that made it. An outcome label closes someone
+    // else's ticket, and since the follow-up it can arrive from the sync-bot
+    // account, so the sender is the only record of who decided. Written
+    // before the delivery is acknowledged: if it fails, the catch below
+    // releases the claim and the delivery can be redelivered.
+    if (bounty.kind === 'outcome' || bounty.kind === 'tier_added' || bounty.kind === 'tier_removed') {
+      const viaSyncBot = !!(botLogin && senderLogin && senderLogin.toLowerCase() === botLogin.toLowerCase());
+      const details = JSON.stringify({
+        ticket_id: ticket.id,
+        issue_number: issueNumber,
+        label: payload?.label?.name ?? null,
+        kind: bounty.kind,
+        ...(bounty.kind === 'outcome' ? { outcome: bounty.outcome } : { rule_key: bounty.ruleKey }),
+        github_sender: senderLogin,
+        via_sync_bot_account: viaSyncBot,
+        status_before: ticket.status,
+        status_after: newStatus,
+      });
+      await sql`INSERT INTO activity_logs (action, details, actor) VALUES (${'github.bounty_label'}, ${details}, ${`github:${senderLogin}`})`;
+    }
+
     // Notify the owner on meaningful state flips they didn't cause.
     if (changed && newStatus !== ticket.status) {
       try {

@@ -42,6 +42,7 @@ function ddl(name: string): string {
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   db.exec(ddl('tickets'));
+  db.exec(ddl('activity_logs'));
   for (const col of ['github_issue_number INTEGER', 'github_labels TEXT', 'github_assignees TEXT', 'github_updated_at TEXT', "type TEXT NOT NULL DEFAULT 'task'"]) {
     try { db.exec(`ALTER TABLE tickets ADD COLUMN ${col}`); } catch { /* the baseline already has it */ }
   }
@@ -360,4 +361,51 @@ test('an outcome on an issue already closed on GitHub closes the ticket with no 
     assert.equal(ticket(db).status, 'closed');
     assert.equal(gh.calls.length, 0);
   } finally { gh.restore(); }
+});
+
+test('every bounty decision acted on is recorded with the GitHub sender, including one from the sync-bot account', async () => {
+  const audits = (db: any) => db.prepare(`SELECT action, actor, user_id, details FROM activity_logs WHERE action = 'github.bounty_label' ORDER BY id`).all() as any[];
+  // An outcome from the shared sync-bot account closes the ticket and is recorded.
+  const db = freshDb();
+  const gh = captureFetch();
+  try {
+    const out = await deliver(db, labelEvent('labeled', 'bounty:duplicate', S1, ['bug', 'bounty:duplicate']),
+      { env: env(db, { GITHUB_SYNC_BOT_LOGIN: S1 }) });
+    assert.equal(out.status, 200);
+    assert.equal(ticket(db).status, 'closed');
+  } finally { gh.restore(); }
+  const a = audits(db);
+  assert.equal(a.length, 1, 'a ticket was closed with no actor recorded');
+  assert.equal(a[0].actor, `github:${S1}`);
+  assert.equal(a[0].user_id, null);
+  const d = JSON.parse(a[0].details);
+  assert.deepEqual(
+    { ticket_id: d.ticket_id, issue_number: d.issue_number, label: d.label, kind: d.kind, outcome: d.outcome,
+      github_sender: d.github_sender, via_sync_bot_account: d.via_sync_bot_account, status_before: d.status_before, status_after: d.status_after },
+    { ticket_id: 41, issue_number: 900, label: 'bounty:duplicate', kind: 'outcome', outcome: 'duplicate',
+      github_sender: S1, via_sync_bot_account: true, status_before: 'open', status_after: 'closed' });
+
+  // A tier label is recorded too; a refused label and an ordinary one are not.
+  const db2 = freshDb();
+  await deliver(db2, labelEvent('labeled', 'bounty:verified-medium', S1, ['bug', 'bounty:verified-medium']));
+  await deliver(db2, labelEvent('labeled', 'bounty:verified-high', 'stranger', ['bug', 'bounty:verified-high']));
+  await deliver(db2, labelEvent('labeled', 'priority: high', S1, ['bug', 'priority: high']));
+  const b = audits(db2);
+  assert.equal(b.length, 1);
+  assert.equal(JSON.parse(b[0].details).rule_key, 'bug_medium');
+  assert.equal(JSON.parse(b[0].details).via_sync_bot_account, false);
+
+  // If the record cannot be written, the delivery is not acknowledged: the
+  // claim is released and the response asks for a redelivery.
+  const db3 = freshDb();
+  db3.exec('DROP TABLE activity_logs');
+  const gh3 = captureFetch();
+  try {
+    const r = await deliver(db3, labelEvent('labeled', 'bounty:verified-low', S1, ['bug', 'bounty:verified-low']), { id: 'audit-fail-1' });
+    assert.ok(r.status >= 500, `an unrecorded decision was acknowledged with ${r.status}`);
+    db3.exec(ddl('activity_logs'));
+    const again = await deliver(db3, labelEvent('labeled', 'bounty:verified-low', S1, ['bug', 'bounty:verified-low']), { id: 'audit-fail-1' });
+    assert.equal(again.status, 200, 'the redelivery was taken for a duplicate');
+    assert.equal(audits(db3).length, 1);
+  } finally { gh3.restore(); }
 });
