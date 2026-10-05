@@ -55,6 +55,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/dashboard     → dashboard.ts
 /api/matches       → matches.ts         (Best-Fit's /summary only; the AI Matching Engine was removed)
 /api/research      → research.ts        (the Research bucket's own stores)
+/api/research      → research_markets.ts (markets and geographies, through the D533 crosswalk)
 /api/advisor-grants → advisor_grants.ts (a founder's per-scope grant to a named advisor)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
 ```
