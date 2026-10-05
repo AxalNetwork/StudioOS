@@ -39,8 +39,12 @@ const isOk = (s) => s?.status === 'ok';
 export function nothingRecorded(data) {
   const keys = ['heat', 'demand_vs_supply', 'competition', 'money', 'signals'];
   const t = data?.totals;
+  const pub = t?.market_split?.public;
   const totalsEmpty = !isOk(t) ? !isUnreadable(t)
-    : ['companies', 'markets', 'funds'].every((k) => t[k]?.value == null && t[k]?.reason !== 'Unreadable');
+    : ['companies', 'markets', 'funds'].every((k) => t[k]?.value == null && t[k]?.reason !== 'Unreadable')
+      // The split's public count reads `signal_companies`, a store the three
+      // directories do not cover: a listed company is a record.
+      && pub?.value == null && pub?.status !== 'unreadable' && pub?.reason !== 'Unreadable';
   return totalsEmpty && keys.every((k) => data?.[k]?.status === 'not_recorded');
 }
 
@@ -113,10 +117,13 @@ function Split({ totals }) {
 
 const DIMS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
 
-function Delta({ pct }) {
+export function Delta({ pct }) {
   if (pct == null || !Number.isFinite(Number(pct))) return null;
   const n = Number(pct);
-  return <span className={n >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}>{n >= 0 ? '▲' : '▼'} {Math.abs(n).toFixed(1)}%</span>;
+  // A change that rounds to 0.0% is no change: no arrow, no colour, so an
+  // unchanged index never reads as a rise.
+  if (Math.abs(n) < 0.05) return <span className="text-axal-muted dark:text-gray-400" title="Unchanged on last month">= 0.0%</span>;
+  return <span className={n > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}>{n > 0 ? '▲' : '▼'} {Math.abs(n).toFixed(1)}%</span>;
 }
 
 function Heat({ heat }) {

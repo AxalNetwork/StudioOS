@@ -60,7 +60,7 @@ test('the Company profiles card says it counts platform companies, not the resea
 // ---------------------------------------------------------------------------
 
 const PANEL = read('frontend/src/pages/research/ResearchOverviewPanel.jsx');
-const { ResearchOverviewView, nothingRecorded, countOf } = await import('../src/pages/research/ResearchOverviewPanel.jsx');
+const { ResearchOverviewView, nothingRecorded, countOf, Delta } = await import('../src/pages/research/ResearchOverviewPanel.jsx');
 const { renderedText } = await import('./_renderedText.mjs');
 const { codeOnly } = await import('./_codeOnly.mjs');
 const { createElement } = await import('react');
@@ -290,4 +290,26 @@ test('the founder desk prints "Not recorded" for every fund figure it was not se
   }
   // The overlap keeps the literal null check founder_research_a7_contract pins, then the same helper.
   assert.match(DESK, /\{funds\.cheque_overlap_count == null \? 'Not recorded' : fundFigure\(funds\.cheque_overlap_count\)\}/);
+});
+
+test('panel: a public-company count alone is a record, so the overview is not "empty"', () => {
+  const data = empty();
+  data.totals.market_split.public = { value: 21, as_of: '2026-10-05', source: 'signal_companies', reason: null };
+  assert.equal(nothingRecorded(data), false);
+  const out = html({ phase: 'ready', data });
+  assert.doesNotMatch(out, /data-state="empty"/);
+  assert.doesNotMatch(renderedText(out), /No directory, index or signal holds a record yet/);
+  // An unreadable public count is not a claim of emptiness either.
+  data.totals.market_split.public = { value: null, as_of: null, source: 'signal_companies', reason: 'Unreadable' };
+  assert.equal(nothingRecorded(data), false);
+});
+
+test('panel: an unchanged index reads "= 0.0%" with no arrow; rises and falls keep theirs', () => {
+  const d = (pct) => renderedText(renderToStaticMarkup(createElement(Delta, { pct })));
+  assert.equal(d(0), '= 0.0%');
+  assert.equal(d(0.04), '= 0.0%', 'a change that rounds to 0.0% is drawn as a rise');
+  assert.equal(d(-0.04), '= 0.0%');
+  assert.equal(d(2.5), '▲ 2.5%');
+  assert.equal(d(-1.2), '▼ 1.2%');
+  assert.equal(d(null), '');
 });
