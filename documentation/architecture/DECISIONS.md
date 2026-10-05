@@ -40232,7 +40232,8 @@ is answered, the terms keep today's partner gate, which is option A's
 behaviour.
 
 **Guards.**
-- `cloudflare-worker/test/deal_amount_admin_d469.test.ts` has 6 tests. They
+- `cloudflare-worker/test/deal_amount_admin_d469.test.ts` has 6 tests (8
+  after review, below). They
   drive the real `deals` router against real SQLite, on D463's fixture plus
   `activity_logs`. They cover:
   - a partner's amount refused and not written;
@@ -40252,6 +40253,27 @@ behaviour.
   - never audit, or always audit;
   - lose the amount before;
   - lose the fields.
+
+**After review: a write that fails part way is still audited.** Each
+`UPDATE` in `PUT /api/deals/:id` commits on its own. So
+`{ amount: 750000, lead_partner_id: 999999 }` used to write the amount, then
+throw on the lead partner, and never reach the audit: the amount moved with
+no record. The writes now run inside one `try`. Each field that commits is
+added to `written`, and an error is held until the audit has run, then
+rethrown, so the caller still gets the failure. The audit row now carries
+`complete` (true or false). A failed request also carries `written`, the
+fields that did commit. `amount_from`/`amount_to` appear only when the
+amount was actually written. Two more tests inject a refusal (a SQLite
+trigger standing in for D1's foreign key):
+- on `lead_partner_id`, after the amount;
+- on `notes`, before it.
+
+Both fail on the code before this change. 5 of 5 mutations were caught:
+- rethrow at once;
+- hard-code `complete: true`;
+- key the amount on the request rather than the write;
+- swallow the error;
+- never record the amount as written.
 
 ## D470
 

@@ -205,7 +205,7 @@ test('an admin\'s amount change is written, and audited when the deal is not the
   assert.equal(a.length, 1);
   assert.equal(a[0].action, 'deal_update_by_admin');
   assert.equal(a[0].user_id, ADMIN);
-  assert.deepEqual(a[0].details, { deal_id: DEAL, lead_partner_id: PARTNER, fields: ['amount'], amount_from: 500000, amount_to: 750000 });
+  assert.deepEqual(a[0].details, { deal_id: DEAL, lead_partner_id: PARTNER, fields: ['amount'], amount_from: 500000, amount_to: 750000, complete: true });
 });
 
 test('any admin edit to someone else\'s deal is audited, not only the amount', async () => {
@@ -214,7 +214,38 @@ test('any admin edit to someone else\'s deal is audited, not only the amount', a
   assert.equal(r.status, 200);
   const a = audits(db);
   assert.equal(a.length, 1);
-  assert.deepEqual(a[0].details, { deal_id: DEAL, lead_partner_id: PARTNER, fields: ['notes'] });
+  assert.deepEqual(a[0].details, { deal_id: DEAL, lead_partner_id: PARTNER, fields: ['notes'], complete: true });
+});
+
+test('a write that fails part way still audits what an admin already committed', async () => {
+  const db = freshDb();
+  // Production D1 refuses a lead_partner_id that is no user (a foreign key);
+  // the test schema has no FK, so a trigger refuses it the same way.
+  db.exec(`CREATE TRIGGER no_such_lead BEFORE UPDATE OF lead_partner_id ON deals
+    WHEN NEW.lead_partner_id = 999999 BEGIN SELECT RAISE(ABORT, 'FOREIGN KEY constraint failed'); END`);
+  const r = await put(admin, DEAL, { amount: 750000, lead_partner_id: 999999 }, db);
+  assert.equal(r.status, 500, 'the failure still reaches the caller');
+  assert.equal(deal(db).amount, 750000, 'each UPDATE commits on its own: the amount stays written');
+  const a = audits(db);
+  assert.equal(a.length, 1, 'the committed amount is audited, not skipped by the throw');
+  assert.deepEqual(a[0].details, {
+    deal_id: DEAL, lead_partner_id: PARTNER, fields: ['amount', 'lead_partner_id'],
+    amount_from: 500000, amount_to: 750000, complete: false, written: ['amount'],
+  });
+});
+
+test('a write that fails before the amount records no amount move', async () => {
+  const db = freshDb();
+  db.exec(`CREATE TRIGGER no_notes BEFORE UPDATE OF notes ON deals
+    BEGIN SELECT RAISE(ABORT, 'refused'); END`);
+  const r = await put(admin, DEAL, { notes: 'x', amount: 750000 }, db);
+  assert.equal(r.status, 500);
+  assert.equal(deal(db).amount, 500000);
+  const a = audits(db);
+  assert.equal(a.length, 1);
+  assert.deepEqual(a[0].details, {
+    deal_id: DEAL, lead_partner_id: PARTNER, fields: ['amount', 'notes'], complete: false, written: [],
+  });
 });
 
 test('an admin editing their own deal (they are its lead partner) leaves no audit row', async () => {
