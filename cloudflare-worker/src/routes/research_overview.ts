@@ -10,6 +10,8 @@
  *                research_fund_directory — each count with its as-of date;
  *   heat         market_intel_indexes, live rows only (D538), the current
  *                month (month to date) and its change on the last month;
+ *                computed on the read when live observations exist but the
+ *                month's index does not yet (as sector-compass does);
  *   demand_vs_supply  the sectors whose live demand rises faster than supply;
  *   competition  companies per sector label and per country (top N);
  *   money        funds per HQ and per focus (top N), size bands, vintages;
@@ -27,9 +29,9 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { SECTORS } from '../services/market_intel/aggregator';
-import { liveIndexSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
-import { periodKey } from '../services/market_intel/scoring';
+import { SECTORS, recomputeIndexes } from '../services/market_intel/aggregator';
+import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
+import { periodKey, WINDOW_DAYS } from '../services/market_intel/scoring';
 
 const researchOverview = new Hono<{ Bindings: Env }>();
 
@@ -123,11 +125,48 @@ async function readTotals(env: Env) {
 
 interface IndexRow { sector: string; dimension: string; value: number; delta_pct: number | null; source_count: number }
 
-async function readLiveIndexes(env: Env): Promise<IndexRow[]> {
-  return (await env.DB.prepare(
+/**
+ * Live observations exist but this month's index has not been computed from
+ * them: the first hours of a month before the 04:00 recompute, or after a
+ * missed cron, when computing it on the read failed too.
+ */
+export const INDEX_PENDING_REASON =
+  "Live observations are recorded, but this month's index has not been computed yet";
+
+interface LiveIndexes { rows: IndexRow[]; pending: boolean }
+
+/**
+ * This month's live index rows. When there are none but live observations
+ * exist inside the scoring window, the index is computed on the read and read
+ * again — the same cold-start path `/market-intel/sector-compass` takes — so
+ * a month whose recompute has not run yet never reads as "no live source".
+ * If the compute fails or still yields nothing, the answer says the index is
+ * pending (`pending: true`), not that no source reported.
+ */
+async function readLiveIndexes(env: Env): Promise<LiveIndexes> {
+  const read = async () => (await env.DB.prepare(
     `SELECT sector, dimension, value, delta_pct, source_count
        FROM market_intel_indexes WHERE geo = 'global' AND period_key = ? AND ${liveIndexSql()}`
   ).bind(periodKey()).all<IndexRow>()).results || [];
+  const rows = await read();
+  if (rows.length > 0) return { rows, pending: false };
+  const cutoff = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString();
+  const observed = await env.DB.prepare(
+    `SELECT 1 AS one FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()} LIMIT 1`
+  ).bind(cutoff).first<{ one: number }>();
+  if (!observed) return { rows, pending: false };
+  try {
+    await recomputeIndexes(env);
+    const again = await read();
+    return { rows: again, pending: again.length === 0 };
+  } catch {
+    return { rows: [], pending: true };
+  }
+}
+
+/** Why there is no live index row this month. */
+function noIndexReason(r: LiveIndexes): string {
+  return r.pending ? INDEX_PENDING_REASON : NO_LIVE_SOURCE_REASON;
 }
 
 type Cell = { value: number | null; delta_pct: number | null; source_count: number; reason?: string };
@@ -168,18 +207,20 @@ export function demandOverSupply(rows: IndexRow[]) {
   return out.sort((a, b) => b.gap_pct - a.gap_pct);
 }
 
-async function readHeat(env: Env, rows: Promise<IndexRow[]>) {
+async function readHeat(env: Env, indexes: Promise<LiveIndexes>) {
   return section(async () => {
-    const r = await rows;
-    if (r.length === 0) return { status: 'not_recorded' as const, reason: NO_LIVE_SOURCE_REASON };
+    const live = await indexes;
+    const r = live.rows;
+    if (r.length === 0) return { status: 'not_recorded' as const, reason: noIndexReason(live) };
     return { status: 'ok' as const, period_key: periodKey(), period_status: 'month_to_date', sectors: heatGrid(r) };
   });
 }
 
-async function readDemandVsSupply(env: Env, rows: Promise<IndexRow[]>) {
+async function readDemandVsSupply(env: Env, indexes: Promise<LiveIndexes>) {
   return section(async () => {
-    const r = await rows;
-    if (r.length === 0) return { status: 'not_recorded' as const, reason: NO_LIVE_SOURCE_REASON };
+    const live = await indexes;
+    const r = live.rows;
+    if (r.length === 0) return { status: 'not_recorded' as const, reason: noIndexReason(live) };
     const sectors = demandOverSupply(r);
     if (sectors.length === 0) {
       return { status: 'not_recorded' as const, reason: 'No sector has a live demand and supply change on last month yet' };

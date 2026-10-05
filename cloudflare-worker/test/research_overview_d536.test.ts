@@ -19,10 +19,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
-import researchOverview, { demandOverSupply, SIZE_BANDS } from '../src/routes/research_overview.ts';
+import researchOverview, { demandOverSupply, SIZE_BANDS, INDEX_PENDING_REASON } from '../src/routes/research_overview.ts';
+import '../src/services/market_intel/sources/index.ts';
 import { SECTORS } from '../src/services/market_intel/aggregator.ts';
-import { LIVE_INDEX_BASIS, NO_LIVE_SOURCE_REASON } from '../src/services/market_intel/liveRows.ts';
-import { periodKey } from '../src/services/market_intel/scoring.ts';
+import { LIVE_INDEX_BASIS, NO_LIVE_SOURCE_REASON, STUB_CITATION_PREFIX } from '../src/services/market_intel/liveRows.ts';
+import { periodKey, WINDOW_DAYS } from '../src/services/market_intel/scoring.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -104,7 +105,7 @@ app.onError((err: any, c) => {
   return c.json({ detail: msg }, msg === 'Unauthorized' ? 401 : 500);
 });
 
-async function get(db: InstanceType<typeof DatabaseSync>, opts: { auth?: boolean; query?: string } = {}) {
+async function get(db: InstanceType<typeof DatabaseSync>, opts: { auth?: boolean; query?: string; DB?: any } = {}) {
   const headers: Record<string, string> = {};
   if (opts.auth !== false) {
     const token = await new SignJWT({ user_id: USER, role: 'founder' })
@@ -113,7 +114,7 @@ async function get(db: InstanceType<typeof DatabaseSync>, opts: { auth?: boolean
     headers.Authorization = `Bearer ${token}`;
   }
   const res = await app.request(`/api/research/overview${opts.query ?? ''}`, { headers },
-    { JWT_SECRET, ENVIRONMENT: 'production', DB: d1Over(db) });
+    { JWT_SECRET, ENVIRONMENT: 'production', DB: opts.DB ?? d1Over(db) });
   const text = await res.text();
   return { status: res.status, body: JSON.parse(text) as any, text };
 }
@@ -207,6 +208,63 @@ test('heat: live index rows only; a stub-derived row is never read', async () =>
   assert.deepEqual(s0.dimensions.demand, { value: null, delta_pct: null, source_count: 0, reason: NO_LIVE_SOURCE_REASON });
   assert.deepEqual(s1.dimensions.demand, { value: 64, delta_pct: 8, source_count: 2 });
   assert.equal(s1.dimensions.supply.value, null);
+});
+
+/** A live observation (cited by its provider, not the stub page) `ageDays` old. */
+function liveRow(db: InstanceType<typeof DatabaseSync>, sector: string, ageDays: number, citation = 'https://openalex.org/W1') {
+  db.prepare(
+    `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, unit, ts, citation_url)
+     VALUES ('openalex', ?, 'global', 'research', 0.6, 'count', ?, ?)`,
+  ).run(sector, new Date(Date.now() - ageDays * 86_400_000).toISOString(), citation);
+}
+
+const indexRows = (db: InstanceType<typeof DatabaseSync>) =>
+  Number((db.prepare(`SELECT COUNT(*) AS n FROM market_intel_indexes WHERE period_key = ? AND basis = ?`).get(periodKey(), LIVE_INDEX_BASIS) as any).n);
+
+test('heat: live observations with this month\'s index not yet computed are computed on the read, like the sector compass', async () => {
+  const db = seeded();
+  liveRow(db, SECTORS[0], 1);
+  assert.equal(indexRows(db), 0, 'the month starts with no index row');
+  const { body } = await get(db);
+  assert.equal(body.heat.status, 'ok', JSON.stringify(body.heat));
+  const s0 = body.heat.sectors.find((s: any) => s.sector === SECTORS[0]);
+  assert.equal(typeof s0.dimensions.research.value, 'number');
+  assert.ok(indexRows(db) > 0, 'the computed index was stored');
+  assert.notEqual(body.demand_vs_supply.reason, NO_LIVE_SOURCE_REASON);
+});
+
+test('heat: when the index cannot be computed on the read, both sections say it is pending, not that no source reported', async () => {
+  const db = seeded();
+  liveRow(db, SECTORS[0], 1);
+  const DB = { ...d1Over(db), batch: async () => { throw new Error('D1_ERROR: batch failed'); } };
+  const { status, body } = await get(db, { DB });
+  assert.equal(status, 200);
+  for (const k of ['heat', 'demand_vs_supply']) {
+    assert.deepEqual(body[k], { status: 'not_recorded', reason: INDEX_PENDING_REASON }, k);
+  }
+});
+
+test('heat: a compute on the read that still writes no index row reads as pending too', async () => {
+  const db = seeded();
+  // A live observation from a source the registry no longer knows: scored, it contributes nothing.
+  db.prepare(
+    `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, unit, ts, citation_url)
+     VALUES ('retired_source', ?, 'global', 'research', 0.6, 'count', ?, 'https://example.org/obs/1')`,
+  ).run(SECTORS[0], new Date(Date.now() - 86_400_000).toISOString());
+  const { body } = await get(db);
+  assert.equal(indexRows(db), 0);
+  assert.deepEqual(body.heat, { status: 'not_recorded', reason: INDEX_PENDING_REASON });
+});
+
+test('heat: only stub rows, or live rows older than the window, still read "no live source" and compute nothing', async () => {
+  const db = seeded();
+  liveRow(db, SECTORS[0], 1, `${STUB_CITATION_PREFIX}openalex`);
+  liveRow(db, SECTORS[1], WINDOW_DAYS + 2);
+  const DB = { ...d1Over(db), batch: async () => { throw new Error('no compute expected'); } };
+  const { body } = await get(db, { DB });
+  for (const k of ['heat', 'demand_vs_supply']) {
+    assert.deepEqual(body[k], { status: 'not_recorded', reason: NO_LIVE_SOURCE_REASON }, k);
+  }
 });
 
 test('demand against supply: only sectors whose live demand rises faster than supply', async () => {
