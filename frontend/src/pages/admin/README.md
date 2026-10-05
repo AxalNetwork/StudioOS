@@ -26,7 +26,10 @@ templates), the network (profiles, partners, referrals), and integrations
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
 console's Users panel; links Exploring, Personas, Trash), `HeldApprovals.jsx`
 (S22's sixteen lanes as literal rows), `HeldPrograms.jsx`, `HeldCommunity.jsx`
-and `HeldInsights.jsx` (links nowhere, by S20). Mounted at `/admin/held/*` —
+and `HeldInsights.jsx` (links nowhere, by S20). Since D555 each reads HQ's own
+figures from the Studio glance through `heldFigures.jsx` (`useHeldGlance`,
+`Figure`, `laneOf`): lane counts on Approvals, counts on the cards, and the
+headline figures on Insights. Mounted at `/admin/held/*` —
 a prefix of their own so none can collide with an HQ console such as
 `/admin/accounts`. Every console link on them is literal, because
 `frontend/test/admin_route_reachability.test.mjs` reads navigation syntax,

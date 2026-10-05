@@ -50,6 +50,87 @@ function Glance({ glance }) {
   return null;
 }
 
+const nf = (n) => Number(n).toLocaleString('en-US');
+
+/** D555: HQ's accounts, as counts. Every line links to its console. */
+export function HqAccounts({ view }) {
+  if (!view || view.kind !== 'ready') return <Glance glance={view} />;
+  return (
+    <div className="mt-2 text-[13px] text-axal-ink" data-testid="hq-accounts">
+      <p className="text-[11px] font-semibold uppercase tracking-[.07em] text-axal-muted">{view.label}</p>
+      <p className="mt-1"><span className="text-[18px] font-extrabold tabular-nums">{nf(view.total)}</span> active accounts</p>
+      <ul className="mt-1 space-y-0.5">
+        {view.byRole.map((r) => <li key={r.role}><span className="tabular-nums">{nf(r.count)}</span> {titleCase(r.role)}</li>)}
+      </ul>
+      <p className="mt-1">
+        <span className="tabular-nums">{nf(view.new7d)}</span> new this week · <span className="tabular-nums">{nf(view.new30d)}</span> in 30 days
+      </p>
+      <p className="mt-0.5">
+        <Link to="/admin/exploring" className="underline underline-offset-2">Exploring</Link>{' '}
+        {view.exploring === null ? <Unrecorded reason="The Exploring lane could not be read, so its count is not shown as zero.">not read</Unrecorded> : <span className="tabular-nums">{nf(view.exploring)}</span>}
+        {' · '}
+        <Link to="/admin/trash" className="underline underline-offset-2">Projects in Trash</Link>{' '}
+        {view.trash === null ? <Unrecorded reason="The project table could not be read, so Trash is not shown as zero.">not read</Unrecorded> : <span className="tabular-nums">{nf(view.trash)}</span>}
+      </p>
+      {view.deactivated ? <p className="mt-0.5 text-[11.5px] text-axal-muted">{nf(view.deactivated)} deactivated, not counted above</p> : null}
+    </div>
+  );
+}
+
+/** D555: HQ's lanes, the total first, then worst first, each with its oldest age and console. */
+export function HqApprovals({ view, limit = 5 }) {
+  if (!view || view.kind !== 'ready') return <Glance glance={view} />;
+  const shown = view.lanes.filter((l) => l.count === null || l.count > 0).slice(0, limit);
+  return (
+    <div className="mt-2 text-[13px] text-axal-ink" data-testid="hq-approvals">
+      <p className="text-[11px] font-semibold uppercase tracking-[.07em] text-axal-muted">{view.label}</p>
+      <p className="mt-1" data-testid="hq-approvals-total">
+        {view.total === null
+          ? <Unrecorded reason={`${view.unreadable} lane(s) could not be read, so a total over the rest would be smaller than the truth.`}>No total: a lane could not be read</Unrecorded>
+          : view.total === 0 ? 'Nothing is waiting' : <><span className="text-[18px] font-extrabold tabular-nums">{nf(view.total)}</span> pending</>}
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {shown.map((l) => (
+          <li key={l.key} data-testid={`hq-lane-${l.key}`}>
+            {l.to ? <Link to={l.to} className="font-semibold underline underline-offset-2">{l.label}</Link> : <span className="font-semibold">{l.label}</span>}
+            {' · '}
+            {l.count === null
+              ? <Unreadable what={l.label} claim="That is not the same as nothing pending." />
+              : <><span className="tabular-nums">{nf(l.count)}</span> pending · oldest {l.age || 'undated'}{l.sla === 'past' ? ' · past the window' : l.sla === 'due_soon' ? ' · due soon' : ''}</>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** D555: HQ's headline figures; each answers alone. */
+export function HqInsights({ view }) {
+  if (!view || view.kind !== 'ready') return <Glance glance={view} />;
+  return (
+    <div className="mt-2 space-y-1 text-[13px] text-axal-ink" data-testid="hq-insights">
+      <p className="text-[11px] font-semibold uppercase tracking-[.07em] text-axal-muted">{view.label}</p>
+      <p>Sign-ups:{' '}
+        {view.signups.kind === 'ready'
+          ? <><span className="tabular-nums">{nf(view.signups.thisWeek)}</span> this week (to date) · <span className="tabular-nums">{nf(view.signups.eightWeeks)}</span> in 8 weeks</>
+          : <Unreadable what="Sign-ups" claim={view.signups.reason || 'Not the same as none.'} />}
+      </p>
+      <p>AI spend this month:{' '}
+        {view.spend.kind === 'ready'
+          ? <><span className="tabular-nums">${view.spend.usd.toFixed(2)}</span> over {nf(view.spend.calls)} calls</>
+          : <Unreadable what="AI spend" claim={view.spend.reason || 'Not the same as no spend.'} />}
+      </p>
+      <p>Open support tickets:{' '}
+        {view.tickets.kind === 'ready'
+          ? <Link to="/admin/hq-support" className="tabular-nums underline underline-offset-2">{nf(view.tickets.open)}</Link>
+          : <Unreadable what="Tickets" claim={view.tickets.reason || 'Not the same as none open.'} />}
+      </p>
+      <p>Active accounts: <Unrecorded reason={view.active.reason} /></p>
+      <p>Territory benchmark: <Unrecorded reason={view.benchmark.reason} /></p>
+    </div>
+  );
+}
+
 function CardHead({ title, to }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
@@ -100,7 +181,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
     ? glancesFromStudioGlance(glance, user)
     : studioGlances({ user, home, licence, templates, insights });
   const {
-    onBranch, lic, seats, approvals, programme, contracts, insights: insightView,
+    onBranch, lic, seats, approvals, programme, contracts, insights: insightView, hq,
   } = g;
   const licenceAbsence = g.licenceAbsence || null;
   const licenceUnreadable = g.licenceUnreadable || null;
@@ -125,7 +206,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
 
       {g.tier === 'hq' ? (
         <p className="mt-4 text-[12.5px] text-axal-muted" data-testid="admin-studio-hq">
-          These figures are read from HQ&apos;s own database. A figure that belongs to one subsidiary is not recorded here.
+          These figures are HQ&apos;s own: HQ-held accounts · axal.vc. A figure that belongs to one subsidiary (seat use, its share rate, the territory benchmark) is not recorded here.
         </p>
       ) : onBranch ? (
         <p className="mt-4 text-[12.5px] text-axal-muted" data-testid="admin-studio-territory">
@@ -142,9 +223,10 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <Card data-testid="admin-studio-accounts">
           <CardHead title="Accounts" to={open('Accounts')} />
-          {seats === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading seats…</p> : null}
-          {seats && seats.kind !== 'ready' ? <Glance glance={seats} /> : null}
-          {seats?.kind === 'ready' ? (
+          {hq ? <HqAccounts view={hq.accounts} /> : null}
+          {!hq && seats === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading seats…</p> : null}
+          {!hq && seats && seats.kind !== 'ready' ? <Glance glance={seats} /> : null}
+          {!hq && seats?.kind === 'ready' ? (
             <ul className="mt-2 space-y-1 text-[13px] text-axal-ink">
               {seats.lines.tiles.map((t) => (
                 <li key={t.type}>
@@ -174,7 +256,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
 
         <Card data-testid="admin-studio-approvals">
           <CardHead title="Approvals" to={open('Approvals')} />
-          <Glance glance={approvals} />
+          {hq ? <HqApprovals view={hq.approvals} /> : <Glance glance={approvals} />}
         </Card>
 
         <Card data-testid="admin-studio-programs">
@@ -215,7 +297,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
 
         <Card data-testid="admin-studio-insights">
           <CardHead title="Insights" to={open('Insights')} />
-          {insightView === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading insights…</p> : (
+          {hq ? <HqInsights view={hq.insights} /> : insightView === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading insights…</p> : (
             <>
               <Glance glance={insightView.median} />
               <Glance glance={insightView.share} />
