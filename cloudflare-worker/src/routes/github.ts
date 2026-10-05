@@ -213,9 +213,12 @@ github.post('/webhook', async (c) => {
       //
       // The GitHub close comes FIRST. If it fails (401, 403, a rate limit,
       // 5xx after the retry), nothing is written locally, the delivery claim
-      // is released and the response is a 502, so GitHub's redelivery runs
-      // the whole step again. Closing locally anyway would be undone by the
-      // next sync, which reads the issue as still open.
+      // is released and the response is a 502. GitHub does not redeliver a
+      // failed delivery on its own: it shows as failed in the webhook's log,
+      // and redelivering it from there runs the whole step again (the claim
+      // was released, so it is not taken for a duplicate). Closing locally
+      // anyway would be undone by the next sync, which reads the issue as
+      // still open.
       newStatus = 'closed';
       let githubClosed: boolean | null = null;
       if (issue.state !== 'closed') {
@@ -229,7 +232,7 @@ github.post('/webhook', async (c) => {
           if (deliveryKey) await releaseSyncEvent(c.env, deliveryKey);
           return refuse(c, 502, {
             code: 'github_close_failed',
-            message: 'The GitHub issue could not be closed, so the ticket was left open; GitHub will retry the delivery.',
+            message: 'The GitHub issue could not be closed, so the ticket was left open. Redeliver this event to try again.',
             raw: thrown ?? r?.error ?? null,
           });
         }
