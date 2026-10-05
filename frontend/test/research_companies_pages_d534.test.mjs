@@ -23,7 +23,7 @@ import {
   listState, money, pageList, pageWindow, relatedSignals, withoutFilter,
 } from '../src/lib/companyDirectoryView.js';
 import { CoverageCard, DirectoryFilters, DirectoryResults } from '../src/pages/research/CompanyDirectoryZone.jsx';
-import { Competitors, KeyMetrics, MarketContext, SourcesTable } from '../src/pages/research/CompanyProfile.jsx';
+import { CompanyHeader, Competitors, KeyMetrics, MarketContext, SourcesTable } from '../src/pages/research/CompanyProfile.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -200,4 +200,14 @@ test('sources: a failed evidence table is Unreadable on its own row; statuses re
   assert.match(t, /Field sources\s*Not recorded/);
   assert.match(t, /Competitor status\s*tracked/);
   assert.match(t, /Diligence status\s*Not recorded/);
+});
+
+test('description, logo and investors read Not recorded, because no source holds them', () => {
+  const t = render(CompanyHeader, { item: { name: 'Acme', website: 'https://acme.example', sector: 'robotics', country: 'Germany', founded_year: 2015 },
+    tracked: { status: 'not_recorded' } });
+  assert.match(t, /Description\s*Not recorded · no source holds one/);
+  assert.match(t, /Logo\s*Not recorded/);
+  assert.match(t, /Investors\s*Not recorded · no source lists them/);
+  assert.match(t, /Tracked sector: Not recorded/);
+  assert.match(t, /Run competitor analysis/);
 });

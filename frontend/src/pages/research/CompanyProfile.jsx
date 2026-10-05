@@ -9,7 +9,7 @@
 //   signals          the market's signals plus GET /research/geographies/:code
 //
 // The bundled `data/companyDirectory.json` read is retired. Description, logo
-// and investors are not drawn: no source holds them. The "Run competitor
+// and investors read Not recorded: no source holds them. The "Run competitor
 // analysis" button opens the Saved analyses tab on `/research/companies` with
 // the company prefilled — `/build/competitors` redirected founders to the
 // directory and dropped the prefill.
@@ -301,6 +301,13 @@ export function SourcesTable({ item, metrics, financials, employment, sources })
   );
 }
 
+/** Fields the canvas draws that no source holds: shown as Not recorded, never invented. */
+export const UNSOURCED = [
+  ['Description', 'no source holds one'],
+  ['Logo', 'no source holds one'],
+  ['Investors', 'no source lists them'],
+];
+
 /** The header: identity, sector label and tracked sector, and the directory record. */
 export function CompanyHeader({ item, tracked }) {
   return (
@@ -308,6 +315,11 @@ export function CompanyHeader({ item, tracked }) {
       <div className="min-w-0">
         <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.name}</h1>
         {item.website ? <a href={item.website} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[12px] text-axal-violet underline">{item.website}<ExternalLink size={12} /><span className="sr-only">(opens in a new tab)</span></a> : null}
+        <dl data-testid="company-unsourced" className="mt-2 grid max-w-xl grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]">
+          {UNSOURCED.map(([name, why]) => (
+            <React.Fragment key={name}><dt className="text-axal-muted">{name}</dt><dd className="text-axal-faint">{NOT_RECORDED} · {why}</dd></React.Fragment>
+          ))}
+        </dl>
         <div className="mt-2 flex flex-wrap gap-2 text-[11.5px]">
           <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-axal-muted dark:border-gray-700">Sector label: {item.sector || NOT_RECORDED}</span>
           <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-axal-muted dark:border-gray-700">Tracked sector: {tracked?.status === 'ok' ? (tracked.name || tracked.slug) : tracked?.status === 'unreadable' ? UNREADABLE : NOT_RECORDED}</span>
