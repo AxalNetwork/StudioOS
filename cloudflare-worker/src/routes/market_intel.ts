@@ -215,33 +215,54 @@ export const DELTA_NOTE =
 const DAY_MS = 86_400_000;
 
 /**
+ * A live observation older than this many days means live data has stopped:
+ * the window cannot fill, and no date for a full index is given (D538).
+ */
+export const LIVE_STALE_AFTER_DAYS = 2;
+
+/**
  * D538 step 4 — how fresh the composite is: the first day of live data inside
- * the scoring window, how many days of the window it covers, when the first
- * full-window index is due, and how many monthly points the index has. Read
- * failures say "Unreadable", never zero.
+ * the scoring window, how many distinct days of the window carry a live
+ * observation, whether that coverage is full and still current, when the
+ * first full-window index is due, and how many monthly points the index has.
+ * Coverage is counted from observation days, never from elapsed time since
+ * the first one: a source that wrote once and stopped covers one day.
+ * Read failures say "Unreadable", never zero.
  */
 export async function readCompassFreshness(env: Env, now = new Date()) {
   const cutoff = new Date(now.getTime() - WINDOW_DAYS * DAY_MS).toISOString();
   let live: Record<string, unknown>;
   try {
-    const first = await env.DB.prepare(
-      `SELECT MIN(ts) AS first_ts FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()}`
-    ).bind(cutoff).first<{ first_ts: string | null }>();
-    const firstTs = first?.first_ts ?? null;
-    if (!firstTs) {
+    const obs = await env.DB.prepare(
+      `SELECT MIN(ts) AS first_ts, MAX(ts) AS last_ts, COUNT(DISTINCT substr(ts, 1, 10)) AS days
+         FROM market_intel_rows WHERE ts >= ? AND ${liveRowSql()}`
+    ).bind(cutoff).first<{ first_ts: string | null; last_ts: string | null; days: number | null }>();
+    const firstTs = obs?.first_ts ?? null;
+    const lastTs = obs?.last_ts ?? null;
+    if (!firstTs || !lastTs) {
       live = { live_since: null, live_since_reason: 'No live source has reported yet', window_days: WINDOW_DAYS, days_covered: 0, window_full: false, first_full_index_in_days: null };
     } else {
-      const covered = Math.max(0, Math.floor((now.getTime() - new Date(firstTs).getTime()) / DAY_MS));
-      const full = covered >= WINDOW_DAYS - 1;
+      // A 30-day window spans 31 calendar dates; full means at most one of
+      // the last WINDOW_DAYS days went without a live observation.
+      const covered = Math.min(Number(obs?.days ?? 0), WINDOW_DAYS);
+      const needed = WINDOW_DAYS - 1;
+      const lastAgeDays = Math.max(0, (now.getTime() - new Date(lastTs).getTime()) / DAY_MS);
+      const recent = lastAgeDays <= LIVE_STALE_AFTER_DAYS;
+      const full = recent && covered >= needed;
       live = {
         live_since: firstTs.slice(0, 10),
-        // Once live data spans the whole window, its first day inside the
+        // Once live data covers the whole window, its first day inside the
         // window is a lower bound: the data may go back further.
         live_since_exact: !full,
+        last_live: lastTs.slice(0, 10),
+        live_recent: recent,
         window_days: WINDOW_DAYS,
-        days_covered: Math.min(covered, WINDOW_DAYS),
+        days_covered: covered,
         window_full: full,
-        first_full_index_in_days: full ? 0 : WINDOW_DAYS - covered,
+        // The fewest further days of daily live observations before the
+        // window is full; null while live data has stopped.
+        first_full_index_in_days: full ? 0 : recent ? needed - covered : null,
+        ...(recent ? {} : { first_full_index_reason: `No live observation in the last ${LIVE_STALE_AFTER_DAYS} days` }),
       };
     }
   } catch {

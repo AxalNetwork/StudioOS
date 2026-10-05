@@ -16,7 +16,7 @@
  *   4. that wrangler.toml flips exactly those six live, in both var tables,
  *      and declares MI_STUB_ROWS "off" in both;
  *   5. that the index records its month-on-month change, and the composite
- *      read says when its live data starts, how much of the window it covers,
+ *      read says when its live data starts, how many days of the window carry a live observation,
  *      that the month is month to date, and how many monthly points exist.
  *
  * Run with:
@@ -31,7 +31,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
-import marketIntel from '../src/routes/market_intel.ts';
+import marketIntel, { readCompassFreshness, LIVE_STALE_AFTER_DAYS } from '../src/routes/market_intel.ts';
 import {
   runSourcesByCadence, runFreeConnectors, recomputeIndexes, stubRowsEnabled,
   deltaPct, previousPeriodKey, SECTORS,
@@ -295,6 +295,33 @@ test('a provider answer with nothing to cite yields no row, and a connector with
   } finally { globalThis.fetch = real; }
 });
 
+test('arxiv: every query is limited to preprints submitted in the last 30 days, like OpenAlex and Crossref', async () => {
+  const before = Date.now();
+  const requested = await withRecorded(async (requested) => {
+    await sourceByKey('arxiv').fetchLive!({} as any, { sectors: SECTORS.slice() });
+    return requested;
+  });
+  const after = Date.now();
+  const stamp = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace(/[-T:]/g, '');
+  assert.equal(requested.length, SECTORS.length);
+  for (const u of requested) {
+    const q = new URL(u).searchParams.get('search_query') ?? '';
+    const m = /^all:"[^"]+" AND submittedDate:\[(\d{12}) TO (\d{12})\]$/.exec(q);
+    assert.ok(m, `arXiv query has no submittedDate window: ${q}`);
+    assert.ok(m![2] >= stamp(before) && m![2] <= stamp(after), `window ends now, not ${m![2]}`);
+    assert.ok(m![1] >= stamp(before - 30 * DAY) && m![1] <= stamp(after - 30 * DAY), `window starts 30 days back, not ${m![1]}`);
+  }
+  // The other two research connectors already bound their count to the same 30 days.
+  const from = new Date(Date.now() - 30 * DAY).toISOString().slice(0, 10);
+  const others = await withRecorded(async (requested) => {
+    await sourceByKey('openalex').fetchLive!({} as any, { sectors: SECTORS.slice(0, 1) });
+    await sourceByKey('crossref').fetchLive!({} as any, { sectors: SECTORS.slice(0, 1) });
+    return requested;
+  });
+  assert.ok(new URL(others[0]).searchParams.get('filter')!.includes(`from_publication_date:${from}`), others[0]);
+  assert.equal(new URL(others[1]).searchParams.get('filter'), `from-pub-date:${from}`);
+});
+
 /* ------------------------------------------------------------------ */
 /* 4. wrangler.toml                                                    */
 /* ------------------------------------------------------------------ */
@@ -393,7 +420,8 @@ async function getCompass(env: ReturnType<typeof envFor>) {
 test('sector-compass: live since the first live day, the window it covers, month to date, and the monthly points', async () => {
   const db = fixture();
   insertLiveRow(db, SECTORS[0], 5);
-  insertLiveRow(db, SECTORS[0], 2);
+  insertLiveRow(db, SECTORS[0], 1);
+  insertLiveRow(db, SECTORS[1], 1); // a second observation on the same day is still one day
   // A stub row older than the first live one must not move "live since".
   db.prepare(
     `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, unit, ts, citation_url)
@@ -412,9 +440,11 @@ test('sector-compass: live since the first live day, the window it covers, month
   assert.equal(f.live_since, new Date(Date.now() - 5 * DAY).toISOString().slice(0, 10));
   assert.equal(f.live_since_exact, true);
   assert.equal(f.window_days, WINDOW_DAYS);
-  assert.equal(f.days_covered, 5);
+  assert.equal(f.last_live, new Date(Date.now() - 1 * DAY).toISOString().slice(0, 10));
+  assert.equal(f.live_recent, true);
+  assert.equal(f.days_covered, 2, 'two days carry a live observation, not the five since the first');
   assert.equal(f.window_full, false);
-  assert.equal(f.first_full_index_in_days, WINDOW_DAYS - 5);
+  assert.equal(f.first_full_index_in_days, WINDOW_DAYS - 1 - 2);
   // The cold read computed this month (live), plus July and August.
   assert.equal(f.monthly_points, 3, 'the stub-derived June counts as no point');
   const s0 = body.sectors.find((s: any) => s.sector === SECTORS[0]);
@@ -429,4 +459,59 @@ test('sector-compass: with no live data at all, live since is not recorded, with
   assert.equal(body.freshness.live_since_reason, 'No live source has reported yet');
   assert.equal(body.freshness.first_full_index_in_days, null);
   assert.equal(body.freshness.monthly_points, 0);
+});
+
+test('freshness: a source that wrote once and stopped covers one day, never a full window', async () => {
+  const db = fixture();
+  insertLiveRow(db, SECTORS[0], WINDOW_DAYS - 1);
+  const f = await readCompassFreshness(envFor(db) as any) as any;
+  assert.equal(f.live_since, new Date(Date.now() - (WINDOW_DAYS - 1) * DAY).toISOString().slice(0, 10));
+  assert.equal(f.days_covered, 1, 'one observation day, not the 29 days elapsed since it');
+  assert.equal(f.window_full, false);
+  assert.equal(f.live_since_exact, true);
+  assert.equal(f.live_recent, false);
+  assert.equal(f.first_full_index_in_days, null, 'no date for a full index while live data has stopped');
+  assert.equal(f.first_full_index_reason, `No live observation in the last ${LIVE_STALE_AFTER_DAYS} days`);
+});
+
+test('freshness: a live observation on every day of the window, up to today, is a full window', async () => {
+  const db = fixture();
+  for (let age = 0; age < WINDOW_DAYS; age++) insertLiveRow(db, SECTORS[age % SECTORS.length], age + 0.01);
+  const f = await readCompassFreshness(envFor(db) as any) as any;
+  assert.equal(f.days_covered, WINDOW_DAYS);
+  assert.equal(f.live_recent, true);
+  assert.equal(f.window_full, true);
+  assert.equal(f.first_full_index_in_days, 0);
+  assert.equal(f.live_since_exact, false, 'a full window\'s first day is only a lower bound');
+  assert.ok(!('first_full_index_reason' in f));
+});
+
+test('freshness: daily live data that stopped three days ago is neither full nor due', async () => {
+  const db = fixture();
+  // Every day from 3 to 29 days ago, then nothing.
+  for (let age = LIVE_STALE_AFTER_DAYS + 1; age < WINDOW_DAYS; age++) insertLiveRow(db, SECTORS[0], age);
+  const f = await readCompassFreshness(envFor(db) as any) as any;
+  assert.equal(f.days_covered, WINDOW_DAYS - LIVE_STALE_AFTER_DAYS - 1);
+  assert.equal(f.live_recent, false);
+  assert.equal(f.window_full, false);
+  assert.equal(f.first_full_index_in_days, null);
+});
+
+test('freshness: enough observation days do not make a full window once the newest is stale', async () => {
+  const db = fixture();
+  // At 00:30Z the 30-day window reaches back to 00:30Z thirty days ago: one
+  // observation on each of 29 calendar dates, the newest 2 days 20 minutes old.
+  const now = new Date('2026-10-05T00:30:00Z');
+  const at = (ms: number) => db.prepare(
+    `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, unit, ts, citation_url)
+     VALUES ('openalex', ?, 'global', 'research', 0.6, 'count', ?, 'https://openalex.org/W1')`,
+  ).run(SECTORS[0], new Date(ms).toISOString());
+  at(now.getTime() - WINDOW_DAYS * DAY + 10 * 60_000);
+  for (let age = WINDOW_DAYS - 1; age >= 3; age--) at(Date.parse('2026-10-05T12:00:00Z') - age * DAY);
+  at(now.getTime() - LIVE_STALE_AFTER_DAYS * DAY - 20 * 60_000);
+  const f = await readCompassFreshness(envFor(db) as any, now) as any;
+  assert.equal(f.days_covered, WINDOW_DAYS - 1);
+  assert.equal(f.live_recent, false);
+  assert.equal(f.window_full, false, 'coverage alone is not a full window when live data has stopped');
+  assert.equal(f.first_full_index_in_days, null);
 });
