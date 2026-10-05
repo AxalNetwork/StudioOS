@@ -227,3 +227,137 @@ test('BOUNTY_GRANTERS is declared in both var tables of wrangler.toml', () => {
   assert.match(top, /^BOUNTY_GRANTERS = "guillaumelauzier"$/m);
   assert.match(prod, /^BOUNTY_GRANTERS = "guillaumelauzier"$/m, 'the production table does not inherit the top-level vars');
 });
+
+// ─────────────────────────────────────── follow-up: review findings ──
+
+/** A fetch stub that answers every call with one status, counting the calls. */
+function failingFetch(status: number) {
+  const calls: Array<{ url: string; method: string }> = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init: any = {}) => {
+    calls.push({ url: String(url), method: init.method || 'GET' });
+    return new Response(JSON.stringify({ message: 'nope' }), { status, headers: { 'content-type': 'application/json' } });
+  }) as any;
+  return { calls, restore: () => { globalThis.fetch = real; } };
+}
+
+// ghFetch waits 750 ms before its one retry of a 5xx or 429; the tests do not.
+function instantTimers() {
+  const real = globalThis.setTimeout;
+  globalThis.setTimeout = ((fn: any) => real(fn, 0)) as any;
+  return () => { globalThis.setTimeout = real; };
+}
+
+test('when the sync bot IS the granter, its bounty label is processed; its other events are still dropped as echoes', async () => {
+  const sameAccount = (db: any) => env(db, { GITHUB_SYNC_BOT_LOGIN: 'GuillaumeLauzier' });
+  // A tier label from the shared account.
+  const db = freshDb();
+  const tier = await deliver(db, labelEvent('labeled', 'bounty:verified-medium', S1, ['bug', 'bounty:verified-medium']), { env: sameAccount(db) });
+  assert.notEqual(tier.body.ignored, 'sync_bot_actor', 'the coordinator\'s bounty label was dropped as a sync echo');
+  assert.equal(tier.body.bounty?.kind, 'tier_added');
+  assert.equal(tier.body.bounty?.rule_key, 'bug_medium');
+
+  // An outcome label from the shared account closes the ticket and the issue.
+  const db2 = freshDb();
+  const gh = captureFetch();
+  try {
+    const out = await deliver(db2, labelEvent('labeled', 'bounty:not-a-bug', S1, ['bug', 'bounty:not-a-bug']), { env: sameAccount(db2) });
+    assert.equal(out.body.bounty?.kind, 'outcome');
+    assert.equal(ticket(db2).status, 'closed');
+    assert.equal(gh.calls.length, 1);
+  } finally { gh.restore(); }
+
+  // Everything else from the bot is an echo, as before: an ordinary label, a
+  // bounty label removed, and the close our own PATCH caused.
+  const db3 = freshDb();
+  const closedEcho = labelEvent('labeled', 'x', S1, ['bug'], 'closed') as any;
+  closedEcho.action = 'closed';
+  delete closedEcho.label;
+  for (const body of [
+    labelEvent('labeled', 'priority: high', S1, ['bug', 'priority: high']),
+    labelEvent('unlabeled', 'bounty:verified-high', S1, ['bug']),
+    closedEcho,
+  ]) {
+    const r = await deliver(db3, body, { env: sameAccount(db3) });
+    assert.equal(r.body.ignored, 'sync_bot_actor', `a bot ${body.action} event was not dropped`);
+  }
+  assert.equal(ticket(db3).status, 'open');
+  assert.equal(ticket(db3).github_labels, null, 'a dropped echo wrote the label snapshot');
+
+  // A bounty label from the bot account when the bot is NOT a granter is still an echo.
+  const db4 = freshDb();
+  const notGranter = await deliver(db4, labelEvent('labeled', 'bounty:not-a-bug', 'sync-bot', ['bug', 'bounty:not-a-bug']),
+    { env: env(db4, { GITHUB_SYNC_BOT_LOGIN: 'sync-bot' }) });
+  assert.equal(notGranter.body.ignored, 'sync_bot_actor');
+  assert.equal(ticket(db4).status, 'open');
+});
+
+test('an issue number that is not a positive safe integer is refused before any fetch or write', async () => {
+  for (const bad of ['900', '900/../../orgs', -900, 0, 900.5, 2 ** 53, 1e300, true, [900], { n: 900 }]) {
+    const db = freshDb();
+    const gh = captureFetch();
+    try {
+      const body = labelEvent('labeled', 'bounty:not-a-bug', S1, ['bug', 'bounty:not-a-bug']);
+      (body.issue as any).number = bad;
+      const r = await deliver(db, body);
+      assert.equal(r.status, 400, `issue number ${JSON.stringify(bad)} was accepted`);
+      assert.equal(r.body.error, 'invalid_issue_number');
+      assert.equal(gh.calls.length, 0, `issue number ${JSON.stringify(bad)} reached a GitHub URL`);
+      assert.equal(ticket(db).status, 'open');
+      assert.equal(ticket(db).github_labels, null);
+    } finally { gh.restore(); }
+  }
+  // Missing is acknowledged and ignored, as before.
+  const db = freshDb();
+  const gh = captureFetch();
+  try {
+    const body = labelEvent('labeled', 'bounty:not-a-bug', S1, ['bug', 'bounty:not-a-bug']);
+    delete (body.issue as any).number;
+    const r = await deliver(db, body);
+    assert.equal(r.body.ignored, 'no_issue_number');
+    assert.equal(gh.calls.length, 0);
+    assert.equal(ticket(db).status, 'open');
+  } finally { gh.restore(); }
+});
+
+test('a failed GitHub close leaves the ticket open, releases the claim and asks for a retry', async () => {
+  const restoreTimers = instantTimers();
+  try {
+    for (const status of [401, 403, 429, 500]) {
+      const db = freshDb();
+      const body = labelEvent('labeled', 'bounty:duplicate', S1, ['bug', 'bounty:duplicate']);
+      const id = `close-fails-${status}`;
+      const gh = failingFetch(status);
+      let r: { status: number; body: any };
+      try { r = await deliver(db, body, { id }); } finally { gh.restore(); }
+      assert.ok(gh.calls.length >= 1 && gh.calls.every((x) => x.method === 'PATCH'));
+      assert.ok(r.status >= 500, `a ${status} from GitHub was answered ${r.status}`);
+      assert.equal(r.body.error, 'github_close_failed');
+      assert.equal(ticket(db).status, 'open', `the ticket closed locally though GitHub answered ${status}`);
+      assert.equal(ticket(db).github_labels, null, 'a half-done delivery wrote the label snapshot');
+
+      // GitHub's redelivery of the same GUID runs again and now succeeds.
+      const ok = captureFetch();
+      try {
+        const again = await deliver(db, body, { id });
+        assert.notEqual(again.body.ignored, 'duplicate_delivery', 'the failed delivery\'s claim was not released');
+        assert.equal(again.status, 200);
+        assert.equal(again.body.bounty.github_closed, true);
+        assert.equal(ticket(db).status, 'closed');
+        assert.equal(ok.calls.length, 1);
+      } finally { ok.restore(); }
+    }
+  } finally { restoreTimers(); }
+});
+
+test('an outcome on an issue already closed on GitHub closes the ticket with no outbound call', async () => {
+  const db = freshDb();
+  const gh = captureFetch();
+  try {
+    const r = await deliver(db, labelEvent('labeled', 'bounty:not-a-bug', S1, ['bug', 'bounty:not-a-bug'], 'closed'));
+    assert.equal(r.status, 200);
+    assert.equal(r.body.bounty.github_closed, null);
+    assert.equal(ticket(db).status, 'closed');
+    assert.equal(gh.calls.length, 0);
+  } finally { gh.restore(); }
+});
