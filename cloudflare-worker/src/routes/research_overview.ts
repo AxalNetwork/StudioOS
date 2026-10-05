@@ -8,14 +8,22 @@
  *
  *   totals       research_company_directory, research_market_directory,
  *                research_fund_directory — each count with its as-of date;
+ *                the supplied-company sum, the fund lists, the twelve
+ *                indexed sectors with each one's last computed_at, and the
+ *                private / public / government split (government is not
+ *                recorded anywhere);
  *   heat         market_intel_indexes, live rows only (D538), the current
  *                month (month to date) and its change on the last month;
  *                computed on the read when live observations exist but the
  *                month's index does not yet (as sector-compass does);
  *   demand_vs_supply  the sectors whose live demand rises faster than supply;
- *   competition  companies per sector label and per country (top N);
- *   money        funds per HQ and per focus (top N), size bands, vintages;
- *   signals      the latest active signals (hand-written theses today).
+ *   competition  companies per sector label and per country (top N), the
+ *                remainders, and the companies with no label or no country;
+ *   money        funds per HQ country and per focus market through the D533
+ *                crosswalk (top N), euro size bands, every vintage, and the
+ *                count missing each of those;
+ *   signals      the latest active signals (hand-written theses today), with
+ *                why now, the build opportunity, region and confidence.
  *
  * HONESTY. Each section reads on its own and reports its own failure as
  * "unreadable", so one broken table never blanks the page. A count of zero is
@@ -32,6 +40,8 @@ import { requireAuth } from '../auth';
 import { SECTORS, recomputeIndexes } from '../services/market_intel/aggregator';
 import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
 import { periodKey, WINDOW_DAYS } from '../services/market_intel/scoring';
+import { listCountries, loadOverrides, mapFundFocus, mapFundHq, type Mapping } from '../services/researchTaxonomy';
+import { EUR_SOURCE } from '../services/researchFundDirectory';
 
 const researchOverview = new Hono<{ Bindings: Env }>();
 
@@ -65,20 +75,22 @@ function total(n: number | null | undefined, asOf: string | null | undefined, so
 }
 
 /**
- * Fund size bands, on `fund_size_cents` (hundredths of the reported unit).
- * The directory records no currency, so the bands carry none either.
+ * Fund size bands, on `fund_size_cents` in euro cents. Only the rows whose
+ * currency is known are banded — the EuroTech list (`EUR_SOURCE`, D535); the
+ * other list records no size in a known currency, and sizes in different
+ * currencies are never banded or summed together.
  */
 export const SIZE_BANDS: Array<{ band: string; min: number; max: number | null }> = [
-  { band: 'under 25M', min: 0, max: 25_000_000_00 },
-  { band: '25M–100M', min: 25_000_000_00, max: 100_000_000_00 },
-  { band: '100M–250M', min: 100_000_000_00, max: 250_000_000_00 },
-  { band: '250M–1B', min: 250_000_000_00, max: 1_000_000_000_00 },
-  { band: '1B and over', min: 1_000_000_000_00, max: null },
+  { band: 'under €25M', min: 0, max: 25_000_000_00 },
+  { band: '€25M–100M', min: 25_000_000_00, max: 100_000_000_00 },
+  { band: '€100M–250M', min: 100_000_000_00, max: 250_000_000_00 },
+  { band: '€250M–1B', min: 250_000_000_00, max: 1_000_000_000_00 },
+  { band: '€1B and over', min: 1_000_000_000_00, max: null },
 ];
 
 const COMPANY_SOURCE = 'Wikidata (CC0), research_company_directory';
 const MARKET_SOURCE = 'Axal market directory, research_market_directory';
-const FUND_SOURCE = 'EuroTech VC Funds (public spreadsheets), research_fund_directory';
+const FUND_SOURCE = 'Public fund lists (spreadsheets), research_fund_directory';
 
 /** One total's read; a failure is "Unreadable" on its own line, never a zero. */
 async function readTotal<R>(read: () => Promise<R | null>): Promise<R | 'unreadable'> {
@@ -93,32 +105,98 @@ function unreadable(source: string): Total {
   return { value: null, as_of: null, source, reason: UNREADABLE };
 }
 
+/** Why the government count is empty: no store records ownership type (#1083 Q3 decides only the wording). */
+export const GOVERNMENT_REASON = 'No source lists government-owned companies yet; no store holds ownership type';
+const PUBLIC_SOURCE = 'signal_companies: listed companies, each with its symbol and exchange';
+const SECTORS_SOURCE = 'market_intel_indexes: the market-intelligence sectors, live rows only';
+
+/**
+ * The twelve market-intelligence sectors, each with the last time a live
+ * index row was computed for it. A sector no live source has reached carries
+ * `last_computed_at: null` and the reason; a failed read says "Unreadable" on
+ * every sector, never a date it did not read.
+ */
+async function readSectorsTracked(env: Env) {
+  const rows = await readTotal(async () => (await env.DB.prepare(
+    `SELECT sector, MAX(computed_at) AS computed_at FROM market_intel_indexes
+      WHERE ${liveIndexSql()} GROUP BY sector`
+  ).all<{ sector: string; computed_at: string | null }>()).results || []);
+  if (rows === 'unreadable') {
+    return {
+      value: SECTORS.length, as_of: null, source: SECTORS_SOURCE, reason: UNREADABLE,
+      sectors: SECTORS.map((sector) => ({ sector, last_computed_at: null, reason: UNREADABLE })),
+    };
+  }
+  const by = new Map(rows.map((r) => [r.sector, r.computed_at] as const));
+  const sectors = SECTORS.map((sector) => {
+    const at = by.get(sector) ?? null;
+    return at ? { sector, last_computed_at: at } : { sector, last_computed_at: null, reason: NO_LIVE_SOURCE_REASON };
+  });
+  const dates = sectors.map((s) => s.last_computed_at).filter((d): d is string => !!d).sort();
+  return { value: SECTORS.length, as_of: dates.length ? dates[dates.length - 1] : null, source: SECTORS_SOURCE, sectors };
+}
+
 async function readTotals(env: Env) {
   return section(async () => {
-    const [c, m, f] = await Promise.all([
+    const [c, m, f, lists, pub, tracked] = await Promise.all([
       readTotal(() => env.DB.prepare(
         `SELECT COUNT(*) AS n, MAX(as_of) AS as_of,
                 COUNT(DISTINCT CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN country END) AS countries,
                 COUNT(DISTINCT CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN LOWER(TRIM(sector)) END) AS sectors
            FROM research_company_directory`
       ).first<{ n: number; as_of: string | null; countries: number; sectors: number }>()),
-      readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(as_of) AS as_of FROM research_market_directory`)
-        .first<{ n: number; as_of: string | null }>()),
+      readTotal(() => env.DB.prepare(
+        `SELECT COUNT(*) AS n, MAX(as_of) AS as_of, SUM(company_count) AS supplied FROM research_market_directory`
+      ).first<{ n: number; as_of: string | null; supplied: number | null }>()),
       readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(as_of) AS as_of FROM research_fund_directory`)
         .first<{ n: number; as_of: string | null }>()),
+      readTotal(async () => (await env.DB.prepare(
+        `SELECT source_name AS name, COUNT(*) AS funds, MAX(as_of) AS as_of FROM research_fund_directory
+          GROUP BY source_name ORDER BY funds DESC, source_name`
+      ).all<{ name: string; funds: number; as_of: string | null }>()).results || []),
+      readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(updated_at) AS as_of FROM signal_companies`)
+        .first<{ n: number; as_of: string | null }>()),
+      readSectorsTracked(env),
     ]);
     const countriesSource = `${COMPANY_SOURCE}: distinct countries`;
     const sectorsSource = `${COMPANY_SOURCE}: distinct raw sector labels`;
+    const suppliedSource = `${MARKET_SOURCE}: SUM(company_count), supplied by Axal and not verified`;
+    const listsSource = `${FUND_SOURCE}: distinct source lists`;
+    const listsAsOf = lists === 'unreadable' ? null
+      : (lists ?? []).map((x) => x.as_of).filter((d): d is string => !!d).sort().pop() ?? null;
+    const companies = c === 'unreadable' ? unreadable(COMPANY_SOURCE)
+      : total(c?.n, c?.as_of, COMPANY_SOURCE, 'The company directory holds no company yet');
     return {
       status: 'ok' as const,
-      companies: c === 'unreadable' ? unreadable(COMPANY_SOURCE) : total(c?.n, c?.as_of, COMPANY_SOURCE, 'The company directory holds no company yet'),
+      companies,
       markets: m === 'unreadable' ? unreadable(MARKET_SOURCE) : total(m?.n, m?.as_of, MARKET_SOURCE, 'The market directory holds no market yet'),
+      // What the market directory says its markets hold: supplied taxonomy
+      // counts, not the company directory's own rows.
+      supplied_companies: m === 'unreadable' ? unreadable(suppliedSource)
+        : total(m?.supplied, m?.as_of, suppliedSource, 'The market directory supplies no company count yet'),
       funds: f === 'unreadable' ? unreadable(FUND_SOURCE) : total(f?.n, f?.as_of, FUND_SOURCE, 'The fund directory holds no fund yet'),
+      fund_sources: lists === 'unreadable' ? { ...unreadable(listsSource), names: [] } : {
+        ...total(lists?.length, listsAsOf, listsSource, 'The fund directory holds no fund yet'),
+        names: (lists ?? []).map((x) => ({ name: x.name, funds: Number(x.funds) })),
+      },
       countries: c === 'unreadable' ? unreadable(countriesSource) : total(c?.countries, c?.as_of, countriesSource, 'No company in the directory records a country'),
+      // Distinct raw labels in the company directory. The overview's "sectors
+      // tracked" is `sectors_tracked`: the twelve indexed sectors.
       sectors: c === 'unreadable' ? unreadable(sectorsSource) : total(c?.sectors, c?.as_of, sectorsSource, 'No company in the directory records a sector'),
-      // Whether a market is private, public or government is recorded nowhere
-      // yet; #1083 settles how it will be.
-      market_split: { value: null, reason: 'Private, public and government are not recorded yet (#1083)' },
+      sectors_tracked: tracked,
+      // No source records ownership per company, so each count follows the
+      // list the record came from. Government has no list at all.
+      market_split: {
+        value: null,
+        reason: 'No source records ownership for each company, so each count follows the list the record came from',
+        private: {
+          ...companies,
+          note: 'Company directory records not known to be listed. Listing status is not recorded per company, so a few may trade on an exchange.',
+        },
+        public: pub === 'unreadable' ? unreadable(PUBLIC_SOURCE)
+          : total(pub?.n, pub?.as_of, PUBLIC_SOURCE, 'No listed company is recorded yet'),
+        government: { value: null, as_of: null, source: null, reason: GOVERNMENT_REASON },
+      },
     };
   });
 }
@@ -231,7 +309,7 @@ async function readDemandVsSupply(env: Env, indexes: Promise<LiveIndexes>) {
 
 async function readCompetition(env: Env, top: number) {
   return section(async () => {
-    const [bySector, byCountry, asOf] = await Promise.all([
+    const [bySector, byCountry, stats] = await Promise.all([
       env.DB.prepare(
         `SELECT TRIM(sector) AS label, COUNT(*) AS companies FROM research_company_directory
           WHERE TRIM(COALESCE(sector, '')) <> '' GROUP BY LOWER(TRIM(sector))
@@ -242,20 +320,76 @@ async function readCompetition(env: Env, top: number) {
           WHERE TRIM(COALESCE(country, '')) <> '' GROUP BY TRIM(country)
           ORDER BY companies DESC, country COLLATE NOCASE LIMIT ?`
       ).bind(top).all<{ country: string; companies: number }>(),
-      env.DB.prepare(`SELECT MAX(as_of) AS as_of FROM research_company_directory`).first<{ as_of: string | null }>(),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS total, MAX(as_of) AS as_of,
+                SUM(CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN 1 ELSE 0 END) AS labelled,
+                COUNT(DISTINCT CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN LOWER(TRIM(sector)) END) AS labels,
+                SUM(CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN 1 ELSE 0 END) AS located,
+                COUNT(DISTINCT CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN TRIM(country) END) AS countries
+           FROM research_company_directory`
+      ).first<{ total: number; as_of: string | null; labelled: number | null; labels: number; located: number | null; countries: number }>(),
     ]);
     const sectors = bySector.results || [];
     const countries = byCountry.results || [];
     if (sectors.length === 0 && countries.length === 0) {
       return { status: 'not_recorded' as const, reason: 'No company in the directory records a sector or a country' };
     }
+    const all = Number(stats?.total ?? 0);
+    const labelled = Number(stats?.labelled ?? 0);
+    const located = Number(stats?.located ?? 0);
+    const sum = (rows: Array<{ companies: number }>) => rows.reduce((n, r) => n + Number(r.companies), 0);
     return {
-      status: 'ok' as const, source: COMPANY_SOURCE, as_of: asOf?.as_of ?? null,
-      // Raw directory labels until #1080's crosswalk merges; not the 12 index sectors.
+      status: 'ok' as const, source: COMPANY_SOURCE, as_of: stats?.as_of ?? null,
+      // Wikidata's own industry words, as the canvas draws them; the twelve
+      // index sectors are `totals.sectors_tracked`.
       sector_basis: 'raw directory sector labels',
-      by_sector: sectors, by_country: countries,
+      total_companies: all,
+      by_sector: sectors,
+      // Every company is in exactly one of: a top label, `other_sectors`, `no_sector`.
+      other_sectors: { labels: Math.max(0, Number(stats?.labels ?? 0) - sectors.length), companies: labelled - sum(sectors) },
+      no_sector: all - labelled,
+      by_country: countries,
+      other_countries: { countries: Math.max(0, Number(stats?.countries ?? 0) - countries.length), companies: located - sum(countries) },
+      no_country: all - located,
     };
   });
+}
+
+/** One distinct raw value of a directory column and how many funds carry it. */
+export interface RawCount { v: string; n: number }
+
+/**
+ * Funds per crosswalk target (a country code, a market slug), largest first.
+ *
+ * A fund whose HQ names two countries, or whose focus names two markets, is
+ * counted under each, so the ranked counts can add up to more than the funds;
+ * `other` and `unmapped` count each fund once. Every fund with a value is in
+ * exactly one of: a ranked target, `other` (mapped, but only to targets outside
+ * the top), `unmapped` (text the crosswalk places nowhere).
+ */
+export function crosswalkCounts(rows: RawCount[], map: (raw: string) => Mapping, top: number) {
+  const per = new Map<string, number>();
+  const mapped: Array<{ targets: string[]; n: number }> = [];
+  let unmapped = 0;
+  let unmappedValues = 0;
+  for (const r of rows) {
+    const n = Number(r.n);
+    const targets = map(r.v).targets;
+    if (targets.length === 0) { unmapped += n; unmappedValues += 1; continue; }
+    mapped.push({ targets, n });
+    for (const t of targets) per.set(t, (per.get(t) ?? 0) + n);
+  }
+  const ranked = [...per.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([key, funds]) => ({ key, funds }));
+  const shown = ranked.slice(0, top);
+  const inTop = new Set(shown.map((x) => x.key));
+  const otherFunds = mapped.filter((m) => !m.targets.some((t) => inTop.has(t))).reduce((s, m) => s + m.n, 0);
+  return {
+    ranked: shown,
+    other: { targets: ranked.length - shown.length, funds: otherFunds },
+    unmapped: { values: unmappedValues, funds: unmapped },
+  };
 }
 
 async function readMoney(env: Env, top: number) {
@@ -264,54 +398,127 @@ async function readMoney(env: Env, top: number) {
       `SUM(CASE WHEN fund_size_cents >= ${b.min}${b.max != null ? ` AND fund_size_cents < ${b.max}` : ''} THEN 1 ELSE 0 END) AS b${i}`,
     ).join(', ');
     const thisYear = new Date().getUTCFullYear();
-    const [byHq, byFocus, bands, vintages, asOf] = await Promise.all([
+    const [hqRows, focusRows, overrides, countries, markets, bands, vintages, stats] = await Promise.all([
       env.DB.prepare(
-        `SELECT TRIM(hq) AS hq, COUNT(*) AS funds FROM research_fund_directory
-          WHERE TRIM(COALESCE(hq, '')) <> '' GROUP BY TRIM(hq)
-          ORDER BY funds DESC, hq COLLATE NOCASE LIMIT ?`
-      ).bind(top).all<{ hq: string; funds: number }>(),
+        `SELECT hq AS v, COUNT(*) AS n FROM research_fund_directory
+          WHERE TRIM(COALESCE(hq, '')) <> '' GROUP BY hq`
+      ).all<RawCount>(),
       env.DB.prepare(
-        `SELECT TRIM(sector_focus) AS focus, COUNT(*) AS funds FROM research_fund_directory
-          WHERE TRIM(COALESCE(sector_focus, '')) <> '' GROUP BY LOWER(TRIM(sector_focus))
-          ORDER BY funds DESC, focus COLLATE NOCASE LIMIT ?`
-      ).bind(top).all<{ focus: string; funds: number }>(),
-      // The band edges are constants of this file, never request values.
-      env.DB.prepare(`SELECT ${bandSql} FROM research_fund_directory WHERE fund_size_cents > 0`)
-        .first<Record<string, number | null>>(),
+        `SELECT sector_focus AS v, COUNT(*) AS n FROM research_fund_directory
+          WHERE TRIM(COALESCE(sector_focus, '')) <> '' GROUP BY sector_focus`
+      ).all<RawCount>(),
+      loadOverrides(env),
+      listCountries(env),
+      env.DB.prepare(`SELECT slug, name FROM research_market_directory`).all<{ slug: string; name: string }>(),
+      // The band edges are constants of this file, never request values. Only
+      // sizes whose currency is known are banded: the euro list (EUR_SOURCE).
+      env.DB.prepare(`SELECT ${bandSql} FROM research_fund_directory WHERE source_name = ? AND fund_size_cents > 0`)
+        .bind(EUR_SOURCE).first<Record<string, number | null>>(),
       env.DB.prepare(
         `SELECT fund_year AS year, COUNT(*) AS funds FROM research_fund_directory
-          WHERE fund_year BETWEEN ? AND ? GROUP BY fund_year ORDER BY fund_year DESC`
-      ).bind(thisYear - 4, thisYear).all<{ year: number; funds: number }>(),
-      env.DB.prepare(`SELECT MAX(as_of) AS as_of FROM research_fund_directory`).first<{ as_of: string | null }>(),
+          WHERE fund_year IS NOT NULL GROUP BY fund_year ORDER BY fund_year`
+      ).all<{ year: number; funds: number }>(),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS total, MAX(as_of) AS as_of,
+                SUM(CASE WHEN TRIM(COALESCE(hq, '')) = '' THEN 1 ELSE 0 END) AS no_hq,
+                SUM(CASE WHEN TRIM(COALESCE(sector_focus, '')) = '' THEN 1 ELSE 0 END) AS no_focus,
+                SUM(CASE WHEN source_name = ? AND fund_size_cents > 0 THEN 1 ELSE 0 END) AS sized,
+                SUM(CASE WHEN fund_year IS NULL THEN 1 ELSE 0 END) AS no_vintage
+           FROM research_fund_directory`
+      ).bind(EUR_SOURCE).first<{ total: number; as_of: string | null; no_hq: number | null; no_focus: number | null; sized: number | null; no_vintage: number | null }>(),
     ]);
+    const all = Number(stats?.total ?? 0);
+    if (all === 0) return { status: 'not_recorded' as const, reason: 'The fund directory holds no fund yet' };
+    const countryName = new Map(countries.map((c) => [c.code, c.name] as const));
+    const marketName = new Map((markets.results || []).map((m) => [m.slug, m.name] as const));
+    const hq = crosswalkCounts(hqRows.results || [], (v) => mapFundHq(v, overrides), top);
+    const focus = crosswalkCounts(focusRows.results || [], (v) => mapFundFocus(v, overrides), top);
     const sizeBands = SIZE_BANDS
       .map((b, i) => ({ band: b.band, funds: Number(bands?.[`b${i}`] ?? 0) }))
       .filter((b) => b.funds > 0);
-    const hq = byHq.results || [];
-    const focus = byFocus.results || [];
-    const recent = vintages.results || [];
-    if (hq.length === 0 && focus.length === 0 && sizeBands.length === 0 && recent.length === 0) {
-      return { status: 'not_recorded' as const, reason: 'The fund directory records no HQ, focus, size or vintage yet' };
-    }
+    const years = (vintages.results || []).map((v) => ({ year: Number(v.year), funds: Number(v.funds) }));
+    const recent = years.filter((v) => v.year >= thisYear - 4 && v.year <= thisYear).reverse();
+    const sized = Number(stats?.sized ?? 0);
     return {
-      status: 'ok' as const, source: FUND_SOURCE, as_of: asOf?.as_of ?? null,
-      size_note: 'Reported fund sizes only, in the currency the source spreadsheet used, which the directory does not record; no NAV, IRR, TVPI or performance is inferred.',
-      by_hq: hq, by_focus: focus, size_bands: sizeBands,
+      status: 'ok' as const, source: FUND_SOURCE, as_of: stats?.as_of ?? null,
+      total_funds: all,
+      hq_basis: 'HQ text matched to countries through the Research crosswalk (D533); a fund whose HQ names two countries counts in each',
+      by_hq: hq.ranked.map((x) => ({ hq: countryName.get(x.key) ?? x.key, code: x.key, funds: x.funds })),
+      other_hq: { countries: hq.other.targets, funds: hq.other.funds },
+      hq_unmapped: hq.unmapped,
+      focus_basis: 'Stated focus matched to markets through the Research crosswalk (D533); a fund naming two markets counts in each',
+      by_focus: focus.ranked.map((x) => ({ focus: marketName.get(x.key) ?? x.key, slug: x.key, funds: x.funds })),
+      other_focus: { markets: focus.other.targets, funds: focus.other.funds },
+      focus_unmapped: focus.unmapped,
+      size_currency: 'EUR',
+      size_note: 'Sizes in euros, from the one list whose currency is known (the EuroTech list); other lists record no size in a known currency and count as missing. Reported fund sizes only; no NAV, IRR, TVPI or performance is inferred.',
+      size_bands: sizeBands,
+      vintages: years,
+      vintage_range: years.length ? { from: years[0].year, to: years[years.length - 1].year } : null,
       recent_vintages: recent,
       ...(recent.length === 0 ? { recent_vintages_reason: `No fund records a vintage from ${thisYear - 4} to ${thisYear}` } : {}),
+      missing: {
+        hq: Number(stats?.no_hq ?? 0),
+        focus: Number(stats?.no_focus ?? 0),
+        size: all - sized,
+        vintage: Number(stats?.no_vintage ?? 0),
+      },
     };
   });
 }
 
+/** The parts of a signal's `build_opportunity` JSON the overview shows; null when it holds none. */
+export function buildOpportunity(raw: string | null | undefined) {
+  let parsed: unknown;
+  try { parsed = JSON.parse(String(raw ?? '')); } catch { return null; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const out: Record<string, string> = {};
+  for (const k of ['headline', 'wedge', 'icp', 'gtm', 'moat', 'risks']) {
+    const v = (parsed as Record<string, unknown>)[k];
+    if (typeof v === 'string' && v.trim()) out[k] = v.trim();
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+interface SignalRow {
+  id: string; type: string; title: string; sector: string; country: string; region: string;
+  why_now: string | null; build_opportunity: string | null; confidence_score: number | null; updated_at: string;
+}
+
 async function readSignals(env: Env, top: number) {
   return section(async () => {
-    // advisor_note is deliberately not selected (voice rule).
-    const rows = (await env.DB.prepare(
-      `SELECT id, type, title, sector, country, updated_at FROM signals
-        WHERE status = 'active' ORDER BY updated_at DESC, id LIMIT ?`
-    ).bind(top).all<{ id: string; type: string; title: string; sector: string; country: string; updated_at: string }>()).results || [];
+    // advisor_note is deliberately never selected (voice rule).
+    const [list, count] = await Promise.all([
+      env.DB.prepare(
+        `SELECT id, type, title, sector, country, region, why_now, build_opportunity, confidence_score, updated_at
+           FROM signals WHERE status = 'active' ORDER BY updated_at DESC, id LIMIT ?`
+      ).bind(top).all<SignalRow>(),
+      env.DB.prepare(`SELECT COUNT(*) AS n FROM signals WHERE status = 'active'`).first<{ n: number }>(),
+    ]);
+    const rows = list.results || [];
     if (rows.length === 0) return { status: 'not_recorded' as const, reason: 'No active signal yet' };
-    return { status: 'ok' as const, source: 'Axal research team: hand-written theses (services/signals)', items: rows };
+    const items = rows.map((r) => {
+      const whyNow = typeof r.why_now === 'string' && r.why_now.trim() ? r.why_now.trim() : null;
+      const build = buildOpportunity(r.build_opportunity);
+      // 0 is the stored default for a signal no evidence has scored, not a score.
+      const confidence = Number(r.confidence_score);
+      const scored = Number.isFinite(confidence) && confidence > 0;
+      return {
+        id: r.id, type: r.type, title: r.title, sector: r.sector, country: r.country,
+        region: typeof r.region === 'string' && r.region.trim() ? r.region : null,
+        why_now: whyNow,
+        ...(whyNow ? {} : { why_now_reason: NOT_RECORDED }),
+        build_opportunity: build,
+        ...(build ? {} : { build_opportunity_reason: NOT_RECORDED }),
+        confidence_score: scored ? confidence : null,
+        ...(scored ? {} : { confidence_reason: 'Not recorded: no evidence has been scored for this signal yet' }),
+        updated_at: r.updated_at,
+      };
+    });
+    return {
+      status: 'ok' as const, source: 'Axal research team: hand-written theses (services/signals)',
+      active_count: Number(count?.n ?? rows.length), items,
+    };
   });
 }
 

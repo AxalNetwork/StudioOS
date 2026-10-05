@@ -68,7 +68,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // graduated out of `design/incoming/` that day with no row of their own, and
   // the eight canvases that arrived. Five canvases still carry none; D305
   // names them.
-  assert.equal(recs.length, 125);
+  // 126 as of 2026-10-05 (D536). `Research · Main` — the `/research` overview
+  // panel the owner approved for #1082 (D546), on all four licences.
+  assert.equal(recs.length, 126);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

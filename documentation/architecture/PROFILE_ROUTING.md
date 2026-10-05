@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 125 canonical canvases at `design/canvases/`, listed
-148 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 126 canonical canvases at `design/canvases/`, listed
+152 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 55 canvases
+## Founder — 56 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ it, where in their nav, and how do they get there.*
 | Perks & Products | `/perks` | Home | Full page | Sidebar → Home → Grow | NEW | High |
 | Pitch Deck Builder | `/spinout-lab/pitch-deck` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Profiling | `/spinout-lab/profiling` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Research · Main | `/research` · `/market-intel` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
 | Revenue | `/spinout-lab/revenue` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Round Manager | `/raise/capital/pipeline` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
 | Scoring Engine | `/spinout-lab/scoring` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
@@ -87,7 +88,7 @@ it, where in their nav, and how do they get there.*
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 
-## Advisor — 10 canvases
+## Advisor — 11 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -100,9 +101,10 @@ it, where in their nav, and how do they get there.*
 | Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Home | Full page (proposed) | Sidebar → Home → Expertise | UPGRADE | Low |
 | Pages · Advisor Network | `/network/*` | Home | Full page (proposed) | Sidebar → Home → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Home | Full page (proposed) | Sidebar → Home → Research | UPGRADE | Low |
+| Research · Main | `/research` · `/market-intel` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
 | Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
 
-## LP / Investor — 21 canvases
+## LP / Investor — 22 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -126,9 +128,10 @@ it, where in their nav, and how do they get there.*
 | Pages · Investor Research | `/advisor/research*` · `/market-intel` · `/research/ask` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
 | Portfolio | `/portfolio/value-add` | Home | Full page | Sidebar → Home → Portfolio | UPGRADE | High |
 | Quarterly Report | `/lp-reports` · `/spinout-lab/investor-workspace` · `/lp-portal` | Home | Full page + print stylesheet | Sidebar → Home → Axal VC Fund | UPGRADE | High |
+| Research · Main | `/research` · `/market-intel` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Partner / Operator — 8 canvases
+## Partner / Operator — 9 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -139,6 +142,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | Headerless | Full page | Sidebar → Headerless → Pipeline | UPGRADE | High |
 | Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Offers | NEW | High |
+| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
 ## Subsidiary Admin — 7 canvases
@@ -229,7 +233,7 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 76 | Live route, reachable from that workspace’s sidebar. |
+| High | 80 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 41 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 31 | Not routed. Proposed route only. |
 

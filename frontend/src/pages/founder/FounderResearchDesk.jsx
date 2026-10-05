@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
+import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import './founderResearchDesk.css';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -189,6 +190,10 @@ export default function FounderResearchDesk() {
           <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <NavLink data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state} className={zonePillClass}>{label}</NavLink>)}</nav>
         </header>
         {error && <div className="a7-error" data-testid="status-research-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-research" type="button" onClick={() => setRetry((value) => value + 1)}><RefreshCw size={13} />Retry</button></div>}
+        {/* D536 — the Research overview (Research · Main canvas, D546): the
+            directory totals, the split, the sector grid, the competition, the
+            money and the signals, each section with its own state. */}
+        <ResearchOverviewPanel />
         <section className="a7-card a7-brief" id="a7-ask"><SectionHead title="Sourced brief" meta={freshness ? `Updated ${prettyDate(freshness)}` : 'Stored market evidence'} />
           {loading && !brief ? <Skeleton /> : <><div className="a7-source-label"><Radar size={13} /> Stored market evidence</div><h2 data-testid="text-research-brief-title">{briefTitle}</h2><p data-testid="text-research-brief-summary">{briefBody}</p><div className="a7-citations">{firstText(briefRecord.source, briefRecord.publisher, data.sources[0]?.name, 'Source not recorded')} <span>{prettyDate(firstText(briefRecord.published, briefRecord.date, briefRecord.updated_at))}</span>{firstText(briefRecord.link, briefRecord.url, briefRecord.source_url) && <a href={firstText(briefRecord.link, briefRecord.url, briefRecord.source_url)} target="_blank" rel="noreferrer">Open source <ArrowUpRight size={12} /></a>}</div></>}
         </section>
@@ -255,15 +260,20 @@ function fundCountMeta(funds) {
   return n == null || n === '' || !Number.isFinite(Number(n)) ? 'Not recorded' : `${Number(n)} researched`;
 }
 
+/** One of the fund card's figures: the count it was sent, or "Not recorded" — never a blank or a 0 it was not given. */
+function fundFigure(n) {
+  return n == null || n === '' || !Number.isFinite(Number(n)) ? 'Not recorded' : Number(n);
+}
+
 function FundResearch({ funds, failed, onRetry }) {
   if (failed) return <Unreadable what="Your fund research" claim="This is not a sign that no fund is researched." onRetry={onRetry} />;
   if (!funds) return <Skeleton />;
   if (!Number(funds.researched_count)) return <div className="a7-unavailable"><Landmark size={19} /><div><strong>No fund is researched yet</strong><p>Add the funds you are considering on the Funds page, with their cheque range, stage fit and path in.</p></div></div>;
   return <div className="a7-fund-stats" data-testid="stats-research-funds">
-    <div><strong>{funds.right_stage_count}</strong><span>At the right stage</span></div>
-    <div><strong>{funds.warm_path_count}</strong><span>With a warm path</span></div>
-    <div><strong>{funds.cheque_overlap_count == null ? 'Not recorded' : funds.cheque_overlap_count}</strong><span>Cheque fits the raise</span></div>
-    <div><strong>{funds.passed_count}</strong><span>Passed</span></div>
+    <div><strong>{fundFigure(funds.right_stage_count)}</strong><span>At the right stage</span></div>
+    <div><strong>{fundFigure(funds.warm_path_count)}</strong><span>With a warm path</span></div>
+    <div><strong>{funds.cheque_overlap_count == null ? 'Not recorded' : fundFigure(funds.cheque_overlap_count)}</strong><span>Cheque fits the raise</span></div>
+    <div><strong>{fundFigure(funds.passed_count)}</strong><span>Passed</span></div>
     {funds.cheque_overlap_count == null && funds.cheque_overlap_note ? <p>{funds.cheque_overlap_note}</p> : null}
   </div>;
 }
