@@ -25,7 +25,7 @@ import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
-  NOT_RECORDED, UNREADABLE, analysisHref, employees, indexRows, lastRound, money, relatedSignals,
+  NOT_RECORDED, UNREADABLE, analysisHref, employees, indexRows, lastRound, latestOnly, money, relatedSignals,
   sectorLabelHref, signedPct,
 } from '../../lib/companyDirectoryView.js';
 import { companyHref } from './CompanyDirectoryZone.jsx';
@@ -42,10 +42,19 @@ const faint = 'text-[11px] text-axal-faint';
 /** A read in flight, failed, or answered. */
 function useRead(fn, deps) {
   const [r, setR] = useState({ loading: true, error: null, data: null });
+  // A peer link reuses this page with a new uid; the old company's read must
+  // not land on the new one, so only the newest read commits.
+  const [reads] = useState(latestOnly);
   const run = useCallback(async () => {
+    const id = reads.next();
     if (!fn) { setR({ loading: false, error: null, data: null }); return; }
     setR((x) => ({ ...x, loading: true, error: null }));
-    try { setR({ loading: false, error: null, data: await fn() }); } catch (error) { setR({ loading: false, error, data: null }); }
+    try {
+      const data = await fn();
+      if (reads.isCurrent(id)) setR({ loading: false, error: null, data });
+    } catch (error) {
+      if (reads.isCurrent(id)) setR({ loading: false, error, data: null });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   useEffect(() => { run(); }, [run]);
@@ -257,7 +266,7 @@ export function Signals({ market, geography, tracked }) {
 }
 
 /** Where each fact comes from. A failed evidence table says so on its own row. */
-export function SourcesTable({ item, metrics, financials, employment, sources }) {
+export function SourcesTable({ item, metrics, financials, employment, sources, fundingRounds }) {
   const m = metrics || {};
   const rec = (x) => x?.status === 'recorded';
   const metricRow = (label, x) => rec(x)
@@ -273,7 +282,7 @@ export function SourcesTable({ item, metrics, financials, employment, sources })
     metricRow('Valuation', m.valuation),
     metricRow('Market share', m.market_share_pct),
   ];
-  const evidence = [['Financial statements', financials], ['Headcount history', employment], ['Field sources', sources]];
+  const evidence = [['Financial statements', financials], ['Headcount history', employment], ['Funding rounds', fundingRounds], ['Field sources', sources]];
   return (
     <section id="sources" className="space-y-3">
       <div><h2 className={h2}>Sources and evidence</h2><p className={lede}>Where each fact on this page comes from, and how sure the source is.</p></div>
@@ -371,7 +380,7 @@ export default function CompanyProfile() {
       <Competitors item={d.item} peers={d.peers} />
       <Funds tracked={tracked} focusRead={focusRead} hqRead={hqRead} country={d.item.country} />
       <Signals tracked={tracked} market={slug ? market : null} geography={code ? geography : null} />
-      <SourcesTable item={d.item} metrics={d.metrics} financials={d.financials} employment={d.employment} sources={d.sources} />
+      <SourcesTable item={d.item} metrics={d.metrics} financials={d.financials} employment={d.employment} sources={d.sources} fundingRounds={d.funding_rounds} />
       <p className={faint}>Company records come from Wikidata (CC0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>
     </div>
   );

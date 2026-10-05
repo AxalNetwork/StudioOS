@@ -20,7 +20,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import {
   EMPTY_FILTERS, activeFilters, buildCompetitorsRedirect, directoryParams, employees, indexRows, lastRound,
-  listState, money, pageList, pageWindow, relatedSignals, withoutFilter,
+  latestOnly, listState, money, pageList, pageWindow, relatedSignals, withoutFilter,
 } from '../src/lib/companyDirectoryView.js';
 import { CoverageCard, DirectoryFilters, DirectoryResults } from '../src/pages/research/CompanyDirectoryZone.jsx';
 import { CompanyHeader, Competitors, KeyMetrics, MarketContext, SourcesTable } from '../src/pages/research/CompanyProfile.jsx';
@@ -210,4 +210,25 @@ test('description, logo and investors read Not recorded, because no source holds
   assert.match(t, /Investors\s*Not recorded · no source lists them/);
   assert.match(t, /Tracked sector: Not recorded/);
   assert.match(t, /Run competitor analysis/);
+});
+
+test('only the newest read lands: an older list or profile read is dropped', () => {
+  const reads = latestOnly();
+  const first = reads.next();
+  const second = reads.next();
+  assert.equal(reads.isCurrent(first), false, 'a read that started before the newest one must not land');
+  assert.equal(reads.isCurrent(second), true);
+  for (const f of ['frontend/src/pages/research/CompanyDirectoryZone.jsx', 'frontend/src/pages/research/CompanyProfile.jsx']) {
+    const src = read(f);
+    assert.match(src, /const id = reads\.next\(\);/, `${f} does not start a guarded read`);
+    assert.ok((src.match(/reads\.isCurrent\(id\)/g) || []).length >= 2, `${f} commits a read without checking it is the newest`);
+  }
+});
+
+test('sources: funding rounds are listed, and a failed rounds read is Unreadable on its own row', () => {
+  const base = { item: { as_of: '2026-09-30', sector: null }, metrics: {},
+    financials: { status: 'ok', rows: [] }, employment: { status: 'ok', rows: [] }, sources: { status: 'ok', rows: [] } };
+  assert.match(render(SourcesTable, { ...base, fundingRounds: { status: 'ok', rows: [{}, {}, {}] } }), /Funding rounds\s*3 rows/);
+  assert.match(render(SourcesTable, { ...base, fundingRounds: { status: 'unreadable', rows: [] } }), /Funding rounds\s*Unreadable: read failed/);
+  assert.match(read('frontend/src/pages/research/CompanyProfile.jsx'), /fundingRounds=\{d\.funding_rounds\}/);
 });

@@ -318,7 +318,8 @@ export async function getCompany(env: Env, uid: string) {
         env.DB.prepare(
           `SELECT uid, name, website, country, founded_year, sector, last_funding_amount, last_funding_currency,
                   last_funding_date, last_funding_type, employee_count, employee_growth_pct,
-                  (COALESCE(country, '') = COALESCE(?, '')) AS same_country
+                  -- Two blanks are not one country: both must be recorded to match.
+                  (TRIM(COALESCE(country, '')) <> '' AND TRIM(country) = TRIM(COALESCE(?, ''))) AS same_country
              FROM research_company_directory
             WHERE LOWER(TRIM(sector)) = LOWER(?) AND uid <> ?
             ORDER BY same_country DESC, name COLLATE NOCASE, uid

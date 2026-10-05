@@ -368,3 +368,15 @@ test('peers carry a total beyond the cap, same_country, and their own metrics', 
   const none = (await get(fixture(), '/company-directory/eta')).body.peers;
   assert.equal(none.total, null, 'no sector: no total either');
 });
+
+test('two companies with no recorded country are not "same country"', async () => {
+  const many: Co[] = [
+    { uid: 'self', name: 'Self', country: null, sector: 'robotics' },
+    { uid: 'blank', name: 'Blank Peer', country: '', sector: 'robotics' },
+    { uid: 'none', name: 'None Peer', country: null, sector: 'robotics' },
+    { uid: 'de', name: 'Alpha DE', country: 'Germany', sector: 'robotics' },
+  ];
+  const p = (await get(fixture(many), '/company-directory/self')).body.peers;
+  assert.deepEqual(p.rows.map((r: any) => [r.uid, r.same_country]), [['de', 0], ['blank', 0], ['none', 0]],
+    'no peer is ranked or labelled same-country when neither country is recorded');
+});

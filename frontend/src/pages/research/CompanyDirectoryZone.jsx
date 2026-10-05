@@ -23,7 +23,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import {
   COVERAGE_LABELS, DIRECTORY_SORTS, EMPTY_FILTERS, HAS_OPTIONS, NOT_RECORDED, PAGE_SIZES,
-  activeFilters, directoryParams, employees, lastRound, listState, pageList, pageWindow, withoutFilter,
+  activeFilters, directoryParams, employees, lastRound, latestOnly, listState, pageList, pageWindow, withoutFilter,
 } from '../../lib/companyDirectoryView.js';
 
 const CompetitorAnalysis = lazy(() => import('../../components/CompetitorAnalysis'));
@@ -281,16 +281,20 @@ function Directory({ role, zoneActions, initial }) {
   const params = useMemo(() => directoryParams({ ...filters, q }), [filters, q]);
   const key = JSON.stringify(params);
 
+  const [reads] = useState(latestOnly);
   const load = useCallback(async () => {
+    const id = reads.next();
     setRead((r) => ({ ...r, loading: true, error: null }));
     try {
       const data = await researchCompaniesApi.list(JSON.parse(key));
+      if (!reads.isCurrent(id)) return;
       setRead({ loading: false, error: null, data });
       setShape({ coverage: data.coverage, facets: data.facets });
     } catch (error) {
+      if (!reads.isCurrent(id)) return;
       setRead({ loading: false, error, data: null });
     }
-  }, [key]);
+  }, [key, reads]);
   useEffect(() => { load(); }, [load]);
 
   const state = listState(read);

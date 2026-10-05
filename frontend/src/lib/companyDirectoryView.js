@@ -228,3 +228,16 @@ export function buildCompetitorsRedirect(search) {
   }
   return `/research/companies?${to.toString()}`;
 }
+
+/**
+ * Only the newest read may land. A list or profile read that answers after a
+ * newer one started (a filter changed, a peer link followed) is dropped, so
+ * the controls and the rows never describe two different queries.
+ */
+export function latestOnly() {
+  let current = 0;
+  return {
+    next: () => { current += 1; return current; },
+    isCurrent: (id) => id === current,
+  };
+}
