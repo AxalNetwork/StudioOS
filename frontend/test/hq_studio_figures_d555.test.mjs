@@ -126,6 +126,26 @@ test('each HQ block keeps loading, unreadable and not-recorded apart', () => {
   assert.doesNotMatch(zero, /Not recorded/);
 });
 
+test('a failed Exploring or Trash read is Unreadable, not Not recorded', () => {
+  const view = hqAccountsView({ ...PAYLOAD.accounts, exploring: null, trash_projects: null });
+  const t = text(h(HqAccounts, { view }));
+  assert.match(t, /The Exploring lane could not be read\. Its count is not shown as zero\./);
+  assert.match(t, /The project table could not be read\. Trash is not shown as zero\./);
+  assert.doesNotMatch(t, /not read|Not recorded/);
+  assert.doesNotMatch(html(h(HqAccounts, { view })), /<p[^>]*>(?:(?!<\/p>).)*<p/, 'no <p> nested in a <p>');
+});
+
+test('the ticket count links to HQ Support only for a Super Admin, whose console it is', () => {
+  const insights = { ...PAYLOAD.insights, open_tickets: { available: true, open: 3 } };
+  const glance = { ...PAYLOAD, insights };
+  const admin = html(h(AdminStudioOverview, { user: { role: 'admin', is_super_admin: 0 }, glance }));
+  assert.ok(!admin.includes('href="/admin/hq-support"'), 'an ordinary admin is not sent to a Super-Admin-only console');
+  assert.match(text(h(AdminStudioOverview, { user: { role: 'admin', is_super_admin: 0 }, glance })), /Open support tickets: 3/);
+  const sa = html(h(AdminStudioOverview, { user: { role: 'admin', is_super_admin: 1 }, glance }));
+  assert.ok(sa.includes('href="/admin/hq-support"'), 'a Super Admin opens HQ Support from the count');
+  assert.doesNotMatch(html(h(HqInsights, { view: hqInsightsView(PAYLOAD.insights) })), /<p[^>]*>(?:(?!<\/p>).)*<p/, 'no <p> nested in a <p>');
+});
+
 test('the needs-a-decision strip: on HQ the Seats tile is Accounts, and Approvals names the worst lane', () => {
   const t = text(h(StudioNeedsDecisionView, { user: null, glance: PAYLOAD }));
   assert.match(t, /Accounts 12 accounts · 7 founder/);

@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SIDEBAR_GROUPS } from '../../sidebarConfig';
 import { reportError } from '../../lib/log';
-import { branchLabel, branchOfUser } from '../../lib/shellRole';
+import { branchLabel, branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
 import { titleCase, Card, Unrecorded, Unreadable } from '../../ui';
 import { COMMUNITY_CONSOLES } from '../branch/BranchCommunity';
 import {
@@ -65,13 +65,13 @@ export function HqAccounts({ view }) {
       <p className="mt-1">
         <span className="tabular-nums">{nf(view.new7d)}</span> new this week · <span className="tabular-nums">{nf(view.new30d)}</span> in 30 days
       </p>
-      <p className="mt-0.5">
+      <div className="mt-0.5">
         <Link to="/admin/exploring" className="underline underline-offset-2">Exploring</Link>{' '}
-        {view.exploring === null ? <Unrecorded reason="The Exploring lane could not be read, so its count is not shown as zero.">not read</Unrecorded> : <span className="tabular-nums">{nf(view.exploring)}</span>}
+        {view.exploring === null ? <Unreadable what="The Exploring lane" claim="Its count is not shown as zero." /> : <span className="tabular-nums">{nf(view.exploring)}</span>}
         {' · '}
         <Link to="/admin/trash" className="underline underline-offset-2">Projects in Trash</Link>{' '}
-        {view.trash === null ? <Unrecorded reason="The project table could not be read, so Trash is not shown as zero.">not read</Unrecorded> : <span className="tabular-nums">{nf(view.trash)}</span>}
-      </p>
+        {view.trash === null ? <Unreadable what="The project table" claim="Trash is not shown as zero." /> : <span className="tabular-nums">{nf(view.trash)}</span>}
+      </div>
       {view.deactivated ? <p className="mt-0.5 text-[11.5px] text-axal-muted">{nf(view.deactivated)} deactivated, not counted above</p> : null}
     </div>
   );
@@ -104,27 +104,33 @@ export function HqApprovals({ view, limit = 5 }) {
   );
 }
 
-/** D555: HQ's headline figures; each answers alone. */
-export function HqInsights({ view }) {
+/**
+ * D555: HQ's headline figures; each answers alone. The ticket count links to
+ * HQ Support only for a Super Admin: that console is `hqOnly` and its Worker
+ * routes call `requireSuperAdmin`, so for any other admin it is a plain count.
+ */
+export function HqInsights({ view, superAdmin = false }) {
   if (!view || view.kind !== 'ready') return <Glance glance={view} />;
   return (
     <div className="mt-2 space-y-1 text-[13px] text-axal-ink" data-testid="hq-insights">
       <p className="text-[11px] font-semibold uppercase tracking-[.07em] text-axal-muted">{view.label}</p>
-      <p>Sign-ups:{' '}
+      <div>Sign-ups:{' '}
         {view.signups.kind === 'ready'
           ? <><span className="tabular-nums">{nf(view.signups.thisWeek)}</span> this week (to date) · <span className="tabular-nums">{nf(view.signups.eightWeeks)}</span> in 8 weeks</>
           : <Unreadable what="Sign-ups" claim={view.signups.reason || 'Not the same as none.'} />}
-      </p>
-      <p>AI spend this month:{' '}
+      </div>
+      <div>AI spend this month:{' '}
         {view.spend.kind === 'ready'
           ? <><span className="tabular-nums">${view.spend.usd.toFixed(2)}</span> over {nf(view.spend.calls)} calls</>
           : <Unreadable what="AI spend" claim={view.spend.reason || 'Not the same as no spend.'} />}
-      </p>
-      <p>Open support tickets:{' '}
+      </div>
+      <div>Open support tickets:{' '}
         {view.tickets.kind === 'ready'
-          ? <Link to="/admin/hq-support" className="tabular-nums underline underline-offset-2">{nf(view.tickets.open)}</Link>
+          ? superAdmin
+            ? <Link to="/admin/hq-support" className="tabular-nums underline underline-offset-2">{nf(view.tickets.open)}</Link>
+            : <span className="tabular-nums">{nf(view.tickets.open)}</span>
           : <Unreadable what="Tickets" claim={view.tickets.reason || 'Not the same as none open.'} />}
-      </p>
+      </div>
       <p>Active accounts: <Unrecorded reason={view.active.reason} /></p>
       <p>Territory benchmark: <Unrecorded reason={view.benchmark.reason} /></p>
     </div>
@@ -297,7 +303,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
 
         <Card data-testid="admin-studio-insights">
           <CardHead title="Insights" to={open('Insights')} />
-          {hq ? <HqInsights view={hq.insights} /> : insightView === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading insights…</p> : (
+          {hq ? <HqInsights view={hq.insights} superAdmin={isSuperAdminUser(user)} /> : insightView === null ? <p className="mt-2 text-[12px] text-axal-muted">Reading insights…</p> : (
             <>
               <Glance glance={insightView.median} />
               <Glance glance={insightView.share} />
