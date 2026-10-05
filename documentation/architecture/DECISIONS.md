@@ -41520,6 +41520,77 @@ Page:
 - the floor caveat;
 - the old rail copy.
 
+## D518
+
+**Profiling v2, Session 12: the advisor and coach fit banks v2 (#956, merged
+2026-09-29 as `95600719`).** This is the decision record #956 shipped
+without. It was filed afterwards under issue #1003, slot S07, from #956's
+body and checked against the code on main. No migration. The spec is
+`PROFILING_V2.md` (D356); the engine is D357.
+
+**Size.** The advisor fit bank grew from 55 to 85 questions and the coach fit
+bank from 18 to 76. No id was renamed or removed. The counts were re-measured
+on main: `profilingBankFor('advisor')` holds 85 `fit.advisor.*` items, and
+`BANKS.fitCoach` holds 76 `fit.coach.*` items.
+
+**Archetype: four pick-ones per bank.**
+- Each pick-one has one option per advisor archetype. Each option loads the
+  two traits where its archetype stands apart, at that archetype's centroid
+  values.
+- Every pick-one offers both Hands-On Coach and Accountability Anchor, the
+  closest pair in the set at 2.45 apart: one option works alongside the
+  founder, the other holds them to what they committed.
+- The options form a Latin square: each position holds each archetype once,
+  so "always pick option N" never adds up to a confident profile.
+- Each bank also has two reverse-keyed probes per trait.
+
+**Coaches can be classified.** The coach bank gained its first archetype
+module: the 20 shared probes plus eight coach role probes. Before #956, a
+coach could never be classified.
+
+**Order is part of the design.** The pick-ones sit ahead of the trait probes,
+so at the archetype floor a person has answered one probe per trait and two
+pick-ones. D519 later made the rule that every trait must be answered an
+engine rule, so it no longer depends on this order.
+
+**Skills, values and re-asks.**
+- **Skills:** both banks ask behavioural items ("In the last year, how often
+  did you…") on all 8 radar axes.
+- **Values:** both banks ask behavioural items for the four Schwartz
+  dimensions. Each of the six Axal values gets a situation-then-choice
+  variant beside its original. The red-flag probes are kept and still asked
+  first.
+- **Re-asks:** every item in both banks has re-ask wording.
+
+**Where the handoff and the spec disagreed, the spec won.**
+- Advisors are not asked the founder spectrums (`mission_vs_profit`,
+  `growth_vs_sustain`), because §6 lists none for advisors.
+- The coach module does not repeat the illustration question. The advisor
+  bank asks it in the same conversation, and it sets one account-wide choice.
+  §2.4 says so.
+
+**Known limit, left to the owner.** Coach items come after the advisor bank in
+the advisor conversation, and the modules are pooled over both banks. So
+adaptive selection reaches coach items only after the advisor floors are met.
+Giving coaches their own conversation is a routing decision for the owner.
+
+**Tests.** `fit_advisor_coach_bank_v2.test.ts` has 16 tests, re-counted on
+main:
+- the four advisor personas classify as themselves, confidently, in each
+  bank;
+- Hands-On Coach and Accountability Anchor are told apart by the pick-ones
+  alone, by at least 0.5;
+- a blend persona reports both archetypes;
+- answering in adaptive queue order reaches every floor in about 23 answers,
+  with every trait answered and the archetype already right;
+- no fixed answer pattern is ever confident;
+- shape checks on the reverse keys, the Latin square, option loadings,
+  re-ask wording, all 8 axes, kept ids and size targets.
+
+#956 reports 20 mutations run and 20 caught, after three tests were added for
+the three its first pass let through. The baseline report matched v1 on 42 of
+48 rows, and all six misses fall inside hysteresis windows.
+
 ## D519
 
 **Profiling: the archetype module is confident only when every trait is
