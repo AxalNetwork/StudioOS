@@ -24,6 +24,8 @@ zones: one record each, reached from a zone's list.
 | `companyAnalysisRead.js` | That page's tiles, inputs row, feature grid and landscape read, in three shapes for a failed read, a failed run and a finished one. |
 | `CompanyCandidate.jsx` | `/research/companies/:analysisId/:candidateId`. One competitor. A blank relevance stays blank. The draft restates the summary and the source titles. Back-links to its analysis. |
 | `companyCandidateRead.js` | The readings that page and its tests share. |
+| `CompanyDirectoryZone.jsx` | `/research/companies`. The company directory, searched, filtered, sorted and paged on the Worker (D534); it prints the API's total, coverage and facet counts, never a count of its own. A Saved analyses tab holds the competitor analyses and is where `/build/competitors` lands. |
+| `CompanyProfile.jsx` | `/research/companies/company/:uid`. One directory company: metrics with source and date or Not recorded, market context, same-label competitors, funds by focus and HQ, signals, and the sources table. Each read fails on its own. |
 
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score

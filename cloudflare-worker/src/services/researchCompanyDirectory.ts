@@ -30,6 +30,7 @@
  * funding-rounds table is empty), counted on 4 October without reading a row.
  */
 import type { Env } from '../types';
+import { loadOverrides, mapCompanyCountry, mapCompanySector, type Overrides } from './researchTaxonomy';
 
 /** A bad query value. `reason` is a sentence this file wrote, safe for a refusal body (D278). */
 export class CompanyQueryError extends Error {
@@ -60,6 +61,12 @@ export interface CompanyQuery {
   q: string;
   country: string;
   sectorTerms: string[];
+  /** An exact sector label; null for no filter. */
+  sector_label: string | null;
+  /** `sector_label=none`: only companies with no sector label. */
+  sector_none: boolean;
+  /** An ISO 3166-1 alpha-2 code, matched through the crosswalk (researchTaxonomy.ts). */
+  country_code: string;
   founded_from: number | null;
   founded_to: number | null;
   has: string[];
@@ -87,10 +94,16 @@ export function parseCompanyQuery(get: (k: string) => string | undefined, sector
   for (const h of has) {
     if (!Object.hasOwn(HAS, h)) throw new CompanyQueryError('has', `has must be one or more of ${Object.keys(HAS).join(', ')}`);
   }
+  const label = String(get('sector_label') ?? '').trim().slice(0, 200);
+  const code = String(get('country_code') ?? '').trim();
+  if (code && !/^[A-Za-z]{2}$/.test(code)) throw new CompanyQueryError('country_code', 'country_code must be a two-letter ISO 3166-1 code');
   const q: CompanyQuery = {
     q: String(get('q') ?? '').trim().slice(0, 120),
     country: String(get('country') ?? '').trim().slice(0, 120),
     sectorTerms,
+    sector_label: label && label.toLowerCase() !== SECTOR_NONE ? label : null,
+    sector_none: label.toLowerCase() === SECTOR_NONE,
+    country_code: code.toUpperCase(),
     founded_from: int('founded_from', get('founded_from'), 1000, 2100),
     founded_to: int('founded_to', get('founded_to'), 1000, 2100),
     has: [...new Set(has)],
@@ -104,13 +117,72 @@ export function parseCompanyQuery(get: (k: string) => string | undefined, sector
   return q;
 }
 
+/** `sector_label=none` asks for the companies with no sector label. */
+export const SECTOR_NONE = 'none';
+
 /** `%`, `_` and `\` match themselves inside a LIKE … ESCAPE '\' pattern. */
 export function likeLiteral(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 const LIST_COLUMNS = `uid, name, website, country, founded_year, sector, source_name,
-  source_url, source_license, as_of`;
+  source_url, source_license, as_of, funding_total, funding_currency, last_funding_amount,
+  last_funding_currency, last_funding_date, last_funding_type, employee_count, employee_growth_pct,
+  employee_as_of`;
+
+/** The distinct raw `country` strings the crosswalk maps to `code`. */
+async function countriesMappingTo(env: Env, code: string, ov: Overrides): Promise<string[]> {
+  const rows = await env.DB.prepare(
+    `SELECT DISTINCT country AS v FROM research_company_directory WHERE TRIM(COALESCE(country, '')) <> ''`,
+  ).all<{ v: string }>();
+  return (rows.results || []).map((r) => r.v).filter((v) => mapCompanyCountry(v, ov).targets[0] === code);
+}
+
+/**
+ * What the whole directory records, before any filter: how many rows carry
+ * each field (`coverage`), and the filter options with their counts
+ * (`facets`). The page prints these, never a number of its own.
+ */
+export const COVERAGE_FIELDS: Readonly<Record<string, string>> = {
+  website: `TRIM(COALESCE(website, '')) <> ''`,
+  country: `TRIM(COALESCE(country, '')) <> ''`,
+  founded_year: 'founded_year IS NOT NULL',
+  sector: `TRIM(COALESCE(sector, '')) <> ''`,
+  funding: HAS.funding,
+  last_round: 'last_funding_amount IS NOT NULL',
+  revenue: HAS.revenue,
+  headcount: HAS.headcount,
+};
+
+async function directoryShape(env: Env, ov: Overrides) {
+  // Every expression is a literal of this file.
+  const sums = Object.entries(COVERAGE_FIELDS).map(([k, expr]) => `SUM(CASE WHEN ${expr} THEN 1 ELSE 0 END) AS ${k}`).join(', ');
+  const [cov, sectors, countries] = await Promise.all([
+    env.DB.prepare(`SELECT COUNT(*) AS total, ${sums} FROM research_company_directory`).first<Record<string, number>>(),
+    env.DB.prepare(
+      `SELECT TRIM(sector) AS label, COUNT(*) AS n FROM research_company_directory
+        WHERE TRIM(COALESCE(sector, '')) <> '' GROUP BY 1 ORDER BY n DESC, label COLLATE NOCASE`,
+    ).all<{ label: string; n: number }>(),
+    env.DB.prepare(
+      `SELECT country, COUNT(*) AS n FROM research_company_directory
+        WHERE TRIM(COALESCE(country, '')) <> '' GROUP BY 1 ORDER BY country COLLATE NOCASE`,
+    ).all<{ country: string; n: number }>(),
+  ]);
+  const total = Number(cov?.total ?? 0);
+  const coverage: Record<string, number> = {};
+  for (const k of Object.keys(COVERAGE_FIELDS)) coverage[k] = Number(cov?.[k] ?? 0);
+  return {
+    coverage: { of: total, fields: coverage },
+    facets: {
+      sector_labels: (sectors.results || []).map((r) => ({ label: r.label, count: Number(r.n) })),
+      sector_none: total - coverage.sector,
+      countries: (countries.results || []).map((r) => ({
+        country: r.country, code: mapCompanyCountry(r.country, ov).targets[0] ?? null, count: Number(r.n),
+      })),
+      has: { funding: coverage.funding, revenue: coverage.revenue, headcount: coverage.headcount },
+    },
+  };
+}
 
 export async function listCompanies(env: Env, q: CompanyQuery) {
   const where: string[] = [];
@@ -121,6 +193,13 @@ export async function listCompanies(env: Env, q: CompanyQuery) {
     binds.push(like, like);
   }
   if (q.country) { where.push('country = ?'); binds.push(q.country); }
+  const ov = await loadOverrides(env);
+  if (q.country_code) {
+    where.push('country IN (SELECT value FROM json_each(?))');
+    binds.push(JSON.stringify(await countriesMappingTo(env, q.country_code, ov)));
+  }
+  if (q.sector_label != null) { where.push('TRIM(sector) = ?'); binds.push(q.sector_label); }
+  if (q.sector_none) where.push(`TRIM(COALESCE(sector, '')) = ''`);
   if (q.sectorTerms.length) {
     where.push(`(${q.sectorTerms.map(() => `LOWER(COALESCE(sector, '')) LIKE ? ESCAPE '\\'`).join(' OR ')})`);
     binds.push(...q.sectorTerms.map((t) => `%${likeLiteral(t.toLowerCase())}%`));
@@ -130,14 +209,16 @@ export async function listCompanies(env: Env, q: CompanyQuery) {
   for (const h of q.has) where.push(HAS[h]);
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
   // `clause` and the ORDER BY are built from literals of this file; every value is in `binds`.
-  const [count, page] = await Promise.all([
+  const [count, page, shape] = await Promise.all([
     env.DB.prepare(`SELECT COUNT(*) AS n FROM research_company_directory ${clause}`).bind(...binds).first<{ n: number }>(),
     env.DB.prepare(`SELECT ${LIST_COLUMNS} FROM research_company_directory ${clause} ORDER BY ${SORTS[q.sort]} LIMIT ? OFFSET ?`)
       .bind(...binds, q.limit, q.offset).all(),
+    directoryShape(env, ov),
   ]);
   return {
     items: page.results || [],
     total: Number(count?.n ?? 0),
+    ...shape,
     limit: q.limit,
     offset: q.offset,
     sort: q.sort,
@@ -184,6 +265,28 @@ async function evidence(env: Env, sql: string, id: number) {
 export const PEER_LIMIT = 8;
 
 /**
+ * The market the company's sector label maps to through the crosswalk, with
+ * its name and how it was decided, and the company's ISO country code. A
+ * label the crosswalk cannot place is Not recorded; a failed read, Unreadable.
+ */
+async function trackedSector(env: Env, row: Row) {
+  try {
+    const ov = await loadOverrides(env);
+    const country = mapCompanyCountry(row.country, ov);
+    const m = mapCompanySector(row.sector, ov);
+    const slug = m.targets[0] ?? null;
+    if (!slug) {
+      return { status: 'not_recorded' as const, slug: null, name: null, method: null, country_code: country.targets[0] ?? null,
+        reason: row.sector ? 'Not recorded: the crosswalk maps no market to this sector label' : 'Not recorded: this company has no sector label' };
+    }
+    const market = await env.DB.prepare(`SELECT name FROM research_market_directory WHERE slug = ?`).bind(slug).first<{ name: string }>();
+    return { status: 'ok' as const, slug, name: market?.name ?? null, method: m.method, country_code: country.targets[0] ?? null };
+  } catch {
+    return { status: 'unreadable' as const, slug: null, name: null, method: null, country_code: null, reason: 'Unreadable' };
+  }
+}
+
+/**
  * One company: identity, each metric with its source and as-of date, the
  * migration-370 evidence matched on `company_id = id`, and peers — other
  * companies in the same sector, same country first, then by name, capped.
@@ -205,29 +308,38 @@ export async function getCompany(env: Env, uid: string) {
       FROM company_funding_rounds WHERE company_id = ? ORDER BY announcement_date DESC, funding_round_id`, row.id),
   ]);
 
-  let peers: { status: 'ok' | 'unreadable' | 'not_recorded'; rows: unknown[]; reason?: string };
+  let peers: { status: 'ok' | 'unreadable' | 'not_recorded'; rows: unknown[]; total: number | null; reason?: string };
   const sector = typeof row.sector === 'string' ? row.sector.trim() : '';
   if (!sector) {
-    peers = { status: 'not_recorded', rows: [], reason: 'Not recorded: this company has no sector, so it has no peers to match' };
+    peers = { status: 'not_recorded', rows: [], total: null, reason: 'Not recorded: this company has no sector, so it has no peers to match' };
   } else {
     try {
-      const r = await env.DB.prepare(
-        `SELECT uid, name, website, country, founded_year, sector
-           FROM research_company_directory
-          WHERE LOWER(TRIM(sector)) = LOWER(?) AND uid <> ?
-          ORDER BY (COALESCE(country, '') = COALESCE(?, '')) DESC, name COLLATE NOCASE, uid
-          LIMIT ?`,
-      ).bind(sector, row.uid, row.country ?? null, PEER_LIMIT).all();
-      peers = { status: 'ok', rows: r.results || [] };
+      const [r, n] = await Promise.all([
+        env.DB.prepare(
+          `SELECT uid, name, website, country, founded_year, sector, last_funding_amount, last_funding_currency,
+                  last_funding_date, last_funding_type, employee_count, employee_growth_pct,
+                  (COALESCE(country, '') = COALESCE(?, '')) AS same_country
+             FROM research_company_directory
+            WHERE LOWER(TRIM(sector)) = LOWER(?) AND uid <> ?
+            ORDER BY same_country DESC, name COLLATE NOCASE, uid
+            LIMIT ?`,
+        ).bind(row.country ?? null, sector, row.uid, PEER_LIMIT).all(),
+        env.DB.prepare(
+          `SELECT COUNT(*) AS n FROM research_company_directory WHERE LOWER(TRIM(sector)) = LOWER(?) AND uid <> ?`,
+        ).bind(sector, row.uid).first<{ n: number }>(),
+      ]);
+      peers = { status: 'ok', rows: r.results || [], total: Number(n?.n ?? 0) };
     } catch {
-      peers = { status: 'unreadable', rows: [], reason: 'Unreadable' };
+      peers = { status: 'unreadable', rows: [], total: null, reason: 'Unreadable' };
     }
   }
 
   const item: Row = {};
-  for (const k of ['uid', 'name', 'website', 'country', 'founded_year', 'sector', 'source_name', 'source_url', 'source_license', 'as_of']) item[k] = row[k] ?? null;
+  for (const k of ['uid', 'name', 'website', 'country', 'founded_year', 'sector', 'source_name', 'source_url', 'source_license', 'as_of',
+    'competitor_status', 'diligence_status']) item[k] = row[k] ?? null;
   return {
     item,
+    tracked_sector: await trackedSector(env, row),
     metrics: presentMetrics(row),
     financials, employment, sources, funding_rounds: fundingRounds,
     peers,
