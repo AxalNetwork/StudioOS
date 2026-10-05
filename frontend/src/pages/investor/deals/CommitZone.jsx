@@ -49,11 +49,29 @@ import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
  * the deal, written by its organiser after the room rather than before it.
  *
  * THE RATIONALE TILE IS A CLAIM BEING CHECKED, NOT DECORATION. The artboard
- * says `Rationale required`. `ic_votes.rationale` is nullable and the vote
- * endpoint accepts a vote without one, so the tile counts how many votes
- * actually carry a reason and says the requirement is not enforced. That is
- * the difference between a record a fund can defend and a tally it cannot.
+ * says `Rationale required`. Since D494 the vote endpoint refuses a vote with
+ * no reason, but `ic_votes.rationale` stays nullable and votes cast before
+ * then may carry none. So the tile still counts how many votes actually carry
+ * a reason, and its note says which rule the server reports (`rationaleNote`).
+ * That is the difference between a record a fund can defend and a tally it
+ * cannot.
  */
+
+/**
+ * The Rationales tile's note, from what the commit room reports. `enforced` is
+ * the rule new votes meet; the count is what was written, so a shortfall under
+ * an enforced rule is older votes, and the note says so.
+ */
+export function rationaleNote(rationale) {
+  if (!rationale) return 'unreadable';
+  if (rationale.enforced === true) {
+    return rationale.recorded < rationale.total
+      ? 'required for every new vote — the votes without one were cast before the rule'
+      : 'required for every vote';
+  }
+  if (rationale.enforced === false) return 'the column is nullable — a reason is recorded, not required';
+  return 'unreadable';
+}
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -439,9 +457,7 @@ export default function InvestorCommitZone() {
             <CommitTile
               label="Rationales"
               value={ready ? `${room.rationale.recorded} of ${room.rationale.total}` : null}
-              note={ready && room.rationale.enforced === false
-                ? 'the column is nullable — a reason is recorded, not required'
-                : 'unreadable'}
+              note={ready ? rationaleNote(room.rationale) : 'unreadable'}
               tone={ready && room.rationale.recorded < room.rationale.total
                 ? 'text-amber-700 dark:text-amber-300'
                 : ''}

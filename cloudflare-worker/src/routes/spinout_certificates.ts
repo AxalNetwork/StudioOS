@@ -21,7 +21,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireBranchNotSuspended } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logAdminAction } from '../services/adminAudit';
 
@@ -94,6 +94,9 @@ export function credentialRefFor(cohortLabel: string | null, conferredAt: string
 app.post('/certificates', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // D511 — a suspended branch issues and revokes nothing (D135's freeze).
+  // After the admin check, as every other frozen write does (D107).
+  await requireBranchNotSuspended(c);
   await ensureTables(c.env);
 
   const body = await c.req.json().catch(() => ({} as any));
@@ -119,12 +122,16 @@ app.post('/certificates', async (c) => {
     const row = await c.env.DB
       .prepare(`SELECT ${OWNER_COLS} FROM spinout_certificates WHERE user_id = ? AND status = 'issued'`)
       .bind(userId).first<any>();
+    // D541 — the graduation bonus, once, when the certificate is issued.
+    let graduationCredit: unknown = null;
     if (outcome === 'issued') {
       await logAdminAction(c.env, user.id, user.email, 'spinout_certificate_issued', {
         target_user_id: userId, certificate_id: row?.id ?? null, credential_id: row?.credential_id ?? null,
       });
+      const { creditLabGraduation } = await import('../services/labMilestoneCredits');
+      graduationCredit = await creditLabGraduation(c.env, userId);
     }
-    return c.json({ certificate: row, outcome, already_issued: outcome === 'already_issued' }, outcome === 'issued' ? 201 : 200);
+    return c.json({ certificate: row, outcome, already_issued: outcome === 'already_issued', graduation_credit: graduationCredit }, outcome === 'issued' ? 201 : 200);
   }
 
   const conferredAt = String(body.conferred_at || '').slice(0, 10);
@@ -169,7 +176,10 @@ app.post('/certificates', async (c) => {
   await logAdminAction(c.env, user.id, user.email, 'spinout_certificate_issued', {
     target_user_id: userId, certificate_id: row?.id ?? null, credential_id: credentialId, manual: true,
   });
-  return c.json({ certificate: row }, 201);
+  // D541 — a hand-issued certificate pays the bonus on the same terms.
+  const { creditLabGraduation } = await import('../services/labMilestoneCredits');
+  const graduationCredit = await creditLabGraduation(c.env, userId);
+  return c.json({ certificate: row, graduation_credit: graduationCredit }, 201);
 });
 
 app.get('/certificates', async (c) => {
@@ -220,6 +230,9 @@ app.get('/certificates', async (c) => {
 app.post('/certificates/:id/revoke', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // D511 — a suspended branch issues and revokes nothing (D135's freeze).
+  // After the admin check, as every other frozen write does (D107).
+  await requireBranchNotSuspended(c);
   await ensureTables(c.env);
   const id = Number(c.req.param('id'));
   const body = await c.req.json().catch(() => ({} as any));
@@ -263,6 +276,9 @@ app.post('/certificates/:id/revoke', async (c) => {
 app.post('/certificates/backfill', async (c) => {
   const user = await requireAuth(c);
   if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // D511 — a suspended branch issues and revokes nothing (D135's freeze).
+  // After the admin check, as every other frozen write does (D107).
+  await requireBranchNotSuspended(c);
   await ensureTables(c.env);
   const body = (await c.req.json().catch(() => ({}))) as { limit?: unknown };
   const { backfillCertificates } = await import('../services/certificateIssuance');

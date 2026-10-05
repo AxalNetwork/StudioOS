@@ -51,6 +51,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { rowCredit, rowCreditLabel } from '../lib/labCredits';
 
 const SPRINT_DAYS = 28;
 
@@ -249,6 +250,38 @@ export const WEEK_DEFS = [
     ],
   },
 ];
+
+/**
+ * D541 — what a checklist row pays in credits. Amounts come from the Worker
+ * (`state.milestone_credits`); a failed read says so rather than drawing no
+ * credit, and someone who cannot earn sees no amounts at all.
+ */
+export function MilestoneCreditBadge({ keys, state }) {
+  if (state?.milestone_credits_unreadable) {
+    return <span data-testid="milestone-credit-unreadable" className="text-[10.5px] font-semibold rounded-full px-2 py-0.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300">Credits unreadable</span>;
+  }
+  const mc = state?.milestone_credits;
+  if (!mc || !mc.eligible) return null;
+  const credit = rowCredit(keys, mc);
+  if (!credit) return null;
+  return (
+    <span
+      data-testid="milestone-credit"
+      className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${credit.earned
+        ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+        : 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'}`}
+    >
+      {rowCreditLabel(credit)}
+    </span>
+  );
+}
+
+/** Why no credit amounts are shown, once above the checklist. */
+export function MilestoneCreditNote({ state }) {
+  const mc = state?.milestone_credits;
+  if (state?.milestone_credits_unreadable || !mc || mc.eligible || !mc.reason) return null;
+  return <p data-testid="milestone-credit-note" className="mb-3 text-[11.5px] text-gray-500 dark:text-gray-400">{mc.reason}</p>;
+}
 
 // Deliverable progress with either/or awareness: rows sharing an `altGroup`
 // count as a single unit that is done when ANY member is done (mirrors the
@@ -1032,6 +1065,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
           <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
             Week {selectedDef.num} deliverables
           </div>
+          <MilestoneCreditNote state={state} />
           <div className="flex flex-col gap-2.5">
             {selectedDef.deliverables.map((d) => {
               const dDone = chipDone(selectedDef.num, d.keys);
@@ -1073,6 +1107,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
                       >
                         {dDone ? 'Done' : partial ? 'In Progress' : d.optional ? 'Optional · boosts readiness' : 'Not started'}
                       </span>
+                      <MilestoneCreditBadge keys={d.keys} state={state} />
                     </div>
                     {partial && (
                       <div className="mt-2 h-1.5 w-40 max-w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">

@@ -163,6 +163,9 @@ OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
+# D542 — the GitHub logins whose bounty labels the webhook acts on. Comma
+# separated; empty means nobody's. Session 1 labels as the owner account.
+BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
@@ -474,6 +477,8 @@ OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
+# D542 — redeclared here: an env table does not inherit the top-level vars.
+BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).

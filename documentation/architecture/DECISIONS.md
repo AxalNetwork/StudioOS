@@ -37065,6 +37065,125 @@ here computes or draws a margin.
   - the api method dropping the page
   - the Unreadable hidden
 
+## D405
+
+**The Worker AI rail on a phone: a floating button and a bottom sheet (canvas
+M5, issue #993).** No migration.
+
+**What M5 asks for.** A 284pt rail does not fit beside a 390pt screen. Below
+1024px the panel becomes a floating button whose badge always states the mode,
+and a tap opens a sheet. The page stays visible above the sheet, and the usage
+meter comes along unchanged.
+
+**What changed** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **Below 1024px the in-flow panel is hidden** (`aside.fwr { display: none }`).
+  Until now the host pages stacked it under the body.
+- **The floating button.** `RailFab` sits at
+  `calc(var(--mobile-tabbar-h, 0px) + 16px)` from the bottom, set inline so the
+  one number that must agree with the tab bar (D425) sits where the button is
+  declared. A page with no bar falls back to 16px.
+- **The badge.** It is filled (green) when a fill mode is on and hollow for
+  Manual. The button's label says the same in words.
+- **The sheet.** `RailSheet` is a labelled dialog (`aria-modal`) holding the
+  rail's own body, the same JSX as the panel and not a phone copy. So the
+  usage meter keeps its three states — loading, Unreadable, the figure — and
+  never shows a made-up zero. The body renders in the panel or in the sheet,
+  never both.
+- **Closing.** The sheet closes the four ways the tab bar's More sheet does:
+  the backdrop, a swipe down past 60px, Escape, and its close button. A route
+  change and a widening past 1024px close it too. Focus moves to the close
+  button on open and back to the button on close.
+- **Portalled to `<body>`, after mount.** The shell's rail slot is
+  `hidden xl:block`, and a fixed button inside a `display: none` parent never
+  draws. Waiting for the first effect also keeps every server render, and every
+  render test of a page with a rail, free of a document.
+
+**Built against the variable.** The tab bar's mount in the shell is D504's
+(slot S05). The button reads `--mobile-tabbar-h`, which is set while a bar
+draws.
+
+**Tests.** `frontend/test/worker_rail_mobile_d405.test.mjs` has 9 tests. The
+repository renders without a DOM, so every open and close goes through
+`railSheetReducer`, the one place the component decides it. The button and the
+sheet are rendered with react-dom/server. The tests cover:
+
+- the button's position;
+- the mode badge and its label;
+- the dialog's labelling, close button, backdrop and content;
+- open, and each of the five closers;
+- the swipe threshold, downward only;
+- a closed sheet ignoring every closer;
+- no button in a server render;
+- the breakpoint rules in the stylesheet.
+
+Eleven mutations were each caught:
+
+- the offset ignoring the tab bar;
+- the inline style losing `bottom`;
+- the badge always reading Manual;
+- Escape not closing;
+- a swipe of any length closing;
+- a closed sheet opening on a stray event;
+- the dialog losing `aria-modal`;
+- the portal rendering before mount;
+- the panel still drawing on a phone;
+- the button showing on desktop;
+- the sheet dropping the rail's content.
+
+## D406
+
+**The collapsed rail's spine: the status dot and the vertical spend (issue
+#994).** No migration.
+
+**What the canvas asks for.** Founder Workspaces canvas, "Collapsed spine":
+"Keeps three facts alive: the advisor is on (green dot), which page-model is
+loaded (hover), and spend to date … Manual mode turns the dot grey and hides
+the meter — a founder who never wants AI sees a quiet strip, not a nag."
+
+**What is built: two of the three** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **The dot** reads the rail's real mode, the same value the Mode block and
+  the phone button (D405) read. It is green when a fill mode is on, grey for
+  Manual, and its label names the mode in words.
+- **The vertical spend** is the account's month-to-date figure from
+  `/api/ai/me/spend`, in four states that each look different:
+  - loading: an ellipsis;
+  - Unreadable: the request failed, or `recorded: false`;
+  - Not recorded: the log was read and holds no month figure;
+  - the figure itself.
+- None of the first three is ever drawn as $0.00. A real zero is a figure and
+  is drawn as one.
+- **In Manual the spend is not drawn**, as the canvas says.
+- **No hover model.** The page-model on hover is left out because the spine
+  names no model and no price; those belong to the expanded rail, where the
+  rate sits beside the model.
+- **Placement.** The spine sits between the label and the toggle, because the
+  collapsed title is a reversed column. The canvas's order follows: toggle,
+  dot and spend, then the turned label. It is desktop only, like the spine
+  itself.
+
+**Tests.** `frontend/test/worker_rail_spine_d406.test.mjs` has 9 tests,
+rendered with react-dom/server. They cover:
+
+- the dot in both modes;
+- each spend state, including a real zero;
+- each state having its own style;
+- Manual hiding the spend;
+- no model or price on the spine;
+- desktop only.
+
+Eight mutations were each caught:
+
+- the dot always on;
+- loading drawn as a zero;
+- Unreadable folded into Not recorded;
+- Not recorded drawn as $0.00;
+- the spend shown in Manual;
+- a state losing its style;
+- the spine always visible;
+- a real zero hidden.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -39753,6 +39872,98 @@ complete statement and recording a dispute write matching audit rows.
 allowed on a suspended licence; paid-in-full shown on an incomplete row; void
 without a reason; full payment accepted on a floor statement.
 
+## D459
+
+**HQ Support: one SLA band rule, both SLA tables named, the mirror lag
+derived, and the relation confirmed (issue #1017, slot S07, from S16).** No
+migration.
+
+**One band rule.** `services/slaWindow.ts` is the only place that defines the
+due-soon window and the boundary.
+- The window is `min(24h, limit / 2)`.
+- `bandForRemaining` is past once the limit is behind (`remaining < 0`), due
+  soon while `remaining <= window`, and on time otherwise.
+- Tickets (`ticketSlaBand`) and escalations (`slaBand`, now through
+  `escalationSlaBand` with the kind's window) both call it.
+- `approvalSources.ts` re-exports its `SLA_DUE_SOON_HOURS`. No file defines
+  the window a second time.
+
+What this fixes:
+- A 24-hour P1 ticket, and a 24-hour moderation escalation, read due soon from
+  their first hour. They could never be on time. Now they are due soon for
+  their last 12 hours.
+- The two functions disagreed at the boundary (`>` against `<=`). They now
+  agree at every remaining time, and a test sweeps four limits in half-hour
+  steps to prove it.
+- `support_sla_d455.test.ts` asserts `ticketSlaBand(5, 24) === 'ok'` again.
+  Commit b1f0027b had changed it to `(0, 24)` to fit the code.
+- The page says "due soon" instead of a fixed "due within 24h".
+
+**Two tables, named.** Tickets band against P1/P2/P3 (24/48/96h).
+Escalations carry a `due_at` stamped from their kind's hours (`SLA_HOURS`:
+moderation 24, the rest 72). They are different promises, so the panel shows
+both instead of mapping one onto the other.
+- `slaPolicyBody()` sends each row with its due-soon window.
+- The mapping line is built from `ticketPriorityTier`.
+- "Set here · inherited by every subsidiary" is now "Fixed in code · the same
+  on every subsidiary". Nothing on the page edits the hours.
+
+**The mirror lag, derived.** Filing a ticket writes `out:create:ticket-<id>`
+to `ticket_sync_events` in the same request. `readSyncLag` averages
+event-minus-ticket `created_at` over tickets filed in the last 24 hours, to
+the second, and also reports the longest.
+- A ticket with no create event is counted as `unmeasured`, and is never
+  averaged as zero.
+- A backfill event (`out:backfill:…`) is not a lag.
+- No measured ticket: Not recorded, with the reason.
+- An unreadable event log costs the lag alone, not the counts beside it.
+- The ROUTE_MAP row (Support Security · Super) says so now. It had claimed the
+  strip read `ticket_sync_events` before anything did.
+
+**The relation: already fixed on main, confirmed.** `openEscalationSummary`
+selects `relation`, and `escalationQueue` passes it to the page. D275's tests
+cover it. No change.
+
+**LOW and NIT findings:**
+- **Bands.** The three buckets outside H22's queues now send `bands: null`
+  instead of zeros nobody counted. An undated ticket is counted as `undated`,
+  so a queue's bands sum to its count.
+- **Panel loading.** The panel says "Reading the ticket types…" while the
+  read is pending. It no longer shows Unreadable.
+- **Taxonomy SQL.** It uses `GROUP BY 1`, so a blank type folds into `task`.
+  It binds `...OPEN_TICKET_STATUSES`, and drops `|| 0`.
+- **Dead code and coverage.** `TICKET_TAXONOMY_TYPES` is deleted (nothing read
+  it). The taxonomy read gets a coverage line.
+- **Comments and fixtures.** "Five reads" is now six, in both comments. The
+  D204 fixture's 44-hour medium ticket marked due soon (impossible for P3) is
+  now a high (P2) ticket.
+- **Tests.** The source-regex test in `hq_support_sla_d455.test.mjs` is
+  replaced by render tests.
+
+**Not changed.** `services/githubSync.ts` is not touched.
+
+**Tests.**
+- `support_sla_band_d459.test.ts`: 9 tests.
+- `support_sla_d455.test.ts`: 2 assertions restored or extended.
+- `support_queues_d204.test.ts`: the lag measured from create events, Not
+  recorded without one, and unreadable without the log.
+- `hq_support_sla_d455.test.mjs`: 5 render tests.
+
+Thirteen mutations were run, and each fails at least one test:
+- a flat 24h window, so `(5, 24)` is not ok;
+- `<` instead of `<=`;
+- the escalation boundary restated;
+- escalations on a flat window;
+- the lag joined on `ticket_id`, which takes in backfill events;
+- a missing event averaged as zero;
+- no events read as a lag of 0;
+- zeros for an uncounted bucket;
+- undated tickets dropped;
+- `GROUP BY type`;
+- the escalation table dropped;
+- Unreadable while loading;
+- the undated count not drawn.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences
@@ -40288,6 +40499,16 @@ walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
 
+## D474
+
+**Branch Contracts: Expiring soon, and Use template on the current library cards.** Issue #1027. No migration. `admin_contracts.ts` is not edited.
+
+**Expiring soon.** `GET /api/admin/contracts` now carries `valid_until` on pairwise NDAs and `expires_at` on partner deals. The strip on `/branch/contracts` is the next 90 days from those two fields. A row whose source records no end date is not in the strip, and the renewal cell says so. An end date already past, or further out than 90 days, stays on the row and is not called expiring. A failed list is Unreadable and draws no empty strip. E-sign envelopes and signed documents still record no end date. The list has no renewal date separate from a partner deal's expiry, and the strip says that rather than treating `expires_at` as a renewal.
+
+**Use template.** Each current card of the copy HQ pushed links to `/legal/send`. The send page, Remind, and Void are not this change: the link does not preselect a template, because that page only reads `envelope`. Archived versions are still absent from the copy. The page keeps rendering the server's `not_carried` reason and does not invent unusable cards.
+
+**Tests.** `frontend/test/branch_contracts_expiring_d474.test.mjs`.
+
 ## D480
 
 **HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
@@ -40564,6 +40785,78 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D494
+
+**Investor Deals, built to the owner's line: every IC vote records its
+reason, and the three unbuilt Deals ops name the decision each waits on.**
+This is the first of the four zone-family PRs for #1023 (the Deals family),
+slot S07, from S16. No migration.
+
+**Read against the code first.** D460 to D463 were read against main for
+the Deals family. These claims were checked through the tests each decision
+cites, which pass on this branch; they were not re-read line by line:
+- the Stage column reads `dealStage`, and a passed deal is neither listed nor
+  counted;
+- `recused` sits beside the tally, and a recusal needs its declaration;
+- the conditions store and the 409 that refuses a wire while a condition is
+  open;
+- the closing checklist with no seeded items, and the packet index of
+  executed envelopes;
+- `deals.source` and the partial-edit `PUT`.
+
+One sentence moved: D461 left a rationale on an ordinary vote as the owner's
+call, and #1023 settles it (below).
+
+**Every vote records its reason.** `POST /api/ic/:uid/vote` now refuses a
+yes, no or abstain vote whose rationale is missing or blank:
+- The response is 400 with code `rationale_required`, and no row is written.
+- A recusal keeps its own code, `recusal_requires_declaration`, which is
+  checked first.
+- The column stays nullable, because votes cast before now carry none and are
+  not rewritten.
+- The commit room reports `rationale.enforced: true`. Its Rationales tile
+  (`rationaleNote`) says the rule applies to every new vote, and explains any
+  shortfall as votes cast before the rule.
+- `ICDecisionPage`'s field reads "Rationale (required)", and its vote buttons
+  stay disabled until the field has text, with the reason on hover.
+- A rationale under three characters still drafts the journal entry with the
+  fallback thesis, unchanged.
+
+**The three unbuilt Deals ops, each built up to its decision.**
+- **Configure stages:** the columns are the deal record's stored status, the
+  one workflow every route and the IC hand-off read. Whether a firm may define
+  its own stage set is a decision about that workflow, not a missing form.
+- **New batch run:** `POST /api/scoring/score` scores the rubric answers sent
+  in the request body, and an investor holds none to send for a founder's
+  project. Where a batch's answers come from is the decision.
+- **Edit rubric:** the six weights are fixed in code. Who may edit them is
+  question 3 on #1023.
+
+Each op's `unbuilt` reason names its decision, and a customer-facing `hover:`
+(at most 120 characters) says it plainly.
+
+**Asked on #1023, not built, waiting on the answers:**
+- DD "Blocking" (question 1);
+- the `zone_saved_views` store behind "Save view" (question 2);
+- the section-weighting editor (question 3).
+
+**Coordinate.** #1096 (S16, D468) and #1094 (S16, D467) also edit
+`routes/ic.ts`. This PR adds one check beside the recusal check in the vote
+route and changes the commit room's `rationale` block.
+
+**Tests.**
+- `ic_conditions_minutes.test.ts` gains two tests: a blank, spaces-only or
+  missing rationale is refused and writes nothing; the room reports the rule
+  as enforced and counts a pre-rule vote as one without a reason.
+- `investor_deals_rationale_d494.test.mjs` adds two frontend tests on the
+  tile's note.
+- `investor_deals_id3.test.mjs`'s rationale pin is re-aimed at the enforced
+  rule.
+- Two fixtures that voted with no reason now carry one.
+- Five mutations, each caught: a blank vote accepted, spaces accepted as a
+  reason, the room saying unenforced, the shortfall left unexplained, and a
+  missing rule read as the old one.
 
 ## D500
 
@@ -41343,6 +41636,110 @@ route and no new `api.js` method.
   because the fixture writes SQL-format times. The ISO test was added for it
   and catches it, except in the first hour after UTC midnight, when both
   sides fall on different dates and a bare compare happens to agree.
+
+## D511
+
+**Spin-Out Lab: a cohort-size read that fails is reported, not defaulted, and
+the branch freeze reaches certificates.** Issue #992, slot S08 (moved from S18,
+originally S10). Items 1 and 2. Item 3, graduate access to the Lab tools, waits
+on the owner's A/B/C on #992 and is not built here. No migration.
+
+**What was true on main (`5201db161`).**
+- **The cohort size read.** `getCohortSizeSettings`
+  (`services/cohortApplications.ts`) caught any failed read of
+  `cohort_settings` and answered `DEFAULT_MIN_COHORT_SIZE` /
+  `DEFAULT_MAX_COHORT_SIZE`, and its three callers acted on that number:
+  - the cron's capacity check postponed or passed cycles against the minimum,
+    and the activation that follows it in the same tick admitted the approved
+    applicants;
+  - `GET /admin/cohort/applications` judged every cycle's `meets_minimum`
+    against it;
+  - the public `GET /spinout-lab/brief` printed it as `places`.
+- **The admin console.** `AdminCohortApplications.jsx` added a typed
+  `{ min: 1, max: 25 }` of its own whenever no settings arrived.
+- **Certificates.** The certificate admin writes (`POST /certificates`,
+  `/certificates/:id/revoke`, `/certificates/backfill`) check
+  `role === 'admin'` themselves, not through `requireAdmin`. So neither D135's
+  HQ compliance freeze nor `requireBranchNotSuspended` reached them, and a
+  suspended branch could still issue and revoke credentials.
+
+**What changed.**
+- **The read.** `getCohortSizeSettings` throws `CohortSettingsUnreadable`
+  when the read fails. A key no admin has set still answers its product
+  default, which is the operative number. `cohort_settings` is in the schema
+  baseline and in migration 157, so a database without it is a read that
+  fails, not "nothing set". `readCohortSizeSettings` returns null instead of
+  throwing, for callers that say "Unreadable".
+- **The cron.** With no minimum read, the capacity check runs on no cycle. It
+  writes a `capacity_unreadable` event to each due cycle's history, and the
+  tick skips activation, so no cycle is postponed or started on a number
+  nobody read. The next tick tries again.
+- **`GET /admin/cohort/applications`.** It sends `settings: null`,
+  `settings_unreadable: true` and `meets_minimum: null` on every cycle.
+- **The console.** It holds no typed default. The size button reads "Min ·
+  Max unreadable", and each cycle's pill reads "N approved · minimum
+  unreadable", in neither the pass nor the fail colour (`SizeSettingsLabel`,
+  `MinimumPill`).
+- **`GET /spinout-lab/brief`.** It sends `places: null` and
+  `places_unreadable: true`; the other five facts need no table and still
+  load. The Lab pages already treated a null `places` as a failed read
+  (`useCohortPlaces`, D385).
+- **Certificates.** The three certificate admin writes call
+  `requireBranchNotSuspended` after the admin check, the order D107 uses, so
+  a suspended branch gets 423 and the registry is unchanged. Reads, the
+  owner's own sharing toggle and public verification are unchanged. Revoking
+  freezes with issuing: FREEZE_RULE keeps takedowns open, but a revocation is
+  not a takedown of the branch's own content. It changes a graduate's
+  credential on the public verification page. S7's Locked "Programs" row
+  (`lib/branchFreeze.js`) now says certificates cannot be issued or revoked,
+  as `branch_shell_s7_s13` requires of every new gate.
+
+**Not built: item 3.** A graduate is bounced from the Lab tool routes, because
+graduation clears `spinout_lab_active` and the routes require it, while
+`featureUnlocked` tells them they have every tool (D381, "Filed, not fixed").
+No decision records intended graduate access. S1's question on #992 offers:
+- A. full access (S1's pick);
+- B. read-only;
+- C. no access.
+
+**Verified.**
+- `cloudflare-worker/test/lab_gates_d511.test.ts` (6 tests) runs the real
+  tick, the admin overview and the certificate routes over baseline tables,
+  with a failed `cohort_settings` read injected at the adapter. It covers:
+  - a failed read throwing, and an unset key answering its default;
+  - a due cycle neither postponed nor activated, with its history saying why,
+    and the same tick activating once the minimum reads;
+  - the overview's nulls;
+  - 423 on issue, hand issue, revoke and backfill on a suspended branch, with
+    nothing written, and an active branch still issuing and revoking.
+- `spinout_brief_d141.test.ts`:
+  - its "no setting" fixture is now an empty `cohort_settings`, as every real
+    database has;
+  - a new test pins `places: null` and `places_unreadable` on a failed read;
+  - the response's key list gains `places_unreadable`.
+- `frontend/test/cohort_settings_unreadable_d511.test.mjs` (4 tests) renders
+  the label and the pill.
+- `spinout_lab_intro.test.mjs` pins the new read in `/brief`.
+- Mutations: 14 run. 13 were caught. The one survivor was an
+  `instanceof` branch in `readCohortSizeSettings` that no throw could reach,
+  and that branch was removed.
+
+**After review: one line per outage, not one per tick.** The cron retries
+every tick, so an outage lasting an hour wrote the same `capacity_unreadable`
+line into the cycle's history on every pass. The line is now written only
+when the cycle's latest event is not already `capacity_unreadable`. The check
+and the insert are one `INSERT … SELECT … WHERE`, so overlapping ticks cannot
+both add it. When anything else happens to the cycle in between, a later
+outage gets its own line.
+
+A new test in `lab_gates_d511.test.ts` runs three failed ticks, then adds an
+event, then runs one more failed tick. It expects 1 line after the three
+ticks and 2 after the fourth. It fails on the code before this change. 4 of
+4 mutations were caught:
+- no guard;
+- guard on any earlier line rather than the latest;
+- read the oldest event instead of the latest;
+- drop the bind.
 
 ## D512
 

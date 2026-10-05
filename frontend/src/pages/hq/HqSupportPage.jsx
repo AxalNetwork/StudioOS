@@ -9,7 +9,7 @@
  * licence it administers — so `GET /api/admin/hq-support` sorts each open
  * ticket by its requester's standing and the page renders what it measured.
  *
- * EVERY PART ANSWERS FOR ITSELF. The route makes five reads and each carries its
+ * EVERY PART ANSWERS FOR ITSELF. The route makes six reads and each carries its
  * own state: an unreadable escalation board costs the escalation card and the
  * matrix's escalation cells, never the ticket queues beside it. A read that
  * failed renders `Unreadable`; a read that hit its ceiling renders its count as
@@ -100,7 +100,10 @@ const PILL = {
   none: 'bg-axal-ground text-axal-muted dark:bg-white/5 dark:text-gray-300',
 };
 
-const SLA_WORD = { past: 'past SLA', due_soon: 'due within 24h', ok: 'on time' };
+// "Due soon" is the last 24 hours of a limit, or its last half when the limit
+// is shorter (D459): a 24-hour P1 is due soon for 12 hours. The panel below
+// gives each limit's window.
+const SLA_WORD = { past: 'past SLA', due_soon: 'due soon', ok: 'on time' };
 
 /**
  * One queue. Pure over its props so every state renders in a test.
@@ -135,7 +138,8 @@ export function QueueCard({
 
         {state === 'ready' && bands && (
           <p className="mt-2 text-[10.5px] tabular-nums text-axal-muted" data-testid={`${testId}-bands`}>
-            {bands.ok} on time · {bands.due_soon} due within 24h · {bands.past} past SLA
+            {bands.ok} on time · {bands.due_soon} due soon · {bands.past} past SLA
+            {bands.undated > 0 ? ` · ${bands.undated} undated` : ''}
           </p>
         )}
 
@@ -706,7 +710,7 @@ export function SyncStrip({ sync, failed, onRetry }) {
         <div className="grid grid-cols-3 gap-2" data-testid="hq-support-sync-stats">
           {stat(`Synced · ${sync.window_hours}h`, sync.synced)}
           {stat(`Failed · ${sync.window_hours}h`, sync.failed, sync.failed > 0 ? 'text-red-700 dark:text-red-300' : undefined)}
-          {stat('Average lag', <Unrecorded reason={sync.lag?.reason} />)}
+          {stat('Average lag', syncLagText(sync.lag) ?? <Unrecorded reason={sync.lag?.reason} />)}
         </div>
         {sync.not_configured > 0 && (
           <p className="mt-2 text-[10.5px] text-amber-800 dark:text-amber-300">
@@ -715,7 +719,7 @@ export function SyncStrip({ sync, failed, onRetry }) {
         )}
         <p className="mt-2 text-[10.5px] leading-relaxed text-axal-muted">
           Counted from each ticket&apos;s latest mirror attempt, so a ticket retried within the window counts once, as
-          its latest outcome. {sync.lag?.reason}
+          its latest outcome. {syncLagNote(sync.lag, sync.window_hours)}
         </p>
       </>
     );
@@ -738,6 +742,23 @@ export function SyncStrip({ sync, failed, onRetry }) {
 }
 
 /** One coverage line per read that answered (D126) — never a line for a read that failed. */
+/** The average create-to-mirror lag as a figure, or null when there is none to show (D459). */
+export function syncLagText(lag) {
+  if (!lag || lag.value === null || lag.value === undefined) return null;
+  const s = Number(lag.value);
+  return s < 120 ? `${s}s` : `${Math.round(s / 60)} min`;
+}
+
+/** The sentence under the strip: how the lag was measured, or why there is none. */
+export function syncLagNote(lag, windowHours) {
+  if (!lag) return '';
+  if (lag.value === null || lag.value === undefined) return lag.reason || '';
+  const left = lag.unmeasured
+    ? ` ${plural(lag.unmeasured, 'ticket', 'tickets')} filed with no mirror event ${lag.unmeasured === 1 ? 'is' : 'are'} not in the average.`
+    : '';
+  return `Average lag is from filing to the GitHub issue, over ${plural(lag.measured, 'ticket', 'tickets')} filed in the last ${windowHours}h, to the second; the longest took ${syncLagText({ value: lag.max })}.${left}`;
+}
+
 export function supportCoverage(data) {
   if (!data) return [];
   const out = [];
@@ -755,6 +776,10 @@ export function supportCoverage(data) {
   }
   if (data.sync?.available) {
     out.push(`Mirror, last ${data.sync.window_hours}h: ${data.sync.synced} synced, ${data.sync.failed} failed`);
+  }
+  if (data.taxonomy?.available) {
+    const n = data.taxonomy.items.reduce((sum, t) => sum + Number(t.open), 0);
+    out.push(`${plural(n, 'open ticket', 'open tickets')} counted by type`);
   }
   return out;
 }
@@ -778,16 +803,19 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry }) {
     );
   }
   const tiers = slaPolicy?.tiers || [];
+  const kinds = slaPolicy?.escalation_kinds || [];
+  // `taxonomy` is undefined until the read answers: that is loading, not unreadable.
+  const loading = taxonomy === undefined || taxonomy === null;
   const tax = taxonomy?.available ? taxonomy.items : null;
   return (
     <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[13.5px] font-extrabold tracking-tight">SLA policy and taxonomy</h2>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-axal-faint">Set here · inherited by every subsidiary</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-axal-faint">Fixed in code · the same on every subsidiary</span>
       </div>
       <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_1.15fr]">
         <div>
-          <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Response bands</p>
+          <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Tickets · response bands</p>
           <ul className="mt-2 grid gap-2">
             {tiers.map((b) => (
               <li
@@ -799,10 +827,28 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry }) {
                   <span className="text-[10px] font-extrabold tracking-wide text-[#881337] dark:text-rose-300">{b.id}</span>
                   <span className="ml-2 text-[11px] text-axal-muted">{b.description}</span>
                 </div>
-                <span className="shrink-0 text-[12px] font-extrabold tabular-nums text-axal-ink dark:text-white">{b.hours}h</span>
+                <span className="shrink-0 text-[12px] font-extrabold tabular-nums text-axal-ink dark:text-white">
+                  {b.hours}h{b.due_soon_hours != null && <span className="ml-1 text-[10px] font-semibold text-axal-faint">· due soon last {b.due_soon_hours}h</span>}
+                </span>
               </li>
             ))}
           </ul>
+          {kinds.length > 0 && (
+            <>
+              <p className="mt-3 text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Escalations from branches · a second table</p>
+              <ul className="mt-2 grid gap-1.5" data-testid="hq-support-sla-escalations">
+                {kinds.map((k) => (
+                  <li key={k.kind} className="flex items-center justify-between gap-3 text-[11px] text-axal-muted">
+                    <span className="capitalize">{String(k.kind).replace(/_/g, ' ')}</span>
+                    <span className="tabular-nums">{k.hours}h · due soon last {k.due_soon_hours}h</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-[10.5px] text-axal-faint">
+                An escalation is due at a time stamped from its kind when the branch raises it; a ticket is banded by its priority tier. The two tables are separate promises.
+              </p>
+            </>
+          )}
           {slaPolicy?.note && (
             <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">{slaPolicy.note}</p>
           )}
@@ -812,9 +858,10 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry }) {
         </div>
         <div>
           <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Open tickets by type</p>
-          {!taxonomy?.available && (
+          {loading && <p className="mt-2 text-[11px] text-axal-muted">Reading the ticket types…</p>}
+          {!loading && !taxonomy.available && (
             <p className="mt-2 text-[11px] text-axal-muted">
-              <Unrecorded reason={taxonomy?.reason}>Unreadable</Unrecorded>
+              <Unrecorded reason={taxonomy.reason}>Unreadable</Unrecorded>
             </p>
           )}
           {tax && tax.length === 0 && (
