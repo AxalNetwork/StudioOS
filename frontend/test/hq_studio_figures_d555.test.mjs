@@ -112,7 +112,8 @@ test('the overview cards draw HQ\'s figures, labelled, with each line linking to
   assert.match(t, /Active accounts: Not recorded/);
   const markup = html(h(AdminStudioOverview, { user: null, glance: PAYLOAD }));
   for (const to of ['/admin?tab=kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
-    assert.ok(markup.includes(`href="${to.replace('&', '&amp;')}"`), `${to} is not linked`);
+    // None of these paths carries an &, so the href is the path as written.
+    assert.ok(markup.includes(`href="${to}"`), `${to} is not linked`);
   }
 });
 
