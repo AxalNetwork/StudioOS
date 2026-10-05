@@ -1,20 +1,153 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ExternalLink, Plus, ShieldCheck, BrainCircuit } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
 import { api } from '../../lib/api';
-import finance from '../../data/financialSnapshots.json';
+import { researchFundsApi } from '../../lib/api/researchFunds.js';
+import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import EuroTechFundHistoryChart from './EuroTechFundHistoryChart';
+import { FundDetails, UnreadableBadge } from './FundDirectory';
+
+/**
+ * `/research/funds/catalog/:id` — one fund from the public directory (D535,
+ * #1081 steps 4–5), the Funds canvas's drawer as a page of its own.
+ *
+ * IT USED TO SWALLOW ITS ERRORS. It read the bundled `fundDirectory.json`
+ * first, then asked the Worker and dropped any failure on the floor
+ * (`catch (_) {}`), so a failed read showed the stale bundled row as if it
+ * were the directory's answer, and a failed read of the founder's own list
+ * hid the "Add" button's state. Now the Worker is the only source: a failed
+ * read says "Unreadable", a missing fund says so, and the list's own read
+ * failing says "Unreadable" beside the button rather than offering an add
+ * that may duplicate a row.
+ *
+ * THE TWO ETF ROWS ARE GONE WITH THE BUNDLE. `fundDirectory.json` carried two
+ * public-market ETFs (SPY, QQQ) with tearsheet figures; the D1 directory never
+ * held them, and a VC fund directory is the wrong home for them.
+ */
 
 const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-function Fact({ label, value }) { return <div><div className="text-[9px] font-extrabold uppercase tracking-[.08em] text-axal-faint">{label}</div><div className="mt-1 text-[12px] text-axal-ink dark:text-gray-100">{value || 'Not recorded'}</div></div>; }
+const GHOST = 'inline-flex items-center gap-1 rounded-lg border border-axal-hairline px-3 py-2 text-[12px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+
+/**
+ * The page body from props alone (the tests render it with react-dom/server).
+ * `fund` is { loading, error, status, data }; `list` is the founder's own
+ * shortlist read, { loading, error, existing }.
+ */
+export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, notice = null, onRetry = () => {} }) {
+  const back = (
+    <Link to="/research/funds" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
+      <ArrowLeft size={13} /> Fund directory
+    </Link>
+  );
+  if (fund.loading) {
+    return <div className="space-y-3">{back}<Card variant="dashed" padding="lg" aria-busy="true"><p className="text-[12.5px] text-axal-muted">Loading this fund…</p></Card></div>;
+  }
+  if (fund.status === 404) {
+    return (
+      <div className="space-y-3">{back}
+        <Card variant="dashed" padding="lg" data-testid="fund-catalog-missing">
+          <h1 className="text-sm font-extrabold">Fund not found</h1>
+          <p className="mt-2 text-[12.5px] text-axal-muted">No fund in the directory has this id. A link from before the directory moved to the server may name a row it no longer holds.</p>
+        </Card>
+      </div>
+    );
+  }
+  if (fund.error) {
+    return (
+      <div className="space-y-3">{back}
+        <Card padding="lg" className="border-red-200 dark:border-red-900" data-testid="fund-catalog-unreadable">
+          <div className="flex items-center gap-2"><UnreadableBadge /><span className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Read failed</span></div>
+          <h1 className="mt-2 text-sm font-extrabold">This fund could not be read.</h1>
+          <p className="mt-1 text-[12.5px] text-axal-muted">{fund.error} Nothing is shown in its place, because an old copy would pass for the directory’s answer.</p>
+          <button type="button" className={`${GHOST} mt-3`} onClick={onRetry}>Try again</button>
+        </Card>
+      </div>
+    );
+  }
+  const { item, reports, reports_status: reportsStatus, source_boundary: boundary } = fund.data;
+  const reportsState = reportsStatus === 'unreadable' ? 'unreadable' : 'ok';
+  return (
+    <div data-testid="fund-catalog-profile" className="space-y-4">
+      {back}
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-axal-faint">Public fund profile</div>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.name}</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {list.loading && <span className="text-[12px] text-axal-muted">Checking your list…</span>}
+          {!list.loading && list.error && (
+            <span className="flex items-center gap-2 text-[12px] text-axal-muted"><UnreadableBadge /> Your list could not be read, so this page cannot tell whether the fund is on it.</span>
+          )}
+          {!list.loading && !list.error && (list.existing
+            ? <Link to={`/research/funds/${encodeURIComponent(list.existing.uid)}`} className="rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white">Open your dossier →</Link>
+            : <button type="button" onClick={onAdd || undefined} disabled={!onAdd} className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"><Plus size={14} /> Add to my list</button>)}
+        </div>
+      </div>
+      {notice && <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{notice.text}</p>}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Card padding="lg"><FundDetails item={item} reports={reports} reportsState={reportsState} /></Card>
+        <div className="space-y-4">
+          {reportsState === 'ok' && item.size_currency === 'EUR' ? <EuroTechFundHistoryChart reports={reports} /> : null}
+          <Card padding="lg">
+            <h2 className="text-sm font-extrabold tracking-tight">What this record is</h2>
+            <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">{boundary}</p>
+            <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">Public fund lists go stale. Check the fund’s own site before relying on a size, a vintage or a backer.</p>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FundCatalogProfile({ role = 'founder' }) {
-  const { id } = useParams(); const [fund, setFund] = useState(null); const [existing, setExisting] = useState(null); const [loading, setLoading] = useState(true); const [notice, setNotice] = useState('');
-  useEffect(() => { let alive = true; import('../../data/fundDirectory.json').then(async (module) => { if (!alive) return; const payload = module.default || module; const local = (payload.items || []).find((x) => String(x.id) === id) || null; setFund(local); try { const remote = await api.research.fundDirectoryGet(id); if (!alive || !remote?.item) return; const item = remote.item; setFund({ ...local, ...item, id: item.uid, sectors: item.sector_focus ? String(item.sector_focus).split(' · ').filter(Boolean) : (local?.sectors || []), quarterly_reports: remote.reports || local?.quarterly_reports || [] }); } catch (_) { /* static build asset remains the offline fallback */ } }).finally(() => { if (alive) setLoading(false); }); return () => { alive = false; }; }, [id]);
-  useEffect(() => { api.research.funds().then((r) => { if (!fund) return; setExisting((r.items || []).find((x) => normalize(x.name) === normalize(fund.name)) || null); }).catch(() => {}); }, [fund]);
-  const add = async () => { if (!fund || existing) return; try { const row = await api.research.fundCreate({ name: fund.name, source_url: fund.website || null }); setExisting(row); setNotice('Added to your private fund research list.'); } catch (e) { setNotice(e?.message || 'That fund did not save.'); } };
-  const snapshot = fund?.provider_id ? finance.funds?.[fund.provider_id] : null;
-  if (loading) return <Card variant="dashed"><p className="text-[12px] text-axal-muted">Loading fund profile.</p></Card>;
-  if (!fund) return <Card variant="dashed"><h1 className="text-sm font-extrabold">Fund not found</h1><Link to="/research/funds" className="mt-2 inline-block text-[12px] text-axal-violet underline">Back to funds</Link></Card>;
-  return <div data-testid="fund-catalog-profile" className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><Link to="/research/funds" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline"><ArrowLeft size={13} /> Fund directory</Link><Link to="/research/gtm" className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-bold text-white"><BrainCircuit size={14} /> GTM intelligence</Link></div><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-axal-faint">Public fund profile</div><h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{fund.name}</h1><p className="mt-1 text-[12px] text-axal-muted">{[fund.type, fund.hq].filter(Boolean).join(' · ') || 'Investor profile'}</p></div><div className="flex flex-wrap gap-2">{existing ? <Link to={`/research/funds/${encodeURIComponent(existing.uid)}`} className="rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white">Open private dossier →</Link> : <button type="button" onClick={add} className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white"><Plus size={14} /> Add to research</button>}{fund.website && <a href={fund.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-axal-hairline px-3 py-2 text-[12px] font-semibold text-axal-muted">Website <ExternalLink size={13} /></a>}</div></div>{notice && <p className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">{notice}</p>}<Card className="border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20"><div className="flex items-start gap-2 text-[12px] leading-relaxed text-violet-950 dark:text-violet-100"><ShieldCheck size={15} className="mt-0.5 shrink-0" /><span><strong>Source boundary:</strong> {snapshot ? 'This ETF profile contains provider-reported public-market metrics as-of 29 September 2026.' : 'This is a public mapping record, not a diligence conclusion. Verify stage, ticket, fund size, and latest fund on the official website before relying on them.'}</span></div></Card><Card><div className="grid grid-cols-2 gap-x-5 gap-y-5 sm:grid-cols-3"><Fact label="Stages" value={(fund.stages || []).join(' · ')} /><Fact label="Regions" value={(fund.regions || []).join(' · ')} /><Fact label="Sectors" value={(fund.sectors || []).join(' · ')} /><Fact label="Ticket" value={[fund.min_ticket, fund.max_ticket].filter(Boolean).join('–')} /><Fact label="Fund size" value={fund.fund_size} /><Fact label="Latest fund" value={fund.fund_date} /> <Fact label="Reported periods" value={fund.eurotech_report_count} /><Fact label="Known EIF LP" value={fund.eurotech_eif_flag ? 'Yes' : 'Not recorded'} /><Fact label="Known EIFO LP" value={fund.eurotech_eifo_flag ? 'Yes' : 'Not recorded'} /></div></Card>{fund.quarterly_reports?.length ? <EuroTechFundHistoryChart reports={fund.quarterly_reports} /> : null}{snapshot && <><Card><div className="flex items-baseline justify-between gap-3"><h2 className="text-sm font-extrabold tracking-tight">ETF facts</h2><span className="text-[10px] font-semibold uppercase tracking-[.08em] text-axal-faint">{snapshot.ticker} · FMP</span></div><div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-5 sm:grid-cols-4"><Fact label="NAV" value={snapshot.nav} /><Fact label="AUM" value={snapshot.aum} /><Fact label="Expense ratio" value={`${snapshot.expense_ratio_pct}%`} /><Fact label="Holdings" value={snapshot.holdings_count} /><Fact label="Last price" value={snapshot.last_price} /><Fact label="1D change" value={`${snapshot.change_1d_pct}%`} /><Fact label="20D volatility" value={`${snapshot.volatility_20d_pct}%`} /><Fact label="1Y drawdown" value={`${snapshot.max_drawdown_1y_pct}%`} /></div></Card><Card><h2 className="text-sm font-extrabold tracking-tight">Performance</h2><div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-5 sm:grid-cols-6">{Object.entries(snapshot.returns || {}).map(([period, value]) => <Fact key={period} label={period.toUpperCase()} value={`${value}%`} />)}</div><p className="mt-3 text-[11px] text-axal-faint">Source: Bigdata.com ETF tearsheet using FMP. This is public-market ETF performance, not private VC fund performance.</p></Card></>}<div className="grid gap-4 lg:grid-cols-2"><Card><h2 className="text-sm font-extrabold tracking-tight">Research checklist</h2><ul className="mt-2 list-disc space-y-1 pl-5 text-[12px] leading-relaxed text-axal-muted"><li>Confirm current fund size and close date.</li><li>Confirm active stage and ticket range.</li><li>Review recent investments and partner ownership.</li><li>Attach quarterly reports in the private dossier when sourced.</li></ul></Card><Card><h2 className="text-sm font-extrabold tracking-tight">Source</h2><p className="mt-2 text-[12px] text-axal-muted">{fund.source_label || 'Axal public fund-mapping exports'}</p><p className="mt-2 text-[11px] leading-relaxed text-axal-faint">Public mapping records can become stale. Missing values remain missing rather than being inferred.</p></Card></div></div>;
+  const { id } = useParams();
+  const [fund, setFund] = useState({ loading: true, error: null, status: null, data: null });
+  const [list, setList] = useState({ loading: true, error: null, existing: null });
+  const [notice, setNotice] = useState(null);
+
+  const load = useCallback(async () => {
+    setFund({ loading: true, error: null, status: null, data: null });
+    try {
+      const data = await researchFundsApi.get(id);
+      setFund({ loading: false, error: null, status: 200, data });
+    } catch (e) {
+      setFund({ loading: false, error: e?.message || 'Unreadable.', status: e?.status ?? null, data: null });
+    }
+  }, [id]);
+  useEffect(() => { load(); }, [load]);
+
+  const name = fund.data?.item?.name;
+  useEffect(() => {
+    if (!name) return undefined;
+    let alive = true;
+    setList({ loading: true, error: null, existing: null });
+    api.research.funds()
+      .then((r) => { if (alive) setList({ loading: false, error: null, existing: (r.items || []).find((x) => normalize(x.name) === normalize(name)) || null }); })
+      .catch((e) => { if (alive) setList({ loading: false, error: e?.message || 'Unreadable', existing: null }); });
+    return () => { alive = false; };
+  }, [name]);
+
+  const add = async () => {
+    const item = fund.data?.item;
+    if (!item || list.existing || list.error) return;
+    try {
+      const row = await api.research.fundCreate({ name: item.name, source_url: item.website || null });
+      setList({ loading: false, error: null, existing: row });
+      setNotice({ ok: true, text: 'Added to your research list.' });
+    } catch (e) {
+      setNotice({ ok: false, text: e?.message || 'That fund did not save.' });
+    }
+  };
+
+  return (
+    <WorkspaceShell
+      role={role}
+      title={name || 'Fund profile'}
+      activeSlug="funds"
+    >
+      <FundCatalogView fund={fund} list={list} onAdd={add} notice={notice} onRetry={load} />
+    </WorkspaceShell>
+  );
 }
