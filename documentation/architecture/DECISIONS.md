@@ -37980,6 +37980,74 @@ stands alone, and is idempotent. No bytes are kept in D1.
   - an 11 MB file refused before any upload, with the Worker's sentence
   - no page errors
 
+## D416
+
+**E-sign accepts an already-rendered body, so each party signs the same
+document (issue #1001).** No migration.
+
+**Why.** Per-party co-founder signing (D354) was blocked. `createAndSendEnvelope`
+built every document itself: the D1 template store, then the Y-1 markdown, then
+`buildTemplateBody`, with the recipient merged in. Sending one agreement to
+each party would have re-rendered it per recipient, with each party's own name
+in `recipient_name`. Every signer would then hold a different document under a
+different hash.
+
+**What changed** (`routes/esign.ts`):
+
+- **`createAndSendEnvelope` takes an optional `renderedBody: { title, body }`.**
+  When it is set:
+  - the template lookup and the merge are skipped;
+  - the body is stored and hashed exactly as given;
+  - the title is the caller's.
+- Each party's envelope therefore carries the same bytes and the same
+  `body_sha256`.
+- **Everything after the body is unchanged:**
+  - the one-pending-send key (D410), so the same party twice is
+    `already_pending`, while each party gets its own envelope;
+  - the recipients row in the same batch;
+  - the email;
+  - the audit trail.
+- **Refused before anything is written:**
+  - `RenderedBodyError` for a missing title, a missing body, or `mergeFields`
+    sent alongside. A finished document has no slots, and silently ignoring
+    the fields would be worse.
+  - `UnfilledFieldsError` for a body that still holds a `{{token}}`, whether
+    or not `refuseUnfilled` is set. A finished document with a hole in it is
+    never one the sender meant to send.
+- **Audit.** `envelope_created` records `body_source: 'rendered' | 'template'`
+  on both the native and DocuSign paths. Who decided the document's words is a
+  different claim on each path, and a dispute reads that row.
+- **No route change.** `POST /send` and the operator callers do not pass
+  `renderedBody`, so the template path is what they always ran. Slot S07 lands
+  per-party signing on top of this.
+
+**Tests.** `cloudflare-worker/test/esign_rendered_body_d416.test.ts` has 8
+tests. They run the real function against node:sqlite through the e-sign
+harness and cover:
+
+- the body stored and hashed exactly as given, under its own title, with the
+  recipient not merged in;
+- two parties getting two envelopes over the same hash;
+- the same party twice being already pending;
+- the audit's `body_source`;
+- the four refusals, each with nothing written;
+- a token always refused;
+- the template path unchanged;
+- a rendered body winning where the document type has a template.
+
+Eight mutations were each caught:
+
+- the template winning over the rendered body;
+- the recipient merged into the rendered body;
+- no title check;
+- no body check;
+- merge fields silently ignored;
+- tokens refused only under `refuseUnfilled`;
+- the audit always saying template;
+- the caller's title ignored.
+
+The existing D410, D411, de-admin and D451 e-sign tests pass unchanged.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
