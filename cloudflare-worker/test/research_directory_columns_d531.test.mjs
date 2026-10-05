@@ -163,7 +163,15 @@ test('D531: the decision\'s command records 375 under its real checksum', () => 
   assert.ok(d531.includes('node scripts/migrate-d1.mjs --remote --verify-marked'), 'D531 no longer gives the --verify-marked command after the INSERT');
 });
 
-test('D531: nothing reads the 24 columns yet, so nothing can show a zero for an absent value', () => {
+// Re-aimed with the first reader (D534, #1079): `services/researchCompanyDirectory.ts`
+// reads the columns, and its tests (research_company_directory_d534.test.ts,
+// research_companies_pages_d534.test.mjs) pin an absent value as Not recorded,
+// never zero. Every other file still may not read them.
+const D534_READER = 'cloudflare-worker/src/services/researchCompanyDirectory.ts';
+
+test('D531: only the D534 reader reads the 24 columns, and it says Not recorded for an absent value', () => {
+  assert.match(read(D534_READER), /status: 'not_recorded' as const, reason: 'Not recorded'/,
+    'the D534 reader no longer marks an absent metric Not recorded');
   // Every SQL template in the Worker that names the table, read whole.
   const files = [];
   const walk = (dir) => {
@@ -182,6 +190,7 @@ test('D531: nothing reads the 24 columns yet, so nothing can show a zero for an 
   }
   assert.ok(templates.length >= 2, 'the two directory reads in routes/research.ts were not found');
   for (const { f, sql } of templates) {
+    if (f === resolve(ROOT, D534_READER)) continue;
     for (const c of NAMES) {
       assert.doesNotMatch(sql, new RegExp(`\\b${c}\\b`),
         `${f} reads ${TABLE}.${c}. The first reader (D534) renders an absent value as "Not recorded", never zero; re-aim this pin with it`);
