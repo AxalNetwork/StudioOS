@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { Card, Pill, Skeleton, Unrecorded, Unreadable, RailFrame, WorkerRail } from '../../ui';
+import { Card, Pill, RailFrame, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import {
   EMPTY_RESOURCE, LIBRARY_SORTS, RESOURCE_CATEGORIES, countLabel, filterResources, formatDate,
   libraryCoverage, pageOf, resourceBody, resourceFacts, resourceKind, safeHref,
@@ -228,7 +228,6 @@ export default function WellbeingResourceLibrary() {
 
   return (
     <RailFrame
-      data-testid="wellbeing-library"
       rail={(
         <WorkerRail
           workspace="Wellbeing library"
@@ -242,6 +241,7 @@ export default function WellbeingResourceLibrary() {
           ]}
         />
       )}
+      data-testid="wellbeing-library"
     >
       <section className="min-w-0 space-y-4" aria-label="Resource library">
         <PageHeader

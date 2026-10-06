@@ -47,6 +47,15 @@ export const PAYOUT_MIN_CENTS = 1000;
  */
 export const TABLE_DEFAULT_CURRENCY = 'USD';
 
+/**
+ * Why a payout's amount is shown with no currency. Since D572 the request
+ * writes the currency of the commissions it claims, together with the payout's
+ * `uid`. A payout from before that has no uid, and its row carries the column
+ * default, `TABLE_DEFAULT_CURRENCY`, whatever its commissions were in (D569,
+ * GAP 5). That default is not a fact about the payout.
+ */
+export const PAYOUT_CURRENCY_GAP = 'Requested before payouts recorded their currency, so the row holds the table default, not the currency of the commissions it claimed.';
+
 /** `commissions.status`: accrued, then paid once a payout request claims it. */
 export const COMMISSION_STATUS = {
   accrued: { label: 'Accrued', tone: 'info' },
@@ -75,7 +84,7 @@ export const REFERRAL_STATUS = {
 export const PAYOUT_ACTIONS = {
   complete: { label: 'Process payout', from: ['requested', 'processing'] },
   process: { label: 'Mark processing', from: ['requested'] },
-  fail: { label: 'Mark failed', from: ['requested', 'processing', 'completed'] },
+  fail: { label: 'Mark failed', from: ['requested', 'processing'] },
 };
 
 /** The relationship types `partnernet.ts` accepts (REL_TYPES), in words. */
@@ -273,18 +282,43 @@ export function totalsByStatus(rows, order = ['accrued', 'paid'], map = COMMISSI
   return { statuses, unreadable };
 }
 
-/** The payouts still in flight — requested or processing — summed per currency. */
+/**
+ * A payout's currency, or null when the payout did not record one. D572's
+ * request writes the currency with the payout's `uid`; a payout from before it
+ * has no uid and holds the column default (`PAYOUT_CURRENCY_GAP`).
+ */
+export function payoutCurrency(payout) {
+  return String(payout?.uid ?? '').trim() ? currencyOf(payout?.currency) : null;
+}
+
+/**
+ * The ids of the commissions a payout claimed (D572's `commission_ids`), or
+ * null for a payout from before payouts recorded them. Null is not an empty
+ * list: an empty list would say the payout claimed nothing.
+ */
+export function payoutClaims(payout) {
+  return Array.isArray(payout?.commission_ids) ? payout.commission_ids : null;
+}
+
+/**
+ * The payouts still in flight — requested or processing — counted, and their
+ * amounts added up per currency. A payout whose currency is not recorded
+ * (`payoutCurrency`), or whose amount is unreadable, is counted and left out
+ * of the sums: `apart` says how many.
+ */
 export function payoutsInFlight(payouts) {
   const open = (payouts || []).filter((p) => ['requested', 'processing'].includes(String(p?.status ?? '').toLowerCase()));
   const byCurrency = new Map();
+  let apart = 0;
   for (const p of open) {
+    const code = payoutCurrency(p);
     const cents = centsOf(p?.amount_cents);
-    if (cents === null) continue;
-    const code = currencyOf(p?.currency) || '';
-    const prev = byCurrency.get(code) || { currency: code || null, cents: 0, count: 0 };
-    byCurrency.set(code, { currency: prev.currency, cents: prev.cents + cents, count: prev.count + 1 });
+    if (!code || cents === null) { apart += 1; continue; }
+    const prev = byCurrency.get(code) || { currency: code, cents: 0, count: 0 };
+    byCurrency.set(code, { currency: code, cents: prev.cents + cents, count: prev.count + 1 });
   }
-  return { count: open.length, sums: [...byCurrency.values()] };
+  const sums = [...byCurrency.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+  return { count: open.length, sums, apart };
 }
 
 /* ------------------------------------------------------------------ *
@@ -292,20 +326,21 @@ export function payoutsInFlight(payouts) {
  * ------------------------------------------------------------------ */
 
 /**
- * The amounts `POST /network/payout/request` will accept, in the order it
- * checks them.
+ * The amounts `POST /network/payout/request` will accept, per currency, in the
+ * order it checks them.
  *
- * The route reads the caller's accrued commissions `ORDER BY created_at ASC`
- * and claims whole rows from the oldest until the amount is used up; a row
- * larger than what is left refuses the request. So the only amounts it takes
- * are the sum of the oldest one, the oldest two, and so on — and only those of
- * at least `PAYOUT_MIN_CENTS`.
+ * ONE CURRENCY PER REQUEST (D572). The route takes the caller's accrued
+ * commissions in the currency the request names, `ORDER BY created_at ASC, id
+ * ASC`, and claims whole rows from the oldest until the amount is used up; a
+ * row larger than what is left refuses the request. So the amounts it takes in
+ * a currency are the sums of that currency's oldest one, oldest two, and so
+ * on — and only those of at least `PAYOUT_MIN_CENTS`.
  *
- * ONE CURRENCY PER REQUEST. The route adds cents without reading `currency`,
- * so a run that crossed from one currency into another would be a payout of
- * nothing in particular. The options stop where the currency changes, and
- * `stoppedAt` says so, so the page can tell the partner why the rest of their
- * balance is not offered.
+ * `currencies` holds each currency's runs, the currency of the oldest
+ * commission first, and `options` is all of them in that order. `defaultIndex`
+ * is the first currency's whole balance, or its largest run. A run stops at a
+ * row with no readable amount; that currency's `stoppedAt` is then `amount`,
+ * and so is the plan's, so the page can say why the rest is not offered.
  */
 export function payoutOptions(rows, minCents = PAYOUT_MIN_CENTS) {
   const accrued = (rows || [])
@@ -319,27 +354,48 @@ export function payoutOptions(rows, minCents = PAYOUT_MIN_CENTS) {
       }
       return Number(a.id) - Number(b.id);
     });
-  const options = [];
-  let sum = 0;
-  let stoppedAt = null;
-  const currency = accrued[0]?.currency ?? null;
-  for (let i = 0; i < accrued.length; i += 1) {
-    const row = accrued[i];
-    if (row.cents === null || row.cents <= 0) { stoppedAt = 'amount'; break; }
-    if (row.currency !== currency) { stoppedAt = 'currency'; break; }
-    sum += row.cents;
-    if (sum >= minCents) {
-      options.push({ count: i + 1, cents: sum, currency, ids: accrued.slice(0, i + 1).map((r) => r.id) });
-    }
+  const groups = new Map();
+  for (const row of accrued) {
+    const key = row.currency ?? '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
   }
-  return { accruedCount: accrued.length, currency, options, stoppedAt };
+  const currencies = [];
+  const options = [];
+  let stoppedAt = null;
+  let defaultIndex = null;
+  for (const list of groups.values()) {
+    const currency = list[0].currency;
+    const own = [];
+    let sum = 0;
+    let stop = null;
+    for (let i = 0; i < list.length; i += 1) {
+      const row = list[i];
+      if (row.cents === null || row.cents <= 0) { stop = 'amount'; break; }
+      sum += row.cents;
+      if (sum >= minCents) {
+        own.push({ count: i + 1, cents: sum, currency, ids: list.slice(0, i + 1).map((r) => r.id), all: i + 1 === list.length });
+      }
+    }
+    if (stop) stoppedAt = stop;
+    if (defaultIndex === null && own.length) defaultIndex = options.length + own.length - 1;
+    currencies.push({ currency, accruedCount: list.length, options: own, stoppedAt: stop });
+    options.push(...own);
+  }
+  return { accruedCount: accrued.length, currency: accrued[0]?.currency ?? null, currencies, options, defaultIndex, stoppedAt };
 }
 
-/** The request body the route reads: `amount_cents`, `payout_method`, `payout_details`. */
+/**
+ * The request body the route reads: `amount_cents`, the `currency` it claims
+ * (D572; a balance in two currencies is refused without one), `payout_method`
+ * and `payout_details`.
+ */
 export function payoutRequestBody(option, method, note) {
   const text = String(note ?? '').trim();
+  const currency = currencyOf(option?.currency);
   return {
     amount_cents: option?.cents,
+    ...(currency ? { currency } : {}),
     payout_method: method,
     ...(text ? { payout_details: { note: text.slice(0, 500) } } : {}),
   };
@@ -482,7 +538,11 @@ export function eventEntry(event) {
   };
 }
 
-/** One `partner_interactions` row as a timeline entry. */
+/**
+ * One `partner_interactions` row as a timeline entry. A touch its recorder
+ * voided is still returned by the route, with `voided_at`; it stays in the
+ * log, marked, and is counted apart from the live entries.
+ */
 export function interactionEntry(row) {
   const kind = String(row?.kind ?? '').trim().toLowerCase();
   const title = INTERACTION_KINDS.find((k) => k.value === kind)?.label || titleCase(kind) || 'Interaction';
@@ -492,9 +552,12 @@ export function interactionEntry(row) {
     kind: 'interaction',
     title,
     detail: note || null,
+    outcome: String(row?.outcome ?? '').trim() || null,
     by: String(row?.recorded_by_name ?? '').trim() || null,
     at: row?.interacted_at ?? null,
     t: timeOf(row?.interacted_at),
+    voided: Boolean(row?.voided_at),
+    voidedAt: row?.voided_at ?? null,
   };
 }
 
@@ -509,13 +572,20 @@ export function timeline(events, interactions) {
     });
 }
 
+/** The longest outcome `POST …/interactions` takes (D572, `outcome_too_long` past it). */
+export const OUTCOME_MAX = 200;
+
 /**
  * The body `POST /partnernet/relationships/:id/interactions` reads. A date with
  * no time is noon UTC, as the investor book sends it; with a time, the
  * reader's own clock is turned into an instant.
  */
-export function interactionBody({ kind, date, time, note }) {
+export function interactionBody({ kind, date, time, note, outcome }) {
   const body = { kind: String(kind || 'note'), note: String(note ?? '').trim() || null };
+  // D572: an optional outcome, at most `OUTCOME_MAX` characters. The route
+  // refuses a longer one rather than clipping it, and so does the form.
+  const said = String(outcome ?? '').trim();
+  if (said) body.outcome = said;
   const day = String(date ?? '').trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     const clock = String(time ?? '').trim();
@@ -582,6 +652,73 @@ export function ruleAmount(rule) {
 export function ruleActive(rule) {
   if (rule?.active == null) return true;
   return Number(rule.active) === 1;
+}
+
+/** The bounds `PATCH /network/admin/commission-rules/:key` holds an edit to (D572). */
+export const RULE_LIMITS = { amountMaxCents: 100_000_000, bpsMax: 10_000, descriptionMax: 300 };
+
+/** A rule as the editor's draft: how it pays, the figure as a person types it, the description, on or off. */
+export function ruleDraftOf(rule) {
+  const amount = ruleAmount(rule);
+  const description = String(rule?.description ?? '');
+  const active = ruleActive(rule);
+  if (amount?.kind === 'percentage') return { kind: 'percentage', value: String(centsOf(rule.percentage_bps) / 100), description, active };
+  return { kind: 'fixed', value: amount ? (centsOf(rule.amount_cents) / 100).toFixed(2) : '', description, active };
+}
+
+const DECIMAL = /^\d+(\.\d{1,2})?$/;
+
+/**
+ * The PATCH body for a rule edit, or an error a person can act on. A rule pays
+ * exactly one of a flat amount or a share (the route refuses anything else
+ * with `rule_amount_ambiguous`), so the body sets one and clears the other. A
+ * flat amount is in the table default currency, because a rule stores none.
+ * These are the route's checks, made before sending rather than after; a rule
+ * that should stop paying is switched off, not set to zero.
+ */
+export function ruleEditInput(draft) {
+  const raw = String(draft?.value ?? '').trim();
+  let pays;
+  if (draft?.kind === 'percentage') {
+    if (!DECIMAL.test(raw)) return { error: 'Enter the share as a percentage, such as 2 or 2.5.' };
+    const bps = Math.round(Number(raw) * 100);
+    if (bps <= 0) return { error: 'Enter a share above zero. To stop the rule paying, switch it off.' };
+    if (bps > RULE_LIMITS.bpsMax) return { error: 'The highest share the route accepts is 100%.' };
+    pays = { amount_cents: null, percentage_bps: bps };
+  } else {
+    if (!DECIMAL.test(raw)) return { error: `Enter the amount in ${TABLE_DEFAULT_CURRENCY}, such as 50 or 49.50.` };
+    const cents = Math.round(Number(raw) * 100);
+    if (cents <= 0) return { error: 'Enter an amount above zero. To stop the rule paying, switch it off.' };
+    if (cents > RULE_LIMITS.amountMaxCents) {
+      return { error: `The highest flat amount the route accepts is ${formatMoney(RULE_LIMITS.amountMaxCents, TABLE_DEFAULT_CURRENCY)}.` };
+    }
+    pays = { amount_cents: cents, percentage_bps: null };
+  }
+  const description = String(draft?.description ?? '').trim();
+  if (description.length > RULE_LIMITS.descriptionMax) return { error: `A description is at most ${RULE_LIMITS.descriptionMax} characters.` };
+  return { body: { ...pays, description: description || null, active: draft?.active !== false } };
+}
+
+/** What a rule pays, in words: "$50.00 USD, fixed", "2% of the amount", or null. */
+export function rulePaysText(rule) {
+  const amount = ruleAmount(rule);
+  if (!amount) return null;
+  return amount.kind === 'fixed' ? `${amount.text} ${amount.currency}, fixed` : `${amount.text} of the amount`;
+}
+
+/**
+ * The fields an edit changes, as `[label, from, to]`, for the confirmation.
+ * Empty when the body would store what the rule already holds.
+ */
+export function ruleChanges(rule, body) {
+  const out = [];
+  const before = rulePaysText(rule) || 'Nothing';
+  const after = rulePaysText(body) || 'Nothing';
+  if (before !== after) out.push(['Pays', before, after]);
+  const was = String(rule?.description ?? '').trim() || null;
+  if (was !== (body?.description ?? null)) out.push(['Description', was || 'None', body?.description || 'None']);
+  if (ruleActive(rule) !== (body?.active !== false)) out.push(['Active', ruleActive(rule) ? 'Active' : 'Off', body?.active === false ? 'Off' : 'Active']);
+  return out;
 }
 
 /**
