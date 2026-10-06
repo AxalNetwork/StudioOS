@@ -7,6 +7,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { api } from '../../lib/api';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { researchSectorsApi } from '../../lib/api/researchSectors.js';
+import { researchOverviewApi } from '../../lib/api/researchOverview.js';
 import { SaveNote } from '../advisor/expertise/kit';
 import { STALE_AT, ageBand, daysSince } from './MarketZone';
 import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } from './marketReadingRead';
@@ -28,8 +29,8 @@ import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } 
  * (the read worked and holds nothing), and the rows.
  *
  * WHAT NO SOURCE HOLDS reads "Not recorded" with the reason: government-owned
- * companies (no source names an owner, EDGAR included; D537, #1083 answer 3A) and
- * the top movers, which come from the Research overview (#1092) once it lands.
+ * companies (no source names an owner, EDGAR included; D537, #1083 answer 3A).
+ * The top movers read the Research overview's live heat grid (D536).
  *
  * D595 — THE PUBLIC TAB READS TWO STORES, each row labelled: the signal
  * companies with their bands, and SEC EDGAR's companies (migration 404) with
@@ -401,14 +402,83 @@ export function WhereBased({ geos }) {
   return <Card data-testid="markets-where"><h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Where the directory’s companies are based</h2><div className="mt-2">{body}</div></Card>;
 }
 
-export function TopMovers() {
+/** The month before a `YYYY-MM` period key, or null for anything else. */
+export function previousPeriod(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
+  if (!m) return null;
+  const y = Number(m[1]); const mo = Number(m[2]);
+  return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`;
+}
+
+/**
+ * The overview's heat grid → the largest live changes on last month, rising
+ * and falling, `n` of each. A cell with no live row, or no change recorded,
+ * is left out: it is not a change of zero.
+ */
+export function topMovers(heat, n = 4) {
+  const cells = [];
+  for (const s of heat?.sectors || []) {
+    for (const [dimension, c] of Object.entries(s?.dimensions || {})) {
+      // No change recorded (null) is neither above nor below 0, so the two
+      // filters below leave it out with the unchanged cells.
+      cells.push({ sector: s.sector, slug: sectorSlug(s.sector), dimension, delta_pct: c?.delta_pct });
+    }
+  }
+  return {
+    rising: cells.filter((c) => c.delta_pct > 0).sort((a, b) => b.delta_pct - a.delta_pct).slice(0, n),
+    falling: cells.filter((c) => c.delta_pct < 0).sort((a, b) => a.delta_pct - b.delta_pct).slice(0, n),
+  };
+}
+
+const pct = (d) => `${Math.abs(d).toLocaleString('en-US', { maximumFractionDigits: 1 })}%`;
+
+function MoverRows({ rows, dir }) {
   return (
-    <Card data-testid="markets-movers">
-      <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Top movers this month</h2>
-      <p className="mt-2"><Unrecorded reason="The month-on-month movers come from the Research overview (#1092), which has not landed." /></p>
-      <p className="mt-1 text-[12px] text-axal-muted">The largest changes across the tracked sectors arrive with the Research overview. Until then nothing is ranked here.</p>
-    </Card>
+    <ul>
+      {rows.map((r) => (
+        <li key={`${r.sector}|${r.dimension}`} className="flex min-h-[40px] items-center justify-between gap-3">
+          <Link to={`/research/markets/sector/${encodeURIComponent(r.slug)}`} className="truncate text-[12.5px] text-axal-ink hover:text-axal-violet dark:text-gray-100">
+            <span className="font-semibold">{r.sector}</span><span className="text-axal-muted"> · {r.dimension}</span>
+          </Link>
+          <span className="font-mono text-[12px] text-axal-ink dark:text-gray-100">
+            {dir === 'up' ? '▲' : '▼'} {pct(r.delta_pct)}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
+}
+
+/**
+ * Top movers this month (canvas "Top movers"), from the Research overview's
+ * heat grid (`GET /api/research/overview`, D536): live index rows only, this
+ * month to date against last month.
+ */
+export function TopMovers({ overview }) {
+  const heat = overview?.data?.heat;
+  let body;
+  if (!overview || (overview.status === 'loading' && !overview.data)) body = <Loading what="the movers" />;
+  else if (overview.status === 'unreadable' || heat?.status === 'unreadable') {
+    body = <Unreadable what="The month's indexes" claim="This is not a sign nothing moved." onRetry={overview.reload} />;
+  } else if (!heat || heat.status !== 'ok') {
+    body = <p><Unrecorded reason={heat?.reason || 'The Research overview sent no index grid.'} /></p>;
+  } else {
+    const { rising, falling } = topMovers(heat);
+    const prev = previousPeriod(heat.period_key);
+    body = !rising.length && !falling.length
+      ? <p><Unrecorded reason="No live index has a change on last month yet." /></p>
+      : (
+        <>
+          <p className="text-[12.5px] text-axal-muted">Largest changes across the tracked sectors and six dimensions, against last month. This month is month to date.</p>
+          <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-axal-muted">Rising</p>
+          {rising.length ? <MoverRows rows={rising} dir="up" /> : <p className="text-[12.5px] text-axal-muted">No live index rose on last month.</p>}
+          <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-axal-muted">Falling</p>
+          {falling.length ? <MoverRows rows={falling} dir="down" /> : <p className="text-[12.5px] text-axal-muted">No live index fell on last month.</p>}
+          <Caption>market_intel_indexes · global · {heat.period_key}{prev ? ` against ${prev}` : ''}</Caption>
+        </>
+      );
+  }
+  return <Card data-testid="markets-movers"><h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Top movers this month</h2><div className="mt-2">{body}</div></Card>;
 }
 
 export function LatestSignals({ sigs }) {
@@ -682,6 +752,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
   const [geos, reloadGeos] = useRead(() => researchMarketsApi.geographies({ sort: 'company_count', limit: 100 }));
   const [sigs, reloadSigs] = useRead(() => api.signals.list({ limit: 3, mode: role === 'advisor' ? 'advisor' : 'founder' }), role);
   const [readings, reloadReadings] = useRead(() => api.research.marketReadings());
+  const [overview, reloadOverview] = useRead(() => researchOverviewApi.get(1));
   const [form, setForm] = useState(null);
   const [opened, setOpened] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -759,7 +830,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <WhereBased geos={{ ...geos, reload: reloadGeos }} />
-        <TopMovers />
+        <TopMovers overview={{ ...overview, reload: reloadOverview }} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LatestSignals sigs={{ ...sigs, reload: reloadSigs }} />
