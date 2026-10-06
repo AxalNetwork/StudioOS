@@ -1,41 +1,11 @@
-/**
- * The Ops canvas's practice tools (D571), as derivations apart from the pages.
- *
- * `design/incoming/Ops Page.dc.html` draws five advisor screens: deliverables
- * per client (A1), session types (A2), booking links (A3), the client data
- * access log (A4) and the profile a client sees (A5). The first four live in
- * the Practice zones that already hold their stores, so this module serves
- * `DeliveryZone`, `SessionsZone` and `EngagementsZone`, plus the profile page.
- * Pure, and imports nothing, for the reason `README.md` gives: a guard can
- * import a module and not a page.
- *
- * WHAT THE STORES CANNOT SAY, which every function here is written around:
- *   · a work product has no due date and no status column. Its state is
- *     derived from what was sent and opened (migration 239), so Planned and
- *     In progress are one state, and Accepted needs a sign-off nothing writes;
- *   · a session type has no "included" column. Included is a price of zero,
- *     the only no-charge value the store holds besides a free intro;
- *   · a booking does not record the session type or the link it came through,
- *     so neither has a booking count;
- *   · a booking link cannot be switched on or off by any route, and no page
- *     opens one by its address;
- *   · the access log is read by the client company that owns the record, not
- *     by the advisor who opened it.
- */
+/** D571/D573: pure derivations for Ops A1–A5. Nullable migration-394 facts stay unknown; receipts, manual work status and included pricing are distinct. */
 
 // ───────────────────────────── A1 · Deliverables ─────────────────────────────
 
-/**
- * The canvas's status flow, as the store can say it.
- *
- * The canvas draws Planned → In progress → Delivered → Accepted. The store
- * derives `not_started` | `sent` | `opened` from two stamps, and carries a
- * `signed_off_at` that no route writes. So the four canvas steps land on four
- * store states, but not one to one: `canvas` names which drawn steps each
- * stands for.
- */
+/** Planned/in-progress are manual facts; delivery and acceptance come from version receipts. */
 export const DELIVERABLE_FLOW = Object.freeze([
-  { key: 'not_started', label: 'Not started', canvas: ['Planned', 'In progress'] },
+  { key: 'planned', label: 'Planned', canvas: ['Planned'] },
+  { key: 'in_progress', label: 'In progress', canvas: ['In progress'] },
   { key: 'sent', label: 'Sent', canvas: ['Delivered'] },
   { key: 'opened', label: 'Opened', canvas: [] },
   { key: 'accepted', label: 'Accepted', canvas: ['Accepted'] },
@@ -46,7 +16,10 @@ export function deliverableStep(item) {
   // The latest version's sign-off, not any version's: a newer version sent
   // after an old one was signed off has not itself been accepted.
   if (item?.latest_version?.signed_off_at) return 'accepted';
-  return ['not_started', 'sent', 'opened'].includes(item?.state) ? item.state : null;
+  if (item?.latest_version?.opened_at) return 'opened';
+  if (item?.latest_version?.sent_at) return 'sent';
+  if (['planned', 'in_progress'].includes(item?.manual_status)) return item.manual_status;
+  return item?.latest_version ? null : ['sent', 'opened'].includes(item?.state) ? item.state : null;
 }
 
 /**
@@ -118,6 +91,8 @@ export function deliverableEdit(item, draft) {
   if (engagement != null && !Number.isInteger(engagement)) return { error: 'Pick an engagement from the list.' };
   const current = item?.engagement_id ?? null;
   const body = { title };
+  if (draft?.due_date !== undefined) body.due_date = draft.due_date || null;
+  if (draft?.manual_status !== undefined) body.manual_status = draft.manual_status || null;
   if (engagement !== current) body.engagement_id = engagement;
   if (engagement == null) {
     const client = String(draft?.client_name ?? '').trim();
@@ -140,21 +115,15 @@ export function attachmentBody(draft) {
 
 // ───────────────────────────── A2 · Session types ─────────────────────────────
 
-/**
- * How a stored type is priced: `price` | `included` | `free` | `unset`.
- *
- * FOUR, NOT TWO. Migration 240 keeps "unpriced" (NULL) apart from "free"
- * (`is_free_intro`), and the canvas adds "included" — no separate charge.
- * The store has no column for that, so it is a price of zero, which is the
- * only other no-charge value it can hold. A null is never read as zero.
- */
+/** Four recorded outcomes. Included needs its flag; a legacy zero is still a price. */
 export function priceMode(type) {
   if (type?.is_free_intro) return 'free';
+  if (type?.is_included) return 'included';
   const c = type?.price_cents;
   if (c == null || c === '') return 'unset';
   const n = Number(c);
   if (!Number.isFinite(n)) return 'unset';
-  return n === 0 ? 'included' : 'price';
+  return 'price';
 }
 
 /** The canvas's rule: a type cannot be bookable until a price or "included" is set. */
@@ -198,13 +167,7 @@ export function sessionTypeForm(type) {
   };
 }
 
-/**
- * The body a save sends, or the reason it cannot be sent.
- *
- * `is_active` is the bookable switch. The create route ignores it and always
- * stores a new type switched on, so the page follows a create with a second
- * write when the type should be off; the update route takes it as sent.
- */
+/** The server honors the requested bookable state on both create and update. */
 export function sessionTypeBody(form) {
   const name = String(form?.name ?? '').trim();
   if (!name) return { error: 'A session type needs a name.' };
@@ -223,7 +186,7 @@ export function sessionTypeBody(form) {
   if (mode === 'price') {
     const parsed = parseAmount(form?.amount);
     if (parsed.error) return { error: parsed.error };
-    if (parsed.cents == null || parsed.cents <= 0) return { error: 'Enter the price, or choose Included.' };
+    if (parsed.cents == null || parsed.cents < 0) return { error: 'Enter the price, or choose Included.' };
     price = parsed.cents;
   } else if (mode === 'included') {
     price = 0;
@@ -241,7 +204,7 @@ export function sessionTypeBody(form) {
   return {
     body: {
       name, duration_minutes: duration, cadence_note: note || null,
-      price_cents: price, is_free_intro: free, is_active: bookable,
+      price_cents: price, is_free_intro: free, is_included: mode === 'included', is_active: bookable,
     },
   };
 }
@@ -347,7 +310,7 @@ export function accessRecord(row) {
   if (row?.action === 'open_document') {
     return row.document_title
       ? { label: row.document_title, missing: null }
-      : { label: null, missing: 'the document was deleted after it was opened' };
+      : { label: null, missing: row?.document_uid ? 'the title was not stored with this access receipt' : 'the document was deleted after it was opened' };
   }
   return { label: null, missing: 'the log names no record for this action' };
 }

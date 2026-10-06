@@ -27,15 +27,25 @@ already reads the store for, so each address redirects into that zone
 | --- | --- | --- | --- |
 | `DeliverablesByClient.jsx` | A1 · Deliverables | `/practice/delivery?view=by_client` — the "By client" chip now groups | `updateMyAdvisorDeliverable`, and a link as the next version |
 | `SessionTypesPanel.jsx` | A2 · Session types | `/practice/sessions#session-types` | `createMyAdvisorSessionType`, `updateMyAdvisorSessionType` |
-| `BookingLinksPanel.jsx` | A3 · Booking links | `/practice/sessions#booking-links` | `createMyAdvisorBookingLink` |
+| `BookingLinksPanel.jsx` | A3 · Booking links | `/practice/sessions#booking-links` | create and toggle booking links |
 | `ClientAccessLog.jsx` | A4 · Client data access log | `/practice/engagements#access-log`, and the founder's grant panel | nothing: read-only |
 
 `practiceTools.js` holds their derivations, and those of the profile a client
 sees (A5, `../AdvisorProfilePage.jsx` at `/advisors/:uid`). Its header lists
-what the stores cannot say — no due date, no "included" column, no booking
-attributed to a type or a link, no route that switches a link off, and an
-access log only the client company can read — and each screen says it in
-place. `frontend/test/advisor_practice_d571.test.mjs` is the guard.
+the stored facts introduced by D573/migration 394: nullable due date and
+planned/in-progress status, explicit included pricing, attributed booking
+counts and link opens. Delivery and acceptance remain client receipts; only
+the client can accept a sent version. The advisor reads only their own access
+rows; document titles were not stored with those receipts and remain Not
+recorded. Old booking rows have no type/link attribution; counts explicitly
+say attributed rather than claiming a complete history.
+
+`../PublicAdvisorBookingPage.jsx` opens `/b/*`, reusing A5's profile and the
+existing directory booking dialog. Public profiles publish active types and
+public enabled links, without account IDs or email. Cohort links require a
+recorded cycle membership; payout-required links wait for verification.
+Opens count accepted page-open requests, including repeat visits, since
+instrumentation began. D571 and D573 frontend regressions cover the screens.
 
 **PR5 IS A POINTER, AND ITS ARTBOARD IS ELSEWHERE.** `Advisor Detail ·
 Practice.dc.html` draws Earnings as `/practice/earnings · drawn in full as D4`,

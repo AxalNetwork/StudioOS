@@ -285,6 +285,26 @@ test('private notes require a roster client, valid text and an owned advisor pro
 // ---------------------------------------------------------------------------
 // 202 — profile fields
 // ---------------------------------------------------------------------------
+test('D573: saving a partial profile preserves every omitted core field', async () => {
+  const db = freshDb();
+  try {
+    const e = env(db);
+    await call(e, 'POST', '/me', ada, {
+      display_name: 'Practice name', bio: 'Existing biography', linkedin_url: 'https://example.com/profile',
+      hourly_rate_usd: 175, expertise: ['Product'], sectors: ['Energy'],
+    });
+    const saved = await call(e, 'POST', '/me', ada, { headline: 'Updated headline' });
+    assert.deepEqual({ status: saved.status, name: saved.body.display_name, bio: saved.body.bio,
+      linkedin: saved.body.linkedin_url, rate: saved.body.hourly_rate_usd,
+      expertise: saved.body.expertise, sectors: saved.body.sectors }, {
+      status: 200, name: 'Practice name', bio: 'Existing biography', linkedin: 'https://example.com/profile',
+      rate: 175, expertise: ['Product'], sectors: ['Energy'],
+    });
+    const cleared = await call(e, 'POST', '/me', ada, { hourly_rate_usd: null, bio: null, expertise: [] });
+    assert.deepEqual([cleared.status, cleared.body.hourly_rate_usd, cleared.body.bio, cleared.body.expertise],
+      [200, null, null, []]);
+  } finally { db.close(); }
+});
 test('the profile fields the office-hours ProfileCard sends are no longer discarded', async () => {
   const e = env(freshDb());
   const saved = await call(e, 'POST', '/me', ada, { headline: 'ex-Stripe payments PM', timezone: 'America/New_York' });

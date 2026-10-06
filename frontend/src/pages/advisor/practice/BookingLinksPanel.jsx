@@ -9,22 +9,7 @@ import {
   priceMode, suggestSlug,
 } from './practiceTools';
 
-/**
- * Practice · Sessions · Booking links — the Ops canvas's A3 (D571).
- *
- * `/practice/booking-links` in the canvas, and the body of the Sessions
- * zone's "Booking links" card here. One link per session type, with the
- * address to copy, and a form over `createMyAdvisorBookingLink`.
- *
- * THREE THINGS THE CANVAS DRAWS THAT NOTHING STORES OR SERVES, each said on
- * the card rather than drawn as if it worked:
- *   · the on/off switch: no route changes a link once it is created, so the
- *     switch shows the stored state and is disabled, with the reason;
- *   · opens and bookings per link: nothing counts an open, and a booking does
- *     not record the link it came through;
- *   · the link itself: no page opens `/b/…` yet. The address is reserved, and
- *     the card says plainly that following it today reaches page-not-found.
- */
+/** Ops A3: create/toggle links, copy working /b/* addresses and show recorded opens and attributed bookings. */
 
 export default function BookingLinksPanel({ links, types, loading = false, read = true, typesRead = true, onChanged }) {
   const [form, setForm] = useState(null);
@@ -69,7 +54,7 @@ export default function BookingLinksPanel({ links, types, loading = false, read 
     try {
       await navigator.clipboard.writeText(url);
       setCopied(slug);
-      setNote({ ok: true, text: `Copied ${url}. No page opens it yet.` });
+      setNote({ ok: true, text: `Copied ${url}.` });
     } catch {
       setNote({ ok: false, text: `That could not be copied. Select the address to copy it: ${url}` });
     }
@@ -80,6 +65,16 @@ export default function BookingLinksPanel({ links, types, loading = false, read 
     const type = typeList.find((t) => t.id === link.session_type_id);
     if (type) return type.name;
     return typesRead ? 'Session type not found' : 'Session type could not be read';
+  };
+  const toggle = async (link) => {
+    setBusy(true); setNote(null);
+    try {
+      await api.updateMyAdvisorBookingLink(link.id, { is_active: !link.is_active });
+      await onChanged?.();
+      setNote({ ok: true, text: `Link ${link.is_active ? 'disabled' : 'enabled'}.` });
+    } catch (err) {
+      setNote({ ok: false, text: err?.message || 'The link could not be changed.' });
+    } finally { setBusy(false); }
   };
 
   return (
@@ -98,9 +93,7 @@ export default function BookingLinksPanel({ links, types, loading = false, read 
 
       <p className="mt-2 rounded-[10px] border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11.5px] leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200"
         data-testid="links-not-live">
-        <strong>No page opens these addresses yet.</strong> A link is stored and its address kept for you, but
-        someone who follows it today reaches a page-not-found screen. Clients book your open hours through
-        the advisor directory meanwhile.
+        A copied link opens its session type. Clients sign in to choose an open time and request a booking.
       </p>
       <SaveNote note={note} />
 
@@ -178,7 +171,8 @@ export default function BookingLinksPanel({ links, types, loading = false, read 
         <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
           {groups.flatMap((group) => (group.links.length
             ? group.links.map((link) => (
-              <LinkCard key={link.id} link={link} typeName={typeLabel(link)} copied={copied === link.slug} onCopy={copy} />
+              <LinkCard key={link.id} link={link} typeName={typeLabel(link)} copied={copied === link.slug}
+                onCopy={copy} onToggle={() => toggle(link)} busy={busy} />
             ))
             : [(
               <div key={`type-${group.type.id}`} data-testid={`unlinked-a3-${group.type.id}`}
@@ -195,8 +189,9 @@ export default function BookingLinksPanel({ links, types, loading = false, read 
 
       {!loading && read && (
         <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
-          Opens and bookings per link are not recorded: nothing counts an open, and a booking does not say
-          which link it came through. Every request you have received is on{' '}
+          Opens count accepted page-open requests since recording began, including repeat visits.
+          Bookings count attributed requests that have not been cancelled. Older requests have no recorded link.
+          Every request you have received is on{' '}
           <Link to="/practice/opportunities" className="text-emerald-700 underline dark:text-emerald-300">Opportunities</Link>.
         </p>
       )}
@@ -205,15 +200,15 @@ export default function BookingLinksPanel({ links, types, loading = false, read 
 }
 
 /** One link: its type, its stored state, the address to copy, and what is not counted. */
-export function LinkCard({ link, typeName, copied = false, onCopy }) {
+export function LinkCard({ link, typeName, copied = false, onCopy, onToggle, busy = false }) {
   return (
     <div data-testid={`link-a3-${link.id}`}
       className="flex flex-col gap-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
       <div className="flex items-center justify-between gap-2">
         <span className="min-w-0 text-[12.5px] font-bold">{typeName ?? <Unrecorded>No session type</Unrecorded>}</span>
         <span className="flex shrink-0 items-center gap-1.5">
-          <Switch on={Boolean(link.is_active)} disabled label={`${bookingLinkAddress(link.slug)} is enabled`}
-            title="No control changes a link once it is created." testid={`toggle-a3-${link.id}`} />
+          <Switch on={Boolean(link.is_active)} disabled={busy} onClick={onToggle}
+            label={`${bookingLinkAddress(link.slug)} is enabled`} testid={`toggle-a3-${link.id}`} />
           <span className="text-[11px] text-axal-muted">{link.is_active ? 'Enabled' : 'Disabled'}</span>
         </span>
       </div>
@@ -231,8 +226,8 @@ export function LinkCard({ link, typeName, copied = false, onCopy }) {
         {link.note && <span className="block">{link.note}</span>}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-axal-faint">
-        <span>Opens: <Unrecorded reason="Nothing counts how often a link is opened.">Not recorded</Unrecorded></span>
-        <span>Bookings: <Unrecorded reason="A booking does not record the link it came through.">Not recorded</Unrecorded></span>
+        <span>Opens: {link.opens_count ?? <Unrecorded reason="No open has been recorded since instrumentation began.">Not recorded</Unrecorded>}</span>
+        <span>Bookings: {link.booking_count == null ? <Unrecorded>Not recorded</Unrecorded> : `${link.booking_count} attributed`}</span>
       </div>
     </div>
   );

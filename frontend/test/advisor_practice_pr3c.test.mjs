@@ -138,8 +138,8 @@ test('a draft is neither listed nor openable, and the card says why', () => {
   // count over the file finds four — the self-matching trap, one more time.
   const code = codeOnly(WORKER);
   const routes = code.slice(code.indexOf("advisors.get('/received/deliverables'"));
-  assert.equal((routes.match(/sent_at IS NOT NULL/g) || []).length, 3,
-    'the read filters twice (row and version) and the open once');
+  assert.equal((routes.match(/sent_at IS NOT NULL/g) || []).length, 4,
+    'the read filters twice (row and version), and both open and acceptance require a sent version');
   assert.match(GRANT, /work in progress until they hand it over/);
 });
 
@@ -147,12 +147,12 @@ test('the founder card states the two things it is not', () => {
   // NOT GRANT-GATED — everything above it in that section is project-scoped and
   // this list is keyed on the reader's own account through the engagement.
   assert.match(GRANT, /not from the grants above/);
-  // AND SIGN-OFF IS NOT RECORDED. 239 carries the column and nothing writes it;
-  // saying so is the difference between a stated gap and a silent one.
-  assert.match(GRANT, /Signing a work product off is not recorded/);
-  const signOff = [...WORKER.matchAll(/UPDATE\s+advisor_deliverable_versions\s+SET\s+([^`]*?)WHERE/gs)];
+  // D573 gives the client a sign-off; advisor-side writes must still never set it.
+  assert.match(GRANT, /Acceptance records your sign-off on that version/);
+  const advisorSide = WORKER.slice(0, WORKER.indexOf("advisors.post('/received/deliverables/:uid/open'"));
+  const signOff = [...advisorSide.matchAll(/UPDATE\s+advisor_deliverable_versions\s+SET\s+([^`]*?)WHERE/gs)];
   for (const [, setClause] of signOff) {
-    assert.ok(!/signed_off_at/.test(setClause), 'nothing may write signed_off_at yet');
+    assert.ok(!/signed_off_at/.test(setClause), 'an advisor cannot set the client’s sign-off');
   }
 });
 

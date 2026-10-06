@@ -207,7 +207,7 @@ test('the only writer of opened_at is the client\'s own route', () => {
   const at = src.indexOf(CLIENT_ROUTE);
   assert.ok(at > 0, 'the client\'s open route must exist, or this file has no writer at all');
   const advisorSide = src.slice(0, at);
-  const clientSide = src.slice(at);
+  const clientSide = src.slice(at, src.indexOf("advisors.post('/received/deliverables/:uid/accept'", at));
 
   const updatesIn = (region: string) =>
     [...region.matchAll(/UPDATE\s+advisor_deliverable_versions\s+SET\s+([^`]*?)WHERE/gs)];

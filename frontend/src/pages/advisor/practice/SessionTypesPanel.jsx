@@ -6,26 +6,7 @@ import {
   PRICE_MODES, bookableState, canBeBookable, priceMode, sessionTypeBody, sessionTypeForm,
 } from './practiceTools';
 
-/**
- * Practice · Sessions · Session types — the Ops canvas's A2 (D571).
- *
- * `/practice/session-types` in the canvas, and the body of the Sessions zone's
- * "Session types" card here: that card already read migration 240's
- * catalogue and offered no way to write it. This adds the editor the canvas
- * draws — name, length, price or "included", and a bookable switch — over
- * `createMyAdvisorSessionType` and `updateMyAdvisorSessionType`.
- *
- * THE CANVAS'S RULE IS ENFORCED HERE, AND ONE ROUTE QUIETLY BREAKS IT. A type
- * with no price reads "Not recorded" and cannot be switched on. The create
- * route stores every new type switched on whatever it is sent, so an unpriced
- * type is created and then switched off in a second write — and if that write
- * fails, the page says the type is stored bookable rather than leaving it.
- *
- * TWO THINGS THE TABLE CANNOT SAY. How many bookings a type has had: a booking
- * does not record which type it was for. And what "bookable" changes: booking
- * runs through open hours today, and no booking path reads a session type, so
- * the switch records the offer.
- */
+/** Ops A2: explicit price/free/included facts and server-enforced bookable controls, with attributed booking counts. */
 
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint';
 const GRID = 'grid grid-cols-2 gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,2fr)_72px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_auto] md:items-center';
@@ -72,21 +53,8 @@ export default function SessionTypesPanel({ types, loading = false, read = true,
         await api.updateMyAdvisorSessionType(existing.id, body);
         setNote({ ok: true, text: `Saved “${body.name}”.` });
       } else {
-        const { is_active: bookable, ...createBody } = body;
-        const created = await api.createMyAdvisorSessionType(createBody);
-        if (!bookable) {
-          try {
-            await api.updateMyAdvisorSessionType(created?.id, { is_active: false });
-          } catch (err) {
-            setEditor(null);
-            setNote({
-              ok: false,
-              text: `Created “${body.name}”, but it could not be switched off, so it is stored as bookable. Switch it off from its row. ${err?.message || ''}`.trim(),
-            });
-            await onChanged?.();
-            return null;
-          }
-        }
+        await api.createMyAdvisorSessionType(body);
+        const bookable = body.is_active;
         setNote({ ok: true, text: `Created “${body.name}”, ${bookable ? 'bookable' : 'not bookable'}.` });
       }
       setEditor(null);
@@ -168,8 +136,7 @@ export default function SessionTypesPanel({ types, loading = false, read = true,
       {read && !loading && (
         <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
           A type with no price reads <Unrecorded>Not recorded</Unrecorded> and cannot be bookable until a price or
-          &ldquo;included&rdquo; is set. Bookings per type are not recorded: a booking does not say which type it was
-          for. Clients book your open hours today, so the switch records what you offer rather than opening a calendar.
+          &ldquo;included&rdquo; is set. Counts include bookings attributed to this type; older bookings have no recorded type.
         </p>
       )}
     </div>
@@ -205,7 +172,7 @@ function TypeRow({ type, busy, editing, onToggle, onEdit, onCancel, onSave }) {
         </div>
         <div className="text-[12px]">
           <span className={`${LABEL} mr-1.5 md:hidden`}>Bookings</span>
-          <Unrecorded reason="A booking does not record which session type it was for.">Not recorded</Unrecorded>
+          {type.booking_count == null ? <Unrecorded>Not recorded</Unrecorded> : `${type.booking_count} attributed`}
         </div>
         <div className="col-span-2 md:col-span-1 md:text-right">
           <button type="button" className={ghostButtonClass} onClick={onEdit} data-testid={`edit-a2-${type.id}`}>
