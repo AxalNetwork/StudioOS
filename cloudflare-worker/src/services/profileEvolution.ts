@@ -26,6 +26,7 @@
  * count under SMALL_CELL_MIN hidden.
  */
 import type { Env } from '../types';
+import { evidenceBlendEnabled, profileEngineVersion } from './profileEvidenceBlend';
 import { FIT_ID_RE, questionById, type Question } from './advisor/questionBank.ts';
 import { selectAdaptiveProfiling } from './advisor/profilingModules.ts';
 import {
@@ -144,7 +145,7 @@ export async function recordChangeEvents(
   return out;
 }
 
-async function markEvaluated(env: Env, userId: number, trigger: SnapshotTrigger, now: Date): Promise<void> {
+async function markEvaluated(env: Env, userId: number, trigger: SnapshotTrigger, now: Date, engineVersion: string): Promise<void> {
   try {
     await env.DB.prepare(
       `INSERT INTO profile_evolution_state (user_id, last_evaluated_at, last_trigger, engine_version)
@@ -153,7 +154,7 @@ async function markEvaluated(env: Env, userId: number, trigger: SnapshotTrigger,
          last_evaluated_at = excluded.last_evaluated_at,
          last_trigger = excluded.last_trigger,
          engine_version = excluded.engine_version`,
-    ).bind(userId, now.toISOString(), trigger, ENGINE_VERSION).run();
+    ).bind(userId, now.toISOString(), trigger, engineVersion).run();
   } catch (e) {
     // Before migration 364: the recompute already happened; only the
     // nightly bookkeeping is missing.
@@ -179,7 +180,8 @@ export async function evaluateUser(
   } catch (e) {
     console.warn('[profile-evolution] change events not recorded', (e as Error).message);
   }
-  await markEvaluated(env, userId, trigger, now);
+  const engineVersion = results[0]?.profile.engine_version ?? profileEngineVersion(await evidenceBlendEnabled(env));
+  await markEvaluated(env, userId, trigger, now, engineVersion);
   return { results, events };
 }
 
@@ -196,10 +198,11 @@ export function dueReason(input: {
   evidenceComputedAt: string | null;
   pendingHysteresis: boolean;
   nowMs: number;
+  engineVersion?: string;
 }): SnapshotTrigger | null {
   const { state } = input;
   if (!state) return 'scheduled';
-  if (state.engine_version !== ENGINE_VERSION) return 'engine_bump';
+  if (state.engine_version !== (input.engineVersion ?? ENGINE_VERSION)) return 'engine_bump';
   if (input.evidenceComputedAt && input.evidenceComputedAt > state.last_evaluated_at) return 'evidence';
   if (input.pendingHysteresis) return 'scheduled';
   const last = Date.parse(state.last_evaluated_at);
@@ -207,7 +210,7 @@ export function dueReason(input: {
   return null;
 }
 
-async function dueTrigger(env: Env, userId: number, nowMs: number): Promise<SnapshotTrigger | null> {
+async function dueTrigger(env: Env, userId: number, nowMs: number, engineVersion: string): Promise<SnapshotTrigger | null> {
   const state = await env.DB.prepare(
     'SELECT last_evaluated_at, engine_version FROM profile_evolution_state WHERE user_id = ?',
   ).bind(userId).first<{ last_evaluated_at: string; engine_version: string }>();
@@ -224,7 +227,7 @@ async function dueTrigger(env: Env, userId: number, nowMs: number): Promise<Snap
   const pendingHysteresis = (latest.results || []).some((r) => {
     try { return !!(r.hysteresis_json && JSON.parse(r.hysteresis_json)?.pending); } catch { return false; }
   });
-  return dueReason({ state: state ?? null, evidenceComputedAt, pendingHysteresis, nowMs });
+  return dueReason({ state: state ?? null, evidenceComputedAt, pendingHysteresis, nowMs, engineVersion });
 }
 
 type Cursor = {
@@ -312,9 +315,10 @@ export async function runProfileEvolutionTick(
   let evaluated = 0;
   let failed = 0;
   let events = 0;
+  const engineVersion = profileEngineVersion(await evidenceBlendEnabled(env));
   for (const id of ids) {
     try {
-      const why = await dueTrigger(env, id, now.getTime());
+      const why = await dueTrigger(env, id, now.getTime(), engineVersion);
       if (!why) continue;
       const r = await (opts.evaluate ?? evaluateUser)(env, id, why, now, opts);
       evaluated += 1;
@@ -603,7 +607,7 @@ export async function profilingTrends(env: Env, opts: { now?: Date; months?: num
 
   return {
     generated_at: now.toISOString(),
-    engine_version: ENGINE_VERSION,
+    engine_version: profileEngineVersion(await evidenceBlendEnabled(env)),
     min_cell: min,
     months: span.map((s) => s.month),
     distribution,
