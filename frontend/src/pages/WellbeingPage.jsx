@@ -9,7 +9,7 @@ import {
   CANVAS_SCORES, MORE_SCORES, TOPICS, MAX_TAGS, NOT_STORED_REASON, HISTORY_ROW_CAP,
   ROUTE_SCORE_KEYS, isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
   answeredCount, pastWeeks, formatDay, formatWhen, splitBookings, bookingStatus, canRate,
-  resourceKind, resourceFacts, safeHref, homeCoverage,
+  resourceKind, resourceFacts, safeHref, homeCoverage, countRange,
 } from './wellbeing/wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
 
@@ -388,6 +388,37 @@ export function ResourcesCard({ status, resources = [], expanded = false, onTogg
 // tiles were always a dash and the three it does send were never shown.
 const AGGREGATE_LABELS = { mood: 'Mood', stress: 'Stress', sleep: 'Sleep', energy: 'Energy', focus: 'Focus', social: 'Connection' };
 
+function PulseTile({ label, children }) {
+  return (
+    <div className="rounded-axal-md bg-axal-ground p-3">
+      <SectionLabel>{label}</SectionLabel>
+      <div className="text-lg font-semibold tabular-nums text-axal-ink sm:text-2xl dark:text-gray-100">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The pulse's founder and submission counts. `/aggregate` rounds both down
+ * to a multiple of five, so each shows the range it stands for
+ * (`countRange`): printed bare, a cohort of three founders read "0".
+ */
+export function PulseCounts({ data }) {
+  const range = (n) => countRange(n)
+    ?? <span className="text-sm"><Unrecorded reason="The pulse did not return this count.">Not recorded</Unrecorded></span>;
+  return (
+    <div className="mb-4" data-testid="pulse-counts">
+      <div className="grid grid-cols-3 gap-3">
+        <PulseTile label="Founders">{range(data?.cohort_size)}</PulseTile>
+        <PulseTile label="Submissions">{range(data?.submissions)}</PulseTile>
+        <PulseTile label="Window">{data?.window_days}d</PulseTile>
+      </div>
+      <p className="mt-2 text-xs text-axal-muted dark:text-gray-400">
+        Counts are rounded down to a multiple of five so no founder can be singled out, and are shown as the range they stand for.
+      </p>
+    </div>
+  );
+}
+
 function AdminAggregate() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -431,20 +462,7 @@ function AdminAggregate() {
       {!data && !err && <Skeleton.Text lines={2} />}
       {data && (
         <>
-          <div className="mb-4 grid grid-cols-3 gap-3">
-            <div className="rounded-axal-md bg-axal-ground p-3">
-              <SectionLabel>Founders</SectionLabel>
-              <div className="text-2xl font-semibold text-axal-ink dark:text-gray-100">{data.cohort_size}</div>
-            </div>
-            <div className="rounded-axal-md bg-axal-ground p-3">
-              <SectionLabel>Submissions</SectionLabel>
-              <div className="text-2xl font-semibold text-axal-ink dark:text-gray-100">{data.submissions}</div>
-            </div>
-            <div className="rounded-axal-md bg-axal-ground p-3">
-              <SectionLabel>Window</SectionLabel>
-              <div className="text-2xl font-semibold text-axal-ink dark:text-gray-100">{data.window_days}d</div>
-            </div>
-          </div>
+          <PulseCounts data={data} />
           {data.insufficient_data ? (
             <div className="flex items-start gap-2 rounded-axal-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

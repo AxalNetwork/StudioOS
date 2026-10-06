@@ -728,6 +728,31 @@ export function pageOf(rows, page = 1, size = 25) {
 export const countLabel = ({ from, to, total }) => (total ? `${from}–${to} of ${total}` : '0 of 0');
 
 /* ------------------------------------------------------------------ *
+ * The admin pulse
+ * ------------------------------------------------------------------ */
+
+/** The step `GET /aggregate` rounds its counts down to (`COUNT_BUCKET` in routes/wellbeing.ts). */
+export const COUNT_STEP = 5;
+
+/**
+ * A count `/aggregate` rounded down to a multiple of five, as the range it
+ * stands for: 0 is "Fewer than 5", 10 is "10–14". The route rounds so that a
+ * count cannot single anyone out, so printed bare it claimed a precision it
+ * does not have: a cohort of three founders read "0". A count off the step is
+ * floored onto it, so the range still holds the true count. Null when there
+ * is no count.
+ */
+export function countRange(n, step = COUNT_STEP) {
+  if (n === null || n === undefined || n === '') return null;
+  const v = Number(n);
+  if (!Number.isFinite(v) || v < 0) return null;
+  if (v < step) return `Fewer than ${step}`;
+  const low = Math.floor(v / step) * step;
+  const fmt = (x) => x.toLocaleString('en-GB');
+  return `${fmt(low)}–${fmt(low + step - 1)}`;
+}
+
+/* ------------------------------------------------------------------ *
  * What the rails may read back
  * ------------------------------------------------------------------ */
 

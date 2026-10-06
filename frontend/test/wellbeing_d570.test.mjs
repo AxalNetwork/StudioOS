@@ -22,7 +22,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { DAILY_KEYS, CHECKIN_KEYS, validateDailyBody } from '../../cloudflare-worker/src/routes/wellbeing.helpers.ts';
 import { VALID_MODALITIES, VALID_PRICING_MODELS } from '../../cloudflare-worker/src/data/expertCategories.ts';
 import * as M from '../src/pages/wellbeing/wellbeingModel.js';
-import { CheckinCard, PastWeeksCard, MyBookingsCard, ResourcesCard } from '../src/pages/WellbeingPage.jsx';
+import { CheckinCard, PastWeeksCard, MyBookingsCard, ResourcesCard, PulseCounts } from '../src/pages/WellbeingPage.jsx';
 import WellbeingBookPage, {
   DirectoryToolbar, ExpertColumn, ServiceColumn, TimeColumn, ConfirmColumn, SERVICE_GAP,
 } from '../src/pages/wellbeing/WellbeingBookPage.jsx';
@@ -719,6 +719,32 @@ test('the rails read counts only, and Eadwyn’s copy is plain and makes no clin
     'frontend/src/pages/wellbeing/WellbeingResourceLibrary.jsx', 'frontend/src/pages/wellbeing/wellbeingModel.js']
     .map((f) => codeOnly(read(f))).join('\n');
   assert.doesNotMatch(copy, /diagnos|symptom|disorder|\bcure|treatment|clinically|recommend/i, 'no clinical claim and no recommendation');
+});
+
+test('the admin pulse: the route’s rounded counts are shown as the ranges they stand for, never as counts', () => {
+  // The route's rounding, read from the route: a multiple of five, floored,
+  // on both counts and on both answers (a small cohort and a full one).
+  assert.match(ROUTE, new RegExp(`const COUNT_BUCKET = ${M.COUNT_STEP};`));
+  assert.match(ROUTE, /function bucket\(n: number, step = COUNT_BUCKET\): number \{\s*if \(n <= 0\) return 0;\s*return Math\.floor\(n \/ step\) \* step;/);
+  const agg = handler("wellbeing.get('/aggregate'");
+  assert.equal(agg.match(/cohort_size: bucket\(cohort\),\s*submissions: bucket\(rows\.length\),/g)?.length, 2);
+
+  assert.equal(M.countRange(0), 'Fewer than 5', 'a cohort of one to four is sent as 0');
+  assert.equal(M.countRange(5), '5–9');
+  assert.equal(M.countRange(10), '10–14');
+  assert.equal(M.countRange(12), '10–14', 'a count off the step is floored, so the range still holds it');
+  assert.equal(M.countRange(1230), '1,230–1,234');
+  for (const none of [null, undefined, '', 'many', -5, Number.NaN]) assert.equal(M.countRange(none), null, String(none));
+
+  const t = text(h(PulseCounts, { data: { cohort_size: 0, submissions: 10, window_days: 30 } }));
+  assert.match(t, /Founders Fewer than 5 Submissions 10–14 Window 30d/);
+  assert.match(t, /Counts are rounded down to a multiple of five so no founder can be singled out, and are shown as the range they stand for\./);
+  assert.doesNotMatch(t, /Founders 0 |Submissions 10 /, 'no bucket printed as a count');
+  assert.match(text(h(PulseCounts, { data: { window_days: 90 } })), /Founders Not recorded Submissions Not recorded Window 90d/);
+
+  const page = codeOnly(read('frontend/src/pages/WellbeingPage.jsx'));
+  assert.match(page, /<PulseCounts data=\{data\} \/>/, 'the admin card shows the ranges');
+  assert.doesNotMatch(page, /\{data\.(cohort_size|submissions)\}/, 'and prints neither count bare');
 });
 
 test('the four routes are registered with guards matching the API, the old dashboard redirects, and the library has a door', () => {
