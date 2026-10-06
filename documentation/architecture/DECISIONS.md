@@ -41573,6 +41573,29 @@ route and changes the commit room's `rationale` block.
   reason, the room saying unenforced, the shortfall left unexplained, and a
   missing rule read as the old one.
 
+## D497
+
+**Investor Network, built to the owner's line: each held op says its decision
+is open.** The last of the four zone-family PRs for #1023 (the Network family),
+slot S07. No migration and no new route.
+
+| Canvas item | Waits on | What the control says now |
+| --- | --- | --- |
+| IN1 Add person (`/network/relationships`) | question 7 on #1023: whom an investor may find to send a tie to (D493) without a user directory | disabled; "Adding a person is not decided yet: it needs a way to find someone without a user directory." |
+| IN2 Offer one (`/network/introductions`) | question 8 on #1023: whether it reuses the `intro_propositions` flow between two accepted ties | disabled; "Offering an introduction is not decided yet." |
+| IN3 Add org, Merge duplicates, and the All, Portfolio and Co-investors chips (`/network/organizations`) | question 8 on #1023: an organisation recorded on your side of a tie, or read from the other person's profile | disabled; each names the decision as open |
+
+The old reasons were true, but they described only the missing feature: "the
+contact form is not reachable", "offering an introduction is not built". They
+now also say that what would fill each gap is undecided, which is what #1023's
+owner's line asks for. The LPs and Passed chips name records kept in other
+stores, and no decision is pending on them, so they are unchanged.
+
+**Tests.**
+- `frontend/test/investor_network_d497.test.mjs` (2 tests) pins every held op
+  and chip. Both fail on the code before this change.
+- 5 mutations were made and each was caught.
+
 ## D500
 
 **A support ticket's persona stays its requester's standing now.** The owner's

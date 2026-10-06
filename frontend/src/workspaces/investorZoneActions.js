@@ -216,7 +216,10 @@ export const INVESTOR_ZONE_ACTIONS = {
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    { label: 'Add person', unbuilt: 'the contact form is not reachable from the investor Network desk' },
+    // D497 (#1023): built up to the owner's line. A tie is a request the other
+    // person accepts (D493), and finding that person without opening a user
+    // directory is question 7 on #1023.
+    { label: 'Add person', unbuilt: 'a tie is a request the other person accepts, and who you may find to send one to, without opening a directory of every account, is the owner’s decision, asked on #1023', hover: 'Adding a person is not decided yet: it needs a way to find someone without a user directory.' },
     // LIVE WITH D465 (migration 338): `partner_reminders` is the store, and a
     // reminder surfaces on the desk when it is due — no notification fan-out.
     { label: 'Set reminders', kind: 'handler', handler: 'setReminders' },
@@ -227,7 +230,9 @@ export const INVESTOR_ZONE_ACTIONS = {
     // called `introductionsRequest`. The AI Matching Engine was removed, the
     // button with it, and nothing else asks for an intro.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
+    // D497 (#1023): question 8 on #1023 asks whether this reuses the
+    // `intro_propositions` flow between two of your accepted ties.
+    { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
     { label: 'Export', kind: 'export' },
   ],
   // THE DERIVATION NAMED HERE PRODUCES NOTHING, which the filter half of this
@@ -236,9 +241,11 @@ export const INVESTOR_ZONE_ACTIONS = {
   // `{partner_id, relationship_type, strength_score}` — no organisation, ever.
   // "Derived from the relationship book" was true and incomplete; the book has
   // no organisation to derive one from.
+  // D497 (#1023): where an organisation is recorded (on your side of a tie,
+  // or read from the other person's profile) is question 8 on #1023.
   'network/organizations': [
-    { label: 'Add org', unbuilt: 'a relationship records two accounts, a type and a strength, and nothing on it names a firm, so there is no org for a form to add', hover: 'A relationship records two accounts, a type and a strength — nothing on it names a firm.' },
-    { label: 'Merge duplicates', unbuilt: 'no organisation is stored on a relationship, so the list above is empty on every account and has no duplicates to merge' },
+    { label: 'Add org', unbuilt: 'a relationship records two accounts, a type and a strength, and nothing on it names a firm; where an organisation would be recorded is the owner’s decision, asked on #1023', hover: 'Organisations are not recorded yet: where they would be is not decided.' },
+    { label: 'Merge duplicates', unbuilt: 'no organisation is stored on a relationship, so the list above is empty on every account and has no duplicates to merge; where one would be recorded is the owner’s decision, asked on #1023', hover: 'There are no organisations to merge: where they would be recorded is not decided.' },
     { label: 'Export', kind: 'export' },
   ],
 
