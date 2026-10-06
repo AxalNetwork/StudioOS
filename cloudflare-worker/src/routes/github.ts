@@ -14,7 +14,12 @@
  *     ticket_sync_events table (INSERT OR IGNORE);
  *   - events whose body carries the axal-sync source marker, or whose sender
  *     matches GITHUB_SYNC_BOT_LOGIN (the token identity), are acknowledged
- *     and dropped — they are echoes of our own outbound writes.
+ *     and dropped — they are echoes of our own outbound writes. One
+ *     exception (D542 follow-up): a `labeled` bounty label from a sender on
+ *     BOUNTY_GRANTERS is processed even when that sender is the sync bot,
+ *     because the coordinator labels as the same account. The outbound sync
+ *     never adds a bounty label (its label PUT keeps them as they are), so
+ *     such an event is a person's decision, not an echo.
  *
  * Public (no auth) but signature-verified. Non-issue events, unknown issue
  * numbers, and irrelevant actions are acknowledged with 2xx so GitHub
@@ -25,8 +30,9 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import {
   ensureTicketSyncSchema, recordSyncEvent, releaseSyncEvent, sha256Hex,
-  mapGithubStatusToLocal, parseLabelsFromGithub, hasSyncMarker,
+  mapGithubStatusToLocal, parseLabelsFromGithub, hasSyncMarker, updateIssue,
 } from '../services/githubSync';
+import { bountyLabelEvent, bountySourceRef, parseGranters } from '../services/bugBounties';
 import { refuse } from '../util/refusal';
 
 const github = new Hono<{ Bindings: Env }>();
@@ -51,6 +57,11 @@ async function verifySignature(secret: string, raw: ArrayBuffer, header: string 
   const sig = await crypto.subtle.sign('HMAC', key, raw);
   const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
   return timingSafeEqual(`sha256=${hex}`, header.trim());
+}
+
+/** A GitHub issue number: a JSON number that is a positive safe integer. */
+export function isIssueNumber(n: unknown): n is number {
+  return typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
 }
 
 const ISSUE_ACTIONS = ['closed', 'reopened', 'edited', 'labeled', 'unlabeled', 'assigned', 'unassigned'];
@@ -80,7 +91,16 @@ github.post('/webhook', async (c) => {
   const action = payload?.action;
   const issue = payload?.issue || {};
   const issueNumber = issue?.number;
-  if (!issueNumber) return c.json({ ok: true, ignored: 'no_issue_number' });
+  if (issueNumber === undefined || issueNumber === null) return c.json({ ok: true, ignored: 'no_issue_number' });
+  // The issue number goes into an outbound GitHub URL and a query. GitHub
+  // sends a JSON number; anything else (a string, zero, a negative, a
+  // fraction, past 2^53) is refused before anything is claimed or fetched.
+  if (!isIssueNumber(issueNumber)) {
+    return refuse(c, 400, {
+      code: 'invalid_issue_number',
+      message: 'The delivery\'s issue number is not a positive whole number, so it was not processed.',
+    });
+  }
 
   if (event === 'issues' && !ISSUE_ACTIONS.includes(action)) {
     return c.json({ ok: true, ignored: `action:${action}` });
@@ -92,7 +112,17 @@ github.post('/webhook', async (c) => {
   // Loop prevention — drop echoes of our own outbound writes.
   const senderLogin: string | null = payload?.sender?.login || null;
   const botLogin = (c.env as any).GITHUB_SYNC_BOT_LOGIN as string | undefined;
-  if (botLogin && senderLogin && senderLogin.toLowerCase() === botLogin.toLowerCase()) {
+  // D542 follow-up — the coordinator labels as the same account the sync
+  // bot uses, so a bounty label ADDED by an allowlisted sender is a decision,
+  // not an echo: the outbound label PUT keeps bounty labels as they are and
+  // never adds one. Every other event from the bot is still dropped.
+  const grantedBountyLabel = event === 'issues' && action === 'labeled' && (() => {
+    const kind = bountyLabelEvent({
+      action, label: payload?.label?.name, sender: senderLogin, granters: parseGranters(c.env.BOUNTY_GRANTERS),
+    }).kind;
+    return kind !== 'ignored' && kind !== 'refused';
+  })();
+  if (botLogin && senderLogin && senderLogin.toLowerCase() === botLogin.toLowerCase() && !grantedBountyLabel) {
     return c.json({ ok: true, ignored: 'sync_bot_actor' });
   }
   // Only COMMENT bodies are marker-dropped: our issue bodies always carry the
@@ -161,7 +191,71 @@ github.post('/webhook', async (c) => {
       await sql.end();
       return c.json({ ok: true, ignored: 'stale_event', issue: issueNumber });
     }
-    const newStatus = mapGithubStatusToLocal(issue.state, issue.state_reason);
+    let newStatus = mapGithubStatusToLocal(issue.state, issue.state_reason);
+
+    // D542 — a bounty label counts only from a sender on BOUNTY_GRANTERS.
+    // The ordinary label snapshot below still records every label; what the
+    // allowlist governs is what the platform DOES about one.
+    const bounty = bountyLabelEvent({
+      action,
+      label: payload?.label?.name,
+      sender: senderLogin,
+      granters: parseGranters(c.env.BOUNTY_GRANTERS),
+    });
+    let bountyReport: Record<string, unknown> | null = null;
+    if (bounty.kind === 'refused') {
+      console.warn('[github] bounty label from a sender not on BOUNTY_GRANTERS ignored', bounty.label);
+      bountyReport = { kind: bounty.kind, reason: bounty.reason, label: bounty.label };
+    } else if (bounty.kind === 'outcome') {
+      // Not a bug, or a duplicate: the ticket closes. S1's reason comment
+      // reaches the user through the comment sync. The GitHub issue is closed
+      // as not planned too, so the next absolute write cannot reopen it.
+      //
+      // The GitHub close comes FIRST. If it fails (401, 403, a rate limit,
+      // 5xx after the retry), nothing is written locally, the delivery claim
+      // is released and the response is a 502. GitHub does not redeliver a
+      // failed delivery on its own: it shows as failed in the webhook's log,
+      // and redelivering it from there runs the whole step again (the claim
+      // was released, so it is not taken for a duplicate). Closing locally
+      // anyway would be undone by the next sync, which reads the issue as
+      // still open.
+      newStatus = 'closed';
+      let githubClosed: boolean | null = null;
+      if (issue.state !== 'closed') {
+        let r: { ok: boolean; error?: string | null } | null = null;
+        let thrown: unknown = null;
+        try {
+          r = await updateIssue(c.env, issueNumber, { state: 'closed', state_reason: 'not_planned' });
+        } catch (e) { thrown = e; }
+        if (!r?.ok) {
+          await sql.end();
+          if (deliveryKey) await releaseSyncEvent(c.env, deliveryKey);
+          return refuse(c, 502, {
+            code: 'github_close_failed',
+            message: 'The GitHub issue could not be closed, so the ticket was left open. Redeliver this event to try again.',
+            raw: thrown ?? r?.error ?? null,
+          });
+        }
+        githubClosed = true;
+      }
+      bountyReport = { kind: bounty.kind, outcome: bounty.outcome, github_closed: githubClosed };
+    } else if (bounty.kind === 'tier_added' || bounty.kind === 'tier_removed') {
+      // The grant and its revoke go through the credit grant service, keyed
+      // by the source ref, so a redelivery or a later replay from the label
+      // snapshot grants once. That service is not built yet: nothing is
+      // granted or revoked here, and the response says so.
+      bountyReport = {
+        kind: bounty.kind,
+        rule_key: bounty.ruleKey,
+        source_ref: bountySourceRef(ticket.id),
+        credits: 'not_granted',
+        reason: 'The credit grant service is not built yet. The label is kept in the snapshot, and the grant '
+          + 'is keyed by source_ref, so it can be applied once without loss when the service lands.',
+      };
+    } else if (bounty.kind !== 'ignored') {
+      bountyReport = { kind: bounty.kind };
+    }
+
     const parsed = parseLabelsFromGithub(issue.labels);
     const labelsSnap = JSON.stringify(parsed.names);
     const assigneesSnap = JSON.stringify((issue.assignees || []).map((a: any) => a?.login).filter(Boolean));
@@ -170,6 +264,28 @@ github.post('/webhook', async (c) => {
 
     const changed = newStatus !== ticket.status || newPriority !== ticket.priority || newType !== ticket.type;
     await sql`UPDATE tickets SET status = ${newStatus}, priority = ${newPriority}, type = ${newType}, github_labels = ${labelsSnap}, github_assignees = ${assigneesSnap}, github_updated_at = ${issueUpdatedAt}, updated_at = datetime('now') WHERE id = ${ticket.id}`;
+
+    // D542 follow-up — every bounty decision the platform acts on is recorded
+    // with the GitHub login that made it. An outcome label closes someone
+    // else's ticket, and since the follow-up it can arrive from the sync-bot
+    // account, so the sender is the only record of who decided. Written
+    // before the delivery is acknowledged: if it fails, the catch below
+    // releases the claim and the delivery can be redelivered.
+    if (bounty.kind === 'outcome' || bounty.kind === 'tier_added' || bounty.kind === 'tier_removed') {
+      const viaSyncBot = !!(botLogin && senderLogin && senderLogin.toLowerCase() === botLogin.toLowerCase());
+      const details = JSON.stringify({
+        ticket_id: ticket.id,
+        issue_number: issueNumber,
+        label: payload?.label?.name ?? null,
+        kind: bounty.kind,
+        ...(bounty.kind === 'outcome' ? { outcome: bounty.outcome } : { rule_key: bounty.ruleKey }),
+        github_sender: senderLogin,
+        via_sync_bot_account: viaSyncBot,
+        status_before: ticket.status,
+        status_after: newStatus,
+      });
+      await sql`INSERT INTO activity_logs (action, details, actor) VALUES (${'github.bounty_label'}, ${details}, ${`github:${senderLogin}`})`;
+    }
 
     // Notify the owner on meaningful state flips they didn't cause.
     if (changed && newStatus !== ticket.status) {
@@ -190,7 +306,10 @@ github.post('/webhook', async (c) => {
     }
 
     await sql.end();
-    return c.json({ ok: true, updated: changed, ticket_id: ticket.id, status: newStatus, priority: newPriority, type: newType });
+    return c.json({
+      ok: true, updated: changed, ticket_id: ticket.id, status: newStatus, priority: newPriority, type: newType,
+      ...(bountyReport ? { bounty: bountyReport } : {}),
+    });
   } catch (e: any) {
     try { await sql.end(); } catch { /* noop */ }
     // Release the delivery claim so GitHub's retry of this delivery is

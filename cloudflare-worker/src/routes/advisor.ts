@@ -102,6 +102,7 @@ import {
   type ToolEnvelope,
 } from '../services/advisor/tools';
 import { run as aiRouterRun, audioMinutesFromBytes } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 // Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
 // ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain).
 import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
@@ -920,7 +921,7 @@ advisor.post('/answer', async (c) => {
   // aiRouter). Runs on every user-typed value before it touches the
   // write-router or the LLM. A block returns 422 with the canonical
   // jailbreak refusal; the routed write does NOT happen.
-  const safety = await classifyInput(c.env, user.id, valueStr);
+  const safety = await classifyInput(c.env, user.id, valueStr, AI_SURFACE.studio);
   if (safety.blocked) {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: conv.id,
@@ -2071,7 +2072,7 @@ advisor.post('/explain', async (c) => {
   if (!topic) return c.json({ error: 'topic is required' }, 400);
 
   // Task #4 (AW) L0 — input safety classifier on the topic.
-  const safety = await classifyInput(c.env, user.id, topic);
+  const safety = await classifyInput(c.env, user.id, topic, AI_SURFACE.studio);
   if (safety.blocked) {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: null,
@@ -2185,6 +2186,7 @@ advisor.post('/explain', async (c) => {
   const ai = await aiRouterRun(c.env, {
     task: 'advisor_explain',
     userId: user.id,
+    surface: AI_SURFACE.studio,
     systemPrompt: systemPromptText,
     messages: [{ role: 'user', content: safeTopic }],
     maxTokens: EXPLAIN_MAX_TOKENS,
@@ -2487,6 +2489,7 @@ advisor.post('/tool/auto', async (c) => {
     const r = await aiRouterRun(c.env, {
       task: 'tool_call',
       userId: user.id,
+      surface: AI_SURFACE.studio,
       systemPrompt: TOOL_CALL_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: message }],
       maxTokens: 256,
@@ -2788,6 +2791,7 @@ advisor.post('/transcribe', async (c) => {
   const r = await aiRouterRun(c.env, {
     task: 'transcribe',
     userId: user.id,
+    surface: AI_SURFACE.studio,
     audio: bytes,
     audioMinutes: audioMinutesFromBytes(bytes.byteLength),
   });

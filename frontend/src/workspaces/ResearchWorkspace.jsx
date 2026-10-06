@@ -11,6 +11,7 @@ import { RESEARCH_STORE_GAPS } from './noStoreCopy';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
+import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -157,6 +158,9 @@ function ResearchOverview({ role }) {
   const board = boardFor(role, '/research', api);
   if (board) return <>
     {role === 'advisor' && <Link to="/market-intel" className="mb-4 inline-block text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">Open Market Intelligence</Link>}
+    {/* D536 — the Research overview (Research · Main canvas, D546) above the
+        advisor and partner board. The board keeps its own sections. */}
+    <ResearchOverviewPanel />
     <BucketBoard bucket={bucket} role={role} board={board} />
   </>;
   return (

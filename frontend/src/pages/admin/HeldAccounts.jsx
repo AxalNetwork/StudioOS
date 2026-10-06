@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../ui';
 import HeldZone from './HeldZone';
+import { Figure, useHeldGlance } from './heldFigures';
 
 /**
  * Admin · Accounts on HQ-held accounts — S20's row (D286).
@@ -23,12 +24,19 @@ import HeldZone from './HeldZone';
  */
 const OPEN = 'font-semibold text-axal-ink underline underline-offset-2';
 
+const NOT_ON_GLANCE = 'Retagging is per person, and no count of it is on the Studio glance.';
+
 export default function HeldAccounts() {
+  // D555: each card shows its number, from the same glance as the Studio overview.
+  const glance = useHeldGlance();
+  const acc = glance.hq?.accounts;
+  const ready = acc?.kind === 'ready';
+  const unreadAcc = acc?.kind === 'unreadable' ? null : undefined;
   return (
     <HeldZone
       workspace="Accounts"
       stance="Four consoles, each opened where it is decided"
-      coverage={['Four account consoles on this page, none counted here']}
+      coverage={[ready ? `${acc.total.toLocaleString('en-US')} active HQ-held accounts, counted on the Studio glance` : 'Four account consoles on this page']}
       coverageNote="Counts are this database’s — the accounts HQ holds on axal.vc — and live in the Users table. No branch figure appears."
       unavailable={[
         ['A tenant per account', 'No ordinary account names a licence (U1), so there is no Branch column to read.'],
@@ -47,6 +55,9 @@ export default function HeldAccounts() {
               The directory: counts by role, filters, the detail drawer and View As. Search there says what it
               searches — HQ-held accounts.
             </p>
+            <Figure state={glance} value={ready ? acc.total : unreadAcc} unit="active accounts" reason={acc?.reason} testId="held-accounts-users-count">
+              {ready && acc.byRole.length ? <span className="text-axal-muted"> · {acc.byRole.map((r) => `${r.count.toLocaleString('en-US')} ${r.role}`).join(' · ')}</span> : null}
+            </Figure>
             <p className="mt-2 text-[11.5px]"><Link to="/admin" className={OPEN}>Open the Users table</Link></p>
           </Card>
         </li>
@@ -56,6 +67,7 @@ export default function HeldAccounts() {
             <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
               Chat-onboarded people awaiting a binding agreement and a role. Also an Approvals lane.
             </p>
+            <Figure state={glance} value={ready ? acc.exploring : unreadAcc} unit="exploring" reason={acc?.reason || 'The Exploring lane could not be read.'} testId="held-accounts-exploring-count" />
             <p className="mt-2 text-[11.5px]"><Link to="/admin/exploring" className={OPEN}>Open the Exploring board</Link></p>
           </Card>
         </li>
@@ -65,6 +77,7 @@ export default function HeldAccounts() {
             <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
               Retags one person’s persona; the taxonomy itself is HQ’s.
             </p>
+            <Figure state={glance} value={undefined} reason={NOT_ON_GLANCE} testId="held-accounts-personas-count" />
             <p className="mt-2 text-[11.5px]"><Link to="/admin?tab=personas" className={OPEN}>Open personas</Link></p>
           </Card>
         </li>
@@ -74,6 +87,7 @@ export default function HeldAccounts() {
             <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
               Soft-deleted projects, with a hard-delete that does not come back.
             </p>
+            <Figure state={glance} value={ready ? acc.trash : unreadAcc} unit="projects in Trash" reason={acc?.reason || 'The project table could not be read.'} testId="held-accounts-trash-count" />
             <p className="mt-2 text-[11.5px]"><Link to="/admin/trash" className={OPEN}>Open trash</Link></p>
           </Card>
         </li>

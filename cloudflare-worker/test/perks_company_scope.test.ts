@@ -151,7 +151,9 @@ function freshDb() {
       kind        TEXT NOT NULL CHECK (kind IN ('grant', 'spend', 'refund', 'admin_adjust')),
       source_ref  TEXT NOT NULL,
       note        TEXT,
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      -- Migration 381 (D540): the reward rule a grant was paid under.
+      rule_key    TEXT
     );
   `);
   const u = db.prepare('INSERT INTO users (id, role, email, subscription_tier) VALUES (?,?,?,?)');

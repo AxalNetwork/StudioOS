@@ -8,6 +8,11 @@ import { storeReason } from './impersonationBar';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/communityTasks.js';
+export * from './api/researchFunds.js';
+export * from './api/researchMarkets.js';
+export * from './api/researchOverview.js';
+export * from './api/researchSectors.js';
 // api-modules:end
 
 const BASE = '/api';
@@ -3081,6 +3086,13 @@ export const api = {
     request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
   fundsSignLpa: (lpId) =>
     request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
+  // D553 (#1146): an LP's type (one of five, or null to clear), and the comms
+  // log — what was sent to which LP and when. The log stores no message body.
+  fundsSetLpType: (id, lpId, lp_type) =>
+    request(`/funds/${id}/lps/${lpId}/type`, { method: 'PUT', body: JSON.stringify({ lp_type }) }),
+  fundsCommsList: (id, lpId) => request(`/funds/${id}/comms${lpId ? `?lp=${encodeURIComponent(lpId)}` : ''}`),
+  fundsLogComm: (id, data) =>
+    request(`/funds/${id}/comms`, { method: 'POST', body: JSON.stringify(data) }),
   // Fund analytics over real D1 rows only. Metrics the schema cannot support
   // (NAV, RVPI, TVPI, IRR) come back null with a reason in `unavailable`; the
   // pages render "Not recorded" rather than an invented figure.
@@ -3451,6 +3463,25 @@ export const api = {
   // person" by its presence is a call site nobody can read.
   hqForceReauthUser: (userId, reason) =>
     request(`/admin/security/force-reauth/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  // D481 — the Sessions zone's list and its three acts. Every write takes a
+  // typed reason (stored with the act) and the same bar as force re-auth; a
+  // bulk revoke is one request and one audit row per session.
+  hqSecuritySessions: () => request('/admin/security/sessions'),
+  hqRevokeSession: (sessionId, reason) =>
+    request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  hqRevokeSessions: (ids, reason) =>
+    request('/admin/security/sessions/revoke', {
+      method: 'POST',
+      body: JSON.stringify({ ids, reason }),
+    }),
+  hqEndImpersonation: (sessionId, reason) =>
+    request(`/admin/security/impersonations/${encodeURIComponent(sessionId)}/end`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),

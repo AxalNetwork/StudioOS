@@ -51,12 +51,16 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { rowCredit, rowCreditLabel } from '../lib/labCredits';
 
 const SPRINT_DAYS = 28;
 
 // Feature keys mirror the backend catalog (backend/app/api/routes/
 // spinout_lab.py MILESTONES / Worker spinoutLabCatalog.ts). Routes reuse the
 // same in-app destinations the old lab sidebar linked to.
+/** What a graduate reads where the Lab tools used to open (D511 item 3). */
+export const GRADUATE_TOOLS_CLOSED = 'The Lab tools closed at graduation. Your work carries into the tools in the sidebar; your certificate stays here.';
+
 export const TOOL_INFO = {
   // The lab-facing company record page (design: workspace tool pages); the
   // raw /projects list stays reachable from it via "Edit record".
@@ -107,7 +111,8 @@ export const TOOL_INFO = {
   // The credential itself, not a deliverable: it is CONFERRED by finishing
   // incorporation rather than being another box to tick, so `uncounted`
   // keeps it off the week's scorecard denominator (same rule as misignals).
-  certificate: { label: 'Graduation Certificate', to: '/spinout-lab/certificate', desc: 'Your cohort credential', icon: Award, uncounted: true, unlockWeek: 4 },
+  // `keptAfterGraduation`: the one tool a graduate keeps (D511 item 3).
+  certificate: { label: 'Graduation Certificate', to: '/spinout-lab/certificate', desc: 'Your cohort credential', icon: Award, uncounted: true, unlockWeek: 4, keptAfterGraduation: true },
   // No founder-facing capital surface exists yet (/capital is the investor
   // console) — card shows as coming soon until the lab version ships.
   // Lab-facing raise workspace (round + investor pipeline + data-room
@@ -249,6 +254,38 @@ export const WEEK_DEFS = [
     ],
   },
 ];
+
+/**
+ * D541 — what a checklist row pays in credits. Amounts come from the Worker
+ * (`state.milestone_credits`); a failed read says so rather than drawing no
+ * credit, and someone who cannot earn sees no amounts at all.
+ */
+export function MilestoneCreditBadge({ keys, state }) {
+  if (state?.milestone_credits_unreadable) {
+    return <span data-testid="milestone-credit-unreadable" className="text-[10.5px] font-semibold rounded-full px-2 py-0.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300">Credits unreadable</span>;
+  }
+  const mc = state?.milestone_credits;
+  if (!mc || !mc.eligible) return null;
+  const credit = rowCredit(keys, mc);
+  if (!credit) return null;
+  return (
+    <span
+      data-testid="milestone-credit"
+      className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${credit.earned
+        ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+        : 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'}`}
+    >
+      {rowCreditLabel(credit)}
+    </span>
+  );
+}
+
+/** Why no credit amounts are shown, once above the checklist. */
+export function MilestoneCreditNote({ state }) {
+  const mc = state?.milestone_credits;
+  if (state?.milestone_credits_unreadable || !mc || mc.eligible || !mc.reason) return null;
+  return <p data-testid="milestone-credit-note" className="mb-3 text-[11.5px] text-gray-500 dark:text-gray-400">{mc.reason}</p>;
+}
 
 // Deliverable progress with either/or awareness: rows sharing an `altGroup`
 // count as a single unit that is done when ANY member is done (mirrors the
@@ -622,11 +659,19 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
     return previewAllUnlocked ? 'unlocked' : 'locked';
   };
   const weekBrowsable = (num) => weekStatus(num) !== 'locked';
-  const featureUnlocked = (key) =>
-    previewAllUnlocked || graduated || unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated) ||
-    // Tools with no standalone backend flag (e.g. MI — Investor Signals) unlock
-    // by program week instead of an `unlocked_features` entry.
-    (TOOL_INFO[key]?.unlockWeek != null && currentWeek >= TOOL_INFO[key].unlockWeek);
+  // D511 item 3 (#992, the owner's C): graduation closes the Lab tools. The
+  // routes behind them already refuse a graduate (`spinout_lab_active` is
+  // cleared), so this used to promise every tool and open none. Only the
+  // certificate stays; the records stay too, read by admins, and the work
+  // carries into the sidebar tools.
+  const featureUnlocked = (key) => {
+    if (previewAllUnlocked) return true;
+    if (graduated) return Boolean(TOOL_INFO[key]?.keptAfterGraduation);
+    return unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated) ||
+      // Tools with no standalone backend flag (e.g. MI — Investor Signals) unlock
+      // by program week instead of an `unlocked_features` entry.
+      (TOOL_INFO[key]?.unlockWeek != null && currentWeek >= TOOL_INFO[key].unlockWeek);
+  };
   const chipDone = (weekNum, keys) =>
     keys.length > 0 ? keys.every((k) => done.has(k)) : weekStatus(weekNum) === 'done';
 
@@ -750,7 +795,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
               ) : (
                 <div className="text-xs text-gray-500 dark:text-gray-400" data-testid="workspace-days-remaining">
                   {graduated
-                    ? 'Graduated · incorporated'
+                    ? <>Graduated · incorporated<span className="block" data-testid="workspace-graduate-tools-closed">{GRADUATE_TOOLS_CLOSED}</span></>
                     : exited
                       ? `Left the programme in Week ${currentWeek}`
                       : `Week ${currentWeek} of 4 · ${daysRemaining} days remaining`}
@@ -1032,6 +1077,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
           <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
             Week {selectedDef.num} deliverables
           </div>
+          <MilestoneCreditNote state={state} />
           <div className="flex flex-col gap-2.5">
             {selectedDef.deliverables.map((d) => {
               const dDone = chipDone(selectedDef.num, d.keys);
@@ -1073,6 +1119,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
                       >
                         {dDone ? 'Done' : partial ? 'In Progress' : d.optional ? 'Optional · boosts readiness' : 'Not started'}
                       </span>
+                      <MilestoneCreditBadge keys={d.keys} state={state} />
                     </div>
                     {partial && (
                       <div className="mt-2 h-1.5 w-40 max-w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
@@ -1157,7 +1204,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
                             }`}
                           >
-                            {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : `Unlocks Wk ${w.num}`}
+                            {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : graduated ? 'Closed at graduation' : `Unlocks Wk ${w.num}`}
                           </span>
                           {clickable && (
                             <button

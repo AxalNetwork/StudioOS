@@ -6,10 +6,12 @@ const root = new URL('../src/', import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), 'utf8');
 
 test('fund directory cards open public catalog profiles and private fund rows open dossiers', () => {
-  const funds = read('pages/research/FundsZone.jsx');
+  // D535 steps 4–5: the directory moved to FundDirectory.jsx; a row opens the
+  // canvas's drawer, and the drawer links to the catalog profile.
+  const funds = read('pages/research/FundDirectory.jsx');
   const router = read('App.jsx');
-  assert.match(funds, /research\/funds\/catalog/);
-  assert.match(funds, /role="link"/);
+  assert.match(funds, /to=\{`\/research\/funds\/catalog\/\$\{encodeURIComponent\(item\.uid\)\}`\}/);
+  assert.match(funds, /aria-controls="fd-drawer"/);
   assert.match(router, /research\/funds\/catalog\/:id/);
   assert.match(router, /research\/funds\/:uid/);
 });
