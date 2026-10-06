@@ -24,6 +24,8 @@
 //                       jurisdiction_code us_de). Official DE ICIS can't be
 //                       driven via a REST-only browser binding; without the key
 //                       this degrades to "verify manually".
+//   us_wy_ccorp       → OpenCorporates, jurisdiction_code us_wy (D586). Without
+//                       the key this degrades to "verify manually".
 //   sg_pte            → data.gov.sg ACRA datastore_search (keyless JSON API;
 //                       resource id via SG_ACRA_RESOURCE_ID). Unset → manual.
 //   ee_oy             → Estonian e-Business Register search page via BROWSER.
@@ -58,13 +60,14 @@ export interface NameCheckDeps {
   timeoutMs?: number;
 }
 
-export type RegistryKey = 'de' | 'uk' | 'sg' | 'ee';
+export type RegistryKey = 'de' | 'wy' | 'uk' | 'sg' | 'ee';
 
 // Maps a wizard jurisdiction id → the register adapter that backs it. Both
 // Delaware entity types resolve to the same Delaware register.
 export const JURISDICTION_REGISTRY: Record<string, RegistryKey> = {
   us_de_ccorp: 'de',
   us_de_llc: 'de',
+  us_wy_ccorp: 'wy',
   uk_ltd: 'uk',
   sg_pte: 'sg',
   ee_oy: 'ee',
@@ -407,6 +410,9 @@ export async function checkCompanyName(
       break;
     case 'de':
       adapterPromise = checkOpenCorporates(env, ctx, 'us_de', 'de_register_requires_manual_check');
+      break;
+    case 'wy':
+      adapterPromise = checkOpenCorporates(env, ctx, 'us_wy', 'wy_register_requires_manual_check');
       break;
     case 'sg':
       adapterPromise = checkSG(env, ctx);

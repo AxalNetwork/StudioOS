@@ -78,6 +78,12 @@ const TEMPLATES: Record<string, { title: string; layer: string; content: string 
 // on the FastAPI backend, which is the source of truth for both DBs.
 const JURISDICTIONS = [
   { id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'The default for VC-backed startups.', est_cost_usd: [500, 1500], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: true, pros: ['Stripe Atlas one-click', 'Universally accepted by US VCs'], cons: ['21% federal corporate tax', 'Annual filings + agent'], tax_summary: '21% federal corporate income tax. DE franchise tax $400–$1,750.', templates: ['certificate_of_incorporation_de', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
+  // D586 (#1213, the owner's answer A) — Wyoming C-Corp. Priced only from the
+  // catalog (a Stripe price tagged jurisdiction_id = us_wy_ccorp): there is no
+  // JURISDICTION_COSTS entry and no legacy env price. Its Articles of
+  // Incorporation are generated only from a counsel-approved body in the D1
+  // template store (COUNSEL_REQUIRED_TEMPLATES below), never from a stub.
+  { id: 'us_wy_ccorp', label: 'Wyoming C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'A US corporation with no state corporate income tax.', est_cost_usd: [100, 600], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: false, pros: ['No Wyoming corporate income tax', 'Low annual report fee'], cons: ['Less familiar to US VCs than Delaware', 'Annual report + registered agent'], tax_summary: '21% federal corporate income tax. Wyoming levies no state corporate income tax.', templates: ['articles_of_incorporation_wy', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
   { id: 'us_de_llc', label: 'Delaware LLC', country: 'United States', country_code: 'US', entity_type: 'Limited Liability Company', summary: 'Pass-through taxation. Hard to take VC.', est_cost_usd: [300, 800], time_to_form_days: [1, 5], fundraising_friendly: false, atlas_supported: false, pros: ['Pass-through tax', 'Flexible operating agreement'], cons: ['Most VCs cannot invest in LLCs', 'Self-employment tax'], tax_summary: 'Pass-through. DE franchise tax flat $300/yr.', templates: ['operating_agreement', 'ein_application_kit', 'member_consent'] },
   { id: 'uk_ltd', label: 'UK Private Limited (Ltd)', country: 'United Kingdom', country_code: 'GB', entity_type: 'Private Limited Company', summary: 'Fast and credible for European VCs.', est_cost_usd: [50, 250], time_to_form_days: [1, 3], fundraising_friendly: true, atlas_supported: false, pros: ['£50 same-day filing', 'SEIS/EIS angel tax relief'], cons: ['US VCs may want a flip', 'Public PSC register'], tax_summary: 'Corporation tax 25% (19% small-profits up to £50k).', templates: ['uk_memorandum_of_association', 'uk_articles_of_association', 'uk_form_in01_kit'] },
   { id: 'sg_pte', label: 'Singapore Pte Ltd', country: 'Singapore', country_code: 'SG', entity_type: 'Private Limited (Pte. Ltd.)', summary: 'Asia hub. Strong rule of law, English-language filings.', est_cost_usd: [600, 1500], time_to_form_days: [1, 5], fundraising_friendly: true, atlas_supported: false, pros: ['Startup tax exemption ~75% on first S$100k', '17% headline corporate tax'], cons: ['Need SG-resident director', 'Bank account 2–4 weeks'], tax_summary: '17% corporate tax; effective ~4–8% in years 1–3.', templates: ['sg_constitution', 'sg_acra_form_45_kit', 'sg_first_directors_resolution'] },
@@ -127,6 +133,7 @@ legal.get('/name-check', async (c) => {
 // the wizard never silently fails for the user.
 const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
   certificate_of_incorporation_de: { title: 'Certificate of Incorporation (Delaware C-Corp)' },
+  articles_of_incorporation_wy: { title: 'Articles of Incorporation (Wyoming C-Corp)' },
   bylaws: { title: 'Corporate Bylaws' },
   stock_purchase_agreement: { title: "Founders' Restricted Stock Purchase Agreement" },
   section_83b: { title: 'Section 83(b) Election' },
@@ -143,6 +150,12 @@ const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
   ee_e_residency_application_kit: { title: 'Estonia e-Residency Application Kit' },
   ee_founding_resolution: { title: 'Founding Resolution (Estonia OÜ)' },
 };
+
+// D586 — templates with no stub: a document is generated from these only when
+// the D1 template store holds a counsel-approved, active body
+// (`templates/legal/LEGAL_REVIEW.md`). Until then the wizard lists them under
+// `pending_counsel` and writes no document row.
+const COUNSEL_REQUIRED_TEMPLATES = new Set(['articles_of_incorporation_wy']);
 
 // Map our template keys → existing documenttype enum values (anything
 // not in the enum is stored as 'other' with the real key in
@@ -237,6 +250,7 @@ legal.post('/incorporate/wizard', async (c) => {
   // envelope instead of being inserted as 'generated' rows in `documents`.
   // (esign_envelopes is the single source of truth for active contracts.)
   const pendingEsign: Array<{ template_key: string; title: string; doc_type: string; reason: string }> = [];
+  const pendingCounsel: Array<{ template_key: string; title: string; reason: string }> = [];
   for (const tkey of j.templates) {
     const meta = JURISDICTION_TEMPLATES[tkey] || (TEMPLATES as any)[tkey];
     if (!meta) continue;
@@ -262,6 +276,10 @@ legal.post('/incorporate/wizard', async (c) => {
     // over the inline stub; fall back to fillContent for the legacy
     // single-brace inline bodies.
     const d1Body = await getActiveTemplateBody(c.env, tkey);
+    if (!d1Body && COUNSEL_REQUIRED_TEMPLATES.has(tkey)) {
+      pendingCounsel.push({ template_key: tkey, title: meta.title, reason: 'counsel_approval_pending' });
+      continue;
+    }
     const content = d1Body
       ? applyMergeFields(d1Body, fill)
       : fillContent((TEMPLATES as any)[tkey]?.content || `${meta.title}\n\nCompany: ${fill.company_name}\nJurisdiction: ${fill.jurisdiction}\nDate: ${fill.incorporation_date}\n\n[Counsel-reviewed body managed in the FastAPI backend.]`);
@@ -281,6 +299,12 @@ legal.post('/incorporate/wizard', async (c) => {
       url: `https://atlas.stripe.com/start?${params.toString()}`,
       summary: 'Continue incorporation on Stripe Atlas — your company name is pre-filled.',
     };
+  } else if (j.id === 'us_wy_ccorp') {
+    handoff.next_steps = [
+      'File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)',
+      'Appoint a Wyoming registered agent',
+      'Apply for an EIN with the IRS once the state approves the filing',
+    ];
   } else if (j.id === 'uk_ltd') {
     handoff.next_steps = [
       'File IN01 on Companies House (https://www.gov.uk/limited-company-formation)',
@@ -340,6 +364,7 @@ legal.post('/incorporate/wizard', async (c) => {
     },
     documents: generated,
     pending_esign: pendingEsign,
+    pending_counsel: pendingCounsel,
     seeded_compliance: seededCompliance,
     handoff,
   });

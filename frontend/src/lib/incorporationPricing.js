@@ -35,10 +35,13 @@ export function fmtCents(cents, currency = 'usd') {
 
 /**
  * Where this startup is formed, from the Lab application's jurisdiction label
- * (the Apply page stores e.g. "Wyoming C-Corp — Wyoming, USA"). Only Delaware
- * has a Worker jurisdiction and a catalog SKU; any other answer yields no
- * `jurisdictionId`, and the reason is shown instead of a Pay button. With no
- * application jurisdiction on record, Delaware is used and labelled as such.
+ * (the Apply page stores e.g. "Wyoming C-Corp — Wyoming, USA"). Delaware forms
+ * a C-Corp, a PBC (a Delaware corporation) or an LLC. Wyoming forms a C-Corp
+ * only (D586, `us_wy_ccorp`); a Wyoming PBC or LLC has no Worker jurisdiction.
+ * Any other answer yields no `jurisdictionId`, and the reason is shown instead
+ * of a Pay button. Whether a jurisdiction can be charged is then the catalog
+ * quote's to say: no Stripe price, no Pay button. With no application
+ * jurisdiction on record, Delaware is used and labelled as such.
  */
 export function formationJurisdiction(applicationJurisdiction, entity) {
   const label = String(applicationJurisdiction || '').trim();
@@ -49,12 +52,35 @@ export function formationJurisdiction(applicationJurisdiction, entity) {
   if (/delaware/i.test(label)) {
     return { state: 'Delaware', jurisdictionId: delawareId, fromApplication: true, reason: null };
   }
-  const state = /wyoming/i.test(label) ? 'Wyoming' : label;
+  if (/wyoming/i.test(label)) {
+    if (entity === 'ccorp') {
+      return { state: 'Wyoming', jurisdictionId: 'us_wy_ccorp', fromApplication: true, reason: null };
+    }
+    const kind = entity === 'llc' ? 'an LLC' : 'a public benefit corporation';
+    return {
+      state: 'Wyoming',
+      jurisdictionId: null,
+      fromApplication: true,
+      reason: `Your application chose Wyoming, where formation here offers a C-Corp only. Wyoming as ${kind} cannot be ordered or charged.`,
+    };
+  }
   return {
-    state,
+    state: label,
     jurisdictionId: null,
     fromApplication: true,
-    reason: `Your application chose ${state}. Formation here has no ${state} jurisdiction and no catalog price yet, so it cannot be ordered or charged.`,
+    reason: `Your application chose ${label}. Formation here has no ${label} jurisdiction and no catalog price yet, so it cannot be ordered or charged.`,
   };
 }
 
+/** The state's name for the charter: Wyoming files Articles, Delaware a Certificate. */
+export function charterName(state) {
+  return state === 'Wyoming' ? 'Articles of Incorporation' : 'Certificate of Incorporation';
+}
+
+/** The entity as it is formed in `state`: "Wyoming C-Corp", "Delaware PBC", "Delaware LLC". */
+export function entityLabel(entity, state) {
+  const where = state || 'Delaware';
+  if (entity === 'pbc') return `${where} PBC`;
+  if (entity === 'llc') return `${where} LLC`;
+  return `${where} C-Corp`;
+}
