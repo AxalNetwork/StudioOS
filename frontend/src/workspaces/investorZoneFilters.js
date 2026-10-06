@@ -88,7 +88,7 @@ const NO_OFFER_ON_THIS_DESK =
 // `partner_relationships`. A column on a table this zone does not read is not a
 // column this zone has.
 const NO_ORG_ON_A_RELATIONSHIP =
-  'a relationship records two accounts, a type and a strength, and nothing on it names the firm either of them is at, so there are no organisations here to select between';
+  'a relationship records two accounts, a type and a strength, and nothing on it names the firm either of them is at, so there are no organisations here to select between; where one would be recorded is the owner’s decision, asked on #1023 (D497)';
 // The other two name records that are real and are kept somewhere this page
 // never opens: it loads the relationship book, the network summary and the
 // introductions desk, and nothing else. `limited_partners` is keyed on

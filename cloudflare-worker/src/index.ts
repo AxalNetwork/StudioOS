@@ -89,6 +89,7 @@ import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
+import adminIncorporations from './routes/admin_incorporations';
 import safeIssuances from './routes/safe_issuances';
 import admin83bReview from './routes/admin_83b_review';
 import companyEin from './routes/company_ein';
@@ -801,6 +802,8 @@ app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 // Cohort Timing & Gating — timeline, review queue, grace/override, impersonation audit.
 app.route('/api/admin/cohort', adminCohort);
+// D601 (#998) — HQ records a formation order's packet and its state filing.
+app.route('/api/admin/incorporations', adminIncorporations);
 // D578 (#1205) — a startup's SAFEs: recorded terms, status from the envelope.
 app.route('/api/safe-issuances', safeIssuances);
 // D580 (#1207) — 83(b) operator review: assign an operator, record a review.

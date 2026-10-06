@@ -71,7 +71,7 @@ interface StripeCharge {
 // enqueued on 'paid' but the no-refund line is drawn once filing actually
 // progresses (packet_processing and beyond).
 const INCORPORATION_FILED_STATUSES = new Set([
-  'packet_processing', 'filed', 'submitted', 'in_review', 'completed', 'active',
+  'packet_processing', 'packet_ready', 'filed', 'submitted', 'in_review', 'completed', 'active',
 ]);
 
 // Session cancellation window — refunds for an advisorship/expert booking are

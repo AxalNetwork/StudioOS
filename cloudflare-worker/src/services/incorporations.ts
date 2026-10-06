@@ -26,6 +26,15 @@ export async function ensureIncorporationsSchema(env: Env): Promise<void> {
       paid_at                TIMESTAMP
     )`,
     `CREATE INDEX IF NOT EXISTS idx_incorporations_user_status ON incorporations(user_id, status)`,
+    // Migration 411 (D601) — the packet and the filing, recorded by an admin.
+    // Declared there; these are the D235 safety net for a database the runner
+    // has not reached yet. "duplicate column" is swallowed below.
+    'ALTER TABLE incorporations ADD COLUMN packet_document_id INTEGER',
+    'ALTER TABLE incorporations ADD COLUMN packet_ready_at TEXT',
+    'ALTER TABLE incorporations ADD COLUMN packet_ready_by INTEGER',
+    'ALTER TABLE incorporations ADD COLUMN filed_on TEXT',
+    'ALTER TABLE incorporations ADD COLUMN filed_recorded_at TEXT',
+    'ALTER TABLE incorporations ADD COLUMN filed_by INTEGER',
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }

@@ -7,8 +7,12 @@
  * module formats them and never computes a price.
  */
 
-/** Server order statuses that mean the incorporation fee was paid. */
-export const PAID_STATUSES = ['paid', 'packet_processing', 'packet_ready'];
+/**
+ * Server order statuses that mean the incorporation fee was paid. `packet_ready`
+ * and `filed` are set by an Axal admin by hand (D601, the owner's answer 1A on
+ * #998): the packet attached, then the date it was filed with the state.
+ */
+export const PAID_STATUSES = ['paid', 'packet_processing', 'packet_ready', 'filed'];
 
 /**
  * D367 — what a paid order's screens may say about the packet. After payment
@@ -16,7 +20,8 @@ export const PAID_STATUSES = ['paid', 'packet_processing', 'packet_ready'];
  * packet, emails a link or files with the state, and nothing sets
  * `packet_ready` (which step does is the owner's open decision on #998). So
  * no screen spins "Processing", says a packet is being prepared, or marks
- * documents prepared or a filing started for these two statuses.
+ * documents prepared or a filing started for these two statuses. An admin
+ * moves an order on from them in HQ (D601).
  */
 export const PACKET_NOT_BUILT_STATUSES = ['paid', 'packet_processing'];
 export const PACKET_NOT_BUILT =
