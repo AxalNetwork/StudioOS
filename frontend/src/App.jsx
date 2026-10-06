@@ -426,6 +426,7 @@ const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcu
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
+import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -2419,7 +2420,7 @@ function AppInner() {
           : <Navigate
               to={new URLSearchParams(location.search).get('id')
                 ? `/research/companies/${encodeURIComponent(new URLSearchParams(location.search).get('id'))}`
-                : '/research/companies'}
+                : buildCompetitorsRedirect(location.search)}
               replace
             />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />

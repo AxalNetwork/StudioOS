@@ -11,6 +11,7 @@ import { storeReason } from './impersonationBar';
 export * from './api/adminLearning.js';
 export * from './api/communityTasks.js';
 export * from './api/learning.js';
+export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';

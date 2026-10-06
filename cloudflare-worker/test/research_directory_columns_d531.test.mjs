@@ -168,15 +168,21 @@ test('D531: the decision\'s command records 375 under its real checksum', () => 
 // last round, for `/research/geographies/:code`. Its page prints an absent
 // value as "Not recorded", never zero, and `frontend/test/
 // research_markets_pages_d533.test.mjs` pins exactly that. So that one template
-// is allowed, on the condition that the page pin stays, and every other
-// template is still held to reading none of the 24.
+// is allowed, on the condition that the page pin stays.
+// RE-AIMED BY D534 (#1079): `services/researchCompanyDirectory.ts` reads the
+// columns too, and its tests (research_company_directory_d534.test.ts,
+// research_companies_pages_d534.test.mjs) pin an absent value as Not recorded,
+// never zero. Every other template is still held to reading none of the 24.
 const FIRST_READER = 'cloudflare-worker/src/routes/research_markets.ts';
 const FIRST_READER_PIN = 'frontend/test/research_markets_pages_d533.test.mjs';
+const D534_READER = 'cloudflare-worker/src/services/researchCompanyDirectory.ts';
 
-test('D531: only the first reader reads the 24 columns, and it shows an absent value as Not recorded', () => {
+test('D531: only the D533 and D534 readers read the 24 columns, and they show an absent value as Not recorded', () => {
   const pin = read(FIRST_READER_PIN);
   assert.match(pin, /no headcount is Not recorded, never 0/, 'the first reader lost its Not-recorded pin');
   assert.match(pin, /Zeta Labs Not recorded Not recorded 4,000 Not recorded/, 'the first reader lost its no-round pin');
+  assert.match(read(D534_READER), /status: 'not_recorded' as const, reason: 'Not recorded'/,
+    'the D534 reader no longer marks an absent metric Not recorded');
   // Every SQL template in the Worker that names the table, read whole.
   const files = [];
   const walk = (dir) => {
@@ -196,6 +202,7 @@ test('D531: only the first reader reads the 24 columns, and it shows an absent v
   assert.ok(templates.length >= 2, 'the two directory reads in routes/research.ts were not found');
   let readers = 0;
   for (const { f, sql } of templates) {
+    if (f === resolve(ROOT, D534_READER)) continue;
     if (f.endsWith(FIRST_READER) && /FROM research_company_directory/.test(sql) && /\bemployee_count\b/.test(sql)) {
       readers += 1;
       continue;
