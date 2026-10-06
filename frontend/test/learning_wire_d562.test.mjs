@@ -47,7 +47,9 @@ process.env.TZ = 'UTC';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const html = (el, path = '/learning') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, el));
-const flat = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
+// `&amp;` is decoded last, so an escaped entity such as `&amp;quot;` reads as
+// `&quot;`, never as a quote (CodeQL's double-unescaping rule).
+const flat = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const text = (el, path) => flat(html(el, path));
 const page = (url, pattern, props) => renderToStaticMarkup(
   h(MemoryRouter, { initialEntries: [url] }, h(Routes, null, h(Route, { path: pattern, element: h(LearningPage, props) }))),
