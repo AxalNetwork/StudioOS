@@ -26,7 +26,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { cohortRecordFromBrief } from '../src/lib/spinoutLab.js';
-import { GATES_DECISION, TRACK_GATES } from '../src/lib/spinoutBrief.js';
+import * as BRIEF_LIB from '../src/lib/spinoutBrief.js';
+import { PIPELINE_PHASES } from '../src/lib/spinoutLab.js';
 import { DEFAULT_TRACK } from '../src/lib/spinoutLabArsenal.js';
 import { LabHero, LabApplyBand, applyLabelFor } from '../src/components/spinout/LabIntro.jsx';
 
@@ -125,23 +126,32 @@ test('no landing surface prints the client calendar’s cohort number any more',
 });
 
 // ---------------------------------------------------------------------------
-// The open product call: per-track gates.
+// Per-track gates: settled on #979 (A, 2026-10-06). One set for everyone, and
+// the Brief prints the set the Lab enforces.
 // ---------------------------------------------------------------------------
 
-test('both surfaces print the one sentence that says the gates call is open', () => {
-  assert.match(BRIEF, /\{GATES_DECISION\.brief\}/);
-  assert.match(INTRO, /\{GATES_DECISION\.intro\}/);
-  for (const k of ['brief', 'intro']) assert.match(GATES_DECISION[k], /still to be decided/);
+test('the Brief prints the enforced gates, read from PIPELINE_PHASES, never a copy of its own', () => {
+  const grid = BRIEF.slice(BRIEF.indexOf('data-testid="brief-gate-grid"'), BRIEF.indexOf('<PageFoot n={2}'));
+  assert.match(grid, /\{PIPELINE_PHASES\.map\(\(g, gi\) =>/, 'the Brief does not render the enforced set');
+  assert.match(grid, /pipelineItemsFor\(g\)/);
+  assert.match(grid, /\{g\.gate\}/);
+  assert.doesNotMatch(grid, /LAB_TRACKS\.map/, 'the Brief prints a gate column per track again');
+  // The enforced set is the four weeks, each with its own gate.
+  assert.equal(PIPELINE_PHASES.length, 4);
+  assert.ok(PIPELINE_PHASES.every((p) => p.gate && p.items.length));
 });
 
-test('neither surface has quietly taken a side while the call is open', () => {
-  // The brief still prints each track's gates, and the intro still renders
-  // the one enforced set with no track prop. When the owner decides, this
-  // test is the one to change, together with the sentence above.
-  assert.match(BRIEF, /TRACK_GATES\[t\.id\]/);
-  assert.equal(Object.keys(TRACK_GATES).length, 3);
+test('no per-track gate copy and no open-decision notice remains', () => {
+  assert.equal(BRIEF_LIB.TRACK_GATES, undefined, 'spinoutBrief.js exports per-track gates again');
+  assert.equal(BRIEF_LIB.GATES_DECISION, undefined, 'spinoutBrief.js still says the gates call is open');
+  for (const [label, src] of [['Brief', BRIEF], ['LabIntro', INTRO]]) {
+    assert.doesNotMatch(src, /GATES_DECISION|TRACK_GATES/, `${label} still reads the per-track copy or the open call`);
+    assert.doesNotMatch(src, /still to be decided/, `${label} still says the gates call is open`);
+  }
+  assert.match(BRIEF, /One set of gates, the same for every track\./);
+  assert.match(INTRO, /The four gates are the same for every track\./);
   const sig = INTRO.slice(INTRO.indexOf('export function LabGates'));
-  assert.ok(!sig.slice(sig.indexOf('('), sig.indexOf(')') + 1).includes('track'));
+  assert.ok(!sig.slice(sig.indexOf('('), sig.indexOf(')') + 1).includes('track'), 'the intro gates take a track again');
 });
 
 test('the public default track stays Form; the canvas’s reason for Find fit is the signed-in case', () => {
