@@ -43,7 +43,6 @@ const PAGES = {
   networkType: () => local('pages/investor/InvestorNetworkWorkspace.jsx', 'typeLabel'),
   portfolioCanvas: () => local('pages/investor/InvestorPortfolioCanvas.jsx', 'label'),
   portfolioUpdates: () => local('pages/investor/InvestorPortfolioUpdates.jsx', 'title'),
-  partnerStudio: () => local('pages/partner/PartnerStudioHome.jsx', 'titleCase'),
 };
 
 test('hyphens now normalise to spaces where only underscores did', () => {
@@ -83,12 +82,8 @@ test('each fallback reads as it did, and is never passed through the caser', () 
   assert.equal(titleCase('Not recorded'), 'Not Recorded');
 });
 
-test('PartnerStudioHome\'s absence reads "Not recorded", never "Not Recorded"', () => {
-  const cased = PAGES.partnerStudio();
-  assert.equal(cased(null), 'Not recorded');
-  assert.equal(cased(''), 'Not recorded');
-  assert.equal(cased('pending_review'), 'Pending Review');
-});
+// PartnerStudioHome's caser left with its module grid (D564): Partner Studio's
+// body is PartnerHomeP2, which cases nothing.
 
 test('humanize and prettyStage keep collapsing runs of _ and -, at the call site', () => {
   assert.equal(humanize('deep__tech--founder'), 'Deep Tech Founder');
@@ -121,7 +116,7 @@ test('no converted file declares its own caser', () => {
     'pages/insights/InsightsPage.jsx', 'pages/investor/InvestorFundLPs.jsx', 'pages/investor/InvestorFundLanding.jsx',
     'pages/investor/InvestorFundReporting.jsx', 'pages/investor/InvestorNetworkWorkspace.jsx',
     'pages/investor/InvestorPortfolioCanvas.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
-    'pages/partner/PartnerStudioHome.jsx', 'pages/pipeline/bucketing.js']) {
+    'pages/pipeline/bucketing.js']) {
     const s = src(rel);
     assert.ok(!/toUpperCase\(\)/.test(s.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')),
       `${rel} upper-cases by hand again`);

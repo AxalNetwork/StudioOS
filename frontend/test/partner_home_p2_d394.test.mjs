@@ -121,7 +121,9 @@ test('D394: the brief is the home/brief surface, run on a click and never on mou
   assert.match(worker, /\n  'home\/brief': \{/);
 });
 
-test('D394: P2 is built and not mounted — /studio stays PartnerStudioHome until the owner signs it off', () => {
+test('D564: P2 is mounted as Partner Studio, inside the /studio frame that keeps Eadwyn', () => {
+  // The owner signed P2 off on #981 (A). Its one importer is the partner frame,
+  // which Dashboard.jsx renders for /studio's partner branch.
   const importers = [];
   // Directory entries carry their own type, so nothing is stat-ed and then
   // read (CodeQL's file-system race, raised on the first draft's statSync).
@@ -134,7 +136,23 @@ test('D394: P2 is built and not mounted — /studio stays PartnerStudioHome unti
     }
   };
   walk(resolve(process.cwd(), 'frontend/src'));
-  assert.deepEqual(importers, [], 'P2 was mounted without the owner\'s sign-off');
-  assert.match(readFileSync(resolve(process.cwd(), 'frontend/src/pages/Dashboard.jsx'), 'utf8'), /PartnerStudioHome/,
-    '/studio still renders the partner studio home');
+  assert.deepEqual(importers.map((p) => p.slice(p.indexOf('frontend/'))), ['frontend/src/pages/partner/PartnerStudioHome.jsx']);
+  const frame = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/partner/PartnerStudioHome.jsx'), 'utf8'));
+  assert.match(frame, /<PartnerHomeP2 previewing=\{previewing\} \/>/);
+  assert.match(frame, /<StudioInterview persona="partner"/, 'Eadwyn left Partner Studio');
+  assert.match(frame, /data-testid="text-partner-studio-title">Partner Studio</);
+  assert.match(readFileSync(resolve(process.cwd(), 'frontend/src/pages/Dashboard.jsx'), 'utf8'), /<PartnerStudioHome/,
+    '/studio no longer renders the partner frame');
+  const p2 = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/partner/PartnerHomeP2.jsx'), 'utf8'));
+  assert.doesNotMatch(p2 + frame, /\bHome\b(?!P2)/, 'Partner Studio still says Home');
+});
+
+test('D564: a partner on /studio sees Partner Studio, and nothing on it says Home', () => {
+  // The frame (Eadwyn, the profile band) mounts Worker-reaching imports, so the
+  // body it mounts is rendered here, as the partner's /studio draws it.
+  const html = render({ status: 'ready', reads: { board: { mode: 'project', engagements: [], due_next_7_days: 0, needs_attention: [] }, retainers: { mrr_cents: 0, retainers: [] }, capacity: { over_committed_count: null, cap_note: 'No cap stated.' } } });
+  assert.match(html, /Where does the firm stand today\?/);
+  assert.match(html, /Partner Studio/, 'the rail does not name Partner Studio');
+  assert.doesNotMatch(html, /\bHome\b/);
+  assert.match(render({ status: 'preview' }), /nothing on Partner Studio is read while you preview it/);
 });
