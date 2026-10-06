@@ -30,7 +30,7 @@ import {
   issueFundCall, recordReceipt, readLine, readFundCalls, readFundLedger,
 } from '../services/fundCallLedger';
 import {
-  rollUpFundRow, totalFundRollups, FUND_METRIC_UNAVAILABLE,
+  rollUpFundRow, readFundCapital, totalFundRollups, FUND_METRIC_UNAVAILABLE,
   type FundRollup, type FundRollupRow,
 } from '../services/fundRollup';
 
@@ -318,7 +318,7 @@ funds.get('/distributions', async (c) => {
 });
 
 // Fund analytics. The arithmetic and the honesty rules live in
-// services/fundRollup.ts, which is pure and tested; this file only does SQL.
+// services/fundRollup.ts, including the scoped capital-call receipt read.
 const FUND_ROLLUP_SQL = (where: string) =>
   `SELECT f.id, f.name, f.vintage_year, f.status, f.deployed_capital,
           f.total_commitment, f.management_fee, f.carried_interest,
@@ -340,7 +340,7 @@ async function rollUpFunds(env: Env, fundId?: number, scope?: { sql: string; bin
   if (scope) { where.push(scope.sql); binds.push(...scope.binds); }
   const stmt = env.DB.prepare(FUND_ROLLUP_SQL(where.length ? `WHERE ${where.join(' AND ')}` : ''));
   const rows = await (binds.length ? stmt.bind(...binds) : stmt).all<FundRollupRow>();
-  return (rows.results || []).map(rollUpFundRow);
+  return Promise.all((rows.results || []).map(row => readFundCapital(env, rollUpFundRow(row))));
 }
 
 // Family rollup. Registered before /:id so `analytics` is not read as an id.

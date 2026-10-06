@@ -46,6 +46,8 @@ The API client, formatters and helpers. Nothing here renders.
 | `messagesView.js` | The Messages page's pure half (D414): `FILTERS` (the canvas's seven chips and the subject types each answers to), `SUBJECT_LABEL`, `threadMatches` (chip plus search over the counterparty card, the subject and the preview) and `groupMessages` (day separators; name on the first of a run, avatar and time on the last), plus the card formatters, and (D415) `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_ACCEPT` and `fileSize` for the composer's file picker. No email is read anywhere in it. |
 | `zoneTime.js` | `inZone`, `dateInZone` — an instant rendered in the zone it is **enforced** in, with that zone named. The zone is a required argument, never a default: the Spin-Out Lab programme runs on America/New_York for every territory and a branch admin does not, so a formatter that fell back to the reader's zone would print the wrong hour. Deliberately not merged with `spinoutLab.js`'s date helpers, which bake the zone in for a reader who is on that clock. |
 
+**`investorIntroRequest.js`** — D550 recorded founder/project target selection and a shared in-flight/pending lock for investor intro requests. A quota ask is not consent or a completed introduction.
+
 ## Subfolders
 
 | Folder | What lives there |
