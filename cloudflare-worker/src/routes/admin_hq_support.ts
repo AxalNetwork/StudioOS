@@ -30,9 +30,10 @@ import { openEscalationSummary, ESCALATION_KINDS, SLA_HOURS, type OpenEscalation
 import { ageHours } from '../services/approvalSources';
 import {
   readOpenTickets, summariseTickets, readTicketSync, readSupportLicences,
-  readSupportDeployments, buildTenantMatrix, SUPPORT_LIST_LIMIT,
-  type TicketQueues,
+  readSupportDeployments, buildTenantMatrix, branchTicketLine, SUPPORT_LIST_LIMIT,
+  type TicketQueues, type BranchTicketLine, type BranchTicketsRead,
 } from '../services/supportQueues';
+import { fanOut, withRegistry, coverage } from '../services/branches';
 import {
   readOpenTicketTaxonomy, ticketMappingText, readSlaTiers, parseSlaTiers, SLA_TIERS,
 } from '../services/supportSlaPolicy';
@@ -117,6 +118,7 @@ type Queue = { count: number | null; oldest_age_hours: number | null };
 function totalOf(
   escalations: ReturnType<typeof escalationQueue>,
   tickets: ({ available: true } & TicketQueues) | { available: false; reason: string },
+  branchLines: BranchTicketLine[] = [],
 ) {
   if (!escalations.available) {
     return { value: null, reason: 'Escalations could not be read, so the three queues have no total.' };
@@ -127,10 +129,26 @@ function totalOf(
   if (!escalations.complete || !tickets.complete) {
     return { value: null, reason: 'A queue holds more items than one read counts, so a total would be a cut count.' };
   }
+  // D485 — a branch's administrators' tickets are part of the About-Admin
+  // queue, so a branch that could not be read leaves the total a part.
+  const unread = branchLines.filter((b) => b.state !== 'ok');
+  if (unread.length) {
+    return {
+      value: null,
+      reason: `The tickets filed on ${unread.map((b) => b.label).join(', ')} could not be read, so the About-Admin queue is uncounted and a total would be a part.`,
+    };
+  }
+  if (branchLines.some((b) => b.state === 'ok' && b.count === null)) {
+    return { value: null, reason: 'A branch holds more open tickets than one read counts, so a total would be a cut count.' };
+  }
   const parts: Array<[string, Queue]> = [
     ['escalations', { count: escalations.count, oldest_age_hours: escalations.oldest_age_hours }],
     ['hq_held', tickets.buckets.hq_held],
     ['admin_product', tickets.buckets.admin_product],
+    ...branchLines.map((b): [string, Queue] => [
+      `branch:${b.code}`,
+      b.state === 'ok' ? { count: b.count, oldest_age_hours: b.oldest_age_hours } : { count: null, oldest_age_hours: null },
+    ]),
   ];
   let value = 0;
   let oldest: { age_hours: number; queue: string } | null = null;
@@ -159,6 +177,27 @@ r.get('/', async (c) => {
     readSlaTiers(env),
   ]);
 
+  // D485 — each branch's administrators' tickets, filed on its own host.
+  // Asked of every bound branch and merged with the registry, so a deployed
+  // branch with no binding is named rather than silently left out. Labels come
+  // from the licence ledger the matrix already read.
+  const answers = await fanOut<{ tickets: BranchTicketsRead }>(env, 'openTickets');
+  const registry = deployments.available ? deployments.rows.map((d) => ({ code: d.code, licence_uid: d.licence_uid })) : [];
+  const brandOf = new Map((licences.available ? licences.rows : []).map((l) => [l.uid, l.brand_name]));
+  const labelOf = new Map(registry.map((d) => [String(d.code).toLowerCase(), brandOf.get(d.licence_uid) || d.code]));
+  const branchResults = withRegistry(answers, registry);
+  const branchLines: BranchTicketLine[] = branchResults.map((b) => {
+    const label = labelOf.get(b.code) || b.code;
+    if (b.status === 'ok' && b.data?.tickets) {
+      return branchTicketLine(b.code, label, b.data.tickets, nowMs, tiersRead.available ? tiersRead.hours : null);
+    }
+    return {
+      code: b.code, label,
+      state: b.status === 'not_deployed' ? 'not_deployed' as const : 'unreadable' as const,
+      reason: b.reason || 'This branch did not answer.',
+    };
+  });
+
   let escalationsRead: EscalationsRead;
   try {
     escalationsRead = { available: true, ...(await openEscalationSummary(env, nowMs)) };
@@ -180,6 +219,7 @@ r.get('/', async (c) => {
         escalations: escalationsRead,
         tickets: ticketsRead,
         nowMs,
+        branchTickets: new Map(branchLines.map((b) => [b.code, b])),
       }),
     }
     : { available: false as const, reason: licences.reason };
@@ -187,9 +227,14 @@ r.get('/', async (c) => {
   return c.json({
     read_at: new Date(nowMs).toISOString(),
     list_limit: SUPPORT_LIST_LIMIT,
-    total: totalOf(escalations, tickets),
+    total: totalOf(escalations, tickets, branchLines),
     escalations,
     tickets,
+    branch_tickets: {
+      lines: branchLines,
+      coverage: coverage(branchResults),
+      whose: 'Each branch’s active administrators, filing on its own host about the Admin product. A branch member’s own ticket is the branch’s to answer and is not sent.',
+    },
     matrix,
     sync,
     sla_policy: slaPolicyBody(tiersRead),

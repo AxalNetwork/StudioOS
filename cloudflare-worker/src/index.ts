@@ -43,6 +43,7 @@ import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import profileHistoryRoutes from './routes/profile_history';
 import adminProfilingRoutes from './routes/admin_profiling';
+import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
@@ -88,6 +89,7 @@ import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
+import safeIssuances from './routes/safe_issuances';
 import admin83bReview from './routes/admin_83b_review';
 import companyEin from './routes/company_ein';
 import privateData from './routes/private-data';
@@ -799,6 +801,8 @@ app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 // Cohort Timing & Gating — timeline, review queue, grace/override, impersonation audit.
 app.route('/api/admin/cohort', adminCohort);
+// D578 (#1205) — a startup's SAFEs: recorded terms, status from the envelope.
+app.route('/api/safe-issuances', safeIssuances);
 // D580 (#1207) — 83(b) operator review: assign an operator, record a review.
 app.route('/api/admin/83b-review', admin83bReview);
 // D579 (#1206) — a startup's EIN, encrypted at rest; founders, company editors and admins.
@@ -1067,6 +1071,9 @@ app.route('/api/profiling', profiling);
 app.route('/api/profile', profileHistoryRoutes);
 // D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
 app.route('/api/admin/profiling', adminProfilingRoutes);
+// D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
+app.route('/api/help', helpCenterRoutes);
+app.route('/api/admin/help', adminHelpCenter);
 app.route('/api/dashboard', dashboard);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);
@@ -1637,6 +1644,16 @@ export default {
           } catch (e) {
             console.error('[cron] learning video sweep failed', e);
           }
+        }
+        // D484 — publish approved articles whose scheduled time has passed.
+        // Every minute, on every tier: a branch's articles are its own, and an
+        // article with no `publish_at` is never touched.
+        try {
+          const { publishDueArticles } = await import('./routes/admin_articles');
+          const p = await publishDueArticles(env, now);
+          if (p.published) console.info(`[cron] scheduled articles published=${p.published} of due=${p.due}`);
+        } catch (e) {
+          console.error('[cron] scheduled article publish failed', e);
         }
         // Cohort Timing & Gating — every-minute tick: materializes monthly
         // cycles, unlocks weeks at their Delaware-midnight boundaries,

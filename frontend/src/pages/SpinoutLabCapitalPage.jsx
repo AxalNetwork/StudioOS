@@ -24,8 +24,11 @@
 //     on the cap-table scenario, labelled as such — not terms of this round.
 //     Pro-rata rights read /contacts/raise-pro-rata (migration 169) with the
 //     Worker's own entitlement arithmetic, shown read-only in a card.
+//   - SAFEs (D578): the round's SAFEs, terms recorded per investor and status
+//     read from the e-sign envelope (SafeIssuancesCard). Generating and
+//     sending one waits on the counsel-approved SAFE text.
 //   - Omitted (no backend): warm-intro probabilities, conviction scores,
-//     per-prospect next steps/statuses, SAFE generator, pitch-feedback
+//     per-prospect next steps/statuses, SAFE document generation, pitch-feedback
 //     objection counts, MFN and lead-profile round terms (rendered as honest
 //     "Not set" tiles), share/copy-link, projected-close
 //     pacing and meetings-this-week (no stage-transition/meeting timestamps).
@@ -52,6 +55,7 @@ import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { reportError, reportWarn } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
 import { instrumentTiles, proRataTile, proRataRuleCopy } from '../lib/capitalRoundTerms';
+import SafeIssuancesCard from '../components/spinout/SafeIssuancesCard';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -790,6 +794,9 @@ export default function SpinoutLabCapitalPage() {
           </p>
         </div>
       )}
+
+      {/* D578 — the round's SAFEs, from safe_issuances and their envelopes. */}
+      {project?.id && <SafeIssuancesCard projectId={project.id} prospects={prospects} />}
 
       {/* D364 — pro-rata rights in the active round, read-only. The Worker
           computes each entitlement per request from the round size and the

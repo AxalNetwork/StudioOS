@@ -141,6 +141,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('fundsRegistry', true),
       // D483 — H15's approval age fans out to it (admin_hq.ts). A read of durations, no secret.
       m('approvalAges', true),
+      // D485 — HQ · Support fans out to it (admin_hq_support.ts). A read, no secret.
+      m('openTickets', true),
       m('applyLicence', true),
       m('applyPromoCeiling', true),
       m('applyEscalationAnswer', true),

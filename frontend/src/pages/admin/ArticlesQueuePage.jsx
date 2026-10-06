@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   FileText, RefreshCw, Loader2, MessageSquare, CheckCircle2,
-  XCircle, Edit3, Globe, RotateCcw, Eye,
+  XCircle, Edit3, Globe, RotateCcw, Eye, Clock,
 } from 'lucide-react';
 import { adminArticles as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import { reportError } from '../../lib/log';
+import { localInputValue, publishAtFromLocal, utcLabel } from './articlePublishAt';
 
 // Admin /admin/articles review queue — the single "Content Queue" (Task #3
 // merged the former News + Articles admin queues). /admin/news redirects here.
@@ -19,6 +20,58 @@ const STATUS_TABS = [
   { id: 'published', label: 'Published' },
   { id: 'rejected', label: 'Rejected' },
 ];
+
+/**
+ * D484 — the time an approved article goes out. Set, it is published by the
+ * per-minute cron once the time passes; cleared, it waits for Publish, as
+ * before. The input is read in this browser's zone and stored as UTC, and the
+ * stored time is shown in both, so admins in two zones agree on it.
+ */
+export function PublishAtControl({ article, busy, onSet, onClear }) {
+  const [value, setValue] = useState(() => localInputValue(article.publish_at));
+  const next = publishAtFromLocal(value);
+  const stored = utcLabel(article.publish_at);
+  return (
+    <div className="mt-2 w-full rounded border border-slate-200 p-2 text-xs dark:border-slate-700" data-testid="article-publish-at">
+      <p className="flex items-center gap-1 text-slate-700 dark:text-slate-200" data-testid="article-publish-at-state">
+        <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+        {stored
+          ? <>Goes out {new Date(article.publish_at).toLocaleString()} your time ({stored}), checked every minute.</>
+          : <>No publish time set: it waits for Publish. Set one to have it go out on its own.</>}
+      </p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1">
+          <span>Publish at</span>
+          <input
+            type="datetime-local"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 dark:border-slate-600 dark:bg-slate-900"
+            aria-label="Publish at, in your time zone"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy || !next}
+          onClick={() => onSet(next)}
+          className="rounded bg-violet-700 px-2 py-1 text-white hover:bg-violet-800 disabled:opacity-50"
+        >
+          {stored ? 'Move time' : 'Set time'}
+        </button>
+        {stored && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onClear}
+            className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-800"
+          >
+            Clear time
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function statusBadge(s) {
   const map = {
@@ -124,6 +177,7 @@ export default function ArticlesQueuePage() {
   const startReview = (id) => action(() => api.startReview(id), 'Started review');
   const approve = (id) => action(() => api.approve(id), 'Approved');
   const publish = (id) => action(() => api.publish(id), 'Published');
+  const schedule = (id, publishAt) => action(() => api.schedule(id, publishAt), publishAt ? 'Publish time set' : 'Publish time cleared');
   const unpublish = (id) => { if (!window.confirm('Unpublish this article?')) return; action(() => api.unpublish(id), 'Unpublished'); };
   const requestChanges = (id) => setPrompt({
     title: 'Request changes', placeholder: 'Describe what to change…',
@@ -254,6 +308,15 @@ export default function ArticlesQueuePage() {
                     <button disabled={busy} onClick={() => publish(detail.article.id)} className="text-sm px-3 py-1.5 bg-violet-700 text-white rounded hover:bg-violet-800 disabled:opacity-50 flex items-center gap-1">
                       <Globe className="w-4 h-4" /> Publish
                     </button>
+                  )}
+                  {detail.article.status === 'approved' && (
+                    <PublishAtControl
+                      key={`${detail.article.id}:${detail.article.publish_at || ''}`}
+                      article={detail.article}
+                      busy={busy}
+                      onSet={(at) => schedule(detail.article.id, at)}
+                      onClear={() => schedule(detail.article.id, null)}
+                    />
                   )}
                   {detail.article.status === 'published' && (
                     <button disabled={busy} onClick={() => unpublish(detail.article.id)} className="text-sm px-3 py-1.5 border border-orange-300 text-orange-700 dark:text-orange-300 rounded hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 flex items-center gap-1">

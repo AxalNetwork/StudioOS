@@ -57,7 +57,7 @@ import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
-import { pickLabProject } from './SpinoutLabStartupPage';
+import { incorporateRoute, pickLabProject } from './SpinoutLabStartupPage';
 import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
@@ -274,8 +274,11 @@ const MILESTONE_TOOLS = {
   scoring_run_completed: { label: 'Scoring Engine', to: '/spinout-lab/scoring' },
   advisor_meeting_booked: { label: 'Advisors', to: '/spinout-lab/advisors' },
   cofounder_request_sent: { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement' },
-  incorporation_completed: { label: 'Incorporate', to: '/incorporate' },
 };
+// D582: Incorporate depends on who is looking, so it is resolved per viewer.
+export function milestoneTool(key, user) {
+  return key === 'incorporation_completed' ? { label: 'Incorporate', to: incorporateRoute(user) } : MILESTONE_TOOLS[key];
+}
 const MILESTONE_LABELS = {
   problem_defined: 'Define the problem statement',
   icp_defined: 'Define your ICP',
@@ -550,9 +553,9 @@ export default function SpinoutLabOfficeHoursPage() {
       4: ['incorporation_completed'],
     };
     return (WEEK_KEYS[week] || []).map((k) => ({
-      key: k, label: MILESTONE_LABELS[k] || k, done: milestoneDone(k), tool: MILESTONE_TOOLS[k],
+      key: k, label: MILESTONE_LABELS[k] || k, done: milestoneDone(k), tool: milestoneTool(k, user),
     }));
-  }, [state]);
+  }, [state, user]);
 
   // ---- Booking drawer ----
   const drawerSeq = React.useRef(0);
@@ -1042,7 +1045,7 @@ export default function SpinoutLabOfficeHoursPage() {
             {[
               { dot: 'bg-sky-500', label: 'Advisors', desc: 'find and book an advisor', to: '/spinout-lab/advisors' },
               { dot: 'bg-amber-500', label: 'Capital', desc: 'plan and track your raise', to: '/spinout-lab/capital' },
-              { dot: 'bg-emerald-500', label: 'Incorporate', desc: 'form the entity', to: '/incorporate' },
+              { dot: 'bg-emerald-500', label: 'Incorporate', desc: 'form the entity', to: incorporateRoute(user) },
             ].map((r) => (
               <Link key={r.label} to={r.to} className="flex items-center gap-2 py-1.5 group" data-testid={`feeds-${r.label.toLowerCase()}`}>
                 <span className={`w-2 h-2 rounded-full ${r.dot}`} />

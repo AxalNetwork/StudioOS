@@ -29,7 +29,7 @@ import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
-  moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges,
+  moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges, branchOpenTickets,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
 } from './branchOps';
 import {
@@ -52,6 +52,10 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // D483 — this branch's referral decision ages, for HQ's H15. A read of
   // anonymous durations, so no secret, on the rule above.
   approvalAges() { return branchApprovalAges(this.env); }
+
+  // D485 — the tickets this branch's administrators filed on its host, for
+  // HQ · Support. A read, so no secret, on the rule above.
+  openTickets() { return branchOpenTickets(this.env); }
 
   applyLicence(record: Record<string, unknown>) { return applyLicenceCopy(this.env, record); }
 

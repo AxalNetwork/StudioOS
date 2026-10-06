@@ -11,12 +11,14 @@ import { storeReason } from './impersonationBar';
 export * from './api/adminLearning.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
+export * from './api/helpCenter.js';
 export * from './api/learning.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
+export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 // api-modules:end
 
@@ -2621,12 +2623,15 @@ export const api = {
   // Task #2 — branded multi-page sites & saved templates.
   brandGetSite: (projectId) => request(`/brand/site/by-project/${projectId}`),
   brandSetSiteSlug: (projectId, slug) => request(`/brand/site/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify({ slug }) }),
-  brandListPages: (projectId) => request(`/brand/landing/by-project/${projectId}/pages`),
+  // D583: `archived: true` lists the archived pages too (they are hidden by default).
+  brandListPages: (projectId, { archived = false } = {}) => request(`/brand/landing/by-project/${projectId}/pages${archived ? '?archived=1' : ''}`),
   brandCreatePage: (projectId, payload) => request(`/brand/landing/by-project/${projectId}/pages`, { method: 'POST', body: JSON.stringify(payload) }),
   brandGetPage: (pageId) => request(`/brand/landing/pages/${pageId}`),
   brandUpdatePage: (pageId, payload) => request(`/brand/landing/pages/${pageId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
   brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  // D583: archive (unpublish and hide, kept) or restore one page.
+  brandArchivePage: (pageId, archived) => request(`/brand/landing/pages/${pageId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }),
   brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
   // The SHAREABLE public url (distinct from the noindex preview-token link
   // above). Returns { url, published, page_slug }.
@@ -5536,6 +5541,9 @@ export const adminArticles = {
     request(`/admin/articles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   approve: (id) => request(`/admin/articles/${id}/approve`, { method: 'POST', body: '{}' }),
   publish: (id) => request(`/admin/articles/${id}/publish`, { method: 'POST', body: '{}' }),
+  // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
+  schedule: (id, publishAt) =>
+    request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),
   unpublish: (id) => request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: '{}' }),
   addComment: (id, body, anchor) =>
     request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify({ body, anchor }) }),

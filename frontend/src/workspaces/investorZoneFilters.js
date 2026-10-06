@@ -202,7 +202,10 @@ export const INVESTOR_ZONE_FILTERS = {
   'portfolio/updates': [
     { canvas: 'This period', key: 'period' },
     { canvas: 'Overdue', key: 'overdue' },
-    { canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER },
+    // D496 (#1023): built up to the owner's line. No extraction layer exists,
+    // and whether one should (AI proposals, a check of the founder-entered
+    // fields, or nothing) is question 6 on #1023.
+    { canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER, hover: 'Parsing updates is not decided yet: no extraction runs, so there is nothing to review.' },
     // `Rules` WAS `NO_EXTRACTION_LAYER` TOO, and that reason is true about the
     // rules which would produce an extraction — but it is not the only rule set
     // in play. `portfolio_kpi_definitions` stores the KPIs companies are held
