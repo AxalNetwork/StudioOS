@@ -350,6 +350,13 @@ test('all eight branch routes render through the frame', () => {
   // component is read — which also catches the case a list never could: a page
   // that stops wrapping itself while the route still expects it to.
   for (const { path, el } of bare) {
+    // D473 — `/branch` is a redirect to Studio, not a page, so it has no rail.
+    if (path === '/branch') {
+      assert.match(el, /<BranchDigestRedirect\b/, '/branch opens Studio');
+      assert.doesNotMatch(el, /<BranchHome\b/);
+      assert.doesNotMatch(el, /<BranchZone\b/);
+      continue;
+    }
     const named = /<([A-Z][A-Za-z0-9]*)\b/.exec(el);
     assert.ok(named, `${path} renders no component, so it cannot have a rail`);
     const file = `frontend/src/pages/branch/${named[1]}.jsx`;
@@ -495,6 +502,11 @@ test('every branch zone can NAME its branch, which is S12 rule 1 (D151)', () => 
     assert.ok(at > 0, `${path} is no longer a registered route`);
     const next = app.indexOf('<Route', at);
     const element = app.slice(at, next > at ? next : at + 240);
+    // D473 — the bare path has no rail. It redirects, so there is no frame to name.
+    if (path === '/branch') {
+      assert.match(element, /<BranchDigestRedirect\b/);
+      continue;
+    }
     assert.ok(element.includes('user={user}'), `${path} must pass the user, or the rail cannot name the branch`);
   }
   for (const file of [

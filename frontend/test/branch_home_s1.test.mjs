@@ -86,18 +86,14 @@ const API = raw('frontend/src/lib/api.js');
 const ROUTE = raw('cloudflare-worker/src/routes/branch_home.ts');
 const SERVICE = raw('cloudflare-worker/src/services/branchHome.ts');
 
-test('/branch is a page now, not a notice promising six blocks', () => {
+test('/branch redirects to Studio and does not mount the digest', () => {
   const at = APP.indexOf('path="/branch"');
   assert.ok(at > 0, '/branch must still be a registered route');
-  const row = APP.slice(at, at + 160);
-  // D151 — PINNED TO THE COMPONENT, NOT TO THE PROP-LESS SPELLING. This read
-  // `includes('<BranchHome />')`, so passing the route a prop failed a guard
-  // about which component it renders — a fact the prop does not change. The
-  // boundary check is what keeps it honest: `<BranchHome` alone would also
-  // match a longer name like `<BranchHomeLegacy`.
-  const open = row.indexOf('<BranchHome');
-  assert.ok(open >= 0 && /[\s/>]/.test(row[open + '<BranchHome'.length] || ''),
-    '/branch must render the page');
+  const next = APP.indexOf('<Route', at);
+  const row = APP.slice(at, next > at ? next : at + 240);
+  // D473 — the path stays. It no longer renders the digest.
+  assert.match(row, /<BranchDigestRedirect\b/);
+  assert.doesNotMatch(row, /<BranchHome\b/);
   assert.ok(
     !row.includes('BranchZonePending'),
     '/branch still renders the pending notice, which promises three blocks this PR ships',
