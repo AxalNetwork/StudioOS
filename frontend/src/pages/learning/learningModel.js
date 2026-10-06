@@ -3,8 +3,14 @@
  * real shape becomes a row, and the derivations the presentational components
  * share. No React and no fetch, so a test can read every rule here directly.
  *
- * THREE SOURCES ARE LIVE TODAY, AND EACH IS READ IN THE SHAPE ITS ROUTE SENDS:
+ * EACH LIVE SOURCE IS READ IN THE SHAPE ITS ROUTE SENDS:
  *
+ *   catalog       `GET /api/learning/catalog` (`routes/learning.ts`, D557),
+ *                 `{ items, sources, limit, offset }`: courses, videos and
+ *                 readings with articles, publications and events, and each
+ *                 source's own state;
+ *   courses, items, progress  `GET /api/learning/courses/:slug`,
+ *                 `/items/:uid`, `/me` and `POST /progress` (D557);
  *   articles      `GET /api/articles` (`routes/articles.ts`), `{ items, total }`,
  *                 each item `publicArticleShape`;
  *   publications  `GET /api/market-intel-public/publications`
@@ -13,10 +19,9 @@
  *   events        `GET /api/public/events` (`routes/events_public.ts`),
  *                 `{ events }`, each `shapeEvent`, upcoming by default.
  *
- * EVERYTHING ELSE WAITS ON A STORE THAT DOES NOT EXIST YET: courses, lessons,
- * videos and progress on #1158, programs on #1159, exercises and exams on
- * #1160, webinars on #1161, video playback on #1162. Those surfaces say so in
- * one line rather than drawing a row.
+ * THE REST WAITS ON A STORE THAT DOES NOT EXIST YET: programs on #1159,
+ * exercises and exams on #1160, webinars on #1161, playback of an uploaded
+ * video on #1162. Those surfaces say so in one line rather than drawing a row.
  */
 import { titleCase } from '../../lib/absence';
 
@@ -34,11 +39,15 @@ export const NOT_LIVE = {
   studio: 'The learning studio is not live yet.',
 };
 
-/** The canvas's nine tabs, in its order. `live` marks the three an existing route fills. */
+/**
+ * The canvas's nine tabs, in its order. `live` marks the ones a route fills:
+ * All, Courses and Videos read D557's catalog; Articles, Publications and
+ * Events their own routes. The other three wait on their stores.
+ */
 export const LEARNING_TABS = [
   { key: 'all', label: 'All', live: true },
-  { key: 'courses', label: 'Courses', live: false },
-  { key: 'videos', label: 'Videos', live: false },
+  { key: 'courses', label: 'Courses', live: true },
+  { key: 'videos', label: 'Videos', live: true },
   { key: 'webinars', label: 'Webinars', live: false },
   { key: 'articles', label: 'Articles', live: true },
   { key: 'publications', label: 'Publications', live: true },
@@ -46,6 +55,13 @@ export const LEARNING_TABS = [
   { key: 'exercises', label: 'Exercises', live: false },
   { key: 'exams', label: 'Exams', live: false },
 ];
+
+/** The line each tab that waits on a store says, and the store it waits on. */
+export const TAB_NOT_LIVE = {
+  webinars: NOT_LIVE.webinars,
+  exercises: NOT_LIVE.exercises,
+  exams: NOT_LIVE.exams,
+};
 
 export const ARTICLES_PAGE_SIZE = 20;
 export const EVENTS_PAGE_SIZE = 20;
@@ -211,26 +227,186 @@ export function matchesQuery(row, query) {
   return [row.title, row.summary, row.section].some((v) => String(v ?? '').toLowerCase().includes(needle));
 }
 
-const KIND_LABEL = { article: 'Article', publication: 'Publication', event: 'Event' };
+const KIND_LABEL = {
+  course: 'Course', video: 'Video', reading: 'Reading', article: 'Article', publication: 'Publication', event: 'Event',
+};
 export const kindLabel = (kind) => KIND_LABEL[kind] || titleCase(kind);
 
+// ── The federated catalog (D557, `GET /api/learning/catalog`) ─────────────
+
+/** The six kinds the catalog reads, in its own order. */
+export const CATALOG_KINDS = ['course', 'video', 'reading', 'article', 'publication', 'event'];
+
+/** The tab a catalog kind belongs to, and back: All reads every kind. */
+export const TAB_KIND = { courses: 'course', videos: 'video' };
+
+/** Where a standalone item opens: a video at its own route, a reading at the catalog's. */
+export function itemHref(item) {
+  const uid = clean(item?.uid ?? item?.id);
+  if (!uid) return null;
+  return item?.kind === 'video' ? `/learning/videos/${encodeURIComponent(uid)}` : `/learning/items/${encodeURIComponent(uid)}`;
+}
+
 /**
- * All: the three live lists as one, newest date first, each row keeping its
- * kind. A source that is still loading or could not be read is named rather
- * than folded in as empty, so a failed read never reads as "nothing published".
+ * One catalog row, from the shape `readKind` returns: `kind`, `id` (a uid
+ * for an item, a slug otherwise), `title`, `summary`, `date`, plus the
+ * fields each kind adds. The href is built here from the id, so a video opens
+ * `/learning/videos/:uid` (the route this app serves; the catalog's own href
+ * for an item is `/learning/items/:uid`, which it also serves). A row whose
+ * status is not `published` is the Super Admin's draft, and says so.
  */
-export function combineAll(sources, limit = ALL_LIMIT) {
-  const rows = [];
-  const loading = [];
-  const unreadable = [];
-  for (const [kind, state] of Object.entries(sources)) {
-    if (!state || state.status === 'loading') loading.push(kind);
-    else if (state.status === 'unreadable') unreadable.push(kind);
-    else if (state.status === 'ready') rows.push(...(state.rows || []));
+export function catalogRow(r) {
+  const id = clean(r?.id);
+  const enc = encodeURIComponent;
+  const base = {
+    kind: r?.kind,
+    key: `${r?.kind}:${id}`,
+    title: clean(r?.title) || 'Untitled',
+    summary: clean(r?.summary) || null,
+    date: r?.date || null,
+    draft: r?.status && r.status !== 'published' ? titleCase(r.status) : null,
+  };
+  const level = clean(r?.level) ? titleCase(r.level) : null;
+  switch (r?.kind) {
+    case 'course':
+      return { ...base, href: id ? `/learning/courses/${enc(id)}` : null, level, minutes: r.estimated_minutes ?? null };
+    case 'video':
+    case 'reading':
+      return { ...base, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null };
+    case 'article': {
+      const minutes = Number(r.read_minutes);
+      return {
+        ...base, href: id ? `/articles/${enc(id)}` : null,
+        author: clean(r.author?.name) || null,
+        role: clean(r.author?.role) ? titleCase(r.author.role) : null,
+        readMinutes: Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : null,
+      };
+    }
+    case 'publication':
+      return { ...base, href: id ? `/insights/public/${enc(id)}` : null, section: clean(r.section) ? titleCase(r.section) : null };
+    case 'event':
+      return { ...base, href: id ? `/events/${enc(id)}` : null, type: clean(r.event_type) ? titleCase(r.event_type) : null };
+    default:
+      return { ...base, href: null };
   }
-  const stamp = (row) => parseInstant(row.date)?.getTime() ?? -Infinity;
-  rows.sort((a, b) => stamp(b) - stamp(a));
-  return { rows: rows.slice(0, limit), count: rows.length, loading, unreadable };
+}
+
+/**
+ * The catalog's per-source states, named: `ready` with a total,
+ * `unreadable` with the route's own reason, or `filtered_out`. A source that
+ * failed is never read as an empty list.
+ */
+export function sourceStates(sources) {
+  return CATALOG_KINDS
+    .filter((kind) => sources && sources[kind])
+    .map((kind) => ({ kind, ...sources[kind] }));
+}
+
+// ── Items: how a video plays (D557's allow-list; R2 streaming is #1162) ────
+
+const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com'];
+const VIDEO_ID = /^[\w-]{6,32}$/;
+const STREAM_ID = /^[a-f0-9]{32}$/i;
+
+/**
+ * How a video item plays here. `{ src, embed: true }` is an iframe in the
+ * platform's own embed form; `{ reason, href }` is a video this page cannot
+ * play, with the reason and, for a link, the link itself.
+ *
+ *   - YouTube (`watch?v=`, `youtu.be/`, `/embed/`, `/shorts/`, `/live/`) →
+ *     `www.youtube-nocookie.com/embed/<id>`;
+ *   - Vimeo (`vimeo.com/<id>`, `player.vimeo.com/video/<id>`) →
+ *     `player.vimeo.com/video/<id>`;
+ *   - Cloudflare Stream (`<customer>.cloudflarestream.com/<id>`,
+ *     `videodelivery.net/<id>`) → the `iframe` player for that id.
+ *
+ * An upload (`video_source = 'r2'`) streams through `GET
+ * /api/learning/items/:uid/video`, which #1162 has not built, so it is "Not
+ * recorded" here until it is.
+ */
+export function videoPlayback(item) {
+  if (!item || item.kind !== 'video') return null;
+  if (item.video_source === 'r2') {
+    return { reason: 'This video was uploaded to be streamed here, and streaming is not live yet.' };
+  }
+  const raw = clean(item.video_url);
+  if (!raw) return { reason: 'No video link is recorded for this item.' };
+  let u;
+  try { u = new URL(raw); } catch { return { reason: 'The video link cannot be read.' }; }
+  if (u.protocol !== 'https:') return { reason: 'The video link is not https, so it is not played here.' };
+  const host = u.hostname.toLowerCase();
+  const segments = u.pathname.split('/').filter(Boolean);
+  const embed = (src) => ({ src, embed: true });
+  if (YOUTUBE_HOSTS.includes(host)) {
+    const id = u.pathname === '/watch' ? u.searchParams.get('v')
+      : ['embed', 'shorts', 'live'].includes(segments[0]) ? segments[1] : null;
+    if (id && VIDEO_ID.test(id)) return embed(`https://www.youtube-nocookie.com/embed/${id}`);
+  }
+  if (host === 'youtu.be' && segments[0] && VIDEO_ID.test(segments[0])) {
+    return embed(`https://www.youtube-nocookie.com/embed/${segments[0]}`);
+  }
+  if ((host === 'vimeo.com' || host === 'www.vimeo.com') && /^\d+$/.test(segments[0] || '')) {
+    return embed(`https://player.vimeo.com/video/${segments[0]}`);
+  }
+  if (host === 'player.vimeo.com' && segments[0] === 'video' && /^\d+$/.test(segments[1] || '')) {
+    return embed(`https://player.vimeo.com/video/${segments[1]}`);
+  }
+  if (host.endsWith('.cloudflarestream.com') && STREAM_ID.test(segments[0] || '')) {
+    return embed(`https://${host}/${segments[0]}/iframe`);
+  }
+  if (host === 'videodelivery.net' && STREAM_ID.test(segments[0] || '')) {
+    return embed(`https://iframe.videodelivery.net/${segments[0]}`);
+  }
+  return { reason: 'This link cannot be played on this page.', href: u.toString() };
+}
+
+// ── Courses and lessons, from `GET /api/learning/courses/:slug` ──────────────
+
+/** Every lesson of a course, in module order then lesson order, with its module. */
+export function courseLessons(modules) {
+  return byPosition(modules).flatMap((m) => byPosition(m?.lessons).map((l) => ({ ...l, module: m })));
+}
+
+/** One lesson of a course, with the lessons either side of it. */
+export function findLesson(modules, uid) {
+  const all = courseLessons(modules);
+  const at = all.findIndex((l) => l.uid === uid);
+  if (at < 0) return null;
+  return { lesson: all[at], index: at, total: all.length, prev: all[at - 1] || null, next: all[at + 1] || null };
+}
+
+// ── The studio's helpers ──────────────────────────────────────────────────
+
+/**
+ * A length typed as `12` (minutes) or `12:05` (minutes and seconds), as whole
+ * seconds. `null` for an empty field; `undefined` for one that is not a length.
+ */
+export function parseLength(value) {
+  const s = clean(value);
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s) * 60;
+  const m = /^(\d+):([0-5]\d)$/.exec(s);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : undefined;
+}
+
+/** Whole seconds as the studio's `m:ss`, or '' when there is none. */
+export function formatLength(seconds) {
+  const n = Number(seconds);
+  if (seconds === null || seconds === undefined || seconds === '' || !Number.isFinite(n) || n < 0) return '';
+  return `${Math.floor(n / 60)}:${String(Math.round(n % 60)).padStart(2, '0')}`;
+}
+
+/**
+ * A complete order with one uid moved a step up (-1) or down (+1), as the
+ * reorder routes take it; null when it is already at that end.
+ */
+export function moveInOrder(uids, uid, step) {
+  const at = uids.indexOf(uid);
+  const to = at + step;
+  if (at < 0 || to < 0 || to >= uids.length) return null;
+  const next = [...uids];
+  [next[at], next[to]] = [next[to], next[at]];
+  return next;
 }
 
 // ── Shared by the presentational components (planned shapes, #1158–#1162) ──
@@ -240,13 +416,19 @@ export const LESSON_KINDS = ['video', 'reading', 'exercise', 'exam', 'webinar'];
 export const lessonKindLabel = (kind) => (LESSON_KINDS.includes(kind) ? titleCase(kind) : 'Lesson');
 
 /**
- * Where a lesson opens. A video or reading plays in the lesson player; an
- * exercise, exam or webinar lesson points at its own page through `ref_uid`.
+ * Where a lesson opens. A video or reading plays in the lesson player. An
+ * exercise or exam lesson points at its own page through `ref_uid`. A webinar
+ * lesson names an EVENT by its slug (D557: `checkRef` looks it up in
+ * `events`), so it opens the event's page until #1161's webinars exist.
  */
 export function lessonHref(courseSlug, lesson) {
   const slug = clean(courseSlug);
   if (!lesson) return null;
-  if (lesson.kind === 'exercise' || lesson.kind === 'exam' || lesson.kind === 'webinar') {
+  if (lesson.kind === 'webinar') {
+    const ref = clean(lesson.ref_uid);
+    return ref ? `/events/${encodeURIComponent(ref)}` : null;
+  }
+  if (lesson.kind === 'exercise' || lesson.kind === 'exam') {
     const ref = clean(lesson.ref_uid);
     return ref ? `/learning/${lesson.kind}s/${encodeURIComponent(ref)}` : null;
   }

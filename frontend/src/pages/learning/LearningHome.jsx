@@ -2,16 +2,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarPlus, ChevronLeft, ChevronRight, Search, SquarePen } from 'lucide-react';
 import { Card, Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
-import { reportError } from '../../lib/log';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
-  ARTICLES_PAGE_SIZE, ALL_LIMIT, EVENTS_PAGE_SIZE, LEARNING_TABS, NOT_LIVE_LINE,
-  combineAll, formatDay, formatWhen, kindLabel, matchesQuery, rangeLabel, resolveTab, tabMode,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, NOT_LIVE, TAB_KIND, TAB_NOT_LIVE,
+  durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode,
 } from './learningModel';
-import { readArticles, readEvents, readPublications } from './learningReads';
+import { readArticles, readCatalog, readEvents, readMe, readPublications } from './learningReads';
 import {
-  ComingSoonCard, LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, NotLiveYet, SectionCard,
+  ComingSoonCard, LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, NotLiveYet,
+  RouteUnreadable, SectionCard,
 } from './LearningStates';
+import useLearningRead from './useLearningRead';
 
 /** The canvas's one header action, kept for every profile: Articles stay open. */
 export function WriteArticleLink() {
@@ -29,11 +30,25 @@ export function WriteArticleLink() {
 const ROW_TITLE = 'text-[14px] font-semibold text-axal-ink hover:text-axal-violet-deep dark:text-gray-100 dark:hover:text-violet-300';
 const ROW_META = 'mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-axal-muted dark:text-gray-400';
 const PAGER = 'inline-flex items-center gap-1 rounded-axal-sm border border-axal-hairline px-2.5 py-1 text-[12px] font-medium text-axal-ink hover:border-axal-violet/40 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-200';
+const isLoading = (state) => state.status === 'loading' || state.status === 'idle';
 
 function RowTitle({ href, children, testid }) {
   return href
     ? <Link to={href} className={ROW_TITLE} data-testid={testid}>{children}</Link>
     : <span className="text-[14px] font-semibold text-axal-ink dark:text-gray-100" data-testid={testid}>{children}</span>;
+}
+
+function Pager({ prevDisabled, nextDisabled, onPage, prevLabel = 'Previous', nextLabel = 'Next', testid }) {
+  return (
+    <span className="flex gap-1.5">
+      <button type="button" className={PAGER} disabled={prevDisabled} onClick={() => onPage(-1)} data-testid={`button-${testid}-prev`}>
+        <ChevronLeft size={13} aria-hidden="true" /> {prevLabel}
+      </button>
+      <button type="button" className={PAGER} disabled={nextDisabled} onClick={() => onPage(1)} data-testid={`button-${testid}-next`}>
+        {nextLabel} <ChevronRight size={13} aria-hidden="true" />
+      </button>
+    </span>
+  );
 }
 
 /**
@@ -42,7 +57,7 @@ function RowTitle({ href, children, testid }) {
  * the route sends (D562). This tab stays open while the rest is coming soon.
  */
 export function ArticleList({ state, q, onPage, onRetry }) {
-  if (state.status === 'loading') return <LearningLoading rows={4} what="the articles" />;
+  if (isLoading(state)) return <LearningLoading rows={4} what="the articles" />;
   if (state.status === 'unreadable') {
     return <LearningUnreadable what="The article list" claim="This is not a claim that no article is published." onRetry={onRetry} />;
   }
@@ -75,14 +90,7 @@ export function ArticleList({ state, q, onPage, onRetry }) {
         <span className="text-[11.5px] tabular-nums text-axal-faint dark:text-gray-500" data-testid="text-articles-range">
           {rangeLabel(offset, rows.length, state.total)} · each opens in the article reader
         </span>
-        <span className="flex gap-1.5">
-          <button type="button" className={PAGER} disabled={offset === 0} onClick={() => onPage(-1)} data-testid="button-articles-prev">
-            <ChevronLeft size={13} aria-hidden="true" /> Newer
-          </button>
-          <button type="button" className={PAGER} disabled={!hasNext} onClick={() => onPage(1)} data-testid="button-articles-next">
-            Older <ChevronRight size={13} aria-hidden="true" />
-          </button>
-        </span>
+        <Pager prevDisabled={offset === 0} nextDisabled={!hasNext} onPage={onPage} prevLabel="Newer" nextLabel="Older" testid="articles" />
       </div>
     </div>
   );
@@ -95,7 +103,7 @@ export function ArticleList({ state, q, onPage, onRetry }) {
  * public page and the PDF is "not recorded" here (D562 GAPS).
  */
 export function PublicationList({ state, q, onRetry }) {
-  if (state.status === 'loading') return <LearningLoading rows={3} what="the publications" />;
+  if (isLoading(state)) return <LearningLoading rows={3} what="the publications" />;
   if (state.status === 'unreadable') {
     return <LearningUnreadable what="The publication list" claim="This is not a claim that nothing is published." onRetry={onRetry} />;
   }
@@ -138,7 +146,7 @@ export function PublicationList({ state, q, onRetry }) {
 
 /** Events: the next upcoming events from the public feed, each with its calendar file. */
 export function EventList({ state, q, onRetry }) {
-  if (state.status === 'loading') return <LearningLoading rows={3} what="the events" />;
+  if (isLoading(state)) return <LearningLoading rows={3} what="the events" />;
   if (state.status === 'unreadable') {
     return <LearningUnreadable what="The event list" claim="This is not a claim that no event is planned." onRetry={onRetry} />;
   }
@@ -178,61 +186,111 @@ export function EventList({ state, q, onRetry }) {
   );
 }
 
-function allMeta(row) {
-  if (row.kind === 'article') return [row.author, row.readMinutes ? `${row.readMinutes} min read` : null, formatDay(row.date)].filter(Boolean).join(' · ');
-  if (row.kind === 'publication') return [formatDay(row.date), row.section].filter(Boolean).join(' · ');
-  return [formatWhen(row.date, row.timezone), row.place].filter(Boolean).join(' · ');
+/** The line under a catalog card: what each kind's row carries. */
+export function catalogMeta(row) {
+  const parts = {
+    course: [row.level, minutesLabel(row.minutes)],
+    video: [durationLabel(row.seconds), row.topic, row.level],
+    reading: [row.topic, row.level],
+    article: [row.author, row.readMinutes ? `${row.readMinutes} min read` : null, formatDay(row.date)],
+    publication: [formatDay(row.date), row.section],
+    // The catalog's event row sends no time zone, so the start is in the reader's own.
+    event: [formatWhen(row.date), row.type],
+  }[row.kind] || [];
+  return parts.filter(Boolean).join(' · ');
 }
 
-const SOURCE_NAME = { article: 'The article list', publication: 'The publication list', event: 'The event list' };
+const CATALOG_EMPTY = {
+  course: ['No course published yet', 'Courses HQ publishes appear here.'],
+  video: ['No video published yet', 'Videos HQ publishes appear here.'],
+  all: ['Nothing published yet', 'Courses, videos, readings, articles, publications and upcoming events appear here.'],
+};
 
 /**
- * All: articles, publications and events as one list, newest first, each row
- * labelled by its kind. A source still loading or unreadable is named above
- * the rows, never counted as empty.
+ * All, Courses and Videos, from D557's catalog. Each row is labelled by its
+ * kind, and a draft the Super Admin can see says so. A source the route could
+ * not read is named in the route's own words above the rows, and is never
+ * folded in as empty; a whole catalog that failed is Unreadable.
  */
-export function AllList({ articles, publications, events, q, onRetry }) {
-  const filteredPublications = publications.status === 'ready'
-    ? { ...publications, rows: (publications.rows || []).filter((r) => matchesQuery(r, q)) }
-    : publications;
-  const all = combineAll({ article: articles, publication: filteredPublications, event: events });
-  if (all.loading.length === 3) return <LearningLoading rows={4} what="the catalogue" />;
+export function CatalogList({ state, kind = null, q = '', onPage, onRetry }) {
+  if (isLoading(state)) return <LearningLoading rows={4} what="the catalogue" />;
+  if (state.status !== 'ready') {
+    return <LearningUnreadable what="The catalogue" claim="This is not a claim that nothing is published." onRetry={onRetry} />;
+  }
+  const rows = state.rows || [];
+  const failed = sourceStates(state.sources).filter((s) => s.status === 'unreadable');
+  const own = kind ? state.sources?.[kind] : null;
+  const offset = state.offset || 0;
+  const [emptyTitle, emptyBody] = CATALOG_EMPTY[kind || 'all'];
   return (
-    <div className="space-y-3" data-testid="list-all">
-      {all.unreadable.map((kind) => (
-        <LearningUnreadable key={kind} what={SOURCE_NAME[kind]} claim="This is not a claim that it is empty." onRetry={onRetry?.[kind]} />
-      ))}
-      {all.loading.length > 0 && (
-        <p className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="text-all-loading">
-          Still reading {all.loading.map((k) => `${kindLabel(k).toLowerCase()}s`).join(' and ')}…
-        </p>
+    <div className="space-y-3" data-testid={`list-catalog-${kind || 'all'}`}>
+      {failed.map((s) => <RouteUnreadable key={s.kind} reason={s.reason} onRetry={onRetry} testid={`source-unreadable-${s.kind}`} />)}
+      {rows.length === 0 && failed.length === 0 && (
+        q ? <LearningEmpty title={`Nothing matches “${q}”`} body="Try another word, or clear the search." /> : <LearningEmpty title={emptyTitle} body={emptyBody} />
       )}
-      {all.rows.length === 0 && all.loading.length === 0 && all.unreadable.length === 0 && (
-        q ? <LearningEmpty title={`Nothing matches “${q}”`} body="Try another word, or clear the search." />
-          : <LearningEmpty title="Nothing published yet" body="Articles, publications and upcoming events appear here." />
-      )}
-      {all.rows.length > 0 && (
+      {rows.length > 0 && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {all.rows.map((row) => {
+            {rows.map((row) => {
               const inner = (
                 <>
-                  <span><Pill tone="info">{kindLabel(row.kind)}</Pill></span>
+                  <span className="flex flex-wrap gap-1.5">
+                    <Pill tone="info">{kindLabel(row.kind)}</Pill>
+                    {row.draft && <Pill tone="warn">{row.draft}</Pill>}
+                  </span>
                   <span className="line-clamp-2 text-[13.5px] font-semibold text-axal-ink dark:text-gray-100">{row.title}</span>
-                  <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{allMeta(row) || 'Date not recorded'}</span>
+                  <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{catalogMeta(row) || <Unrecorded>Not recorded</Unrecorded>}</span>
                 </>
               );
               return row.href
-                ? <Card key={row.key} as={Link} to={row.href} interactive padding="sm" className="flex flex-col gap-1.5" data-testid={`all-row-${row.kind}`}>{inner}</Card>
-                : <Card key={row.key} padding="sm" className="flex flex-col gap-1.5" data-testid={`all-row-${row.kind}`}>{inner}</Card>;
+                ? <Card key={row.key} as={Link} to={row.href} interactive padding="sm" className="flex flex-col gap-1.5" data-testid={`catalog-row-${row.kind}`}>{inner}</Card>
+                : <Card key={row.key} padding="sm" className="flex flex-col gap-1.5" data-testid={`catalog-row-${row.kind}`}>{inner}</Card>;
             })}
           </div>
-          <p className="text-[11.5px] tabular-nums text-axal-faint dark:text-gray-500" data-testid="text-all-count">
-            {all.rows.length < all.count ? `The newest ${ALL_LIMIT} of ${all.count}` : `${all.count} in all`} across articles, publications and events. Each tab holds its own full list.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800">
+            <span className="text-[11.5px] tabular-nums text-axal-faint dark:text-gray-500" data-testid="text-catalog-range">
+              {kind
+                ? rangeLabel(offset, rows.length, Number(own?.total))
+                : `The newest ${rows.length} across courses, videos, readings, articles, publications and events. Each tab holds its own list.`}
+            </span>
+            {kind && onPage && (
+              <Pager prevDisabled={offset === 0} nextDisabled={offset + rows.length >= Number(own?.total || 0)} onPage={onPage} testid="catalog" />
+            )}
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+/** Continue learning: what the member has started, from `GET /api/learning/me`. */
+export function ContinueLearning({ state, onRetry }) {
+  if (isLoading(state)) return <LearningLoading rows={2} what="your progress" />;
+  if (state.status !== 'ready') {
+    return <LearningUnreadable what="Your progress" claim="This is not a claim that you have started nothing." onRetry={onRetry} />;
+  }
+  const rows = (state.in_progress || []).filter((r) => r.href).slice(0, 3);
+  if (!rows.length) return <LearningEmpty title="Nothing in progress" body="A course you start appears here, with where you left off." />;
+  return (
+    <ul className="space-y-3" data-testid="list-continue">
+      {rows.map((r) => {
+        const p = Number(r.percent);
+        const has = r.percent !== null && r.percent !== undefined && Number.isFinite(p);
+        return (
+          <li key={`${r.subject_kind}:${r.subject_uid}`} className="space-y-1" data-testid="row-continue">
+            <div className="flex items-baseline justify-between gap-2 text-[13px]">
+              <Link to={r.href} className="min-w-0 truncate font-semibold text-axal-ink hover:text-axal-violet-deep dark:text-gray-100 dark:hover:text-violet-300">{r.title || 'Untitled'}</Link>
+              <span className="flex-none text-[12px] tabular-nums text-axal-muted dark:text-gray-400">{has ? `${Math.round(p)}%` : 'Started'}</span>
+            </div>
+            {has && (
+              <div className="h-1.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800" aria-hidden="true">
+                <div className="h-full rounded-full bg-axal-violet" style={{ width: `${Math.max(0, Math.min(100, Math.round(p)))}%` }} />
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -276,6 +334,17 @@ function TabBar({ tab, gated, onTab }) {
   );
 }
 
+const IDLE = { status: 'idle' };
+
+/**
+ * The catalog read as the open tab may draw it. A tab switch renders once
+ * before the new tab's read starts, so a reply for another kind is "loading"
+ * here: All's rows are never drawn under Courses, nor Courses' under Videos.
+ */
+export function catalogFor(state, kind) {
+  return state?.status === 'ready' && (state.kind || null) !== (kind || null) ? { status: 'loading' } : state;
+}
+
 /**
  * The learner home, drawn entirely from its props so every state can be
  * rendered without a fetch (D562). `LearningHome` below owns the reads.
@@ -284,12 +353,15 @@ function TabBar({ tab, gated, onTab }) {
  *             one coming-soon card (temporary, owner's request of 2026-10-06)
  *   tab       the open tab; onTab(key)
  *   query     the search box; q the settled query the reads used
- *   articles, publications, events   `{ status, rows, total, offset }`
+ *   catalog   `readCatalog`'s state, for All, Courses and Videos
+ *   articles, publications, events   each tab's own read
+ *   me        `readMe`'s state, for Continue learning
  *   links     extra links for an admin: [{ to, label }]
  */
 export function LearningHomeView({
   gated, tab, onTab = () => {}, query = '', onQuery = () => {}, q = '',
-  articles, publications, events, onArticlesPage = () => {}, onRetry = {}, links = [],
+  catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
+  onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
 }) {
   const mode = tabMode(tab, gated);
   return (
@@ -311,8 +383,8 @@ export function LearningHomeView({
         <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <SectionCard title="Continue learning" testid="section-continue"><NotLiveYet /></SectionCard>
-          <SectionCard title="My programs" testid="section-programs"><NotLiveYet /></SectionCard>
+          <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
+          <SectionCard title="My programs" testid="section-programs"><NotLiveYet line={NOT_LIVE.programs} /></SectionCard>
         </div>
       )}
       <Card padding="none" data-testid="learning-catalogue">
@@ -327,7 +399,7 @@ export function LearningHomeView({
                 type="search"
                 value={query}
                 onChange={(e) => onQuery(e.target.value)}
-                placeholder={gated ? 'Search articles' : 'Search articles, publications and events'}
+                placeholder={gated ? 'Search articles' : 'Search courses, videos, articles, publications and events'}
                 className="w-full rounded-axal-md border border-axal-hairline bg-white py-2 pl-9 pr-3 text-[13px] text-axal-ink placeholder:text-axal-faint dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
                 data-testid="input-learning-search"
               />
@@ -336,91 +408,77 @@ export function LearningHomeView({
         )}
         <div id="learning-panel" role="tabpanel" aria-labelledby={`learning-tab-${tab}`} className="p-4" data-testid={`panel-${tab}`} data-mode={mode}>
           {mode === 'coming_soon' && <ComingSoonCard />}
-          {mode === 'not_live' && <NotLiveYet />}
-          {mode === 'live' && tab === 'all' && <AllList articles={articles} publications={publications} events={events} q={q} onRetry={onRetry} />}
+          {mode === 'not_live' && <NotLiveYet line={TAB_NOT_LIVE[tab]} />}
+          {mode === 'live' && tab === 'all' && <CatalogList state={catalog} q={q} onRetry={onRetry.catalog} />}
+          {mode === 'live' && TAB_KIND[tab] && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
           {mode === 'live' && tab === 'articles' && <ArticleList state={articles} q={q} onPage={onArticlesPage} onRetry={onRetry.article} />}
           {mode === 'live' && tab === 'publications' && <PublicationList state={publications} q={q} onRetry={onRetry.publication} />}
           {mode === 'live' && tab === 'events' && <EventList state={events} q={q} onRetry={onRetry.event} />}
         </div>
       </Card>
       {!gated && (
-        <SectionCard title="Upcoming webinars" testid="section-webinars"><NotLiveYet /></SectionCard>
+        <SectionCard title="Upcoming webinars" testid="section-webinars"><NotLiveYet line={NOT_LIVE.webinars} /></SectionCard>
       )}
     </>
   );
 }
 
-/** What the rail says it is looking at: one line per source this page actually read. */
-export function homeCoverage({ gated, q, articles, publications, events }) {
+/** What the rail says it is looking at: one line per read this page actually made. */
+export function homeCoverage({ gated, q, catalog, articles, publications, events, me }) {
   const s = (n) => (n === 1 ? '' : 's');
-  return [
-    articles.status === 'ready' && Number.isFinite(articles.total)
-      ? `${articles.total} published article${s(articles.total)}${q ? ` matching “${q}”` : ''}`
-      : null,
-    !gated && publications.status === 'ready' ? `${publications.rows.length} publication${s(publications.rows.length)}` : null,
-    !gated && events.status === 'ready' ? `${events.rows.length} upcoming event${s(events.rows.length)} read` : null,
-  ].filter(Boolean);
+  const lines = [];
+  if (catalog?.status === 'ready') {
+    const own = catalog.kind ? catalog.sources?.[catalog.kind] : null;
+    if (own?.status === 'ready') lines.push(`${own.total} ${kindLabel(catalog.kind).toLowerCase()}${s(own.total)} in the catalogue`);
+    if (!catalog.kind) lines.push(`${catalog.rows.length} newest catalogue row${s(catalog.rows.length)}`);
+  }
+  if (articles?.status === 'ready' && Number.isFinite(articles.total)) {
+    lines.push(`${articles.total} published article${s(articles.total)}${q ? ` matching “${q}”` : ''}`);
+  }
+  if (!gated && publications?.status === 'ready') lines.push(`${publications.rows.length} publication${s(publications.rows.length)}`);
+  if (!gated && events?.status === 'ready') lines.push(`${events.rows.length} upcoming event${s(events.rows.length)} read`);
+  if (!gated && me?.status === 'ready') lines.push(`${me.in_progress.length} started by you`);
+  return lines;
 }
-
-const IDLE = { status: 'idle', rows: [] };
 
 /**
  * `/learning`: the container. It owns the tab (in the URL, `?tab=`), the
- * search and the three reads, and hands them to `LearningHomeView`. A gated
- * profile reads articles only: the other two would be drawn nowhere.
+ * search and the reads, and hands them to `LearningHomeView`. Each tab reads
+ * only while it is open. A gated profile reads articles only: nothing else is
+ * drawn for it.
  */
 export default function LearningHome({ gated, links = [] }) {
   const [params, setParams] = useSearchParams();
   const tab = resolveTab(params.get('tab'), gated);
+  const live = tabMode(tab, gated) === 'live';
+  const kind = TAB_KIND[tab] || null;
   const [query, setQuery] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(0);
-  const [reload, setReload] = useState({ article: 0, publication: 0, event: 0 });
-  const [articles, setArticles] = useState({ status: 'loading', rows: [] });
-  const [publications, setPublications] = useState(gated ? IDLE : { status: 'loading', rows: [] });
-  const [events, setEvents] = useState(gated ? IDLE : { status: 'loading', rows: [] });
+  const [catalogOffset, setCatalogOffset] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(() => { setQ(query.trim()); setPage(0); }, 300);
+    const t = setTimeout(() => { setQ(query.trim()); setPage(0); setCatalogOffset(0); }, 300);
     return () => clearTimeout(t);
   }, [query]);
 
-  useEffect(() => {
-    let alive = true;
-    setArticles({ status: 'loading', rows: [] });
-    readArticles({ q, page })
-      .then((r) => { if (alive) setArticles({ status: 'ready', ...r }); })
-      .catch((err) => { if (!alive) return; reportError('Learning:articles', err); setArticles({ status: 'unreadable', rows: [] }); });
-    return () => { alive = false; };
-  }, [q, page, reload.article]);
+  const [catalogRead, retryCatalog] = useLearningRead(() => readCatalog({ kind, q, offset: catalogOffset }), [kind, q, catalogOffset],
+    { enabled: live && (tab === 'all' || Boolean(kind)), scope: 'catalog' });
+  const catalog = catalogFor(catalogRead, kind);
+  const [articles, retryArticles] = useLearningRead(() => readArticles({ q, page }), [q, page],
+    { enabled: live && tab === 'articles', scope: 'articles' });
+  const [publications, retryPublications] = useLearningRead(readPublications, [],
+    { enabled: live && tab === 'publications', scope: 'publications' });
+  const [events, retryEvents] = useLearningRead(() => readEvents({ q }), [q],
+    { enabled: live && tab === 'events', scope: 'events' });
+  const [me, retryMe] = useLearningRead(readMe, [], { enabled: !gated, scope: 'me' });
 
-  useEffect(() => {
-    if (gated) return undefined;
-    let alive = true;
-    setPublications({ status: 'loading', rows: [] });
-    readPublications()
-      .then((r) => { if (alive) setPublications({ status: 'ready', ...r }); })
-      .catch((err) => { if (!alive) return; reportError('Learning:publications', err); setPublications({ status: 'unreadable', rows: [] }); });
-    return () => { alive = false; };
-  }, [gated, reload.publication]);
-
-  useEffect(() => {
-    if (gated) return undefined;
-    let alive = true;
-    setEvents({ status: 'loading', rows: [] });
-    readEvents({ q })
-      .then((r) => { if (alive) setEvents({ status: 'ready', ...r }); })
-      .catch((err) => { if (!alive) return; reportError('Learning:events', err); setEvents({ status: 'unreadable', rows: [] }); });
-    return () => { alive = false; };
-  }, [gated, q, reload.event]);
-
-  // A new tab starts the articles from their newest page, so All, which shares
-  // that read, is always "the newest", never page three of the Articles tab.
+  // A new tab starts from its first page.
   const onTab = useCallback((key) => {
     setPage(0);
+    setCatalogOffset(0);
     setParams((old) => { const next = new URLSearchParams(old); next.set('tab', key); return next; }, { replace: true });
   }, [setParams]);
-  const retry = (kind) => () => setReload((r) => ({ ...r, [kind]: r[kind] + 1 }));
 
   return (
     <RailFrame
@@ -432,10 +490,10 @@ export default function LearningHome({ gated, links = [] }) {
           role="founder"
           stance="Read-only catalogue"
           note="Eadwyn reads back the lines this page has loaded, on a click. It does not write an article, register you for an event or mark anything complete."
-          coverage={homeCoverage({ gated, q, articles, publications, events })}
+          coverage={homeCoverage({ gated, q, catalog, articles, publications, events, me })}
           unavailable={gated
             ? [['Courses, videos, webinars and more', COMING_SOON_LINE]]
-            : [['Courses, videos, webinars, exercises and exams', NOT_LIVE_LINE]]}
+            : [['Webinars, exercises, exams and programs', 'Their stores are not live yet, so nothing here reads them.']]}
         />
       )}
       data-testid="learning-home"
@@ -448,11 +506,14 @@ export default function LearningHome({ gated, links = [] }) {
           query={query}
           onQuery={setQuery}
           q={q}
+          catalog={catalog}
           articles={articles}
           publications={publications}
           events={events}
+          me={me}
+          onCatalogPage={(step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT))}
           onArticlesPage={(step) => setPage((p) => Math.max(0, p + step))}
-          onRetry={{ article: retry('article'), publication: retry('publication'), event: retry('event') }}
+          onRetry={{ catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe }}
           links={links}
         />
       </div>
