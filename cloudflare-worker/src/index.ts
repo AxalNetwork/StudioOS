@@ -193,6 +193,8 @@ import learningAssessmentRoutes from './routes/learning_assessment';
 import adminLearningAssessmentRoutes from './routes/admin_learning_assessment';
 import learningProgramsRoutes from './routes/learning_programs';
 import adminLearningProgramsRoutes from './routes/admin_learning_programs';
+import learningWebinarsRoutes from './routes/learning_webinars';
+import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
@@ -810,6 +812,8 @@ app.route('/api/admin/learning', adminLearningRoutes);
 app.route('/api/admin/learning', adminLearningAssessmentRoutes);
 // D558 (#1159) — authoring programs: contents, assigned admins, enrolments.
 app.route('/api/admin/learning', adminLearningProgramsRoutes);
+// D560 (#1161) — authoring webinars: schedule, publish, cancel, recording, attendance.
+app.route('/api/admin/learning', adminLearningWebinarsRoutes);
 // User-facing Telegram channel join request — pings the studio Slack
 // inbox so an admin can issue the invite link manually. Mounted under
 // /api/telegram (not /api/admin) since any authenticated user can ask.
@@ -1100,6 +1104,8 @@ app.route('/api/learning', learningRoutes);
 app.route('/api/learning', learningAssessmentRoutes);
 // D558 (#1159) — programs: self-enrolment, and the assigned admin's read-only learner view.
 app.route('/api/learning', learningProgramsRoutes);
+// D560 (#1161) — webinars: registration within capacity, a time-gated join link, recordings.
+app.route('/api/learning', learningWebinarsRoutes);
 app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.

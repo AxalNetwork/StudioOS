@@ -143,6 +143,10 @@ export interface EventIcsOptions {
   organizer?: { email: string; name?: string | null };
   /** REQUEST only — the invited attendee (the recipient mailbox). */
   attendee?: { email: string; name?: string | null };
+  /** The VEVENT's UID, for a calendar item that is not an event row (D560's webinars). Defaults to `event-<id>@axal.vc`. */
+  uid?: string;
+  /** The page the VEVENT links to. Defaults to `/events/<slug>` under the base URL. */
+  url?: string;
 }
 
 /** Quote an ICS parameter value (e.g. a CN) per RFC 5545 §3.1: strip CR/LF and
@@ -158,10 +162,10 @@ function icsMailto(value: string): string {
 }
 
 function vevent(event: any, baseUrl: string, opts: EventIcsOptions = {}): string[] {
-  const uid = `event-${event.id}@axal.vc`;
+  const uid = opts.uid || `event-${event.id}@axal.vc`;
   const dtStart = toIcsStamp(event.starts_at);
   const dtEnd = toIcsStamp(event.ends_at) || dtStart;
-  const url = `${baseUrl.replace(/\/$/, '')}/events/${event.slug}`;
+  const url = opts.url || `${baseUrl.replace(/\/$/, '')}/events/${event.slug}`;
   const locationParts = [event.location_text, event.location_url].filter(Boolean);
   const lines = [
     'BEGIN:VEVENT',
