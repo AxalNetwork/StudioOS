@@ -163,6 +163,9 @@ OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
+# D542 — the GitHub logins whose bounty labels the webhook acts on. Comma
+# separated; empty means nobody's. Session 1 labels as the owner account.
+BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
@@ -182,6 +185,19 @@ CF_AI_GATEWAY_SLUG_ADVISOR = "advisor-ongoing"
 # `ai_spend:advisor:{user_id}:{yyyy-mm-dd}`. The "USD_DAY" suffix is a
 # misnomer in the spec — the value is a TURN count, not dollars.
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
+# D538 (#1078) — Market Intelligence. A source that cannot report live data
+# stores NOTHING and its run says why; MI_STUB_ROWS = "on" (set in .dev.vars,
+# never here) brings back the synthetic stubs for local development. The six
+# MI_FLAG_* below are the keyless connectors whose fetchLive calls a real
+# provider; the "Market-Intelligence free connectors" comment further down
+# names the ones that are still drafts or need a key.
+MI_STUB_ROWS           = "off"
+MI_FLAG_OPENALEX       = "live"
+MI_FLAG_CROSSREF       = "live"
+MI_FLAG_ARXIV          = "live"
+MI_FLAG_WORLD_BANK     = "live"
+MI_FLAG_OECD           = "live"
+MI_FLAG_EUROSTAT       = "live"
 
 # ---------- Cloudflare Turnstile (bot protection) ----------
 # The Worker only needs the SECRET (set via `wrangler secret put TURNSTILE_SECRET_KEY`);
@@ -378,25 +394,23 @@ crons = [
 ]
 
 # ---------- Market-Intelligence free connectors ----------
-# Each registered source runs its deterministic stub by default and only
-# calls its real provider when flipped LIVE via `MI_FLAG_<KEY>=live` (see
-# registry.ts::isLive). Set these as plain vars or via `wrangler secret put`.
-# P0 (merged): MI_FLAG_OPENALEX, MI_FLAG_PATENT_USPTO, MI_FLAG_PATENT_EPO,
-#   MI_FLAG_NEWS_GDELT, MI_FLAG_PAPERSWITHCODE, MI_FLAG_STACK_EXCHANGE, …
-# P1 (this task — macro/research free sources):
-#   MI_FLAG_WORLD_BANK=live   # World Bank gross-capital-formation (keyless)
-#   MI_FLAG_OECD=live         # OECD MSTI GERD % GDP (keyless)
-#   MI_FLAG_EUROSTAT=live     # Eurostat EU27 GERD % GDP (keyless)
-#   MI_FLAG_CROSSREF=live     # Crossref publication velocity (keyless, send mailto)
-#   MI_FLAG_ARXIV=live        # arXiv preprint counts (keyless)
-#   MI_FLAG_BLS=live          # US BLS unemployment — needs BLS_API_KEY
-#   MI_FLAG_FRED=live         # FRED fed-funds rate — needs FRED_API_KEY
+# A source calls its real provider only when flipped LIVE via
+# `MI_FLAG_<KEY>=live` (see registry.ts::isLive). Since D538 a source that is
+# off, out of quota or failing stores nothing in production and the run logs
+# why; its deterministic stub runs only where MI_STUB_ROWS = "on" (dev, tests).
+# LIVE (D538, set in both var tables, top level and production) — keyless, real fetchLive:
+#   OPENALEX, CROSSREF, ARXIV (research); WORLD_BANK, OECD, EUROSTAT (macro).
+# NOT live, and why:
+#   NEWS_GDELT, PAPERSWITHCODE, STACK_EXCHANGE, PATENT_EPO — fetchLive is still a
+#     draft that returns stub rows (D538 never stores those as live).
+#   PATENT_USPTO — PatentsView needs PATENTSVIEW_API_KEY.
+#   BLS — needs BLS_API_KEY.   FRED — needs FRED_API_KEY.
 # Optional: MI_CONTACT_EMAIL (polite-pool mailto/UA; defaults market-intel@axal.vc).
-# Key secrets (free keys; Worker secrets only — never .replit):
+# Key secrets (free keys; Worker secrets only — never in this file or .replit):
+#   wrangler secret put PATENTSVIEW_API_KEY --env production
 #   wrangler secret put BLS_API_KEY  --env production
 #   wrangler secret put FRED_API_KEY --env production
-# When a key-required source is flipped live but its key is unset, it stays on
-# its stub (does NOT throw) — same graceful-degrade contract as the rest.
+# then add the matching MI_FLAG_<KEY> = "live" to both var tables.
 
 # ---------- Observability ----------
 [observability]
@@ -463,6 +477,8 @@ OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
+# D542 — redeclared here: an env table does not inherit the top-level vars.
+BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
@@ -472,6 +488,14 @@ WORKER_DEPLOY_VERSION = ""
 # because Wrangler env tables don't inherit from the top-level [vars].
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
+# D538 (#1078) — see top-level [vars]. Mirrored because env tables don't inherit.
+MI_STUB_ROWS           = "off"
+MI_FLAG_OPENALEX       = "live"
+MI_FLAG_CROSSREF       = "live"
+MI_FLAG_ARXIV          = "live"
+MI_FLAG_WORLD_BANK     = "live"
+MI_FLAG_OECD           = "live"
+MI_FLAG_EUROSTAT       = "live"
 # T22.4 — leave EXTRA_DEV_ORIGINS UNSET in production. The CORS allowlist
 # in cloudflare-worker/src/index.ts only adds origins from this var when
 # present; an empty value here ensures the workers.dev sandbox URL never

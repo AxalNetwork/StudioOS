@@ -7,6 +7,10 @@
  * HQ-held Studio had nothing to read. This one does not. The service decides
  * what this database can answer.
  *
+ * D555: on HQ the payload carries HQ's own `accounts`, `approvals` (the
+ * lanes, by the consoles' predicates) and `insights`, labelled as HQ's, as
+ * aggregates only. The gate is unchanged.
+ *
  * NOT A PURE READ. On a branch, the first look at a missing licence copy asks
  * HQ and stores the answer (`applyLicenceCopy` in `branchLicencePayload`).
  * `listTemplates` can also create the master-library tables when they are

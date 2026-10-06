@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FileText, Lock } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -15,9 +16,10 @@ import BranchZone from './BranchZone';
  * real — `publishTemplate` (D147) gives a branch its copy — and the ledger
  * is the same deployment's own rows, read from the list that already existed
  * (D444). Pending signatures are that list's stats. The template version a
- * row was sent from, its value, and its renewal date are not on that list,
- * so those three cells stay Not recorded rather than borrowed from the
- * library copy or shown as zero.
+ * row was sent from, and its value, are not on that list, so those cells
+ * stay Not recorded rather than borrowed from the library copy or shown as
+ * zero. End dates are (D474): pairwise NDAs by `valid_until`, partner deals
+ * by `expires_at`. There is no renewal date separate from that expiry.
  *
  * THE WRONG TABLE WAS NAMED FIRST, and D199 corrects it. It said the
  * contracts live in `licence_contracts` (migration 259), HQ's table. That
@@ -27,8 +29,8 @@ import BranchZone from './BranchZone';
  * `loadAllContracts` unions — are rows in THIS database (D.2), and
  * `GET /api/admin/contracts` is `requireAdmin`, not HQ-gated. The Studio
  * overview already counts the dated ones ending inside 60 days (D199). The
- * list still drops those end dates, so the renewal column does not invent
- * them back.
+ * list now carries those end dates (D474). A row whose source records none
+ * is not expiring, and the renewal cell says so.
  *
  * THE LIBRARY IS A COPY AND THE PAGE NEVER LETS YOU FORGET IT. Every field on
  * screen comes from `branch_templates`, which only HQ's push writes; the
@@ -59,15 +61,143 @@ import BranchZone from './BranchZone';
 export const VALUE_UNRECORDED =
   'None of the four sources behind GET /api/admin/contracts records a value, so this column is not shown as zero.';
 export const RENEWAL_UNRECORDED =
-  'This list does not carry an end date. Pairwise NDAs store valid_until and partner deals store an expiry, and the list drops both; e-sign envelopes and signed documents record none.';
+  'E-sign envelopes and signed documents record no end date, so this row is not expiring.';
+export const NDA_END_UNRECORDED =
+  'This pairwise NDA stores no valid_until, so it is not expiring.';
+export const DEAL_END_UNRECORDED =
+  'This partner deal stores no expires_at. The list has no renewal date separate from that expiry, so it is not expiring.';
 export const VERSION_UNRECORDED =
   'This list carries the template name and not the version the agreement was sent from. The version on the library above is the copy HQ last pushed, which is not this row\'s version.';
+
+const DAY_MS = 86400000;
+export const EXPIRING_WINDOW_DAYS = 90;
+
+function calendarDay(value) {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(value));
+  return m ? m[1] : null;
+}
+
+function readEnd(value, field, absentReason) {
+  if (value == null || value === '') return { kind: 'none', reason: absentReason, field };
+  const day = calendarDay(value);
+  const ms = Date.parse(value);
+  if (!day || !Number.isFinite(ms)) {
+    return {
+      kind: 'none',
+      field,
+      reason: `${field} is not a date this page can read, so this row is not expiring.`,
+    };
+  }
+  return { kind: 'date', field, ms, day };
+}
+
+/** The end date the list actually carries, or why this row has none. */
+export function endDateOf(row) {
+  if (!row || typeof row !== 'object') return { kind: 'none', reason: RENEWAL_UNRECORDED };
+  if (row.source === 'pairwise_nda') return readEnd(row.valid_until, 'valid_until', NDA_END_UNRECORDED);
+  if (row.source === 'partner_deal') return readEnd(row.expires_at, 'expires_at', DEAL_END_UNRECORDED);
+  return { kind: 'none', reason: RENEWAL_UNRECORDED };
+}
+
+/**
+ * Rows whose end date falls in the next 90 days from `nowMs`.
+ * A missing or unreadable end date is counted in `withoutEnd` and is not
+ * treated as expiring. A date already past, or further out than the window,
+ * is recorded and simply not in this strip.
+ */
+export function selectExpiring(rows, nowMs) {
+  const now = nowMs;
+  const horizon = now + EXPIRING_WINDOW_DAYS * DAY_MS;
+  const expiring = [];
+  let withoutEnd = 0;
+  for (const row of rows) {
+    const end = endDateOf(row);
+    if (end.kind !== 'date') {
+      withoutEnd += 1;
+      continue;
+    }
+    if (end.ms < now || end.ms > horizon) continue;
+    const days = Math.ceil((end.ms - now) / DAY_MS);
+    expiring.push({ row, end, days });
+  }
+  expiring.sort((a, b) => a.end.ms - b.end.ms || String(a.row.uid).localeCompare(String(b.row.uid)));
+  return { expiring, withoutEnd };
+}
+
+function daysLabel(days) {
+  if (days === 0) return 'Ends today';
+  if (days === 1) return '1 day';
+  return `${days} days`;
+}
+
+function ExpiringSoon({ rows, now, total }) {
+  const { expiring, withoutEnd } = selectExpiring(rows, now);
+  const partial = typeof total === 'number' && Number.isFinite(total) && rows.length !== total;
+  return (
+    <div data-testid="branch-contracts-expiring" className="mb-3">
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Expiring soon</h3>
+      <p className="text-[11px] text-gray-500 mt-0.5 dark:text-gray-400">
+        Next 90 days. NDAs by valid_until, agreements by expires_at. The list has no
+        renewal date separate from a partner deal&rsquo;s expiry. An end date already past,
+        or further out than 90 days, is not in this strip.
+      </p>
+      {expiring.length === 0 ? (
+        <p className="mt-2 text-sm text-gray-700 dark:text-gray-300" data-testid="branch-contracts-expiring-none">
+          None in the next 90 days.
+        </p>
+      ) : (
+        <ul className="mt-2 divide-y divide-gray-100 dark:divide-gray-800" data-testid="branch-contracts-expiring-rows">
+          {expiring.map(({ row, end, days }) => (
+            <li key={`${row.source || 'row'}:${row.uid}`} className="py-1.5 text-[12px]" data-testid="branch-contracts-expiring-row">
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{daysLabel(days)}</span>
+              {' · '}
+              {row.title || <Unrecorded reason="This row has no title on the list.">Not recorded</Unrecorded>}
+              {' · '}
+              <span className="font-mono">{end.day}</span>
+              {' · '}
+              <span className="font-mono">{end.field}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {withoutEnd > 0 ? (
+        <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400" data-testid="branch-contracts-expiring-no-end">
+          {withoutEnd === 1
+            ? '1 row records no end date, so it is not expiring.'
+            : `${withoutEnd} rows record no end date, so they are not expiring.`}
+        </p>
+      ) : null}
+      {partial ? (
+        <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400" data-testid="branch-contracts-expiring-partial">
+          {`This strip reads ${rows.length} of ${total} rows.`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function RenewalCell({ row }) {
+  const end = endDateOf(row);
+  if (end.kind === 'date') {
+    return (
+      <span>
+        <span className="font-mono">{end.day}</span>
+        {' '}
+        <span className="font-mono text-gray-500 dark:text-gray-400">({end.field})</span>
+      </span>
+    );
+  }
+  if (end.reason === RENEWAL_UNRECORDED) {
+    return <Unrecorded reason={RENEWAL_UNRECORDED}>Not recorded</Unrecorded>;
+  }
+  return <Unrecorded reason={end.reason}>Not recorded</Unrecorded>;
+}
 
 function finiteCount(n) {
   return typeof n === 'number' && Number.isFinite(n) ? n : null;
 }
 
-export function BranchContractsLedger({ ledger, ledgerFailed, onRetry, stats, statsFailed }) {
+export function BranchContractsLedger({ ledger, ledgerFailed, onRetry, stats, statsFailed, now = Date.now() }) {
   const total = finiteCount(ledger?.total);
   const rows = Array.isArray(ledger?.items) ? ledger.items : [];
   const sources = Array.isArray(ledger?.meta?.sources) ? ledger.meta.sources : null;
@@ -110,11 +240,15 @@ export function BranchContractsLedger({ ledger, ledgerFailed, onRetry, stats, st
             onRetry={onRetry}
           />
         ) : total === 0 ? (
-          <p className="text-sm text-gray-700 dark:text-gray-300" data-testid="branch-contracts-empty">
-            None in this database. The list was read{sources ? ` across ${sources.join(', ')}` : ''}.
-          </p>
+          <>
+            <ExpiringSoon rows={[]} now={now} total={total} />
+            <p className="text-sm text-gray-700 dark:text-gray-300" data-testid="branch-contracts-empty">
+              None in this database. The list was read{sources ? ` across ${sources.join(', ')}` : ''}.
+            </p>
+          </>
         ) : (
           <>
+            <ExpiringSoon rows={rows} now={now} total={total} />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12px]">
                 <thead>
@@ -137,7 +271,7 @@ export function BranchContractsLedger({ ledger, ledgerFailed, onRetry, stats, st
                       <td className="py-1.5 pr-3 font-mono">{r.template_name || <Unrecorded reason="This row names no template.">Not recorded</Unrecorded>}</td>
                       <td className="py-1.5 pr-3"><Unrecorded reason={VERSION_UNRECORDED}>Not recorded</Unrecorded></td>
                       <td className="py-1.5 pr-3"><Unrecorded reason={VALUE_UNRECORDED}>Not recorded</Unrecorded></td>
-                      <td className="py-1.5"><Unrecorded reason={RENEWAL_UNRECORDED}>Not recorded</Unrecorded></td>
+                      <td className="py-1.5"><RenewalCell row={r} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -162,6 +296,40 @@ function ageOf(iso) {
   const days = Math.floor((Date.now() - at) / 86400000);
   if (days <= 0) return 'today';
   return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/**
+ * Current cards of the copy HQ pushed. Each links into the send flow.
+ * Archived versions are not in this payload — the page renders the server's
+ * `not_carried` reason for them and does not invent unusable cards.
+ * The send page is not this file's: the link does not preselect a template.
+ */
+export function BranchTemplateCards({ items }) {
+  return (
+    <ul className="divide-y divide-gray-100 dark:divide-gray-800" data-testid="branch-templates-list">
+      {items.map((t) => (
+        <li key={t.slug} className="py-2 flex items-start gap-3">
+          <FileText size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{t.title}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              <span className="font-mono">{t.slug}</span>
+              {t.category ? ` · ${t.category}` : ''}
+              {` · v${t.version}`}
+            </div>
+          </div>
+          <Link
+            to="/legal/send"
+            data-testid="branch-template-use"
+            data-template={t.slug}
+            className="shrink-0 text-[11px] font-semibold text-gray-900 underline dark:text-gray-100"
+          >
+            Use template
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default function BranchContracts({ user }) {
@@ -306,21 +474,7 @@ export default function BranchContracts({ user }) {
               HQ&rsquo;s library is empty
             </Unrecorded>
           ) : (
-            <ul className="divide-y divide-gray-100 dark:divide-gray-800" data-testid="branch-templates-list">
-              {items.map((t) => (
-                <li key={t.slug} className="py-2 flex items-start gap-3">
-                  <FileText size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{t.title}</div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                      <span className="font-mono">{t.slug}</span>
-                      {t.category ? ` · ${t.category}` : ''}
-                      {` · v${t.version}`}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <BranchTemplateCards items={items} />
           )}
         </div>
 

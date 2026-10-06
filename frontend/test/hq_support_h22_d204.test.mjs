@@ -64,7 +64,7 @@ function payload(over = {}) {
           { id: 2, title: 'Cannot reach billing', status: 'in_progress', priority: 'low', age_hours: 3, sla_band: 'ok', requester: 'Investor B', licence: null },
         ] },
         admin_product: { count: 4, oldest_age_hours: 44, bands: { ok: 0, due_soon: 1, past: 0 }, items: [
-          { id: 4, title: 'Approvals filter loses state', status: 'open', priority: 'medium', age_hours: 44, sla_band: 'due_soon', requester: 'K. Weber', licence: { uid: 'lic_fr', licence_ref: 'AXL-001', brand_name: 'Axal VC France' } },
+          { id: 4, title: 'Approvals filter loses state', status: 'open', priority: 'high', age_hours: 44, sla_band: 'due_soon', requester: 'K. Weber', licence: { uid: 'lic_fr', licence_ref: 'AXL-001', brand_name: 'Axal VC France' } },
         ] },
         hq_staff: { count: 1, oldest_age_hours: 1, items: [{ id: 7, title: 'Staff test ticket', status: 'open', age_hours: 1, requester: 'HQ Staff', licence: null }] },
         account_closed: { count: 1, oldest_age_hours: 70, items: [{ id: 8, title: 'Closed admin asking', status: 'open', age_hours: 70, requester: 'Closed Admin', licence: null }] },
@@ -141,22 +141,22 @@ test('the band says four things and never a total it was not sent', () => {
 
 // ────────────────────────────────────────────────────────── the queues ──
 
-test('an escalation keeps its band: due within 24h is not folded into open', () => {
+test('an escalation keeps its band: due soon is not folded into open', () => {
   const props = escalationCardProps(payload(), false);
   assert.deepEqual(props.items.map((x) => x.band), ['past', 'due_soon', 'ok', 'ok']);
   const html = render(QueueCard, props);
-  assert.match(text(html), /2 on time · 1 due within 24h · 1 past SLA/);
+  assert.match(text(html), /2 on time · 1 due soon · 1 past SLA/);
   assert.match(html, /title="past SLA"[^>]*>96h</);
-  assert.match(html, /title="due within 24h"[^>]*>31h</);
+  assert.match(html, /title="due soon"[^>]*>31h</);
   assert.match(html, /bg-red-50[^"]*"[^>]*title="past SLA"/);
-  assert.match(html, /bg-amber-100[^"]*"[^>]*title="due within 24h"/);
+  assert.match(html, /bg-amber-100[^"]*"[^>]*title="due soon"/);
 });
 
 test('a ticket inherits a band from priority and age, and opens the ticket', () => {
   const props = ticketCardProps(payload(), false, 'admin_product');
   const html = render(QueueCard, props);
   assert.match(html, /href="\/help\/tickets\/4"/);
-  assert.match(html, /title="due within 24h"/);
+  assert.match(html, /title="due soon"/);
   assert.match(html, /bg-amber-100[^"]*"[^>]*>44h</);
   assert.match(text(html), /K\. Weber · AXL-001 · open/);
 });

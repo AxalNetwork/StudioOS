@@ -298,7 +298,14 @@ test('guardrail hits are counted — but never the artboard\'s per-category rows
     'the block stopped passing enforcement through, so the breakdown reaches nobody');
   // The rows that ARE still unbuilt keep their reasons, and still carry no
   // invented count — the half of the old assertion that is still true.
-  for (const what of ['Token anomalies', 'Guardrail counters by branch']) {
+  // D481 — 'Token anomalies' left this list the way D158's rule row did: it is
+  // computed now (services/tokenAnomalies.ts) and served as `token_anomalies`.
+  // The rows that took its place are H23's tiles the page had not named.
+  assert.doesNotMatch(ROUTE, /what: 'Token anomalies'/,
+    'the panel refuses a token-anomaly figure it now serves');
+  assert.match(ROUTE, /token_anomalies: await loadTokenAnomalies\(env\)/,
+    'the block stopped carrying the token-anomaly figure');
+  for (const what of ['Guardrail counters by branch', 'Cross-tenant refusals', 'Flagged outputs held for review']) {
     const at = ROUTE.indexOf(`what: '${what}'`);
     assert.ok(at > 0, `${what} lost its row without the absence being closed`);
     assert.doesNotMatch(ROUTE.slice(at, ROUTE.indexOf('},', at)), /\bn:\s/,
@@ -413,6 +420,10 @@ test('the rail stopped saying nothing aggregates guardrail verdicts', () => {
   // and the rail cannot come to disagree about what is missing.
   assert.match(P, /data\.ai_safety\?\.not_counted \|\| \[\]/,
     'the rail hand-types its AI-safety absences instead of reading the payload');
-  assert.match(ROUTE, /what: 'Token anomalies'/,
-    'the one clause of the old sentence that was TRUE lost its row');
+  // D481 — the one clause of the old sentence that was TRUE is closed by a
+  // figure, not by a deleted row: the block serves it from ai_usage_logs.
+  assert.doesNotMatch(ROUTE, /what: 'Token anomalies'/,
+    'the token-anomaly refusal came back beside the figure that answers it');
+  assert.match(ROUTE, /token_anomalies: await loadTokenAnomalies\(env\)/,
+    'the clause D152 left standing is neither refused nor answered');
 });

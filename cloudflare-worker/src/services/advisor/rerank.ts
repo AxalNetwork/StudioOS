@@ -30,6 +30,7 @@
 import type { Env } from '../../types';
 import type { Question } from './questionBank';
 import { run as aiRouterRun } from '../aiRouter';
+import { AI_SURFACE } from '../aiSurfaces';
 
 const TOP_K = 8;
 const RECENT_TURN_WINDOW = 3;
@@ -260,6 +261,7 @@ export async function pickNextQuestion(
     const result = await aiRouterRun(env, {
       task: 'rerank',
       userId,
+      surface: AI_SURFACE.studio,
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 64,
