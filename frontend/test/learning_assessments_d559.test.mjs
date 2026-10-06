@@ -197,7 +197,7 @@ test('the fixtures are what D559 sends, and the studio\'s frozen line is the rou
     'question_count: questionCount, status: x.status, published_at: x.published_at,',
     'attempt: { uid: attempt.uid, started_at: attempt.started_at, deadline:',
     'questions: inOrder(all, attempt.question_order_json).map(memberQuestion),',
-    'return c.json({ attempt: attemptView(after, exam, all), correct_count: g.correct, question_count: g.total });',
+    'return c.json({ attempt: attemptView(after, exam, all), correct_count: g.correct, question_count: g.total, lesson_progress });',
     "if (!a.submitted_at || exam.reveal !== 'score_and_answers') return { ...base, answers_revealed: false };",
     'return { ...base, answers_revealed: true, answers, correct: revealed(shown) };',
     'attempts_left: exam.max_attempts == null ? null : Math.max(0, Number(exam.max_attempts) - used),',
@@ -621,8 +621,11 @@ test('the course builder: an exercise or exam lesson chooses among the studio\'s
   assert.doesNotMatch(choices, /value="e0"|value="x1"/, 'an archived exercise, or an exam, offered for an exercise lesson');
   assert.match(flat(form), /Exercise Choose one/);
   assert.match(flat(form), /Members open a draft exercise only once it is published\./);
-  // No route marks such a lesson complete, and the builder says what "Required" then costs.
-  assert.match(flat(zone(form, 'text-lesson-assessment-progress', '</p>')), /Nothing marks an exercise or exam lesson complete yet, so a required one keeps the course below 100%\./);
+  // D559 (#1249): the Worker completes such a lesson itself, and the builder says when, for each kind.
+  assert.equal(flat(zone(form, 'text-lesson-assessment-progress', '</p>')).trim(), 'It completes for a member when a reviewer accepts their answer.');
+  const examForm = html(h(LessonForm, { lesson: { ...exerciseLesson, kind: 'exam', ref_uid: 'x1' }, items: [], exercises: STUDIO_EXERCISES, exams: STUDIO_EXAMS, onSubmit: () => {}, onCancel: () => {}, submitLabel: 'Save lesson' }));
+  assert.equal(flat(zone(examForm, 'text-lesson-assessment-progress', '</p>')).trim(), 'It completes for a member when they pass the exam.');
+  assert.doesNotMatch(flat(form) + flat(examForm), /Nothing marks|below 100%/);
   assert.doesNotMatch(html(h(LessonForm, { items: [], onSubmit: () => {}, onCancel: () => {}, submitLabel: 'Add lesson' })), /text-lesson-assessment-progress/);
   const examChoices = zone(html(h(LessonForm, { lesson: { ...exerciseLesson, kind: 'exam', ref_uid: 'x1' }, items: [], exercises: STUDIO_EXERCISES, exams: STUDIO_EXAMS, onSubmit: () => {}, onCancel: () => {}, submitLabel: 'Save lesson' })), 'select-lesson-ref', '</select>');
   assert.match(examChoices, /<option value="x1" selected="">Seed basics check<\/option>/);
