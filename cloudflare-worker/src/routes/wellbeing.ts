@@ -37,6 +37,7 @@ import {
   validateDailyBody, encryptOrFallback,
 } from './wellbeing.helpers';
 import { notify } from '../services/notify';
+import { refuse } from '../util/refusal';
 import {
   EXPERT_CATEGORIES, EXPERT_CATEGORY_FAMILIES,
   isValidCategoryKey, VALID_MODALITIES, VALID_PRICING_MODELS,
@@ -381,6 +382,18 @@ wellbeing.post('/checkins', async (c) => {
   return c.json(result.body, result.status);
 });
 
+/**
+ * D574 — A READ THAT FAILED IS NOT AN EMPTY ONE. These four reads used to
+ * answer 200 with an empty list (or, for the pulse, the small-cohort shape),
+ * so the screens said "nothing yet" — and the admin pulse "Fewer than 5" —
+ * when nothing had been read at all. A failure is now a 503 refusal with its
+ * code, which the client reads as Unreadable. The raw error is logged, never
+ * returned.
+ */
+function unreadable(c: any, code: string, message: string, raw: unknown, extra?: Record<string, unknown>) {
+  return refuse(c, 503, { code, message, raw, extra });
+}
+
 wellbeing.get('/checkins', async (c) => {
   const user = await requireAuth(c);
   if (role(user) === 'investor') {
@@ -404,8 +417,7 @@ wellbeing.get('/checkins', async (c) => {
       submitted_today: rows.some((r) => r.day === todayUTC()),
     });
   } catch (e: any) {
-    console.warn('[wellbeing] /checkins read failed, returning empty:', String(e?.message || e));
-    return c.json({ checkins: [], today: todayUTC(), submitted_today: false });
+    return unreadable(c, 'checkins_unreadable', 'Your check-ins could not be read. This is not a claim that you have none.', e);
   }
 });
 
@@ -593,12 +605,7 @@ wellbeing.get('/aggregate', async (c) => {
       averages,
     });
   } catch (e: any) {
-    console.warn('[wellbeing] /aggregate failed:', String(e?.message || e));
-    return c.json({
-      window_days: days,
-      cohort_size: 0, submissions: 0,
-      insufficient_data: true, min_cohort: MIN_AGGREGATE_COHORT, averages: null,
-    });
+    return unreadable(c, 'aggregate_unreadable', 'The wellbeing pulse could not be read. This is not a claim that the cohort is small.', e, { window_days: days });
   }
 });
 
@@ -684,8 +691,7 @@ wellbeing.get('/resources', async (c) => {
     const res = await c.env.DB.prepare(sql).bind(...params).all<ResourceRow>();
     return c.json({ resources: (res.results || []).map((r: any) => serializeResource(r)) });
   } catch (e: any) {
-    console.warn('[wellbeing] /resources failed:', String(e?.message || e));
-    return c.json({ resources: [] });
+    return unreadable(c, 'resources_unreadable', 'The resource library could not be read. This is not a claim that it is empty.', e);
   }
 });
 
@@ -906,8 +912,7 @@ wellbeing.get('/experts', async (c) => {
       view_budget: viewBudget,
     });
   } catch (e: any) {
-    console.warn('[wellbeing] /experts failed:', String(e?.message || e));
-    return c.json({ matches: [], total_active: 0, filtered_count: 0, view_budget: null });
+    return unreadable(c, 'experts_unreadable', 'The expert directory could not be read. This is not a claim that no expert is listed.', e);
   }
 });
 

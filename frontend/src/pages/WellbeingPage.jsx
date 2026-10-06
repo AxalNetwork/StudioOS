@@ -428,8 +428,8 @@ function AdminAggregate() {
     setErr(null);
     // D332 — a request failure of ANY kind used to be rendered as
     // `insufficient_data: true`, the exact shape the worker's own /aggregate
-    // sends for a genuinely small cohort (see its catch block, which already
-    // answers 200 with that shape on an internal read failure). So a request
+    // sends for a genuinely small cohort (and, until D574, also sent on an
+    // internal read failure; it now answers 503). So a request
     // that never reached the worker at all — a 404 from a stale deploy, a
     // network failure — read on screen as "not enough people have checked in
     // yet", which is a claim about the cohort, not about the read. The
