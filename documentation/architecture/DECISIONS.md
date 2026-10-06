@@ -38930,6 +38930,13 @@ This entry adds the guard that keeps them there. No migration, no route, no
 **Left for later.** The values-compatibility half of Session 14 waits for
 the investor bank. It is not part of this entry.
 
+**Verification.** Five mutations, five caught, each with a non-zero exit and
+a `not ok` line, restored from a sha256-checked snapshot: a dropped strength,
+a missing banner, the card calling Eadwyn's output advice, the human-operator
+line losing that word, and coach no longer sharing the advisor array.
+`npm run build`, then `npm run test:drift`: EXIT=0. Frontend 4819 pass,
+worker 5686 pass, retention 121.
+
 ## D430
 
 **Recovery codes get a single writer: regenerating them and then re-pairing
