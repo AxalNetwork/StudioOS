@@ -20,6 +20,7 @@ const meta = read('../src/lib/assessmentMeta.js');
 const metaCode = codeOnly(meta);
 const page = read('../src/pages/ArchetypeCardPage.jsx');
 const pageCode = codeOnly(page);
+const sections = codeOnly(read('../src/components/profile/ArchetypeSections.jsx'));
 const app = read('../src/App.jsx');
 const appCode = codeOnly(app);
 
@@ -64,12 +65,14 @@ test('the full page shows locked ARCHETYPES copy and a back link', () => {
   assert.match(pageCode, /data-testid="archetype-strengths"/);
   assert.match(pageCode, /data-testid="archetype-blindspots"/);
   assert.match(pageCode, /data-testid="archetype-complements"/);
-  assert.match(pageCode, /data-testid="archetype-matching"/);
   assert.match(pageCode, /meta\?\.strengths/);
   assert.match(pageCode, /meta\?\.blindSpots/);
   assert.match(pageCode, /meta\?\.complements/);
-  assert.match(pageCode, /meta\?\.matching/);
-  assert.match(pageCode, /Who you match with/);
+  // D619 — the matching copy is the Matches section's type cards now: the
+  // page groups the members under ARCHETYPES[slug].matching (matchGroups).
+  assert.match(pageCode, /<MatchesSection/);
+  assert.match(pageCode, /matchGroups\(slug, members\.reply\)/);
+  assert.match(sections, /Who you match with/);
   assert.match(pageCode, /to="\/studio"/);
   assert.match(pageCode, /Back to studio/);
   // The empty state sends the user to the chat, which is Eadwyn, not an
