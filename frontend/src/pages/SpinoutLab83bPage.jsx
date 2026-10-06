@@ -23,10 +23,11 @@
 //     as "Filed · complete" or "3 days left" would misstate a STATUTORY tax
 //     deadline the founder is reading to decide when to mail. The chips render
 //     as a state indicator with the live one active.
-//   - Operator assist (a named legal-ops contact and follow-up dates) and
-//     deadline reminders have no store: each renders "Not recorded" with its
-//     reason. Operator review is an owner decision; no reminder job exists on
-//     the Worker for 83(b).
+//   - Operator assist (D580): the Axal admin assigned to this startup, their
+//     last review of the filing record and the next follow-up date, read from
+//     GET /legal/83b/operator-review (OperatorAssistRow). Each is "Not
+//     recorded" with its reason until HQ records it. Deadline reminders still
+//     have no store: no reminder job exists on the Worker for 83(b).
 //   - The checklist is the server's six real items, not the design's nine.
 //
 // The filing record (D361, migration 310). "Mark as filed" opens a form: the
@@ -64,12 +65,14 @@ import {
   Upload,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { section83bReviewApi } from '../lib/api/section83bReview.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import LabPageHeader from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import OperatorAssistRow from '../components/spinout/OperatorAssistRow';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -213,6 +216,9 @@ export default function SpinoutLab83bPage({ embedded = false }) {
   const [taxpayerName, setTaxpayerName] = useState('');
   // Which reads failed. A failed read is never folded into an empty one.
   const [unread, setUnread] = useState({ projects: false, trackers: false, capTable: false });
+  // D580 — the startup's operator review: { status, data }. A failed read is
+  // 'unreadable', never an empty one.
+  const [opReview, setOpReview] = useState({ status: 'loading', data: null });
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -225,7 +231,7 @@ export default function SpinoutLab83bPage({ embedded = false }) {
       });
       const p = failed.projects ? null : pickLabProject(projects, user);
       setProject(p);
-      const [tr, ct] = await Promise.all([
+      const [tr, ct, op] = await Promise.all([
         failed.projects ? null : api.legal83bList(p?.id).catch((e) => {
           reportError('SpinoutLab83bPage:trackers', e);
           failed.trackers = true;
@@ -236,7 +242,15 @@ export default function SpinoutLab83bPage({ embedded = false }) {
           failed.capTable = true;
           return null;
         }) : Promise.resolve(null),
+        p ? section83bReviewApi.read(p.id).then(
+          (data) => ({ status: 'ready', data }),
+          (e) => {
+            reportError('SpinoutLab83bPage:operatorReview', e);
+            return { status: 'unreadable', data: null };
+          },
+        ) : Promise.resolve({ status: failed.projects ? 'unreadable' : 'no-project', data: null }),
       ]);
+      setOpReview(op);
       const list = Array.isArray(tr) ? tr : tr?.trackers || [];
       setTrackers(list);
       setCapTable(ct);
@@ -799,14 +813,11 @@ export default function SpinoutLab83bPage({ embedded = false }) {
                 </div>
               </div>
 
-              {/* Canvas features with no store (D361): named, not invented. */}
+              {/* Operator assist is recorded by HQ (D580); reminders have no store (D361). */}
               <div data-testid="card-83b-unrecorded">
                 <div className={`${LBL} mb-3`}>Assist &amp; reminders</div>
                 <div className={`${CARD} p-4 flex flex-col gap-2.5 text-[12px]`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-gray-600 dark:text-gray-300">Operator assist</span>
-                    <Unrecorded reason="No operator is assigned to 83(b) filings: operator review needs an owner decision before it has a store." />
-                  </div>
+                  <OperatorAssistRow review={opReview} />
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-gray-600 dark:text-gray-300">Deadline reminders</span>
                     <Unrecorded reason="Nothing on the Worker sends 83(b) deadline reminders yet; the countdown on this page is the only one." />

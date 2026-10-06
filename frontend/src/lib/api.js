@@ -16,6 +16,7 @@ export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
+export * from './api/section83bReview.js';
 // api-modules:end
 
 const BASE = '/api';
