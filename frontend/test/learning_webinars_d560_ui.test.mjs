@@ -64,7 +64,8 @@ const elementOf = (markup, id) => {
 };
 const count = (markup, needle) => markup.split(needle).length - 1;
 /** The visible text of each list item carrying this test id. */
-const rowsOf = (markup, id) => [...markup.matchAll(new RegExp(`<li[^>]*data-testid="${id}"[^>]*>([\\s\\S]*?)</li>`, 'g'))].map((m) => flat(m[1]).trim());
+const rowsOf = (markup, id) => [...markup.matchAll(/<li[^>]*data-testid="([^"]*)"[^>]*>([\s\S]*?)<\/li>/g)]
+  .filter((m) => m[1] === id).map((m) => flat(m[2]).trim());
 
 // ── Fixtures, built by D560's own code ────────────────────────────────────
 
@@ -402,8 +403,9 @@ test('the join link is the route\'s: drawn only when it arrives, and never built
   assert.deepEqual([tagOf(unset, 'link-webinar-join'), /href="https:/.test(unset), elementOf(unset, 'text-webinar-note').label], ['', false, 'No join link has been set for this webinar yet.']);
   // Not registered, inside the window: the route sends no link, and the page asks the member to register.
   const outsider = panel({ webinar: shaped(ROW, LIVE), registration: NOT_REGISTERED, now: LIVE, onRegister: () => {} });
-  assert.deepEqual([tagOf(outsider, 'link-webinar-join'), outsider.includes(JOIN), elementOf(outsider, 'text-webinar-note').label, elementOf(outsider, 'text-webinar-host').label],
-    ['', false, 'Register to receive the join link.', 'Host Ada Host · capacity 50 · 12 registered · 38 seats left']);
+  // The join address appears nowhere on the page (counted, not a URL substring test).
+  assert.deepEqual([tagOf(outsider, 'link-webinar-join'), count(outsider, JOIN), elementOf(outsider, 'text-webinar-note').label, elementOf(outsider, 'text-webinar-host').label],
+    ['', 0, 'Register to receive the join link.', 'Host Ada Host · capacity 50 · 12 registered · 38 seats left']);
   // The recording link is the route's, and is drawn only inside Learning.
   const good = panel({ webinar: shaped(ROW, AFTER), registration: NOT_REGISTERED, recording: RECORDED, now: AFTER });
   const odd = panel({ webinar: shaped(ROW, AFTER), registration: NOT_REGISTERED, recording: { available: true, item_uid: 'x', href: 'javascript:alert(1)' }, now: AFTER });
@@ -608,9 +610,11 @@ test('only webinarReads.js calls the client for webinars, through methods the cl
     assert.doesNotMatch(codeOnly(read(`${dir}/${f}`)), /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
   }
   const src = codeOnly(read(`${dir}/webinarReads.js`));
+  // One literal pattern for both clients (never a RegExp built from a variable).
+  const calls = [...src.matchAll(/\b(learningApi|adminLearningApi)\.(\w+)\b/g)];
   for (const [client, file] of [['learningApi', 'frontend/src/lib/api/learning.js'], ['adminLearningApi', 'frontend/src/lib/api/adminLearning.js']]) {
     const declared = read(file);
-    const called = [...new Set([...src.matchAll(new RegExp(`\\b${client}\\.(\\w+)\\b`, 'g'))].map((m) => m[1]))];
+    const called = [...new Set(calls.filter((m) => m[1] === client).map((m) => m[2]))];
     assert.ok(called.length >= 4, `webinarReads.js calls no ${client} method`);
     for (const method of called) assert.ok(declared.includes(`  ${method}: (`), `${client}.${method} is not a method ${file} declares`);
   }

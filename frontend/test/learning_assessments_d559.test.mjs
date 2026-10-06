@@ -654,7 +654,7 @@ test('the exercise editor: a written answer or a checklist, the kind set once, t
   assert.doesNotMatch(draft, /select-exercise-kind/, 'the edit route would ignore a new kind');
   assert.match(flat(zone(draft, 'text-exercise-kind', '</p>')), /A checklist · set when the exercise was created/);
   const items = zone(draft, 'studio-exercise-checklist', '</fieldset>');
-  for (const item of ITEMS) assert.match(items, new RegExp(`value="${item}"`));
+  for (const item of ITEMS) assert.ok(items.includes(`value="${item}"`), `the checklist item "${item}" is not drawn`);
   assert.match(draft, /button-studio-publish/);
   assert.doesNotMatch(draft, /button-studio-unpublish/);
   assert.match(draft, /<option value="program" selected="">/);
@@ -684,7 +684,7 @@ test('the exam builder: the rules, each question with its correct answer, and th
   assert.doesNotMatch(markup, /studio-exam-frozen/);
   // Started once: every question write is the route's to refuse, so none is offered, and the route's sentence says why.
   const frozen = html(h(StudioExamBuilder, { exam: { ...EXAM_TREE, attempt_count: 2 }, handlers: {} }));
-  assert.match(flat(zone(frozen, 'studio-exam-frozen', '</p>')), new RegExp(`${FROZEN_LINE.replace(/[.?]/g, '\\$&')} \\(2 attempts started\\.\\)`));
+  assert.ok(flat(zone(frozen, 'studio-exam-frozen', '</p>')).includes(`${FROZEN_LINE} (2 attempts started.)`), 'the frozen exam does not say why, with its count');
   assert.doesNotMatch(frozen, /button-add-question|button-delete-question-/);
   assert.doesNotMatch(flat(zone(frozen, 'studio-exam-questions')), /\bEdit\b/);
   // A refusal is shown beside what it refused.
@@ -801,9 +801,11 @@ test('the app\'s own styling, one file calling the client, and no client method 
   const reads = codeOnly(read('frontend/src/pages/learning/assessmentReads.js'));
   assert.match(reads, /import \{ learningApi \} from '\.\.\/\.\.\/lib\/api\/learning\.js';/);
   assert.match(reads, /import \{ adminLearningApi \} from '\.\.\/\.\.\/lib\/api\/adminLearning\.js';/);
+  // One literal pattern for both clients (never a RegExp built from a variable).
+  const calls = [...reads.matchAll(/\b(learningApi|adminLearningApi)\.(\w+)\(/g)];
   for (const [client, file] of [['learningApi', 'learning.js'], ['adminLearningApi', 'adminLearning.js']]) {
     const declared = read(`frontend/src/lib/api/${file}`);
-    const called = new Set([...reads.matchAll(new RegExp(`\\b${client}\\.(\\w+)\\(`, 'g'))].map((m) => m[1]));
+    const called = new Set(calls.filter((m) => m[1] === client).map((m) => m[2]));
     assert.ok(called.size > 0, `no ${client} method is called`);
     for (const method of called) assert.ok(declared.includes(`  ${method}: (`), `${client}.${method} is not a method ${file} declares`);
   }

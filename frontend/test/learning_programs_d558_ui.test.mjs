@@ -870,7 +870,7 @@ test('the four pages: each its own frame, header and rail, reading from its firs
   for (const [file, role] of rails) {
     const mounts = [...codeOnly(read(`frontend/src/pages/learning/${file}`)).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
     assert.equal(mounts.length, 1, `${file} mounts ${mounts.length} rails`);
-    assert.match(mounts[0], new RegExp(`role="${role}"`));
+    assert.ok(mounts[0].includes(`role="${role}"`), `${file}'s rail is not role="${role}"`);
     assert.match(mounts[0], /note="Eadwyn /);
   }
 });

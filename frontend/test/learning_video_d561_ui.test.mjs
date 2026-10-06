@@ -132,10 +132,12 @@ function box(initial) {
 
 test('the limits are the route\'s own, shown as the route says them, and a file outside them is refused in its words', () => {
   const svc = read('cloudflare-worker/src/services/learningVideo.ts');
+  // Every `export const NAME = <a product of numbers>;`, read with one literal pattern.
+  const products = new Map([...svc.matchAll(/export const (\w+) = ([\d\s*]+);/g)].map((m) => [m[1], m[2]]));
   const product = (name) => {
-    const m = new RegExp(`export const ${name} = ([\\d\\s*]+);`).exec(svc);
-    assert.ok(m, `services/learningVideo.ts no longer declares ${name} as a product of numbers`);
-    return m[1].split('*').map(Number).reduce((a, b) => a * b, 1);
+    const factors = products.get(name);
+    assert.ok(factors, `services/learningVideo.ts no longer declares ${name} as a product of numbers`);
+    return factors.split('*').map(Number).reduce((a, b) => a * b, 1);
   };
   assert.equal(VIDEO_UPLOAD.maxBytes, product('VIDEO_MAX_BYTES'));
   assert.equal(VIDEO_UPLOAD.partMaxBytes, product('VIDEO_PART_MAX_BYTES'));
