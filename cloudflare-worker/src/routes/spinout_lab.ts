@@ -367,6 +367,12 @@ async function loadApplicantBlock(env: Env, userId: number) {
 
 spinoutLab.get('/state', async (c) => {
   const user = await requireAuth(c);
+  // D585: a founder paid while week 4 was still locked is recorded once it
+  // unlocks. Cheap when there is nothing to do (one indexed read); never throws.
+  try {
+    const { syncIncorporationMilestone } = await import('../services/labIncorporationMilestone');
+    await syncIncorporationMilestone(c.env, user.id);
+  } catch { /* the state read never fails on this */ }
   const sql = getSQL(c.env);
   const state = await getLabState(sql, user.id);
   // Task #7 — admission fields. Queried at the wire layer (not inside
@@ -423,8 +429,21 @@ spinoutLab.get('/state', async (c) => {
     console.warn('[spinout-lab] milestone credits unreadable', (e as Error).message);
     milestoneCreditsUnreadable = true;
   }
+  // D576 — the caller's own Week 1 plan. Null when none is stored; a failed
+  // read is said, never drawn as the standard order.
+  let week1Plan: unknown = null;
+  let week1PlanUnreadable = false;
+  try {
+    const { readWeek1Plan } = await import('../services/week1PlanStore');
+    week1Plan = await readWeek1Plan(c.env, user.id);
+  } catch (e) {
+    console.warn('[spinout-lab] week 1 plan unreadable', (e as Error).message);
+    week1PlanUnreadable = true;
+  }
   const payload: Record<string, unknown> = {
     ...state, admitted, cohort, application, applicant,
+    week1_plan: week1Plan,
+    week1_plan_unreadable: week1PlanUnreadable,
     milestone_credits: milestoneCredits,
     milestone_credits_unreadable: milestoneCreditsUnreadable,
     cohort_timing: cohortTiming,
@@ -563,6 +582,16 @@ spinoutLab.post('/apply', async (c) => {
   try {
     await c.env.DB.prepare(`DELETE FROM spinout_application_drafts WHERE user_id = ?`).bind(user.id).run();
   } catch { /* drafts table not migrated */ }
+
+  // D576 — the answer is saved, so the member's Week 1 plan is (re)computed
+  // from it now. A failed write never refuses the application: the plan is
+  // computed again when Week 1 starts, if none is stored by then.
+  try {
+    const { writeWeek1Plan } = await import('../services/week1PlanStore');
+    await writeWeek1Plan(c.env, user.id, 'applied', `user:${user.id}`);
+  } catch (e) {
+    console.warn('[spinout-lab/apply] week 1 plan not written', (e as Error)?.message);
+  }
 
   // Task #5 — pin the application to its target cycle so the close/
   // capacity/activation jobs know exactly which pool it belongs to.
@@ -746,6 +775,14 @@ spinoutLab.post('/start', async (c) => {
   const r = await startLab(sql, user.id);
   await sql.end();
   if (!r.ok) return c.json({ error: r.error }, r.status);
+  // D576 — Week 1 begins with a plan: the one written when the member
+  // applied, or one computed now from their latest application.
+  try {
+    const { ensureWeek1Plan } = await import('../services/week1PlanStore');
+    await ensureWeek1Plan(c.env, user.id, `user:${user.id}`);
+  } catch (e) {
+    console.warn('[spinout-lab/start] week 1 plan not written', (e as Error)?.message);
+  }
   return c.json(r.state);
 });
 
@@ -789,6 +826,24 @@ spinoutLab.post('/milestone', async (c) => {
   // nothing. Two racing calls can both see it absent — the grant's own
   // source ref then pays it once.
   const trimmed = (key ?? '').trim();
+  // D585 (#1212): graduation's formation milestone comes only from the
+  // server's order status, at payment. A client call cannot record it; it
+  // asks the server to sync, which records it only behind a paid order.
+  if (trimmed === 'incorporation_completed') {
+    const { syncIncorporationMilestone } = await import('../services/labIncorporationMilestone');
+    const out = await syncIncorporationMilestone(c.env, user.id);
+    if (!out.recorded && out.reason === 'not_paid') {
+      return c.json({ error: 'incorporation_not_paid', message: 'This milestone is recorded when your incorporation order is paid.' }, 409);
+    }
+    const sqlS = getSQL(c.env);
+    const state = await getLabState(sqlS, user.id);
+    await sqlS.end();
+    return c.json({
+      ...state,
+      milestone_credit: out.recorded ? out.milestone_credit : null,
+      graduation_credit: out.recorded ? out.graduation_credit : null,
+    });
+  }
   let existedBefore = true;
   try {
     existedBefore = !!(await c.env.DB.prepare(

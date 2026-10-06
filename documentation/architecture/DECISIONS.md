@@ -35866,6 +35866,22 @@ the application said the company is incorporated. A test pins both halves.
   - a test pins that neither side has quietly taken a side. It is the test
     to change, together with `GATES_DECISION`, when the call is made.
 
+**Settled 2026-10-06: the owner answered A on #979 (#1236).** One set of
+gates for everyone. The Programme Brief prints the set the Lab enforces.
+- **What it prints.** Its gate page renders `PIPELINE_PHASES`, the same list
+  the Lab intro and the workspace render, so no second copy is typed for the
+  Brief.
+- **What is gone.** `TRACK_GATES` and `GATES_DECISION` are removed, with the
+  open-decision sentence on both pages. The Brief and the intro say once that
+  the gates are the same for every track, and that the track changes which
+  tools lead, not what a gate requires.
+- **Per-track milestones (option B)** stay unbuilt, unless the tracks
+  diverge.
+- **The test.** `spinout_landing_d385.test.mjs`'s "open call" tests are
+  rewritten. The Brief's gates must equal the enforced set read from
+  `PIPELINE_PHASES`, and no per-track copy or open-decision notice may
+  remain.
+
 **Not built, because nothing stores it** (unchanged from D38, and still true
 of the Landing canvas):
 - the "Yours" tag;
@@ -40970,6 +40986,27 @@ The cut is the same byte: the `<` in front of `data-dc-script`. The test
 walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
+
+## D473
+
+**`/branch` redirects to `/studio`.** The digest is no longer a page a person opens. `/branch/*` stays. No migration. The admin guard stays `guard(['admin'])`. A bookmark's query string and hash travel with the redirect.
+
+**What the digest did, and where Studio does it.**
+- **Queue pressure, oldest first.** The Approvals card and the Approvals tile (`approvalsGlance`) name the oldest open lane, its age, its window and its count, from the same `queue_pressure` the digest sorted. The card opens `/branch/approvals`, which is the eleven lanes item by item.
+- **Programme clock, with the zone.** The Programs card and tile (`programmeGlance`) print the open week, the close formatted in the programme zone, and the zone name. A recorded `pending_accounts` count, including zero, is part of that sentence. A missing count is left off the sentence and is not printed as zero. Hours left still rank the tile (due within 24 hours) rather than being printed beside the close.
+- **Revenue share, as a rate, and no amount.** The Insights card and the share chip print the percentage from the same basis points (`insightsGlance`). They do not multiply it by a base. The complement "you keep" stays on `/branch/insights/analytics`. The digest's month-to-date line said the amount is not recorded. Studio draws no amount line, so it does not invent one.
+
+**The five blocks with no source.** The digest's rail listed an AI digest, rail flags, a local clock, a help desk and security alerts as absent, each with the worker's reason on `GET /api/branch/home`. Studio's rail reports the glance blocks it read. It does not repeat those five absences. The worker route still returns them.
+
+**Nothing in the app linked to the bare path.** The sidebar's first row is already `/studio`. The route stays so a bookmark lands on Studio.
+
+**`BranchHome.jsx` stays, unmounted.** `pctFromBps` is imported by the studio overview, and the digest tests still read the component. Deleting the file would take the rate helper with it. The default export has no route caller.
+
+**Relayed, not edited.** `sidebarConfig.js` still says `/branch` stays registered as the digest. That comment is slot S05's. The route is still registered. It redirects.
+
+**Tests.** `frontend/test/branch_digest_redirect_d473.test.mjs`. The redirect is rendered: `/branch?kept=1#sec` lands on `/studio?kept=1#sec`, and `/branch/accounts` stays. The programme sentence is called, not scanned.
+
+**Verification.** Four mutations, four caught, each with a non-zero exit and a `not ok` line, restored from a snapshot: the redirect removed, the query and hash dropped, the pending count dropped, and a zero count treated as missing. `npm run build`, then `npm run test:drift`: EXIT=1. Frontend 4904 pass, 2 fail. Both failures are the learning pins already failing on main (`learning_assessments_d559.test.mjs`, `learning_programs_d558_ui.test.mjs`). This change does not touch those files. The suite stops there, so the worker and retention jobs did not run.
 
 ## D474
 

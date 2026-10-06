@@ -52,11 +52,12 @@ export const CONFIDENTIAL_NOTE =
 
 /**
  * The canvas's "What your answer changes" panel says a TTO answer re-sequences
- * the founder's Week 1. The Lab has ONE milestone list for every founder
- * (`MILESTONES`, lib/spinoutLab.js); nothing reads this answer to change it.
- * Until that is built — a product call, named in D384 — the panel says what
- * the answer is used for today: the reviewer and the interviewing partner read
- * it. It never promises a schedule that no code produces.
+ * the founder's Week 1. D384 dropped that promise because nothing built it;
+ * D576 (#1189, the owner's answer B on #978) builds it: the Worker orders a
+ * member's Week 1 steps by this answer when the application is saved
+ * (`services/week1Plan.ts`, migration 396), and their Week 1 says which status
+ * it is ordered for. So the panel says so again, without naming an order: the
+ * rules live in the Worker, in one place, and are not copied here.
  */
 export function consequenceFor(answers) {
   const a = answers || {};
@@ -77,7 +78,7 @@ export function consequenceFor(answers) {
     text: tto
       ? `The reviewer and the partner who interviews you read “${tto.name}” before they read anything else, and ask about the licence timeline with that in mind.`
       : 'Tell us where the licence stands. The partner who interviews you asks about the timeline with your answer in mind.',
-    foot: 'Nothing on this step is scored. Your Lab weeks are the same for every founder today; this answer does not change them.',
+    foot: 'Nothing on this step is scored. If you join the Lab, this answer orders your Week 1 steps, and your Week 1 names the status it is ordered for.',
   };
 }
 

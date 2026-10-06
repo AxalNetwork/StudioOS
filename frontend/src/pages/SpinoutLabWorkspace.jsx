@@ -52,6 +52,7 @@ import {
   Users,
 } from 'lucide-react';
 import { rowCredit, rowCreditLabel } from '../lib/labCredits';
+import { orderDeliverables, planLine } from '../lib/week1Plan';
 
 const SPRINT_DAYS = 28;
 
@@ -429,6 +430,28 @@ function CohortDeadlineBanner({ timing, serverTime }) {
 }
 
 const SUM_LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2';
+
+/**
+ * D576 — the line above the Week 1 checklist: the tech-transfer status the
+ * member's plan is ordered for, and why. With no plan stored, or one that
+ * could not be read, it says so and the standard order is shown.
+ */
+export function Week1PlanLine({ state }) {
+  const line = planLine(state);
+  if (line.status === 'unreadable') {
+    return (
+      <div data-testid="workspace-week1-plan" className="mb-3">
+        <Unreadable what="Your Week 1 order" claim="The standard order is shown." />
+      </div>
+    );
+  }
+  return (
+    <div data-testid="workspace-week1-plan" className="mb-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2">
+      <p className="m-0 text-[12px] font-semibold text-gray-700 dark:text-gray-200">{line.text}</p>
+      {line.why ? <p className="m-0 mt-0.5 text-[11.5px] text-gray-500 dark:text-gray-400">{line.why}</p> : null}
+    </div>
+  );
+}
 
 /**
  * The Week 1 summary's record (canvas: "Week 1 Summary" — startup record,
@@ -1078,8 +1101,9 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
             Week {selectedDef.num} deliverables
           </div>
           <MilestoneCreditNote state={state} />
+          {selectedDef.num === 1 ? <Week1PlanLine state={state} /> : null}
           <div className="flex flex-col gap-2.5">
-            {selectedDef.deliverables.map((d) => {
+            {(selectedDef.num === 1 ? orderDeliverables(selectedDef.deliverables, state?.week1_plan) : selectedDef.deliverables).map((d) => {
               const dDone = chipDone(selectedDef.num, d.keys);
               const keysDone = d.keys.filter((k) => done.has(k)).length;
               const partial = !dDone && d.keys.length > 1 && keysDone > 0;

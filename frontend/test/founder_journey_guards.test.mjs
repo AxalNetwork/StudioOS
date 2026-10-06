@@ -78,10 +78,10 @@ test('the exploring holding screen offers the founder lane its real next step', 
   assert.ok(src.includes('exploring-lane-cta'), 'lane CTA testid missing');
 });
 
-test('/studio (founder home) leads its modules with the venture next step', () => {
-  const src = fe('src/pages/founder/FounderStudioHome.jsx');
-  const firstCard = src.match(/<StudioCard\s+title="([^"]+)"/);
-  assert.ok(firstCard, 'expected the founder home to draw its cards');
-  assert.equal(firstCard[1], 'Venture next step', 'the founder home no longer leads with the venture');
+test('/studio (founder Studio, D564) leads its zones with Do these next', () => {
+  const src = fe('src/pages/founder/FounderStudioBody.jsx');
+  const firstZone = src.match(/<Zone\s+title="([^"]+)"/);
+  assert.ok(firstZone, 'expected the founder Studio to draw its zones');
+  assert.equal(firstZone[1], 'Do these next', 'the founder Studio no longer leads with what to do next');
   assert.ok(!fe('src/pages/Dashboard.jsx').includes('VentureNextStep'), 'the retired strip is mounted again');
 });

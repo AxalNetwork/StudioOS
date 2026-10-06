@@ -12,40 +12,40 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Studio | `/studio` | Founder Studio |
-| Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Workspace |
-| Home | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
-| Home | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
-| Home | Raise | `/raise` | Founder Workspaces Canvas |
-| Home | Grow | `/grow` | Founder Workspaces Canvas, Pages · Founder Grow |
-| Home | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
-| Home | Research | `/research` | Founder Workspaces Canvas, Research · Main |
+| Headerless | Studio | `/studio` | Founder Studio |
+| Headerless | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Workspace |
+| Headerless | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
+| Headerless | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
+| Headerless | Raise | `/raise` | Founder Workspaces Canvas |
+| Headerless | Grow | `/grow` | Founder Workspaces Canvas, Pages · Founder Grow |
+| Headerless | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
+| Headerless | Research | `/research` | Founder Workspaces Canvas, Research · Main |
 
 ## `advisor` — 7 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Studio | `/studio` | Advisor Canvas |
-| Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Practice | `/practice` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Cohorts | `/cohorts` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Expertise | `/expertise` | Pages · Advisor Expertise |
-| Home | Network | `/network` | Advisor Canvas |
-| Home | Research | `/research` | Research · Main |
+| Headerless | Studio | `/studio` | Advisor Canvas |
+| Headerless | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Practice | `/practice` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Cohorts | `/cohorts` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Expertise | `/expertise` | Pages · Advisor Expertise |
+| Headerless | Network | `/network` | Advisor Canvas |
+| Headerless | Research | `/research` | Research · Main |
 
 ## `investor` — 9 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Studio | `/studio` | Investor LP Canvas |
-| Home | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
-| Home | Deals | `/deals` | Deal Flow, Investor LP Canvas, Pages · Investor Deals |
-| Home | Portfolio | `/portfolio` | Investor LP Canvas |
-| Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace, Quarterly Report |
-| Home | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
-| Home | Network | `/network` | Investor LP Canvas, Pages · Investor Network |
-| Home | Research | `/research` | Investor LP Canvas, Research · Main |
-| Home | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Studio | `/studio` | Investor LP Canvas |
+| Headerless | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
+| Headerless | Deals | `/deals` | Deal Flow, Investor LP Canvas, Pages · Investor Deals |
+| Headerless | Portfolio | `/portfolio` | Investor LP Canvas |
+| Headerless | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace, Quarterly Report |
+| Headerless | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
+| Headerless | Network | `/network` | Investor LP Canvas, Pages · Investor Network |
+| Headerless | Research | `/research` | Investor LP Canvas, Research · Main |
+| Headerless | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `partner` — 7 destinations in 1 group
 
@@ -118,10 +118,10 @@ design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
 rather than merely absent.
 
-- advisor · Home · Spin-Out Lab (`/spinout-lab`)
-- advisor · Home · Practice (`/practice`)
-- advisor · Home · Cohorts (`/cohorts`)
-- investor · Home · Trust (`/trust`)
+- advisor · Headerless · Spin-Out Lab (`/spinout-lab`)
+- advisor · Headerless · Practice (`/practice`)
+- advisor · Headerless · Cohorts (`/cohorts`)
+- investor · Headerless · Trust (`/trust`)
 - partner · Headerless · Pipeline (`/pipeline`)
 - partner · Headerless · Delivery (`/delivery`)
 - partner · Headerless · Offers (`/offers`)
