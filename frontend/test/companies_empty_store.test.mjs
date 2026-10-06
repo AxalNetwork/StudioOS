@@ -131,7 +131,7 @@ test('the capability gap sits above the body, and never replaces it', () => {
 
   // The body renders regardless — the gap is drawn beside it, not instead.
   const workspace = raw('frontend/src/workspaces/ResearchWorkspace.jsx');
-  assert.match(workspace, /const storeGap = !isRoot && slug \? RESEARCH_STORE_GAPS\[slug\] : null;/,
+  assert.match(workspace, /const gap = !isRoot && slug \? storeGapFor\(slug, role\) : null;/,
     'the capability gap is no longer looked up separately from the body');
   const live = workspace.match(/const LIVE_ZONES = new Set\(\[([^\]]*)\]\)/)?.[1] || '';
   for (const slug of ['companies', 'markets', 'ask']) {

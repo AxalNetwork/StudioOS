@@ -41573,6 +41573,42 @@ route and changes the commit room's `rationale` block.
   reason, the room saying unenforced, the shortfall left unexplained, and a
   missing rule read as the old one.
 
+## D495
+
+**Investor Research, built to the owner's line: each held op and zone names what
+it waits on.** The second of the four zone-family PRs for #1023 (the Research
+family), slot S07. No migration and no new route.
+
+**What waits, and on what:**
+
+| Canvas item | Waits on | What the screen says now |
+| --- | --- | --- |
+| IR1 Clear history (`/research/ask`) | the owner's decision, question 4 on #1023: delete, hide behind "Show cleared", or keep refusing | disabled; "Clearing history is not decided yet. Nothing has been deleted." |
+| IR2 New request, Attach to deal (`/research/diligence`) | `research.ts`'s `deals/*` routes, which are slot S02's | disabled; each names the deal routes and slot S02 |
+| IR4 theses (`/research/markets`) | the owner's decision, question 5 on #1023: theses per investor, per firm, or held | a "Blocked on a decision" card above the zone, for the investor only |
+
+**The old Clear history note presented a refusal as policy** ("the one
+irreversible act this page declines to offer"). No such decision was ever
+recorded, so the note now says the decision is open. It also says that nothing
+has been cleared.
+
+**One lookup for a zone's gap.** `storeGapFor(slug, role)` in `noStoreCopy.js`
+takes a licence-specific entry (`markets:investor`) first. Otherwise it takes
+the zone's own entry, narrowed by its `roles` (D392). The investor's Markets
+canvas draws theses (Active, Parked, Retired), not the saved analysis the
+founder's draws, so the investor needs an entry of its own.
+
+**IR3 (Benchmarking) is unchanged.** Its ops already describe the stores they
+rest on, and none waits on an open decision.
+
+**Tests.**
+- `frontend/test/investor_research_d495.test.mjs` (3 tests) pins each held op's
+  reason, and the investor's theses gap. It fails on the code before this
+  change.
+- `research_zone_states.test.mjs` now checks the lookup by behaviour, where it
+  used to read its source text.
+- 7 mutations were made and each was caught.
+
 ## D500
 
 **A support ticket's persona stays its requester's standing now.** The owner's
