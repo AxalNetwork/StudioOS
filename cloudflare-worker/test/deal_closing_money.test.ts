@@ -106,9 +106,21 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
       project_id INTEGER, deal_id INTEGER, title TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'draft', created_by INTEGER,
+      company_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    -- D467: the wire gate reads through icDecisionScope, which needs the vote
+    -- and membership tables; transfers carry their firm (migration 340).
+    CREATE TABLE ic_votes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, ic_decision_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL, vote TEXT NOT NULL, rationale TEXT, created_at TEXT
+    );
+    CREATE TABLE user_company_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, company_id INTEGER NOT NULL,
+      is_primary_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT
+    );
+    CREATE TABLE company_profiles (id INTEGER PRIMARY KEY, company_name TEXT);
     CREATE TABLE ic_conditions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
       ic_decision_id INTEGER NOT NULL, body TEXT NOT NULL,
@@ -121,7 +133,8 @@ function freshDb() {
       deal_id INTEGER NOT NULL, amount_cents INTEGER NOT NULL,
       reference TEXT, phone_verified INTEGER NOT NULL DEFAULT 0, note TEXT,
       recorded_by INTEGER NOT NULL,
-      recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      company_id INTEGER
     );
     CREATE TABLE deal_closing_checklists (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,

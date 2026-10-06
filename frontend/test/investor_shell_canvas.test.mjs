@@ -73,6 +73,8 @@ test('investor Research zones match Pages · Investor Research (IR1–IR5)', () 
     ['diligence', 'COLLECTION'],
     ['benchmarking', 'ANALYTICS'],
     ['markets', 'ANALYTICS'],
+    // D546 (#1080) — the Geographies pill, beside Markets in every licence.
+    ['geographies', 'ANALYTICS'],
     ['library', 'COLLECTION'],
   ]);
 });

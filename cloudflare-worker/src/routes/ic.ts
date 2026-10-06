@@ -127,6 +127,40 @@ export async function scopedDecisions(
   return out;
 }
 
+/**
+ * D467 — THE WIRE GATE'S COUNT, SPLIT BY WHAT THIS CALLER MAY SEE.
+ *
+ * `POST /api/deals/:id/transfers` (D462) refuses while an IC condition on the
+ * deal is open. It used to count those conditions across every firm's
+ * decisions on the deal and put the number in its 409, so a partner learned
+ * how many open conditions ANOTHER firm's committee had on a deal they shared.
+ * D467 scopes IC work by firm, so the count the caller is told goes through
+ * `icDecisionScope` like every other IC read — which is why this lives in this
+ * file rather than in `deals.ts`.
+ *
+ * `hidden` is the open conditions on decisions this caller may not see. The
+ * gate still refuses on them (a wire is not the place to weaken a fraud
+ * control) but says nothing about how many there are or whose they are.
+ *
+ * A failed read THROWS. It used to be caught into 0, which let the wire
+ * through on a read that never happened.
+ */
+export async function openConditionsOnDeal(
+  env: Env, user: User, dealId: number,
+): Promise<{ visible: number; hidden: number }> {
+  const scope = icDecisionScope(user);
+  const where = `d.deal_id = ? AND cond.status = 'open' AND ${scope.sql}`;
+  const visible = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM ic_conditions cond JOIN ic_decisions d ON d.id = cond.ic_decision_id WHERE ${where}`
+  ).bind(dealId, ...scope.binds).first<{ n: number }>();
+  const total = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM ic_conditions cond JOIN ic_decisions d ON d.id = cond.ic_decision_id
+      WHERE d.deal_id = ? AND cond.status = 'open'`
+  ).bind(dealId).first<{ n: number }>();
+  const v = Number(visible?.n) || 0;
+  return { visible: v, hidden: Math.max(0, (Number(total?.n) || 0) - v) };
+}
+
 async function tally(env: Env, decisionId: number): Promise<{ yes: number; no: number; abstain: number; recused: number }> {
   const rows = await env.DB.prepare(
     'SELECT vote, COUNT(*) AS n FROM ic_votes WHERE ic_decision_id = ? GROUP BY vote'

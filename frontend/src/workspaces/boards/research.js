@@ -49,6 +49,8 @@ export default function researchBoard(role, api) {
       // date and an age gate. It stopped being the signals feed when that zone
       // was rebuilt, and this blurb still described the feed.
       card('markets', 'Markets', 'Comparable ranges you entered for your own work, each with the date it was run and how old it is.'),
+      // D546 (#1080) — Geographies sits beside Markets in every Research bucket.
+      card('geographies', 'Geographies', 'Where the directory’s companies are based and its funds are headquartered.'),
       ...(isPartner ? [] : [
         card('companies', 'Companies', 'The competitor and market analyses you have run yourself.'),
       ]),

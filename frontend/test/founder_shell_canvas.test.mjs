@@ -89,6 +89,8 @@ test('founder Research zones match Pages · Founder Research (FS1–FS5)', () =>
   assert.deepEqual(research.zones.map((z) => [z.slug, archetypeLabel(z)]), [
     ['ask', 'FEED'],
     ['markets', 'ANALYTICS'],
+    // D546 (#1080) — the Geographies pill, beside Markets in every licence.
+    ['geographies', 'ANALYTICS'],
     ['companies', 'COLLECTION'],
     ['funds', 'MATCH ENGINE'],
     ['library', 'COLLECTION'],
