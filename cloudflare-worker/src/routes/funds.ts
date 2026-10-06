@@ -23,7 +23,7 @@ import { lpMembershipScope, lpSelfScope, fundGpScope, NO_ROWS } from '../service
 import { refuse } from '../util/refusal';
 import { CommsInputError, addCommunication, listCommunications, parseCommInput, parseLpType } from '../services/fundLpComms';
 import { claimLpRowsByEmail } from '../services/lpClaim';
-import { userMeetsInvestorTier } from '../middleware/requireInvestorTier';
+import { userMeetsInvestorTier, investorUpsell } from '../middleware/requireInvestorTier';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { splitCall } from '../services/fundCallSplit';
 import {
@@ -275,6 +275,12 @@ funds.get('/syndication', async (c) => {
   // narrowed further below to the funds the caller is GP of record for.
   if (!['admin', 'investor', 'partner'].includes(String(user.role))) {
     return refuse(c, 403, { code: 'investor_access_required', message: 'Co-invest listings are for investors, partners and the platform team.' });
+  }
+  // D614: co-invest discovery is Institutional, as the pricing page sells it.
+  // The same check and 402 body as `requireInvestorTier`, so the client's
+  // paywall opens; admins and partners bypass it there too.
+  if (!userMeetsInvestorTier(user, 'institutional')) {
+    return c.json(investorUpsell('institutional'), 402);
   }
   // T17 — clamp ?limit=N (default 20, max 50) for both lists.
   const limit = clampLimit(c.req.query('limit'), 20, 50);

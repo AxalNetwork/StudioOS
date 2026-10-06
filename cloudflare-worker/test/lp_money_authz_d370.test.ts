@@ -258,10 +258,14 @@ test('syndication: pending calls are the caller\'s own funds (all of them for an
   const pendingFunds = (r: any) => r.body.pending_capital_calls.map((j: any) => Number(j.fund_id)).sort();
   assert.deepEqual(pendingFunds(await call(funds, env, ADMIN_ID, '/syndication')), [1, 2]);
   assert.deepEqual(pendingFunds(await call(funds, env, GP_ID, '/syndication')), [1]);
+  // D614: co-invest is Institutional, so the free-tier LP gets the paywall and
+  // no call amounts; an Institutional investor reads the listings.
   const lp = await call(funds, env, LP_ID, '/syndication');
-  assert.equal(lp.status, 200);
-  assert.deepEqual(lp.body.pending_capital_calls, [], 'an LP saw queued call amounts');
-  assert.equal(lp.body.co_invest_listings.length, 1, 'the listings themselves are for investors');
+  assert.equal(lp.status, 402);
+  assert.equal(lp.body.required, 'institutional');
+  assert.ok(!('pending_capital_calls' in lp.body), 'an LP saw queued call amounts');
+  const gp = await call(funds, env, GP_ID, '/syndication');
+  assert.equal(gp.body.co_invest_listings.length, 1, 'the listings themselves are for investors');
 });
 
 // ── LPA: no GP of record, no LPA ────────────────────────────────────────
