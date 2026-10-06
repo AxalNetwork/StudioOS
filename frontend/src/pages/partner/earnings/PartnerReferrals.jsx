@@ -173,7 +173,9 @@ export function SignupsTable({ state, rows, total, commissionsState, commissions
             testid: `row-signup-${r.id}`,
             cells: [
               name ? <span className="font-semibold text-axal-ink dark:text-gray-100">{name}</span> : <Unrecorded>Name not recorded</Unrecorded>,
-              <Unrecorded reason="The sign-up list does not return a role.">Not returned</Unrecorded>,
+              titleCase(r?.referred_role)
+                ? <span className="text-axal-muted" title="The account’s role as it stands now.">{titleCase(r.referred_role)}</span>
+                : <Unrecorded>Not recorded</Unrecorded>,
               joined ? <span className="tabular-nums text-axal-muted">{joined}</span> : <Unrecorded>Not recorded</Unrecorded>,
               <span className="flex flex-col items-start gap-0.5">
                 <StatusPill status={status} />
@@ -200,12 +202,13 @@ export function SignupsTable({ state, rows, total, commissionsState, commissions
 }
 
 /** Sign-ups narrowed by status, period and a search over the name and email. */
-export function filterSignups(rows, { status = 'all', period = 'all', query = '', now = Date.now() } = {}) {
+export function filterSignups(rows, { status = 'all', role = 'all', period = 'all', query = '', now = Date.now() } = {}) {
   const days = PERIODS.find((p) => p.key === period)?.days ?? null;
   const since = days === null ? null : now - days * 86400000;
   const q = String(query ?? '').trim().toLowerCase();
   return (rows || []).filter((r) => {
     if (status !== 'all' && String(r?.status ?? '').toLowerCase() !== status) return false;
+    if (role !== 'all' && String(r?.referred_role ?? '').trim().toLowerCase() !== role) return false;
     if (since !== null) {
       const t = timeOf(r?.created_at);
       if (t === null || t < since) return false;
@@ -213,6 +216,12 @@ export function filterSignups(rows, { status = 'all', period = 'all', query = ''
     if (q && !`${r?.referred_name ?? ''} ${r?.referred_email ?? ''}`.toLowerCase().includes(q)) return false;
     return true;
   });
+}
+
+/** The roles present among the sign-ups, as filter options, alphabetical. */
+export function signupRoles(rows) {
+  const keys = new Set((rows || []).map((r) => String(r?.referred_role ?? '').trim().toLowerCase()).filter(Boolean));
+  return [...keys].sort().map((key) => ({ key, label: titleCase(key) }));
 }
 
 /** One read into one state: loading, then ready with the data or unreadable. */
@@ -230,6 +239,7 @@ export default function PartnerReferrals() {
   const [commissions, setCommissions] = useState({ status: 'loading', data: null });
   const [status, setStatus] = useState('all');
   const [period, setPeriod] = useState('all');
+  const [role, setRole] = useState('all');
   const [query, setQuery] = useState('');
   const [copied, setCopied] = useState(null);
 
@@ -240,7 +250,8 @@ export default function PartnerReferrals() {
   useEffect(() => { loadCode(); loadList(); loadCredits(); loadCommissions(); }, [loadCode, loadList, loadCredits, loadCommissions]);
 
   const rows = useMemo(() => (Array.isArray(list.data) ? list.data : []), [list.data]);
-  const visible = useMemo(() => filterSignups(rows, { status, period, query }), [rows, status, period, query]);
+  const visible = useMemo(() => filterSignups(rows, { status, role, period, query }), [rows, status, role, period, query]);
+  const roles = useMemo(() => signupRoles(rows), [rows]);
   const commissionRows = Array.isArray(commissions.data?.commissions) ? commissions.data.commissions : [];
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
@@ -266,7 +277,6 @@ export default function PartnerReferrals() {
         ? { label, testid: `chip-signup-${key}`, active: status === key, onSelect: () => setStatus(key) }
         : { label, testid: `chip-signup-${key}`, disabled: true, title: 'The sign-ups have not been read, so there is nothing to narrow.' }
     )),
-    { label: 'Role', testid: 'chip-signup-role', disabled: true, title: 'The sign-up list does not return a role, so there is nothing to narrow by.' },
   ];
 
   const coverage = [
@@ -290,7 +300,6 @@ export default function PartnerReferrals() {
           coverageNote={coverage.length ? undefined : 'Nothing has been read yet, so there is nothing to report.'}
           unavailable={[
             ['Share text', 'Eadwyn drafts no share messages here yet: no draft surface reads your code.'],
-            ['A sign-up’s role', 'The sign-up list returns a name, an email, a status and a KYC state, and no role.'],
           ]}
         />
       )}
@@ -312,11 +321,18 @@ export default function PartnerReferrals() {
           onRetry={loadList}
           onCopyCode={code.status === 'ready' && code.data?.code ? () => copy('code', code.data.code) : undefined}
           filters={list.status === 'ready' && rows.length ? (
-            <div className="grid gap-2 border-b border-axal-hairline px-4 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] dark:border-gray-700">
+            <div className="grid gap-2 border-b border-axal-hairline px-4 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] dark:border-gray-700">
               <label className="block">
                 <span className="sr-only">Search sign-ups</span>
                 <input className={inputClass} type="search" value={query} placeholder="Search sign-ups…"
                   onChange={(e) => setQuery(e.target.value)} data-testid="input-search-signups" />
+              </label>
+              <label className="block">
+                <span className="sr-only">Role</span>
+                <select className={inputClass} value={role} onChange={(e) => setRole(e.target.value)} data-testid="select-signup-role">
+                  <option value="all">Every role</option>
+                  {roles.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                </select>
               </label>
               <label className="block">
                 <span className="sr-only">Period</span>
@@ -329,7 +345,7 @@ export default function PartnerReferrals() {
         />
         <StatedLimit title="What this page does not claim">
           <p><strong>A sign-up’s commission is what names it.</strong> A commission earned on a milestone carries the referral it came from; a purchase commission and a compounding bonus carry none, so they appear on Earnings and not against a sign-up here.</p>
-          <p className="mt-2"><strong>No role is shown.</strong> The sign-up list does not return one, so the column says so rather than guessing from anything else.</p>
+          <p className="mt-2"><strong>The role is the account’s role now.</strong> The sign-up list reads it from the account as it stands today, not as it was when they signed up.</p>
         </StatedLimit>
       </div>
     </WorkspaceShell>

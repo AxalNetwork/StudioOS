@@ -14,7 +14,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
-import { SectionLabel, Skeleton, Unreadable, Unrecorded, RailFrame, WorkerRail } from '../ui';
+import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../ui';
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // D568 — the Account center canvas (`ac-*`): its section list, the five
 // profile cards, the push devices and sessions cards, the plan line and
@@ -414,7 +414,7 @@ export default function SettingsPage() {
   const reloadAccount = () => api.getSettings().then(setData);
 
   // D568 — the page sits beside the Worker AI rail, in the one frame every
-  // rail host uses (D556's `RailFrame`, collapsible through --fwr-track).
+  // rail host uses (D556's `RailFrame`).
   return (
     <RailFrame
       rail={(
