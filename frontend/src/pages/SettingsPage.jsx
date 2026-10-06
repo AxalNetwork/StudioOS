@@ -14,7 +14,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
-import { SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../ui';
+import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../ui';
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // D568 — the Account center canvas (`ac-*`): its section list, the five
 // profile cards, the push devices and sessions cards, the plan line and
@@ -413,10 +413,25 @@ export default function SettingsPage() {
   const activeLabel = sections.find((s) => s.id === safeActive)?.label;
   const reloadAccount = () => api.getSettings().then(setData);
 
-  // D568 — the page sits beside the Worker AI rail, the way the sidebar pages
-  // do (`SendForSignaturePage.jsx`'s grid, collapsible through --fwr-track).
+  // D568 — the page sits beside the Worker AI rail, in the one frame every
+  // rail host uses (D556's `RailFrame`).
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]">
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace="Account"
+          // A literal, as on Send for signature: the Account canvas draws this
+          // page in violet for every role, which is the founder accent.
+          role="founder"
+          stance="Your settings, changed by you"
+          note="Eadwyn reads the account lines below and changes nothing on this page. Every setting here is saved by the button beside it."
+          coverage={accountRailCoverage(data, activeLabel)}
+          unavailable={[
+            ['Bio draft', 'The canvas offers a two-line bio drafted from your role, company and sectors. Nothing drafts one yet, so no proposal is made here.'],
+          ]}
+        />
+      )}
+    >
     <div className="min-w-0" data-testid="settings-page" data-active-section={safeActive}>
       <h1 className="mb-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Account</h1>
       <p className="mb-6 text-[13.5px] leading-relaxed text-axal-muted dark:text-gray-400">Who you are on the platform, how it reaches you, how you sign in, what you pay for and who you follow.</p>
@@ -490,20 +505,7 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
-    <WorkerRail
-      workspace="Account"
-      // A literal, as on Send for signature: the Account canvas draws this
-      // page in violet for every role, which is the founder accent.
-      role="founder"
-      className="self-start lg:sticky lg:top-4"
-      stance="Your settings, changed by you"
-      note="Eadwyn reads the account lines below and changes nothing on this page. Every setting here is saved by the button beside it."
-      coverage={accountRailCoverage(data, activeLabel)}
-      unavailable={[
-        ['Bio draft', 'The canvas offers a two-line bio drafted from your role, company and sectors. Nothing drafts one yet, so no proposal is made here.'],
-      ]}
-    />
-    </div>
+    </RailFrame>
   );
 }
 

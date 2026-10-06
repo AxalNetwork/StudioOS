@@ -336,7 +336,14 @@ test('A2: the table — switch disabled where the rule forbids it, the contradic
   ];
   const markup = html(h(SessionTypesPanel, { types, read: true }));
   const t = text(h(SessionTypesPanel, { types, read: true }));
-  const sw = (id) => new RegExp(`<button[^>]*data-testid="toggle-a2-${id}"[^>]*>`).exec(markup)[0];
+  // The opening tag of switch `id`, by string search rather than a RegExp built
+  // from a variable (Semgrep's detect-non-literal-regexp).
+  const sw = (id) => {
+    const at = markup.indexOf(`data-testid="toggle-a2-${id}"`);
+    assert.ok(at >= 0, `switch ${id} is drawn`);
+    const open = markup.lastIndexOf('<button', at);
+    return markup.slice(open, markup.indexOf('>', at) + 1);
+  };
   const OFF = /\sdisabled=""/;
   assert.doesNotMatch(sw(1), OFF);
   assert.match(sw(2), OFF, 'an unpriced type that is off cannot be switched on');
