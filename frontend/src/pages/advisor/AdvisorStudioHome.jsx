@@ -9,6 +9,7 @@ import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import { AWAITING_DECISION, isBookableSlot, slotMinutes, slotView } from './advisory/kit';
 import './advisorStudioHome.css';
+import { earningsFigures } from './advisorEarnings';
 
 /**
  * " · 45 min", or nothing at all.
@@ -41,17 +42,7 @@ const failed = (error) => ({ state: 'unavailable', message: error?.message || 'U
 const firstName = (value) => String(value || '').trim().split(/\s+/)[0] || 'there';
 const asItems = (value) => Array.isArray(value) ? value : (Array.isArray(value?.items) ? value.items : []);
 
-function formatMoney(cents, currency = 'USD') {
-  if (cents == null) return 'Not recorded';
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: String(currency || 'USD').toUpperCase(),
-    }).format(Number(cents) / 100);
-  } catch {
-    return `${(Number(cents) / 100).toFixed(2)} ${String(currency || 'USD').toUpperCase()}`;
-  }
-}
+
 
 function formatWhen(value) {
   if (!value) return 'Time not recorded';
@@ -102,6 +93,7 @@ export default function AdvisorStudioHome({
   const [bookings, setBookings] = useState(loading);
   const [calendar, setCalendar] = useState(loading);
   const [payouts, setPayouts] = useState(loading);
+  const [commissions, setCommissions] = useState(loading);
   const [advisorAssistantAvailable, setAdvisorAssistantAvailable] = useState(true);
 
   const load = useCallback(() => {
@@ -111,9 +103,10 @@ export default function AdvisorStudioHome({
       setBookings(unavailable('Client history is withheld in role preview.'));
       setCalendar(unavailable('Calendar is withheld in role preview.'));
       setPayouts(unavailable('Earnings are withheld in role preview.'));
+      setCommissions(unavailable('Earnings are withheld in role preview.'));
       return;
     }
-    setAdvisor(loading); setSlots(loading); setBookings(loading); setCalendar(loading); setPayouts(loading);
+    setAdvisor(loading); setSlots(loading); setBookings(loading); setCalendar(loading); setPayouts(loading); setCommissions(loading);
     api.getMyAdvisor()
       .then((profile) => {
         if (!profile?.uid) { setAdvisor(unavailable('Your advisor profile is not available yet.')); setSlots(unavailable('Publish an advisor profile to manage slots.')); return; }
@@ -124,6 +117,7 @@ export default function AdvisorStudioHome({
     api.listMyAdvisorBookings().then((r) => setBookings(ready(asItems(r)))).catch((e) => setBookings(failed(e)));
     api.listCalendarEvents().then((r) => setCalendar(ready(asItems(r)))).catch((e) => setCalendar(failed(e)));
     api.payoutsMe().then((r) => setPayouts(ready(r || {}))).catch((e) => setPayouts(failed(e)));
+    api.commissionsMe().then((r) => setCommissions(ready(r || {}))).catch((e) => setCommissions(failed(e)));
   }, [previewing]);
 
   useEffect(() => { load(); }, [load]);
@@ -175,6 +169,10 @@ export default function AdvisorStudioHome({
     && Number(payouts.data?.lifetime_cents) === 0
     && asItems(payouts.data?.commissions).length === 0
     && asItems(payouts.data?.payouts).length === 0;
+  const earnings = earningsFigures(
+    commissions.state === 'ready' ? commissions.data : null,
+    payouts.state === 'ready' ? payouts.data : null,
+  );
   const publicProfileLive = profile?.listed === true || profile?.is_active === true;
   const storefrontRows = profile ? [
     ['Public profile', publicProfileLive ? 'Listed' : profile.listed === false || profile.is_active === false ? 'Not listed' : 'Not recorded', publicProfileLive ? 'good' : 'neutral'],
@@ -238,7 +236,7 @@ export default function AdvisorStudioHome({
         </Module>
 
         <Module title="Earnings" action="Open payout settings" to="/wellbeing/expert-dashboard" testid="module-earnings" disabled={previewing}>
-          {payouts.state === 'loading' ? <Pending /> : payouts.state === 'unavailable' || isDevPayoutShim ? <StateNote text={isDevPayoutShim ? 'Advisor earnings are not recorded in the local development service.' : payouts.message} icon={CircleDollarSign} /> : <div className="advisor-keyvalues"><div><span>Available balance</span><b>{formatMoney(payouts.data.balance_cents, profile?.currency)}</b></div><div><span>Lifetime paid</span><b>{formatMoney(payouts.data.lifetime_cents, profile?.currency)}</b></div><div><span>Payout account</span><b>{profile?.stripe_account_status || profile?.stripe?.account_status || 'Not recorded'}</b></div></div>}
+          {payouts.state === 'loading' || commissions.state === 'loading' ? <Pending /> : payouts.state === 'unavailable' || commissions.state === 'unavailable' || isDevPayoutShim ? <StateNote text={isDevPayoutShim ? 'Advisor earnings are not recorded in the local development service.' : (payouts.state === 'unavailable' ? payouts.message : commissions.message)} icon={CircleDollarSign} /> : <div className="advisor-keyvalues"><div><span>Available balance</span><b>{earnings.balance}</b></div><div><span>Lifetime paid</span><b>{earnings.paid}</b></div><div><span>Payout account</span><b>{profile?.stripe_account_status || profile?.stripe?.account_status || 'Not recorded'}</b></div></div>}
         </Module>
       </div>
     </main>

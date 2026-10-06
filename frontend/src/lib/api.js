@@ -2362,6 +2362,8 @@ export const api = {
   payoutRequest: (data) => request('/network/payout/request', { method: 'POST', body: JSON.stringify(data) }),
   adminCommissions: () => request('/network/admin/commissions'),
   adminCommissionRules: () => request('/network/admin/commission-rules'),
+  // D572 — edit one rule: any of amount_cents, percentage_bps, description, active.
+  adminUpdateCommissionRule: (ruleKey, data) => request(`/network/admin/commission-rules/${encodeURIComponent(ruleKey)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   adminPayouts: () => request('/network/admin/payouts'),
   adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
 
