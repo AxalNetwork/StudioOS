@@ -40,16 +40,19 @@ import { resolve, join } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 /** Every `.js`/`.jsx` under `frontend/src`, so a sweep cannot miss a file. */
-function allSources(dir = resolve(process.cwd(), 'frontend/src'), out = []) {
+function allSources(dir = resolve(process.cwd(), 'frontend/src'), out = [], ext = /\.jsx?$/) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) allSources(full, out);
-    else if (/\.jsx?$/.test(entry.name)) out.push(full);
+    if (entry.isDirectory()) allSources(full, out, ext);
+    else if (ext.test(entry.name)) out.push(full);
   }
   return out;
 }
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from '../src/pages/docs/sections/index.js';
 import { createDocsFuse } from '../src/lib/docs/search.js';
+import {
+  parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity,
+} from '../src/pages/docs/helpCenter.js';
 import {
   canUseCustomerChat,
   CHAT_FOUNDER_TIERS,
@@ -302,20 +305,144 @@ test('every suggested search actually finds something', () => {
   }
 });
 
-test('the corpus stays mounted while a search is open', () => {
-  // Deep links arrive with the hash AND, from /support, a `?q=`. Unmounting
-  // the sections on search would make `scrollContentTo` fail on exactly those
-  // arrivals — the anchors would not be in the DOM to scroll to.
+// ---------------------------------------------------------------------------
+// D599 (#1280) — every guide has its own page, and every old address reaches it
+// ---------------------------------------------------------------------------
+
+test('every guide has its own address, and the page reads it', () => {
+  // The canvas's H2 is one guide on a page. Until D599 every guide rendered in
+  // one long scroll under the home, under a rail listing all of them.
   assert.match(
-    LAYOUT_CODE,
-    /<div className=\{trimmedQuery \? 'hidden' : ''\}>/,
-    'the sections must be hidden, not unmounted, during a search',
+    APP_CODE,
+    /path="\/help\/:area\/:guide" element=\{guard\([^)]*<HelpCenterPage \/>\)\}/,
+    'a guide must have a route, and it must mount the Help Center',
   );
+  assert.match(LAYOUT_CODE, /const route = parseGuidePath\(location\.pathname\)/);
+  assert.match(LAYOUT_CODE, /<HelpArticle sections=\{visibleSections\}/,
+    'the guide page reads the role-filtered manifest, so an admin guide is "not found" to anyone else');
+  assert.ok(!/aria-label="Help Center contents"/.test(LAYOUT_CODE),
+    'the rail listing every guide is gone; the canvas draws none');
+
+  assert.deepEqual(parseGuidePath('/help/capital/cap-table'), { area: 'capital', guide: 'cap-table' });
+  assert.deepEqual(parseGuidePath('/help/capital/cap-table/'), { area: 'capital', guide: 'cap-table' });
+  for (const p of ['/help', '/help/', '/help/tickets', '/help/capital', '/help/a/b/c', '/docs/capital/cap-table', '/help/Capital/x']) {
+    assert.equal(parseGuidePath(p), null, `${p} is not a guide address`);
+  }
+  assert.equal(guideHref('capital/cap-table'), '/help/capital/cap-table');
+});
+
+test('a #<area>/<guide> hash on the home opens that guide', () => {
+  // That hash was every guide's address for the life of the old page: it is
+  // in notifications already sent, the advisor's tools and bookmarks.
+  assert.match(LAYOUT_CODE, /const target = hashTarget\(decodeURIComponent\(location\.hash\), visibleSections, \{ isAdmin, restricted: restrictedAnchors \}\)/);
+  assert.match(LAYOUT_CODE, /if \(target\) navigate\(target, \{ replace: true \}\)/);
+
+  const founder = filterSectionsForRole(SECTIONS, 'founder');
+  const admin = filterSectionsForRole(SECTIONS, 'admin');
+  const restricted = adminOnlyAnchors();
+  assert.equal(hashTarget('#capital/cap-table', founder, { restricted }), '/help/capital/cap-table');
+  assert.equal(hashTarget('capital/cap-table', founder, { restricted }), '/help/capital/cap-table');
+  assert.equal(hashTarget('#admin/overview', founder, { restricted }), '/help',
+    'an admin anchor drops for everyone else, as if the guide did not exist');
+  assert.equal(hashTarget('#admin/overview', admin, { isAdmin: true, restricted }), '/help/admin/overview');
+  assert.equal(hashTarget('#core/projects', founder, { restricted }), null, 'an anchor no guide carries leaves the home alone');
+  assert.equal(hashTarget('#capital/no-such-guide', founder, { restricted }), null, 'a real area with an unknown guide is not a guide');
+  assert.equal(hashTarget('', founder, { restricted }), null);
+  assert.equal(hashTarget('#capital', founder, { restricted }), null);
+});
+
+test('every address the code builds for a guide names a real one', () => {
+  // `/help#core/projects` sat in StartupList's empty state for months: there
+  // is no `core` area, so "Learn more" opened the home. A guide page makes
+  // that a dead link outright, so the sweep reads every source for both
+  // shapes, and every `related` link too.
+  const ids = new Set();
+  for (const s of SECTIONS) for (const sub of s.subsections) ids.add(`${s.id}/${sub.id}`);
+  const files = [
+    ...allSources(),
+    // The Worker builds guide links too (the advisor's tools, notifications).
+    ...allSources(resolve(process.cwd(), 'cloudflare-worker/src'), [], /\.ts$/),
+  ];
+  assert.ok(files.some((f) => f.endsWith('services/advisor/tools.ts')), 'the sweep must reach the Worker');
+  const unknown = [];
+  for (const f of files) {
+    if (f.includes('/pages/docs/sections/')) continue;
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/\/(?:help|docs)#([a-z0-9-]+\/[a-z0-9-]+)/g)) {
+      if (!ids.has(m[1])) unknown.push(`${f.replace(`${process.cwd()}/`, '')}: #${m[1]}`);
+    }
+    for (const m of src.matchAll(/['"`]\/help\/([a-z0-9-]+)\/([a-z0-9-]+)['"`]/g)) {
+      if (m[1] === 'tickets') continue;
+      if (!ids.has(`${m[1]}/${m[2]}`)) unknown.push(`${f.replace(`${process.cwd()}/`, '')}: /help/${m[1]}/${m[2]}`);
+    }
+  }
+  assert.deepEqual(unknown, [], 'these addresses name no guide');
+  const brokenRelated = [];
+  for (const s of SECTIONS) {
+    for (const sub of s.subsections) {
+      for (const r of sub.related || []) {
+        if (!ids.has(String(r.href).replace(/^#/, ''))) brokenRelated.push(`${s.id}/${sub.id} -> ${r.href}`);
+      }
+    }
+  }
+  assert.deepEqual(brokenRelated, [], 'a Related link on a guide page must open a guide');
+});
+
+test("the guide page's reading time is the guide's own words, never under a minute", () => {
+  assert.equal(readingMinutes({}), 1);
+  assert.equal(readingMinutes({ overview: 'one two three' }), 1);
+  const words = (n) => Array.from({ length: n }, () => 'w').join(' ');
+  assert.equal(readingMinutes({ overview: words(500) }), 3);
+  assert.equal(readingMinutes({ overview: words(100), howto: [words(150)], tips: [words(100)], pitfalls: [words(50)] }), 2);
+  assert.match(LAYOUT_CODE, /\{readingMinutes\(sub\)\} min read/);
+});
+
+test("the home shows the reader's open tickets, and never a failed read as none", () => {
+  // The canvas's H1 card. `GET /api/tickets` answers a member with their own
+  // tickets and an admin with every member's, so the card names which.
+  const body = fnBody(LAYOUT_CODE, 'YourTicketsCard');
+  assert.match(body, /api\.listTickets\(\)/);
+  assert.match(body, /openTicketsByActivity\(rows\)/);
+  assert.match(body, /Your tickets could not be read\./);
+  assert.match(body, /Try again/);
+  assert.match(body, /'Open tickets across the platform' : 'Your tickets'/);
+  assert.match(body, /to="\/help\/tickets"/, 'the card links to the whole list');
+  assert.match(LAYOUT_CODE, /<YourTicketsCard isAdmin=\{role === 'admin'\} \/>/);
+
+  assert.equal(openTicketsByActivity(undefined), null, 'a reply that is not a list is a failed read');
+  assert.equal(openTicketsByActivity({ error: 'x' }), null);
+  assert.deepEqual(openTicketsByActivity([]), []);
+  const rows = [
+    { id: 1, status: 'open', updated_at: '2026-10-01 10:00:00' },
+    { id: 2, status: 'resolved', updated_at: '2026-10-06 10:00:00' },
+    { id: 3, status: 'in_progress', updated_at: '2026-10-05 10:00:00' },
+    { id: 4, status: 'closed', updated_at: '2026-10-06 11:00:00' },
+    { id: 5, status: 'open', created_at: '2026-10-03 10:00:00' },
+  ];
+  assert.deepEqual(openTicketsByActivity(rows).map((t) => t.id), [3, 5, 1],
+    'open and in progress only, latest activity first');
+});
+
+test('the canvas the page is built to is in the repository, with its imported screens', () => {
+  const dir = 'design/canvases/integrated';
+  const canvas = read(`${dir}/Help Center.dc.html`);
+  for (const id of ['h1', 'h2', 'h3', 'h4', 'h5', 'h5b', 'h6', 'h7']) {
+    assert.ok(canvas.includes(`<section class="ab" id="${id}">`), `the canvas must carry ${id}`);
+  }
+  const imports = [...new Set([...canvas.matchAll(/<dc-import name="([^"]+)"/g)].map((m) => m[1]))];
+  assert.deepEqual(imports, ['Help Ticket Screen']);
+  for (const name of imports) {
+    assert.ok(read(`${dir}/${name}.dc.html`).includes('<x-dc>'), `${name}.dc.html must sit beside the canvas that imports it`);
+  }
 });
 
 test('the contact block points at the flow, not at a menu item', () => {
   const body = fnBody(LAYOUT_CODE, 'StillStuck');
-  assert.match(body, /to="\/help\/tickets"/, 'the ticket link must be a link');
+  // D599 — straight to the form: the ticket page opens it on `?new=1`.
+  assert.match(body, /to="\/help\/tickets\?new=1"/, 'the ticket link must be a link, to the form');
+  assert.match(TICKETS, /useState\(\(\) => new URLSearchParams\(location\.search\)\.get\('new'\) === '1'\)/,
+    'the ticket page must open its form when it arrives with ?new=1');
+  assert.match(body, /to="\/trust"/, 'the canvas sends "What we can see" to the Trust Center');
   assert.ok(
     !/in the sidebar/.test(body),
     'naming a sidebar item is how this went stale the first time',
@@ -505,15 +632,21 @@ test('an admin sees it, or the restoration achieved nothing', () => {
   assert.ok(hits.some((h) => h.item.sectionId === 'admin'), 'and find them by search');
 });
 
-test('the path guard redirects to an anchor that now exists', () => {
-  // `AdminDocsPathGuard` sends `/docs/admin/<sub>` and `/help/admin/<sub>` to
-  // `/help#admin/<sub>`, defaulting to `overview`. Both halves of that have to
-  // be real, and for four months the right-hand side was not.
-  const app = codeOnly(read('frontend/src/App.jsx'));
-  assert.match(app, /\/help#admin\/\$\{encodeURIComponent\(sub\)\}/,
-    'the guard must still redirect into the hash surface');
+test('the path guard opens the admin guide at its own address', () => {
+  // `AdminDocsPathGuard` used to send `/docs/admin/<sub>` and
+  // `/help/admin/<sub>` to `/help#admin/<sub>`. Since D599 the hash on the home
+  // opens `/help/admin/<sub>` — this guard's own address — so the redirect
+  // would loop. An admin now gets the guide's page right here; the legacy
+  // `/docs/admin/<sub>` comes here first; everyone else still gets "not found".
+  const body = fnBody(APP_CODE, 'AdminDocsPathGuard');
+  assert.match(body, /const target = `\/help\/admin\/\$\{sub\}`/);
+  assert.match(body, /if \(location\.pathname !== target\) return <Navigate to=\{target\} replace \/>/);
+  assert.match(body, /return <HelpCenterPage \/>/);
+  assert.match(body, /\/\^\[a-z0-9-\]\+\$\/\.test\(raw\) \? raw : 'overview'/,
+    'only an id-shaped segment is used; anything else opens the overview');
+  assert.ok(!/\/help#admin\//.test(body), 'the hash redirect would loop back here');
   const ids = new Set(ADMIN_ANCHORS.subsections.map((s) => s.id));
-  assert.ok(ids.has('overview'), "the guard's default subsection must resolve");
+  assert.ok(ids.has('overview'), "the guard's default guide must exist");
 });
 
 test('the role filter drops a tagged SUBSECTION, not just a tagged section', () => {

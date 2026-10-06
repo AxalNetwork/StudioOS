@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
 import { TICKET_CATEGORIES } from '../lib/ticketCategories';
@@ -251,7 +251,10 @@ export default function TicketsPage() {
   const [, setSyncing] = useState(false);
   const [githubConfigured, setGithubConfigured] = useState(null);
   const [retrying, setRetrying] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  // D599 — the Help Center's "Open a ticket" lands here as `?new=1`, so the
+  // form is open on arrival rather than one more click away.
+  const location = useLocation();
+  const [showForm, setShowForm] = useState(() => new URLSearchParams(location.search).get('new') === '1');
   // Task #103 — the ticket id in the URL now opens the ticket.
   //
   // `/help/:id` was declared by D39 and `/tickets/:id` redirected into it, but
