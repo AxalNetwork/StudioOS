@@ -194,13 +194,13 @@ test('no instant is formatted without the zone the route sent', () => {
  * `check-inline-project-pickers`'s shape, so a stale entry is refused too.
  *
  * "Office hours" is a support offering on page 4 AND a tool card on page 3; the
- * two say different things about it and may be renamed apart. "Form" is both a
- * track and the name of the third gate ON that track — the week the entity is
- * filed. Neither is a second list, which is what this test is actually for.
+ * two say different things about it and may be renamed apart. It is not a
+ * second list, which is what this test is actually for. ("Form" was the other
+ * collision, as a per-track gate name, until D385 settled on one set of gates
+ * read from PIPELINE_PHASES.)
  */
 const SHARED_NAMES = {
   'Office hours': 'a support row on page 4 as well as a tool card on page 3',
-  Form: 'the third gate on the Form track is the week the entity is filed',
 };
 
 test('the content module reaches no server and holds no second tool or track list', () => {
