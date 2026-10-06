@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Check, Copy, FileDown, Loader2, X } from 'lucide-react';
 import { viewLimitCopy } from '../lib/deckShareViews';
+import { SLIDE_META } from '../lib/pitchDeckViewModel';
 
 /** Export progress modal. `phase` is 'running' | 'done' | null. */
 export function PitchDeckExportModal({ phase, progress, filename, error, onClose }) {
@@ -66,7 +67,7 @@ export function PitchDeckExportModal({ phase, progress, filename, error, onClose
             </div>
             <h2 className="text-[18px] font-extrabold text-gray-900 dark:text-gray-50">Preparing your deck…</h2>
             <p className="mt-2 mb-4 text-[13px] text-gray-500 dark:text-gray-400">
-              Rendering 11 slides · Axal VC Spin-Out
+              Rendering {SLIDE_META.length} slides · Axal VC Spin-Out
             </p>
             <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
               <div

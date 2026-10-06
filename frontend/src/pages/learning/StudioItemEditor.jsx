@@ -13,10 +13,11 @@ const LEVELS = [['', 'Not set'], ['intro', 'Intro'], ['intermediate', 'Intermedi
  *   kind     'video' or 'reading', for a new item
  *   onSave(form), onStatus(action), busy, error, notice
  *
- * A VIDEO IS A LINK. The route takes https links from YouTube, Vimeo and
- * Cloudflare Stream and refuses an upload (`video_upload_not_built`), so the
- * upload control is drawn disabled, with its line, until #1162 builds the
- * path. What the route refuses is shown in the route's own words (`error`).
+ * A VIDEO IS A LINK HERE. The item route takes https links from YouTube,
+ * Vimeo and Cloudflare Stream; a file is attached only through D561's upload
+ * routes (#1162), which this editor does not call yet, so the upload control
+ * is drawn disabled, with its line. What the route refuses is shown in the
+ * route's own words (`error`).
  *
  * The page keys this editor on the item, so opening another one starts from
  * that item's stored fields rather than from the last one's edits.

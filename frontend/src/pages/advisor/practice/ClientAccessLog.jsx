@@ -6,32 +6,7 @@ import {
   ACCESS_ACTION_LABEL, accessRecord, accessWho, distinctOf, filterAccessRows, stampLabel,
 } from './practiceTools';
 
-/**
- * The client data access log — the Ops canvas's A4 (D571).
- *
- * `/practice/access-log` in the canvas. The canvas draws ONE log seen from two
- * sides: the advisor's (every record they opened, across their clients) and
- * the client company's (every record of theirs an advisor opened). The store
- * is `advisor_client_access_log` (migration 218, "the founder's own record of
- * an advisor's reading"), written each time an advisor opens a client brief.
- *
- * ONLY ONE SIDE HAS A READER, AND IT IS NOT THE ADVISOR'S. The one route,
- * `GET /api/advisor-grants/:projectUid/access-log`, answers the founder who
- * owns the project (`ownedProject` → `projectOwnerScope`, which returns no rows
- * for any role but founder) and an admin. An advisor asking for a client's log
- * is answered 404. So:
- *
- *   · `AdvisorAccessLog` — the advisor's side, a section of Practice ·
- *     Engagements. It lists the clients whose records are open to the advisor
- *     (`advisorClientsSharedWithMe`) and says the rows are not recorded on any
- *     page they can open. It does not call the founder's route to be refused.
- *   · `ClientCompanyAccessLog` — the client company's side, under the advisor
- *     grants on the founder's data room page, where the route answers. This is
- *     the only place `advisorClientAccessLog` is read.
- *   · `AccessLogTable` — the rows, filterable by client, by who and by date,
- *     and read-only: no row carries a control. The canvas: "Rows cannot be
- *     edited or removed by anyone."
- */
+/** Ops A4: the same recorded opens, scoped to the advisor's own actor or the client's owned project. Read-only. */
 
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint';
 const GRID_CLIENT = 'grid grid-cols-2 gap-x-3 gap-y-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_90px_130px] md:items-center';
@@ -131,7 +106,7 @@ export default function AdvisorAccessLog() {
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const res = await api.advisorClientsSharedWithMe();
+      const res = await api.listMyAdvisorAccessLog();
       setState({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [], detail: res?.detail || '' });
     } catch (e) {
       setState({ loading: false, error: e?.message || 'Your client list could not be read.', items: [], detail: '' });
@@ -141,7 +116,6 @@ export default function AdvisorAccessLog() {
   return <AdvisorAccessLogView state={state} onRetry={load} />;
 }
 
-const SCOPE_WORDS = [['scope_project', 'their record'], ['scope_data_room', 'open data-room files'], ['scope_sessions', 'their other sessions']];
 
 /** The advisor's view, from props, so a guard can render each state. */
 export function AdvisorAccessLogView({ state, onRetry }) {
@@ -157,7 +131,7 @@ export function AdvisorAccessLogView({ state, onRetry }) {
           <div className="text-[12.5px] font-bold">Advisor view</div>
           <div className="text-[11.5px] text-axal-muted">Every record you opened, across your clients.</div>
           <div className="mt-1.5 text-[11.5px]">
-            <Unrecorded reason="No page reads this log for the advisor who opened the records.">Not recorded</Unrecorded>
+            The newest 200 opens are shown below.
           </div>
         </div>
         <div className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" data-testid="viewer-client">
@@ -170,46 +144,12 @@ export function AdvisorAccessLogView({ state, onRetry }) {
       <div className="mt-3">
         {state?.loading && <div className="space-y-2" aria-busy="true"><Skeleton className="h-8" /><Skeleton className="h-8" /></div>}
         {!state?.loading && state?.error && (
-          <Unreadable what="Your client list" claim="This is not a claim that no client has opened a record to you." onRetry={onRetry} />
+          <Unreadable what="Your access log" claim="This is not a claim that no record was opened." onRetry={onRetry} />
         )}
-        {!state?.loading && !state?.error && (
-          <>
-            <p className="text-[12px] leading-relaxed text-axal-muted" data-testid="access-log-reason">
-              <strong>Your own view is not recorded on any page yet.</strong> Each client brief you open adds a row to
-              this log, and the log is the client company&rsquo;s record: only the company that owns it can read it.
-            </p>
-            {items.length === 0 ? (
-              <p className="mt-2 rounded-[10px] border border-dashed border-axal-hairline p-3 text-[12px] text-axal-muted dark:border-gray-700"
-                data-testid="access-log-no-clients">
-                {state?.detail || 'No client has opened a record to you, so there is nothing of theirs to open.'}
-              </p>
-            ) : (
-              <ul className="mt-2 grid gap-2" data-testid="access-log-clients">
-                {items.map((c) => {
-                  const scopes = SCOPE_WORDS.filter(([k]) => c[k]).map(([, w]) => w);
-                  const since = stampLabel(c.created_at);
-                  const until = stampLabel(c.expires_at);
-                  return (
-                    <li key={c.grant_uid || c.project_uid}
-                      className="flex flex-wrap items-start justify-between gap-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-                      <div className="min-w-0">
-                        <div className="text-[12.5px] font-bold">{c.project_name || <Unrecorded>Client not recorded</Unrecorded>}</div>
-                        <div className="text-[11px] text-axal-faint">
-                          Open to you: {scopes.length ? scopes.join(', ') : 'nothing, every part is closed'}
-                          {since ? ` · since ${since}` : ''}
-                          {until ? ` · until ${until}` : ''}
-                        </div>
-                      </div>
-                      <span className="text-[11px] text-axal-faint">
-                        Rows: <Unrecorded reason="Only the client company can read its log.">Not recorded</Unrecorded>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        )}
+        {!state?.loading && !state?.error && (items.length
+          ? <AccessLogTable rows={items} />
+          : <p className="mt-2 text-[12px] text-axal-muted" data-testid="access-log-no-clients">No client record opens recorded yet.</p>)}
+        {items.length >= ACCESS_LOG_LIMIT && <p className="mt-2 text-[11px] text-axal-faint">The newest 200 opens are shown; older rows are kept.</p>}
       </div>
       <p className="mt-3 text-[11px] text-axal-faint">{READ_ONLY}</p>
     </Card>

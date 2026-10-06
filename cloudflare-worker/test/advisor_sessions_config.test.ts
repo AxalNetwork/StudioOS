@@ -105,6 +105,11 @@ function freshDb() {
     );
   `);
   db.exec(migration('240_advisor_sessions_config'));
+  // Real booking schema for the attributed counts introduced by D573.
+  const bookingSchema = readFileSync(`${SQL}/historical/t13_t14_t15.sql`, 'utf8')
+    .match(/CREATE TABLE IF NOT EXISTS advisor_bookings\s*\([\s\S]*?\);/)?.[0];
+  if (!bookingSchema) throw new Error('Historical booking schema not found');
+  db.exec(bookingSchema);
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
@@ -287,7 +292,7 @@ test('PATCH can clear a price back to unpriced without renaming the type', async
   const made = await call(e, 'POST', '/me/session-types', ada, {
     name: 'Five-session pack', price_cents: 125000,
   });
-  const cleared = await call(e, 'PATCH', `/me/session-types/${made.body.id}`, ada, { price_cents: null });
+  const cleared = await call(e, 'PATCH', `/me/session-types/${made.body.id}`, ada, { price_cents: null, is_active: false });
   assert.equal(cleared.status, 200);
   assert.equal(cleared.body.price_cents, null);
   assert.equal(cleared.body.name, 'Five-session pack');

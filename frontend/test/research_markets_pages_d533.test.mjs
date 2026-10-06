@@ -46,9 +46,10 @@ const MARKETS = {
 
 test('markets group by tracked sector, the unmapped last and said so; counts are summed per group', () => {
   const g = groupMarkets(MARKETS.items);
+  // D593 — the unmapped group takes the canvas M1 wording.
   assert.deepEqual(g.map((x) => [x.name, x.markets.length, x.companies, x.mapped]), [
     ['Fintech / DeFi', 2, 910, true],
-    ['Not mapped to a tracked sector', 1, 50, false],
+    ['Not mapped yet', 1, 50, false],
   ]);
   assert.equal(g[0].slug, 'fintech-defi');
   assert.equal(g[1].slug, null, 'an unmapped group has no sector page to open');
@@ -64,13 +65,13 @@ test('the private tab: each state, and the totals the API sends', () => {
   const ok = text(h(PrivatePanel, { markets: ready(MARKETS) }));
   assert.match(ok, /3 markets holding 960 companies, as the taxonomy source counts them/);
   assert.match(ok, /not independently verified/);
-  assert.match(ok, /Not mapped to a tracked sector 1 markets · no index applies/);
+  assert.match(ok, /Not mapped yet 1 markets · no index applies/);
   assert.match(ok, /Fintech \/ DeFi 2 markets · 910 companies/);
   const markup = html(h(PrivatePanel, { markets: ready(MARKETS) }));
-  // Today's sector page resolves market slugs only, so a tracked-sector link
-  // would read "Market not found". It lands with #1139's per-sector page.
-  assert.doesNotMatch(markup, /href="\/research\/markets\/sector\/fintech-defi"/, 'a group links to a page that cannot resolve it');
-  assert.doesNotMatch(markup, /Open sector/);
+  // D593 — #1139's per-sector page landed (D547), so a sector group opens it.
+  // The unmapped group has no sector page, and no link.
+  assert.match(markup, /href="\/research\/markets\/sector\/fintech-defi"/, 'a sector group opens its own page');
+  assert.equal((markup.match(/Open sector/g) || []).length, 1, 'one link, on the one sector group');
   assert.match(markup, /href="\/research\/markets\/sector\/payments"/, 'a market opens its own page');
 });
 

@@ -9,7 +9,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { getCurrentUser, requireAuth } from '../auth';
+import { logAdminAction } from '../services/adminAudit';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
   isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull, role,
@@ -117,6 +118,7 @@ type BookingRow = {
   // dropped them for a year.
   amount_cents: number | null; billing_state: string;
   created_at: string; updated_at: string;
+  session_type_id?: number | null; booking_link_id?: number | null;
 };
 
 /**
@@ -173,6 +175,7 @@ function bookingDto(b: BookingRow, extras: any = {}): any {
     founder_user_id: b.founder_user_id,
     topic: b.topic, notes: b.notes, questions: b.notes, client_message: b.notes, status: b.status,
     cancel_reason: b.cancel_reason,
+    session_type_id: b.session_type_id ?? null, booking_link_id: b.booking_link_id ?? null,
     created_at: b.created_at, updated_at: b.updated_at,
     ...extras,
   };
@@ -242,7 +245,7 @@ async function myAdvisor(env: Env, user: User): Promise<AdvisorRow | null> {
   if ((user as any).advisor_id) {
     const row = await env.DB.prepare('SELECT * FROM advisors WHERE id = ?')
       .bind((user as any).advisor_id).first<AdvisorRow>();
-    if (row) return row;
+    if (row?.user_id === user.id) return row;
   }
   return env.DB.prepare('SELECT * FROM advisors WHERE user_id = ?').bind(user.id).first<AdvisorRow>();
 }
@@ -275,6 +278,12 @@ advisors.get('/', async (c) => {
       (m.sectors || []).map((s: string) => s.toLowerCase()).includes(sector));
     if (expertise) items = items.filter((m: any) =>
       (m.expertise || []).map((s: string) => s.toLowerCase()).includes(expertise));
+    if (c.req.query('free_only') === '1') items = items.filter((m: any) => m.hourly_rate_usd === 0);
+    const maxRate = c.req.query('max_rate');
+    if (maxRate !== undefined) {
+      if (!Number.isFinite(Number(maxRate)) || Number(maxRate) < 0) return c.json({ detail: 'Invalid maximum rate' }, 400);
+      items = items.filter((m: any) => m.hourly_rate_usd != null && m.hourly_rate_usd <= Number(maxRate));
+    }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
 });
@@ -294,9 +303,8 @@ advisors.get('/me', async (c) => {
 /**
  * Resolve the 202 profile fields for a write, MERGING rather than replacing.
  *
- * This is the one thing that must not be got wrong. The six fields above
- * (display_name, bio, expertise, …) are full-replace, and every caller sends
- * all of them together. The seven below are written by different surfaces at
+ * This is the one thing that must not be got wrong. Core profile fields and the expanded fields both preserve omissions.
+ * Explicit null still clears nullable text and rates. The seven below are written by different surfaces at
  * different times — `/office-hours`'s ProfileCard sends `headline` and
  * `timezone` and knows nothing about stages or languages — so replacing the
  * whole set on every POST would mean each surface silently blanked the fields
@@ -338,14 +346,22 @@ advisors.post('/me', async (c) => {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
-    const display_name = String(body.display_name || user.name || user.email).slice(0, 200);
-    const bio = body.bio ? String(body.bio).slice(0, 4000) : null;
-    const linkedin_url = body.linkedin_url ? String(body.linkedin_url).slice(0, 500) : null;
-    const hourly_rate_usd = body.hourly_rate_usd != null ? Number(body.hourly_rate_usd) : null;
-    const expertise_json = JSON.stringify(Array.isArray(body.expertise) ? body.expertise.slice(0, 32).map(String) : []);
-    const sectors_json = JSON.stringify(Array.isArray(body.sectors) ? body.sectors.slice(0, 32).map(String) : []);
-
     const existing = await myAdvisor(c.env, user);
+    const display_name = body.display_name === undefined && existing
+      ? existing.display_name : String(body.display_name || user.name || user.email).slice(0, 200);
+    const bio = body.bio === undefined && existing ? existing.bio : trimOrNull(body.bio, 4000);
+    const linkedin_url = body.linkedin_url === undefined && existing
+      ? existing.linkedin_url : trimOrNull(body.linkedin_url, 500);
+    const hourly_rate_usd = body.hourly_rate_usd === undefined && existing
+      ? existing.hourly_rate_usd : body.hourly_rate_usd == null || body.hourly_rate_usd === ''
+        ? null : Number(body.hourly_rate_usd);
+    if (hourly_rate_usd != null && (!Number.isFinite(hourly_rate_usd) || hourly_rate_usd < 0)) {
+      return c.json({ detail: 'Hourly rate must be a non-negative number' }, 400);
+    }
+    const expertise_json = body.expertise === undefined && existing ? existing.expertise_json
+      : JSON.stringify(Array.isArray(body.expertise) ? body.expertise.slice(0, 32).map(String) : []);
+    const sectors_json = body.sectors === undefined && existing ? existing.sectors_json
+      : JSON.stringify(Array.isArray(body.sectors) ? body.sectors.slice(0, 32).map(String) : []);
     const p = mergeProfileFields(existing, body);
     const now = nowIso();
     if (existing) {
@@ -529,10 +545,17 @@ advisors.get('/match', async (c) => {
 
 advisors.get('/:uid', async (c) => {
   try {
-    await requireAuth(c);
     const m = await loadAdvisorByUid(c.env, c.req.param('uid'));
-    if (!m) return c.json({ detail: 'Advisor not found' }, 404);
-    return c.json(advisorDto(m));
+    if (!m || !m.is_active) return c.json({ detail: 'Advisor not found' }, 404);
+    const types = await c.env.DB.prepare(
+      'SELECT * FROM advisor_session_types WHERE advisor_id = ? AND is_active = 1 ORDER BY sort_order, id'
+    ).bind(m.id).all<SessionTypeRow>();
+    const links = await c.env.DB.prepare(
+      `SELECT * FROM advisor_booking_links WHERE advisor_id = ? AND is_active = 1 AND audience = 'public' ORDER BY id`
+    ).bind(m.id).all<BookingLinkRow>();
+    const { email: _email, user_id: _userId, id: _id, ...profile } = advisorDto(m);
+    return c.json({ ...profile, session_types: (types.results || []).map(sessionTypeDto),
+      booking_links: (links.results || []).map(bookingLinkDto) });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -607,6 +630,55 @@ advisors.delete('/me/slots/:id', async (c) => {
 // ---------------------------------------------------------------------------
 // Booking
 // ---------------------------------------------------------------------------
+async function usableBookingLink(c: Context<{ Bindings: Env }>, slug: unknown, user: User | null) {
+  if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9/-]{1,98}[a-z0-9]$/.test(slug)) {
+    throw c.json({ detail: 'Booking link not found' }, 404);
+  }
+  const link = await c.env.DB.prepare(
+    'SELECT * FROM advisor_booking_links WHERE slug = ? AND is_active = 1'
+  ).bind(slug).first<BookingLinkRow>();
+  if (!link) throw c.json({ detail: 'Booking link not found' }, 404);
+  if (link.audience === 'cohort') {
+    // A cohort reference is an existing cycle ID, never a label matched loosely.
+    const member = user && link.cohort_ref && /^[1-9]\d*$/.test(link.cohort_ref)
+      ? await c.env.DB.prepare(
+        'SELECT 1 AS present FROM company_week_status WHERE cohort_cycle_id = ? AND user_id = ? LIMIT 1'
+      ).bind(Number(link.cohort_ref), user.id).first<{ present: number }>() : null;
+    if (!member) throw c.json({ detail: 'Booking link not found' }, 404);
+  } else if (!['public', 'private'].includes(link.audience)) {
+    throw c.json({ detail: 'Booking link not found' }, 404);
+  }
+  const advisor = await loadAdvisorById(c.env, link.advisor_id);
+  if (!advisor?.is_active) throw c.json({ detail: 'Booking link not found' }, 404);
+  const type = await c.env.DB.prepare(
+    'SELECT * FROM advisor_session_types WHERE id = ? AND advisor_id = ? AND is_active = 1'
+  ).bind(link.session_type_id, advisor.id).first<SessionTypeRow>();
+  if (!type || (!type.is_included && !type.is_free_intro && type.price_cents == null)) {
+    throw c.json({ detail: 'This session type is not bookable' }, 409);
+  }
+  if (link.requires_payout_account) {
+    const account = await loadPayoutAccount(c.env, advisor.id);
+    if (!account || derivePayoutState(account) !== 'verified') {
+      throw c.json({ detail: 'This booking link is waiting for a verified payout account' }, 409);
+    }
+  }
+  return { link, advisor, type };
+}
+
+advisors.post('/booking-links/open', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({} as any));
+    const user = await getCurrentUser(c);
+    const { link, advisor, type } = await usableBookingLink(c, body.slug, user);
+    await c.env.DB.prepare(
+      'UPDATE advisor_booking_links SET opens_count = COALESCE(opens_count, 0) + 1 WHERE id = ? AND is_active = 1'
+    ).bind(link.id).run();
+    const { email: _email, user_id: _userId, id: _id, ...profile } = advisorDto(advisor);
+    return c.json({ advisor: profile, session_type: sessionTypeDto(type),
+      link: { slug: link.slug, session_type_id: link.session_type_id } });
+  } catch (e) { return mapError(c, e); }
+});
+
 advisors.post('/slots/:id/book', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -618,9 +690,6 @@ advisors.post('/slots/:id/book', async (c) => {
     // role, and those accounts get neither the tier skip nor booking access.
     const isActiveLabExplorer =
       user.role === 'exploring' && Number(user.spinout_lab_active ?? 0) === 1;
-    if (!isActiveLabExplorer) {
-      ensureTier(user, 'growth');
-    }
     if (!isFounder(user) && !isAdmin(user) && !isActiveLabExplorer) {
       return c.json({ detail: 'Founder role required' }, 403);
     }
@@ -628,6 +697,38 @@ advisors.post('/slots/:id/book', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
     if (!slot || slot.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
+    const context = body.booking_link_slug === undefined ? null
+      : await usableBookingLink(c, body.booking_link_slug, user);
+    if (context && context.advisor.id !== slot.advisor_id) {
+      return c.json({ detail: 'Slot not available for this booking link' }, 404);
+    }
+    const typeId = context?.type.id ?? body.session_type_id ?? null;
+    let type = context?.type ?? null;
+    if (body.session_type_id != null && context && Number(body.session_type_id) !== context.type.id) {
+      return c.json({ detail: 'Session type does not match the booking link' }, 400);
+    }
+    if (typeId != null && !type) {
+      if (!Number.isSafeInteger(Number(typeId)) || Number(typeId) < 1) {
+        return c.json({ detail: 'Session type not found' }, 404);
+      }
+      type = await c.env.DB.prepare(
+        'SELECT * FROM advisor_session_types WHERE id = ? AND advisor_id = ? AND is_active = 1'
+      ).bind(Number(typeId), slot.advisor_id).first<SessionTypeRow>();
+      if (!type || (!type.is_included && !type.is_free_intro && type.price_cents == null)) {
+        return c.json({ detail: 'This session type is not bookable' }, 409);
+      }
+    }
+    if (!isActiveLabExplorer && context?.link.audience !== 'cohort') ensureTier(user, 'growth');
+    if (type?.duration_minutes != null
+      && (Date.parse(slot.ends_at) - Date.parse(slot.starts_at)) / 60000 !== type.duration_minutes) {
+      return c.json({ detail: 'Slot length does not match this session type' }, 400);
+    }
+    if (type?.once_per_client) {
+      const previous = await c.env.DB.prepare(
+        `SELECT id FROM advisor_bookings WHERE session_type_id = ? AND founder_user_id = ? AND status != 'cancelled' LIMIT 1`
+      ).bind(type.id, user.id).first<{ id: number }>();
+      if (previous) return c.json({ detail: 'This session type is available once per client' }, 409);
+    }
     if (new Date(slot.starts_at).getTime() < Date.now()) {
       return c.json({ detail: 'Slot is in the past' }, 400);
     }
@@ -637,12 +738,22 @@ advisors.post('/slots/:id/book', async (c) => {
     try {
       const r = await c.env.DB.prepare(
         `INSERT INTO advisor_bookings
-          (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+          (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, session_type_id, booking_link_id, created_at, updated_at)
+         SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?
+          WHERE (? IS NULL OR EXISTS (SELECT 1 FROM advisor_session_types
+            WHERE id = ? AND advisor_id = ? AND is_active = 1
+              AND (is_included = 1 OR is_free_intro = 1 OR price_cents IS NOT NULL)))
+            AND (? IS NULL OR EXISTS (SELECT 1 FROM advisor_booking_links WHERE id = ? AND is_active = 1))
+            AND (? = 0 OR NOT EXISTS (SELECT 1 FROM advisor_bookings
+              WHERE session_type_id = ? AND founder_user_id = ? AND status != 'cancelled'))`
       ).bind(uid, slotId, slot.advisor_id, user.id,
              (body.topic || '').toString().slice(0, 200),
              (body.notes || '').toString().slice(0, 2000),
-             nowIso(), nowIso()).run();
+             type?.id ?? null, context?.link.id ?? null, nowIso(), nowIso(),
+             type?.id ?? null, type?.id ?? null, slot.advisor_id,
+             context?.link.id ?? null, context?.link.id ?? null,
+             type?.once_per_client ?? 0, type?.id ?? null, user.id).run();
+      if (!(r as any).meta?.changes) return c.json({ detail: 'The session type or booking link is no longer available' }, 409);
       // Re-check capacity after insert (D1 has no SELECT-FOR-UPDATE).
       const after = await takenForSlot(c.env, slotId);
       if (after > slot.capacity) {
@@ -3359,6 +3470,7 @@ advisors.post('/me/engagements/:id/renewal', async (c) => {
 type DeliverableRow = {
   id: number; uid: string; advisor_id: number;
   engagement_id: number | null; client_name: string; title: string;
+  due_date?: string | null; manual_status?: string | null;
   created_at: string; updated_at: string;
 };
 type VersionRow = {
@@ -3462,6 +3574,7 @@ advisors.get('/me/deliverables', async (c) => {
         id: d.id, uid: d.uid, advisor_id: d.advisor_id,
         engagement_id: d.engagement_id ?? null,
         client_name: d.client_name, title: d.title,
+        due_date: d.due_date ?? null, manual_status: d.manual_status ?? null,
         // NULL means this client has no account, so nothing they are sent can
         // ever be opened. The zone says so rather than showing a stuck row.
         client_user_id: d.client_user_id ?? null,
@@ -3562,6 +3675,15 @@ advisors.patch('/me/deliverables/:id', async (c) => {
     const m = await requireMyAdvisor(c, user);
     const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
     const body = await c.req.json().catch(() => ({} as any));
+    const due = body.due_date === undefined ? row.due_date ?? null : body.due_date;
+    if (due != null && (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due)
+      || !Number.isFinite(Date.parse(due)) || new Date(due).toISOString().slice(0, 10) !== due)) {
+      return c.json({ detail: 'Due date must be a calendar date (YYYY-MM-DD)' }, 400);
+    }
+    const manual = body.manual_status === undefined ? row.manual_status ?? null : body.manual_status;
+    if (manual != null && !['planned', 'in_progress'].includes(manual)) {
+      return c.json({ detail: 'Manual status must be planned or in_progress; delivery and acceptance use receipts' }, 400);
+    }
     let engagementId = row.engagement_id;
     let clientName = row.client_name;
     if ('engagement_id' in body) {
@@ -3577,12 +3699,13 @@ advisors.patch('/me/deliverables/:id', async (c) => {
     }
     await c.env.DB.prepare(
       `UPDATE advisor_deliverables
-          SET title = ?, engagement_id = ?, client_name = ?, updated_at = ?
-        WHERE id = ?`
+          SET title = ?, engagement_id = ?, client_name = ?, due_date = ?, manual_status = ?, updated_at = ?
+        WHERE id = ? AND advisor_id = ?`
     ).bind(
       String(body.title ?? '').trim().slice(0, 200) || row.title,
-      engagementId, clientName, nowIso(), row.id,
+      engagementId, clientName, due, manual, nowIso(), row.id, m.id,
     ).run();
+    await logAdminAction(c.env, user.id, user.email, 'advisor_deliverable_updated', { deliverable_id: row.id });
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
       .bind(row.id).first<DeliverableRow>();
     return c.json(fresh);
@@ -3784,6 +3907,30 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
 });
 
 // ───────────────────────────── PR4 · Sessions — the rules, prices and links ──
+advisors.post('/received/deliverables/:uid/accept', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const v = await c.env.DB.prepare(
+      `SELECT v.* FROM advisor_deliverable_versions v
+         JOIN advisor_deliverables d ON d.id = v.deliverable_id
+         JOIN advisor_engagements e ON e.id = d.engagement_id
+        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+    ).bind(c.req.param('uid'), user.id).first<VersionRow>();
+    if (!v) return c.json({ detail: 'Work product not found' }, 404);
+    const now = nowIso();
+    const accepted: any = await c.env.DB.prepare(
+      `UPDATE advisor_deliverable_versions SET signed_off_at = ?, opened_at = COALESCE(opened_at, ?), updated_at = ?
+        WHERE id = ? AND signed_off_at IS NULL`
+    ).bind(now, now, now, v.id).run();
+    if (accepted.meta?.changes) {
+      await logAdminAction(c.env, user.id, user.email, 'advisor_deliverable_accepted', { version_id: v.id });
+    }
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
+      .bind(v.id).first<VersionRow>();
+    return c.json(versionDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
 //
 // Migration 240's three stores plus the two new slot columns. The artboard
 // (`Advisor Detail · Practice.dc.html` PR4, tagged FEED) draws a calendar and,
@@ -3809,12 +3956,14 @@ type SessionTypeRow = {
   duration_minutes: number | null; cadence_note: string | null;
   price_cents: number | null; is_free_intro: number; once_per_client: number;
   sort_order: number; is_active: number; created_at: string; updated_at: string;
+  is_included?: number | null; booking_count?: number;
 };
 type BookingLinkRow = {
   id: number; uid: string; advisor_id: number; slug: string;
   session_type_id: number | null; audience: string; cohort_ref: string | null;
   requires_payout_account: number; note: string | null; is_active: number;
   created_at: string; updated_at: string;
+  opens_count?: number | null; booking_count?: number;
 };
 
 const LINK_AUDIENCES = ['public', 'cohort', 'private'];
@@ -3841,6 +3990,8 @@ function sessionTypeDto(r: SessionTypeRow): any {
     duration_minutes: r.duration_minutes, cadence_note: r.cadence_note,
     price_cents: r.price_cents,
     is_free_intro: !!r.is_free_intro,
+    is_included: r.is_included == null ? null : !!r.is_included,
+    booking_count: r.booking_count ?? null,
     once_per_client: !!r.once_per_client,
     sort_order: r.sort_order, is_active: !!r.is_active,
   };
@@ -3853,6 +4004,7 @@ function bookingLinkDto(r: BookingLinkRow): any {
     cohort_ref: r.cohort_ref,
     requires_payout_account: !!r.requires_payout_account,
     note: r.note, is_active: !!r.is_active,
+    opens_count: r.opens_count ?? null, booking_count: r.booking_count ?? null,
   };
 }
 
@@ -3941,7 +4093,8 @@ advisors.get('/me/session-types', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM advisor_session_types WHERE advisor_id = ?
+      `SELECT t.*, (SELECT COUNT(*) FROM advisor_bookings b WHERE b.session_type_id = t.id
+          AND b.status != 'cancelled') AS booking_count FROM advisor_session_types t WHERE advisor_id = ?
         ORDER BY sort_order ASC, id ASC LIMIT 100`
     ).bind(m.id).all<SessionTypeRow>();
     return c.json({ items: (rows.results || []).map(sessionTypeDto) });
@@ -3956,7 +4109,15 @@ advisors.post('/me/session-types', async (c) => {
     const name = String(body.name || '').trim().slice(0, 200);
     if (!name) return c.json({ detail: 'A session type needs a name' }, 400);
     const isFreeIntro = body.is_free_intro ? 1 : 0;
+    const included = body.is_included ? 1 : 0;
     const price = parsePriceCents(body.price_cents);
+    if (included && (isFreeIntro || (price != null && price > 0))) {
+      return c.json({ detail: 'Included sessions cannot also be priced or a free intro' }, 400);
+    }
+    const active = body.is_active === undefined ? (included || isFreeIntro || price != null ? 1 : 0) : body.is_active ? 1 : 0;
+    if (active && !included && !isFreeIntro && price == null) {
+      return c.json({ detail: 'Set a price, included or a free intro before making a type bookable' }, 400);
+    }
     // FREE AND UNPRICED ARE DIFFERENT FACTS and the pair must not contradict.
     // A free intro carrying a price says two things at once, and the canvas
     // prices its intro at "Free" precisely so a reader can trust the word.
@@ -3968,15 +4129,15 @@ advisors.post('/me/session-types', async (c) => {
     const r = await c.env.DB.prepare(
       `INSERT INTO advisor_session_types
          (uid, advisor_id, name, duration_minutes, cadence_note, price_cents,
-          is_free_intro, once_per_client, sort_order, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+          is_free_intro, once_per_client, sort_order, is_active, is_included, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       uid, m.id, name,
       parseOptionalCount(body.duration_minutes, 'duration_minutes', 24 * 60),
       trimOrNull(body.cadence_note, 200), price,
       isFreeIntro, body.once_per_client ? 1 : 0,
       parseOptionalCount(body.sort_order, 'sort_order', 999) ?? 0,
-      now, now,
+      active, included, now, now,
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ?')
       .bind((r as any).meta?.last_row_id).first<SessionTypeRow>();
@@ -3999,13 +4160,21 @@ advisors.patch('/me/session-types/:id', async (c) => {
     if (!name) return c.json({ detail: 'A session type needs a name' }, 400);
     const isFreeIntro = body.is_free_intro == null ? row.is_free_intro : (body.is_free_intro ? 1 : 0);
     const price = body.price_cents === undefined ? row.price_cents : parsePriceCents(body.price_cents);
+    const included = body.is_included === undefined ? row.is_included ?? null : body.is_included ? 1 : 0;
+    const active = body.is_active === undefined ? row.is_active : body.is_active ? 1 : 0;
+    if (included && (isFreeIntro || (price != null && price > 0))) {
+      return c.json({ detail: 'Included sessions cannot also be priced or a free intro' }, 400);
+    }
+    if (active && !included && !isFreeIntro && price == null) {
+      return c.json({ detail: 'Set a price, included or a free intro before making a type bookable' }, 400);
+    }
     if (isFreeIntro && price != null && price > 0) {
       return c.json({ detail: 'A free intro cannot carry a price' }, 400);
     }
     await c.env.DB.prepare(
       `UPDATE advisor_session_types
           SET name = ?, duration_minutes = ?, cadence_note = ?, price_cents = ?,
-              is_free_intro = ?, once_per_client = ?, sort_order = ?, is_active = ?,
+              is_free_intro = ?, once_per_client = ?, sort_order = ?, is_active = ?, is_included = ?,
               updated_at = ?
         WHERE id = ? AND advisor_id = ?`
     ).bind(
@@ -4017,7 +4186,7 @@ advisors.patch('/me/session-types/:id', async (c) => {
       body.once_per_client == null ? row.once_per_client : (body.once_per_client ? 1 : 0),
       body.sort_order === undefined ? row.sort_order
         : (parseOptionalCount(body.sort_order, 'sort_order', 999) ?? 0),
-      body.is_active == null ? row.is_active : (body.is_active ? 1 : 0),
+      active, included,
       nowIso(), row.id, m.id,
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ?')
@@ -4113,10 +4282,48 @@ advisors.get('/me/booking-links', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM advisor_booking_links WHERE advisor_id = ?
+      `SELECT l.*, (SELECT COUNT(*) FROM advisor_bookings b WHERE b.booking_link_id = l.id
+          AND b.status != 'cancelled') AS booking_count FROM advisor_booking_links l WHERE advisor_id = ?
         ORDER BY is_active DESC, id ASC LIMIT 100`
     ).bind(m.id).all<BookingLinkRow>();
     return c.json({ items: (rows.results || []).map(bookingLinkDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.get('/me/access-log', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    await requireMyAdvisor(c, user);
+    const rows = await c.env.DB.prepare(
+      `SELECT l.action, l.created_at, p.uid AS project_uid, p.name AS client,
+              u.name AS advisor_name, d.uid AS document_uid
+         FROM advisor_client_access_log l
+         JOIN users u ON u.id = l.advisor_user_id
+         LEFT JOIN projects p ON p.id = l.project_id
+         LEFT JOIN research_documents d ON d.id = l.document_id
+        WHERE l.advisor_user_id = ? ORDER BY l.created_at DESC, l.id DESC LIMIT 200`
+    ).bind(user.id).all();
+    return c.json({ items: rows.results || [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.patch('/me/booking-links/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    const m = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    if (typeof body.is_active !== 'boolean') return c.json({ detail: 'is_active must be a boolean' }, 400);
+    const row = await c.env.DB.prepare('SELECT id FROM advisor_booking_links WHERE id = ? AND advisor_id = ?')
+      .bind(Number(c.req.param('id')), m.id).first<{ id: number }>();
+    if (!row) return c.json({ detail: 'Booking link not found' }, 404);
+    await c.env.DB.prepare('UPDATE advisor_booking_links SET is_active = ?, updated_at = ? WHERE id = ? AND advisor_id = ?')
+      .bind(body.is_active ? 1 : 0, nowIso(), row.id, m.id).run();
+    await logAdminAction(c.env, user.id, user.email, 'advisor_booking_link_updated', { link_id: row.id });
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_booking_links WHERE id = ? AND advisor_id = ?')
+      .bind(row.id, m.id).first<BookingLinkRow>();
+    return c.json(bookingLinkDto(fresh!));
   } catch (e) { return mapError(c, e); }
 });
 

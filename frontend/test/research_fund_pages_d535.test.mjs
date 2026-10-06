@@ -176,7 +176,7 @@ test('drawer: the fund\'s facts, stage and size "Not recorded" with reasons, rep
   assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
   assert.match(text, /EIF \/ EIFONot recordedWith no LPs listed, EIF and EIFO backing is unknown, not absent\./);
   assert.match(text, /Unreadable The reports could not be read\. This is not a fund with no reports\./);
-  assert.match(text, /Add to my list/);
+  assert.match(text, /Add to my funds/, 'D593: the button is "Add to my funds"');
   assert.match(text, /Open full profile/);
 });
 
@@ -203,10 +203,10 @@ test('catalog profile: populated, with "Not recorded" sizes and stage, and an un
   assert.match(text, /SizeNot recordedNot recorded: this list records no size in a known currency/);
   assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
   assert.match(text, /Your list could not be read/);
-  assert.doesNotMatch(text, /Add to my list/, 'no add while the list is unreadable: it might duplicate a row');
+  assert.doesNotMatch(text, /Add to my funds/, 'no add while the list is unreadable: it might duplicate a row');
   const ok = catalog({ fund: { ...fund, data: { ...fund.data, item: ALPHA } }, list: { loading: false, error: null, existing: null } });
   assert.match(ok, /€50M/);
-  assert.match(ok, /Add to my list/);
+  assert.match(ok, /Add to my funds/);
 });
 
 test('catalog profile sits inside WorkspaceShell and reads only the Worker', () => {

@@ -7,26 +7,9 @@ import {
   groupByClient, linkHost, safeHref,
 } from './practiceTools';
 
-/**
- * Practice · Delivery, grouped by client — the Ops canvas's A1 (D571).
- *
- * `/practice/deliverables` in the canvas, and a VIEW of the Delivery zone here
- * rather than a second page: `DeliveryZone` already reads every work product,
- * and its "By client" chip is exactly this grouping. The address lands on that
- * chip (`App.jsx`), so the two can never disagree about what a client is owed.
- *
- * WHAT THE CANVAS DRAWS AND THE STORE CANNOT HOLD. A due date (no column), a
- * status set by hand (the state is derived from what was sent and opened), and
- * an Accepted step (a sign-off column nothing writes). Each is said on the
- * screen rather than drawn as a control that would save nothing.
- *
- * WHAT IT CAN DO. Edit the title and the client or engagement
- * (`updateMyAdvisorDeliverable`), send the latest version — the one status
- * change an advisor makes — and attach a link, which records the next version
- * because a version is never edited once recorded.
- */
+/** Ops A1: client grouping, due date, planned/in-progress work status and delivery/version receipts. */
 
-const STEP_TONE = { ...STATE_TONE, accepted: 'ok' };
+const STEP_TONE = { ...STATE_TONE, planned: 'neutral', in_progress: 'info', accepted: 'ok' };
 const STEP_LABEL = Object.fromEntries(DELIVERABLE_FLOW.map((s) => [s.key, s.label]));
 
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint';
@@ -46,9 +29,8 @@ export function FlowLegend() {
         ))}
       </div>
       <p className="mt-1.5 max-w-3xl text-[11px] leading-relaxed text-axal-faint">
-        Planned and In progress are one state here, Not started: nothing records that work began, only
-        what was sent. Delivered is Sent, and Opened is the client&rsquo;s own receipt. Accepted needs the
-        client&rsquo;s sign-off, which nothing records yet. No work product carries a due date yet either.
+        Planned and In progress are recorded by you. Sent and Opened come from delivery receipts.
+        Accepted is the client&rsquo;s sign-off on the latest version.
       </p>
     </div>
   );
@@ -106,13 +88,13 @@ function ClientRow({ item, engagements, busy, editing, attaching, onEdit, onAtta
         </div>
         <div className="text-[12px]">
           <span className={`${LABEL} mr-1.5 md:hidden`}>Due</span>
-          <Unrecorded reason="No due date is stored for a work product.">Not recorded</Unrecorded>
+          {item.due_date || <Unrecorded reason="No due date has been set.">Not recorded</Unrecorded>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
           <span className={`${LABEL} md:hidden`}>Status</span>
           {step
             ? <Pill tone={STEP_TONE[step]}>{STEP_LABEL[step]}</Pill>
-            : <Unrecorded reason="The route sent a state this page does not know.">Not recorded</Unrecorded>}
+            : <Unrecorded reason="No work status was recorded, and the latest version has no delivery receipt.">Not recorded</Unrecorded>}
           {sendable && (
             <button type="button" className={ghostButtonClass} disabled={busy === `s-${item.id}`}
               onClick={() => onSend?.(item)} data-testid={`send-a1-${item.id}`}>
@@ -181,6 +163,7 @@ export function DeliverableEditor({ item, engagements = [], busy = false, onCanc
     title: item.title || '',
     engagement_id: item.engagement_id == null ? '' : String(item.engagement_id),
     client_name: item.client_name || '',
+    due_date: item.due_date || '', manual_status: item.manual_status || '',
   });
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -204,6 +187,12 @@ export function DeliverableEditor({ item, engagements = [], busy = false, onCanc
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Title">
           <input className={inputClass} value={draft.title} onChange={set('title')} />
+        </Field>
+        <Field label="Due date"><input type="date" className={inputClass} value={draft.due_date} onChange={set('due_date')} /></Field>
+        <Field label="Work status" hint="Delivery and acceptance are recorded by receipts.">
+          <select className={inputClass} value={draft.manual_status} onChange={set('manual_status')}>
+            <option value="">Not recorded</option><option value="planned">Planned</option><option value="in_progress">In progress</option>
+          </select>
         </Field>
         <Field label="Engagement" hint="A work product under a contract takes its client from it.">
           <select className={inputClass} value={draft.engagement_id} onChange={set('engagement_id')}>

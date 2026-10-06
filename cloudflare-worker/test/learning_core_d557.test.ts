@@ -165,7 +165,9 @@ test('a video link is accepted only over https from the allow-list', async () =>
   assert.equal(r.status, 400);
   assert.equal(r.body.error, 'bad_video_url');
   const up = await admin(db, SUPER, '/items', { method: 'POST', body: { kind: 'video', title: 'Upload', video_source: 'r2' } });
-  assert.equal(up.body.error, 'video_upload_not_built');
+  // RE-AIMED BY D561: an upload path exists now, and it is the only way an
+  // uploaded video is attached; a field write still cannot claim one.
+  assert.equal(up.body.error, 'video_source_by_upload');
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM learning_items').get() as any).n, 0, 'nothing refused was stored');
 });
 

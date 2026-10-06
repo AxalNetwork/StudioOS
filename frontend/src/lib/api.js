@@ -128,6 +128,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/login'
     || currentPath === '/register'
     || currentPath === '/verify-email'
+    || currentPath.startsWith('/b/')
+    || /^\/advisors\/[^/]+$/.test(currentPath)
     || currentPath === '/spinout-lab'
     // Printable Program Brief — public brochure page; /spinout-lab/apply
     // is intentionally NOT listed (auth-only, a 401 there should bounce).
@@ -4011,7 +4013,7 @@ export const api = {
   // ---------- Advisor matching + office hours (Task #35) ----------
   listAdvisors: (opts = {}) => {
     const qs = new URLSearchParams();
-    if (opts.specialty) qs.set('specialty', opts.specialty);
+    if (opts.specialty) qs.set('expertise', opts.specialty);
     if (opts.sector) qs.set('sector', opts.sector);
     if (opts.q) qs.set('q', opts.q);
     if (opts.free_only) qs.set('free_only', '1');
@@ -4033,6 +4035,9 @@ export const api = {
     return request(`/advisors/match${s ? `?${s}` : ''}`);
   },
   getAdvisor: (uid) => request(`/advisors/${uid}`),
+  openAdvisorBookingLink: (slug) =>
+    request('/advisors/booking-links/open', { method: 'POST', body: JSON.stringify({ slug }) }),
+  listMyAdvisorAccessLog: () => request('/advisors/me/access-log'),
   upsertMyAdvisor: (data) => request('/advisors/me', { method: 'POST', body: JSON.stringify(data) }),
   getMyAdvisor: () => request('/advisors/me'),
   listAdvisorSlots: (uid, upcomingOnly = true) =>
@@ -4231,6 +4236,8 @@ export const api = {
   // URL alone, so it is unique across the table rather than per advisor.
   createMyAdvisorBookingLink: (data) =>
     request('/advisors/me/booking-links', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorBookingLink: (id, data) =>
+    request(`/advisors/me/booking-links/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // The CLIENT's half of 239 — the only writer of `opened_at` in the product.
   // These two are read and called by the FOUNDER, not the advisor: the receipt
@@ -4238,6 +4245,8 @@ export const api = {
   listReceivedDeliverables: () => request('/advisors/received/deliverables'),
   openReceivedDeliverableVersion: (uid) =>
     request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/open`, { method: 'POST' }),
+  acceptReceivedDeliverableVersion: (uid) =>
+    request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
 
   // The attester's own answer. Unauthenticated on purpose — the token is the
   // credential, and an attester is usually not a user of this product.

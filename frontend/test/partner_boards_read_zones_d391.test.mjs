@@ -168,6 +168,12 @@ test('D391: the Markets card describes the zone it opens, not the signals feed',
     assert.doesNotMatch(markets.blurb, /signal/i, role);
     assert.match(markets.blurb, /Comparable ranges/, role);
   }
-  assert.match(raw('frontend/src/pages/research/MarketZone.jsx'), /comparable RANGES/,
-    'if MarketZone stops being comparable ranges, this card must be revisited');
+  // D593 — the zone the card opens is the one MOUNTED there, `MarketDirectoryZone`;
+  // `MarketZone` has not been mounted since the directory replaced it. So it is
+  // that page which must still list and record comparable ranges.
+  assert.match(raw('frontend/src/workspaces/ResearchWorkspace.jsx'), /<MarketDirectoryZone\b/,
+    'the Markets card opens a different page now; revisit its blurb');
+  const zone = raw('frontend/src/pages/research/MarketDirectoryZone.jsx');
+  assert.match(zone, /Your market readings/, 'if the Markets zone stops listing comparable ranges, this card must be revisited');
+  assert.match(zone, /create: api\.research\.marketReadingCreate/, 'if the Markets zone stops recording comparable ranges, this card must be revisited');
 });

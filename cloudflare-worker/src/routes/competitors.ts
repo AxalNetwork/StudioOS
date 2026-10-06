@@ -25,6 +25,7 @@ import {
   type AnalysisOutput,
 } from '../services/competitorAnalysis';
 import { fetchPage } from '../services/webFetch';
+import { linkCandidatesToDirectory } from '../services/competitorDirectoryLink';
 
 const competitors = new Hono<{ Bindings: Env }>();
 
@@ -93,6 +94,9 @@ async function loadAnalysis(env: Env, userId: number, id: string): Promise<Recor
   const sources = await sql`SELECT * FROM competitor_sources WHERE analysis_id = ${id}`;
   const signals = await sql`SELECT * FROM competitor_signals WHERE analysis_id = ${id}`;
   const outRows = await sql`SELECT * FROM competitor_analysis_outputs WHERE analysis_id = ${id}`;
+  // D593: each competitor's directory profile, when exactly one matches it
+  // (services/competitorDirectoryLink.ts). Read, never stored.
+  const directory = await linkCandidatesToDirectory(env.DB, candidates);
   return {
     id: a.id,
     project_id: a.project_id,
@@ -103,7 +107,8 @@ async function loadAnalysis(env: Env, userId: number, id: string): Promise<Recor
     inputs: safeParse(a.inputs_json, {}),
     created_at: a.created_at,
     updated_at: a.updated_at,
-    candidates: candidates.map(mapCandidate),
+    candidates: candidates.map((row) => ({ ...mapCandidate(row), directory_uid: directory.byId.get(String(row.id)) ?? null })),
+    directory_match: directory.status,
     sources,
     signals,
     output: safeParse((outRows[0] || {}).output_json, {}),

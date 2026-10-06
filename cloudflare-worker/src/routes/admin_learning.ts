@@ -95,7 +95,9 @@ function itemFields(b: any, creating: boolean) {
   if (creating && !title) bad('bad_title', 'An item needs a title.');
   if (title === null) bad('bad_title', 'An item needs a title.');
   if (b?.video_source !== undefined && b.video_source !== null && b.video_source !== 'url') {
-    bad('video_upload_not_built', 'Only a video link is accepted: there is no upload path yet.');
+    // D561 — an uploaded video is attached by the upload route, which checks
+    // the stored object; a field write cannot claim one.
+    bad('video_source_by_upload', 'An uploaded video is attached through the upload routes, not set here.');
   }
   let video_url: string | null | undefined;
   if (b?.video_url !== undefined) {
@@ -215,8 +217,12 @@ r.patch('/items/:uid', async (c) => {
     if (!before) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
     const f = itemFields(await c.req.json().catch(() => ({})), false);
     const changed = await patchRow(c.env, 'learning_items', ITEM_COLUMNS, uid, f);
-    if (f.video_url !== undefined) {
-      await c.env.DB.prepare('UPDATE learning_items SET video_source = ? WHERE uid = ?').bind(f.video_url ? 'url' : null, uid).run();
+    // A link replaces an uploaded video (the daily sweep removes the object);
+    // clearing the link leaves an uploaded video where it is (D561).
+    if (f.video_url) {
+      await c.env.DB.prepare(`UPDATE learning_items SET video_source = 'url', r2_key = NULL WHERE uid = ?`).bind(uid).run();
+    } else if (f.video_url === null) {
+      await c.env.DB.prepare(`UPDATE learning_items SET video_source = NULL WHERE uid = ? AND video_source = 'url'`).bind(uid).run();
     }
     await record(c, admin, 'learning.item.update', { uid, fields: ITEM_COLUMNS.filter((k) => (f as any)[k] !== undefined) });
     void changed;
@@ -229,10 +235,12 @@ export const NEXT_STATUS: Record<string, 'published' | 'draft' | 'archived'> = {
 async function setItemStatus(c: Context<{ Bindings: Env }>, action: 'publish' | 'unpublish' | 'archive') {
   const admin = await gate(c); if (admin instanceof Response) return admin;
   const uid = c.req.param('uid') as string;
-  const item = await c.env.DB.prepare('SELECT kind, title, body, video_url FROM learning_items WHERE uid = ?').bind(uid).first<any>();
+  const item = await c.env.DB.prepare('SELECT kind, title, body, video_url, video_source, r2_key FROM learning_items WHERE uid = ?').bind(uid).first<any>();
   if (!item) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
   if (action === 'publish') {
-    if (item.kind === 'video' && !item.video_url) return refuse(c, 409, { code: 'no_video', message: 'A video needs its link before it is published.' });
+    // D561 — a video has its link or an uploaded file.
+    const hasVideo = !!item.video_url || (item.video_source === 'r2' && !!item.r2_key);
+    if (item.kind === 'video' && !hasVideo) return refuse(c, 409, { code: 'no_video', message: 'A video needs its link or an uploaded file before it is published.' });
     if (item.kind === 'reading' && !item.body) return refuse(c, 409, { code: 'no_body', message: 'A reading needs its text before it is published.' });
   }
   const t = now();

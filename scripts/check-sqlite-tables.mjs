@@ -156,9 +156,12 @@ export function unknownReferences() {
         // sqlite_master / sqlite_sequence are the engine's own tables, and
         // `pragma_*` are SQLite's built-in table-valued functions
         // (`SELECT name FROM pragma_table_info(?)`), which no migration
-        // creates and none ever will.
+        // creates and none ever will. `json_each` and `json_tree` are the
+        // JSON1 table-valued functions D1 ships (`IN (SELECT value FROM
+        // json_each(?))`), in the same position for the same reason.
         if (known.has(t) || ctes.has(t) || NOT_A_TABLE.has(t)
-            || t.startsWith('sqlite_') || t.startsWith('pragma_')) continue;
+            || t.startsWith('sqlite_') || t.startsWith('pragma_')
+            || t === 'json_each' || t === 'json_tree') continue;
         if (!hits.has(t)) hits.set(t, []);
         hits.get(t).push(`${rel}:${line}`);
       }

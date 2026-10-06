@@ -36,7 +36,7 @@ function StarRow({ rating, onChange }) {
   );
 }
 
-function AdvisorCard({ advisor, onOpen, viewerRole }) {
+export function AdvisorCard({ advisor, onOpen, viewerRole }) {
   return (
     <button
       onClick={() => onOpen(advisor)}
@@ -44,7 +44,7 @@ function AdvisorCard({ advisor, onOpen, viewerRole }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-semibold text-gray-900 dark:text-gray-100">{advisor.name}</div>
+          <div className="font-semibold text-gray-900 dark:text-gray-100">{advisor.display_name}</div>
           {advisor.headline && <div className="text-sm text-gray-600 mt-0.5">{advisor.headline}</div>}
         </div>
         <div className="text-right">
@@ -55,13 +55,13 @@ function AdvisorCard({ advisor, onOpen, viewerRole }) {
             </div>
           ) : <div className="text-xs text-gray-400">No reviews yet</div>}
           <div className="mt-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-            {advisor.hourly_rate > 0 ? `$${advisor.hourly_rate}/hr` : 'Free'}
+            {advisor.hourly_rate_usd == null ? 'Not recorded — no rate set' : advisor.hourly_rate_usd > 0 ? `$${advisor.hourly_rate_usd}/hr` : 'Free'}
           </div>
         </div>
       </div>
-      {advisor.specialties?.length > 0 && (
+      {advisor.expertise?.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-3">
-          {advisor.specialties.slice(0, 6).map((s) => (
+          {advisor.expertise.slice(0, 6).map((s) => (
             <span key={s} className="text-[10px] px-2 py-0.5 bg-violet-50 text-violet-700 rounded">{s}</span>
           ))}
         </div>
@@ -69,7 +69,7 @@ function AdvisorCard({ advisor, onOpen, viewerRole }) {
       {advisor.match_reasons?.length > 0 && (
         <div className="mt-2 text-[11px] text-emerald-600">{advisor.match_reasons.join(' · ')}</div>
       )}
-      {!advisor.accepting_bookings && (
+      {!advisor.is_active && (
         <div className="mt-2 text-[11px] text-amber-700">Not accepting bookings right now</div>
       )}
       {advisor.user_id && (
@@ -106,7 +106,7 @@ function CalendlyCTA({ userId }) {
   );
 }
 
-function BookingForm({ slot, advisor, onClose, onBooked }) {
+function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onBooked }) {
   const { user } = useAuth();
   const [topic, setTopic] = useState('');
   const [questions, setQuestions] = useState('');
@@ -116,7 +116,7 @@ function BookingForm({ slot, advisor, onClose, onBooked }) {
     if (!topic.trim()) { setErr('Topic is required'); return; }
     setErr(null); setBusy(true);
     try {
-      const b = await api.bookAdvisorSlot(slot.id, { topic, questions });
+      const b = await api.bookAdvisorSlot(slot.id, { topic, notes: questions, ...(sessionType ? { session_type_id: sessionType.id } : {}), ...(bookingLinkSlug ? { booking_link_slug: bookingLinkSlug } : {}) });
       onBooked(b);
       // Spin-Out Lab — Week 3 milestone for first advisor booking.
       await markMilestone(user, 'advisor_meeting_booked');
@@ -139,7 +139,7 @@ function BookingForm({ slot, advisor, onClose, onBooked }) {
       <div className="bg-white rounded-lg max-w-md w-full p-6 dark:bg-gray-900">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Book {advisor.name}</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Book {advisor.display_name}</div>
             <div className="text-xs text-gray-500 mt-0.5">
               {formatDateTime(slot.startsAt)}
               {slotMinutes(slot) != null && ` · ${slotMinutes(slot)} min`}
@@ -166,7 +166,7 @@ function BookingForm({ slot, advisor, onClose, onBooked }) {
   );
 }
 
-function AdvisorDetail({ advisor, onClose, onBooked }) {
+export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, onBooked }) {
   const [slots, setSlots] = useState(null);
   const [slotsError, setSlotsError] = useState('');
   const [bookSlot, setBookSlot] = useState(null);
@@ -185,13 +185,13 @@ function AdvisorDetail({ advisor, onClose, onBooked }) {
   // What the worker calls bookable. `s.status === 'open' && s.remaining > 0`
   // stood here and matched nothing — `slotDto` emits neither key — so every
   // advisor looked fully booked and native booking was unreachable.
-  const bookable = (slots || []).filter(isBookableSlot).map(slotView);
+  const bookable = (slots || []).filter(isBookableSlot).map(slotView).filter(s => sessionType?.duration_minutes == null || slotMinutes(s) === sessionType.duration_minutes);
   return (
     <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto dark:bg-gray-900">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{advisor.name}</div>
+            <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{advisor.display_name}</div>
             {advisor.headline && <div className="text-sm text-gray-600">{advisor.headline}</div>}
             {advisor.rating_avg && (
               <div className="flex items-center gap-2 mt-2">
@@ -204,8 +204,8 @@ function AdvisorDetail({ advisor, onClose, onBooked }) {
         </div>
         {advisor.bio && <p className="text-sm text-gray-700 mb-4 dark:text-gray-300">{advisor.bio}</p>}
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-          <div><span className="text-gray-500">Rate:</span> {advisor.hourly_rate > 0 ? `$${advisor.hourly_rate}/hr` : 'Free'}</div>
-          <div><span className="text-gray-500">Capacity:</span> {advisor.capacity_per_week}/week</div>
+          <div><span className="text-gray-500">Rate:</span> {advisor.hourly_rate_usd == null ? 'Not recorded — no rate set' : advisor.hourly_rate_usd > 0 ? `$${advisor.hourly_rate_usd}/hr` : 'Free'}</div>
+          <div><span className="text-gray-500">Capacity:</span> Not recorded — no weekly capacity published</div>
           {advisor.timezone && <div><span className="text-gray-500">Timezone:</span> {advisor.timezone}</div>}
           {advisor.calcom_username && <div><span className="text-gray-500">Cal.com:</span> @{advisor.calcom_username}</div>}
         </div>
@@ -261,7 +261,7 @@ function AdvisorDetail({ advisor, onClose, onBooked }) {
           </>
         )}
         {bookSlot && (
-          <BookingForm slot={bookSlot} advisor={advisor}
+          <BookingForm slot={bookSlot} advisor={advisor} sessionType={sessionType} bookingLinkSlug={bookingLinkSlug}
             onClose={() => setBookSlot(null)}
             onBooked={(b) => { setBookSlot(null); onBooked?.(b); onClose(); }} />
         )}

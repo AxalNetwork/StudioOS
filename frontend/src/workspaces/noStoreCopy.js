@@ -113,13 +113,18 @@ export const RESEARCH_STORE_GAPS = {
   // missing and still what the founder and investor canvases narrow — so the
   // entry stays for them. For partner and advisor, whose canvases draw exactly
   // the readings `MarketZone` holds, it is not shown (`roles`).
+  //
+  // D593 — `why` said the page holds "comparable readings" instead, and since
+  // D533 it is the market directory first: the taxonomy's markets by tracked
+  // sector, with the readings card (whose record form is back) beside them.
+  // The sentence names both; the missing store is unchanged.
   markets: {
     roles: ['founder', 'investor'],
     eyebrow: 'Blocked on a store',
     blocks: 'a saved market analysis',
     heading: 'Comparable readings are stored. A saved market analysis is not.',
     what: 'A deep-dive you ran and kept — its method, the date it was run, the documents it rests on, and whether it is current or retired.',
-    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page holds instead is comparable readings — ranges you entered, each with its run date and an age that decides whether it can still be used — a different object from the one the design narrows. The sector signals feed has its own page, Signals.',
+    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page holds instead is the taxonomy’s markets by tracked sector and your comparable readings — ranges you record here, each with its run date and an age that decides whether it can still be used — different objects from the one the design narrows. The sector signals feed has its own page, Signals.',
   },
   companies: {
     eyebrow: 'Blocked on a store',

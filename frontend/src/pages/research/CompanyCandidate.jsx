@@ -4,6 +4,7 @@ import { Card, Pill, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
+import { companyHref } from '../../lib/companyDirectoryView.js';
 import {
   categoryLabel,
   detailRows,
@@ -304,6 +305,12 @@ export default function CompanyCandidate({ role = 'founder' }) {
                         <span className="text-[12px] text-axal-muted">no URL — nothing here will invent one</span>
                       </span>
                     )}
+                    {candidate.directory_uid ? (
+                      <Link to={companyHref(candidate.directory_uid)} data-testid="candidate-directory-link"
+                        className="ml-3 text-[12px] font-semibold text-violet-700 underline dark:text-violet-300">
+                        Directory profile →
+                      </Link>
+                    ) : null}
                   </div>
                   <p className={`mt-2 text-[12px] leading-relaxed ${manual ? 'text-violet-800 dark:text-violet-200' : 'text-amber-800 dark:text-amber-300'}`}>
                     {keepNote(candidate.origin)}

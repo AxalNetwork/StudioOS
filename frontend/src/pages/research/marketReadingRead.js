@@ -3,6 +3,7 @@
  *
  * The range and the catalog price are different facts. Named engagements are
  * not stored. A fresh reading blanks the dollars. High below low saves nothing.
+ * A blank scope is saved as no scope, and the page says Not recorded.
  */
 
 export const THIN_BELOW = 6;
@@ -35,6 +36,92 @@ export function comparableCount(text) {
     return { n: null, error: 'How many engagements the range came from. Refused if 0.' };
   }
   return { n: Number(raw), error: null };
+}
+
+/**
+ * The scope as typed, or null. Blank is no scope: the Worker stores null and the
+ * header says Not recorded. The old scope is never carried forward — it is in
+ * the box when the form opens, so clearing the box is how a person removes it.
+ */
+export function scopeValue(text) {
+  const raw = String(text ?? '').trim();
+  return raw ? raw.slice(0, 200) : null;
+}
+
+/**
+ * The body `POST /research/market-readings` gets, or the sentence that says why
+ * nothing was sent. Every refusal here is one the Worker makes too.
+ */
+export function readingSubmission(item, form) {
+  const low = dollarsToCents(form?.low);
+  const high = dollarsToCents(form?.high);
+  const count = comparableCount(form?.n);
+  if (low.error || high.error || low.cents == null || high.cents == null) {
+    return { error: low.error || high.error || 'Enter the low and the high.' };
+  }
+  if (high.cents < low.cents) {
+    return { error: 'High is below low. Nothing is saved until the range reads forward.' };
+  }
+  if (count.n == null) return { error: count.error };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(form?.ran_at || '')) {
+    return { error: 'A reading needs the date you ran it.' };
+  }
+  return {
+    body: {
+      offering_uid: item?.offering_uid || undefined,
+      metric: item?.metric,
+      range_low_cents: low.cents,
+      range_high_cents: high.cents,
+      comparable_count: count.n,
+      ran_at: form.ran_at,
+      scope: scopeValue(form?.scope),
+    },
+  };
+}
+
+/**
+ * Where this reading stands with a proposal, in the order the page says it.
+ *
+ * STALE BEATS EVERYTHING, then an attachment. After that, a read that returned
+ * no proposal is not "Attachable": proposals are the quotes the caller's partner
+ * profile owns, so a licence without one, or a partner with no quote yet, has
+ * nowhere to put the reading, and saying Attachable invited a click that could
+ * only fail.
+ */
+export function attachState({ stale, attachments, proposals }) {
+  if (stale) return 'blocked';
+  if ((attachments || []).length > 0) return 'attached';
+  if (!(proposals || []).length) return 'nowhere';
+  return 'attachable';
+}
+
+/** What the header pill and the Proposal tile say in each state. */
+export const ATTACH_COPY = {
+  blocked: { pill: 'Re-run before attaching', tone: 'danger', tile: 'Blocked', sub: 're-run before attaching' },
+  attached: { pill: 'Attached', tone: 'ok', tile: 'Attached', sub: 'travelling with a quote' },
+  nowhere: { pill: 'No proposal to attach to', tone: 'neutral', tile: 'No proposal', sub: 'this account has no quote to attach it to' },
+  attachable: { pill: 'Attachable', tone: 'ok', tile: 'Attachable', sub: 'range + run date travel together' },
+};
+
+/**
+ * The proposals this reading is not on yet. Attaching to the same quote twice
+ * writes nothing new (the Worker's `INSERT OR IGNORE`), so "another proposal"
+ * offers only these.
+ */
+export function openProposals(proposals, attachments) {
+  const on = new Set((attachments || []).map((a) => String(a.quote_id)));
+  return (proposals || []).filter((q) => !on.has(String(q.id)));
+}
+
+/** The form a reading opens with: its own figures, run date and scope. */
+export function readingFields(item) {
+  return {
+    low: String(Math.round(item.range_low_cents / 100)),
+    high: String(Math.round(item.range_high_cents / 100)),
+    n: String(item.comparable_count),
+    ran_at: item.ran_at,
+    scope: item.scope || '',
+  };
 }
 
 /** A re-run is a new reading. The old dollars do not come forward. */
@@ -83,7 +170,9 @@ export function readingDraft({ days, band, comparableCount: count }) {
 
 export function staleAttachmentSentence(ranAt, now = new Date()) {
   const from = runMonth(ranAt) || 'an earlier month';
-  return `A client shown a range from ${from}, presented as current reasoning behind a ${monthName(now)} quote, is worse than a proposal with no market figure.`;
+  const month = monthName(now);
+  const article = /^[AEIOU]/.test(month) ? 'an' : 'a';
+  return `A client shown a range from ${from}, presented as current reasoning behind ${article} ${month} quote, is worse than a proposal with no market figure.`;
 }
 
 export function ageingAttachmentNote(days) {

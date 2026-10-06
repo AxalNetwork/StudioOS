@@ -51,7 +51,7 @@ test('slotDto still emits the keys the frontend reads, and not the ones it used 
 
 test('a booking is born pending, and nothing in the worker writes "requested"', () => {
   // This is the whole of the Confirm/Decline bug, in two assertions.
-  assert.match(worker, /VALUES \(\?, \?, \?, \?, \?, \?, 'pending', \?, \?\)/,
+  assert.match(worker, /INSERT INTO advisor_bookings[\s\S]*?SELECT \?, \?, \?, \?, \?, \?, 'pending', \?, \?, \?, \?/,
     'the only INSERT into advisor_bookings writes pending');
   assert.match(worker, /allowed: \['pending'\], nextStatus: 'confirmed'/,
     'and confirm accepts pending');

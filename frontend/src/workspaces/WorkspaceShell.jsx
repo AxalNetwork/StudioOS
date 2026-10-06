@@ -67,10 +67,17 @@ import { boardFor } from './boards/index.js';
  *
  * NO COMPANY MEANS NO BADGE. An empty slot is honest; `"One venture"` over an
  * account with no company membership is a claim about data that is not there.
+ *
+ * ONE `<h1>` PER PAGE (D593). The title line is the page's heading, unless the
+ * page heads its own content: `/research/markets/:uid` draws the metric as the
+ * h1 of its header card, as its canvas does. Such a page passes `titleAs="p"`
+ * and the same line renders as a paragraph. Every other caller leaves it
+ * unset and keeps the h1.
  */
 export default function WorkspaceShell({
   role = 'founder',
   title,
+  titleAs = 'h1',
   scope,
   scopeHref,
   intro,
@@ -122,6 +129,7 @@ export default function WorkspaceShell({
   // tell one licence from another. An earlier draft computed one here and
   // never used it, which CodeQL caught.
   const arch = zone?.archetype;
+  const Title = titleAs || 'h1';
 
   return (
     // THE ROW IS `RailFrame` (D556): the body takes the rest and shrinks
@@ -191,9 +199,9 @@ export default function WorkspaceShell({
 
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="flex flex-wrap items-baseline gap-2.5">
-            <h1 className="m-0 text-xl font-extrabold tracking-tight">
+            <Title className="m-0 text-xl font-extrabold tracking-tight">
               {title || zone?.label}
-            </h1>
+            </Title>
             {arch && (
               <span
                 className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"

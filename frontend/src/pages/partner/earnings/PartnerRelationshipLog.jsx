@@ -75,12 +75,24 @@ export function RelationshipHeader({ state, rel }) {
       </div>
       <dl className="mt-2.5 grid gap-x-4 gap-y-2 text-[12.5px] sm:grid-cols-4">
         <div><dt><SectionLabel tone="faint">Role</SectionLabel></dt><dd className="mt-0.5">{titleCase(other.role) || <Unrecorded>Not recorded</Unrecorded>}</dd></div>
-        <div><dt><SectionLabel tone="faint">Company</SectionLabel></dt><dd className="mt-0.5"><Unrecorded reason="A relationship stores no company.">Not recorded</Unrecorded></dd></div>
+        <div><dt><SectionLabel tone="faint">Company</SectionLabel></dt><dd className="mt-0.5" data-testid="text-relationship-company">{companyCell(rel, other)}</dd></div>
         <div><dt><SectionLabel tone="faint">In your book since</SectionLabel></dt><dd className="mt-0.5 tabular-nums">{since || <Unrecorded>Not recorded</Unrecorded>}</dd></div>
         <div><dt><SectionLabel tone="faint">Last interaction</SectionLabel></dt><dd className="mt-0.5 tabular-nums">{last || <Unrecorded reason="Nothing has been logged on this relationship.">None logged</Unrecorded>}</dd></div>
       </dl>
     </Card>
   );
+}
+
+/**
+ * D572 part 3 (the owner's Q2 = A): the counterpart's own company, as their
+ * account links it, read when the book is read. A read that failed is said
+ * as one, never as "no company".
+ */
+function companyCell(rel, other) {
+  const name = String(other?.company ?? '').trim();
+  if (name) return name;
+  if (rel?.companies_unreadable) return <Unreadable what="Their company" claim="This is not a claim that they have none." />;
+  return <Unrecorded reason="No company is linked to their account.">Not recorded</Unrecorded>;
 }
 
 /**

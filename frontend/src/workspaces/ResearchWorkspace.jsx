@@ -147,7 +147,7 @@ const ZONE_BLURB = {
   funds: 'Every fund you have researched, whether they write at your stage, and whether you have a route in.',
   diligence: 'The rooms founders have opened to you, and how much of each they actually staged.',
   benchmarking: 'What you are measuring, what the peer set says, and how many it was measured over.',
-  markets: 'Comparable ranges you entered, each with the date it was run and how old it is.',
+  markets: 'Comparable ranges you entered, each with its run date and age, beside the taxonomy’s markets by tracked sector.',
   geographies: 'Where the directory’s companies are based and its funds are headquartered.',
   companies: 'The competitor and market analyses you have run yourself.',
   library: 'Documents you have added, and which of them Ask can actually read.',
@@ -199,11 +199,13 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       // The feed keeps its own route at `/signals`, which every licence that
       // had it here still reaches, and `MarketZone` links to it in as many
       // words rather than leaving a reader to find it.
+      // `handlers` carries the page's own ops (D593): the partner row's
+      // `Re-run stale` opens the directory's record-a-reading form.
       return (
         <Suspense fallback={<Loading />}>
           <MarketDirectoryZone
             role={role}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/markets', { view: {
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/markets', { handlers, view: {
               scope: null,
               zone: 'markets',
               header: ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug'],
