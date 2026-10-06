@@ -51,12 +51,8 @@ const NO_EXTRACTION_LAYER =
 // it. What is true is that the question has already been answered upstream.
 const ALREADY_MINE =
   'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
-// `/network/relationships`. `partner_relationships` is `partner_a_id,
-// partner_b_id, relationship_type, strength_score, metadata` and nothing else
-// — no interaction date and no fund tie, so `Going cold` and `LPs` keep their
-// reasons. The third gap this comment used to name is closed: the counterpart's
-// role was missing from the payload, and `/partnernet/relationships` now
-// returns it, which is what the `Founders` chip narrows on.
+// `/network/relationships`. Going cold reads `partner_interactions` (the log's
+// MAX). LPs stay unbuilt: an LP register is a fund record, not a relationship.
 const NO_LP_RELATIONSHIP =
   'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
 // `Going cold` went live with D465: `partner_interactions` (migration 338) is
@@ -301,14 +297,9 @@ export const INVESTOR_ZONE_FILTERS = {
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
-  // ONE LIVE CHIP OUT OF FIVE, from the same component that gives founder four
-  // out of four. Founder relationships read `contacts`; this licence reads
-  // `partner_relationships`, and the difference is the whole row.
-  //
-  // `Everyone` is the reset view rather than a claim — it selects what the page
-  // loaded, which is what the word means here. `Co-investors` is the one real
-  // narrowing: `relationship_type` is a CHECKed set and `co_investor` is a
-  // member of it.
+  // Four live chips: Everyone, Founders, Co-investors, Going cold. LPs stay
+  // unbuilt. Founder relationships read `contacts`; this licence reads
+  // `partner_relationships`.
   'network/relationships': [
     { canvas: 'Everyone', key: 'all' },
     { canvas: 'Founders', key: 'founders' },

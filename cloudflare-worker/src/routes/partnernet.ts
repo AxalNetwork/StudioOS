@@ -5,6 +5,7 @@ import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { newUid } from './_t13t14t15_helpers';
 import { notify } from '../services/notify';
+import { logAdminAction } from '../services/adminAudit';
 
 const partnernet = new Hono<{ Bindings: Env }>();
 
@@ -25,6 +26,17 @@ const REL_CREATE_RATE_LIMIT = 20;
  * owner chose to keep them and tell their subjects (`noticeLegacyRelationships`).
  */
 export const REL_STATUSES = ['pending', 'accepted', 'declined', 'withdrawn', 'removed'] as const;
+const NOTE_TOUCH_MAX = 2000;
+const NOTE_REMINDER_MAX = 500;
+const KIND_MAX = 40;
+const ABSURD_YEAR_MIN = 1990;
+const ABSURD_YEAR_MAX = 2100;
+
+const INTERACTION_COLUMNS = [
+  `ALTER TABLE partner_interactions ADD COLUMN voided_at TEXT`,
+  `ALTER TABLE partner_interactions ADD COLUMN voided_by INTEGER`,
+];
+
 const REL_REQUEST_COLUMNS = [
   `ALTER TABLE partner_relationships ADD COLUMN status TEXT NOT NULL DEFAULT 'accepted'`,
   `ALTER TABLE partner_relationships ADD COLUMN requested_by INTEGER`,
@@ -123,27 +135,40 @@ async function ensureSchema(env: Env) {
     `CREATE TABLE IF NOT EXISTS partner_interactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uid TEXT UNIQUE NOT NULL,
-      relationship_id INTEGER NOT NULL,
+      relationship_id INTEGER NOT NULL REFERENCES partner_relationships(id),
       kind TEXT NOT NULL DEFAULT 'note',
       note TEXT,
       interacted_at TEXT NOT NULL,
-      recorded_by INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      recorded_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      voided_at TEXT,
+      voided_by INTEGER
     )`,
     `CREATE INDEX IF NOT EXISTS idx_pint_rel ON partner_interactions(relationship_id, interacted_at)`,
     `CREATE TABLE IF NOT EXISTS partner_reminders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uid TEXT UNIQUE NOT NULL,
-      relationship_id INTEGER NOT NULL,
+      relationship_id INTEGER NOT NULL REFERENCES partner_relationships(id),
       remind_at TEXT NOT NULL,
       note TEXT,
       done INTEGER NOT NULL DEFAULT 0,
-      created_by INTEGER NOT NULL,
+      created_by INTEGER NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       done_at TEXT
     )`,
-    `CREATE INDEX IF NOT EXISTS idx_prem_rel ON partner_reminders(relationship_id, done, remind_at)`,
     `CREATE INDEX IF NOT EXISTS idx_prem_due ON partner_reminders(created_by, done, remind_at)`,
+    `CREATE TRIGGER IF NOT EXISTS partner_reminders_done_ok_ins
+      BEFORE INSERT ON partner_reminders
+      FOR EACH ROW WHEN NEW.done NOT IN (0, 1)
+      BEGIN SELECT RAISE(ABORT, 'done'); END`,
+    `CREATE TRIGGER IF NOT EXISTS partner_reminders_done_ok_upd
+      BEFORE UPDATE ON partner_reminders
+      FOR EACH ROW WHEN NEW.done NOT IN (0, 1)
+      BEGIN SELECT RAISE(ABORT, 'done'); END`,
+    `CREATE TRIGGER IF NOT EXISTS partner_interactions_kind_ok
+      BEFORE INSERT ON partner_interactions
+      FOR EACH ROW WHEN NEW.kind IS NULL OR length(NEW.kind) = 0 OR length(NEW.kind) > 40
+      BEGIN SELECT RAISE(ABORT, 'kind'); END`,
 
     // activity_logs may already exist from the legacy schema with columns
     // (action, details, actor, ...). The CREATE IF NOT EXISTS below covers
@@ -215,6 +240,7 @@ async function ensureSchema(env: Env) {
   // columns, then the last two statements (DROP VIEW / CREATE VIEW) again.
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet schema:', e?.message); } }
   try { await runSchemaBootstrap(env, REL_REQUEST_COLUMNS); } catch (e: any) { console.error('partnernet: request columns unavailable —', e?.message); }
+  try { await runSchemaBootstrap(env, INTERACTION_COLUMNS); } catch (e: any) { console.error('partnernet: interaction columns unavailable —', e?.message); }
   for (const s of stmts.slice(-2)) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet view:', e?.message); } }
   MIGRATED.set(bindingKey(env), true);
 }
@@ -246,13 +272,50 @@ function relationshipForParty(row: any, userId: number) {
   return { ...row, metadata: sharedMeta, my_private_note: myPrivateNote };
 }
 
-/** Calendar dates from `<input type="date">` become end-of that UTC day. */
-function parseRemindAt(raw: unknown): Date | null {
-  if (raw == null || raw === '') return null;
+export type BookDate =
+  | { ok: true; value: string; dateOnly: boolean }
+  | { ok: false; code: 'date_unparseable' | 'date_absurd' | 'date_in_future' };
+
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ISO_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * A book date is `YYYY-MM-DD` or a zoned ISO instant, and nothing else.
+ * Absurd years are refused. A touch may not be in the future; a reminder may,
+ * because that is what a reminder is.
+ */
+export function parseBookDate(raw: unknown, opts: { allowFuture: boolean; now?: Date }): BookDate {
+  if (raw == null || String(raw).trim() === '') return { ok: false, code: 'date_unparseable' };
   const s = String(raw).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T23:59:59.000Z`);
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d;
+  const dateOnly = DATE_ONLY.exec(s);
+  const iso = ISO_INSTANT.exec(s);
+  if (!dateOnly && !iso) return { ok: false, code: 'date_unparseable' };
+  const year = Number((dateOnly || iso)![1]);
+  const month = Number((dateOnly || iso)![2]);
+  const day = Number((dateOnly || iso)![3]);
+  if (year < ABSURD_YEAR_MIN || year > ABSURD_YEAR_MAX) return { ok: false, code: 'date_absurd' };
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
+    return { ok: false, code: 'date_unparseable' };
+  }
+  const now = opts.now ?? new Date();
+  if (dateOnly) {
+    if (!opts.allowFuture && s > now.toISOString().slice(0, 10)) return { ok: false, code: 'date_in_future' };
+    return { ok: true, value: s, dateOnly: true };
+  }
+  const instant = new Date(s);
+  if (Number.isNaN(instant.getTime())) return { ok: false, code: 'date_unparseable' };
+  if (instant.getUTCFullYear() < ABSURD_YEAR_MIN || instant.getUTCFullYear() > ABSURD_YEAR_MAX) {
+    return { ok: false, code: 'date_absurd' };
+  }
+  if (!opts.allowFuture && instant.getTime() > now.getTime() + 60_000) return { ok: false, code: 'date_in_future' };
+  return { ok: true, value: instant.toISOString(), dateOnly: false };
+}
+
+function dateError(code: 'date_unparseable' | 'date_absurd' | 'date_in_future') {
+  if (code === 'date_in_future') return 'A touch cannot be dated in the future.';
+  if (code === 'date_absurd') return 'That date is outside the years this book records.';
+  return 'Use a calendar date (YYYY-MM-DD) or an ISO timestamp.';
 }
 function pair(a: number, b: number): [number, number] { return a < b ? [a, b] : [b, a]; }
 
@@ -319,9 +382,12 @@ partnernet.get('/relationships', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
+  try {
   const rows = await sql`
     SELECT pr.*, ua.email as a_email, ua.name as a_name, ua.role as a_role, ub.email as b_email, ub.name as b_name, ub.role as b_role,
-      (SELECT MAX(i.interacted_at) FROM partner_interactions i WHERE i.relationship_id = pr.id) as last_interaction_at
+      (SELECT MAX(i.interacted_at) FROM partner_interactions i
+        WHERE i.relationship_id = pr.id AND i.voided_at IS NULL
+          AND (i.recorded_by = pr.partner_a_id OR i.recorded_by = pr.partner_b_id)) as last_interaction_at
     FROM partner_relationships pr
     LEFT JOIN users ua ON ua.id = pr.partner_a_id
     LEFT JOIN users ub ON ub.id = pr.partner_b_id
@@ -339,6 +405,13 @@ partnernet.get('/relationships', async (c) => {
     return { ...relationshipForParty(r, user.id), other };
   });
   return c.json(enriched);
+  } catch (e) {
+    console.error('partnernet relationships read failed', (e as Error).message);
+    return c.json({
+      error: 'relationships_unreadable',
+      message: 'The relationship book could not be read. This is not a claim that no ties exist.',
+    }, 503);
+  }
 });
 
 partnernet.post('/relationships', async (c) => {
@@ -538,6 +611,11 @@ partnernet.patch('/relationships/:id', async (c) => {
   const rel: any = await c.env.DB.prepare(`SELECT * FROM partner_relationships WHERE id = ?`).bind(id).first();
   if (!rel) return c.json({ error: 'Not found' }, 404);
   if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  if (user.role === 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      relationship_id: id, route: 'PATCH /relationships/:id',
+    });
+  }
   // U8: an unanswered (or ended) request is nobody's to edit.
   if (rel.status !== 'accepted') return c.json({ error: 'Not an accepted relationship' }, 409);
 
@@ -551,7 +629,10 @@ partnernet.patch('/relationships/:id', async (c) => {
     updates.push('relationship_type = ?'); values.push(data.relationship_type);
   }
   let metaPatch: Record<string, unknown> | null = null;
+  let privateNoteTruncated = false;
   if (data?.private_note !== undefined) {
+    const full = data.private_note != null ? String(data.private_note).trim() : '';
+    privateNoteTruncated = full.length > NOTE_TOUCH_MAX;
     metaPatch = mergePrivateNote(rel.metadata, user.id, data.private_note);
   }
   if (data?.metadata && typeof data.metadata === 'object') {
@@ -568,7 +649,7 @@ partnernet.patch('/relationships/:id', async (c) => {
 
   await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'updated', ?)`)
     .bind(id, JSON.stringify({ by: user.id, fields: Object.keys(data) })).run();
-  return c.json({ ok: true });
+  return c.json({ ok: true, note_limit: NOTE_TOUCH_MAX, note_truncated: privateNoteTruncated });
 });
 
 partnernet.get('/relationships/:id/events', async (c) => {
@@ -578,6 +659,11 @@ partnernet.get('/relationships/:id/events', async (c) => {
   const rel: any = await c.env.DB.prepare(`SELECT partner_a_id, partner_b_id, status FROM partner_relationships WHERE id = ?`).bind(id).first();
   if (!rel) return c.json({ error: 'Not found' }, 404);
   if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  if (user.role === 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      relationship_id: id, route: 'GET /relationships/:id/events',
+    });
+  }
   // U8: before it is accepted the person named has agreed to nothing, so the
   // history is not theirs to read either; the author sees it as a request.
   if (rel.status !== 'accepted' && user.role !== 'admin') return c.json({ error: 'Not an accepted relationship' }, 409);
@@ -593,81 +679,131 @@ partnernet.get('/relationships/:id/events', async (c) => {
 // surfaces on the desk when it is due (no notification fan-out).
 // ---------------------------------------------------------------------------
 
-/** The relationship the caller is a party to, or the refusal. */
-async function ownRelationship(c: any, id: number): Promise<any> {
-  const user = await requireAuth(c);
+/** The relationship the caller is a party to, or the refusal. Auth already ran. */
+async function ownRelationship(c: any, user: { id: number; role?: string; email?: string }, id: number, route: string): Promise<any> {
   const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
   if (!rel) return { error: c.json({ error: 'Not found' }, 404) };
-  if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) {
-    return { error: c.json({ error: 'Forbidden' }, 403) };
+  const party = rel.partner_a_id === user.id || rel.partner_b_id === user.id;
+  if (!party && user.role !== 'admin') return { error: c.json({ error: 'Forbidden' }, 403) };
+  if (!party && user.role === 'admin') {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      relationship_id: rel.id, route,
+    });
   }
   // U8: interactions and reminders hang off an ACCEPTED relationship only.
   if (rel.status !== 'accepted') return { error: c.json({ error: 'Not an accepted relationship' }, 409) };
   return { rel, user };
 }
 
+function clipNote(raw: unknown, max: number): { text: string | null; truncated: boolean } {
+  if (raw == null) return { text: null, truncated: false };
+  const full = String(raw).trim();
+  if (!full) return { text: null, truncated: false };
+  return { text: full.slice(0, max), truncated: full.length > max };
+}
+
 partnernet.post('/relationships/:id/interactions', async (c) => {
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
-  const { rel, user, error } = await ownRelationship(c, id);
+  const { rel, error } = await ownRelationship(c, user, id, 'POST /relationships/:id/interactions');
   if (error) return error;
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const note = data?.note != null ? String(data.note).trim().slice(0, 2000) || null : null;
-  const kind = data?.kind != null ? String(data.kind).trim().slice(0, 60) || 'note' : 'note';
+  const noted = clipNote(data?.note, NOTE_TOUCH_MAX);
+  const kind = data?.kind != null ? String(data.kind).trim().slice(0, KIND_MAX) || 'note' : 'note';
   const hasExplicitDate = data?.interacted_at != null && String(data.interacted_at).trim() !== '';
-  const parsedTouch = hasExplicitDate ? new Date(String(data.interacted_at)) : null;
-  const touchDateOk = parsedTouch && !Number.isNaN(parsedTouch.getTime());
-  if (!note && !touchDateOk) {
+  let interactedAt = new Date().toISOString();
+  if (hasExplicitDate) {
+    const parsed = parseBookDate(data.interacted_at, { allowFuture: false });
+    if (!parsed.ok) return c.json({ error: parsed.code, message: dateError(parsed.code) }, 400);
+    interactedAt = parsed.dateOnly ? `${parsed.value}T00:00:00.000Z` : parsed.value;
+  } else if (!noted.text) {
     return c.json({
       error: 'touch_requires_substance',
       message: 'Say what happened or set when it happened — an empty touch must not move the cold flag.',
     }, 400);
   }
-  // The touch's date is supplied or is now — backdating is legitimate (logging
-  // last week's call), and the column is what the cold flag reads.
-  const interactedAt = touchDateOk
-    ? parsedTouch!.toISOString()
-    : new Date().toISOString();
   const uid = newUid();
   await c.env.DB.prepare(
-    'INSERT INTO partner_interactions (uid, relationship_id, kind, note, interacted_at, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(uid, rel.id, kind, note, interactedAt, user.id, new Date().toISOString()).run();
+    'INSERT INTO partner_interactions (uid, relationship_id, kind, note, interacted_at, recorded_by) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(uid, rel.id, kind, noted.text, interactedAt, user.id).run();
   const row = await c.env.DB.prepare('SELECT * FROM partner_interactions WHERE uid = ?').bind(uid).first();
-  return c.json({ item: row }, 201);
+  return c.json({
+    item: row,
+    note_limit: NOTE_TOUCH_MAX,
+    note_truncated: noted.truncated,
+  }, 201);
 });
 
 partnernet.get('/relationships/:id/interactions', async (c) => {
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
-  const { rel, error } = await ownRelationship(c, id);
+  const { rel, error } = await ownRelationship(c, user, id, 'GET /relationships/:id/interactions');
   if (error) return error;
-  const rows = await c.env.DB.prepare(
-    `SELECT i.*, u.name AS recorded_by_name FROM partner_interactions i
-      LEFT JOIN users u ON u.id = i.recorded_by
-     WHERE i.relationship_id = ? ORDER BY i.interacted_at DESC LIMIT 200`
-  ).bind(rel.id).all();
-  return c.json({ items: rows.results || [] });
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT i.*, u.name AS recorded_by_name FROM partner_interactions i
+        LEFT JOIN users u ON u.id = i.recorded_by
+       WHERE i.relationship_id = ? ORDER BY i.interacted_at DESC LIMIT 200`
+    ).bind(rel.id).all();
+    return c.json({ items: rows.results || [] });
+  } catch (e) {
+    console.error('partnernet interactions read failed', (e as Error).message);
+    return c.json({
+      error: 'interactions_unreadable',
+      message: 'The interaction log could not be read. This is not a claim that no touches exist.',
+    }, 503);
+  }
+});
+
+partnernet.post('/relationships/:id/interactions/:uid/void', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, error } = await ownRelationship(c, user, id, 'POST /relationships/:id/interactions/:uid/void');
+  if (error) return error;
+  const uid = c.req.param('uid');
+  const row: any = await c.env.DB.prepare(
+    'SELECT * FROM partner_interactions WHERE uid = ? AND relationship_id = ?'
+  ).bind(uid, rel.id).first();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  if (row.recorded_by !== user.id) return c.json({ error: 'Only the person who recorded a touch can void it' }, 403);
+  if (row.voided_at) return c.json({ error: 'already_void', message: 'This touch is already void.' }, 409);
+  await c.env.DB.prepare(
+    'UPDATE partner_interactions SET voided_at = ?, voided_by = ? WHERE id = ?'
+  ).bind(new Date().toISOString(), user.id, row.id).run();
+  const fresh = await c.env.DB.prepare('SELECT * FROM partner_interactions WHERE id = ?').bind(row.id).first();
+  return c.json({ item: fresh });
 });
 
 partnernet.post('/relationships/:id/reminders', async (c) => {
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
-  const { rel, user, error } = await ownRelationship(c, id);
+  const { rel, error } = await ownRelationship(c, user, id, 'POST /relationships/:id/reminders');
   if (error) return error;
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const remindAt = parseRemindAt(data?.remind_at);
-  if (!remindAt) {
-    return c.json({ error: 'reminder_date_required', message: 'A reminder is a date — say when to re-surface the tie.' }, 400);
+  const parsed = parseBookDate(data?.remind_at, { allowFuture: true });
+  if (!parsed.ok) {
+    const code = parsed.code === 'date_unparseable' && (data?.remind_at == null || String(data.remind_at).trim() === '')
+      ? 'reminder_date_required'
+      : parsed.code;
+    const message = code === 'reminder_date_required'
+      ? 'A reminder is a date — say when to re-surface the tie.'
+      : dateError(parsed.code);
+    return c.json({ error: code, message }, 400);
   }
-  const note = data?.note != null ? String(data.note).trim().slice(0, 500) || null : null;
+  const noted = clipNote(data?.note, NOTE_REMINDER_MAX);
   const uid = newUid();
+  const remindAt = parsed.dateOnly ? parsed.value : parsed.value;
   await c.env.DB.prepare(
-    'INSERT INTO partner_reminders (uid, relationship_id, remind_at, note, done, created_by, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
-  ).bind(uid, rel.id, remindAt.toISOString(), note, user.id, new Date().toISOString()).run();
+    'INSERT INTO partner_reminders (uid, relationship_id, remind_at, note, done, created_by) VALUES (?, ?, ?, ?, 0, ?)'
+  ).bind(uid, rel.id, remindAt, noted.text, user.id).run();
   const row = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE uid = ?').bind(uid).first();
-  return c.json({ item: row }, 201);
+  return c.json({ item: row, note_limit: NOTE_REMINDER_MAX, note_truncated: noted.truncated }, 201);
 });
 
   // The caller's reminders, due first. `?all=` includes the done ones.
@@ -703,6 +839,11 @@ partnernet.patch('/reminders/:uid', async (c) => {
   const rem: any = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE uid = ?').bind(c.req.param('uid')).first();
   if (!rem) return c.json({ error: 'Not found' }, 404);
   if (rem.created_by !== user.id && user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  if (user.role === 'admin' && rem.created_by !== user.id) {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      reminder_uid: rem.uid, route: 'PATCH /reminders/:uid',
+    });
+  }
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const done = data?.done === true ? 1 : 0;
