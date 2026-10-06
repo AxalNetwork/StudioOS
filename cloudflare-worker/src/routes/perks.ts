@@ -22,7 +22,7 @@
  * ADMIN
  *   GET   /admin/queue          everything awaiting review
  *   POST  /admin/:uid/review    approve / reject / pause
- *   POST  /admin/credits        grant credits to a user
+ *   POST  /admin/credits        a Super Admin's manual grant or deduction (D608)
  *
  * THE THREE PRICE KINDS, and why the credit one is the only interesting one:
  *
@@ -59,11 +59,11 @@
 import { Hono } from 'hono';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin, requireRole } from '../auth';
+import { requireAuth, requireAdmin, requireRole, requireSuperAdmin } from '../auth';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
-import { ruleReason } from '../services/creditGrants';
+import { manualAdjust, ruleReason } from '../services/creditGrants';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -776,27 +776,23 @@ r.get('/admin/queue', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D608 (#1308): a manual grant or deduction is the Super Admin's, with a typed
+// reason, and goes through the grant service like every other grant: one
+// ledger line, idempotent on its source, an audit row and an inbox notice.
 r.post('/admin/credits', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const b = await c.req.json().catch(() => ({} as any));
-    const userId = intOrNull(b?.user_id);
-    const delta = intOrNull(b?.delta);
-    if (!userId || !delta) return c.json({ error: 'user_id and a non-zero delta are required' }, 400);
-    const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
-      .bind(userId).first<{ id: number }>();
-    if (!target) return c.json({ error: 'not_found' }, 404);
-    // A grant must not take a balance negative — the ledger would then owe
-    // credits nobody can spend.
-    if (delta < 0 && (await balanceOf(c.env, userId)) + delta < 0) {
-      return c.json({ error: 'that would take the balance below zero' }, 400);
+    const out = await manualAdjust(c.env, {
+      userId: b?.user_id, delta: b?.delta, reason: b?.reason, note: b?.note, sourceRef: b?.source_ref,
+      actor: { id: admin.id, email: admin.email },
+    });
+    if (out.status === 'refused') {
+      const status = out.code === 'user_not_found' ? 404 : out.code === 'already_recorded' ? 409 : 400;
+      const extra = out.ledger_id !== undefined ? { ledger_id: out.ledger_id } : out.balance !== undefined ? { balance: out.balance } : {};
+      return refuse(c, status, { code: out.code, message: out.message, extra });
     }
-    const ref = str(b?.source_ref, 120) || `admin:${admin.id}:${nowIso()}`;
-    await c.env.DB.prepare(
-      `INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, note, created_at)
-       VALUES (?,?,?,?,?,?)`,
-    ).bind(userId, delta, delta > 0 ? 'grant' : 'admin_adjust', ref, str(b?.note, 500) || null, nowIso()).run();
-    return c.json({ ok: true, balance: await balanceOf(c.env, userId) });
+    return c.json({ ok: true, ...out });
   } catch (e) { return mapError(c, e); }
 });
 

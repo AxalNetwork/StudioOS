@@ -277,3 +277,92 @@ export async function revokeGrant(env: Env, args: {
     { grant_ledger_id: grant.id, ledger_id: ledgerId, credits });
   return { status: 'revoked', ledger_id: ledgerId, credits, notified };
 }
+
+/** D608: the marker `rule_key` a Super Admin's manual adjustment carries, so the grants list can show it. */
+export const MANUAL_RULE_KEY = 'manual';
+/** The size of one manual adjustment, either way; the same bound a rule's credits take (`admin_credit_rules.ts`). */
+export const MANUAL_DELTA_MAX = 100_000;
+/** The typed reason's floor, the one every Super Admin credit act shares (`CREDIT_REASON_MIN`). */
+export const MANUAL_REASON_MIN = 10;
+
+export type ManualRefusalCode =
+  | 'invalid_user' | 'invalid_delta' | 'reason_too_short' | 'note_too_long' | 'invalid_source_ref'
+  | 'user_not_found' | 'already_recorded' | 'would_overdraw';
+
+export type ManualResult =
+  | { status: 'recorded'; ledger_id: number; delta: number; source_ref: string; balance: number; notified: boolean }
+  | { status: 'refused'; code: ManualRefusalCode; message: string; ledger_id?: number; balance?: number };
+
+const balanceSql = 'SELECT COALESCE(SUM(delta), 0) AS b FROM perk_credit_ledger WHERE user_id = ?';
+
+/**
+ * D608 — a Super Admin's manual grant or deduction. The route checks the
+ * caller is the Super Admin; everything else is here:
+ *   - `delta` a non-zero whole number, at most MANUAL_DELTA_MAX either way;
+ *   - a typed `reason` of at least MANUAL_REASON_MIN characters, in the audit row;
+ *   - a `note` the member sees, at most 500 characters, refused rather than cut;
+ *   - IDEMPOTENT ON `source_ref`: a ref this user's ledger already holds, of any
+ *     kind, is `already_recorded` naming that row, never a raw index error;
+ *   - a deduction that would take the balance below zero is `would_overdraw`.
+ *     The balance test and the duplicate test are INSIDE the insert, so two
+ *     adjustments racing cannot both pass them.
+ * A grant is a `grant` row, a deduction an `admin_adjust` row; both carry
+ * `rule_key = 'manual'`. It is not a bounty, so it never counts toward the cap.
+ */
+export async function manualAdjust(env: Env, args: {
+  userId: unknown; delta: unknown; reason: unknown; note?: unknown; sourceRef?: unknown;
+  actor: { id: number; email: string };
+}): Promise<ManualResult> {
+  const refused = (code: ManualRefusalCode, message: string, extra: { ledger_id?: number; balance?: number } = {}): ManualResult =>
+    ({ status: 'refused', code, message, ...extra });
+  const userId = Number(args.userId);
+  if (!Number.isInteger(userId) || userId <= 0) return refused('invalid_user', 'Name the account by its user id.');
+  const delta = typeof args.delta === 'number' ? args.delta : NaN;
+  if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > MANUAL_DELTA_MAX) {
+    return refused('invalid_delta', `The change must be a whole number of credits, not zero, at most ${MANUAL_DELTA_MAX.toLocaleString('en-US')} either way.`);
+  }
+  const reason = clean(args.reason, NOTE_MAX);
+  if (reason.length < MANUAL_REASON_MIN) {
+    return refused('reason_too_short', `Say why — at least ${MANUAL_REASON_MIN} characters. It is recorded beside the change.`);
+  }
+  const rawNote = String(args.note ?? '').trim();
+  if (rawNote.length > NOTE_MAX) return refused('note_too_long', `The note the member sees is at most ${NOTE_MAX} characters.`);
+  const rawRef = String(args.sourceRef ?? '').trim();
+  if (rawRef.length > SOURCE_MAX) return refused('invalid_source_ref', `A source reference is at most ${SOURCE_MAX} characters.`);
+  const sourceRef = rawRef || `admin:${args.actor.id}:${new Date().toISOString()}`;
+
+  const user = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first<{ id: number }>();
+  if (!user) return refused('user_not_found', 'No such account.');
+
+  const kind = delta > 0 ? 'grant' : 'admin_adjust';
+  const note = rawNote || (delta > 0 ? 'Credits added by the Axal team' : 'Credits deducted by the Axal team');
+  const ins = await env.DB.prepare(
+    `INSERT OR IGNORE INTO perk_credit_ledger (user_id, delta, kind, source_ref, note, created_at, rule_key)
+     SELECT ?, ?, ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM perk_credit_ledger d WHERE d.user_id = ? AND d.source_ref = ?)
+        AND (SELECT COALESCE(SUM(b.delta), 0) FROM perk_credit_ledger b WHERE b.user_id = ?) + ? >= 0`,
+  ).bind(userId, delta, kind, sourceRef, note, new Date().toISOString(), MANUAL_RULE_KEY,
+    userId, sourceRef, userId, delta).run();
+
+  if (Number(ins?.meta?.changes ?? 0) !== 1) {
+    const prior = await env.DB.prepare(
+      'SELECT id FROM perk_credit_ledger WHERE user_id = ? AND source_ref = ? ORDER BY id LIMIT 1',
+    ).bind(userId, sourceRef).first<{ id: number }>();
+    if (prior) {
+      return refused('already_recorded', `This account's ledger already holds a line with the source ${sourceRef}, so nothing was recorded.`, { ledger_id: Number(prior.id) });
+    }
+    const bal = Number((await env.DB.prepare(balanceSql).bind(userId).first<{ b: number }>())?.b) || 0;
+    return refused('would_overdraw', `The account holds ${plural(bal)}; deducting ${plural(-delta)} would take it below zero, so nothing was recorded.`, { balance: bal });
+  }
+
+  const ledgerId = Number(ins.meta.last_row_id);
+  await logAdminAction(env, args.actor.id, args.actor.email, 'credit_manual_adjust', {
+    target_user_id: userId, delta, ledger_id: ledgerId, source_ref: sourceRef, reason, note,
+  });
+  const notified = await tell(env, userId, 'credit_manual_adjust',
+    delta > 0 ? `${plural(delta)} added to your account` : `${plural(-delta)} deducted from your account`,
+    `${note}. Credits have no cash value and cannot be transferred.`,
+    { ledger_id: ledgerId, delta });
+  const balance = Number((await env.DB.prepare(balanceSql).bind(userId).first<{ b: number }>())?.b) || 0;
+  return { status: 'recorded', ledger_id: ledgerId, delta, source_ref: sourceRef, balance, notified };
+}
