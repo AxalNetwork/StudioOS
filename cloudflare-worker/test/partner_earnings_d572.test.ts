@@ -37,13 +37,14 @@ function ddl(name: string): string {
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 1;
+const PLAIN_ADMIN = 2;
 const PARTNER = 20;
 const OTHER = 21;
 const REFERRED = 30;
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'activity_logs', 'admin_audit_log', 'referrals', 'commissions', 'payouts', 'commission_rules', 'partner_relationships', 'mi_pro_subscriptions']) {
+  for (const t of ['users', 'activity_logs', 'admin_audit_log', 'referrals', 'commissions', 'payouts', 'commission_rules', 'partner_relationships', 'mi_pro_subscriptions', 'super_admins']) {
     db.exec(ddl(t));
   }
   // The interaction log is post-cutoff: 338 creates it and 343 adds the void columns.
@@ -53,6 +54,8 @@ function freshDb() {
   db.exec(MIG('393_partner_earnings.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'admin@example.test');
+  u.run(PLAIN_ADMIN, 'admin', 'Pia Plain', 'plain@example.test');
+  db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(ADMIN);
   u.run(PARTNER, 'partner', 'Pat Partner', 'partner@example.test');
   u.run(OTHER, 'partner', 'Olu Other', 'other@example.test');
   u.run(REFERRED, 'investor', 'Rae Referred', 'referred@example.test');
@@ -76,7 +79,7 @@ function appFor(router: any) {
   const app = new Hono<any>();
   app.route('/', router);
   app.onError((err: any, c) => {
-    const status = ({ Unauthorized: 401, 'Admin required': 403 } as Record<string, 401 | 403>)[String(err?.message || '')];
+    const status = ({ Unauthorized: 401, 'Admin required': 403, 'Super admin required': 403 } as Record<string, 401 | 403>)[String(err?.message || '')];
     if (status) return c.json({ detail: err.message }, status);
     throw err;
   });
@@ -101,6 +104,7 @@ async function call(
 }
 
 const admin = { user: ADMIN, role: 'admin' };
+const plainAdmin = { user: PLAIN_ADMIN, role: 'admin' };
 const partner = { user: PARTNER, role: 'partner' };
 const statusOf = (db: InstanceType<typeof DatabaseSync>, id: number) =>
   (db.prepare('SELECT status, paid_at FROM commissions WHERE id = ?').get(id) as any);
@@ -335,4 +339,26 @@ test('an interaction carries an optional outcome', async () => {
   assert.equal(typed.body.error, 'invalid_outcome');
   const log = await call(db, partner, '/relationships/1/interactions', {}, pnet);
   assert.equal(log.body.items.find((i: any) => i.note === 'Intro call').outcome, 'Agreed to a second meeting');
+});
+
+// --- Part 2: the Super Admin gate ------------------------------------------------
+
+test('every global commission and payout route is the Super Admin\'s; a plain admin gets 403', async () => {
+  const db = freshDb();
+  accrue(db, [[1000, 'USD']]);
+  const req = await call(db, partner, '/payout/request', { method: 'POST', body: { amount_cents: 1000, payout_method: 'wire' } });
+  const routes: Array<[string, { method?: string; body?: any }]> = [
+    ['/admin/commissions', {}],
+    ['/admin/commission-rules', {}],
+    ['/admin/payouts', {}],
+    [`/admin/payouts/${req.body.id}/process`, { method: 'PATCH', body: { action: 'process' } }],
+    ['/admin/commission-rules/referral_kyc_approved', { method: 'PATCH', body: { active: false } }],
+  ];
+  for (const [path, init] of routes) {
+    assert.equal((await call(db, plainAdmin, path, init)).status, 403, `a plain admin reached ${init.method || 'GET'} ${path}`);
+  }
+  assert.equal((db.prepare('SELECT status FROM payouts WHERE id = ?').get(req.body.id) as any).status, 'requested', 'a refused admin moved nothing');
+  for (const [path, init] of routes) {
+    assert.equal((await call(db, admin, path, init)).status, 200, `the Super Admin was refused ${init.method || 'GET'} ${path}`);
+  }
 });

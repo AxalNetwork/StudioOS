@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { Card, Pill, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../../ui';
+import { Card, Pill, Skeleton, Unrecorded, Unreadable, RailFrame, WorkerRail } from '../../ui';
 import {
   EMPTY_RESOURCE, LIBRARY_SORTS, RESOURCE_CATEGORIES, countLabel, filterResources, formatDate,
   libraryCoverage, pageOf, resourceBody, resourceFacts, resourceKind, safeHref,
@@ -227,7 +227,22 @@ export default function WellbeingResourceLibrary() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]" data-testid="wellbeing-library">
+    <RailFrame
+      data-testid="wellbeing-library"
+      rail={(
+        <WorkerRail
+          workspace="Wellbeing library"
+          role="admin"
+          stance="The library, as stored"
+          note="Eadwyn reads back the counts on this page and changes nothing. It cannot draft a summary: the library keeps a link and a description, not the resource itself."
+          coverage={libraryCoverage(library.status === 'ready' ? library.rows : null)}
+          coverageNote="Counts of published resources by kind."
+          unavailable={[
+            ['A one-line summary', 'The library stores no content to summarise.'],
+          ]}
+        />
+      )}
+    >
       <section className="min-w-0 space-y-4" aria-label="Resource library">
         <PageHeader
           back={{ to: '/admin?tab=wellbeing', label: 'Wellbeing' }}
@@ -293,18 +308,6 @@ export default function WellbeingResourceLibrary() {
           </Card>
         </div>
       </section>
-      <WorkerRail
-        workspace="Wellbeing library"
-        role="admin"
-        className="self-start lg:sticky lg:top-4"
-        stance="The library, as stored"
-        note="Eadwyn reads back the counts on this page and changes nothing. It cannot draft a summary: the library keeps a link and a description, not the resource itself."
-        coverage={libraryCoverage(library.status === 'ready' ? library.rows : null)}
-        coverageNote="Counts of published resources by kind."
-        unavailable={[
-          ['A one-line summary', 'The library stores no content to summarise.'],
-        ]}
-      />
-    </div>
+    </RailFrame>
   );
 }

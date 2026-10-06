@@ -659,14 +659,19 @@ test('every method the screens call reaches its Worker route', async () => {
   };
   for (const p of ['/commissions/me', '/payouts/me', '/referral/code', '/referral/list']) assert.match(gate(NETWORK, 'network.get', p), /requireAuth/);
   assert.match(gate(NETWORK, 'network.post', '/payout/request'), /requireAuth/);
-  for (const p of ['/admin/commissions', '/admin/commission-rules', '/admin/payouts']) assert.match(gate(NETWORK, 'network.get', p), /requireAdmin/);
-  assert.match(gate(NETWORK, 'network.patch', '/admin/payouts/:id/process'), /requireAdmin/);
+  // RE-PINNED BY D572 part 2 (#1183): the global commission and payout
+  // routes read or change every user's money, so they are the Super Admin's,
+  // as the take-rate is. `requireAdmin` let any admin settle a colleague's payout.
+  for (const p of ['/admin/commissions', '/admin/commission-rules', '/admin/payouts']) assert.match(gate(NETWORK, 'network.get', p), /requireSuperAdmin/);
+  assert.match(gate(NETWORK, 'network.patch', '/admin/payouts/:id/process'), /requireSuperAdmin/);
   const platform = read('cloudflare-worker/src/routes/admin_platform.ts');
   assert.match(gate(platform, 'r.get', '/take-rate'), /requireSuperAdmin/);
   assert.match(gate(platform, 'r.put', '/take-rate'), /requireSuperAdmin/);
   assert.match(gate(read('cloudflare-worker/src/routes/introductions.ts'), 'introductions.get', '/credits'), /requireAuth/);
-  // No rule-writing route exists, which is why the rules table is read-only.
-  assert.doesNotMatch(NETWORK, /network\.(post|patch|put|delete)\('\/admin\/commission-rules/);
+  // RE-PINNED BY D572 (#1183): a rule can be edited now, by the Super Admin
+  // only, and there is still no route that creates or deletes one.
+  assert.match(gate(NETWORK, 'network.patch', '/admin/commission-rules/:key'), /requireSuperAdmin/);
+  assert.doesNotMatch(NETWORK, /network\.(post|put|delete)\('\/admin\/commission-rules/);
 });
 
 test('the five routes are mounted with the guards their routes need, and each has a door', () => {
