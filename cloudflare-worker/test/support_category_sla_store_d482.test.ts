@@ -32,7 +32,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
-const SECRET = 'synthetic-d482-test-secret-0123456789';
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const M333 = readFileSync('cloudflare-worker/sql/migrations/333_ticket_category_sla_tiers.sql', 'utf8');
 const HOLDER = 1, PLAIN_ADMIN = 2, FOUNDER = 3;
@@ -62,11 +62,11 @@ app.onError((e: any, c) => {
 
 async function call(db: DatabaseSync, who: number, method: string, path: string, body?: unknown) {
   const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await app.request(path, {
     method, headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-  }, { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any);
+  }, { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 
