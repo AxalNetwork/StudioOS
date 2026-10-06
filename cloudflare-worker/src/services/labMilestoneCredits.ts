@@ -23,10 +23,17 @@
  * made (Workers roll back code, not D1).
  *
  * GRADUATION. `lab:graduation` is paid once, when the certificate is issued,
- * and only to someone whose `incorporation_completed` was itself paid. That is
- * #1102 question 4's pick A (only milestones completed from launch day earn)
- * carried to the bonus: a certificate the backfill issues for a pre-launch
- * graduate pays nothing, because their graduation milestone never did.
+ * and only to someone whose `incorporation_completed` was itself paid.
+ *
+ * THE COHORT BACKFILL (#1102 question 4, A and B). Milestones completed from
+ * launch day pay as they are recorded (A); the current cohort is also paid
+ * once for what it completed before (B). `backfillLabCredits` walks each
+ * accepted member's recorded milestones, oldest first, through the same
+ * `creditLabMilestone`, then pays graduation to a member holding an issued
+ * certificate. Every grant keeps its `lab:<user_id>:<key>` source ref, so the
+ * ledger's idempotency key makes a second run, or a milestone already paid
+ * live, pay nothing. A grant a Super Admin revoked stays revoked: its row
+ * still holds the ref.
  *
  * NEVER THROWS. A grant is a side effect of recording a milestone or issuing a
  * certificate; neither may fail because the grant did (D111). Each call
@@ -144,4 +151,69 @@ export async function milestoneCreditsFor(env: Env, userId: number, role: string
       : accepted ? null : 'Credits are earned once you are accepted into a cohort.',
     milestones,
   };
+}
+
+export type LabBackfillResult = {
+  members: number;
+  milestones: number;
+  granted: number;
+  credits: number;
+  already_paid: number;
+  graduations: number;
+  skipped: Record<string, number>;
+  failed: number;
+  /** Pass as `after` to continue; null when every accepted member was walked. */
+  next_after: number | null;
+};
+
+/** Members per call. A member's walk is roughly a hundred D1 queries, and a Worker invocation allows 1,000. */
+export const BACKFILL_BATCH_DEFAULT = 5;
+export const BACKFILL_BATCH_MAX = 8;
+
+/**
+ * Pay the current cohort once for the milestones it completed before credits
+ * launched (#1102 Q4 B). Walks accepted members in user-id order after `after`,
+ * `limit` at a time. Reading who to walk throws, so a failed read is never
+ * reported as "nobody to pay"; one member's failed grant is counted in
+ * `failed` and the walk goes on.
+ */
+export async function backfillLabCredits(env: Env, opts: { after?: number; limit?: number } = {}): Promise<LabBackfillResult> {
+  const after = Number.isInteger(opts.after) && (opts.after as number) > 0 ? (opts.after as number) : 0;
+  const limit = Math.min(BACKFILL_BATCH_MAX, Math.max(1, Number.isInteger(opts.limit) ? (opts.limit as number) : BACKFILL_BATCH_DEFAULT));
+  const members = await env.DB.prepare(
+    `SELECT user_id FROM user_spinout_flags WHERE spinout_lab_admitted = 1 AND user_id > ? ORDER BY user_id LIMIT ?`,
+  ).bind(after, limit + 1).all<{ user_id: number }>();
+  const ids = (members.results || []).map((r) => Number(r.user_id));
+  const walk = ids.slice(0, limit);
+  const out: LabBackfillResult = {
+    members: walk.length, milestones: 0, granted: 0, credits: 0, already_paid: 0, graduations: 0,
+    skipped: {}, failed: 0, next_after: ids.length > limit ? walk[walk.length - 1] : null,
+  };
+  const tally = (r: LabCreditOutcome) => {
+    if (r.status === 'granted') { out.granted += 1; out.credits += Number(r.credits); }
+    else if (r.status === 'already_granted') out.already_paid += 1;
+    else if (r.status === 'skipped' && r.reason === 'error') out.failed += 1;
+    else {
+      const why = r.status === 'skipped' ? r.reason : r.code;
+      out.skipped[why] = (out.skipped[why] || 0) + 1;
+    }
+  };
+  for (const userId of walk) {
+    const done = await env.DB.prepare(
+      `SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ? ORDER BY completed_at, id`,
+    ).bind(userId).all<{ milestone_key: string }>();
+    for (const m of done.results || []) {
+      out.milestones += 1;
+      tally(await creditLabMilestone(env, userId, String(m.milestone_key)));
+    }
+    const cert = await env.DB.prepare(
+      `SELECT id FROM spinout_certificates WHERE user_id = ? AND status = 'issued' LIMIT 1`,
+    ).bind(userId).first<{ id: number }>();
+    if (cert) {
+      const g = await creditLabGraduation(env, userId);
+      if (g.status === 'granted') out.graduations += 1;
+      tally(g);
+    }
+  }
+  return out;
 }

@@ -6,6 +6,9 @@
  *   PUT  /:key                change one rule's credits, value or on/off
  *   GET  /grants              rule-based grants, newest first (?user_id=)
  *   POST /grants/:id/revoke   take one back
+ *   POST /lab-backfill        pay the current Lab cohort once for milestones
+ *                             completed before credits launched (D541,
+ *                             #1102 Q4 B); ?after= continues a walk
  *
  * Every route is the Super Admin's (`requireSuperAdmin`), and every write
  * carries a typed reason of at least ten characters — the floor the other
@@ -18,6 +21,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { CAP_RULE_KEY, isBountyRule, revokeGrant } from '../services/creditGrants';
+import { backfillLabCredits } from '../services/labMilestoneCredits';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
 
@@ -120,6 +124,26 @@ r.post('/grants/:id/revoke', async (c) => {
       });
     }
     return c.json(out);
+  } catch (e) { return mapError(c, e); }
+});
+
+// One walk of the cohort backfill. Idempotent on the ledger's source refs, so
+// running it again, or past a member paid live, pays nothing more. The answer
+// carries `next_after` until every accepted member has been walked.
+r.post('/lab-backfill', async (c) => {
+  try {
+    const admin = await requireSuperAdmin(c);
+    const body = await c.req.json().catch(() => ({}));
+    const reason = await readReason(c, body);
+    if (reason instanceof Response) return reason;
+    const after = Number.parseInt(String(c.req.query('after') ?? '0'), 10);
+    const limit = Number.parseInt(String(c.req.query('limit') ?? ''), 10);
+    const result = await backfillLabCredits(c.env, {
+      after: Number.isInteger(after) ? after : 0,
+      limit: Number.isInteger(limit) ? limit : undefined,
+    });
+    await logAdminAction(c.env, admin.id, admin.email, 'credit_lab_backfill', { after, ...result, reason });
+    return c.json({ ok: true, ...result });
   } catch (e) { return mapError(c, e); }
 });
 
