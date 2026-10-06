@@ -483,9 +483,9 @@ test('the Worker AI rail sits on every Learning page, with a literal accent, in 
   const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
   // The home, the three tiers of a page that waits on its store, the learner pages that read, the studio,
-  // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558) and
-  // the exercise and exam pages (D559).
-  assert.equal(mounts.length, 9);
+  // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
+  // the exercise and exam pages (D559) and the webinar page (D560).
+  assert.equal(mounts.length, 10);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
@@ -567,7 +567,8 @@ const WEBINAR = {
   ends_at: '2026-10-20T17:00:00Z', timezone: 'UTC', capacity: 50, registered_count: 12, join_url: 'https://meet.example.com/abc',
   recording_item_uid: null, status: 'published',
 };
-const webinar = (props) => html(h(WebinarPanel, { status: 'ready', webinar: WEBINAR, ...props }));
+// D560: times are drawn in the viewer's locale; pin one so the strings are stable.
+const webinar = (props) => html(h(WebinarPanel, { status: 'ready', webinar: WEBINAR, locale: 'en-GB', ...props }));
 
 test('WebinarPanel: upcoming, inside the join window, live, past with and without a recording, cancelled, full', () => {
   const upcoming = webinar({ now: START - 2 * 86400000, registration: null, icsHref: '/ics/w1' });
@@ -599,7 +600,9 @@ test('WebinarPanel: upcoming, inside the join window, live, past with and withou
   const full = linkOf(webinar({ now: START - 86400000, webinar: { ...WEBINAR, capacity: 12 }, onRegister: () => {} }), 'button-webinar-register');
   assert.equal(full.label, 'Full');
   assert.match(full.tag, /disabled=""/);
-  const uncounted = flat(webinar({ now: START - 86400000, webinar: { ...WEBINAR, registered_count: null, capacity: null, host_name: null } }));
+  // A capacity the route does not send. D560's `capacity: null` is "no seat limit"
+  // (learning_webinars_d560_ui.test.mjs), so the unsent field is `undefined` here.
+  const uncounted = flat(webinar({ now: START - 86400000, webinar: { ...WEBINAR, registered_count: null, capacity: undefined, host_name: null } }));
   assert.match(uncounted, /Host not recorded · capacity not recorded · registrations not recorded/);
   assert.doesNotMatch(uncounted, /\b0 registered/);
 });
@@ -754,6 +757,7 @@ test('every presentational component draws loading, empty, Not recorded and Unre
 });
 
 test('the pages use the app’s own styling: no font, no canvas colour, no new client method', () => {
+  const CLIENT_FILES = ['learningReads.js', 'studioActions.js', 'programReads.js', 'assessmentReads.js', 'webinarReads.js'];
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
   const files = readdirSync(dir).filter((f) => /\.(jsx?|js)$/.test(f));
   assert.ok(files.length >= 15, `only ${files.length} files read`);
@@ -762,10 +766,13 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
     assert.doesNotMatch(src, /fontFamily|font-family|Space Grotesk|Roboto Mono|font-mono/, `${f} sets a font`);
     assert.doesNotMatch(src, /#[0-9a-fA-F]{6}\b/, `${f} carries a canvas colour`);
     for (const m of src.matchAll(/style=\{\{([^}]*)\}\}/g)) assert.match(m[1], /^\s*width:/, `${f} styles something inline other than a bar's width`);
-    // Four files call the client: the member reads, the studio's reads and writes, and, in stage 3,
-    // the programs' (D558) and exercises and exams (D559).
-    if (!['learningReads.js', 'studioActions.js', 'programReads.js', 'assessmentReads.js'].includes(f)) assert.doesNotMatch(src, /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
+    // Five files call the client: the member reads, the studio's reads and writes, and, in stage 3,
+    // the programs' (D558), exercises and exams (D559) and webinars' (D560).
+    if (!CLIENT_FILES.includes(f)) assert.doesNotMatch(src, /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
   }
+  const webinarCalls = codeOnly(read('frontend/src/pages/learning/webinarReads.js'));
+  assert.match(webinarCalls, /import \{ learningApi \} from '\.\.\/\.\.\/lib\/api\/learning\.js';/);
+  assert.match(webinarCalls, /import \{ adminLearningApi \} from '\.\.\/\.\.\/lib\/api\/adminLearning\.js';/);
   // Each Learning client from its own module (D527), as research's pages import theirs:
   // `lib/api` re-exports them, but a named import through it is not what the guards read.
   const reads = codeOnly(read('frontend/src/pages/learning/learningReads.js'));
@@ -782,7 +789,7 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
   ]) {
     assert.ok(existsSync(resolve(ROOT, file)), `${file} is gone`);
     const declared = read(file);
-    const called = new Set([...(reads + studio + programs + assessments).matchAll(calls)].map((m) => m[1]));
+    const called = new Set([...(reads + studio + programs + assessments + webinarCalls).matchAll(calls)].map((m) => m[1]));
     assert.ok(called.size > 0, `the folder calls no ${client} method`);
     for (const method of called) assert.ok(declared.includes(`  ${method}: (`), `${client}.${method} is not a method ${file} declares`);
   }
