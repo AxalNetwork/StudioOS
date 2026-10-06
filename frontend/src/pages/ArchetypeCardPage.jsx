@@ -9,11 +9,13 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { api, assessment } from '../lib/api';
 import { reportError } from '../lib/log';
 import { Unreadable } from '../ui';
 import { XpBar } from '../components/profile/xpBar';
+import { openPaywall } from '../components/PaywallModal';
+import { archetypeLock, lockedLine, lockedPlanName } from '../lib/archetypeLock';
 import {
   archetypeAudienceFromRole,
   archetypeBanner,
@@ -80,11 +82,14 @@ export default function ArchetypeCardPage({ activeRole }) {
   useEffect(() => { readXp(); }, [readXp]);
 
   const fitData = fit.data;
-  const conv = fitData?.archetype && fitData.archetype.slug
+  // D594 — a locked reply carries no archetype; draw the canvas's locked state
+  // (board S12) and nothing else. No banner, no copy, nothing blurred behind.
+  const lock = archetypeLock(fitData, results.data);
+  const conv = !lock && fitData?.archetype && fitData.archetype.slug
     ? { slug: fitData.archetype.slug, label: fitData.archetype.label, confidence: fitData.archetype.confidence }
     : null;
   let latest = conv;
-  if (!latest) {
+  if (!latest && !lock) {
     const list = (Array.isArray(results.data?.results) ? results.data.results : []).filter((r) => r.archetype_slug);
     const g = list.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0] || null;
     if (g) latest = { slug: g.archetype_slug, label: g.archetype_label, confidence: g.confidence };
@@ -94,7 +99,7 @@ export default function ArchetypeCardPage({ activeRole }) {
     ? fitData.archetype_sex
     : 'both';
   const loading = !fit.data && !fit.error && !results.data && !results.error;
-  const failed = !latest && (fit.error || results.error) && !loading;
+  const failed = !lock && !latest && (fit.error || results.error) && !loading;
   const pct = latest ? confidencePct(latest.confidence) : null;
   const title = latest?.label || meta?.label || latest?.slug;
   const accent = meta?.accent || '#7c3aed';
@@ -147,7 +152,31 @@ export default function ArchetypeCardPage({ activeRole }) {
         </div>
       )}
 
-      {!loading && !failed && !latest && (
+      {lock && (
+        <div
+          className="acp-card bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 p-[22px]"
+          data-testid="archetype-page-locked"
+        >
+          <div className="acp-lbl text-[#a1a1aa] dark:text-gray-400">{archetypeLicenceTitle(audience)}</div>
+          <div
+            className="mt-[14px] rounded-[16px] border border-[#ece8f5] dark:border-[#d4cce8] bg-[#f8f7fb] dark:bg-[#ece8f5] flex flex-col items-center justify-center gap-[10px] px-[22px] py-[48px] text-center cursor-not-allowed"
+            aria-disabled="true"
+          >
+            <Lock size={22} className="text-[#71717a]" aria-hidden="true" />
+            <span className="text-[13.5px] leading-[1.5] text-[#52525b]" data-testid="archetype-locked-line">{lockedLine(lock)}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openPaywall(lock.tier || 'growth', lockedLine(lock))}
+            className="mt-4 rounded-lg bg-[#7c3aed] px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-[#6d28d9]"
+            data-testid="archetype-upgrade"
+          >
+            {lockedPlanName(lock) ? `See the ${lockedPlanName(lock)} plan` : 'See the plans'}
+          </button>
+        </div>
+      )}
+
+      {!loading && !failed && !lock && !latest && (
         <div className="acp-card border border-dashed border-[#e4e4e7] dark:border-gray-700 bg-[#fafafa] dark:bg-gray-800/40 p-[22px] text-[12.5px] text-[#71717a] dark:text-gray-400 leading-[1.5]">
           Answer a few archetype questions with Eadwyn to reveal your archetype.
         </div>
