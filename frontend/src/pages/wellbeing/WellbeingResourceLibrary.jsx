@@ -1,34 +1,35 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Trash2 } from 'lucide-react';
+import { Pencil, Search, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Card, Pill, RailFrame, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import {
   EMPTY_RESOURCE, LIBRARY_SORTS, RESOURCE_CATEGORIES, countLabel, filterResources, formatDate,
   libraryCoverage, pageOf, resourceBody, resourceFacts, resourceKind, safeHref,
+  RESOURCE_FORMATS, RESOURCE_TOPIC_MAX, draftOf, resourceFormat,
 } from './wellbeingModel';
-import { BTN, FIELD, PageHeader, CardHead, NotRecorded, Outcome } from './WellbeingParts';
+import { BTN, FIELD, PageHeader, CardHead, Outcome } from './WellbeingParts';
 
 /**
  * /admin/wellbeing/resources — the resource library (canvas `wba-library`, D570).
  *
- * The list members read under Wellbeing, with publish and delete. It reads
- * `GET /api/wellbeing/resources` (every row, any signed-in user) and writes
- * `POST /resources` and `DELETE /resources/:id`, both behind `requireAdmin`
- * (and, for a publish, the branch-suspension gate, D142/D303).
+ * The list members read under Wellbeing, with publish, edit and delete. It
+ * reads `GET /api/wellbeing/resources` (published rows for members; drafts too
+ * for an admin) and writes `POST /resources`, `PATCH /resources/:id` and
+ * `DELETE /resources/:id`, all behind `requireAdmin` (and, for anything that
+ * puts content in front of members, the branch-suspension gate, D142/D303).
  *
- * WHAT THE CANVAS DREW THAT THE LIBRARY DOES NOT STORE. A resource is a
- * category (one of five), a title, a description, a link, a region, two flags
- * and a sort order, plus the date it was added. So:
- *   - "Kind" is the route's category; the canvas's article / audio / video /
- *     link set does not exist.
- *   - Topic is not stored: its column reads "Not recorded", with the reason.
- *   - There is no draft state. Every saved resource is listed to members at
- *     once, so every row is Published and the editor has no "Save draft".
- *   - Nothing is ever edited, so the date is the one it was added.
- *   - A source is a link; nothing can be uploaded.
+ * WHAT A RESOURCE STORES (D574, migration 395). A category (one of five), a
+ * title, a description, a link, a region, two flags and a sort order, plus:
+ *   - Kind: the canvas's format, article / audio / video / link. A row added
+ *     before D574 has none, which reads "Not recorded".
+ *   - Topic: free text, at most 60 characters.
+ *   - State: a draft is listed to admins only; Publish lists it to members.
+ *   - The date: when it was last edited, or added if it never was.
+ *   - A source is a link; uploading a file comes in D574's next part.
  */
 
-const TOPIC_GAP = 'The library stores no topic.';
+const KIND_GAP = 'Added before the library recorded a format.';
+const TOPIC_GAP = 'No topic was set for this resource.';
 const PAGE_SIZE = 25;
 
 export function LibraryToolbar({ q, category, sort, onChange, count }) {
@@ -62,21 +63,31 @@ export function LibraryToolbar({ q, category, sort, onChange, count }) {
  */
 const TABLE_COLS = '@2xl:grid-cols-[6rem_minmax(0,2fr)_minmax(0,1fr)_5.5rem_6.5rem_4.5rem]';
 
-export function ResourceTable({ rows = [], confirmingId = null, busyId = null, onAskDelete, onConfirmDelete, onCancelDelete }) {
+function dateLine(r) {
+  const edited = formatDate(r.edited_at);
+  if (edited) return { label: 'Edited', date: edited };
+  return { label: 'Added', date: formatDate(r.created_at) || <Unrecorded reason="The row carries no date.">Not recorded</Unrecorded> };
+}
+
+export function ResourceTable({ rows = [], confirmingId = null, busyId = null, onAskDelete, onConfirmDelete, onCancelDelete, onEdit }) {
   return (
     <div className="@container" data-testid="table-library">
       <div className={`hidden gap-3 border-b border-axal-hairline pb-2 text-[10px] font-extrabold uppercase tracking-axal-label text-axal-muted @2xl:grid ${TABLE_COLS} dark:border-gray-700 dark:text-gray-400`}>
-        <span>Kind</span><span>Title</span><span>Topic</span><span>State</span><span>Added</span><span />
+        <span>Kind</span><span>Title</span><span>Topic</span><span>State</span><span>Date</span><span />
       </div>
       <ul className="divide-y divide-axal-hairline dark:divide-gray-800">
         {rows.map((r) => {
           const href = safeHref(r.url);
-          const facts = resourceFacts(r);
-          const added = formatDate(r.created_at) || <Unrecorded reason="The row carries no date.">Not recorded</Unrecorded>;
+          const facts = [resourceKind(r.category), ...resourceFacts(r)];
+          const when = dateLine(r);
+          const format = resourceFormat(r.kind);
+          const topic = String(r.topic ?? '').trim();
+          const draft = r.status === 'draft';
+          const state = <Pill tone={draft ? 'warn' : 'ok'}>{draft ? 'Draft' : 'Published'}</Pill>;
           return (
             <li key={r.id} className="py-2.5" data-testid={`resource-${r.id}`}>
               <div className={`grid grid-cols-[6rem_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 ${TABLE_COLS} @2xl:items-center`}>
-                <span><Pill tone={r.category === 'hotline' ? 'warn' : 'neutral'}>{resourceKind(r.category)}</Pill></span>
+                <span>{format ? <Pill tone="neutral">{format}</Pill> : <Unrecorded reason={KIND_GAP}>Not recorded</Unrecorded>}</span>
                 <span className="min-w-0">
                   {href ? (
                     <a href={href} target="_blank" rel="noopener noreferrer" className="block truncate text-[13px] font-semibold text-axal-ink hover:text-axal-violet dark:text-gray-100">{r.name}</a>
@@ -85,15 +96,18 @@ export function ResourceTable({ rows = [], confirmingId = null, busyId = null, o
                   )}
                   {facts.length > 0 && <span className="block text-xs text-axal-muted dark:text-gray-400">{facts.join(' · ')}</span>}
                   <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-axal-muted @2xl:hidden dark:text-gray-400">
-                    <span>Topic: <Unrecorded reason={TOPIC_GAP}>not recorded</Unrecorded></span>
-                    <Pill tone="ok">Published</Pill>
-                    <span className="tabular-nums">Added {added}</span>
+                    <span>Topic: {topic || <Unrecorded reason={TOPIC_GAP}>none</Unrecorded>}</span>
+                    {state}
+                    <span className="tabular-nums">{when.label} {when.date}</span>
                   </span>
                 </span>
-                <span className="hidden text-xs @2xl:block"><Unrecorded reason={TOPIC_GAP}>Not recorded</Unrecorded></span>
-                <span className="hidden @2xl:block"><Pill tone="ok">Published</Pill></span>
-                <span className="hidden text-xs tabular-nums text-axal-muted @2xl:block dark:text-gray-400">{added}</span>
-                <span className="text-right">
+                <span className="hidden text-xs @2xl:block">{topic || <Unrecorded reason={TOPIC_GAP}>None</Unrecorded>}</span>
+                <span className="hidden @2xl:block">{state}</span>
+                <span className="hidden text-xs tabular-nums text-axal-muted @2xl:block dark:text-gray-400">{when.label} {when.date}</span>
+                <span className="flex flex-col items-end gap-1">
+                  <button type="button" className={BTN.link} onClick={() => onEdit?.(r)} aria-label={`Edit ${r.name}`} data-testid={`button-edit-resource-${r.id}`}>
+                    <Pencil size={13} aria-hidden="true" /> Edit
+                  </button>
                   <button type="button" className={BTN.dangerLink} onClick={() => onAskDelete?.(r)} disabled={busyId === r.id} aria-label={`Delete ${r.name}`}>
                     <Trash2 size={13} aria-hidden="true" /> Delete
                   </button>
@@ -113,14 +127,15 @@ export function ResourceTable({ rows = [], confirmingId = null, busyId = null, o
         })}
       </ul>
       <p className="mt-2 text-xs text-axal-muted dark:text-gray-400">
-        {TOPIC_GAP} Every saved resource is listed to members, so each one is published; there are no drafts, and a resource is never edited, so its date is the day it was added.
+        Members see published resources only. A draft is listed here, to admins, until it is published.
       </p>
     </div>
   );
 }
 
-export function ResourceEditor({ draft, fields = {}, busy = false, error, ok, onChange, onPublish, titleRef }) {
+export function ResourceEditor({ draft, fields = {}, busy = false, error, ok, onChange, onPublish, onSaveDraft, onCancelEdit, titleRef }) {
   const set = (key, value) => onChange?.({ ...draft, [key]: value });
+  const editing = draft?.id != null;
   return (
     <form
       className="space-y-3"
@@ -133,16 +148,27 @@ export function ResourceEditor({ draft, fields = {}, busy = false, error, ok, on
         {fields.name && <p role="alert" className={FIELD.error}>{fields.name}</p>}
       </div>
       <div>
-        <label className={FIELD.label} htmlFor="res-kind">Kind</label>
-        <select id="res-kind" className={FIELD.input} value={draft.category} onChange={(e) => set('category', e.target.value)}>
-          <option value="">Choose a kind</option>
+        <label className={FIELD.label} htmlFor="res-category">Category</label>
+        <select id="res-category" className={FIELD.input} value={draft.category} onChange={(e) => set('category', e.target.value)}>
+          <option value="">Choose a category</option>
           {RESOURCE_CATEGORIES.map((c) => <option key={c} value={c}>{resourceKind(c)}</option>)}
         </select>
         {fields.category && <p role="alert" className={FIELD.error}>{fields.category}</p>}
       </div>
-      <div>
-        <span className={FIELD.label}>Topic</span>
-        <NotRecorded reason={TOPIC_GAP} />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={FIELD.label} htmlFor="res-kind">Kind</label>
+          <select id="res-kind" className={FIELD.input} value={draft.kind || ''} onChange={(e) => set('kind', e.target.value)}>
+            <option value="">Not set</option>
+            {RESOURCE_FORMATS.map((k) => <option key={k} value={k}>{resourceFormat(k)}</option>)}
+          </select>
+          {fields.kind && <p role="alert" className={FIELD.error}>{fields.kind}</p>}
+        </div>
+        <div>
+          <label className={FIELD.label} htmlFor="res-topic">Topic (optional)</label>
+          <input id="res-topic" className={FIELD.input} maxLength={RESOURCE_TOPIC_MAX} value={draft.topic || ''} onChange={(e) => set('topic', e.target.value)} />
+          {fields.topic && <p role="alert" className={FIELD.error}>{fields.topic}</p>}
+        </div>
       </div>
       <div>
         <label className={FIELD.label} htmlFor="res-url">Source link</label>
@@ -168,9 +194,11 @@ export function ResourceEditor({ draft, fields = {}, busy = false, error, ok, on
         <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={draft.is_24_7} onChange={(e) => set('is_24_7', e.target.checked)} /> Open 24/7</label>
         <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={draft.is_free} onChange={(e) => set('is_free', e.target.checked)} /> Free</label>
       </div>
-      <p className={FIELD.note}>Publishing lists it to every member at once. There is no draft to save first.</p>
+      <p className={FIELD.note}>Publishing lists it to every member at once. A draft is kept for admins until it is published.</p>
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" className={BTN.primary} disabled={busy} data-testid="button-publish-resource">{busy ? 'Publishing…' : 'Publish'}</button>
+        <button type="submit" className={BTN.primary} disabled={busy} data-testid="button-publish-resource">{busy ? 'Saving…' : 'Publish'}</button>
+        <button type="button" className={BTN.ghost} disabled={busy} onClick={() => onSaveDraft?.()} data-testid="button-draft-resource">Save draft</button>
+        {editing && <button type="button" className={BTN.ghost} disabled={busy} onClick={() => onCancelEdit?.()} data-testid="button-cancel-edit">Stop editing</button>}
         <Outcome ok={ok} error={error} testId="publish" />
       </div>
     </form>
@@ -201,18 +229,28 @@ export default function WellbeingResourceLibrary() {
 
   const changeView = (patch) => setView((v) => ({ ...v, ...patch, page: patch.page ?? 1 }));
 
-  const publishNow = async () => {
-    const parsed = resourceBody(draft);
+  // D574 — one save for both buttons: a new row is created, a row being
+  // edited is changed in place; `status` is the button pressed.
+  const save = async (status) => {
+    const parsed = resourceBody(draft, status);
     if (!parsed.ok) { setPublish({ busy: false, error: null, ok: null, fields: parsed.fields }); return; }
     setPublish({ busy: true, error: null, ok: null, fields: {} });
     try {
-      const row = await api.wellbeingResourceCreate(parsed.body);
-      setPublish({ busy: false, error: null, ok: `Published “${row?.name || parsed.body.name}”.`, fields: {} });
+      const row = draft.id != null
+        ? await api.wellbeingResourceUpdate(draft.id, parsed.body)
+        : await api.wellbeingResourceCreate(parsed.body);
+      const name = row?.name || parsed.body.name;
+      setPublish({ busy: false, error: null, ok: status === 'draft' ? `Saved “${name}” as a draft.` : `Published “${name}”.`, fields: {} });
       setDraft(EMPTY_RESOURCE);
       await load();
     } catch (e) {
-      setPublish({ busy: false, error: e?.message || 'The resource could not be published.', ok: null, fields: {} });
+      setPublish({ busy: false, error: e?.message || 'The resource could not be saved.', ok: null, fields: {} });
     }
+  };
+  const editRow = (row) => {
+    setDraft(draftOf(row));
+    setPublish({ busy: false, error: null, ok: null, fields: {} });
+    titleRef.current?.focus();
   };
 
   const confirmDelete = async (row) => {
@@ -263,7 +301,7 @@ export default function WellbeingResourceLibrary() {
         />
         <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <Card data-testid="card-library">
-            <CardHead title="Resources" meta={library.status === 'ready' ? `${library.rows.length} published` : null} />
+            <CardHead title="Resources" meta={library.status === 'ready' ? `${library.rows.filter((r) => r.status !== 'draft').length} published` : null} />
             {library.status === 'loading' ? <Skeleton.Table rows={4} cols={5} /> : library.status === 'unreadable' ? (
               <Unreadable what="The library" claim="This is not a sign that it is empty." onRetry={load} />
             ) : !library.rows.length ? (
@@ -281,6 +319,7 @@ export default function WellbeingResourceLibrary() {
                   onAskDelete={(row) => setRemoval({ confirmingId: row.id, busyId: null, error: null, ok: null })}
                   onConfirmDelete={confirmDelete}
                   onCancelDelete={() => setRemoval({ confirmingId: null, busyId: null, error: null, ok: null })}
+                  onEdit={editRow}
                 />
                 {page.pages > 1 && (
                   <div className="mt-3 flex items-center justify-end gap-2 text-xs" data-testid="library-pages">
@@ -294,7 +333,7 @@ export default function WellbeingResourceLibrary() {
             <div className="mt-2"><Outcome ok={removal.ok} error={removal.error} testId="delete" /></div>
           </Card>
           <Card data-testid="card-new-resource">
-            <CardHead title="New resource" />
+            <CardHead title={draft.id != null ? 'Edit resource' : 'New resource'} />
             <ResourceEditor
               draft={draft}
               fields={publish.fields}
@@ -302,7 +341,9 @@ export default function WellbeingResourceLibrary() {
               error={publish.error}
               ok={publish.ok}
               onChange={(next) => { setDraft(next); setPublish((p) => ({ ...p, ok: null })); }}
-              onPublish={publishNow}
+              onPublish={() => save('published')}
+              onSaveDraft={() => save('draft')}
+              onCancelEdit={() => { setDraft(EMPTY_RESOURCE); setPublish({ busy: false, error: null, ok: null, fields: {} }); }}
               titleRef={titleRef}
             />
           </Card>

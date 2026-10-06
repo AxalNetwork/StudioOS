@@ -40,6 +40,8 @@ function makeFakeDB({ failInsert = false } = {}) {
     'free_text_enc', 'tags_enc',
     'mood_plain', 'stress_plain', 'sleep_plain', 'energy_plain',
     'focus_plain', 'social_plain', 'free_text_plain', 'tags_plain',
+    // D574 — migration 395.
+    'support_enc', 'decisions_enc', 'support_plain', 'decisions_plain',
   ];
 
   function prepare(sql) {
@@ -64,6 +66,12 @@ function makeFakeDB({ failInsert = false } = {}) {
         return { success: true };
       },
       async first() {
+        // D574 — the week's existing row, the latest day in the span.
+        if (/WHERE user_id = \? AND day >= \? AND day <= \?/.test(sql)) {
+          const [user_id, from, to] = boundValues;
+          const days = Array.from(table.get(user_id)?.keys() ?? []).filter((d) => d >= from && d <= to).sort();
+          return days.length ? { day: days[days.length - 1] } : null;
+        }
         const m = /WHERE user_id = \? AND day = \?/.exec(sql);
         if (!m) throw new Error('unexpected SELECT in stub: ' + sql);
         const [user_id, day] = boundValues;
@@ -124,7 +132,7 @@ function todayUTC(): string { return new Date().toISOString().slice(0, 10); }
 `;
 
   const composed = `
-import { validateDailyBody, encryptOrFallback } from './wellbeing.helpers.mjs';
+import { weekSpan, validateDailyBody, encryptOrFallback } from './wellbeing.helpers.mjs';
 import { decryptInt, decryptString } from '../services/cryptoBox.mjs';
 ${utilSrc}
 ${deps}
