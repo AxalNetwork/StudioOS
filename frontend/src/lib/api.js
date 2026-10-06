@@ -17,6 +17,7 @@ export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
+export * from './api/section83bReview.js';
 // api-modules:end
 
 const BASE = '/api';
@@ -2878,7 +2879,12 @@ export const api = {
   // numbers instead of taking them as props. Distinguishes "no record" from
   // "$0": `recorded: false` means the usage table could not be read, and the
   // meter must say so rather than drawing an empty bar as a fact.
-  myAiSpend: () => request('/ai/me/spend'),
+  //
+  // D552 step 3 — with `surface`, one page's month and last run instead
+  // (`?surface=<the page's path, as the router records it>`).
+  myAiSpend: (surface) => request(surface == null
+    ? '/ai/me/spend'
+    : `/ai/me/spend?surface=${encodeURIComponent(surface)}`),
 
   // The router's own routing table and price list. The rail quotes a cost
   // before a run and shows a receipt after it; assistCost.js already forces
@@ -3469,6 +3475,7 @@ export const api = {
   // the GitHub mirror strip, in one read. Each part answers for itself: an
   // unreadable escalation board costs its own queue, never the tickets beside it.
   hqSupport: () => request('/admin/hq-support'),
+  hqSupportSetSlaTiers: (tiers) => request('/admin/hq-support/sla-tiers', { method: 'PUT', body: JSON.stringify({ tiers }) }),
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
   // client-side filter would quietly show a handful of rows and read as

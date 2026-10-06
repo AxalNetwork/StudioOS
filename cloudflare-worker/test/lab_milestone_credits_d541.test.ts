@@ -101,6 +101,13 @@ const quiet = async <T>(fn: () => Promise<T>) => {
   try { return await fn(); } finally { console.warn = w; console.error = e; console.log = l; }
 };
 
+/** D585: incorporation_completed is recorded only behind a paid order. */
+function paidOrder(db: any, who: number) {
+  db.exec(`CREATE TABLE IF NOT EXISTS incorporations (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, project_id INTEGER NOT NULL,
+    jurisdiction_id TEXT NOT NULL, company_name TEXT NOT NULL, amount_cents INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending_payment')`);
+  db.prepare(`INSERT INTO incorporations (user_id, project_id, jurisdiction_id, company_name, amount_cents, status) VALUES (?, 1, 'us_de_ccorp', 'Acme, Inc.', 50000, 'paid')`).run(who);
+}
+
 test('an accepted member is paid for a milestone once, however often it is recorded', async () => {
   const db = freshDb();
   const a = await quiet(() => record(db, MEMBER, 'okrs_created'));
@@ -182,6 +189,7 @@ test('the half that paid, granted again, reads already_granted; a grant written 
 
 test('graduation: the certificate issued on the last milestone pays the bonus once', async () => {
   const db = freshDb();
+  paidOrder(db, MEMBER);
   const r = await quiet(() => record(db, MEMBER, 'incorporation_completed'));
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.milestone_credit.credits, 400);
@@ -263,6 +271,7 @@ test('a certificate that was already issued pays no bonus when the milestone lan
   const pre = await quiet(() => call(certificates, db, 'POST', '/certificates', ADMIN,
     { user_id: MEMBER, public_name: 'Ada Member', conferred_at: '2026-10-04' }));
   assert.equal(pre.status, 201);
+  paidOrder(db, MEMBER);
   const r = await quiet(() => record(db, MEMBER, 'incorporation_completed'));
   assert.equal(r.body.milestone_credit.credits, 400);
   assert.equal(r.body.graduation_credit, null, 'issueOnGraduation found it already issued');

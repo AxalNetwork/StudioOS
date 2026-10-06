@@ -367,6 +367,12 @@ async function loadApplicantBlock(env: Env, userId: number) {
 
 spinoutLab.get('/state', async (c) => {
   const user = await requireAuth(c);
+  // D585: a founder paid while week 4 was still locked is recorded once it
+  // unlocks. Cheap when there is nothing to do (one indexed read); never throws.
+  try {
+    const { syncIncorporationMilestone } = await import('../services/labIncorporationMilestone');
+    await syncIncorporationMilestone(c.env, user.id);
+  } catch { /* the state read never fails on this */ }
   const sql = getSQL(c.env);
   const state = await getLabState(sql, user.id);
   // Task #7 — admission fields. Queried at the wire layer (not inside
@@ -820,6 +826,24 @@ spinoutLab.post('/milestone', async (c) => {
   // nothing. Two racing calls can both see it absent — the grant's own
   // source ref then pays it once.
   const trimmed = (key ?? '').trim();
+  // D585 (#1212): graduation's formation milestone comes only from the
+  // server's order status, at payment. A client call cannot record it; it
+  // asks the server to sync, which records it only behind a paid order.
+  if (trimmed === 'incorporation_completed') {
+    const { syncIncorporationMilestone } = await import('../services/labIncorporationMilestone');
+    const out = await syncIncorporationMilestone(c.env, user.id);
+    if (!out.recorded && out.reason === 'not_paid') {
+      return c.json({ error: 'incorporation_not_paid', message: 'This milestone is recorded when your incorporation order is paid.' }, 409);
+    }
+    const sqlS = getSQL(c.env);
+    const state = await getLabState(sqlS, user.id);
+    await sqlS.end();
+    return c.json({
+      ...state,
+      milestone_credit: out.recorded ? out.milestone_credit : null,
+      graduation_credit: out.recorded ? out.graduation_credit : null,
+    });
+  }
   let existedBefore = true;
   try {
     existedBefore = !!(await c.env.DB.prepare(

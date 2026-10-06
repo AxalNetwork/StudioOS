@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
+import { TICKET_CATEGORIES } from '../lib/ticketCategories';
 import {
   Plus, ChevronDown, RefreshCw, MessageSquare, Clock, ArrowLeft,
 } from 'lucide-react';
@@ -263,7 +264,7 @@ export default function TicketsPage() {
   const { id: routeTicketId } = useParams();
   const navigate = useNavigate();
   const [selectedTicketId, setSelectedTicketId] = useState(routeTicketId || null);
-  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', type: 'task' });
+  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', type: 'task', category: '' });
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(null);
   // Set from POST /api/tickets' own github_sync_status. Survives the form
@@ -347,6 +348,7 @@ export default function TicketsPage() {
 
   const submit = async () => {
     if (!form.title.trim()) return alert('Please enter a ticket title.');
+    if (!form.category) return alert('Please choose a category.');
     setSubmitting(true);
     try {
       // THE RESPONSE WAS DISCARDED HERE, AND THAT WAS THE WHOLE DEFECT ON
@@ -383,7 +385,7 @@ export default function TicketsPage() {
         setSyncNotice(null);
       }
       setShowForm(false);
-      setForm({ title: '', description: '', priority: 'medium', type: 'task' });
+      setForm({ title: '', description: '', priority: 'medium', type: 'task', category: '' });
       load();
     } catch (e) { alert(e.message); }
     finally { setSubmitting(false); }
@@ -457,6 +459,13 @@ export default function TicketsPage() {
                   <option value="task">Task</option>
                   <option value="bug">Bug</option>
                   <option value="feature">Feature</option>
+                </ModernSelect>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-600 mb-1 font-medium">Category</label>
+                <ModernSelect value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                  <option value="" disabled>Choose a category</option>
+                  {TICKET_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </ModernSelect>
               </div>
             </div>

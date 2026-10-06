@@ -19,8 +19,9 @@
  *     is recorded as `/research/ask`, because a server route cannot tell which
  *     button was pressed without trusting the request, and a fixed name is the
  *     point.
- *   - `GET /api/ai/me/spend?surface=` accepts exactly these names and refuses
- *     anything else, so this list is also that route's allow-list.
+ *   - `GET /api/ai/me/spend?surface=` accepts these names, and since D552
+ *     step 3 any other page path in the exact form the router records (the
+ *     rail's own pages), so the route never needs a second list.
  *
  * `cloudflare-worker/test/ai_surface_d552.test.ts` scans `src/` and fails when
  * a call into the router does not pass a `surface`, or passes a quoted string

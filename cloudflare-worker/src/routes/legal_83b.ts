@@ -12,6 +12,7 @@ import {
   type FilingPatchBody,
   type Section83bRow,
 } from '../services/section83b';
+import { canReadOperatorReview, projectById, readOperatorReview } from '../services/section83bOperatorReview';
 
 // ----------------------- 83(b) tracker (Task #13) ---------------------------
 // Worker parity for the 83(b) tracker (/spinout-lab/83b). The dev FastAPI backend
@@ -57,6 +58,19 @@ app.get('/83b/trackers', async (c) => {
   }
   await sql.end();
   return c.json({ trackers: (rows as Section83bRow[]).map(tracker83bDto) });
+});
+
+// D580 (#1207) — the startup's 83(b) operator, last review and next follow-up.
+// An admin reads any startup's; a founder reads their own (owner or co-founder);
+// anyone else is told the startup does not exist. HQ writes it
+// (routes/admin_83b_review.ts).
+app.get('/83b/operator-review', async (c) => {
+  const user = await requireAuth(c);
+  const project = await projectById(c.env, Number(c.req.query('project_id')));
+  if (!project || !(await canReadOperatorReview(c.env, user, project))) {
+    return c.json({ error: 'not_found' }, 404);
+  }
+  return c.json(await readOperatorReview(c.env, project.id));
 });
 
 app.post('/83b/trackers', async (c) => {

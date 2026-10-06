@@ -252,10 +252,25 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
    on, which is what the spend endpoint can answer. */
 .fwr-estimate { font-variant-numeric: tabular-nums; }
 /* The lasting "Last run" receipt in the Usage block (D401). The label sits on
-   its own line and says whose run it is — the account's, not the page's. */
+   its own line and says whose run it is: this page's since D552 step 3, the
+   account's on a page whose path the router does not record. */
 .fwr-last-run { font-variant-numeric: tabular-nums; }
-/* This page this month (D404): the page's own share of the account's month. */
+/* This page this month (D404, read directly since D552 step 3). */
 .fwr-page-spend { font-variant-numeric: tabular-nums; }
+/* The month split by page (D552 step 3). One row per page; this page's row is
+   marked so the reader can find it in the split. Long paths wrap rather than
+   widen the rail. */
+.fwr-by-page {
+  list-style: none; margin: 8px 0 0; padding: 0;
+  font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--fwr-muted);
+}
+.fwr-by-page li {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 3px 0; border-top: 1px solid var(--fwr-line);
+}
+.fwr-by-page li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.fwr-by-page li span:last-child { flex: none; }
+.fwr-by-page-current { color: var(--fwr-ink); font-weight: 800; }
 .fwr-last-run b {
   display: block; color: var(--fwr-ink);
   font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;

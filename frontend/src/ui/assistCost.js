@@ -81,7 +81,8 @@ export function spendMeter(spent = 0, cap = 0) {
  * The lasting "Last run" receipt, as one line (D401).
  *
  * `lastRun` is `/api/ai/me/spend`'s `last_run`: the caller's most recent row
- * in `ai_usage_logs`, on ANY surface, so the caller labels it account-wide.
+ * in `ai_usage_logs` — on any page from the account read, or on one page from
+ * the `?surface=` read (D552) — and the caller labels it for which it is.
  * `name` is the display name for its model, if the rail has one.
  *
  * The token half says exactly what the log can support:
@@ -117,23 +118,74 @@ export function lastRunReceipt(lastRun, name) {
 }
 
 /**
- * "This page this month" as one sentence, from `by_surface` (D404).
+ * The page paths the router records as a run's `surface` (D552 step 3).
  *
- * `unattributed` is the month's runs with no recorded page. They are said
- * rather than left out whenever this page shows none, because some of them
- * may be this page's own runs from before migration 319 — so "nothing from
- * this page" alone would be a claim the log cannot make.
+ * The same pattern as `SURFACE_RE` in `cloudflare-worker/src/services/
+ * aiRouter.ts`, which a test holds byte-for-byte equal. A path outside it is
+ * stored as NULL by the router and refused by `/api/ai/me/spend?surface=`, so
+ * the rail does not ask for it: that page's runs are among the month's
+ * unattributed ones, and the rail says so instead of showing a failed read.
  */
-export function pageSpendLine(bySurface, pagePath) {
-  const rows = Array.isArray(bySurface) ? bySurface : [];
-  const mine = rows.find((r) => r && r.surface === pagePath && pagePath);
-  const unattributed = rows.find((r) => r && r.surface == null);
-  if (mine && mine.calls > 0) {
-    return `This page this month: ${formatCost(mine.spend_usd)} over ${mine.calls} run${mine.calls === 1 ? '' : 's'}.`;
+export const RECORDABLE_PAGE_RE = /^\/[A-Za-z0-9/_.-]{0,159}$/;
+
+/** True when the router would record runs on `path` against that path. */
+export function isRecordablePage(path) {
+  return typeof path === 'string' && RECORDABLE_PAGE_RE.test(path);
+}
+
+/**
+ * "This page this month" as one sentence, from `/api/ai/me/spend?surface=`
+ * (D552). `report` is that read's body, already known to have `recorded: true`.
+ *
+ * "No run on this page yet" is said only when the page's last-run read came
+ * back with none; with runs before this month, or a last run that could not
+ * be read, "yet" would be a claim, so the month alone is said. Either way,
+ * the month's runs that carry no page are named beside a zero, for D404's
+ * reason: some may be this page's own, from before pages were recorded.
+ */
+export function pageMonthLine(report) {
+  const calls = Number(report?.month?.calls) || 0;
+  if (calls > 0) {
+    return `This page this month: ${formatCost(report.month.spend_usd)} over ${calls} run${calls === 1 ? '' : 's'}.`;
   }
-  if (unattributed && unattributed.calls > 0) {
-    const n = unattributed.calls;
-    return `No runs recorded from this page this month. ${n} run${n === 1 ? '' : 's'} this month carr${n === 1 ? 'ies' : 'y'} no page, either from before pages were recorded or from features that do not record one.`;
+  const never = report?.last_run_recorded === true && !report?.last_run;
+  let line = never ? 'No run on this page yet.' : 'No run on this page this month.';
+  const n = Number(report?.unattributed?.calls) || 0;
+  if (n > 0) {
+    line += ` ${n} run${n === 1 ? '' : 's'} this month carr${n === 1 ? 'ies' : 'y'} no page, either from before pages were recorded or from features that do not record one.`;
   }
-  return 'No runs from this page this month.';
+  return line;
+}
+
+/**
+ * The month split by page, from `by_surface` (D552 step 3): the `limit`
+ * costliest pages, this page among them wherever it ranks, and the remainder
+ * folded into one `rest` total so the rows still add up to the month.
+ *
+ * The NULL group is its own row, labelled as runs with no page, and never
+ * matches the current page.
+ */
+export function splitByPage(bySurface, pagePath, limit = 5) {
+  const all = (Array.isArray(bySurface) ? bySurface : [])
+    .filter((r) => r && Number(r.calls) > 0)
+    .map((r) => ({
+      surface: r.surface ?? null,
+      label: r.surface ?? 'No page recorded',
+      calls: Number(r.calls) || 0,
+      spend_usd: Number(r.spend_usd) || 0,
+      current: !!pagePath && r.surface === pagePath,
+    }))
+    .sort((a, b) => b.spend_usd - a.spend_usd || b.calls - a.calls);
+  const shown = all.slice(0, limit);
+  const mine = all.find((r) => r.current);
+  if (mine && !shown.includes(mine)) shown.splice(shown.length - 1, 1, mine);
+  const hidden = all.filter((r) => !shown.includes(r));
+  const rest = hidden.length
+    ? {
+      pages: hidden.length,
+      calls: hidden.reduce((n, r) => n + r.calls, 0),
+      spend_usd: hidden.reduce((n, r) => n + r.spend_usd, 0),
+    }
+    : null;
+  return { rows: shown, rest };
 }

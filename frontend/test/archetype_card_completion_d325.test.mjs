@@ -79,7 +79,7 @@ test('each sprite is described: the archetype and which of the pair it is', () =
 
 test('pairTiles drops a slot whose file is missing, so one sprite is one tile', () => {
   assert.deepEqual(pairTiles('fo_missionary'), ['f', 'm']);
-  assert.deepEqual(pairTiles('pt_embedded_operator', { m: true }), ['f'], 'pt_embedded_operator has no male file');
+  assert.deepEqual(pairTiles('pt_embedded_operator', { m: true }), ['f'], 'a male file that fails to load drops its slot');
   assert.deepEqual(pairTiles('fo_missionary', { f: true, m: true }), []);
   assert.deepEqual(pairTiles('not_a_slug'), []);
 });

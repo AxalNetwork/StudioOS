@@ -35,9 +35,9 @@
 //     is formable. Wyoming has no Worker jurisdiction and no catalog SKU, so
 //     for a Wyoming applicant the page stops at that line and says so.
 //   - `incorporation_completed` (which issues the graduation certificate) is
-//     still recorded at payment, now only once the server confirms the order.
-//     Whether it should wait for state approval is an owner decision, named on
-//     screen; the timing is not changed here.
+//     recorded at payment (the owner's answer A, D585), by the Worker: the
+//     payment webhook records it the moment the order is paid. This page
+//     never records it; after payment it re-reads the Lab state to show it.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -46,7 +46,6 @@ import {
   Download, Link2, Eye, Check, X, Shield, Info, PieChart, Handshake, Circle,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
-import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
@@ -361,7 +360,9 @@ export default function SpinoutLabIncorporatePage() {
       const mine = await refreshOrder();
       if (mine) {
         setOrder(mine); setAwaitingServer(false);
-        markMilestone(userRef.current, 'incorporation_completed');
+        // D585: the Worker recorded the milestone when the order was paid;
+        // read the Lab state again so the page shows it.
+        try { setState(await spinoutLab.state()); } catch (e) { reportError('spinout-inc:state-after-pay', e); }
       } else {
         setAwaitingServer(true);
       }
@@ -670,9 +671,9 @@ export default function SpinoutLabIncorporatePage() {
               <div className="text-[10.5px] text-gray-400 text-center mt-2">Payment unlocks document generation and filing. Not legal advice.</div>
             </>
           )}
-          {/* The open owner decision (D362): named, not decided here. */}
+          {/* D585: the moment that graduates the founder, as the owner set it. */}
           <p className="text-[10.5px] text-gray-400 mt-3 leading-relaxed" data-testid="milestone-decision">
-            Graduation's formation milestone is recorded when the server confirms payment. Whether it should wait for state approval instead is an owner decision not yet made.
+            Paying for incorporation completes the Lab's formation milestone and graduates you: the certificate is issued when the payment is confirmed, not when the state approves the filing.
           </p>
         </div>
       </div>

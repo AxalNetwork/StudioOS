@@ -13,3 +13,8 @@
 9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33
 # Synthetic test secret used only by the ticket creation/recovery fixture.
 4335b06fcf2231342ebe76e853398142586fdc03:cloudflare-worker/test/ticket_creation_recovery.test.ts:generic-api-key:12
+# D482 (#1022): the synthetic JWT signing string in the D482 route test's first
+# commit. It signs test tokens for an in-memory database only, and was never a
+# credential. The next commit uses the shared unit-test literal instead, so no
+# later commit carries this one. Scoped to the one finding, as D334's entry is.
+89a2c0c4e2688dfa936957274df2c715232accb0:cloudflare-worker/test/support_category_sla_store_d482.test.ts:generic-api-key:35

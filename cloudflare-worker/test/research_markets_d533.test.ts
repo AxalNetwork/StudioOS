@@ -58,6 +58,7 @@ function freshDb() {
   db.exec(tableFrom('037', 'market_intel_rows'));
   db.exec(tableFrom('037', 'market_intel_indexes'));
   db.exec(migration('379'));
+  db.exec(migration('404'));
 
   const m = db.prepare(`INSERT INTO research_market_directory (slug, name, company_count, source_name, source_boundary, as_of)
                         VALUES (?, ?, ?, 'Axal', 'supplied', '2026-09-30')`);
@@ -405,7 +406,7 @@ test('listed companies: the bands as the source sets them, largest cap first, un
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.items.map((i: any) => i.symbol), ['NU', 'TOST', 'DLO', 'ZZZ']);
   assert.deepEqual(Object.keys(r.body.items[0]).sort(), ['country', 'country_code', 'employee_band', 'exchange', 'market_cap_band',
-    'name', 'region', 'sector', 'symbol', 'updated_at']);
+    'name', 'region', 'sector', 'source', 'symbol', 'updated_at']);
   assert.deepEqual([r.body.items[0].country_code, r.body.items[3].country_code], ['BR', null]);
   assert.deepEqual([r.body.total, r.body.sort, r.body.as_of], [4, '-market_cap', '2026-10-02 00:00:00']);
   assert.deepEqual((await get(db, '/listed-companies?sort=market_cap')).body.items.map((i: any) => i.symbol), ['DLO', 'TOST', 'NU', 'ZZZ']);
@@ -437,4 +438,97 @@ test('listed companies: a failed read is a 503 refusal, never an empty list', as
   assert.equal(r.body.error, 'listed_companies_unreadable');
   assert.equal('items' in r.body, false);
   assert.doesNotMatch(JSON.stringify(r.body), /no such table/);
+});
+
+// --- D595 (#1230): SEC EDGAR's companies on the Public tab ---------------------------
+
+const EDGAR_URL = 'https://www.sec.gov/files/company_tickers_exchange.json';
+function seedEdgar(db: DatabaseSync) {
+  const e = db.prepare(`INSERT OR IGNORE INTO research_public_companies
+    (cik, name, ticker, exchange, other_listings, source_name, source_url, licence, as_of)
+    VALUES (?, ?, ?, ?, ?, 'SEC EDGAR', ?, 'US government work', ?)`);
+  e.run('0000000003', 'Charlie Corp', 'CHAR', 'NYSE', null, EDGAR_URL, '2026-10-05');
+  e.run('0000000001', 'Alpha Inc', 'ALPH', 'Nasdaq', '[["ALPHB","Nasdaq"]]', EDGAR_URL, '2026-10-06');
+  e.run('0000000002', 'bravo holdings', 'BRAV', null, null, EDGAR_URL, '2026-10-06');
+  e.run('0001691493', 'Nu Holdings Ltd.', 'NU', 'NYSE', null, EDGAR_URL, '2026-10-06');
+  e.run('0000000001', 'Alpha Duplicate', 'ALPX', 'NYSE', null, EDGAR_URL, '2026-10-06');
+}
+
+test('listed companies: EDGAR rows follow the signal companies, labelled, carrying only what EDGAR records', async () => {
+  const db = freshDb();
+  seedListed(db);
+  seedEdgar(db);
+  const r = await get(db, '/listed-companies?limit=100');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.items.map((i: any) => [i.source, i.symbol]), [
+    ['signal_companies', 'NU'], ['signal_companies', 'TOST'], ['signal_companies', 'DLO'], ['signal_companies', 'ZZZ'],
+    ['sec_edgar', 'ALPH'], ['sec_edgar', 'BRAV'], ['sec_edgar', 'CHAR'], ['sec_edgar', 'NU'],
+  ]);
+  assert.equal(r.body.total, 8, 'one row per CIK: the duplicate CIK was ignored');
+  const alpha = r.body.items[4];
+  assert.deepEqual(Object.keys(alpha).sort(), ['as_of', 'cik', 'exchange', 'licence', 'name', 'other_listings', 'source', 'source_url', 'symbol'],
+    'no band, country or sector EDGAR does not record');
+  assert.deepEqual([alpha.cik, alpha.name, alpha.source_url], ['0000000001', 'Alpha Inc', EDGAR_URL]);
+  assert.deepEqual(alpha.other_listings, [{ symbol: 'ALPHB', exchange: 'Nasdaq' }]);
+  assert.equal(r.body.items[5].exchange, null, 'an exchange EDGAR does not record stays null');
+  const [sig, edgar] = r.body.sources;
+  assert.deepEqual([sig.key, sig.total, edgar.key, edgar.label, edgar.total, edgar.store_total, edgar.as_of, edgar.url],
+    ['signal_companies', 4, 'sec_edgar', 'SEC EDGAR', 4, 4, '2026-10-06', EDGAR_URL]);
+  assert.equal(edgar.also_signal_companies, 1, 'NU is in both stores, and the response says so');
+  const desc = await get(db, '/listed-companies?sort=-name&source=sec_edgar');
+  assert.deepEqual(desc.body.items.map((i: any) => i.symbol), ['NU', 'CHAR', 'BRAV', 'ALPH']);
+});
+
+test('listed companies: one list paged on the Worker across both stores, totals from the stores', async () => {
+  const db = freshDb();
+  seedListed(db);
+  seedEdgar(db);
+  const p1 = await get(db, '/listed-companies?limit=3&offset=0');
+  const p2 = await get(db, '/listed-companies?limit=3&offset=3');
+  const p3 = await get(db, '/listed-companies?limit=3&offset=6');
+  assert.deepEqual(p1.body.items.map((i: any) => i.symbol), ['NU', 'TOST', 'DLO']);
+  assert.deepEqual(p2.body.items.map((i: any) => [i.source, i.symbol]), [['signal_companies', 'ZZZ'], ['sec_edgar', 'ALPH'], ['sec_edgar', 'BRAV']]);
+  assert.deepEqual(p3.body.items.map((i: any) => i.symbol), ['CHAR', 'NU']);
+  for (const p of [p1, p2, p3]) assert.equal(p.body.total, 8);
+  assert.deepEqual((await get(db, '/listed-companies?limit=3&offset=9')).body.items, []);
+  const only = await get(db, '/listed-companies?source=sec_edgar&limit=2&offset=1');
+  assert.deepEqual([only.body.items.map((i: any) => i.symbol), only.body.total, only.body.source], [['BRAV', 'CHAR'], 4, 'sec_edgar']);
+  const sig = await get(db, '/listed-companies?source=signal_companies');
+  assert.deepEqual([sig.body.total, sig.body.items.every((i: any) => i.source === 'signal_companies')], [4, true]);
+  assert.equal((await get(db, '/listed-companies?source=drop')).body.total, 8, 'an unknown source is both');
+});
+
+test('listed companies: search reaches EDGAR by name or ticker prefix; sector and country leave EDGAR out', async () => {
+  const db = freshDb();
+  seedListed(db);
+  seedEdgar(db);
+  assert.deepEqual((await get(db, '/listed-companies?q=bravo')).body.items.map((i: any) => i.symbol), ['BRAV']);
+  assert.deepEqual((await get(db, '/listed-companies?q=CHA')).body.items.map((i: any) => i.symbol), ['CHAR']);
+  const nu = await get(db, '/listed-companies?q=Nu');
+  assert.deepEqual(nu.body.items.map((i: any) => [i.source, i.symbol]), [['signal_companies', 'NU'], ['sec_edgar', 'NU']]);
+  assert.equal(nu.body.sources[1].store_total, 4, 'the store total is the whole store, whatever the search');
+  const fs = await get(db, `/listed-companies?sector=${encodeURIComponent('Financial Services')}`);
+  assert.deepEqual([fs.body.total, fs.body.sources[1].total], [2, 0], 'EDGAR records no sector');
+  assert.deepEqual((await get(db, '/listed-companies?country=US')).body.total, 1, 'EDGAR records no country');
+  const inj = await get(db, `/listed-companies?source=sec_edgar&q=${encodeURIComponent("' OR 1=1 --")}`);
+  assert.deepEqual([inj.status, inj.body.total], [200, 0], 'the text reached the SQL as text');
+});
+
+test('listed companies: an unreadable EDGAR store is a 503 refusal, never zero', async () => {
+  const db = freshDb();
+  seedListed(db);
+  db.exec('DROP TABLE research_public_companies');
+  const r = await get(db, '/listed-companies');
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error, 'listed_companies_unreadable');
+  assert.equal('items' in r.body, false);
+  assert.equal('total' in r.body, false);
+});
+
+test('listed companies: an empty EDGAR store reads zero from the store, not a failure', async () => {
+  const db = freshDb();
+  seedListed(db);
+  const r = await get(db, '/listed-companies');
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.body.total, r.body.sources[1].total, r.body.sources[1].store_total, r.body.sources[1].as_of], [4, 0, 0, null]);
 });

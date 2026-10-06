@@ -56,6 +56,7 @@ const MIGRATIONS = [
   '267_hq_escalation_sla_claim.sql',
   '273_ticket_sync_status.sql',
   '279_licence_kind.sql',
+  '333_ticket_category_sla_tiers.sql',
 ];
 const migration = (f: string) => read(`cloudflare-worker/sql/migrations/${f}`);
 
@@ -115,6 +116,7 @@ function freshDb(omit: Omit[] = []) {
     if (f.startsWith('259_') && omit.includes('hq_escalations')) continue;
     if (f.startsWith('267_') && omit.includes('hq_escalations')) continue;
     if (f.startsWith('273_') && (omit.includes('m273') || omit.includes('tickets'))) continue;
+    if (f.startsWith('333_') && omit.includes('tickets')) continue;
     db.exec(migration(f));
   }
   if (!omit.includes('hq_escalations')) db.exec(M296_HQ);
