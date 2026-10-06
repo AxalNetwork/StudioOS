@@ -4,7 +4,7 @@ import { BarChart3, Heart, Lock, AlertTriangle, ExternalLink, Star } from 'lucid
 import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
-import { Card, Pill, SectionLabel, Skeleton, Unrecorded, Unreadable, RailFrame, WorkerRail } from '../ui';
+import { Card, Pill, RailFrame, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
 import {
   CANVAS_SCORES, MORE_SCORES, TOPICS, MAX_TAGS, NOT_STORED_REASON, HISTORY_ROW_CAP,
   ROUTE_SCORE_KEYS, isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
@@ -616,7 +616,6 @@ export default function WellbeingPage() {
 
   return (
     <RailFrame
-      data-testid="wellbeing-home"
       rail={(
         <WorkerRail
           workspace="Wellbeing"
@@ -630,6 +629,7 @@ export default function WellbeingPage() {
           ]}
         />
       )}
+      data-testid="wellbeing-home"
     >
       <section className="min-w-0 space-y-4" aria-label="Wellbeing">
         <PageHeader

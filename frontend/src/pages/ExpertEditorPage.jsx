@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, CreditCard, Plus, RefreshCcw } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card, SectionLabel, Skeleton, Unrecorded, Unreadable, RailFrame, WorkerRail } from '../ui';
+import { Card, RailFrame, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
 import {
   EXPERT_MODALITIES, EXPERT_PRICING_MODELS, browserTimeZone, gridTimeZone, practiceCoverage,
   profileBody, profileDraft, splitBookings,
@@ -227,7 +227,6 @@ export default function ExpertEditorPage() {
 
   return (
     <RailFrame
-      data-testid="wellbeing-practice"
       rail={(
         <WorkerRail
           workspace="Wellbeing practice"
@@ -245,6 +244,7 @@ export default function ExpertEditorPage() {
           ]}
         />
       )}
+      data-testid="wellbeing-practice"
     >
       <section className="min-w-0 space-y-4" aria-label="My practice">
         <PageHeader

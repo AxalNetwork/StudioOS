@@ -217,7 +217,7 @@ export function LearningSubPage({ view, gated }) {
   const config = LEARNING_VIEWS[view];
   if (!config) return null;
   return (
-    <RailFrame data-testid={`learning-${view}`} rail={<SubPageRail tier={config.tier} gated={gated} />}>
+    <RailFrame rail={<SubPageRail tier={config.tier} gated={gated} />} data-testid={`learning-${view}`}>
       <div className="space-y-4">
         <LearningHeader title={config.title} sub={config.sub} back={config.back(params)} action={gated ? null : HEADER_ACTION[view]} />
         {gated ? <ComingSoonCard /> : <ViewBody view={view} />}

@@ -143,12 +143,15 @@ test('the article routes still resolve to the article pages, and Learning takes 
   assert.match(routeBlock(src, '/articles/mine'), /<Navigate to="\/articles\/draft" replace \/>/);
 });
 
-const MEMBERS = "guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <LearningPage";
+const MEMBERS = "guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage";
 
 test('every Learning route resolves, behind the narrowest guard it needs', () => {
   const src = readRoutesSource();
-  // The learner routes take the guard /my/events takes.
-  assert.match(routeBlock(src, '/my/events'), /guard\(\['admin', 'founder', 'partner', 'investor', 'advisor'\], <MyEventsPage \/>\)/);
+  // The learner routes admit every signed-in profile, `exploring` included. The
+  // menu's Learning item replaced Articles, and the article list answers every
+  // visitor, so a guard that turned `exploring` away took its articles.
+  assert.match(routeBlock(src, '/articles'), /element=\{<ArticlesPage \/>\}/);
+  assert.ok(MEMBERS.includes("'exploring'"));
   const ROUTES = [
     ['/learning', '/learning', 'home', MEMBERS],
     ['/learning/courses/seed-basics', '/learning/courses/:slug', 'course', MEMBERS],
