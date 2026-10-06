@@ -5,8 +5,7 @@
  * the client already declares.
  *
  *   A member (`routes/learning_programs.ts`, /api/learning):
- *     learningApi.myEnrolledPrograms → GET  /programs/enrolled
- *     learningApi.program            → GET  /programs/:uid        (contents and my completion)
+ *     learningApi.myEnrolledPrograms → GET  /programs/enrolled    (each with its contents and my completion)
  *     learningApi.programs           → GET  /programs             (open to self-enrolment)
  *     learningApi.enrolInProgram     → POST /programs/:uid/enrol
  *   An assigned admin, read-only (same file):
@@ -55,28 +54,21 @@ async function refusedOr(read) {
 // ── A member ─────────────────────────────────────────────────────────────────
 
 /**
- * The member's own programs, each with its contents and their completion.
- * `GET /programs/enrolled` sends neither, so each program is read on its own
- * (`GET /programs/:uid`), and one that fails is that program's "unreadable",
- * never the section's and never a zero.
+ * The member's own programs, each with its contents and their completion, in
+ * one read: `GET /programs/enrolled` carries both on every program (D558,
+ * #1251). When the route could not read the contents it says so on each
+ * program (`contents_error`), and each is then that program's "unreadable",
+ * never a zero; so is a program whose contents come in another shape.
  */
 export async function readMyPrograms() {
   const programs = listOf(await learningApi.myEnrolledPrograms(), 'programs', 'Your programs');
-  const rows = await Promise.all(programs.map(async (program) => {
-    try {
-      const reply = await learningApi.program(program.uid);
-      if (!Array.isArray(reply?.contents)) throw new Error('The program came back in a shape this page cannot read.');
-      return {
-        program,
-        detail: { status: 'ready', contents: reply.contents, completion: Array.isArray(reply.my_completion) ? reply.my_completion : null },
-      };
-    } catch (err) {
-      if (err?.status === 404) return { program, detail: { status: 'missing', message: err.message || '' } };
-      reportError('Learning:my-program', err);
-      return { program, detail: { status: 'unreadable', message: err?.message || '' } };
-    }
-  }));
-  return { rows };
+  return {
+    rows: programs.map(({ contents, my_completion: completion, contents_error: failed, ...program }) => (
+      !failed && Array.isArray(contents)
+        ? { program, detail: { status: 'ready', contents, completion: Array.isArray(completion) ? completion : null } }
+        : { program, detail: { status: 'unreadable', message: failed ? 'The route could not read what this program holds.' : 'The program came back in a shape this page cannot read.' } }
+    )),
+  };
 }
 
 /** Published programs open to self-enrolment, each with whether the member is already in it. */
