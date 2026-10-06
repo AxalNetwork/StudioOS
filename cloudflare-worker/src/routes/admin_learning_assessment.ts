@@ -24,6 +24,7 @@ import { refuse } from '../util/refusal';
 import { newUid } from './_t13t14t15_helpers';
 import { LEARNING_VISIBILITIES } from '../services/learningAccess';
 import { parseCorrect, parseOptions } from '../services/learningAssessment';
+import { completeAssessmentLessons } from '../services/learningCompletion';
 import {
   gate, record, text, bad, oneOf, wholeOrNull, guarded, NEXT_STATUS,
 } from './admin_learning';
@@ -134,9 +135,26 @@ r.post('/submissions/:uid/review', async (c) => {
     `UPDATE learning_exercise_submissions SET status = ?, feedback = ?, reviewer_id = ?, reviewed_at = ? WHERE uid = ?`,
   ).bind(status, feedback, admin.id, now(), uid).run();
   if (!Number(res?.meta?.changes ?? 0)) return refuse(c, 404, { code: 'not_found', message: 'No such submission.' });
-  const row = await c.env.DB.prepare('SELECT user_id FROM learning_exercise_submissions WHERE uid = ?').bind(uid).first<{ user_id: number }>();
+  const row = await c.env.DB.prepare(
+    'SELECT s.user_id, e.uid AS exercise_uid FROM learning_exercise_submissions s JOIN learning_exercises e ON e.id = s.exercise_id WHERE s.uid = ?',
+  ).bind(uid).first<{ user_id: number; exercise_uid: string }>();
   await record(c, admin, 'learning.submission.review', { uid, status, target_user_id: row?.user_id });
-  return c.json({ submission: await c.env.DB.prepare('SELECT uid, status, feedback, reviewed_at FROM learning_exercise_submissions WHERE uid = ?').bind(uid).first() });
+  // #1249: an accepted exercise completes its lessons for that member. Needs
+  // work records nothing. A failure to record is said, not hidden: the review
+  // itself stands.
+  let lesson_progress: unknown = null;
+  if (status === 'accepted' && row) {
+    try {
+      lesson_progress = await completeAssessmentLessons(c.env, Number(row.user_id), 'exercise', row.exercise_uid);
+    } catch (e) {
+      console.warn('[learning] lesson completion not recorded', (e as Error).message);
+      lesson_progress = { unrecorded: true };
+    }
+  }
+  return c.json({
+    submission: await c.env.DB.prepare('SELECT uid, status, feedback, reviewed_at FROM learning_exercise_submissions WHERE uid = ?').bind(uid).first(),
+    lesson_progress,
+  });
 });
 
 // ---- exams ----------------------------------------------------------------------------

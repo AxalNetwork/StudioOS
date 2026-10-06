@@ -38917,6 +38917,42 @@ the test and not in the component. The helper now takes the role as given.
 New test: `mobile_tab_bar_d425.test.mjs` (10 tests), which renders the bar and
 the sheet with `react-dom/server` under a `MemoryRouter`.
 
+## D426
+
+**The 16 displayed archetypes keep a complete profile, both banners, and copy
+that never calls Eadwyn's output advice.** The copy half of Profiling v2
+Session 14. The profiles and the 32 banners were already on main (D320, D325).
+This entry adds the guard that keeps them there. No migration, no route, no
+`api.js` method, and no new copy.
+
+**What the test holds** (`frontend/test/archetype_copy_d426.test.mjs`).
+- The engine's displayed set (`ARCHETYPES` in `archetypeScoring.ts`) is four
+  slugs each for founder, investor, partner and advisor, and coach shares the
+  advisor set. Those 16 keys are exactly the keys of `assessmentMeta.js`.
+- Each profile has a label, tagline, lean, summary, description, icon and
+  accent, five strengths, five blind spots and five matches. The label and
+  the tagline are the engine's own, and the complement chips are the match
+  labels.
+- Each slug has both cinematic banners, `{slug}.webp` and `{slug}_f.webp`.
+  The banner directory is those 32 files, and `archetypeBanner` resolves
+  each of them.
+- Scout and Steward stay on `ARCHETYPES_V2` only. They have no profile and
+  no banner. Adding copy for them waits on the owner's question (#982).
+- A string in a profile, on the archetype card, or in the profile band that
+  names Eadwyn does not contain the word advice. "Advice" about a human
+  operator stays, as D320 allowed: the Embedded Operator's line does not
+  name Eadwyn.
+
+**Left for later.** The values-compatibility half of Session 14 waits for
+the investor bank. It is not part of this entry.
+
+**Verification.** Five mutations, five caught, each with a non-zero exit and
+a `not ok` line, restored from a sha256-checked snapshot: a dropped strength,
+a missing banner, the card calling Eadwyn's output advice, the human-operator
+line losing that word, and coach no longer sharing the advisor array.
+`npm run build`, then `npm run test:drift`: EXIT=0. Frontend 4819 pass,
+worker 5686 pass, retention 121.
+
 ## D430
 
 **Recovery codes get a single writer: regenerating them and then re-pairing

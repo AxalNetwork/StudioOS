@@ -1,22 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Card, Pill, Unrecorded } from '../../ui';
-import { LearningEmpty, SectionCard, stateBlock } from './LearningStates';
+import { LearningEmpty, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
 import { NOT_LIVE, durationLabel, lessonKindLabel } from './learningModel';
 
 /**
  * One lesson, or one standalone video or reading: the media, a transcript
- * panel, previous and next, and "Mark complete" (D562; data D557, R2
- * streaming #1162).
+ * panel, previous and next, and "Mark complete" (D562; data D557, an uploaded
+ * file's stream D561).
  *
  * Props, in the routes' shapes:
  *   status      'loading' | 'unreadable' | 'unrecorded' | 'ready'
  *   lesson      { uid, title, kind } from the course, or null for a standalone item
  *   item        `GET /api/learning/items/:uid`'s item: { uid, kind, title, body,
- *               duration_seconds, thumbnail_url, transcript, video_source, video_url }
- *   video       how it plays (`videoPlayback`): { src, embed } to play, or
+ *               duration_seconds, thumbnail_url, transcript, video_source, video_url,
+ *               video_stream_url }
+ *   video       how it plays (`videoPlayback`): { src, embed: true } in the
+ *               platform's iframe, { src, embed: false } in the browser's own
+ *               player (an uploaded file, from its gated stream route), or
  *               { reason, href } for a video this page cannot play
  *   transcript  the item's transcript text, or null when none is recorded
  *   moduleTitle, position ("5 of 12"), prev and next { title, href } or null
@@ -124,16 +127,51 @@ function VideoArea({ video, item, length }) {
       />
     );
   }
+  // Keyed by its file, so a failure shown for one video never stands in for the next.
   return (
-    <video
-      controls
-      preload="metadata"
+    <StreamPlayer
+      key={video.src}
       src={video.src}
       poster={item?.thumbnail_url || undefined}
+      label={`${item?.title || 'Lesson video'}${length ? `, ${length}` : ''}`}
+    />
+  );
+}
+
+/**
+ * An uploaded file in the browser's own player (D561). `src` is the item's
+ * gated stream route: the session cookie authenticates it and it answers
+ * Range, so the player fetches the metadata first and seeks without loading
+ * the whole file. A load that fails (the route refused it, the file is gone,
+ * the connection dropped) is "Unreadable", never a black box that never
+ * starts, and Retry loads it again.
+ */
+function StreamPlayer({ src, poster, label }) {
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  if (failed) return <VideoUnreadable onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} />;
+  return (
+    <video
+      key={attempt}
+      controls
+      playsInline
+      preload="metadata"
+      src={src}
+      poster={poster}
+      onError={() => setFailed(true)}
       className="aspect-video w-full bg-black"
-      aria-label={`${item?.title || 'Lesson video'}${length ? `, ${length}` : ''}`}
+      aria-label={label}
       data-testid="lesson-video"
     />
+  );
+}
+
+/** The player's place when its file could not be loaded: a failed read, not an absent video. */
+export function VideoUnreadable({ onRetry }) {
+  return (
+    <div className="flex aspect-video w-full items-center justify-center bg-axal-ground px-6 dark:bg-gray-950" data-testid="lesson-video-unreadable">
+      <LearningUnreadable what="The video" claim="This is not a claim that the video is gone." onRetry={onRetry} />
+    </div>
   );
 }
 

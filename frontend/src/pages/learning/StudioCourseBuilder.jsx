@@ -18,13 +18,15 @@ const LEVELS = [['', 'Not set'], ['intro', 'Intro'], ['intermediate', 'Intermedi
  *
  *   course    the tree from `GET /courses/:uid`, or null to create one
  *   items     the studio's item list, for choosing what a lesson opens
+ *   exercises, exams  the studio's exercise and exam lists (D559's `GET
+ *             /exercises` and `GET /exams`), for an exercise or exam lesson
  *   handlers  { onSaveCourse, onStatus, onAddModule, onRenameModule,
  *               onMoveModule, onDeleteModule, onAddLesson, onUpdateLesson,
  *               onMoveLesson, onDeleteLesson }, each resolving true once the
  *               write went through
  *   busy, error ({ where, message }: the route's own words), notice
  */
-export default function StudioCourseBuilder({ course, items = [], handlers, busy = false, error = null, notice = '' }) {
+export default function StudioCourseBuilder({ course, items = [], exercises = [], exams = [], handlers, busy = false, error = null, notice = '' }) {
   const [form, setForm] = useState(() => courseForm(course));
   const ids = useId();
   const id = (name) => `${ids}-${name}`;
@@ -61,7 +63,7 @@ export default function StudioCourseBuilder({ course, items = [], handlers, busy
               {LEVELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </Field>
-          <Field id={id('visibility')} label="Visibility" hint="Program-only content stays hidden from members until programs are live.">
+          <Field id={id('visibility')} label="Visibility" hint="Program-only content reaches a member once they are enrolled in a published program that holds it.">
             <select id={id('visibility')} className={INPUT} value={form.visibility} onChange={set('visibility')}>
               <option value="open">Open to every member</option>
               <option value="program">Program-only</option>
@@ -90,12 +92,12 @@ export default function StudioCourseBuilder({ course, items = [], handlers, busy
           <div className="sm:col-span-2"><ErrorLine error={error?.where === 'course' ? error.message : ''} /></div>
         </form>
       </SectionCard>
-      {course && <ModulesEditor course={course} items={items} handlers={handlers} busy={busy} error={error?.where === 'modules' ? error.message : ''} />}
+      {course && <ModulesEditor course={course} items={items} exercises={exercises} exams={exams} handlers={handlers} busy={busy} error={error?.where === 'modules' ? error.message : ''} />}
     </div>
   );
 }
 
-function ModulesEditor({ course, items, handlers, busy, error }) {
+function ModulesEditor({ course, items, exercises, exams, handlers, busy, error }) {
   const modules = byPosition(course.modules);
   const [title, setTitle] = useState('');
   return (
@@ -104,7 +106,7 @@ function ModulesEditor({ course, items, handlers, busy, error }) {
       {modules.length === 0 && <p className="text-[12.5px] text-axal-muted dark:text-gray-400">No module yet. Add the first one below.</p>}
       <ol className="space-y-3">
         {modules.map((m, i) => (
-          <ModuleBlock key={m.uid} course={course} module={m} index={i} count={modules.length} items={items} handlers={handlers} busy={busy} />
+          <ModuleBlock key={m.uid} course={course} module={m} index={i} count={modules.length} items={items} exercises={exercises} exams={exams} handlers={handlers} busy={busy} />
         ))}
       </ol>
       <form
@@ -119,7 +121,7 @@ function ModulesEditor({ course, items, handlers, busy, error }) {
   );
 }
 
-function ModuleBlock({ module, index, count, items, handlers, busy }) {
+function ModuleBlock({ module, index, count, items, exercises, exams, handlers, busy }) {
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(module.title || '');
   const [confirming, setConfirming] = useState(false);
@@ -160,14 +162,14 @@ function ModuleBlock({ module, index, count, items, handlers, busy }) {
       )}
       <ol className="mt-2 space-y-1.5">
         {lessons.map((l, i) => (
-          <LessonLine key={l.uid} lesson={l} index={i} count={lessons.length} module={module} items={items} handlers={handlers} busy={busy} />
+          <LessonLine key={l.uid} lesson={l} index={i} count={lessons.length} module={module} items={items} exercises={exercises} exams={exams} handlers={handlers} busy={busy} />
         ))}
       </ol>
       {lessons.length === 0 && <p className="mt-1 text-[12px] text-axal-muted dark:text-gray-400">No lesson in this module yet.</p>}
       <div className="mt-2">
         {adding ? (
           <LessonForm
-            items={items} busy={busy} submitLabel="Add lesson"
+            items={items} exercises={exercises} exams={exams} busy={busy} submitLabel="Add lesson"
             onSubmit={(form) => handlers.onAddLesson(module.uid, form).then((ok) => { if (ok) setAdding(false); })}
             onCancel={() => setAdding(false)}
           />
@@ -179,21 +181,25 @@ function ModuleBlock({ module, index, count, items, handlers, busy }) {
   );
 }
 
-/** What a lesson opens, in words: the item's title, or the event's slug. */
-export function refLabel(lesson, items) {
+/** What a lesson opens, in words: the item's title, the exercise's or exam's, or the event's slug. */
+export function refLabel(lesson, items, exercises = [], exams = []) {
   if (lesson.kind === 'webinar') return `the event “${lesson.ref_uid}”`;
+  if (lesson.kind === 'exercise' || lesson.kind === 'exam') {
+    const found = ((lesson.kind === 'exam' ? exams : exercises) || []).find((x) => x.uid === lesson.ref_uid);
+    return found ? `the ${lesson.kind} “${found.title}”` : `${lesson.kind} ${lesson.ref_uid}`;
+  }
   const item = (items || []).find((i) => i.uid === lesson.ref_uid);
   return item ? `“${item.title}”` : `item ${lesson.ref_uid}`;
 }
 
-function LessonLine({ lesson, index, count, module, items, handlers, busy }) {
+function LessonLine({ lesson, index, count, module, items, exercises, exams, handlers, busy }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   if (editing) {
     return (
       <li>
         <LessonForm
-          lesson={lesson} items={items} busy={busy} submitLabel="Save lesson"
+          lesson={lesson} items={items} exercises={exercises} exams={exams} busy={busy} submitLabel="Save lesson"
           onSubmit={(form) => handlers.onUpdateLesson(lesson.uid, form).then((ok) => { if (ok) setEditing(false); })}
           onCancel={() => setEditing(false)}
         />
@@ -206,7 +212,7 @@ function LessonLine({ lesson, index, count, module, items, handlers, busy }) {
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Pill tone="neutral">{lessonKindLabel(lesson.kind)}</Pill>
           <span className="font-medium text-axal-ink dark:text-gray-100">{lesson.title}</span>
-          <span className="text-axal-faint dark:text-gray-500">opens {refLabel(lesson, items)}</span>
+          <span className="text-axal-faint dark:text-gray-500">opens {refLabel(lesson, items, exercises, exams)}</span>
           {lesson.required === false && <Pill tone="neutral">Optional</Pill>}
         </span>
         <span className="flex flex-wrap gap-1">
@@ -232,11 +238,11 @@ function LessonLine({ lesson, index, count, module, items, handlers, busy }) {
 /**
  * Add a lesson, or edit one. A lesson's kind is set when it is added and never
  * changed (`PATCH /lessons/:uid` takes none). A video or reading lesson opens
- * an item of that kind; a webinar lesson opens an event, by its slug (D557).
- * Exercises and exams are refused by the route until #1160, so they are drawn
- * disabled here rather than offered and refused.
+ * an item of that kind; a webinar lesson opens an event, by its slug (D557);
+ * an exercise or exam lesson opens one of its own kind, by its uid (D559's
+ * `checkRef`). Archived ones are left out of every choice.
  */
-export function LessonForm({ lesson, items, onSubmit, onCancel, busy, submitLabel }) {
+export function LessonForm({ lesson, items, exercises = [], exams = [], onSubmit, onCancel, busy, submitLabel }) {
   const [form, setForm] = useState(() => ({
     kind: lesson?.kind || 'video',
     title: lesson?.title || '',
@@ -245,7 +251,10 @@ export function LessonForm({ lesson, items, onSubmit, onCancel, busy, submitLabe
   }));
   const ids = useId();
   const id = (name) => `${ids}-${name}`;
-  const choices = (items || []).filter((i) => i.kind === form.kind && (i.status !== 'archived' || i.uid === form.ref_uid));
+  const assessment = form.kind === 'exercise' || form.kind === 'exam';
+  const choices = assessment
+    ? ((form.kind === 'exam' ? exams : exercises) || []).filter((x) => x.status !== 'archived' || x.uid === form.ref_uid)
+    : (items || []).filter((i) => i.kind === form.kind && (i.status !== 'archived' || i.uid === form.ref_uid));
   return (
     <form
       className="grid gap-2 rounded-axal-md bg-axal-ground p-3 sm:grid-cols-2 dark:bg-gray-950/40"
@@ -258,8 +267,8 @@ export function LessonForm({ lesson, items, onSubmit, onCancel, busy, submitLabe
             <option value="video">Video</option>
             <option value="reading">Reading</option>
             <option value="webinar">Webinar (an event)</option>
-            <option value="exercise" disabled>Exercise (not built yet)</option>
-            <option value="exam" disabled>Exam (not built yet)</option>
+            <option value="exercise">Exercise</option>
+            <option value="exam">Exam</option>
           </select>
         </Field>
       )}
@@ -271,7 +280,11 @@ export function LessonForm({ lesson, items, onSubmit, onCancel, busy, submitLabe
           <input id={id('ref')} className={INPUT} value={form.ref_uid} onChange={(e) => setForm((f) => ({ ...f, ref_uid: e.target.value }))} />
         </Field>
       ) : (
-        <Field id={id('ref')} label={form.kind === 'reading' ? 'Reading' : 'Video'}>
+        <Field
+          id={id('ref')}
+          label={assessment ? lessonKindLabel(form.kind) : form.kind === 'reading' ? 'Reading' : 'Video'}
+          hint={assessment ? `Members open a draft ${form.kind} only once it is published.` : undefined}
+        >
           <select id={id('ref')} className={INPUT} value={form.ref_uid} onChange={(e) => setForm((f) => ({ ...f, ref_uid: e.target.value }))} data-testid="select-lesson-ref">
             <option value="">Choose one</option>
             {choices.map((i) => (
@@ -284,6 +297,11 @@ export function LessonForm({ lesson, items, onSubmit, onCancel, busy, submitLabe
         <input type="checkbox" checked={form.required} onChange={(e) => setForm((f) => ({ ...f, required: e.target.checked }))} className="accent-violet-600" />
         Required: it counts toward the course’s progress
       </label>
+      {assessment && (
+        <p className="text-[11.5px] text-axal-faint sm:col-span-2 dark:text-gray-500" data-testid="text-lesson-assessment-progress">
+          Nothing marks an exercise or exam lesson complete yet, so a required one keeps the course below 100%.
+        </p>
+      )}
       <div className="flex gap-2 sm:col-span-2">
         <button type="submit" className={PRIMARY} disabled={busy}>{submitLabel}</button>
         <button type="button" className={SECONDARY} onClick={onCancel}>Cancel</button>
