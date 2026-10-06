@@ -45,6 +45,7 @@ import ViewAsBranchContext from '../src/contexts/ViewAsBranchContext.js';
 import HqAnalyticsPage, {
   UNAVAILABLE as HQ_UNAVAILABLE, seriesColor, isSuspended, seriesFlag, notRecordedReason,
   hqAnalyticsCoverage, SeriesLegend, ActiveAccountsCard, HqKpis,
+  approvalAgeKpi, approvalAgeRows, HqApprovalAgeCard,
 } from '../src/pages/hq/HqAnalyticsPage.jsx';
 import BranchAnalytics, {
   UNAVAILABLE as BRANCH_UNAVAILABLE, ageTone, pushedLabel, BranchKpis, BranchChartCard, ApprovalAgeList,
@@ -203,6 +204,33 @@ const NR_SOURCE = (() => {
 const SERVER_NR = [...NR_SOURCE.matchAll(/key: '([a-z_]+)',\s*label: '([^']+)'/g)]
   .map(([, key, label]) => ({ key, label, reason: `Reason for ${key}, as the server wrote it.` }));
 
+/**
+ * D483 — `approval_age` as `approvalAgeAcrossBranches` sends it: HQ's own
+ * referral line, one branch that answered, one that did not, the median over
+ * every decision, escalations on HQ's clock, and the two untimeable queues.
+ */
+const HQ_AGE = {
+  window_days: 30,
+  referrals: {
+    rows: [
+      { code: 'hq', label: 'HQ-held', kind: 'hq', available: true, median_hours: 2, n: 1 },
+      { code: 'de', label: 'Axal VC DACH', kind: 'branch', available: false, unreadable: true, median_hours: null, n: 0,
+        reason: 'BRANCH_DE.approvalAges timed out.' },
+      { code: 'fr', label: 'Axal VC France', kind: 'branch', available: true, median_hours: 30.5, n: 3 },
+    ],
+    all: { median_hours: 26, n: 4, lines_counted: 2, lines_total: 3 },
+    coverage: { total: 2, answered: 1, complete: false, unreadable: ['de'] },
+  },
+  escalations: {
+    available: true, median_hours: 50, n: 2, by_branch: [{ code: 'fr', label: 'Axal VC France', median_hours: 50, n: 2 }],
+    clock: 'HQ\'s at both ends: the raise is stamped when it reaches HQ, the answer when HQ decides.',
+  },
+  not_recorded: [
+    { key: 'lp_applications', label: 'LP applications', reason: '`reviewed_at` is rewritten on every status change.' },
+    { key: 'cohort_applications', label: 'Cohort applications', reason: '`decided_at` is overwritten when an application is decided again.' },
+  ],
+};
+
 function hqPayload(over = {}) {
   return {
     range: '8w',
@@ -214,6 +242,7 @@ function hqPayload(over = {}) {
     source: 'Analytics Engine: one row per metered request from every Worker, read here as counts.',
     registry: { readable: true, count: 3 },
     active_accounts: hqActive(),
+    approval_age: HQ_AGE,
     not_recorded: SERVER_NR,
     foot: 'Aggregates, never records.',
     ...over,
@@ -491,7 +520,7 @@ test('H15 · the chart\'s notes appear exactly when the read calls for them', ()
   assert.match(noisy, /data-testid="h15-registry-unreadable"/);
 });
 
-test('H15 · the KPI row: one figure with its week and its lines, three absences with the server\'s reasons', () => {
+test('H15 · the KPI row: two figures, and two absences with the server\'s reasons', () => {
   const data = hqPayload();
   const kpi = data.active_accounts.kpi;
   assert.equal(kpi.value, 26, 'hq 11 + fr 7 + es 5 + xx 3 for the week of 14 Sep');
@@ -501,7 +530,11 @@ test('H15 · the KPI row: one figure with its week and its lines, three absences
   assert.equal(kpiValue(markup, 'h15-kpi-active'), '26');
   assert.match(active, /Week of 14 Sep · 4 of 5 lines recorded/);
   assert.match(markup, /data-testid="h15-kpi-delta-reason"/, 'the missing delta says why');
-  for (const [key, id] of [['activation', 'activation'], ['approval_age', 'approval-age'], ['token_spend', 'token-spend']]) {
+  // D483 — approval age is a figure now, with what it covers on its note.
+  assert.equal(kpiValue(markup, 'h15-kpi-approval-age'), '26h');
+  assert.match(renderedText(slice(markup, 'data-testid="h15-kpi-approval-age"', 'days')),
+    /Referrals · 4 decided across 2 of 3 lines in the last 30 days/);
+  for (const [key, id] of [['activation', 'activation'], ['token_spend', 'token-spend']]) {
     const tile = slice(markup, `data-testid="h15-kpi-${id}"`, 'below.');
     assert.ok(tile.includes(`title="Reason for ${key}, as the server wrote it."`), `${key}'s reason rides on its figure`);
     assert.equal(kpiValue(markup, `h15-kpi-${id}`), 'Not recorded', `${key}'s figure itself reads Not recorded`);
@@ -531,8 +564,8 @@ test('H15 · what the rail reads back is only what loaded; a failed read gives n
   assert.ok(!unreadRegistry.some((l) => l.includes('in the registry')), 'an unread registry is not counted');
 });
 
-test('H15 · the rail\'s four absences are exactly the four the server names', () => {
-  assert.equal(SERVER_NR.length, 4, 'admin_hq.ts names four absences');
+test('H15 · the rail\'s absences are exactly the ones the server names', () => {
+  assert.equal(SERVER_NR.length, 3, 'admin_hq.ts names three absences since D483 measured approval age');
   const PAGE = codeOnly(read('frontend/src/pages/hq/HqAnalyticsPage.jsx'));
   assert.equal(count(PAGE, 'unavailable={['), 1, 'the rail\'s absences are one literal array, not a variable');
   const at = PAGE.indexOf('unavailable={[');
@@ -543,6 +576,61 @@ test('H15 · the rail\'s four absences are exactly the four the server names', (
   assert.equal(notRecordedReason(hqPayload(), 'token_spend'), 'Reason for token_spend, as the server wrote it.');
   assert.match(notRecordedReason(null, 'activation'), /Reading/);
   assert.match(notRecordedReason(HQ_UNAVAILABLE, 'activation'), /could not be read/);
+});
+
+test('H15 · approval age: the median across lines, each line, escalations, and the untimeable queues (D483)', () => {
+  const markup = html(HqApprovalAgeCard, { age: HQ_AGE });
+  assert.match(markup, /data-testid="h15-approval-age"/);
+  assert.deepEqual(attrs(markup, 'data-queue'),
+    ['referrals-hq', 'referrals-de', 'referrals-fr', 'escalations', 'lp_applications', 'cohort_applications']);
+  const line = (key) => renderedText(slice(markup, `data-queue="${key}"`, '</li>'));
+  assert.match(line('referrals-hq'), /^Referrals · HQ-held2h\s*over 1 decision in the last 30 days/);
+  assert.match(line('referrals-fr'), /Referrals · Axal VC France30\.5h\s*over 3 decisions/);
+  assert.match(line('referrals-de'), /Unreadable.*BRANCH_DE\.approvalAges timed out\./,
+    'a line that did not answer is Unreadable with its reason, never a zero');
+  assert.deepEqual(attrs(slice(markup, 'data-queue="referrals-de"', '</li>'), 'data-state'), ['unreadable']);
+  assert.match(line('escalations'), /50h\s*over 2 decisions/);
+  assert.match(line('escalations'), /The clock is HQ's at both ends/);
+  for (const key of ['lp_applications', 'cohort_applications']) {
+    assert.match(line(key), /Not recorded/);
+    assert.deepEqual(attrs(slice(markup, `data-queue="${key}"`, '</li>'), 'data-state'), ['not_recorded']);
+  }
+  assert.match(renderedText(slice(markup, 'data-testid="h15-age-across"', '</p>')),
+    /Referrals across lines: 26h · Referrals · 4 decided across 2 of 3 lines/);
+  assert.match(renderedText(slice(markup, 'data-testid="h15-age-coverage"', '</p>')), /1 of 2 branches answered/);
+  assert.equal(count(markup, 'data-testid="h15-age-row"'), 6, 'HQ\'s rows carry HQ\'s prefix');
+  assert.doesNotMatch(markup, /s15-/, 'no branch-page id leaks onto HQ\'s card');
+  // The page draws the card once its read lands (static render cannot run the read).
+  assert.match(codeOnly(read('frontend/src/pages/hq/HqAnalyticsPage.jsx')),
+    /\{ready && data\.approval_age && <HqApprovalAgeCard age=\{data\.approval_age\} \/>\}/);
+  const whole = html(HqApprovalAgeCard, { age: { ...HQ_AGE, referrals: { ...HQ_AGE.referrals, coverage: { total: 2, answered: 2, complete: true, unreadable: [] } } } });
+  assert.doesNotMatch(whole, /h15-age-coverage/, 'a complete read says nothing about coverage');
+});
+
+test('H15 · approval age KPI: a figure, "None decided", or a stated absence — never a zero', () => {
+  assert.deepEqual(approvalAgeKpi(HQ_AGE), {
+    value: '26h', reason: null, note: 'Referrals · 4 decided across 2 of 3 lines in the last 30 days',
+  });
+  const none = approvalAgeKpi({ ...HQ_AGE, referrals: { ...HQ_AGE.referrals,
+    all: { median_hours: null, n: 0, lines_counted: 2, lines_total: 3, reason: 'No referral was decided.' } } });
+  assert.equal(none.value, 'None decided');
+  assert.equal(none.reason, 'No referral was decided.');
+  const cut = approvalAgeKpi({ ...HQ_AGE, referrals: { ...HQ_AGE.referrals,
+    all: { median_hours: null, n: 2005, lines_counted: 2, lines_total: 3, reason: 'A line sent a cut list.' } } });
+  assert.equal(cut.value, null, 'decisions that were cut are not "None decided"');
+  assert.equal(cut.reason, 'A line sent a cut list.');
+  const unread = approvalAgeKpi({ ...HQ_AGE, referrals: { ...HQ_AGE.referrals,
+    all: { median_hours: null, n: 0, lines_counted: 0, lines_total: 3, reason: 'No line could be read.' } } });
+  assert.equal(unread.value, null, 'no line read is not "None decided"');
+  assert.equal(approvalAgeKpi(undefined).value, null);
+  const tile = html(HqKpis, { data: hqPayload({ approval_age: { ...HQ_AGE, referrals: { ...HQ_AGE.referrals,
+    all: { median_hours: null, n: 0, lines_counted: 0, lines_total: 3, reason: 'No line could be read.' } } } }) });
+  assert.equal(kpiValue(tile, 'h15-kpi-approval-age'), 'Not recorded');
+  assert.ok(slice(tile, 'data-testid="h15-kpi-approval-age"', '</div></div>').includes('title="No line could be read."'));
+  assert.equal(approvalAgeRows(HQ_AGE).length, 6);
+  assert.ok(hqAnalyticsCoverage(hqPayload()).includes('Median referral decision: 26h over 4 decisions on 2 of 3 lines'));
+  assert.ok(!hqAnalyticsCoverage(hqPayload({ approval_age: { ...HQ_AGE, referrals: { ...HQ_AGE.referrals,
+    all: { median_hours: null, n: 0, lines_counted: 0, lines_total: 3 } } } })).some((l) => l.startsWith('Median referral')));
 });
 
 test('H15 · under the view-as overlay the page says it is not narrowed; without it, says nothing', () => {

@@ -6,7 +6,9 @@ import { reportError } from '../../lib/log';
 import { weekLabel } from '../../lib/weeklyChart';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import WeeklyLineChart from '../../components/WeeklyLineChart';
-import { RangePills, KpiTile, NotRecordedCard, rangeLabel, signed } from '../../components/AnalyticsParts';
+import {
+  RangePills, KpiTile, NotRecordedCard, ApprovalAgeList, rangeLabel, signed,
+} from '../../components/AnalyticsParts';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
@@ -17,10 +19,12 @@ import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * and five cards; the platform records what one of them needs. Active accounts
  * per week comes from Analytics Engine, the dataset every Worker writes a row
  * to per metered request, read by `GET /api/admin/hq/analytics` under the SAME
- * definition a branch's own page uses (`services/activeAccounts.ts`). The
- * other four — activation, approval age, token spend, revenue by stream — are
- * named by the server with their reasons, and each is drawn as a stated
- * absence rather than a chart of nothing.
+ * definition a branch's own page uses (`services/activeAccounts.ts`). Median
+ * approval age is measured too since D483: referrals on every line, from the
+ * read each branch's own page uses, and escalations on HQ's own clock. The
+ * other three — activation, token spend, revenue by stream — are named by the
+ * server with their reasons, and each is drawn as a stated absence rather
+ * than a chart of nothing.
  *
  * A MISSING WEEK IS NEVER A ZERO. The server sends `null` for a week it cannot
  * count and says why (a capped read, a week older than the store, a line with
@@ -126,7 +130,70 @@ export function hqAnalyticsCoverage(data) {
     aa && aa.available && aa.sampled ? 'The metrics store sampled this read, so each count is a floor' : null,
     aa && aa.available && !aa.complete ? `The read stopped at its cap of ${aa.row_cap} rows` : null,
     ready && data.registry && data.registry.readable ? `${data.registry.count} branches in the registry` : null,
+    ready && data.approval_age && data.approval_age.referrals.all.median_hours !== null
+      ? `Median referral decision: ${data.approval_age.referrals.all.median_hours}h over ${data.approval_age.referrals.all.n} decisions on ${data.approval_age.referrals.all.lines_counted} of ${data.approval_age.referrals.all.lines_total} lines`
+      : null,
   ].filter(Boolean);
+}
+
+/**
+ * D483 — the approval-age KPI: the median over every referral decision on the
+ * lines that answered, or why there is none. `null` value with a reason when
+ * no figure stands; "None decided" when lines were read and decided nothing.
+ */
+export function approvalAgeKpi(age) {
+  const all = age ? age.referrals.all : null;
+  if (!all) return { value: null, reason: 'The analytics did not carry an approval age.', note: null };
+  const note = `Referrals · ${all.n} decided across ${all.lines_counted} of ${all.lines_total} lines in the last ${age.window_days} days`;
+  if (all.median_hours !== null) return { value: `${all.median_hours}h`, reason: null, note };
+  if (all.lines_counted > 0 && all.n === 0) return { value: 'None decided', reason: all.reason, note };
+  return { value: null, reason: all.reason, note };
+}
+
+/**
+ * The approval-age card's rows, in `ApprovalAgeList`'s shape: one referral row
+ * per line (HQ first, then each branch), escalations to HQ, then the queues no
+ * database can time, with their reasons.
+ */
+export function approvalAgeRows(age) {
+  const w = age.window_days;
+  return [
+    ...age.referrals.rows.map((r) => ({
+      key: `referrals-${r.code}`, label: `Referrals · ${r.label}`, window_days: w,
+      available: r.available, unreadable: r.unreadable, median_hours: r.median_hours, n: r.n, reason: r.reason,
+    })),
+    {
+      key: 'escalations', label: 'Escalations to HQ', window_days: w,
+      available: age.escalations.available, unreadable: age.escalations.unreadable,
+      median_hours: age.escalations.median_hours, n: age.escalations.n,
+      reason: age.escalations.reason, clock: age.escalations.clock,
+    },
+    ...age.not_recorded.map((q) => ({ key: q.key, label: q.label, available: false, reason: q.reason })),
+  ];
+}
+
+/** The card: the median across lines, then each queue and line. */
+export function HqApprovalAgeCard({ age }) {
+  const kpi = approvalAgeKpi(age);
+  const cov = age.referrals.coverage;
+  return (
+    <ApprovalAgeList rows={approvalAgeRows(age)} title="Approval age by queue and line" prefix="h15">
+      <p className="mb-1 text-[12px] text-axal-muted" data-testid="h15-age-across">
+        Referrals across lines: {kpi.value === null ? <Unrecorded reason={kpi.reason} /> : kpi.value}
+        {kpi.note ? ` · ${kpi.note}` : ''}
+      </p>
+      {kpi.reason && <p className="mb-1 text-[11px] text-axal-faint">{kpi.reason}</p>}
+      <p className="mb-1 text-[11px] text-axal-faint">
+        One median over every decision&rsquo;s hours, not a median of each line&rsquo;s median. Only durations
+        leave a branch.
+      </p>
+      {!cov.complete && (
+        <p className="mb-1 text-[11px] text-axal-faint" data-testid="h15-age-coverage">
+          {cov.answered} of {cov.total} branches answered; each line that did not says why.
+        </p>
+      )}
+    </ApprovalAgeList>
+  );
 }
 
 function SectionHead({ title, sub }) {
@@ -187,7 +254,8 @@ export function SeriesLegend({ series, weeks }) {
 }
 
 /**
- * The KPI row. One figure is measured and three are named absences, each
+ * The KPI row. Two figures are measured (D483 added approval age) and two are
+ * named absences, each
  * carrying the server's own reason — the same four tiles in every state the
  * payload can be in, so a failed metrics read still says which figure it took.
  */
@@ -195,6 +263,7 @@ export function HqKpis({ data }) {
   const aa = data.active_accounts;
   const kpi = aa.available ? aa.kpi : null;
   const unreadable = !aa.available && Boolean(aa.unreadable);
+  const age = approvalAgeKpi(data.approval_age);
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="h15-kpis">
       <KpiTile
@@ -224,9 +293,9 @@ export function HqKpis({ data }) {
       />
       <KpiTile
         label="Median approval age"
-        value={null}
-        reason={notRecordedReason(data, 'approval_age')}
-        note="Not recorded. The reason is on its card below."
+        value={age.value}
+        reason={age.reason}
+        note={age.note || 'Not recorded. The reason is on its card below.'}
         testId="h15-kpi-approval-age"
       />
       <KpiTile
@@ -352,7 +421,6 @@ export default function HqAnalyticsPage() {
       coverageNote={hqCoverageNote(data, coverage)}
       unavailable={[
         ['Activation', notRecordedReason(data, 'activation')],
-        ['Median approval age', notRecordedReason(data, 'approval_age')],
         ['Token spend against limit', notRecordedReason(data, 'token_spend')],
         ['Revenue by stream', notRecordedReason(data, 'revenue_by_stream')],
       ]}
@@ -393,6 +461,8 @@ export default function HqAnalyticsPage() {
         {ready && <HqKpis data={data} />}
 
         {ready && <ActiveAccountsCard data={data} onRetry={retry} />}
+
+        {ready && data.approval_age && <HqApprovalAgeCard age={data.approval_age} />}
 
         {ready && (
           <div className="grid gap-3 md:grid-cols-2" data-testid="h15-not-recorded">
