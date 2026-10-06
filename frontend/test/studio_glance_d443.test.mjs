@@ -80,7 +80,9 @@ test('the strip and the cards render that HQ glance, and neither links under /br
   const strip = render(createElement(StudioNeedsDecisionView, props));
   const cards = render(createElement(AdminStudioOverview, props));
   assert.doesNotMatch(strip, /studio-decide-off-branch/);
-  assert.match(strip, /data-testid="studio-decide-seats"/);
+  // D555: on HQ the Seats tile is Accounts (HQ's own counts); seats stay U1 on the cards.
+  assert.match(strip, /data-testid="studio-decide-accounts"/);
+  assert.doesNotMatch(strip, /data-testid="studio-decide-seats"/);
   assert.match(strip, /U1/);
   assert.match(strip, /HQ-held/);
   assert.match(strip, /href="\/admin\/held\/accounts"/);

@@ -202,8 +202,12 @@ export type PersonaBucket = {
   /** Null when the read hit its ceiling: a cut count is not a total. */
   count: number | null;
   oldest_age_hours: number | null;
-  /** Null when the read was cut — band totals would under-count. */
-  bands: { ok: number; due_soon: number; past: number } | null;
+  /**
+   * The SLA bands, for H22's two queues only (D459). Null for the three
+   * buckets outside them, which nobody bands, and null when the read was cut —
+   * band totals would under-count. `undated` counts tickets with no readable age.
+   */
+  bands: { ok: number; due_soon: number; past: number; undated: number } | null;
   /** The oldest `SUPPORT_LIST_LIMIT`, oldest first. Exact even past the ceiling, because the read is ordered. */
   items: SupportTicketItem[];
 };
@@ -222,7 +226,7 @@ export function summariseTickets(
   const buckets = {} as Record<TicketPersona, PersonaBucket>;
   const bandScratch = {} as Record<TicketPersona, Array<SlaBand | null>>;
   for (const p of TICKET_PERSONAS) {
-    buckets[p] = { count: 0, oldest_age_hours: null, bands: { ok: 0, due_soon: 0, past: 0 }, items: [] };
+    buckets[p] = { count: 0, oldest_age_hours: null, bands: null, items: [] };
     bandScratch[p] = [];
   }
   for (const row of read.rows) {
@@ -267,15 +271,31 @@ export function summariseTickets(
 export const SYNC_WINDOW_HOURS = 24;
 
 /**
- * Why the strip has no average lag.
+ * The create-to-mirror lag (D459), derived from what is stored.
  *
- * The mirror runs inside the request that files a ticket (`routes/tickets.ts`),
- * and a ticket keeps only its LATEST attempt — status, error, time. There is no
- * pair of moments stored for any change, so there is nothing to average; a
- * figure here would be invented.
+ * Filing a ticket writes the ticket row, then — in the same request, once
+ * GitHub answers — one `ticket_sync_events` row keyed `out:create:ticket-<id>`
+ * (`routes/tickets.ts`). Both `created_at` columns are `datetime('now')`, so the
+ * gap between them is how long the ticket took to reach GitHub, to the second.
+ *
+ * WHAT IS NOT A LAG. A ticket with no create event (the mirror failed, or no
+ * token is configured) has no lag, and a ticket mirrored later by the backfill
+ * writes `out:backfill:ticket-<id>` instead, which measures the backfill's
+ * timing rather than the filing's. Neither is averaged in, and neither is read
+ * as zero: the first is counted in `unmeasured` so the average says how many
+ * tickets it leaves out.
  */
-export const SYNC_LAG_REASON =
-  'Not recorded: the mirror runs inside the request that files a ticket, and a ticket keeps only its latest attempt, so no delay between a change and its mirror is stored to average.';
+export const SYNC_CREATE_EVENT_PREFIX = 'out:create:ticket-';
+
+export const SYNC_LAG_NONE =
+  'Not recorded: no ticket filed in this window reached GitHub, so there is no delay to average.';
+
+export const SYNC_LAG_UNREADABLE =
+  'The mirror event log (ticket_sync_events) could not be read on this database, so the delay is unknown — not zero.';
+
+export type SyncLag =
+  | { value: number; unit: 'seconds'; measured: number; unmeasured: number; max: number }
+  | { value: null; reason: string; unmeasured?: number };
 
 export const SYNC_UNREADABLE =
   'The mirror status could not be read on this database. Its columns arrive with migration 273.';
@@ -287,7 +307,7 @@ export type TicketSync =
       synced: number;
       failed: number;
       not_configured: number;
-      lag: { value: null; reason: string };
+      lag: SyncLag;
     }
   | { available: false; reason: string };
 
@@ -319,10 +339,41 @@ export async function readTicketSync(env: Env): Promise<TicketSync> {
       synced: by.synced || 0,
       failed: by.failed || 0,
       not_configured: by.not_configured || 0,
-      lag: { value: null, reason: SYNC_LAG_REASON },
+      lag: await readSyncLag(env),
     };
   } catch {
     return { available: false, reason: SYNC_UNREADABLE };
+  }
+}
+
+/**
+ * The average create-to-mirror lag over tickets filed in the window. Its own
+ * read with its own failure: an unreadable event log costs the lag, never the
+ * counts beside it.
+ */
+export async function readSyncLag(env: Env): Promise<SyncLag> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(e.id) AS measured,
+              COUNT(*) - COUNT(e.id) AS unmeasured,
+              AVG((julianday(e.created_at) - julianday(t.created_at)) * 86400.0) AS avg_s,
+              MAX((julianday(e.created_at) - julianday(t.created_at)) * 86400.0) AS max_s
+         FROM tickets t
+         LEFT JOIN ticket_sync_events e ON e.event_key = ? || t.id
+        WHERE datetime(t.created_at) > datetime('now', '-24 hours')`,
+    ).bind(SYNC_CREATE_EVENT_PREFIX).first<{ measured: number; unmeasured: number; avg_s: number | null; max_s: number | null }>();
+    const measured = Number(row?.measured ?? 0);
+    const unmeasured = Number(row?.unmeasured ?? 0);
+    if (!measured || row?.avg_s == null) return { value: null, reason: SYNC_LAG_NONE, unmeasured };
+    return {
+      value: Math.round(Number(row.avg_s)),
+      unit: 'seconds',
+      measured,
+      unmeasured,
+      max: Math.round(Number(row.max_s)),
+    };
+  } catch {
+    return { value: null, reason: SYNC_LAG_UNREADABLE };
   }
 }
 

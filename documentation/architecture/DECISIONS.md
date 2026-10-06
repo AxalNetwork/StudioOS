@@ -37065,6 +37065,125 @@ here computes or draws a margin.
   - the api method dropping the page
   - the Unreadable hidden
 
+## D405
+
+**The Worker AI rail on a phone: a floating button and a bottom sheet (canvas
+M5, issue #993).** No migration.
+
+**What M5 asks for.** A 284pt rail does not fit beside a 390pt screen. Below
+1024px the panel becomes a floating button whose badge always states the mode,
+and a tap opens a sheet. The page stays visible above the sheet, and the usage
+meter comes along unchanged.
+
+**What changed** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **Below 1024px the in-flow panel is hidden** (`aside.fwr { display: none }`).
+  Until now the host pages stacked it under the body.
+- **The floating button.** `RailFab` sits at
+  `calc(var(--mobile-tabbar-h, 0px) + 16px)` from the bottom, set inline so the
+  one number that must agree with the tab bar (D425) sits where the button is
+  declared. A page with no bar falls back to 16px.
+- **The badge.** It is filled (green) when a fill mode is on and hollow for
+  Manual. The button's label says the same in words.
+- **The sheet.** `RailSheet` is a labelled dialog (`aria-modal`) holding the
+  rail's own body, the same JSX as the panel and not a phone copy. So the
+  usage meter keeps its three states — loading, Unreadable, the figure — and
+  never shows a made-up zero. The body renders in the panel or in the sheet,
+  never both.
+- **Closing.** The sheet closes the four ways the tab bar's More sheet does:
+  the backdrop, a swipe down past 60px, Escape, and its close button. A route
+  change and a widening past 1024px close it too. Focus moves to the close
+  button on open and back to the button on close.
+- **Portalled to `<body>`, after mount.** The shell's rail slot is
+  `hidden xl:block`, and a fixed button inside a `display: none` parent never
+  draws. Waiting for the first effect also keeps every server render, and every
+  render test of a page with a rail, free of a document.
+
+**Built against the variable.** The tab bar's mount in the shell is D504's
+(slot S05). The button reads `--mobile-tabbar-h`, which is set while a bar
+draws.
+
+**Tests.** `frontend/test/worker_rail_mobile_d405.test.mjs` has 9 tests. The
+repository renders without a DOM, so every open and close goes through
+`railSheetReducer`, the one place the component decides it. The button and the
+sheet are rendered with react-dom/server. The tests cover:
+
+- the button's position;
+- the mode badge and its label;
+- the dialog's labelling, close button, backdrop and content;
+- open, and each of the five closers;
+- the swipe threshold, downward only;
+- a closed sheet ignoring every closer;
+- no button in a server render;
+- the breakpoint rules in the stylesheet.
+
+Eleven mutations were each caught:
+
+- the offset ignoring the tab bar;
+- the inline style losing `bottom`;
+- the badge always reading Manual;
+- Escape not closing;
+- a swipe of any length closing;
+- a closed sheet opening on a stray event;
+- the dialog losing `aria-modal`;
+- the portal rendering before mount;
+- the panel still drawing on a phone;
+- the button showing on desktop;
+- the sheet dropping the rail's content.
+
+## D406
+
+**The collapsed rail's spine: the status dot and the vertical spend (issue
+#994).** No migration.
+
+**What the canvas asks for.** Founder Workspaces canvas, "Collapsed spine":
+"Keeps three facts alive: the advisor is on (green dot), which page-model is
+loaded (hover), and spend to date … Manual mode turns the dot grey and hides
+the meter — a founder who never wants AI sees a quiet strip, not a nag."
+
+**What is built: two of the three** (`ui/WorkerRail.jsx`, `ui/workerRail.css`):
+
+- **The dot** reads the rail's real mode, the same value the Mode block and
+  the phone button (D405) read. It is green when a fill mode is on, grey for
+  Manual, and its label names the mode in words.
+- **The vertical spend** is the account's month-to-date figure from
+  `/api/ai/me/spend`, in four states that each look different:
+  - loading: an ellipsis;
+  - Unreadable: the request failed, or `recorded: false`;
+  - Not recorded: the log was read and holds no month figure;
+  - the figure itself.
+- None of the first three is ever drawn as $0.00. A real zero is a figure and
+  is drawn as one.
+- **In Manual the spend is not drawn**, as the canvas says.
+- **No hover model.** The page-model on hover is left out because the spine
+  names no model and no price; those belong to the expanded rail, where the
+  rate sits beside the model.
+- **Placement.** The spine sits between the label and the toggle, because the
+  collapsed title is a reversed column. The canvas's order follows: toggle,
+  dot and spend, then the turned label. It is desktop only, like the spine
+  itself.
+
+**Tests.** `frontend/test/worker_rail_spine_d406.test.mjs` has 9 tests,
+rendered with react-dom/server. They cover:
+
+- the dot in both modes;
+- each spend state, including a real zero;
+- each state having its own style;
+- Manual hiding the spend;
+- no model or price on the spine;
+- desktop only.
+
+Eight mutations were each caught:
+
+- the dot always on;
+- loading drawn as a zero;
+- Unreadable folded into Not recorded;
+- Not recorded drawn as $0.00;
+- the spend shown in Manual;
+- a state losing its style;
+- the spine always visible;
+- a real zero hidden.
+
 ## D410
 
 **E-sign `/send` hardening: the signing link reaches only the recipient, a
@@ -37979,6 +38098,74 @@ stands alone, and is idempotent. No bytes are kept in D1.
   - opening a file POSTs for a link, then follows it to a download
   - an 11 MB file refused before any upload, with the Worker's sentence
   - no page errors
+
+## D416
+
+**E-sign accepts an already-rendered body, so each party signs the same
+document (issue #1001).** No migration.
+
+**Why.** Per-party co-founder signing (D354) was blocked. `createAndSendEnvelope`
+built every document itself: the D1 template store, then the Y-1 markdown, then
+`buildTemplateBody`, with the recipient merged in. Sending one agreement to
+each party would have re-rendered it per recipient, with each party's own name
+in `recipient_name`. Every signer would then hold a different document under a
+different hash.
+
+**What changed** (`routes/esign.ts`):
+
+- **`createAndSendEnvelope` takes an optional `renderedBody: { title, body }`.**
+  When it is set:
+  - the template lookup and the merge are skipped;
+  - the body is stored and hashed exactly as given;
+  - the title is the caller's.
+- Each party's envelope therefore carries the same bytes and the same
+  `body_sha256`.
+- **Everything after the body is unchanged:**
+  - the one-pending-send key (D410), so the same party twice is
+    `already_pending`, while each party gets its own envelope;
+  - the recipients row in the same batch;
+  - the email;
+  - the audit trail.
+- **Refused before anything is written:**
+  - `RenderedBodyError` for a missing title, a missing body, or `mergeFields`
+    sent alongside. A finished document has no slots, and silently ignoring
+    the fields would be worse.
+  - `UnfilledFieldsError` for a body that still holds a `{{token}}`, whether
+    or not `refuseUnfilled` is set. A finished document with a hole in it is
+    never one the sender meant to send.
+- **Audit.** `envelope_created` records `body_source: 'rendered' | 'template'`
+  on both the native and DocuSign paths. Who decided the document's words is a
+  different claim on each path, and a dispute reads that row.
+- **No route change.** `POST /send` and the operator callers do not pass
+  `renderedBody`, so the template path is what they always ran. Slot S07 lands
+  per-party signing on top of this.
+
+**Tests.** `cloudflare-worker/test/esign_rendered_body_d416.test.ts` has 8
+tests. They run the real function against node:sqlite through the e-sign
+harness and cover:
+
+- the body stored and hashed exactly as given, under its own title, with the
+  recipient not merged in;
+- two parties getting two envelopes over the same hash;
+- the same party twice being already pending;
+- the audit's `body_source`;
+- the four refusals, each with nothing written;
+- a token always refused;
+- the template path unchanged;
+- a rendered body winning where the document type has a template.
+
+Eight mutations were each caught:
+
+- the template winning over the rendered body;
+- the recipient merged into the rendered body;
+- no title check;
+- no body check;
+- merge fields silently ignored;
+- tokens refused only under `refuseUnfilled`;
+- the audit always saying template;
+- the caller's title ignored.
+
+The existing D410, D411, de-admin and D451 e-sign tests pass unchanged.
 
 ## D420
 
@@ -39753,6 +39940,98 @@ complete statement and recording a dispute write matching audit rows.
 allowed on a suspended licence; paid-in-full shown on an incomplete row; void
 without a reason; full payment accepted on a floor statement.
 
+## D459
+
+**HQ Support: one SLA band rule, both SLA tables named, the mirror lag
+derived, and the relation confirmed (issue #1017, slot S07, from S16).** No
+migration.
+
+**One band rule.** `services/slaWindow.ts` is the only place that defines the
+due-soon window and the boundary.
+- The window is `min(24h, limit / 2)`.
+- `bandForRemaining` is past once the limit is behind (`remaining < 0`), due
+  soon while `remaining <= window`, and on time otherwise.
+- Tickets (`ticketSlaBand`) and escalations (`slaBand`, now through
+  `escalationSlaBand` with the kind's window) both call it.
+- `approvalSources.ts` re-exports its `SLA_DUE_SOON_HOURS`. No file defines
+  the window a second time.
+
+What this fixes:
+- A 24-hour P1 ticket, and a 24-hour moderation escalation, read due soon from
+  their first hour. They could never be on time. Now they are due soon for
+  their last 12 hours.
+- The two functions disagreed at the boundary (`>` against `<=`). They now
+  agree at every remaining time, and a test sweeps four limits in half-hour
+  steps to prove it.
+- `support_sla_d455.test.ts` asserts `ticketSlaBand(5, 24) === 'ok'` again.
+  Commit b1f0027b had changed it to `(0, 24)` to fit the code.
+- The page says "due soon" instead of a fixed "due within 24h".
+
+**Two tables, named.** Tickets band against P1/P2/P3 (24/48/96h).
+Escalations carry a `due_at` stamped from their kind's hours (`SLA_HOURS`:
+moderation 24, the rest 72). They are different promises, so the panel shows
+both instead of mapping one onto the other.
+- `slaPolicyBody()` sends each row with its due-soon window.
+- The mapping line is built from `ticketPriorityTier`.
+- "Set here · inherited by every subsidiary" is now "Fixed in code · the same
+  on every subsidiary". Nothing on the page edits the hours.
+
+**The mirror lag, derived.** Filing a ticket writes `out:create:ticket-<id>`
+to `ticket_sync_events` in the same request. `readSyncLag` averages
+event-minus-ticket `created_at` over tickets filed in the last 24 hours, to
+the second, and also reports the longest.
+- A ticket with no create event is counted as `unmeasured`, and is never
+  averaged as zero.
+- A backfill event (`out:backfill:…`) is not a lag.
+- No measured ticket: Not recorded, with the reason.
+- An unreadable event log costs the lag alone, not the counts beside it.
+- The ROUTE_MAP row (Support Security · Super) says so now. It had claimed the
+  strip read `ticket_sync_events` before anything did.
+
+**The relation: already fixed on main, confirmed.** `openEscalationSummary`
+selects `relation`, and `escalationQueue` passes it to the page. D275's tests
+cover it. No change.
+
+**LOW and NIT findings:**
+- **Bands.** The three buckets outside H22's queues now send `bands: null`
+  instead of zeros nobody counted. An undated ticket is counted as `undated`,
+  so a queue's bands sum to its count.
+- **Panel loading.** The panel says "Reading the ticket types…" while the
+  read is pending. It no longer shows Unreadable.
+- **Taxonomy SQL.** It uses `GROUP BY 1`, so a blank type folds into `task`.
+  It binds `...OPEN_TICKET_STATUSES`, and drops `|| 0`.
+- **Dead code and coverage.** `TICKET_TAXONOMY_TYPES` is deleted (nothing read
+  it). The taxonomy read gets a coverage line.
+- **Comments and fixtures.** "Five reads" is now six, in both comments. The
+  D204 fixture's 44-hour medium ticket marked due soon (impossible for P3) is
+  now a high (P2) ticket.
+- **Tests.** The source-regex test in `hq_support_sla_d455.test.mjs` is
+  replaced by render tests.
+
+**Not changed.** `services/githubSync.ts` is not touched.
+
+**Tests.**
+- `support_sla_band_d459.test.ts`: 9 tests.
+- `support_sla_d455.test.ts`: 2 assertions restored or extended.
+- `support_queues_d204.test.ts`: the lag measured from create events, Not
+  recorded without one, and unreadable without the log.
+- `hq_support_sla_d455.test.mjs`: 5 render tests.
+
+Thirteen mutations were run, and each fails at least one test:
+- a flat 24h window, so `(5, 24)` is not ok;
+- `<` instead of `<=`;
+- the escalation boundary restated;
+- escalations on a flat window;
+- the lag joined on `ticket_id`, which takes in backfill events;
+- a missing event averaged as zero;
+- no events read as a lag of 0;
+- zeros for an uncounted bucket;
+- undated tickets dropped;
+- `GROUP BY type`;
+- the escalation table dropped;
+- Unreadable while loading;
+- the undated count not drawn.
+
 ## D460
 
 **The investor deal-flow honesty pass: dead controls wired, false sentences
@@ -40192,6 +40471,89 @@ versioning decision) and stays unbuilt past its line.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
 
+## D469
+
+**Only an admin changes a deal's amount through `PUT /deals/:id`.** Wave 9,
+item 7, the third of three; issue #1020, slot S08 (moved from S16). No
+migration. Session 1 decided this on the owner's behalf, from the questions
+D461–D464 name. If the owner strikes it, a partner can again rewrite a
+deal's amount, and an admin's edits leave no audit trail.
+
+**The defect.** `PUT /deals/:id` is gated by `requireRole('partner')`,
+which admits partners and admins. Both could rewrite `deals.amount`, and
+nothing recorded an admin changing a deal that was not theirs.
+
+**What changed.**
+- **A partner's `amount` is REFUSED, not dropped:** `403
+  deal_amount_admin_only`, with a sentence. A dropped field reads to the
+  caller as a saved one. The refusal runs before anything else in the
+  request is written, so status, notes and the stage event are untouched.
+  The only screen that calls this route, the Deals page's terms editor,
+  never sends `amount`.
+- Status, partner and notes keep the partner gate.
+- An admin's edit to a deal that is not theirs goes through
+  `logAdminAction` as `deal_update_by_admin`. "Theirs" means the deal's
+  `lead_partner_id` is the admin. A deal with another lead partner, or with
+  none, is someone else's. The audit row carries:
+  - the deal;
+  - its lead partner;
+  - the fields sent;
+  - the amount before and after, when the amount moved.
+  An admin editing their own deal is not acting on someone else's behalf
+  and leaves no row.
+
+**Open: D463's term fields.** The issue says "term edits" in its title and
+names the amount in its decision. Whether target raise, minimum check,
+valuation cap, carry and fee (or every D463 field) follow the same rule is
+asked on #1020 as options A, B and C. The slot's pick is B: the money terms
+join the amount, and the descriptive fields stay with partners. Until it
+is answered, the terms keep today's partner gate, which is option A's
+behaviour.
+
+**Guards.**
+- `cloudflare-worker/test/deal_amount_admin_d469.test.ts` has 6 tests (8
+  after review, below). They
+  drive the real `deals` router against real SQLite, on D463's fixture plus
+  `activity_logs`. They cover:
+  - a partner's amount refused and not written;
+  - the refusal landing before any other write;
+  - status, partner and notes still working for a partner, with no audit
+    row;
+  - an admin's amount written and audited, with before and after;
+  - any admin edit to someone else's deal audited;
+  - an admin's own deal not audited.
+- On the code as it was, 4 of the 6 fail. The other 2 are controls.
+- Mutation-checked both ways: 8 of 8 caught, each with a non-zero exit and
+  a `not ok` line, and the file was restored and checked by sha256. The
+  mutations:
+  - drop the refusal;
+  - treat everyone, or no one, as admin;
+  - silently drop the amount instead of refusing;
+  - never audit, or always audit;
+  - lose the amount before;
+  - lose the fields.
+
+**After review: a write that fails part way is still audited.** Each
+`UPDATE` in `PUT /api/deals/:id` commits on its own. So
+`{ amount: 750000, lead_partner_id: 999999 }` used to write the amount, then
+throw on the lead partner, and never reach the audit: the amount moved with
+no record. The writes now run inside one `try`. Each field that commits is
+added to `written`, and an error is held until the audit has run, then
+rethrown, so the caller still gets the failure. The audit row now carries
+`complete` (true or false). A failed request also carries `written`, the
+fields that did commit. `amount_from`/`amount_to` appear only when the
+amount was actually written. Two more tests inject a refusal (a SQLite
+trigger standing in for D1's foreign key):
+- on `lead_partner_id`, after the amount;
+- on `notes`, before it.
+
+Both fail on the code before this change. 5 of 5 mutations were caught:
+- rethrow at once;
+- hard-code `complete: true`;
+- key the amount on the request rather than the write;
+- swallow the error;
+- never record the amount as written.
+
 ## D470
 
 **Gap-map leftovers, up to the owner's line.** Wave 9 item 7. Items 4 and 5
@@ -40288,6 +40650,16 @@ walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
 
+## D474
+
+**Branch Contracts: Expiring soon, and Use template on the current library cards.** Issue #1027. No migration. `admin_contracts.ts` is not edited.
+
+**Expiring soon.** `GET /api/admin/contracts` now carries `valid_until` on pairwise NDAs and `expires_at` on partner deals. The strip on `/branch/contracts` is the next 90 days from those two fields. A row whose source records no end date is not in the strip, and the renewal cell says so. An end date already past, or further out than 90 days, stays on the row and is not called expiring. A failed list is Unreadable and draws no empty strip. E-sign envelopes and signed documents still record no end date. The list has no renewal date separate from a partner deal's expiry, and the strip says that rather than treating `expires_at` as a renewal.
+
+**Use template.** Each current card of the copy HQ pushed links to `/legal/send`. The send page, Remind, and Void are not this change: the link does not preselect a template, because that page only reads `envelope`. Archived versions are still absent from the copy. The page keeps rendering the server's `not_carried` reason and does not invent unusable cards.
+
+**Tests.** `frontend/test/branch_contracts_expiring_d474.test.mjs`.
+
 ## D480
 
 **HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
@@ -40316,6 +40688,119 @@ null elsewhere. Admin › Contracts pairwise/partner tabs render a failed read a
 
 **Tests.** `contract_template_usage_d480.test.ts`, `admin_contract_doc_registry_d480.test.ts`,
 `hq_contracts_x1_d480.test.mjs`; D454 tests re-aimed.
+
+## D481
+
+**HQ · Security: the session list, revoke, per-account sign-out, and token
+anomalies (issue #1021).** No migration.
+
+**The defect.** The Sessions zone's subtitle said "Revoke is recorded", and the
+zone had no revoke. `admin_security.ts` could sign out every account or one
+account, and nothing smaller. The only per-session revoke was
+`POST /settings/sessions/:id/revoke`, and it reached only the caller's own rows.
+
+**One revoke, two doors.** The statement moved out of `settings.ts` into
+`services/userSessions.ts` (`revokeUserSession`), and both routes call it.
+
+- The account holder's door passes `ownerId`. A session that belongs to
+  someone else answers "not found".
+- HQ's door passes none, and its route carries the gate.
+- The UPDATE carries `revoked_at IS NULL`. If two revokes race, the first one's
+  time stays on the row and the second is not audited.
+- A revoke sets `user_sessions.revoked_at`, which `getCurrentUser` already reads
+  by `jti`. `auth.ts` is unchanged.
+- Only the lines that were lifted moved in `settings.ts`. The TOTP and recovery
+  routes stay with S15.
+
+**Routes.** `GET /sessions` uses `requireSuperAdmin`.
+`POST /sessions/:id/revoke`, `POST /sessions/revoke` (at most 100 ids) and
+`POST /impersonations/:id/end` each use `requireSuperAdminWriteBar` and take a
+typed reason of at least 8 characters.
+
+- Each revoke writes one `logAdminAction` row with `target_user_id`. A bulk
+  revoke writes one row per session it actually revoked, never one row for the
+  batch.
+- The caller's own current session is refused (409). The row reads "Current"
+  and offers no revoke.
+- The list does not send `jti` to the browser.
+- If `user_sessions` cannot be read, the route returns 503 "Unreadable" and no
+  rows. It never answers with an empty list.
+
+**Per-account sign-out.** Each row reaches D165's existing
+`POST /force-reauth/:userId`. It is not built a second time.
+
+**"Active" is a token that could still open a door.** The list, its total and
+the /overview "Active sessions" tile all use one predicate
+(`services/userSessions.ts`, `countActiveSessions` beside `listActiveSessions`),
+built from `getCurrentUser`'s own checks:
+
+- `revoked_at IS NULL`;
+- `created_at` within `JWT_EXPIRY_HOURS` (24, exported from `auth.ts`). No
+  expiry is stored on the row; the row is written just after the token is
+  signed, and nothing mints a longer session, so this keeps a row at most a
+  moment past its token and never drops a live one;
+- `created_at` (as epoch seconds) not below the account's `users.jwt_min_iat`.
+  "Sign out account" writes only that floor, so without this check a
+  signed-out account's sessions came back as active on the next reload.
+
+The first version of this decision bounded "active" by `revoked_at` and a
+30-day `last_seen_at` window. That kept tokens dead for weeks on the list, and
+the payloads' `window_days` is now `token_hours`.
+
+**Ending a support session sets `ended_at` and changes nothing else.** The row
+is never deleted, and `admin_user_id` and `context` are never rewritten, so
+`routes/branch_support_sessions.ts` still finds it. This matches
+`routes/admin.ts` and `util/supportSessionSweep.ts`.
+
+- The list offers only open rows started inside the D248 ceiling. Ending an
+  older row is refused (`past_ceiling`), because it would record an end time
+  that never happened.
+- The response says what ending does not do. An impersonation token carries no
+  `jti`, so it stays valid until it expires, up to 30 minutes. Ending the
+  session stops it being extended.
+
+**Token anomalies** come from `ai_usage_logs`, read directly in
+`services/tokenAnomalies.ts`. `services/aiSpend.ts` (S12's) is not touched.
+
+- An account is flagged when its last 24 hours used at least 4× its average day
+  over the 7 days before, and at least 20,000 tokens. The thresholds are a
+  judgement, and the card shows them.
+- An account with no usage in those 7 days is counted on its own as
+  `no_baseline`, not as an anomaly.
+- Cache hits are left out.
+- An unreadable table renders "Unreadable", with no count.
+- The "Token anomalies" row is removed from `AI_SAFETY_NOT_COUNTED`, as D158
+  removed the rule row. Guards in `hq_governance_h7` and
+  `advisor_guardrail_category_d158` are re-aimed to pin the figure as served.
+  `hq_security`'s list of page calls gains the session read and the acts.
+
+**Not recorded, each with its reason and never a count.**
+
+- Cross-tenant refusals: no store records one.
+- Flagged outputs held for review: a shadow flag does not hold an output. The
+  "Outputs flagged" tile above still counts shadow flags.
+- Accreditation lapsed: no attestation date is stored.
+- Failover test: there is no standby to fail over to.
+
+**DSR zone.** Each row carries `kind` from the store that holds it. The page
+renders that field instead of the hard-coded word "erasure".
+`dsr.kinds` names access and portability as not recorded, each with its reason.
+
+**Tests.** `hq_security_sessions_d481.test.ts` (19 tests) runs every route
+against baseline tables and reads the effects back. Seventeen mutations were each
+caught, including:
+
+- a revoke with no audit row;
+- a plain admin reaching the list;
+- an anomaly count read from another table;
+- a failed read returned as an empty list;
+- ending a session by delete, or by rewriting `admin_user_id`;
+- a racing re-stamp;
+- the active predicate without the sign-out floor (list, count, or both),
+  without the expiry, or with a lifetime shorter than the token's.
+
+`hq_security_sessions_d481.test.mjs` (12 tests) renders the panel and the
+cards. Eight mutations were each caught.
 
 ## D490
 
@@ -40564,6 +41049,78 @@ treated as accepted, and their subjects are told.
 
 **Tests.** `relationship_requests_d493.test.ts` (8). 19 mutations, 19
 caught.
+
+## D494
+
+**Investor Deals, built to the owner's line: every IC vote records its
+reason, and the three unbuilt Deals ops name the decision each waits on.**
+This is the first of the four zone-family PRs for #1023 (the Deals family),
+slot S07, from S16. No migration.
+
+**Read against the code first.** D460 to D463 were read against main for
+the Deals family. These claims were checked through the tests each decision
+cites, which pass on this branch; they were not re-read line by line:
+- the Stage column reads `dealStage`, and a passed deal is neither listed nor
+  counted;
+- `recused` sits beside the tally, and a recusal needs its declaration;
+- the conditions store and the 409 that refuses a wire while a condition is
+  open;
+- the closing checklist with no seeded items, and the packet index of
+  executed envelopes;
+- `deals.source` and the partial-edit `PUT`.
+
+One sentence moved: D461 left a rationale on an ordinary vote as the owner's
+call, and #1023 settles it (below).
+
+**Every vote records its reason.** `POST /api/ic/:uid/vote` now refuses a
+yes, no or abstain vote whose rationale is missing or blank:
+- The response is 400 with code `rationale_required`, and no row is written.
+- A recusal keeps its own code, `recusal_requires_declaration`, which is
+  checked first.
+- The column stays nullable, because votes cast before now carry none and are
+  not rewritten.
+- The commit room reports `rationale.enforced: true`. Its Rationales tile
+  (`rationaleNote`) says the rule applies to every new vote, and explains any
+  shortfall as votes cast before the rule.
+- `ICDecisionPage`'s field reads "Rationale (required)", and its vote buttons
+  stay disabled until the field has text, with the reason on hover.
+- A rationale under three characters still drafts the journal entry with the
+  fallback thesis, unchanged.
+
+**The three unbuilt Deals ops, each built up to its decision.**
+- **Configure stages:** the columns are the deal record's stored status, the
+  one workflow every route and the IC hand-off read. Whether a firm may define
+  its own stage set is a decision about that workflow, not a missing form.
+- **New batch run:** `POST /api/scoring/score` scores the rubric answers sent
+  in the request body, and an investor holds none to send for a founder's
+  project. Where a batch's answers come from is the decision.
+- **Edit rubric:** the six weights are fixed in code. Who may edit them is
+  question 3 on #1023.
+
+Each op's `unbuilt` reason names its decision, and a customer-facing `hover:`
+(at most 120 characters) says it plainly.
+
+**Asked on #1023, not built, waiting on the answers:**
+- DD "Blocking" (question 1);
+- the `zone_saved_views` store behind "Save view" (question 2);
+- the section-weighting editor (question 3).
+
+**Coordinate.** #1096 (S16, D468) and #1094 (S16, D467) also edit
+`routes/ic.ts`. This PR adds one check beside the recusal check in the vote
+route and changes the commit room's `rationale` block.
+
+**Tests.**
+- `ic_conditions_minutes.test.ts` gains two tests: a blank, spaces-only or
+  missing rationale is refused and writes nothing; the room reports the rule
+  as enforced and counts a pre-rule vote as one without a reason.
+- `investor_deals_rationale_d494.test.mjs` adds two frontend tests on the
+  tile's note.
+- `investor_deals_id3.test.mjs`'s rationale pin is re-aimed at the enforced
+  rule.
+- Two fixtures that voted with no reason now carry one.
+- Five mutations, each caught: a blank vote accepted, spaces accepted as a
+  reason, the room saying unenforced, the shortfall left unexplained, and a
+  missing rule read as the old one.
 
 ## D500
 
@@ -41344,6 +41901,130 @@ route and no new `api.js` method.
   and catches it, except in the first hour after UTC midnight, when both
   sides fall on different dates and a bare compare happens to agree.
 
+## D511
+
+**Spin-Out Lab: a cohort-size read that fails is reported, not defaulted, and
+the branch freeze reaches certificates.** Issue #992, slot S08 (moved from S18,
+originally S10). Items 1 and 2. Item 3, graduate access to the Lab tools, waits
+on the owner's A/B/C on #992 and is not built here. No migration.
+
+**What was true on main (`5201db161`).**
+- **The cohort size read.** `getCohortSizeSettings`
+  (`services/cohortApplications.ts`) caught any failed read of
+  `cohort_settings` and answered `DEFAULT_MIN_COHORT_SIZE` /
+  `DEFAULT_MAX_COHORT_SIZE`, and its three callers acted on that number:
+  - the cron's capacity check postponed or passed cycles against the minimum,
+    and the activation that follows it in the same tick admitted the approved
+    applicants;
+  - `GET /admin/cohort/applications` judged every cycle's `meets_minimum`
+    against it;
+  - the public `GET /spinout-lab/brief` printed it as `places`.
+- **The admin console.** `AdminCohortApplications.jsx` added a typed
+  `{ min: 1, max: 25 }` of its own whenever no settings arrived.
+- **Certificates.** The certificate admin writes (`POST /certificates`,
+  `/certificates/:id/revoke`, `/certificates/backfill`) check
+  `role === 'admin'` themselves, not through `requireAdmin`. So neither D135's
+  HQ compliance freeze nor `requireBranchNotSuspended` reached them, and a
+  suspended branch could still issue and revoke credentials.
+
+**What changed.**
+- **The read.** `getCohortSizeSettings` throws `CohortSettingsUnreadable`
+  when the read fails. A key no admin has set still answers its product
+  default, which is the operative number. `cohort_settings` is in the schema
+  baseline and in migration 157, so a database without it is a read that
+  fails, not "nothing set". `readCohortSizeSettings` returns null instead of
+  throwing, for callers that say "Unreadable".
+- **The cron.** With no minimum read, the capacity check runs on no cycle. It
+  writes a `capacity_unreadable` event to each due cycle's history, and the
+  tick skips activation, so no cycle is postponed or started on a number
+  nobody read. The next tick tries again.
+- **`GET /admin/cohort/applications`.** It sends `settings: null`,
+  `settings_unreadable: true` and `meets_minimum: null` on every cycle.
+- **The console.** It holds no typed default. The size button reads "Min ·
+  Max unreadable", and each cycle's pill reads "N approved · minimum
+  unreadable", in neither the pass nor the fail colour (`SizeSettingsLabel`,
+  `MinimumPill`).
+- **`GET /spinout-lab/brief`.** It sends `places: null` and
+  `places_unreadable: true`; the other five facts need no table and still
+  load. The Lab pages already treated a null `places` as a failed read
+  (`useCohortPlaces`, D385).
+- **Certificates.** The three certificate admin writes call
+  `requireBranchNotSuspended` after the admin check, the order D107 uses, so
+  a suspended branch gets 423 and the registry is unchanged. Reads, the
+  owner's own sharing toggle and public verification are unchanged. Revoking
+  freezes with issuing: FREEZE_RULE keeps takedowns open, but a revocation is
+  not a takedown of the branch's own content. It changes a graduate's
+  credential on the public verification page. S7's Locked "Programs" row
+  (`lib/branchFreeze.js`) now says certificates cannot be issued or revoked,
+  as `branch_shell_s7_s13` requires of every new gate.
+
+**Item 3, as it stood before the owner answered.** A graduate is bounced from the Lab tool routes, because
+graduation clears `spinout_lab_active` and the routes require it, while
+`featureUnlocked` tells them they have every tool (D381, "Filed, not fixed").
+No decision records intended graduate access. S1's question on #992 offers:
+- A. full access (S1's pick);
+- B. read-only;
+- C. no access.
+
+**Item 3, built (2026-10-06): the owner chose C.** "Graduates lose the Lab
+tools. Their records stay, and only admins can read them." The owner added that
+the data carries into the tools in the left sidebar, which present it
+differently and with more features, and that a paywall comes later.
+- **The routes already said C.** Graduation clears `spinout_lab_active`, and 17
+  of the 20 Lab tool pages are `labRoles(['admin'])`, which admits a Lab member
+  only while that flag is 1. No route changes.
+- **The three founder-admitting pages stay as they are.** Brand, cofounder
+  match and the certificate admit any `founder`, Lab or not, so they are not
+  Lab-only. The certificate is the graduate's own credential.
+- **The workspace stopped promising otherwise.** `featureUnlocked` no longer
+  opens every tool for a graduate. It opens only `TOOL_INFO` entries marked
+  `keptAfterGraduation`, which today is the certificate.
+  - A closed tool reads "Closed at graduation", not "Unlocks Wk 4".
+  - The header says the tools closed and where the work went.
+  - The admin preview (`previewAllUnlocked`) still opens everything.
+- **Records.** Nothing is deleted. Admin reads are unchanged.
+- **Verified.** `frontend/test/spinout_graduate_tools_d511.test.mjs` (2 tests)
+  fails on main and catches 7 of 7 mutations.
+
+**Verified.**
+- `cloudflare-worker/test/lab_gates_d511.test.ts` (6 tests) runs the real
+  tick, the admin overview and the certificate routes over baseline tables,
+  with a failed `cohort_settings` read injected at the adapter. It covers:
+  - a failed read throwing, and an unset key answering its default;
+  - a due cycle neither postponed nor activated, with its history saying why,
+    and the same tick activating once the minimum reads;
+  - the overview's nulls;
+  - 423 on issue, hand issue, revoke and backfill on a suspended branch, with
+    nothing written, and an active branch still issuing and revoking.
+- `spinout_brief_d141.test.ts`:
+  - its "no setting" fixture is now an empty `cohort_settings`, as every real
+    database has;
+  - a new test pins `places: null` and `places_unreadable` on a failed read;
+  - the response's key list gains `places_unreadable`.
+- `frontend/test/cohort_settings_unreadable_d511.test.mjs` (4 tests) renders
+  the label and the pill.
+- `spinout_lab_intro.test.mjs` pins the new read in `/brief`.
+- Mutations: 14 run. 13 were caught. The one survivor was an
+  `instanceof` branch in `readCohortSizeSettings` that no throw could reach,
+  and that branch was removed.
+
+**After review: one line per outage, not one per tick.** The cron retries
+every tick, so an outage lasting an hour wrote the same `capacity_unreadable`
+line into the cycle's history on every pass. The line is now written only
+when the cycle's latest event is not already `capacity_unreadable`. The check
+and the insert are one `INSERT … SELECT … WHERE`, so overlapping ticks cannot
+both add it. When anything else happens to the cycle in between, a later
+outage gets its own line.
+
+A new test in `lab_gates_d511.test.ts` runs three failed ticks, then adds an
+event, then runs one more failed tick. It expects 1 line after the three
+ticks and 2 after the fourth. It fails on the code before this change. 4 of
+4 mutations were caught:
+- no guard;
+- guard on any earlier line rather than the latest;
+- read the oldest event instead of the latest;
+- drop the bind.
+
 ## D512
 
 **Task #995: Admin Studio's home drops its four legacy reads.**
@@ -41537,6 +42218,74 @@ Page:
 - the dispute's who and when, or the reports' date, unrendered;
 - the floor caveat;
 - the old rail copy.
+
+## D517
+
+**The "pre-existing failures" were the test fixtures depending on the Node
+release (issue #996).** No migration. No route or service changed.
+
+**The question.** Two slots reported three tests as failing on main, and
+`npm run test:drift` exiting 1 because of them:
+
+- `capital_call_ledger` "a retry after a partial write";
+- `trust_center_d432` "a member sees both parties named";
+- `trust_center_d432` "a party whose account is gone".
+
+Another report said they pass on Node 22.
+
+**Measured** on a clean origin/main (`5201db16`), Node 22.22.0, with `npm ci`
+in all three packages, twice:
+
+- both files passed both times;
+- `npm run test:drift` printed EXIT=0 both times.
+
+Running the two files under older releases (`npx -p node@<v>`) reproduced the
+reports:
+
+- the capital test fails on 22.6 through 22.15 and passes from 22.16;
+- the two trust tests fail through 22.19 and pass from 22.20.
+
+Each boundary falls between two releases bundling the same SQLite (3.49.1 and
+3.50.4), so both causes were in `node:sqlite`.
+
+**Cause 1, the capital test.**
+
+- A fund-call line is `INSERT OR IGNORE … RETURNING *`, and the ledger notices
+  only the lines whose `meta.changes` is above zero.
+- Up to 22.15, `StatementSync.run()` stopped a RETURNING statement at its first
+  row. SQLite updates the change counter only when a statement completes, so
+  `changes` was the previous statement's count.
+- On the retry, LP 200's line wrote its row (`last_row_id` 2 → 4) but reported
+  the ignored LP 100 line's 0, and its notice was dropped.
+- D1 counts this correctly.
+- **The fix is in the shared fixture** (`test/_d1_sqlite.mjs`):
+  - a statement with `RETURNING` always runs through `all()`, which completes
+    on every release;
+  - its `changes` is the number of rows returned, because RETURNING emits one
+    row per row written;
+  - the same path replaces the old catch, which reported 0 changes for every
+    RETURNING write on releases where `run()` refused one.
+
+**Cause 2, the trust tests.**
+
+- `routes/trust.ts` binds one value to `party_a_user_id = ?1 OR
+  party_b_user_id = ?1`.
+- Up to 22.19, `node:sqlite` rejected the repeated `?1`
+  (`column index out of range`). D1 accepts it.
+- The admin-branch test has no `?1`, which is why it never failed.
+- **The fix:** the file's local shim now rewrites each `?N` into its own `?`
+  carrying the N-th value, as the D318 shim already does.
+
+**Verified.**
+
+- Both files pass on Node 22.6, 22.12, 22.15, 22.16, 22.19 and 22.20, and on
+  22.22.
+- The full suite passes on 22.22.
+- Two mutations were each caught on the current Node:
+  - a RETURNING write reported as 0 changes fails the capital file (4 tests);
+  - a rewrite that binds the wrong value fails the trust file (2 tests).
+- Removing either fix brings back the measured failures on the old releases.
+- Node 23.11 and 24.4 printed no test output under `npx` and are not claimed.
 
 ## D519
 

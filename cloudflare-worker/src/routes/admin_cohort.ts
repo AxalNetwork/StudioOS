@@ -237,9 +237,11 @@ r.get('/catalog', async (c) => {
 
 r.get('/applications', async (c) => {
   await requireAdmin(c);
-  const { ensureCohortAppSchema, getCohortSizeSettings, monthLabel } = await import('../services/cohortApplications');
+  const { ensureCohortAppSchema, readCohortSizeSettings, monthLabel } = await import('../services/cohortApplications');
   await ensureCohortAppSchema(c.env);
-  const settings = await getCohortSizeSettings(c.env);
+  // D511 — null when the settings could not be read: no minimum is shown and
+  // no cycle is judged against one.
+  const settings = await readCohortSizeSettings(c.env);
   const cycles = await c.env.DB.prepare(
     `SELECT * FROM cohort_cycles ORDER BY year DESC, month DESC LIMIT 12`,
   ).all<Record<string, unknown>>();
@@ -301,11 +303,11 @@ r.get('/applications', async (c) => {
       ...cy,
       label: monthLabel(Number(cy.year), Number(cy.month)),
       applicant_counts: byStatus,
-      meets_minimum: ((byStatus['approved'] ?? 0) + (byStatus['activated'] ?? 0)) >= settings.min,
+      meets_minimum: settings ? ((byStatus['approved'] ?? 0) + (byStatus['activated'] ?? 0)) >= settings.min : null,
       applicants: (applicants.results || []).map((a) => ({ ...a, ...(lifecycle.get(Number(a.id)) || {}) })),
     });
   }
-  return c.json({ cycles: out, settings, server_time: new Date().toISOString() });
+  return c.json({ cycles: out, settings, settings_unreadable: settings === null, server_time: new Date().toISOString() });
 });
 
 r.post('/applications/settings', async (c) => {

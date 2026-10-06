@@ -11,9 +11,15 @@
  * WHAT IT READS IS `last_activity_at` AND NOTHING ELSE. That column is stamped
  * when a contact is created, so an untouched contact ages into "going cold" on
  * its 61st day. The flag is honest about the column; the column does not yet
- * tell a touch from an arrival, and no strength, note or reminder store exists
- * to refine it.
+ * tell a touch from an arrival.
+ *
+ * D551 (#1144): a contact now carries a `strength` and an `organization`
+ * (migration 386), and the contact list carries its follow-up rollup —
+ * `next_task_due`, `open_tasks` and `last_reply_at` — so the pages read those
+ * here too, and print "Not recorded" for any of them that is absent.
  */
+
+import { NOT_RECORDED } from './absence.js';
 
 /** Days after the last recorded activity at which a contact reads as going cold. */
 export const COLD_AFTER_DAYS = 60;
@@ -77,4 +83,46 @@ export function reminderDue(remindAt, now = Date.now(), timeZone = 'UTC') {
   }
   const at = new Date(s).getTime();
   return Number.isFinite(at) && at <= now;
+}
+
+/** The canvas's strength set, in its order (A6: Strong, Warm, Cool). */
+export const STRENGTHS = [
+  { value: 'strong', label: 'Strong' },
+  { value: 'warm', label: 'Warm' },
+  { value: 'cool', label: 'Cool' },
+];
+
+/** A contact's strength as the pages print it: its label, or Not recorded — never Cool by default. */
+export function strengthLabel(row) {
+  const hit = STRENGTHS.find((s) => s.value === String(row?.strength || '').toLowerCase());
+  return hit ? hit.label : NOT_RECORDED;
+}
+
+/** "Oct 20, 2026" from a stored date or timestamp; null when nothing parseable is stored. */
+function shortDate(value) {
+  if (!value) return null;
+  const s = String(value);
+  const t = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00Z` : s).getTime();
+  if (!Number.isFinite(t)) return null;
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(t);
+}
+
+/**
+ * The follow-up a contact has open, from the list's rollup: the next due
+ * date (overdue when it has passed), open follow-ups with no date, or none.
+ * A row from a Worker without the rollup reads Not recorded, not "none open".
+ */
+export function followUp(row, now = Date.now()) {
+  if (row?.open_tasks === undefined) return { state: 'not_recorded', text: NOT_RECORDED };
+  const open = Number(row.open_tasks) || 0;
+  if (!open) return { state: 'none', text: 'No open follow-up' };
+  const due = shortDate(row.next_task_due);
+  if (!due) return { state: 'undated', text: `${open} open, no due date` };
+  const overdue = new Date(/^\d{4}-\d{2}-\d{2}$/.test(row.next_task_due) ? `${row.next_task_due}T23:59:59Z` : row.next_task_due).getTime() < now;
+  return { state: overdue ? 'overdue' : 'due', text: overdue ? `Follow-up overdue since ${due}` : `Follow up due ${due}` };
+}
+
+/** When the last reply was logged, or Not recorded. */
+export function lastNote(row) {
+  return shortDate(row?.last_reply_at) || NOT_RECORDED;
 }

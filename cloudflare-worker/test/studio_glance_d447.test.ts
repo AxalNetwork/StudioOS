@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
-import { studioGlance, HQ_INSIGHTS_REASON } from '../src/services/studioGlance.ts';
+import { studioGlance, HQ_BENCHMARK_REASON } from '../src/services/studioGlance.ts';
 import { branchHome } from '../src/services/branchHome.ts';
 
 const OPEN = Date.parse('2026-09-16T12:00:00Z');
@@ -44,8 +44,9 @@ test('HQ does not read branch_benchmarks, and a closed week does not invent a pe
   )`);
   const open = await studioGlance({ DB: makeD1(db) } as any, OPEN);
   assert.equal(open.tier, 'hq');
-  assert.equal(open.insights.recorded, false);
-  assert.equal(open.insights.reason, HQ_INSIGHTS_REASON);
+  // D555: HQ's own insights are read; the territory benchmark copy still is not.
+  assert.equal(open.insights.benchmark.recorded, false);
+  assert.equal(open.insights.benchmark.reason, HQ_BENCHMARK_REASON);
   assert.equal(open.programme.open_week, 3);
   assert.equal(open.programme.pending_accounts, null, 'no cohort table means the count is unknown');
   assert.match(String(open.programme.reason), /unknown rather than zero/);
@@ -78,7 +79,7 @@ test('an open week counts the pending rows on HQ, and empty agreement tables are
   const body = await studioGlance({ DB: makeD1(db) } as any, OPEN);
   assert.equal(body.programme.pending_accounts, 1);
   assert.equal(body.agreements.expiring, 0);
-  assert.equal(body.insights.recorded, false);
+  assert.equal(body.insights.benchmark.recorded, false);
 });
 
 test('an unreadable licence is not the same claim as a licence HQ has not pushed', async () => {

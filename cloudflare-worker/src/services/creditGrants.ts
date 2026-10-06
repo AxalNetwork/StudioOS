@@ -50,7 +50,7 @@ export type GrantActor =
 
 export type GrantRefusalCode =
   | 'invalid_request' | 'rule_unknown' | 'rule_inactive' | 'user_not_found'
-  | 'not_eligible' | 'cap_reached';
+  | 'not_eligible' | 'cap_reached' | 'superseded';
 
 export type GrantResult =
   | { status: 'granted'; ledger_id: number; rule_key: string; credits: number; usd_value_cents: number; notified: boolean }
@@ -125,8 +125,15 @@ async function tell(env: Env, userId: number, type: string, title: string, body:
 const plural = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
 const usd = (cents: number) => `US$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 
+/**
+ * `unlessPaid` (#1104 follow-up): a source ref of the same user whose grant
+ * forbids this one, for a pair that pays "the first of" two. It is checked
+ * INSIDE the insert, so two grants landing together cannot both pass it,
+ * and a hit is refused as `superseded`. Each half keeps its own source ref.
+ */
 export async function grantCredits(env: Env, args: {
   userId: number; ruleKey: string; sourceRef: string; actor: GrantActor; note?: string | null;
+  unlessPaid?: string | null;
 }): Promise<GrantResult> {
   const ruleKey = clean(args.ruleKey, 80);
   const sourceRef = clean(args.sourceRef, SOURCE_MAX);
@@ -134,6 +141,15 @@ export async function grantCredits(env: Env, args: {
   if (!Number.isInteger(userId) || userId <= 0 || !ruleKey || !sourceRef || ruleKey === CAP_RULE_KEY) {
     return { status: 'refused', code: 'invalid_request', message: 'A grant needs a user, a reward rule and a source.' };
   }
+
+  // A SOURCE ALREADY PAID IS ANSWERED FIRST. Whether the rule is still on,
+  // what it pays now and who the recipient is today can all change after a
+  // grant; a retry of a paid source must still read `already_granted`, or a
+  // webhook or job would treat a processed event as failed and retry forever.
+  const paid = await env.DB.prepare(
+    `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
+  ).bind(userId, sourceRef).first<{ id: number }>();
+  if (paid) return { status: 'already_granted', ledger_id: Number(paid.id), rule_key: ruleKey };
 
   const rule = await env.DB.prepare(
     'SELECT key, credits, usd_value_cents, active FROM credit_reward_rules WHERE key = ?',
@@ -164,26 +180,35 @@ export async function grantCredits(env: Env, args: {
   const since = monthStart();
   const note = clean(args.note, NOTE_MAX) || ruleReason(ruleKey);
   const capped = bounty && cap >= 0;
+  const unlessPaid = clean(args.unlessPaid, SOURCE_MAX) || null;
 
   // THE CAP IS INSIDE THE INSERT. A read-then-write would let two grants
   // landing together both see room under it.
   const ins = await env.DB.prepare(
     `INSERT OR IGNORE INTO perk_credit_ledger (user_id, delta, kind, source_ref, note, created_at, rule_key)
      SELECT ?, ?, 'grant', ?, ?, ?, ?
-      WHERE ? = 0 OR (SELECT COALESCE(SUM(g.delta), 0) AS used FROM perk_credit_ledger g
+      WHERE (? = 0 OR (SELECT COALESCE(SUM(g.delta), 0) AS used FROM perk_credit_ledger g
    WHERE g.user_id = ? AND g.kind = 'grant' AND datetime(g.created_at) >= datetime(?)
      AND (substr(g.rule_key, 1, 4) = 'bug_' OR substr(g.rule_key, 1, 16) = 'feature_shipped_' OR g.rule_key = 'task_approved')
      AND NOT EXISTS (SELECT 1 FROM perk_credit_ledger r
                       WHERE r.user_id = g.user_id AND r.kind = 'admin_adjust'
-                        AND r.source_ref = 'revoke:' || g.id)) + ? <= ?`,
+                        AND r.source_ref = 'revoke:' || g.id)) + ? <= ?)
+      AND (? IS NULL OR NOT EXISTS (SELECT 1 FROM perk_credit_ledger x
+                                     WHERE x.user_id = ? AND x.kind = 'grant' AND x.source_ref = ?))`,
   ).bind(userId, credits, sourceRef, note, new Date().toISOString(), ruleKey,
-    capped ? 1 : 0, userId, since, credits, cap).run();
+    capped ? 1 : 0, userId, since, credits, cap, unlessPaid, userId, unlessPaid).run();
 
   if (Number(ins?.meta?.changes ?? 0) !== 1) {
     const prior = await env.DB.prepare(
       `SELECT id, rule_key FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
     ).bind(userId, sourceRef).first<{ id: number; rule_key: string | null }>();
     if (prior) return { status: 'already_granted', ledger_id: Number(prior.id), rule_key: ruleKey };
+    if (unlessPaid) {
+      const other = await env.DB.prepare(
+        `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
+      ).bind(userId, unlessPaid).first<{ id: number }>();
+      if (other) return { status: 'refused', code: 'superseded', message: 'The other half of this pair was already paid, so nothing was granted.' };
+    }
     const used = await env.DB.prepare(CAP_USED_SQL).bind(userId, since).first<{ used: number }>();
     const usedN = Number(used?.used) || 0;
     return {

@@ -11,6 +11,7 @@
  */
 import type { Env } from '../types';
 import * as ai from './aiRouter';
+import { AI_SURFACE } from './aiSurfaces';
 
 // k-anonymity floor — mirrors K_MIN in routes/market_intel.ts. Any aggregate
 // row with n<5 is suppressed both server-side (here) AND defensively
@@ -116,6 +117,7 @@ export async function draftSummary(
   const r = await ai.run(env, {
     task: 'publication',
     userId,
+    surface: AI_SURFACE.adminPublications,
     systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: 600,

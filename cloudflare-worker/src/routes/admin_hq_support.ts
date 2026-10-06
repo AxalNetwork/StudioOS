@@ -10,7 +10,7 @@
  * D132 stated and D133 applied — and on a branch there is no elevation at all,
  * so it answers "HQ only" (D106).
  *
- * EVERY READ ANSWERS FOR ITSELF. Five reads, each with its own failure: an
+ * EVERY READ ANSWERS FOR ITSELF. Six reads, each with its own failure: an
  * unreadable escalation board costs the escalation queue and the matrix's
  * escalation cells, never the ticket queues beside them. A read that failed is
  * `available: false` with its reason; a read that hit its ceiling is
@@ -25,7 +25,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
-import { openEscalationSummary, type OpenEscalation } from '../rpc/hqOps';
+import { openEscalationSummary, ESCALATION_KINDS, SLA_HOURS, type OpenEscalation } from '../rpc/hqOps';
 import { ageHours } from '../services/approvalSources';
 import {
   readOpenTickets, summariseTickets, readTicketSync, readSupportLicences,
@@ -33,8 +33,27 @@ import {
   type TicketQueues,
 } from '../services/supportQueues';
 import {
-  HQ_SUPPORT_SLA_POLICY, readOpenTicketTaxonomy,
+  HQ_SUPPORT_SLA_POLICY, readOpenTicketTaxonomy, ticketMappingText,
 } from '../services/supportSlaPolicy';
+import { dueSoonWindowHours } from '../services/slaWindow';
+
+/**
+ * The two SLA tables, named side by side (D459). Tickets band against the
+ * P1/P2/P3 hours; escalations carry a `due_at` stamped from their kind's hours
+ * (`SLA_HOURS`). They are different promises about different things, so the
+ * panel shows both rather than mapping one onto the other. Each row carries
+ * the due-soon window its limit gives, from the one module that defines it.
+ */
+export function slaPolicyBody() {
+  return {
+    tiers: HQ_SUPPORT_SLA_POLICY.map((t) => ({ ...t, due_soon_hours: dueSoonWindowHours(t.hours) })),
+    escalation_kinds: ESCALATION_KINDS.map((kind) => ({
+      kind, hours: SLA_HOURS[kind], due_soon_hours: dueSoonWindowHours(SLA_HOURS[kind]),
+    })),
+    note: 'Fixed in code and the same on every subsidiary: a subsidiary can escalate a ticket’s priority but cannot redefine what P1 means, and nothing on this page edits the hours.',
+    ticket_mapping: ticketMappingText(),
+  };
+}
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -158,11 +177,7 @@ r.get('/', async (c) => {
     tickets,
     matrix,
     sync,
-    sla_policy: {
-      tiers: HQ_SUPPORT_SLA_POLICY,
-      note: 'Bands are set here and inherited whole — a subsidiary can escalate a ticket’s priority but cannot redefine what P1 means.',
-      ticket_mapping: 'urgent → P1 · high → P2 · medium and low → P3',
-    },
+    sla_policy: slaPolicyBody(),
     taxonomy,
   });
 });
