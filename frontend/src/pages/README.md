@@ -33,6 +33,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
 | `branch/` | The subsidiary shell's own pages, S1–S11, all eight rows built (D107 for why every row shipped with a route rather than only the built ones; D155 for the last of them). Start at `branch/README.md`. |
 | `insights/` | Insight reader and its public variant. |
+| `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |
 

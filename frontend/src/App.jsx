@@ -30,7 +30,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 // file by path, and several slice it at the Routes element's opening tag, so
 // that tag is not written in prose here). See frontend/src/routes/README.md;
 // routes_modules_d528.test.mjs fails the build for a module that is not wired in.
-// (no modules yet)
+import learningRoutes from './routes/learning';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -702,9 +702,13 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Events
           </Link>
-          <Link to="/articles/draft" onClick={() => setOpen(false)}
+          {/* D562 — "Learning" replaces "Articles" (the owner, epic #1157).
+              Articles live inside Learning now: its Articles tab lists them,
+              each opens at `/articles/:slug`, and "Write an article" there
+              still goes to `/articles/draft`. */}
+          <Link to="/learning" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Articles
+            Learning
           </Link>
           {/* Task #103 — one entry, not two. "Help Center" and "Documentation"
               used to be a ticket tracker and a docs site sitting side by side;
@@ -2212,14 +2216,12 @@ function AppInner() {
   const founderExecutionEditor = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') === 'workspace';
 
-  // D528 — the first route module (frontend/src/routes/<area>.jsx) adds, right
-  // here, what every module gets from this file's closures, so a route in a
-  // module is gated by the same `guard`, `hqOnly` and `authOnly` as one
-  // written here, never by a copy of them:
-  //   const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
-  // It is not declared until then: with no module to read it, it is a dead
-  // variable, and routes_modules_d528.test.mjs holds it absent without a
-  // module and present, in exactly that shape, with one.
+  // D528 — what every route module (frontend/src/routes/<area>.jsx) gets from
+  // this file's closures, so a route in a module is gated by the same `guard`,
+  // `hqOnly` and `authOnly` as one written here, never by a copy of them. The
+  // first module, Learning (D562), added it; routes_modules_d528.test.mjs holds
+  // it present, in exactly this shape, while a module exists.
+  const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
@@ -3311,7 +3313,7 @@ function AppInner() {
           alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in
           the block of the same name at the top of this file. Above the
           catch-all, so a module's routes are matched before it. */}
-      {/* (no modules yet) */}
+      {learningRoutes(routeTools)}
       {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
           other route (public, alias, or guarded) does. */}
