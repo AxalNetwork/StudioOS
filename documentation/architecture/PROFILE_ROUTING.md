@@ -184,7 +184,7 @@ it, where in their nav, and how do they get there.*
 | --- | --- | --- | --- | --- | --- | --- |
 | AdminRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | AdvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
-| AIRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
+| AIRail | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
 | DetailRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | EmberRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | ForgeRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |

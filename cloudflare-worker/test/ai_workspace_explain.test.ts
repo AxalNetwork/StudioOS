@@ -91,7 +91,8 @@ test('what reaches the prompt is bounded on every axis', () => {
   assert.match(SRC, /\.slice\(0, 12\)/, 'cap the number of lines');
   assert.match(SRC, /\.slice\(0, 200\)/, 'cap each line');
   assert.match(SRC, /\.slice\(0, 60\)/, 'cap the workspace and zone names');
-  assert.match(SRC, /classifyInput\(c\.env, user\.id, facts\)/,
+  // D552: the page rides along so the safety run is recorded on it.
+  assert.match(SRC, /classifyInput\(c\.env, user\.id, facts, page\)/,
     'the same input classifier the advisor surface runs');
   const handler = SRC.slice(SRC.indexOf("ai.post('/workspace/explain'"));
   assert.ok(handler.indexOf('classifyInput') < handler.indexOf('aiRun('),
