@@ -369,7 +369,7 @@ test('each lane names its store, and the two meanings of published stay two part
     ['submitted', 'in_review', 'changes_requested']);
   assert.deepEqual(laneOf(body, 'scheduled').parts[0].statuses, ['approved']);
   assert.match(laneOf(body, 'published').note, /Two meanings of "published"/);
-  assert.match(laneOf(body, 'scheduled').note, /Nothing stores a publish time/);
+  assert.match(laneOf(body, 'scheduled').note, /goes out at that time/);
 });
 
 test('a lane cannot disagree with the pipeline block beside it: one read, not two', async () => {
@@ -515,7 +515,10 @@ test('a publication status outside the two is reported, never placed in a lane',
   const { body } = await summary(db);
   assert.deepEqual(body.board.other_publication_statuses, [{ status: 'queued_for_print', n: 1 }]);
   assert.deepEqual(body.pipeline.unmapped_statuses, [{ status: 'weird_status', n: 1 }]);
+  // This fixture's `articles` predates migration 346 (D484), so the times are
+  // unreadable here, and say so; article_publish_at_d484.test.ts reads them.
   assert.equal(body.board.publish_time.recorded, false);
+  assert.match(body.board.publish_time.reason, /migration 346/);
   assert.equal(body.board.origin.recorded, false);
   assert.match(body.board.origin.reason, /only a content escalation carries a branch code/);
 });

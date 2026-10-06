@@ -5537,6 +5537,9 @@ export const adminArticles = {
     request(`/admin/articles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   approve: (id) => request(`/admin/articles/${id}/approve`, { method: 'POST', body: '{}' }),
   publish: (id) => request(`/admin/articles/${id}/publish`, { method: 'POST', body: '{}' }),
+  // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
+  schedule: (id, publishAt) =>
+    request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),
   unpublish: (id) => request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: '{}' }),
   addComment: (id, body, anchor) =>
     request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify({ body, anchor }) }),

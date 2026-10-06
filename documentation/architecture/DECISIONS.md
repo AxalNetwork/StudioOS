@@ -41327,6 +41327,75 @@ C on #1025).
   - the Super Admin gate.
 - `frontend/test/analytics_h15_s15.test.mjs` renders the card and the tile in
   each state, and the rail's read-back line.
+## D484
+
+**HQ · Content (H6): an approved article carries the time it goes out, and
+the cron publishes it then (issue #1025, migration 346).** Slot S09.
+
+**What was true.** H6's Scheduled lane meant "approved": publishing was a
+manual step, and the board said "nothing stores when a piece is meant to go
+out" (`routes/admin_content.ts`).
+
+**The store.** Migration 346 adds two columns to `articles`:
+- `publish_at`, ISO UTC; NULL means "no time set";
+- `publish_at_set_by`, the admin who set it.
+
+**Setting it.** `POST /api/admin/articles/:id/schedule { publish_at }` sets,
+moves or clears (`null`) the time on an APPROVED article. It is admin-gated,
+as every route in that file is.
+- A time must name its zone (`Z` or an offset). "09:00" is a different instant
+  in every reader's browser, and the cron would have to guess which.
+- It must be in the future and at most 365 days ahead.
+- It is stored as UTC.
+- Any other status is 409. The write is conditional on `approved`, so a
+  publish racing it loses nothing.
+- Each accepted write is one `logAdminAction` row (`article.schedule` or
+  `article.unschedule`) carrying the time before and after.
+
+**Publishing at the time.** The publish handler's body became
+`publishApprovedArticle`. Both the manual publish and the cron go through it,
+so the render, revision, edge-cache purge and notifications are identical.
+- The status flip is conditional (`AND status = 'approved'`). Racing callers,
+  such as an admin's click and the cron, or two ticks, publish once. The loser
+  writes no revision and sends no notification, and the manual route answers
+  409.
+- `publishDueArticles` runs every minute from the existing `* * * * *` tick,
+  on every tier, because a branch's articles are its own. It publishes the
+  oldest times first, 20 per tick. The revision is recorded as the admin who
+  set the time.
+- A database without migration 346 publishes nothing and does not fail the
+  cron.
+- Unpublishing returns an article to `approved` and clears both columns, or
+  the next tick would publish it again.
+
+**The pages.**
+- The review queue (`/admin/articles`) shows a "Publish at" control on an
+  approved article. It reads the input in the reader's zone, sends UTC, and
+  shows the stored time in both the reader's zone and UTC. It can set, move or
+  clear the time. The helpers are in `pages/admin/articlePublishAt.js`.
+- H6's `board.publish_time` is now a read. It gives how many approved
+  articles have a time, how many wait for a manual publish, and the five
+  soonest, in UTC. A database without the column is Not recorded with that
+  reason, never "none scheduled".
+- The Scheduled lane's note says which of the two each article is.
+  Publications still carry no publish time: they are issued by hand.
+
+**Tests.**
+- `cloudflare-worker/test/article_publish_at_d484.test.ts` (11 tests) runs on
+  real SQLite through migrations 068, 092, 093 and 346. It covers:
+  - the route: UTC storage, the audit row, and every refusal;
+  - the cron: only due approved articles, the revision's author, a second
+    tick idle, batch order, and a manual publish racing it;
+  - a stale row losing the race;
+  - unpublish clearing the time;
+  - a database without 346;
+  - H6's read in both states.
+- `frontend/test/article_publish_at_d484.test.mjs` (8 tests) runs in
+  Europe/Paris, so local and UTC differ. It covers the zone conversion both
+  ways across a daylight-saving change, the control in each state, the request
+  body, and H6's times in both states.
+- `content_studio_d214.test.ts`: the Scheduled lane's note, and the reason
+  given when 346 is absent.
 
 ## D490
 
