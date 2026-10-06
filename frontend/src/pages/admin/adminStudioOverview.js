@@ -354,6 +354,114 @@ export function loadStudioGlance() {
   return glanceInflight;
 }
 
+// ── D555: HQ's own figures (#1155) ───────────────────────────────────────
+
+/** Each laned queue's console, by the Worker's lane key (`approvalSources.ts`). */
+export const LANE_CONSOLES = {
+  lp: '/admin/lp-applications',
+  referrals: '/admin/refer-earn',
+  cohort: '/admin/spinout-lab',
+  moderation: '/admin/spinout-moderation',
+  kyc: '/admin?tab=kyc',
+  partner_profiles: '/admin?tab=profiles',
+  exploring: '/admin/exploring',
+  jobs: '/admin/jobs',
+  events: '/admin/events',
+  best_fit: '/admin/best-fit',
+  due_diligence: '/admin/due-diligence',
+};
+
+/** The lanes with no pending notion (`NOT_LANED`), by label, with their consoles. */
+export const NO_QUEUE_CONSOLES = {
+  Directory: '/admin?tab=directory',
+  Circles: '/admin/circles',
+  'Partner invitations': '/admin/partners',
+  'Advisor cohort access': '/admin/advisor-cohorts',
+};
+
+const fmtN = (n) => Number(n).toLocaleString('en-US');
+
+/**
+ * HQ's Accounts block. `null` exploring or Trash means that one read failed:
+ * it is said, not shown as zero.
+ */
+export function hqAccountsView(accounts) {
+  if (!accounts) return { kind: 'unrecorded', reason: 'HQ\'s accounts were not on the glance.' };
+  if (accounts.available === false) return { kind: 'unreadable', reason: accounts.reason };
+  const roles = (accounts.by_role || []).map((r) => `${fmtN(r.count)} ${r.role}`).join(' · ');
+  return {
+    kind: 'ready',
+    label: accounts.label,
+    total: accounts.total,
+    byRole: accounts.by_role || [],
+    new7d: accounts.new_7d,
+    new30d: accounts.new_30d,
+    deactivated: accounts.deactivated,
+    exploring: accounts.exploring,
+    trash: accounts.trash_projects,
+    text: `${fmtN(accounts.total)} accounts${roles ? ` · ${roles}` : ''} · ${fmtN(accounts.new_7d)} new this week`
+      + (accounts.exploring === null || accounts.exploring === undefined ? '' : ` · ${fmtN(accounts.exploring)} exploring`),
+  };
+}
+
+/**
+ * HQ's Approvals block: the pending total (null when any lane could not be
+ * read), the lanes worst first as the Worker sorted them, each with its
+ * console, and the lanes with no queue.
+ */
+export function hqApprovalsView(approvals) {
+  if (!approvals || !Array.isArray(approvals.lanes)) {
+    return { kind: 'unrecorded', reason: 'HQ\'s approval lanes were not on the glance.' };
+  }
+  const lanes = approvals.lanes.map((l) => ({
+    ...l,
+    to: LANE_CONSOLES[l.key] || null,
+    age: ageText(l.oldest_age_hours),
+  }));
+  const worst = lanes.find((l) => typeof l.count === 'number' && l.count > 0) || null;
+  const total = approvals.pending_total;
+  const unreadable = lanes.filter((l) => l.count === null).length;
+  const head = total === null || total === undefined
+    ? `${unreadable} lane${unreadable === 1 ? '' : 's'} could not be read, so no total`
+    : total === 0 ? 'Nothing is waiting' : `${fmtN(total)} pending`;
+  return {
+    kind: 'ready',
+    label: approvals.label,
+    total: total ?? null,
+    lanes,
+    worst,
+    unreadable,
+    sla: worst?.sla || null,
+    noQueue: (approvals.no_queue || []).map((n) => ({ ...n, to: NO_QUEUE_CONSOLES[n.label] || null })),
+    notApplicable: approvals.not_applicable || [],
+    text: worst ? `${head} · worst: ${worst.label}, oldest ${worst.age || 'undated'}` : head,
+  };
+}
+
+/** HQ's Insights block: each figure is its own state. */
+export function hqInsightsView(insights) {
+  if (!insights || insights.recorded === false) {
+    return { kind: 'unrecorded', reason: insights?.reason || 'HQ\'s insights were not on the glance.' };
+  }
+  const weeks = insights.signups_by_week?.available ? insights.signups_by_week.weeks : null;
+  const thisWeek = weeks ? weeks[weeks.length - 1] : null;
+  return {
+    kind: 'ready',
+    label: insights.label,
+    signups: insights.signups_by_week?.available
+      ? { kind: 'ready', weeks, thisWeek: thisWeek?.count ?? null, eightWeeks: weeks.reduce((t, w) => t + w.count, 0) }
+      : { kind: 'unreadable', reason: insights.signups_by_week?.reason },
+    spend: insights.ai_spend_month?.available
+      ? { kind: 'ready', usd: insights.ai_spend_month.usd, calls: insights.ai_spend_month.calls, month: insights.ai_spend_month.month }
+      : { kind: 'unreadable', reason: insights.ai_spend_month?.reason },
+    tickets: insights.open_tickets?.available
+      ? { kind: 'ready', open: insights.open_tickets.open }
+      : { kind: 'unreadable', reason: insights.open_tickets?.reason },
+    active: { kind: 'unrecorded', reason: insights.active_accounts?.reason },
+    benchmark: { kind: 'unrecorded', reason: insights.benchmark?.reason },
+  };
+}
+
 function unrecordedBlock(block, fallback) {
   return { kind: 'unrecorded', reason: block?.reason || fallback };
 }
@@ -410,9 +518,15 @@ export function glancesFromStudioGlance(payload, user) {
           return { kind: 'ready', lines };
         })();
 
+  const onHq = payload.tier === 'hq';
+  const hq = onHq ? {
+    accounts: hqAccountsView(payload.accounts),
+    approvals: hqApprovalsView(payload.approvals),
+    insights: hqInsightsView(payload.insights),
+  } : null;
   const approvals = payload.approvals?.recorded === false
     ? unrecordedBlock(payload.approvals, 'The queues were not on the glance, so this is not a claim that the board is clear.')
-    : approvalsGlance(payload.approvals?.lanes);
+    : onHq ? hq.approvals : approvalsGlance(payload.approvals?.lanes);
 
   const programme = payload.programme?.recorded === false
     ? unrecordedBlock(payload.programme, 'The programme clock was not on the glance.')
@@ -446,7 +560,7 @@ export function glancesFromStudioGlance(payload, user) {
 
   const shareUnreadable = payload.revenue?.available === false;
   const shareAbsent = !shareUnreadable && payload.revenue?.recorded === false;
-  const medianAbsent = payload.insights?.recorded === false;
+  const medianAbsent = payload.insights?.recorded === false || onHq;
   const view = insightsGlance(
     shareUnreadable || shareAbsent ? null : payload.revenue,
     medianAbsent ? null : payload.insights,
@@ -458,7 +572,7 @@ export function glancesFromStudioGlance(payload, user) {
         ? unrecordedBlock(payload.revenue, 'The share rate was not on the glance.')
         : view.share,
     median: medianAbsent
-      ? unrecordedBlock(payload.insights, 'The benchmark copy was not on the glance.')
+      ? unrecordedBlock(onHq ? payload.insights?.benchmark : payload.insights, 'The benchmark copy was not on the glance.')
       : view.median,
   };
 
@@ -475,11 +589,12 @@ export function glancesFromStudioGlance(payload, user) {
     programme,
     contracts,
     insights: insightView,
+    hq,
   };
 }
 
 /** The sidebar's order, which breaks every tie in the strip. */
-export const NEEDS_DECISION_ORDER = ['seats', 'approvals', 'programme', 'contracts'];
+export const NEEDS_DECISION_ORDER = ['accounts', 'seats', 'approvals', 'programme', 'contracts'];
 
 /**
  * How urgent a tile is: 0 unreadable, 1 past its window (or seats over the

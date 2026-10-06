@@ -351,11 +351,13 @@ export async function agreementsExpiring(env: Env, now: number): Promise<Agreeme
   };
 }
 
-export async function branchHome(
-  env: Env,
-  now = Date.now(),
-  opts?: { includeRevenue?: boolean },
-): Promise<BranchHome> {
+/**
+ * The approval lanes as pressure, worst first: `laneCounts` (the consoles'
+ * own pending predicates) shaped with each lane's oldest age and SLA band.
+ * One function for the branch home and for HQ's studio glance (D555), so the
+ * two never sort or band a lane differently.
+ */
+export async function queuePressure(env: Env, now = Date.now()) {
   const lanes = await laneCounts(env);
   const queue_pressure: QueuePressureLane[] = lanes.map((l) => {
     const age = l.count === null ? null : ageHours(l.oldest_at, now);
@@ -370,6 +372,15 @@ export async function branchHome(
     };
   });
   queue_pressure.sort(byPressure);
+  return { lanes, queue_pressure };
+}
+
+export async function branchHome(
+  env: Env,
+  now = Date.now(),
+  opts?: { includeRevenue?: boolean },
+): Promise<BranchHome> {
+  const { lanes, queue_pressure } = await queuePressure(env, now);
 
   const includeRevenue = opts?.includeRevenue !== false;
   const [programme, revenue, agreements] = await Promise.all([
