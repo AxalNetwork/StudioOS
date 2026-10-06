@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
 /**
@@ -20,7 +21,13 @@ const TYPE_LABEL = {
 };
 const typeLabel = (t) => TYPE_LABEL[t] || t || 'relationship';
 
-export default function RelationshipRequests({ onChange }) {
+/**
+ * `logPath`, when given, is `(id) => path` to an accepted relationship's log,
+ * and each accepted record links to it (D569). Only the partner shell passes
+ * one: the log is a partner page (`/partner/relationships/:id`), and a link on
+ * another licence would open onto a route its guard refuses.
+ */
+export default function RelationshipRequests({ onChange, logPath }) {
   const [state, setState] = useState({ incoming: [], outgoing: [], accepted: [], error: '' });
   const [busy, setBusy] = useState(null);
 
@@ -106,9 +113,15 @@ export default function RelationshipRequests({ onChange }) {
                 <span className="text-sm text-gray-800 dark:text-gray-200">
                   <strong>{r.other?.name || r.other?.email || 'A member'}</strong> · {typeLabel(r.relationship_type)}
                 </span>
-                <button type="button" disabled={busy === r.id}
-                  onClick={() => act(r.id, () => api.removeRelationship(r.id))}
-                  className="shrink-0 px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-50">Remove</button>
+                <span className="flex shrink-0 items-center gap-2">
+                  {logPath ? (
+                    <Link to={logPath(r.id)} data-testid={`link-relationship-log-${r.id}`}
+                      className="px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200">Open log</Link>
+                  ) : null}
+                  <button type="button" disabled={busy === r.id}
+                    onClick={() => act(r.id, () => api.removeRelationship(r.id))}
+                    className="shrink-0 px-3 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-50">Remove</button>
+                </span>
               </li>
             ))}
           </ul>

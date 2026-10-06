@@ -157,6 +157,8 @@ const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 const AdminReferralReview = lazy(() => import('./pages/admin/ReferralReview'));
+// D569 — the commissions-and-payouts console (canvas pea-commissions).
+const AdminCommissions = lazy(() => import('./pages/admin/AdminCommissions'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
@@ -387,6 +389,12 @@ const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
+// D569 — the partner earnings screens (canvas pe-earnings, pe-referrals,
+// pe-log, pe-board).
+const PartnerEarnings = lazy(() => import('./pages/partner/earnings/PartnerEarnings'));
+const PartnerReferrals = lazy(() => import('./pages/partner/earnings/PartnerReferrals'));
+const PartnerRelationshipLog = lazy(() => import('./pages/partner/earnings/PartnerRelationshipLog'));
+const PartnerLeaderboard = lazy(() => import('./pages/partner/earnings/PartnerLeaderboard'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
 const CirclesPage = lazy(() => import('./pages/CirclesPage'));
 const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfilePage'));
@@ -2498,6 +2506,20 @@ function AppInner() {
       <Route path="/founder/post-need" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=mine" replace /> : <NeedsBoardPage user={user} />)} />
       <Route path="/partner/needs" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<NeedsBoardPage user={user} />))} />
       <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><PartnerInsightsPage /></PartnerWorkspaceTabs>))} />
+      {/* D569 — the partner earnings screens, at the canvas's own routes: no
+          partner bucket holds them (`shellConfig.js` has no `/partner` prefix),
+          so they are pages of their own with one pill row between three of
+          them. NOT wrapped in `partnerPrivateWorkspace`, for the reason the
+          `/referrals` route below gives: every route they call is
+          `requireAuth` scoped to the caller (commissions, payouts, the code,
+          the sign-ups, the credits, the board), or a party-or-admin check
+          (the relationship's events and interactions), so an admin reading
+          them reads their own and there is no partner-private boundary to
+          state. The guard is the persona's, the narrower of the two. */}
+      <Route path="/partner/earnings" element={guard(['admin', 'partner'], <PartnerEarnings />)} />
+      <Route path="/partner/referrals" element={guard(['admin', 'partner'], <PartnerReferrals />)} />
+      <Route path="/partner/relationships/:id" element={guard(['admin', 'partner'], <PartnerRelationshipLog />)} />
+      <Route path="/partner/leaderboard" element={guard(['admin', 'partner'], <PartnerLeaderboard user={user} />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
@@ -2513,6 +2535,11 @@ function AppInner() {
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferralReview />)} />
+      {/* D569 — every read on it is `requireAdmin` and answers on either tier,
+          so the guard is `['admin']` and never `hqOnly`. Its one HQ-only
+          zone, the take rate, is `requireSuperAdmin`; the page asks only when
+          `/me` carries the elevation and says so otherwise. */}
+      <Route path="/admin/commissions" element={guard(['admin'], <AdminCommissions user={user} />)} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
