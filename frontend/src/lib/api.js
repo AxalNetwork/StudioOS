@@ -5585,7 +5585,7 @@ export const events = {
     request(`/events/${id}/invitations`, { method: 'POST', body: JSON.stringify({ user_ids, emails, message }) }),
   roster: (id) => request(`/events/${id}/roster`),
   approveRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/approve`, { method: 'POST', body: '{}' }),
-  declineRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/decline`, { method: 'POST', body: '{}' }),
+  declineRegistration: (id, rid, reason) => request(`/events/${id}/registrations/${rid}/decline`, { method: 'POST', body: JSON.stringify({ reason }) }),
   promoteRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/promote`, { method: 'POST', body: '{}' }),
   checkin: (id, code) => request(`/events/${id}/checkin/${encodeURIComponent(code)}`, { method: 'POST', body: '{}' }),
   icsUrl: (id) => `/api/events/${id}/ics`,
@@ -5594,6 +5594,7 @@ export const events = {
   agenda: (id) => request(`/events/${id}/agenda`),
   addAgendaItem: (id, item) => request(`/events/${id}/agenda`, { method: 'POST', body: JSON.stringify(item) }),
   updateAgendaItem: (id, aid, patch) => request(`/events/${id}/agenda/${aid}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  reorderAgenda: (id, item_ids) => request(`/events/${id}/agenda/reorder`, { method: 'POST', body: JSON.stringify({ item_ids }) }),
   deleteAgendaItem: (id, aid) => request(`/events/${id}/agenda/${aid}`, { method: 'DELETE' }),
 };
 

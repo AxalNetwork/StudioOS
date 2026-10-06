@@ -77,7 +77,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // panel the owner approved for #1082 (D546), on all four licences.
   // 131 the same day (D533, #1080). `Research · Markets` and `Research ·
   // Geography` (D546), built for `/research/markets` and `/research/geographies`.
-  assert.equal(recs.length, 131);
+  // 132 on 2026-10-06: Ops Page event organiser E1–E4 (#1173, D567).
+  assert.equal(recs.length, 132);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

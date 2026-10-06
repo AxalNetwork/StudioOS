@@ -7,7 +7,10 @@ import {
 import PublicNav from '../../components/PublicNav';
 import PublicFooter from '../../components/PublicFooter';
 import AxalCheckout from '../../components/AxalCheckout';
-import { eventsPublic } from '../../lib/api';
+import WorkspaceShell from '../../workspaces/WorkspaceShell';
+import MemberRegistrationPanel from '../../components/events/MemberRegistrationPanel';
+import { useAuth } from '../../hooks/useAuthSync';
+import { events, eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { loadTurnstile } from '../../lib/turnstile';
 import { formatEventPrice as formatMoney } from '../../lib/money';
@@ -50,16 +53,20 @@ function renderAgenda(items) {
                   {it.speaker_title ? ` — ${it.speaker_title}` : ''}
                 </p>
               ) : null}
+              {it.location_text ? <p className="text-xs text-slate-500 dark:text-slate-400">{it.location_text}</p> : <p className="text-xs text-slate-500 dark:text-slate-400">Not recorded — no room supplied.</p>}
+              {it.location_url && <a href={it.location_url} target="_blank" rel="noreferrer">Join</a>}
             </div>
           </div>
         ))}
       </div>
     </div>
   );
+  return memberView ? <WorkspaceShell role={user.role} title={event?.title || 'My event'} intro="Your registration and attendee agenda.">{content}</WorkspaceShell> : content;
 }
 
 export default function PublicEventDetailPage() {
   const { slug } = useParams();
+  const { user } = useAuth();
   const [event, setEvent] = useState(null);
   const [agenda, setAgenda] = useState([]);
   const [seatsTaken, setSeatsTaken] = useState(0);
@@ -78,10 +85,12 @@ export default function PublicEventDetailPage() {
     let cancelled = false;
     setLoading(true);
     setError('');
-    eventsPublic.read(slug)
+    const read = user && /^\d+$/.test(slug) ? events.get(slug).then(async detail => { const preview = await events.eligibility(slug); return { ...detail, seats_taken: preview.seats_taken, is_full: preview.is_full }; }) : eventsPublic.read(slug);
+    read
       .then((data) => {
         if (cancelled) return;
-        setEvent(data?.event || null);
+        if (!data?.event || !Array.isArray(data.agenda) || typeof data.seats_taken !== 'number' || typeof data.is_full !== 'boolean') throw new Error('Event response is incomplete.');
+        setEvent(data.event);
         setAgenda(Array.isArray(data?.agenda) ? data.agenda : []);
         setSeatsTaken(Number(data?.seats_taken || 0));
         setIsFull(!!data?.is_full);
@@ -94,7 +103,7 @@ export default function PublicEventDetailPage() {
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, user?.id]);
 
   // Turnstile lifecycle
   const formVisible = status.state !== 'sent';
@@ -141,14 +150,14 @@ export default function PublicEventDetailPage() {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+    if (!user && TURNSTILE_SITE_KEY && !turnstileToken) {
       setStatus({ state: 'error', error: 'Please complete the verification challenge.', result: null });
       return;
     }
     setStatus({ state: 'sending', error: '', result: null });
     setPayment(null);
     try {
-      const res = await eventsPublic.register(slug, {
+      const res = user ? await events.register(event.id, {}) : await eventsPublic.register(slug, {
         name: form.name,
         email: form.email,
         turnstile_token: turnstileToken,
@@ -204,9 +213,10 @@ export default function PublicEventDetailPage() {
     );
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
-      <PublicNav />
+  const memberView = Boolean(user && /^\d+$/.test(slug));
+  const content = (
+    <div className={memberView ? "bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100" : "min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16"}>
+      {!memberView && <PublicNav />}
       <main className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8">
           <Link to="/events" className="inline-flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 mb-6">
@@ -276,6 +286,7 @@ export default function PublicEventDetailPage() {
                   </div>
                 ) : null}
 
+                {user && <MemberRegistrationPanel eventId={event.id} refreshKey={status.state === 'sent'} />}
                 {renderAgenda(agenda)}
 
                 {/* Registration form */}
@@ -354,7 +365,7 @@ export default function PublicEventDetailPage() {
                       <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                         {isFull ? 'Join the waitlist' : 'Register'}
                       </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {user ? <p className="text-sm text-slate-600 dark:text-slate-400">Register with your signed-in member account.</p> : <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <label className="block">
                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Name</span>
                           <input
@@ -377,20 +388,20 @@ export default function PublicEventDetailPage() {
                             className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
                           />
                         </label>
-                      </div>
+                      </div>}
                       {status.state === 'error' && (
                         <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
                           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                           <span>{status.error}</span>
                         </div>
                       )}
-                      {TURNSTILE_SITE_KEY && (
+                      {!user && TURNSTILE_SITE_KEY && (
                         <div ref={turnstileRef} className="flex justify-start" />
                       )}
                       <div className="flex items-center justify-end gap-4 pt-2">
                         <button
                           type="submit"
-                          disabled={status.state === 'sending' || (TURNSTILE_SITE_KEY && !turnstileToken)}
+                          disabled={status.state === 'sending' || (!user && TURNSTILE_SITE_KEY && !turnstileToken)}
                           className="inline-flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {status.state === 'sending' ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : (isFull ? 'Join waitlist' : 'Register')}
@@ -404,7 +415,7 @@ export default function PublicEventDetailPage() {
           ) : null}
         </div>
       </main>
-      <PublicFooter />
+      {!memberView && <PublicFooter />}
     </div>
   );
 }
