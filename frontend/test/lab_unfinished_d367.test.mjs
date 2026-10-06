@@ -52,7 +52,9 @@ test('formation packet: a paid order is "packet not built", never a spinner that
 test('formation packet: no screen promises a packet, an email or a filing that nothing does', () => {
   const success = read('frontend/src/pages/IncorporateSuccessPage.jsx');
   assert.doesNotMatch(success, /preparing your signing packet|will email you a link once/);
-  assert.match(success, /: PACKET_NOT_BUILT\}/);
+  // D601: the line comes from `packetLine`, which falls back to PACKET_NOT_BUILT.
+  assert.match(success, /return PACKET_NOT_BUILT;/);
+  assert.match(success, /\{packetLine\(status\)\}/);
   const inc = read('frontend/src/pages/IncorporatePage.jsx');
   assert.doesNotMatch(inc, /filing started|preparing your founder document set now/);
   assert.match(inc, /formation ordered/);
@@ -63,8 +65,10 @@ test('formation packet: the Lab tracker marks no step done for packet_processing
   const lab = read('frontend/src/pages/SpinoutLabIncorporatePage.jsx');
   const line = between(lab, 'const filingDone =', ';\n');
   assert.doesNotMatch(line, /packet_processing/, 'packet_processing builds nothing, so it completes no step');
-  assert.doesNotMatch(line, /\? 2\b/, 'a ready packet is not a state submission');
-  assert.match(line, /orderStatus === 'packet_ready' \|\| docsAllDone \? 1 : 0/);
+  // D601: only a filing an admin recorded counts as the state submission (2);
+  // a ready packet is still step 1.
+  assert.match(line, /orderStatus === 'filed' \? 2 : orderStatus === 'packet_ready' \|\| docsAllDone \? 1 : 0/);
+  assert.doesNotMatch(line, /packet_ready'[^:]*\? 2/, 'a ready packet is not a state submission');
   const card = between(lab, 'data-testid="filing-card"', '{filingSteps.map(');
   assert.match(card, /\{packetNotBuilt && \(\s*<p[^>]*data-testid="filing-packet-not-built">\{PACKET_NOT_BUILT\}<\/p>/);
   assert.match(lab, /const packetNotBuilt = paid && PACKET_NOT_BUILT_STATUSES\.includes\(orderStatus\);/);

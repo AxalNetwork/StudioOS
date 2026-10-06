@@ -91,7 +91,7 @@ test('paid is the server order; the page writes no paid flag', () => {
   const notFound = between(onPaid, '} else {', '}\n    } catch');
   assert.match(notFound, /setAwaitingServer\(true\)/);
   assert.doesNotMatch(notFound, /setOrder\(|markMilestone\(|setState\(/);
-  assert.deepEqual(PAID_STATUSES, ['paid', 'packet_processing', 'packet_ready']);
+  assert.deepEqual(PAID_STATUSES, ['paid', 'packet_processing', 'packet_ready', 'filed']);
 });
 
 test('the jurisdiction is the application\'s; one that cannot be formed stops at its line with a reason', () => {

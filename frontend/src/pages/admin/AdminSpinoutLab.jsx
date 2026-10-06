@@ -15,6 +15,7 @@ import AdminCohortTiming from './AdminCohortTiming';
 import AdminCohortApplications from './AdminCohortApplications';
 import AdminSpinoutCertificates from './AdminSpinoutCertificates';
 import AdminLabHosts from './AdminLabHosts';
+import AdminFormationOrders from './AdminFormationOrders';
 import AdminSection83bReview from './AdminSection83bReview';
 
 // ---------------------------------------------------------------------------
@@ -769,6 +770,15 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
         >
           <Check size={14} /> 83(b) review
         </button>
+        <button
+          role="tab"
+          aria-selected={section === 'formation'}
+          onClick={() => setSection('formation')}
+          data-testid="tab-formation"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 ${section === 'formation' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          <Building2 size={14} /> Formation orders
+        </button>
       </div>
 
       {section === 'applications' ? (
@@ -784,6 +794,9 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
       ) : section === 'hosts' ? (
         // D377 — who Lab founders see on /spinout-lab/office-hours.
         <AdminLabHosts />
+      ) : section === 'formation' ? (
+        // D601 — record each paid order's packet and its state filing.
+        <AdminFormationOrders />
       ) : section === 'review83b' ? (
         // D580 — assign each startup's 83(b) operator and record reviews.
         <AdminSection83bReview />
