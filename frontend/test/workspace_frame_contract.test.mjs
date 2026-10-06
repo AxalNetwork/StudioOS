@@ -134,9 +134,16 @@ test('the shell owns its padding, and every workspace route is flush', () => {
   // cards flush against the viewport; advisor was padded and full width;
   // partner was padded AND centred at max-w-7xl, the only licence held to
   // 1280px. The canvases put the padding on `.main`, which is this component.
+  //
+  // RE-AIMED BY D556. The row is `RailFrame` now, so `min-w-0 flex-1` belong
+  // to the frame's main column (`.fwr-frame-main` in workerRail.css), and the
+  // shell's own column is the first element inside `<RailFrame>`: that is the
+  // class list this reads, and it still carries the padding.
   const shell = src('frontend/src/workspaces/WorkspaceShell.jsx');
-  const mainClass = /className="(min-w-0 flex-1[^"]*)"/.exec(shell)?.[1];
+  const mainClass = /<RailFrame rail=\{rail\}>\s*(?:\{\s*(?:\/\*[\s\S]*?\*\/)?\s*\}\s*)?<div className="([^"]*)"/.exec(shell)?.[1];
   assert.ok(mainClass, 'the shell’s main column no longer has a static class list');
+  assert.match(src('frontend/src/ui/workerRail.css'), /\.fwr-frame-main\s*\{[^}]*min-width:\s*0/,
+    'the frame’s main column must shrink first, or a wide table shoves the rail off-screen');
   assert.match(mainClass, /\bp-\d/, 'the shell must carry the canvases’ own .main padding');
   assert.doesNotMatch(mainClass, /\bpr-\d/,
     'the body/rail gutter is the main column’s own right padding now, not a second value beside it');

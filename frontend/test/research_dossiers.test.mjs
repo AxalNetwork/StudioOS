@@ -32,7 +32,10 @@ test('company records navigate from the full row and profiles separate identity 
   const profile = read('pages/research/CompanyProfile.jsx');
   assert.match(directory, /research\/companies\/company/);
   assert.match(directory, /role="link"/);
-  assert.match(profile, /Company intelligence/);
-  assert.match(profile, /Funding/);
-  assert.match(profile, /Evidence required/);
+  // D534 (#1079): the profile is built to the Research · Company canvas. Each
+  // metric shows its source and date or Not recorded, and diligence reads the
+  // stored status beside the sources, not an inferred figure.
+  assert.match(profile, /Key metrics/);
+  assert.match(profile, /Funding total/);
+  assert.match(profile, /Diligence status/);
 });

@@ -16,6 +16,9 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import LabHostApplyCard from '../../../components/officehours/LabHostApplyCard';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+import useScrollToHash from '../../../hooks/useScrollToHash';
+import SessionTypesPanel from './SessionTypesPanel';
+import BookingLinksPanel from './BookingLinksPanel';
 
 /**
  * Practice · Sessions — canvas PR4, `/practice/sessions`, tagged **FEED**.
@@ -116,6 +119,12 @@ export default function SessionsZone() {
   const [rulesRead, setRulesRead] = useState(true);
   const [types, setTypes] = useState([]);
   const [links, setLinks] = useState([]);
+  // D571 — the same distinction for the two lists the cards now edit. A failed
+  // read used to land as `[]` and print "Nothing is offered yet", which is a
+  // claim the page had not read; and `[]` before the first read printed it too.
+  const [restLoading, setRestLoading] = useState(true);
+  const [typesRead, setTypesRead] = useState(true);
+  const [linksRead, setLinksRead] = useState(true);
   const [bookings, setBookings] = useState({ loading: true, error: '', items: [] });
   const [editing, setEditing] = useState(null);
   const [blocking, setBlocking] = useState(false);
@@ -154,7 +163,10 @@ export default function SessionsZone() {
     setRules(r || EMPTY_RULES);
     setRulesRead(r != null);
     setTypes(Array.isArray(t?.items) ? t.items : []);
+    setTypesRead(Array.isArray(t?.items));
     setLinks(Array.isArray(l?.items) ? l.items : []);
+    setLinksRead(Array.isArray(l?.items));
+    setRestLoading(false);
   }, []);
 
   const loadBookings = useCallback(async () => {
@@ -172,6 +184,10 @@ export default function SessionsZone() {
 
   useEffect(() => { loadSlots(view); }, [loadSlots, view]);
   useEffect(() => { loadRest(); loadBookings(); }, [loadRest, loadBookings]);
+  // `/practice/session-types` and `/practice/booking-links` land here with a
+  // hash (D571), and React Router does not scroll to one. Both cards render
+  // their ids from the first paint, so the element is there once the lists are.
+  useScrollToHash(restLoading);
 
   const onSaved = useCallback(() => { setEditing(null); loadBookings(); }, [loadBookings]);
 
@@ -313,6 +329,20 @@ export default function SessionsZone() {
         </Card>
       </ZoneBody>
 
+      {/* D571 — THE TWO CARDS THE OPS CANVAS DRAWS AS SCREENS OF THEIR OWN.
+          `/practice/session-types` (A2) and `/practice/booking-links` (A3)
+          redirect to these two ids. Each card was a read-only list over
+          migration 240's stores; each body is now the canvas's editor, so the
+          two addresses and this page answer from one place. The session types
+          table needs the width, so it is no longer one of three columns. */}
+      <Card padding="md" id="session-types" className="scroll-mt-24">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-[13px] font-extrabold tracking-tight">Session types</h3>
+          <span className="text-[10.5px] text-axal-faint">What can be booked</span>
+        </div>
+        <SessionTypesPanel types={types} loading={restLoading} read={typesRead} onChanged={loadRest} />
+      </Card>
+
       <div className="grid gap-3 lg:grid-cols-3">
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -323,69 +353,13 @@ export default function SessionsZone() {
           <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">{ruleNote(counts)}</p>
         </Card>
 
-        <Card padding="md">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-[13px] font-extrabold tracking-tight">Session types</h3>
-            <span className="text-[10.5px] text-axal-faint">What can be booked</span>
-          </div>
-          {types.length === 0 ? (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
-              Nothing is offered yet. A session type is what a booking link sells — a free intro, a
-              single session, a pack, a retainer.
-            </p>
-          ) : (
-            <ul className="mt-3 grid gap-2">
-              {types.map((t) => (
-                <li key={t.id} data-testid={`type-pr4-${t.id}`}
-                  className="flex items-start justify-between gap-3 rounded-[9px] border border-axal-hairline p-2.5 dark:border-gray-700">
-                  <div className="min-w-0">
-                    <div className="text-[12.5px] font-bold">{t.name}</div>
-                    <div className="mt-0.5 text-[11px] text-axal-faint">
-                      {[t.duration_minutes ? `${t.duration_minutes} min` : null, t.cadence_note]
-                        .filter(Boolean).join(' · ') || <Unrecorded>No duration recorded</Unrecorded>}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right text-[12.5px] font-extrabold tabular-nums">
-                    {/* THREE OUTCOMES, NOT TWO. "Free" is a price the advisor
-                        chose; "Not priced" is a question they have not
-                        answered. Rendering the second as $0 would invent the
-                        first. */}
-                    {t.is_free_intro
-                      ? 'Free'
-                      : (money(t.price_cents) ?? <Unrecorded>Not priced</Unrecorded>)}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card padding="md">
+        <Card padding="md" id="booking-links" className="scroll-mt-24 lg:col-span-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-[13px] font-extrabold tracking-tight">Booking links</h3>
             <span className="text-[10.5px] text-axal-faint">Only here</span>
           </div>
-          {links.length === 0 ? (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
-              No link is published. A link is how someone reaches this calendar without going
-              through your profile — one per audience.
-            </p>
-          ) : (
-            <ul className="mt-3 grid gap-2">
-              {links.map((l) => (
-                <li key={l.id} data-testid={`link-pr4-${l.id}`}
-                  className="rounded-[9px] border border-axal-hairline p-2.5 dark:border-gray-700">
-                  <div className="font-mono text-[11.5px] font-bold break-all">axal.vc/b/{l.slug}</div>
-                  <div className="mt-1 text-[11px] leading-relaxed text-axal-faint">
-                    {l.note || AUDIENCE_NOTE[l.audience] || null}
-                    {l.requires_payout_account && (
-                      <> Requires a verified payout account.</>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <BookingLinksPanel links={links} types={types} loading={restLoading} read={linksRead}
+            typesRead={typesRead} onChanged={loadRest} />
         </Card>
       </div>
 
@@ -468,12 +442,6 @@ export default function SessionsZone() {
     </div>
   );
 }
-
-const AUDIENCE_NOTE = {
-  public: 'Public, on your profile.',
-  cohort: 'Restricted to one cohort.',
-  private: 'Unlisted — the link is the only way in.',
-};
 
 function Stat({ label, value, note }) {
   return (

@@ -30,7 +30,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 // file by path, and several slice it at the Routes element's opening tag, so
 // that tag is not written in prose here). See frontend/src/routes/README.md;
 // routes_modules_d528.test.mjs fails the build for a module that is not wired in.
-// (no modules yet)
+import learningRoutes from './routes/learning';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -52,7 +52,9 @@ import MobileTabBar from './components/MobileTabBar';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
+import { LensProvider, useLensLocation } from './workspaces/lens';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
+import { RailStripSlot } from './ui/RailFrame';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
@@ -105,6 +107,8 @@ const SpinoutLab83bPage = lazy(() => import('./pages/SpinoutLab83bPage'));
 const SpinoutLabCompliancePage = lazy(() => import('./pages/SpinoutLabCompliancePage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
+const WellbeingBookPage = lazy(() => import('./pages/wellbeing/WellbeingBookPage'));
+const WellbeingResourceLibrary = lazy(() => import('./pages/wellbeing/WellbeingResourceLibrary'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
 const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
 const CapitalPage = lazy(() => import('./pages/CapitalPage'));
@@ -157,6 +161,8 @@ const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 const AdminReferralReview = lazy(() => import('./pages/admin/ReferralReview'));
+// D569 — the commissions-and-payouts console (canvas pea-commissions).
+const AdminCommissions = lazy(() => import('./pages/admin/AdminCommissions'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
@@ -248,6 +254,7 @@ const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
+const AdvisorProfilePage = lazy(() => import('./pages/advisor/AdvisorProfilePage'));
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
 const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsentPage'));
 const AdvisorCohortAssignments = lazy(() => import('./pages/admin/AdvisorCohortAssignments'));
@@ -387,6 +394,12 @@ const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
+// D569 — the partner earnings screens (canvas pe-earnings, pe-referrals,
+// pe-log, pe-board).
+const PartnerEarnings = lazy(() => import('./pages/partner/earnings/PartnerEarnings'));
+const PartnerReferrals = lazy(() => import('./pages/partner/earnings/PartnerReferrals'));
+const PartnerRelationshipLog = lazy(() => import('./pages/partner/earnings/PartnerRelationshipLog'));
+const PartnerLeaderboard = lazy(() => import('./pages/partner/earnings/PartnerLeaderboard'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
 const CirclesPage = lazy(() => import('./pages/CirclesPage'));
 const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfilePage'));
@@ -414,6 +427,7 @@ const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcu
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
+import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -702,9 +716,13 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Events
           </Link>
-          <Link to="/articles/draft" onClick={() => setOpen(false)}
+          {/* D562 — "Learning" replaces "Articles" (the owner, epic #1157).
+              Articles live inside Learning now: its Articles tab lists them,
+              each opens at `/articles/:slug`, and "Write an article" there
+              still goes to `/articles/draft`. */}
+          <Link to="/learning" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Articles
+            Learning
           </Link>
           {/* Task #103 — one entry, not two. "Help Center" and "Documentation"
               used to be a ticket tracker and a docs site sitting side by side;
@@ -987,6 +1005,40 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // syntax and a `.map` over data is not a door it can see; the guard holds
   // this markup equal to that list.
   const hqStrip = shellRole === 'super_admin' ? stripFor(location.pathname, location.search) : null;
+  // The strip is drawn above the page container, unless the page docks a
+  // Worker AI rail: then the rail's frame takes it into the top of its body,
+  // so the panel runs from the header rather than from under the strip
+  // (RailFrame's `RailStripSlot`). The frame says when it holds it.
+  const [stripInFrame, setStripInFrame] = useState(false);
+  const hqStripNav = (
+    <>
+      {hqStrip === 'Platform' && (
+        <HqSubNavStrip label="Platform">
+          <StripLink to="/admin/platform">Overview</StripLink>
+          <StripLink to="/admin/platform/switches">Switches</StripLink>
+          <StripLink to="/admin/platform/topology">Topology</StripLink>
+          <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
+          <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
+          <StripLink to="/admin?tab=payments">Payments</StripLink>
+          <StripLink to="/admin?tab=promos">Promo codes</StripLink>
+          <StripLink to="/monitoring">Monitoring</StripLink>
+          <StripLink to="/admin/telegram">Telegram</StripLink>
+        </HqSubNavStrip>
+      )}
+      {hqStrip === 'Content' && (
+        <HqSubNavStrip label="Content">
+          <StripLink to="/admin/content">Overview</StripLink>
+          <StripLink to="/admin/articles">Content queue</StripLink>
+          <StripLink to="/admin/publications">Publications</StripLink>
+          <StripLink to="/admin/assessment">Assessment Studio</StripLink>
+          <StripLink to="/admin?tab=personas">Personas</StripLink>
+          <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
+          <StripLink to="/admin/team">Public team page</StripLink>
+        </HqSubNavStrip>
+      )}
+    </>
+  );
+  const railStrip = hqStrip ? { strip: hqStripNav, inFrame: stripInFrame, dock: setStripInFrame } : null;
   // D287 / S21 — read only where the strip could apply: the plain Admin
   // shell off a branch, the person's own session. The hook memoises one read
   // per user; the strip above the top bar and the badge inside it both draw
@@ -1259,30 +1311,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
-            {hqStrip === 'Platform' && (
-              <HqSubNavStrip label="Platform">
-                <StripLink to="/admin/platform">Overview</StripLink>
-                <StripLink to="/admin/platform/switches">Switches</StripLink>
-                <StripLink to="/admin/platform/topology">Topology</StripLink>
-                <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
-                <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
-                <StripLink to="/admin?tab=payments">Payments</StripLink>
-                <StripLink to="/admin?tab=promos">Promo codes</StripLink>
-                <StripLink to="/monitoring">Monitoring</StripLink>
-                <StripLink to="/admin/telegram">Telegram</StripLink>
-              </HqSubNavStrip>
-            )}
-            {hqStrip === 'Content' && (
-              <HqSubNavStrip label="Content">
-                <StripLink to="/admin/content">Overview</StripLink>
-                <StripLink to="/admin/articles">Content queue</StripLink>
-                <StripLink to="/admin/publications">Publications</StripLink>
-                <StripLink to="/admin/assessment">Assessment Studio</StripLink>
-                <StripLink to="/admin?tab=personas">Personas</StripLink>
-                <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
-                <StripLink to="/admin/team">Public team page</StripLink>
-              </HqSubNavStrip>
-            )}
+            {stripInFrame ? null : hqStripNav}
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
@@ -1291,9 +1320,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 happened to refetch. `savedCompanyId` is the id restored before
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
-            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
-              {children}
-            </div>
+            <RailStripSlot.Provider value={railStrip}>
+              <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
+                {children}
+              </div>
+            </RailStripSlot.Provider>
             {!onboardingCanvas && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
@@ -1751,6 +1782,9 @@ function AppInner() {
   const isImpersonating = !!realUser;
   const navigate = useNavigate();
   const location = useLocation();
+  // D575 — on a phone a zone pill opens its lens in place: the routes below
+  // render the lens's location while the URL and history stay put.
+  const lensLocation = useLensLocation();
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
@@ -2212,19 +2246,17 @@ function AppInner() {
   const founderExecutionEditor = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') === 'workspace';
 
-  // D528 — the first route module (frontend/src/routes/<area>.jsx) adds, right
-  // here, what every module gets from this file's closures, so a route in a
-  // module is gated by the same `guard`, `hqOnly` and `authOnly` as one
-  // written here, never by a copy of them:
-  //   const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
-  // It is not declared until then: with no module to read it, it is a dead
-  // variable, and routes_modules_d528.test.mjs holds it absent without a
-  // module and present, in exactly that shape, with one.
+  // D528 — what every route module (frontend/src/routes/<area>.jsx) gets from
+  // this file's closures, so a route in a module is gated by the same `guard`,
+  // `hqOnly` and `authOnly` as one written here, never by a copy of them. The
+  // first module, Learning (D562), added it; routes_modules_d528.test.mjs holds
+  // it present, in exactly this shape, while a module exists.
+  const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
-<Routes>
+<Routes location={lensLocation || location}>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
       {/* /spinout-lab is THREE surfaces behind one path, because "Spin-Out Lab"
           means something different depending on who is asking:
@@ -2355,6 +2387,11 @@ function AppInner() {
       <Route path="/account/email/revoke" element={<EmailChangeRevokePage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
+      {/* D568 — the Account center's Developer section reads GET
+          /settings/developer, which answers 403 to every role but admin, so
+          its address carries the same gate. The static path outranks
+          `:section` below; the page also lists the section for admins only. */}
+      <Route path="/account/developer" element={guard(['admin'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
@@ -2397,7 +2434,7 @@ function AppInner() {
           : <Navigate
               to={new URLSearchParams(location.search).get('id')
                 ? `/research/companies/${encodeURIComponent(new URLSearchParams(location.search).get('id'))}`
-                : '/research/companies'}
+                : buildCompetitorsRedirect(location.search)}
               replace
             />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
@@ -2496,6 +2533,20 @@ function AppInner() {
       <Route path="/founder/post-need" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=mine" replace /> : <NeedsBoardPage user={user} />)} />
       <Route path="/partner/needs" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<NeedsBoardPage user={user} />))} />
       <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><PartnerInsightsPage /></PartnerWorkspaceTabs>))} />
+      {/* D569 — the partner earnings screens, at the canvas's own routes: no
+          partner bucket holds them (`shellConfig.js` has no `/partner` prefix),
+          so they are pages of their own with one pill row between three of
+          them. NOT wrapped in `partnerPrivateWorkspace`, for the reason the
+          `/referrals` route below gives: every route they call is
+          `requireAuth` scoped to the caller (commissions, payouts, the code,
+          the sign-ups, the credits, the board), or a party-or-admin check
+          (the relationship's events and interactions), so an admin reading
+          them reads their own and there is no partner-private boundary to
+          state. The guard is the persona's, the narrower of the two. */}
+      <Route path="/partner/earnings" element={guard(['admin', 'partner'], <PartnerEarnings />)} />
+      <Route path="/partner/referrals" element={guard(['admin', 'partner'], <PartnerReferrals />)} />
+      <Route path="/partner/relationships/:id" element={guard(['admin', 'partner'], <PartnerRelationshipLog />)} />
+      <Route path="/partner/leaderboard" element={guard(['admin', 'partner'], <PartnerLeaderboard user={user} />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
@@ -2511,6 +2562,11 @@ function AppInner() {
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferralReview />)} />
+      {/* D569 — every read on it is `requireAdmin` and answers on either tier,
+          so the guard is `['admin']` and never `hqOnly`. Its one HQ-only
+          zone, the take rate, is `requireSuperAdmin`; the page asks only when
+          `/me` carries the elevation and says so otherwise. */}
+      <Route path="/admin/commissions" element={guard(['admin'], hqOnly(<AdminCommissions user={user} />))} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
@@ -2735,9 +2791,18 @@ function AppInner() {
           refusal, so the old path now lands each on the one they can open. */}
       <Route path="/incorporate/83b" element={<Navigate to={user?.spinout_lab_active === 1 || user?.role === 'admin' ? '/spinout-lab/83b' : '/raise/legal-engine/equity'} replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
+      {/* D570 — Wellbeing, built to the Ops canvas. Home and booking keep the
+          home page's guard (the Worker refuses investors on the check-in and
+          expert routes).
+          The expert's practice is the old expert dashboard, extended: the old
+          path redirects, so notification links and the Stripe return URL land
+          on it. The library is admin-only, as its two writes are. */}
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
-      <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
+      <Route path="/wellbeing/book" element={guard(['admin', 'founder'], <WellbeingBookPage />)} />
+      <Route path="/wellbeing/practice" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
+      <Route path="/wellbeing/expert-dashboard" element={<Navigate to="/wellbeing/practice" replace />} />
       <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ExpertProfilePage />)} />
+      <Route path="/admin/wellbeing/resources" element={guard(['admin'], <WellbeingResourceLibrary />)} />
       {/* /partners is RETIRED (task #101). It was "Partner Ecosystem": a list of
           partner accounts, a create form, and two match buttons.
 
@@ -2862,6 +2927,11 @@ function AppInner() {
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=advisor" replace /> : <AdvisorsPage />)} />
+      {/* D571 — one advisor's profile as a client sees it (the Ops canvas's
+          A5). Same roles as the directory, because `GET /api/advisors/:uid`
+          answers any signed-in caller. A founder is NOT sent to the team tab
+          here: the founder is the client this page is drawn for. */}
+      <Route path="/advisors/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <AdvisorProfilePage />)} />
       {/* /office-hours is RETIRED (task #124's freeze lifted; UNRESOLVED_ITEMS
           U4 resolved). It coupled the storefront to booking and was broken at
           both jobs: it read five keys the DTOs never emitted, so every slot
@@ -2971,6 +3041,17 @@ function AppInner() {
       <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      {/* D571 — the Ops canvas's four practice addresses. Each is a SECTION of
+          the zone that already reads its store, so each lands there rather than
+          on a second page answering the same question: deliverables are the
+          Delivery zone grouped by client, session types and booking links are
+          two cards on Sessions, and the access log sits under the Engagements
+          board. The guard is the zones' own: every `/me/*` store answers only a
+          caller with an advisor row. */}
+      <Route path="/practice/deliverables" element={guard(['admin', 'advisor'], <Navigate to="/practice/delivery?view=by_client" replace />)} />
+      <Route path="/practice/session-types" element={guard(['admin', 'advisor'], <Navigate to="/practice/sessions#session-types" replace />)} />
+      <Route path="/practice/booking-links" element={guard(['admin', 'advisor'], <Navigate to="/practice/sessions#booking-links" replace />)} />
+      <Route path="/practice/access-log" element={guard(['admin', 'advisor'], <Navigate to="/practice/engagements#access-log" replace />)} />
       {/* Admin: which advisor may read which Lab cohort's founders. Its own
           page rather than a tab on the Spin-Out Lab console — that console is
           Lab-owned and under a do-not-touch instruction, and the split matches
@@ -3311,7 +3392,7 @@ function AppInner() {
           alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in
           the block of the same name at the top of this file. Above the
           catch-all, so a module's routes are matched before it. */}
-      {/* (no modules yet) */}
+      {learningRoutes(routeTools)}
       {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
           other route (public, alias, or guarded) does. */}
@@ -3417,7 +3498,7 @@ export default function App() {
     <AuthProvider>
       <SettingsProvider>
         <AppErrorBoundary>
-        <AppInner />
+        <LensProvider><AppInner /></LensProvider>
         </AppErrorBoundary>
         {/* Task #28 — global "always-on" mounts live OUTSIDE <Routes>,
             so a render-time throw inside any of them blanks the entire

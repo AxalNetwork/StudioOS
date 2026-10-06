@@ -207,8 +207,9 @@ const WORKSPACE_SURFACE = 'workspace';
  * bar falls back to 16px. Inline rather than in the stylesheet so the one
  * number that has to agree with the bar is visible where the button is.
  *
- * PORTALLED TO <body>, AFTER MOUNT. The shell's rail slot is `hidden xl:block`,
- * and a fixed button inside a `display: none` parent never draws. The portal
+ * PORTALLED TO <body>, AFTER MOUNT. The rail's frame column is `display: none`
+ * below 1024px (RailFrame, D556; before it, the shell's slot was `hidden
+ * xl:block`), and a fixed button inside a `display: none` parent never draws. The portal
  * waits for the first effect, so a server render (and every render test of a
  * page that mounts a rail) draws no button and needs no document.
  *

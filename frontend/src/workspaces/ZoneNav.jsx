@@ -1,6 +1,7 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { ACCENT, zonePath, zoneForPath } from './shellConfig';
+import { LensNavLink } from './lens';
 
 /**
  * The zone row — the pill strip under a workspace heading.
@@ -13,6 +14,13 @@ import { ACCENT, zonePath, zoneForPath } from './shellConfig';
  * Each pill is a NavLink to `/prefix/slug`, so it navigates, it is a real
  * link a person can middle-click or copy, and the active state comes from the
  * URL rather than from local component state that a refresh would lose.
+ *
+ * ON A PHONE THE PILLS SWITCH LENSES (D575, canvas M2). Below 1024px a plain
+ * tap opens the zone in place, with no route change and no history entry; see
+ * `lens.jsx`. The pill stays a real link to the zone's route, so a deep link,
+ * a long-press "Copy link" and a desktop click all still mean that route. The
+ * active pill reads the lens, because inside `<Routes>` the location IS the
+ * lens.
  *
  * ACCENT comes from the role, not from the page. Founder violet, Investor
  * indigo, Advisor emerald, Partner amber — one row, four tints, no per-page
@@ -48,7 +56,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
       {bucket.zones.map((zone) => {
         const on = zone.slug === active?.slug;
         return (
-          <NavLink
+          <LensNavLink
             key={zone.slug}
             to={zonePath(bucket, zone)}
             aria-current={on ? 'page' : undefined}
@@ -74,7 +82,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
             }}
           >
             {zone.label}
-          </NavLink>
+          </LensNavLink>
         );
       })}
     </nav>

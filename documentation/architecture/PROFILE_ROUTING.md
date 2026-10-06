@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 131 canonical canvases at `design/canvases/`, listed
-169 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 133 canonical canvases at `design/canvases/`, listed
+173 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 61 canvases
+## Founder — 63 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -76,6 +76,8 @@ it, where in their nav, and how do they get there.*
 | Perks & Products | `/perks` | Home | Full page | Sidebar → Home → Grow | NEW | High |
 | Pitch Deck Builder | `/spinout-lab/pitch-deck` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Profiling | `/spinout-lab/profiling` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Research · Companies | `/research/companies` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
+| Research · Company | `/research/companies/company/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Research · Funds (directory) | `/research/funds` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Research · Funds (fund profile) | `/research/funds/catalog/:id` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
@@ -93,7 +95,7 @@ it, where in their nav, and how do they get there.*
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 
-## Advisor — 14 canvases
+## Advisor — 16 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -106,6 +108,8 @@ it, where in their nav, and how do they get there.*
 | Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Home | Full page (proposed) | Sidebar → Home → Expertise | UPGRADE | Low |
 | Pages · Advisor Network | `/network/*` | Home | Full page (proposed) | Sidebar → Home → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Home | Full page (proposed) | Sidebar → Home → Research | UPGRADE | Low |
+| Research · Companies | `/research/companies` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
+| Research · Company | `/research/companies/company/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Research · Main | `/research` · `/market-intel` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
@@ -250,7 +254,7 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 94 | Live route, reachable from that workspace’s sidebar. |
+| High | 98 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 44 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 31 | Not routed. Proposed route only. |
 

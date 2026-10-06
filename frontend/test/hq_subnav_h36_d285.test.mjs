@@ -25,7 +25,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = read('frontend/src/App.jsx');
-const CHROME = APP.slice(0, APP.indexOf('<Routes>')) + APP.slice(APP.indexOf('</Routes>'));
+const CHROME = APP.slice(0, APP.indexOf('<Routes')) + APP.slice(APP.indexOf('</Routes>'));
 const ADMIN_PAGE = codeOnly(read('frontend/src/pages/AdminPage.jsx'));
 const STRIP = codeOnly(read('frontend/src/components/HqSubNavStrip.jsx'));
 const SIDEBAR_NAV = codeOnly(read('frontend/src/ui/SidebarNav.jsx'));

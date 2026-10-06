@@ -7,7 +7,7 @@ import { weekLabel } from '../../lib/weeklyChart';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import WeeklyLineChart from '../../components/WeeklyLineChart';
 import { RangePills, KpiTile, NotRecordedCard, rangeLabel, signed } from '../../components/AnalyticsParts';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
  * HQ · Analytics — one line per branch, and one for HQ's own deployment (H15,
@@ -361,7 +361,7 @@ export default function HqAnalyticsPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-analytics-page">
+    <RailFrame rail={rail} data-testid="hq-analytics-page">
       <div className="min-w-0 space-y-4">
         <div>
           <Link to="/hq" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">
@@ -409,7 +409,6 @@ export default function HqAnalyticsPage() {
         )}
       </div>
 
-      <div className="mt-4 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

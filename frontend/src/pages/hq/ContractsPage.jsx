@@ -3,7 +3,7 @@ import { FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { LegalPanel } from '../AdminPage';
-import { Unrecorded, Unreadable, WorkerRail } from '../../ui';
+import { Unrecorded, Unreadable, RailFrame, WorkerRail } from '../../ui';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -365,7 +365,7 @@ export default function HqContractsPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-contracts-page">
+    <RailFrame rail={rail} data-testid="hq-contracts-page">
       <div className="space-y-5">
         <header>
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
@@ -399,8 +399,7 @@ export default function HqContractsPage() {
           <LegalPanel />
         </section>
       </div>
-      <div className="mt-6 lg:mt-0">{rail}</div>
       <RegistryEditorModal open={editorOpen} onClose={() => setEditorOpen(false)} onSaved={loadRegistry} />
-    </div>
+    </RailFrame>
   );
 }

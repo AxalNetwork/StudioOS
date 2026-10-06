@@ -36,6 +36,12 @@ a prefix of their own so none can collide with an HQ console such as
 and `HeldZone` carries the always-visible scope sentence and the shell's one
 Worker AI rail mount.
 
+`AdminCommissions.jsx` is `/admin/commissions` (D569, D572): the commission
+rules (edited through D572's route, never created), every commission, the payout queue with
+its confirmed process actions, and the HQ take rate for the super admin. It is
+reached from the referral review console (`ReferralReview.jsx`) and shares
+its drawing pieces with the partner earnings screens (`parts.jsx`).
+
 `assessment/` holds the assessment game editor — see its own README.
 
 ## Rules

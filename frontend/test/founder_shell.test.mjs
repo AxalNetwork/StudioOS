@@ -393,12 +393,18 @@ test('every founder row lands on its own workspace overview', () => {
   }
 });
 
-test('a founder desk pill navigates — it is not an anchor onto the page', () => {
+test('a founder desk pill opens its route — navigating on a desktop, switching the lens on a phone', () => {
   // The user's words: "The buttons are the ones that should show the pages."
   // Three desks shipped their pill row as `href="#validate-0"`, `#a7-ask`,
   // `#build-1` — in-page anchors, two of which named sections that did not
   // exist on the page at all. A pill that scrolls is not navigation, and the
   // section pages it names were then reachable only from the sidebar.
+  //
+  // THE RULE SINCE D575 (#1188, mobile canvas M2). Every pill still names a
+  // real route. On a desktop it navigates there; on a phone it opens that
+  // route's page in place as a lens, with no route change and no history
+  // entry. Both come from the shared `LensNavLink`, so a pill built as a bare
+  // NavLink would navigate on a phone too.
   const DESKS = [
     'FounderValidatePage', 'FounderBuildDesk', 'FounderRaiseDesk',
     'FounderGrowDesk', 'FounderNetworkDesk', 'FounderResearchDesk',
@@ -412,6 +418,9 @@ test('a founder desk pill navigates — it is not an anchor onto the page', () =
     assert.ok(nav, `${name} has no section row`);
     assert.doesNotMatch(nav[0], /href=\{?[`'"]#/,
       `${name} still has an in-page anchor in its section row`);
+    assert.match(nav[0], /<LensNavLink\b/, `${name}'s section row is not the lens switcher`);
+    assert.doesNotMatch(nav[0], /<(?:Nav)?Link\b/,
+      `${name}'s section row has a pill that navigates on a phone instead of switching the lens`);
     // Every `to=` in that row must be a route the router actually opens. The
     // literal targets are checked; template-built ones carry their base path.
     for (const m of nav[0].matchAll(/to=\{?[`'"]([^`'"?$]+)/g)) {
@@ -420,6 +429,23 @@ test('a founder desk pill navigates — it is not an anchor onto the page', () =
         `${name}'s section row links ${target}, which has no route`);
     }
   }
+});
+
+test('every founder zone page\'s section row switches lenses on a phone (D575)', () => {
+  // The zone pages hand-build the same row the desks do, so a lens opened on a
+  // phone would otherwise navigate (and push a history entry) the moment its
+  // own row was tapped. Every row here uses the shared lens links.
+  const rows = [];
+  for (const f of readdirSync(resolve(process.cwd(), 'frontend/src/pages/founder'))) {
+    if (!f.endsWith('.jsx')) continue;
+    const src = codeOnly(read(`frontend/src/pages/founder/${f}`));
+    for (const m of src.matchAll(/<nav[^>]*aria-label="[^"]*sections"[^>]*>[\s\S]*?<\/nav>/gi)) {
+      if (!/<(?:Lens)?(?:Nav)?Link\b/.test(m[0])) continue;
+      rows.push(f);
+      assert.doesNotMatch(m[0], /<(?:Nav)?Link\b/, `${f}'s section row has a pill that navigates on a phone`);
+    }
+  }
+  assert.ok(rows.length >= 27, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {

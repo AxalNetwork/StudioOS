@@ -13,22 +13,30 @@ test('Calendar and Events are not present as standalone sidebar items', () => {
   assert.doesNotMatch(sidebar, /to:\s*['"]\/articles\/draft['"][^}]*label:\s*['"]Articles['"]/);
 });
 
-test('Calendar, Events, and Articles appear in the user dropdown before the Help Center', () => {
+test('Calendar, Events, and Learning appear in the user dropdown before the Help Center', () => {
   // `to="/tickets"` until the Support Hub became the Help Center. The old path
   // still exists in App.jsx as a redirect route (`path="/tickets"`), which is
   // why this reads `to="/help"`: a `to=` is a menu link, a `path=` is a route,
   // and only the first belongs in a menu-order assertion.
-  const trustIndex = app.indexOf('to="/trust"');
-  const calendarIndex = app.indexOf('to="/calendar"');
-  const eventsIndex = app.indexOf('to="/my/events"');
-  const articlesIndex = app.indexOf('to="/articles/draft"');
-  const helpIndex = app.indexOf('to="/help"');
+  //
+  // D562: "Learning" (`/learning`) took the slot "Articles" (`/articles/draft`)
+  // held, at the owner's request; Articles live inside Learning now. The read
+  // is bounded to the dropdown, because `to="/articles/draft"` still appears
+  // further down App.jsx as the target of the `/news` and `/articles/mine`
+  // redirects, which are routes and not menu entries.
+  const menu = app.slice(app.indexOf('function UserDropdown'), app.indexOf('function PortalSwitcher'));
+  const trustIndex = menu.indexOf('to="/trust"');
+  const calendarIndex = menu.indexOf('to="/calendar"');
+  const eventsIndex = menu.indexOf('to="/my/events"');
+  const learningIndex = menu.indexOf('to="/learning"');
+  const helpIndex = menu.indexOf('to="/help"');
 
   assert.ok(trustIndex >= 0, 'Trust Center menu item should exist');
   assert.ok(calendarIndex > trustIndex, 'Calendar should follow Trust Center');
   assert.ok(eventsIndex > calendarIndex, 'Events should follow Calendar');
-  assert.ok(articlesIndex > eventsIndex, 'Articles should follow Events');
-  assert.ok(helpIndex > articlesIndex, 'the Help Center should follow Articles');
+  assert.ok(learningIndex > eventsIndex, 'Learning should follow Events');
+  assert.ok(helpIndex > learningIndex, 'the Help Center should follow Learning');
+  assert.equal(menu.indexOf('to="/articles/draft"'), -1, 'the menu no longer links the article editor as "Articles"');
 });
 
 test('the Help Center is reachable before KYC, and the old path still resolves', () => {

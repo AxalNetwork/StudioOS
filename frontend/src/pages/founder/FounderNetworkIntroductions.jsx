@@ -8,6 +8,7 @@ import './founderNetworkRelationships.css';
 import './founderNetworkIntroductions.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { LensLink } from '../../workspaces/lens';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -90,7 +91,7 @@ export default function FounderNetworkIntroductions({ embedded = false, role = '
   const workspace = `/network?mode=workspace&tab=introductions${projectId ? `&project_id=${encodeURIComponent(projectId)}` : ''}`;
 
   return <main className={`fn-rel fn-intro${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-introductions"><div className="fn-rel-shell"><section className="fn-rel-main">
-    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Introductions</strong></div><div className="fn-rel-title-row"><div><h1>Introductions</h1><p>Asks and offers ledger with privacy-filtered counterpart and state records.</p></div></div><nav aria-label="Network sections"><Link to={`/network/relationships${query}`}>Relationships</Link><Link className="is-active" to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
+    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Introductions</strong></div><div className="fn-rel-title-row"><div><h1>Introductions</h1><p>Asks and offers ledger with privacy-filtered counterpart and state records.</p></div></div><nav aria-label="Network sections"><LensLink to={`/network/relationships${query}`}>Relationships</LensLink><LensLink className="is-active" to={`/network/introductions${query}`}>Introductions</LensLink><LensLink to={`/network/organizations${query}`}>Organizations</LensLink></nav></header>}
     {/* Outside the header on purpose. These three zones only ever render
         through NetworkWorkspace, which passes `embedded` and draws the crumb,
         heading and zone nav itself — so everything inside that guard is dead

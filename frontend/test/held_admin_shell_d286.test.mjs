@@ -320,7 +320,7 @@ test('an /admin tab lights the Admin row the H35 map places it on, and a tab pla
 });
 
 test('the top bar says whose data: "HQ-held · axal.vc" and the HQ-HELD badge, on the plain Admin shell off a branch only', () => {
-  const open = APP.indexOf('<Routes>');
+  const open = APP.indexOf('<Routes');
   const chrome = codeOnly(APP.slice(0, open));
   const m = /\{!branchFact && shellRole === 'admin' && activeRole === 'admin' && !isImpersonating && \(([\s\S]*?)\)\}/.exec(chrome);
   assert.ok(m, 'the HQ-held badge is not gated on the plain Admin shell off a branch');

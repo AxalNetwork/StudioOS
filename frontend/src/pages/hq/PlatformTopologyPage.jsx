@@ -6,7 +6,7 @@ import { reportError } from '../../lib/log';
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import { TopologyTag, RpcSide } from '../../components/TopologyParts';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
  * HQ · Platform → Topology — what HQ can read, and through what (H14, D209).
@@ -347,7 +347,7 @@ export default function PlatformTopologyPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-topology-page">
+    <RailFrame rail={rail} data-testid="hq-topology-page">
       <div className="min-w-0 space-y-4">
         <div>
           <Link to="/admin/platform" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">
@@ -396,7 +396,6 @@ export default function PlatformTopologyPage() {
         {topoReady && <SharedCard topo={topo} />}
       </div>
 
-      <div className="mt-4 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

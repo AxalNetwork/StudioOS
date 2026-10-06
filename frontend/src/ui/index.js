@@ -48,6 +48,9 @@ export { default as AssistLayout } from './AssistLayout';
 // configured per feature. It named no model at all until that route existed;
 // see WorkerRail.jsx for why the route had to come first.
 export { default as WorkerRail } from './WorkerRail';
+// D556 — the one frame every host that does not draw the founder desks' own
+// panel puts its rail in. See RailFrame.jsx.
+export { default as RailFrame, RailStripSlot } from './RailFrame';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 

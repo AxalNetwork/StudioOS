@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
@@ -255,6 +256,14 @@ export default function ProfileZone() {
             <ZoneHeading
               title="Your profile"
               blurb="What a founder reads before deciding whether to book you. Every field is yours to state; nothing here is inferred, scored or written for you."
+              // D571 — the page a client opens, from the record saved here. Only
+              // once there is one: an unsaved draft has no profile to show.
+              action={state.profile?.uid ? (
+                <Link to={`/advisors/${encodeURIComponent(state.profile.uid)}`} data-testid="link-profile-as-client"
+                  className="text-[12px] font-semibold text-emerald-700 underline dark:text-emerald-300">
+                  See it as a client does
+                </Link>
+              ) : null}
             />
             <form onSubmit={save} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {fieldShown(view, 'display_name', state.profile) && (

@@ -230,7 +230,11 @@ test('presets write the same prefs shape the grid writes', () => {
   // No second storage shape and no migration: a preset patches
   // `notification_prefs`, exactly as a checkbox does.
   const s = read('frontend/src/pages/SettingsPage.jsx');
-  assert.match(s, /patch\(\{ notification_prefs: next \}\)/);
+  // D568 — the grid and the presets write through ONE writer, `savePrefs`,
+  // which PUTs the whole prefs object to /notifications/prefs (the column the
+  // root PATCH used to write). Same shape, one route, one call site each.
+  assert.match(s, /await api\.putNotificationPrefs\(next\)/);
+  assert.ok((s.match(/savePrefs\(next\);/g) || []).length >= 2, 'the grid and the presets must share the one writer');
   assert.ok(s.includes('const applyPreset'), 'presets must exist');
   // in_app/inapp are mirrored by the grid for the legacy reader; a preset that
   // set only one of them would desync the bell subsystem.

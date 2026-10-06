@@ -147,7 +147,11 @@ test('the page is routed for the list’s licences and the list links to it', ()
 test('/build/competitors redirects with its ?id=, and stays only where nothing replaces it', () => {
   const at = app.indexOf('path="/build/competitors"');
   const route = app.slice(at, app.indexOf('<Route', at + 10));
-  assert.match(route, /get\('id'\)\s*\?\s*`\/research\/companies\/\$\{encodeURIComponent\(new URLSearchParams\(location\.search\)\.get\('id'\)\)\}`\s*:\s*'\/research\/companies'/);
+  // Without an id it lands on the Saved analyses tab with `market` and
+  // `website` kept (D534, #1079): the bare directory dropped the company
+  // page's prefill. `buildCompetitorsRedirect` is pinned in
+  // research_companies_pages_d534.test.mjs.
+  assert.match(route, /get\('id'\)\s*\?\s*`\/research\/companies\/\$\{encodeURIComponent\(new URLSearchParams\(location\.search\)\.get\('id'\)\)\}`\s*:\s*buildCompetitorsRedirect\(location\.search\)/);
   assert.match(route, /replace/);
   // Partner and investor are not admitted by /research/companies, so a redirect
   // would lock them out of a page they can use today.

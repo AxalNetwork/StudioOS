@@ -38855,7 +38855,8 @@ allocations are on the canvas and are the next step.
 a time, "no route change": the zone chips swap the lens in place. That
 contradicts SHELL_MIGRATION rule 2 and `founder_shell.test.mjs`, which hold
 that a zone pill navigates to its route, and the pills keep navigating. Which
-rule wins is a product decision this entry does not make.
+rule wins is a product decision this entry does not make. *(Settled on #977:
+M2 is built as D575, with desktop pills still navigating.)*
 
 **Not built here, each with its owner.**
 - The AI rail as a floating button plus bottom sheet (M5) is Session 12's.

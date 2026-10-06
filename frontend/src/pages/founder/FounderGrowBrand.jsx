@@ -9,6 +9,7 @@ import './founderGrowBrand.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { LensLink } from '../../workspaces/lens';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -76,7 +77,7 @@ export default function FounderGrowBrand() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-brand" data-testid="founder-grow-brand"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-brand-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Brand</b></div><div><h1>Brand &amp; landing</h1><p>Landing pages, templates and captured leads.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-brand-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Brand' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-brand-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Brand</b></div><div><h1>Brand &amp; landing</h1><p>Landing pages, templates and captured leads.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-brand-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Brand' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/brand', { value: view, onChange: setView })}
               actions={founderZoneActions('grow/brand', { query, view: { scope: project?.name, header: ['Lead', 'Email', 'Source', 'Audience', 'Captured'], rows: signups, cells: (r) => [r.name, r.email, r.source, r.audience, r.created_at] } })}

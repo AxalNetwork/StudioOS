@@ -4,7 +4,7 @@ import {
   FolderPlus, Upload, Trash2, ShieldCheck, ShieldAlert, Users,
   FileText, Folder, FolderOpen, Loader2, ChevronRight, ChevronDown,
 } from 'lucide-react';
-import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
+import { Card, Pill, RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import AdvisorGrantSection from './AdvisorGrantSection';
@@ -507,7 +507,26 @@ function FounderRoom({ projects, initialProjectUid }) {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace="Raise"
+          role="founder"
+          stance="Your room, your gates"
+          note="Every figure here is counted from the room’s own log: opens, downloads, and downloads the NDA refused. Nothing is drafted or sent from this page."
+          coverage={[
+            `${files.length} file${files.length === 1 ? '' : 's'} in ${folders.length} folder${folders.length === 1 ? '' : 's'}`,
+            `${activeGrants.length} investor${activeGrants.length === 1 ? '' : 's'} with access`,
+          ]}
+          coverageNote="The activity list is the last fifty events; the weekly figures count the whole log."
+          unavailable={[
+            ['Committed-only and private tiers', 'The investor reads show a file to anyone with a grant and a signed NDA, so a third mark would leak.'],
+            ['Watermark and preview', 'There is no PDF pipeline in the worker; a download is single-use, expires in two minutes, and is logged.'],
+            ['Per-file views', 'Only downloads are logged per file.'],
+          ]}
+        />
+      )}
+    >
       <div className="min-w-0 space-y-6">
         {/* The in-body startup picker is gone (#181) — see MarketIntelPage for the
             reasoning. `projectUid` still defaults to `projects[0]?.uid`, which is
@@ -631,24 +650,7 @@ function FounderRoom({ projects, initialProjectUid }) {
 
         <ActivityLog events={room?.recent_access || []} />
       </div>
-
-      <WorkerRail
-        workspace="Raise"
-        role="founder"
-        stance="Your room, your gates"
-        note="Every figure here is counted from the room’s own log: opens, downloads, and downloads the NDA refused. Nothing is drafted or sent from this page."
-        coverage={[
-          `${files.length} file${files.length === 1 ? '' : 's'} in ${folders.length} folder${folders.length === 1 ? '' : 's'}`,
-          `${activeGrants.length} investor${activeGrants.length === 1 ? '' : 's'} with access`,
-        ]}
-        coverageNote="The activity list is the last fifty events; the weekly figures count the whole log."
-        unavailable={[
-          ['Committed-only and private tiers', 'The investor reads show a file to anyone with a grant and a signed NDA, so a third mark would leak.'],
-          ['Watermark and preview', 'There is no PDF pipeline in the worker; a download is single-use, expires in two minutes, and is logged.'],
-          ['Per-file views', 'Only downloads are logged per file.'],
-        ]}
-      />
-    </div>
+    </RailFrame>
   );
 }
 

@@ -123,8 +123,10 @@ test('every founder desk strip derives its current pill from the URL', () => {
     const src = codeOnly(read(file));
     assert.match(src, /import \{ zonePillClass \} from '\.\/deskZoneNav'/,
       `${file} must take its active rule from the one shared helper`);
-    assert.match(src, /<NavLink[^>]*className=\{zonePillClass\}/,
-      `${file} must render its zone pills as NavLink with the shared class rule`);
+    // LensNavLink since D575: a NavLink on a desktop, a lens switch on a phone,
+    // with the same isActive render prop either way.
+    assert.match(src, /<LensNavLink[^>]*className=\{zonePillClass\}/,
+      `${file} must render its zone pills as LensNavLink with the shared class rule`);
   }
 });
 

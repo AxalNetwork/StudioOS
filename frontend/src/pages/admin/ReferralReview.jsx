@@ -10,6 +10,7 @@
  * detail drawer shows real history rather than a single "last updated".
  */
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
@@ -66,13 +67,25 @@ export default function ReferralReview() {
             Move referrals through the pipeline. What you write here is what the referrer sees.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={load}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* D569 — the other referral programme's ledger. A sign-up with a
+              partner's code accrues commissions there, and its payouts are
+              processed there; this queue settles its rewards off-platform. */}
+          <Link
+            to="/admin/commissions"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+            data-testid="link-admin-commissions"
+          >
+            Commissions and payouts
+          </Link>
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5">

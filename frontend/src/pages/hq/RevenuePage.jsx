@@ -46,7 +46,7 @@ import { api } from '../../lib/api';
 import { bpsPercent } from '../../lib/bps';
 import { reportError } from '../../lib/log';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { revenueAbsenceForLicence, usageCoverageLabel } from '../../lib/hqRevenuePerSub';
 
 export const UNAVAILABLE = Symbol('unavailable');
@@ -783,7 +783,7 @@ export default function RevenuePage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-revenue-page">
+    <RailFrame rail={rail} data-testid="hq-revenue-page">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#14532d] px-4 py-2.5 text-white">
           <span className="text-[12.5px] font-bold">All subsidiaries</span>
@@ -1158,7 +1158,6 @@ export default function RevenuePage() {
         </div>
       </div>
 
-      <div className="mt-4 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }
