@@ -2858,6 +2858,11 @@ function AppInner() {
       <Route path="/notifications/*" element={<Navigate to="/inbox" replace />} />
       <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
+      {/* D599 — every guide has its own page (the canvas's H2). Static
+          children (`/help/tickets/:id`, `/help/admin/*`) outrank this by React
+          Router's own ranking; the page reads the role-filtered manifest, so a
+          guide the viewer may not read answers "not found". */}
+      <Route path="/help/:area/:guide" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/help/:id" element={<HelpTicketIdRedirect />} />
       <Route path="/tickets" element={<Navigate to="/help/tickets" replace />} />
@@ -3440,8 +3445,15 @@ function AdminDocsPathGuard() {
   if (loading) return null;
   const isAdmin = !!user && role === 'admin';
   if (isAdmin) {
-    const sub = location.pathname.replace(/^\/(?:docs|help)\/admin\/?/, '').split('/')[0] || 'overview';
-    return <Navigate to={`/help#admin/${encodeURIComponent(sub)}`} replace />;
+    // D599 — an admin guide has its own page now, at this very address. So
+    // `/help/admin/<sub>` renders it, and the legacy `/docs/admin/<sub>` comes
+    // here first; redirecting to `/help#admin/<sub>` as before would send the
+    // Help Center's hash handler straight back, round and round.
+    const raw = location.pathname.replace(/^\/(?:docs|help)\/admin\/?/, '').split('/')[0];
+    const sub = /^[a-z0-9-]+$/.test(raw) ? raw : 'overview';
+    const target = `/help/admin/${sub}`;
+    if (location.pathname !== target) return <Navigate to={target} replace />;
+    return <HelpCenterPage />;
   }
   return (
     <div className="max-w-xl mx-auto py-24 px-6 text-center">

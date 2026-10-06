@@ -531,6 +531,9 @@ export const PROFILE_V2_PARAMS = {
   separation_full_at: 1.0,
 } as const;
 
+/** D592 proposed blend, off until the owner activates its audited setting. */
+export const PROFILE_EVIDENCE_BLEND_WEIGHT = 0.25;
+
 const DAY_MS = 86_400_000;
 
 /**

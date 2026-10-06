@@ -260,7 +260,11 @@ export const INVESTOR_ZONE_ACTIONS = {
   'research/ask': [
     { label: 'New brief', kind: 'handler', handler: 'newSession' },
     { label: 'Export session', kind: 'export' },
-    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
+    // D495 (#1023): BUILT UP TO THE OWNER'S LINE. The refusal above was never
+    // a recorded decision. Whether Clear deletes the caller's sessions, hides
+    // them behind a "Show cleared" filter, or stays refused is question 4 on
+    // #1023, and until it is answered nothing is cleared.
+    { label: 'Clear history', unbuilt: 'the history is stored and nothing clears it yet: whether clearing deletes your sessions, hides them, or stays refused is the owner’s decision, asked on #1023', hover: 'Clearing history is not decided yet. Nothing has been deleted.' },
   ],
   // Both of these zones have had a real body since the research stores landed,
   // and both were calling `zoneActionsFor` all along — with no key here, so
@@ -271,8 +275,10 @@ export const INVESTOR_ZONE_ACTIONS = {
     // The zone's own StatedLimit argues this one, and the note says the same
     // thing it does: "a request button that wrote nowhere would be worse than
     // the conversation it replaced."
-    { label: 'New request', unbuilt: 'a founder opens a room; nothing here asks one to, and a button that wrote nowhere would replace the conversation that does', hover: 'A founder opens a data room; nothing here can ask one to.' },
-    { label: 'Attach to deal', unbuilt: 'nothing links a room grant to a deal record' },
+    // D495 (#1023): both wait on `research.ts`'s `deals/*` routes, which are
+    // slot S02's, so the reason names what each waits on rather than a store.
+    { label: 'New request', unbuilt: 'a founder opens a room; asking one to waits on the deal-request routes in research.ts (slot S02), and a button that wrote nowhere would replace the conversation that does', hover: 'Requesting a data room waits on the deal-request routes (slot S02).' },
+    { label: 'Attach to deal', unbuilt: 'nothing links a room grant to a deal record yet; that link waits on the deal routes in research.ts (slot S02)', hover: 'Linking a room to a deal waits on the deal routes (slot S02).' },
     { label: 'Export', kind: 'export' },
   ],
   'research/benchmarking': [

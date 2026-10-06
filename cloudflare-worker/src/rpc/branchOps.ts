@@ -37,6 +37,7 @@ import { createJWT, loadSuperAdminFlag } from '../auth';
 import { likeNeedle } from '../util/likeSearch';
 import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
+import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../services/approvalAge';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -1150,6 +1151,28 @@ export async function branchFundsRegistry(env: Env): Promise<BranchAnswer<FundsR
   const branch = requireBranch(env);
   const read = await readFundsRegistry(env);
   return { branch, as_of: nowIso(), ...read };
+}
+
+/**
+ * D483 — this branch's referral decision ages, for HQ's H15.
+ *
+ * The same read the branch's own Analytics page uses
+ * (`services/approvalAge.ts`), so the median HQ prints for this branch is the
+ * one this branch prints. Only durations travel: no submission id, account or
+ * name. No secret, on `rpc/index.ts`'s rule for reads: "callable by any Worker
+ * in the account" costs at most a list of anonymous hours.
+ */
+export async function branchApprovalAges(
+  env: Env,
+): Promise<BranchAnswer<{ window_days: number; referrals: ReferralAges }>> {
+  const branch = requireBranch(env);
+  const nowMs = Date.now();
+  return {
+    branch,
+    as_of: new Date(nowMs).toISOString(),
+    window_days: DECISION_WINDOW_DAYS,
+    referrals: await referralAges(env, nowMs),
+  };
 }
 
 /* ------------------------------------------------------------------ *

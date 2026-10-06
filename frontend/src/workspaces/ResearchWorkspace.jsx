@@ -7,7 +7,7 @@ import { accentLinkClass, bucketForPath, bucketTitle, zoneForPath } from './shel
 import { zoneActionsFor } from './zoneActionsByRole';
 import { zoneFiltersFor } from './zoneFiltersByRole';
 import NoStoreYet from './NoStoreYet';
-import { RESEARCH_STORE_GAPS } from './noStoreCopy';
+import { storeGapFor } from './noStoreCopy';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
@@ -366,13 +366,12 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   // and rendering nothing leaves a reader comparing the design to the page with
   // four missing controls and no reason given. `noStoreCopy.js` says why each
   // one is recorded and what `blocks` is compared against.
-  const storeGap = !isRoot && slug ? RESEARCH_STORE_GAPS[slug] : null;
   // D392 — AN ENTRY MAY NAME THE LICENCES IT IS TRUE FOR. `markets` is: the
-  // saved deep-dive it names is what the founder and investor canvases draw,
-  // while the partner and advisor canvases draw comparable readings, which is
-  // what `MarketZone` is. A gap card over a zone that already holds the
-  // canvas's object would tell those two licences the page lacks what it has.
-  const gap = storeGap && (!storeGap.roles || storeGap.roles.includes(role)) ? storeGap : null;
+  // saved deep-dive it names is what the founder canvas draws, while the
+  // partner and advisor canvases draw comparable readings, which is what
+  // `MarketZone` is. D495 — the investor canvas draws theses, so the investor
+  // has an entry of its own (`markets:investor`).
+  const gap = !isRoot && slug ? storeGapFor(slug, role) : null;
 
   // Companies has a live store for everyone, but for an advisor the store holds
   // only what they ran themselves — saying it "reads a live source" and stopping

@@ -17,7 +17,7 @@ import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { PropositionCard, NARROW } from '../src/pages/advisor/network/IntroductionsZone.jsx';
 import { MATCH_FIELDS, fieldShown, filled } from '../src/pages/advisor/expertise/ProfileZone.jsx';
-import { RESEARCH_STORE_GAPS } from '../src/workspaces/noStoreCopy.js';
+import { RESEARCH_STORE_GAPS, storeGapFor } from '../src/workspaces/noStoreCopy.js';
 import { ADVISOR_ZONE_FILTERS } from '../src/workspaces/advisorZoneFilters.js';
 import { ADVISOR_ZONE_ACTIONS } from '../src/workspaces/advisorZoneActions.js';
 
@@ -105,14 +105,13 @@ test('D392: the Markets gap no longer says the page reads the signals feed, and 
 
 test('D392: the gap card is drawn only for the licences its entry names', () => {
   const ws = read('frontend/src/workspaces/ResearchWorkspace.jsx');
-  const scope = ws.match(/const gap = (storeGap && \(!storeGap\.roles \|\| storeGap\.roles\.includes\(role\)\) \? storeGap : null);/);
-  assert.ok(scope, 'the role scope is gone');
-  // Evaluate the page's own expression against each licence.
-  // eslint-disable-next-line no-new-func
-  const pick = new Function('storeGap', 'role', `return ${scope[1]};`);
-  for (const role of ['founder', 'investor']) assert.equal(pick(RESEARCH_STORE_GAPS.markets, role), RESEARCH_STORE_GAPS.markets, role);
-  for (const role of ['partner', 'advisor']) assert.equal(pick(RESEARCH_STORE_GAPS.markets, role), null, role);
-  assert.equal(pick(RESEARCH_STORE_GAPS.companies, 'advisor'), RESEARCH_STORE_GAPS.companies,
+  assert.match(ws, /const gap = !isRoot && slug \? storeGapFor\(slug, role\) : null;/, 'the role scope is gone');
+  // The page's own lookup, against each licence. D495: the investor's Markets
+  // canvas draws theses, so it has an entry of its own.
+  assert.equal(storeGapFor('markets', 'founder'), RESEARCH_STORE_GAPS.markets);
+  assert.equal(storeGapFor('markets', 'investor'), RESEARCH_STORE_GAPS['markets:investor']);
+  for (const role of ['partner', 'advisor']) assert.equal(storeGapFor('markets', role), null, role);
+  assert.equal(storeGapFor('companies', 'advisor'), RESEARCH_STORE_GAPS.companies,
     'an entry with no roles is shown to everyone, as before');
 });
 

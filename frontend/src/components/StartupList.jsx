@@ -142,7 +142,7 @@ export default function StartupList({ statusFilter = null, onNewStartup = null }
           // empty state keeps its "Learn more" link and stops promising an action
           // nothing can perform.
           cta={onNewStartup ? { label: 'New startup', onClick: onNewStartup } : undefined}
-          secondary={{ label: 'Learn more', to: '/help#core/projects' }}
+          secondary={{ label: 'Learn more', to: '/help/build/projects' }}
         />
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">

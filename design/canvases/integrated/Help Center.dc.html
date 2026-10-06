@@ -1,13 +1,12 @@
 <!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
-<helmet data-dc-atomics>
+<helmet data-dc-atomics="">
   <meta name="design_doc_mode" content="canvas">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -113,6 +112,30 @@
         </div>
       </div>
 
+      <div class="c" style="padding:18px 22px;margin-top:20px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <span class="lbl">{{ tk.title }}</span>
+          <span class="mono" style="font-size:11px;color:#6b6577">{{ tk.meta }}</span>
+        </div>
+        <sc-if value="{{ tk.hasRows }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:10px;display:flex;flex-direction:column">
+            <sc-for list="{{ tk.rows }}" as="r" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #f0eef5">
+                <span style="font-size:13px;font-weight:700;letter-spacing:-.01em">{{ r.title }}</span>
+                <span style="display:flex;gap:6px;align-items:center"><span style="{{ r.stStyle }}">{{ r.st }}</span><sc-if value="{{ r.chip }}" hint-placeholder-val="{{ false }}"><span style="{{ r.chipStyle }}">{{ r.chip }}</span></sc-if></span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px">
+          <span style="font-size:12.5px;font-weight:700;color:#6d28d9;cursor:pointer">{{ tk.allLink }}</span>
+          <span class="btn2">Open a ticket</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #f0eef5">
+          <sc-for list="{{ tk.states }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"><span class="lbl" style="color:inherit">{{ s.k }}</span><span style="font-size:12px;display:block;margin-top:3px">{{ s.v }}</span><sc-if value="{{ s.cta }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:700;display:block;margin-top:3px">{{ s.cta }}</span></sc-if></div></sc-for>
+        </div>
+      </div>
+
       <div class="c" style="padding:20px 22px;margin-top:20px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
           <div style="min-width:0">
@@ -120,7 +143,7 @@
             <div style="font-size:12.5px;color:#4a4459;margin-top:6px;line-height:1.55;max-width:440px">{{ contactLede }}</div>
           </div>
           <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;flex:none">
-            <sc-for list="{{ contacts }}" as="c" hint-placeholder-count="3"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+            <sc-for list="{{ contacts }}" as="c" hint-placeholder-count="4"><span style="display:flex;flex-direction:column;align-items:center;gap:3px"><span style="{{ c.style }}">{{ c.label }}</span><sc-if value="{{ c.note }}" hint-placeholder-val="{{ false }}"><span class="mono" style="font-size:9.5px;color:#a49ead">{{ c.note }}</span></sc-if></span></sc-for>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:9px;margin-top:15px;padding-top:14px;border-top:1px solid #f0eef5;flex-wrap:wrap">
@@ -276,8 +299,68 @@
   </div>
   <div class="cap">{{ h2Cap }}</div>
 </section>
+
+<!-- ══════════ H3 · HELP · YOUR TICKETS ══════════ -->
+<section class="ab" id="h3">
+  <div class="ab-hd"><a class="ab-id" href="#h3">H3</a><span class="ab-nm">Help · Your tickets</span><span class="ab-sub">member · tabs with counts · type and category filters</span></div>
+  <div style="display:flex;gap:28px;align-items:flex-start">
+    <div class="fr"><dc-import name="Help Ticket Screen" screen="h3" hint-size="1080px,900px"></dc-import></div>
+    <div style="width:390px;min-width:390px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden"><dc-import name="Help Ticket Screen" screen="h3" hint-size="390px,900px"></dc-import></div>
+  </div>
+  <div class="cap">A member’s own tickets, latest activity first, with the bounty or review chip beside the status so the state of a bug or a feature request is visible without opening it.</div>
+</section>
+
+<!-- ══════════ H4 · HELP · OPEN A TICKET ══════════ -->
+<section class="ab" id="h4">
+  <div class="ab-hd"><a class="ab-id" href="#h4">H4</a><span class="ab-nm">Help · Open a ticket</span><span class="ab-sub">required title and type · eight categories · priority hints</span></div>
+  <div style="display:flex;gap:28px;align-items:flex-start">
+    <div class="fr"><dc-import name="Help Ticket Screen" screen="h4" hint-size="1080px,900px"></dc-import></div>
+    <div style="width:390px;min-width:390px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden"><dc-import name="Help Ticket Screen" screen="h4" hint-size="390px,900px"></dc-import></div>
+  </div>
+  <div class="cap">The form records only what the platform stores. Guides match on the title as it is typed, the bug note appears only for a bug, and the three outcomes after submit are drawn beside the form rather than implied.</div>
+</section>
+
+<!-- ══════════ H5 · HELP · TICKET (MEMBER) ══════════ -->
+<section class="ab" id="h5">
+  <div class="ab-hd"><a class="ab-id" href="#h5">H5</a><span class="ab-nm">Help · Ticket (member)</span><span class="ab-sub">detail · 250px rail · thread and reply</span></div>
+  <div style="display:flex;gap:28px;align-items:flex-start">
+    <div class="fr"><dc-import name="Help Ticket Screen" screen="h5" hint-size="1080px,900px"></dc-import></div>
+    <div style="width:390px;min-width:390px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden"><dc-import name="Help Ticket Screen" screen="h5" hint-size="390px,900px"></dc-import></div>
+  </div>
+  <div class="cap">A fixed bug: the rail says in one sentence what the bounty state means and shows the credits granted. Replies are open because the ticket is on the tracker.</div>
+</section>
+
+<!-- ══════════ H5B · HELP · TICKET (MEMBER) · NOT ON THE TRACKER ══════════ -->
+<section class="ab" id="h5b">
+  <div class="ab-hd"><a class="ab-id" href="#h5b">H5B</a><span class="ab-nm">Help · Ticket (member) · not on the tracker</span><span class="ab-sub">reply box disabled · declined feature</span></div>
+  <div style="display:flex;gap:28px;align-items:flex-start">
+    <div class="fr"><dc-import name="Help Ticket Screen" screen="h5b" hint-size="1080px,900px"></dc-import></div>
+    <div style="width:390px;min-width:390px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden"><dc-import name="Help Ticket Screen" screen="h5b" hint-size="390px,900px"></dc-import></div>
+  </div>
+  <div class="cap">The same layout for a ticket whose tracker mirror failed: the reply box is disabled with the reason, and the review panel shows Declined with the reason the Super Admin typed.</div>
+</section>
+
+<!-- ══════════ H6 · HELP · ALL TICKETS (ADMIN QUEUE) ══════════ -->
+<section class="ab" id="h6">
+  <div class="ab-hd"><a class="ab-id" href="#h6">H6</a><span class="ab-nm">Help · All tickets (admin queue)</span><span class="ab-sub">every member · SLA tier and band · tracker column</span></div>
+  <div style="display:flex;gap:28px;align-items:flex-start">
+    <div class="fr"><dc-import name="Help Ticket Screen" screen="h6" hint-size="1080px,900px"></dc-import></div>
+    <div style="width:390px;min-width:390px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden"><dc-import name="Help Ticket Screen" screen="h6" hint-size="390px,900px"></dc-import></div>
+  </div>
+  <div class="cap">The admin queue adds the requester, the SLA tier derived from priority, the age band against it, and the tracker number. The amber banner counts saved tickets that never reached the tracker and offers to create the missing issues, up to 25 at a time.</div>
+</section>
+
+<!-- ══════════ H7 · HELP · TICKET (ADMIN) ══════════ -->
+<section class="ab" id="h7">
+  <div class="ab-hd"><a class="ab-id" href="#h7">H7</a><span class="ab-nm">Help · Ticket (admin)</span><span class="ab-sub">status changer · assignee · mirror state and error</span></div>
+  <div style="display:flex;gap:28px;align-items:flex-start">
+    <div class="fr"><dc-import name="Help Ticket Screen" screen="h7" hint-size="1080px,900px"></dc-import></div>
+    <div style="width:390px;min-width:390px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden"><dc-import name="Help Ticket Screen" screen="h7" hint-size="390px,900px"></dc-import></div>
+  </div>
+  <div class="cap">H5’s layout with the admin controls: a status changer, the assignee, the tracker mirror’s state with its error and a Retry, and for a feature request a link to the Super Admin’s review queue.</div>
+</section>
 </x-dc>
-<script type="text/x-dc" data-dc-script>
+<script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
   ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
 
@@ -381,12 +464,32 @@ class Component extends DCLogic {
           + (i === 0 ? VT + ';color:' + VD + ';border:1px solid #ddd0fb' : '#f4f3f7;color:' + MUT + ';border:1px solid ' + HAIR)
       })),
 
-      contactLede:'Search first — most answers are here and instant. If not, support replies inside a working day, and a walkthrough gets you a person on a call.',
+      tk: (() => {
+        const pill = (fg, bg, bd) => 'font-size:11px;font-weight:600;border-radius:99px;padding:3px 9px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px solid ' + bd;
+        const st = { Open: pill(VD, VT, '#ddd0fb'), 'In progress': pill('#92400e', '#fffdf5', '#fcd34d') };
+        const chip = { green: pill('#047857', '#eefbf5', '#a7f3d0'), amber: pill('#92400e', '#fffdf5', '#fcd34d') };
+        const box = (tone) => 'padding:10px 12px;border-radius:11px;' + (tone === 'red' ? 'background:#fef2f2;border:1px solid #fecaca;color:#b91c1c' : 'background:#f4f3f7;border:1px solid ' + HAIR + ';color:' + MUT);
+        return {
+          title:'Your tickets', meta:'open · latest activity first · up to three', hasRows:true, allLink:'All your tickets →',
+          rows:[
+            { title:'[Ticket title]', st:'In progress', stStyle:st['In progress'], chip:'Confirmed: being fixed', chipStyle:chip.green },
+            { title:'[Ticket title]', st:'Open', stStyle:st.Open, chip:'Awaiting review', chipStyle:chip.amber },
+            { title:'[Ticket title]', st:'Open', stStyle:st.Open, chip:'' }
+          ],
+          states:[
+            { k:'Empty', v:'No open tickets', cta:'', style:box() },
+            { k:'Unreadable', v:'Your tickets could not be read', cta:'Try again', style:box('red') },
+            { k:'Admin', v:'Reads "Open tickets across the platform · [n]" and links to the queue (H6).', cta:'All tickets →', style:box() }
+          ]
+        };
+      })(),
+      contactLede:'Search first — most answers are here and instant. If not, open a ticket; the team replies inside a working day. Message the team shows on plans that include chat.',
       contacts: [
-        { label:'Message support', primary:true },
-        { label:'Book a walkthrough', primary:false },
-        { label:'What we can see', primary:false }
-      ].map(c => ({ label:c.label,
+        { label:'Open a ticket', primary:true },
+        { label:'Message the team', primary:false, note:'plans with chat' },
+        { label:'Email support · support@axal.vc', primary:false },
+        { label:'What we can see', primary:false, note:'Trust Center' }
+      ].map(c => ({ label:c.label, note:c.note || '',
         style: c.primary
           ? 'font-size:12.5px;font-weight:700;padding:9px 17px;border-radius:9px;background:'+V+';color:#fff;border:1px solid '+V+';cursor:pointer;white-space:nowrap'
           : 'font-size:12.5px;font-weight:600;padding:9px 15px;border-radius:9px;background:#fff;color:#4a4459;border:1px solid '+HAIR+';cursor:pointer;white-space:nowrap' })),
@@ -448,5 +551,4 @@ class Component extends DCLogic {
   }
 }
 </script>
-</body>
-</html>
+</body></html>
