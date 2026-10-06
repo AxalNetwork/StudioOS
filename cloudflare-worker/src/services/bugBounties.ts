@@ -20,9 +20,13 @@
  * grant service, keyed by `bountySourceRef`, so a redelivered webhook or a
  * replay from the label snapshot grants once.
  *
- * Everything here is a pure decision over the event, so the webhook handler
- * stays a thin caller and every rule can be tested without a database.
+ * The decisions (`bountyLabelEvent`, `bountyStateFromLabels`) are pure, so
+ * every rule can be tested without a database. `applyBountyTier` is the one
+ * step that writes: it hands a verified tier to the credit grant service
+ * (D540) and takes it back when the tier is removed in time.
  */
+import type { Env } from '../types';
+import { grantCredits, revokeGrant, type GrantActor } from './creditGrants';
 
 export const BOUNTY_CONFIRMED = 'bounty:confirmed';
 export const BOUNTY_NOT_A_BUG = 'bounty:not-a-bug';
@@ -128,4 +132,78 @@ export function bountyStateFromLabels(labels: readonly string[], ticketType: str
   if (set.has(BOUNTY_CONFIRMED)) return { state: 'confirmed' };
   if (String(ticketType ?? '').toLowerCase() === 'bug' || set.has('bug')) return { state: 'under_review' };
   return null;
+}
+
+/** The webhook acts as the system; the GitHub sender is in the activity log beside it. */
+export const BOUNTY_ACTOR: GrantActor = { kind: 'system', source: 'github_bounty' };
+
+/** Whole days from an instant to now, for either stored date shape (D162). */
+function daysSince(at: string, now: Date): number {
+  const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(at) ? at : `${at.replace(' ', 'T')}Z`;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? (now.getTime() - t) / 86_400_000 : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * What a verified tier label added or removed does to the ticket owner's
+ * credits. Returns the report the webhook answers with.
+ *
+ *   added    → `grantCredits(bug_<tier>)` under `bounty:ticket:<id>`. The
+ *              grant service reads the amount, refuses staff, holds the
+ *              monthly cap and pays a source once, so a redelivery or a
+ *              second tier on the same ticket is `already_granted`.
+ *   removed  → the grant under that source is revoked when it is the tier
+ *              that was removed (removing a tier that was never paid takes
+ *              nothing back) and it is under BOUNTY_REVOKE_WINDOW_DAYS old.
+ *              A revoke the ledger refuses (the credits are spent) is
+ *              reported, not retried.
+ *
+ * A refusal is an answer, not a failure: the webhook acknowledges it, since a
+ * redelivery would be refused the same way. A thrown error propagates, so the
+ * webhook releases the delivery claim and the event can be redelivered.
+ */
+export async function applyBountyTier(env: Env, args: {
+  ticketId: number; userId: number | null | undefined;
+  event: { kind: 'tier_added' | 'tier_removed'; label: string; ruleKey: string };
+  now?: Date;
+}): Promise<Record<string, unknown>> {
+  const sourceRef = bountySourceRef(args.ticketId);
+  const base = { kind: args.event.kind, rule_key: args.event.ruleKey, source_ref: sourceRef };
+  const userId = Number(args.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return { ...base, credits: 'not_granted', reason: 'no_ticket_owner' };
+  }
+
+  if (args.event.kind === 'tier_added') {
+    const r = await grantCredits(env, { userId, ruleKey: args.event.ruleKey, sourceRef, actor: BOUNTY_ACTOR });
+    if (r.status === 'granted') return { ...base, credits: 'granted', amount: r.credits, ledger_id: r.ledger_id };
+    if (r.status === 'already_granted') {
+      // One grant per ticket, ever: a tier put back after a revoke does not
+      // pay again, and the answer says so rather than reading as paid.
+      const revoked = r.ledger_id === null ? null : await env.DB.prepare(
+        `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'admin_adjust' AND source_ref = ?`,
+      ).bind(userId, `revoke:${r.ledger_id}`).first<{ id: number }>();
+      return { ...base, credits: revoked ? 'revoked_earlier' : 'already_granted', ledger_id: r.ledger_id };
+    }
+    return { ...base, credits: 'refused', code: r.code, message: r.message, ...(r.cap ? { cap: r.cap } : {}) };
+  }
+
+  const grant = await env.DB.prepare(
+    `SELECT id, rule_key, created_at FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
+  ).bind(userId, sourceRef).first<{ id: number; rule_key: string | null; created_at: string }>();
+  if (!grant) return { ...base, credits: 'nothing_to_revoke' };
+  if (grant.rule_key !== args.event.ruleKey) {
+    return { ...base, credits: 'kept', reason: 'paid_under_another_tier', paid_rule_key: grant.rule_key };
+  }
+  if (daysSince(String(grant.created_at), args.now ?? new Date()) > BOUNTY_REVOKE_WINDOW_DAYS) {
+    return { ...base, credits: 'kept', reason: 'revoke_window_passed', ledger_id: Number(grant.id) };
+  }
+  const r = await revokeGrant(env, {
+    ledgerId: Number(grant.id),
+    actor: BOUNTY_ACTOR,
+    reason: `The ${args.event.label} label was removed from the ticket within ${BOUNTY_REVOKE_WINDOW_DAYS} days: the fix was reverted or regraded.`,
+  });
+  if (r.status === 'revoked') return { ...base, credits: 'revoked', amount: r.credits, ledger_id: r.ledger_id };
+  if (r.status === 'already_revoked') return { ...base, credits: 'already_revoked', ledger_id: r.ledger_id };
+  return { ...base, credits: 'kept', reason: r.code, message: r.message };
 }

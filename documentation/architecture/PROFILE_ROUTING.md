@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 134 canonical canvases at `design/canvases/`, listed
-176 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 135 canonical canvases at `design/canvases/`, listed
+177 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -165,7 +165,7 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Subsidiary Admin — 10 canvases
+## Subsidiary Admin — 11 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -173,6 +173,7 @@ it, where in their nav, and how do they get there.*
 | Contracts · Subsidiary | `/admin` · `/esign/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → Approvals | UPGRADE | High |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Funds (directory) | `/research/funds` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Research · Funds (fund profile) | `/research/funds/catalog/:id` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Research · Sector | `/research/markets/sector/:slug` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
@@ -258,7 +259,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 98 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 44 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 45 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 34 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

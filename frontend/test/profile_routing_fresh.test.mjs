@@ -79,7 +79,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // Geography` (D546), built for `/research/markets` and `/research/geographies`.
   // 133 on 2026-10-06 (D534, #1079). `Research · Companies` and
   // `Research · Company`, approved on 2026-10-05 and built from `design/incoming/`.
-  assert.equal(recs.length, 134);
+  // 134 on 2026-10-06: Ops Page event organiser E1–E4 (#1173, D567).
+  // 135: Advisor practice A1–A5 and working public booking links (D573).
+  assert.equal(recs.length, 135);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

@@ -1,7 +1,7 @@
 /**
  * D559 (#1160) — exercises and exams, graded on the server with no answer leaked.
  *
- * Run on a database built from the baseline and the migrations through 390.
+ * Run on a database built from the baseline and the migrations through 390 (389 included).
  * What is pinned:
  *
  *   - no member-facing payload carries a correct answer before the attempt is
@@ -51,6 +51,8 @@ function builtFromMigrations(): DatabaseSync {
     }
   }
   db.exec(sqlOf('388'));
+  // 389 (D558, programs) sits between: the member reads join its tables.
+  db.exec(sqlOf('389'));
   db.exec(sqlOf('390'));
   return db;
 }

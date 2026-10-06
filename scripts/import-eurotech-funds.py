@@ -7,6 +7,10 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fund_lp_flags import lp_flags  # noqa: E402  (D539: the one EIF/EIFO rule)
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'attached_assets' / 'EuroTechVCFunds(from1_2016)-Sheet1.csv'
@@ -89,8 +93,10 @@ def main():
         item['eurotech_report_month'] = events[-1].get('Month') or None
         item['eurotech_report_count'] = len(events)
         item['quarter'] = events[-1].get('Qtr') or item.get('quarter')
-        item['eurotech_eif_flag'] = any('EIF' in (e.get('Notable Known LPs') or '') for e in events)
-        item['eurotech_eifo_flag'] = any('EIFO' in (e.get('Notable Known LPs') or '') for e in events)
+        # D539 (#1084): whole names, not substrings. 'EIF' in 'EIFO' was true,
+        # so every EIFO-backed fund was also flagged as EIF-backed.
+        item['eurotech_eif_flag'] = any(lp_flags(e.get('Notable Known LPs'))[0] for e in events)
+        item['eurotech_eifo_flag'] = any(lp_flags(e.get('Notable Known LPs'))[1] for e in events)
         observations = {}
         for row in events:
             current_period = period_for_qtr(row.get('Qtr'), row.get('')) or period_for_qtr(row.get('Qtr'), row.get(''))

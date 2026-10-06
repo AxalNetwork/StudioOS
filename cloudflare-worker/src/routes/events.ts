@@ -15,6 +15,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import type { User } from '../types';
 import { requireAuth } from '../auth';
+import { logAdminAction } from '../services/adminAudit';
+import { agendaLocation, registrationEligibility, validateRegistrationRules } from '../services/eventOrganiser';
 import { notify } from '../services/notify';
 import { ensureEventsSchema } from '../services/eventsSchema';
 import {
@@ -385,7 +387,9 @@ events.get('/:id', async (c) => {
   const agenda = await c.env.DB.prepare(
     `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
   ).bind(id).all();
+  const registration = await c.env.DB.prepare(`SELECT id, status, waitlist_position, decision_reason, decided_at FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(id, u.id).first();
   return c.json({
+    registration,
     event: shapeEvent(event, { includePrivate: manage }),
     agenda: (agenda.results || []).map(shapeAgendaItem),
   });
@@ -416,9 +420,12 @@ events.patch('/:id', async (c) => {
   num('capacity'); num('price_cents'); num('project_id');
   if ('currency' in body) { sets.push('currency = ?'); binds.push(body.currency || 'usd'); }
   bool('waitlist_enabled'); bool('approval_required');
-  if ('audience_rules' in body) {
+  if ('audience_rules' in body || 'audience_rules_json' in body) {
+    let rules;
+    try { rules = validateRegistrationRules(body.audience_rules_json ?? body.audience_rules); }
+    catch { return c.json({ error: 'invalid_audience_rules' }, 400); }
     sets.push('audience_rules_json = ?');
-    binds.push(serializeAudienceRules(parseAudienceRules(JSON.stringify(body.audience_rules))));
+    binds.push(JSON.stringify(rules));
   }
 
   if (!sets.length) return c.json({ event: shapeEvent(event, { includePrivate: true }) });
@@ -452,6 +459,7 @@ events.patch('/:id', async (c) => {
       }
     }
   }
+  await logAdminAction(c.env, u.id, u.email, 'event_updated', { event_id: id, fields: Object.keys(body) });
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
 });
 
@@ -476,6 +484,7 @@ events.post('/:id/submit-review', async (c) => {
       `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ?`,
     ).bind(id).run();
   }
+  await logAdminAction(c.env, u.id, u.email, 'event_submitted', { event_id: id });
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
 });
 
@@ -564,9 +573,11 @@ events.get('/:id/roster', async (c) => {
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
 
   const regs = await c.env.DB.prepare(
-    `SELECT r.*, ch.code AS checkin_code, ch.checked_in_at AS checked_in_at
+    `SELECT r.*, ch.code AS checkin_code, ch.checked_in_at AS checked_in_at, decider.name AS decided_by_name, member.role AS member_role
        FROM event_registrations r
        LEFT JOIN event_checkins ch ON ch.registration_id = r.id
+       LEFT JOIN users decider ON decider.id = r.decided_by_user_id
+       LEFT JOIN users member ON member.id = r.user_id
       WHERE r.event_id = ?
       ORDER BY CASE r.status WHEN 'waitlisted' THEN 1 ELSE 0 END, r.waitlist_position ASC, r.registered_at ASC`,
   ).bind(id).all();
@@ -590,6 +601,10 @@ events.get('/:id/roster', async (c) => {
     checkin_code: r.checkin_code ?? null,
     checked_in_at: r.checked_in_at ?? null,
     registered_at: r.registered_at,
+    role: r.member_role ?? null,
+    decision_reason: r.decision_reason ?? null,
+    decided_by_name: r.decided_by_name ?? null,
+    decided_at: r.decided_at ?? null,
   }));
 
   return c.json({
@@ -627,19 +642,20 @@ events.post('/:id/registrations/:rid/approve', async (c) => {
     // Promoting a waitlisted row adds a seat → capacity-guard it atomically.
     const cap = event.capacity != null ? Number(event.capacity) : null;
     const upd: any = await c.env.DB.prepare(
-      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, updated_at = datetime('now')
+      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
          WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
-    ).bind(rid, cap, id, cap).run();
+    ).bind(u.id, rid, cap, id, cap).run();
     if (!upd?.meta?.changes) return c.json({ error: 'full' }, 409);
   } else {
     // 'registered' already holds a seat (approval-pending) → no capacity change.
     await c.env.DB.prepare(
-      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(rid).run();
+      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+    ).bind(u.id, rid).run();
   }
   // Paid registrations stay code-less until payment settles (fulfillEventTicket
   // mints the code) — approving an unpaid paid registration must not issue one.
   if (reg.payment_status !== 'pending') await ensureCheckinCode(c.env, id, rid);
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_approve', { event_id: id, registration_id: rid });
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_confirmed', category: 'events',
@@ -661,10 +677,14 @@ events.post('/:id/registrations/:rid/decline', async (c) => {
   const reg = await loadReg(c.env, id, rid);
   if (!reg) return c.json({ error: 'not_found' }, 404);
 
+  const body = await c.req.json().catch(() => ({} as any));
+  if (body.reason != null && typeof body.reason !== 'string') return c.json({ error: 'invalid_reason' }, 400);
+  const reason = body.reason?.trim() || null;
+  if (reason && reason.length > 1000) return c.json({ error: 'reason_too_long' }, 400);
   const heldSeat = ['registered', 'confirmed', 'attended'].includes(reg.status);
   await c.env.DB.prepare(
-    `UPDATE event_registrations SET status = 'declined', waitlist_position = NULL, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(rid).run();
+    `UPDATE event_registrations SET status = 'declined', waitlist_position = NULL, decision_reason = ?, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+  ).bind(reason, u.id, rid).run();
   if (heldSeat) {
     const promoted = await promoteWaitlist(c.env, event as EventSeatRow);
     for (const p of promoted) {
@@ -676,6 +696,7 @@ events.post('/:id/registrations/:rid/decline', async (c) => {
       }
     }
   }
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_decline', { event_id: id, registration_id: rid });
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_declined', category: 'events',
@@ -703,13 +724,14 @@ events.post('/:id/registrations/:rid/promote', async (c) => {
   // Capacity-guarded compare-and-set: 0 changes means the seat is gone (filled
   // concurrently) or the row was already promoted — either way, refuse.
   const upd: any = await c.env.DB.prepare(
-    `UPDATE event_registrations SET status = ?, waitlist_position = NULL, updated_at = datetime('now')
+    `UPDATE event_registrations SET status = ?, waitlist_position = NULL, decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
        WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
-  ).bind(target, rid, cap, id, cap).run();
+  ).bind(target, u.id, rid, cap, id, cap).run();
   if (!upd?.meta?.changes) return c.json({ error: 'full' }, 409);
   // Paid registrations stay code-less until payment settles (fulfillEventTicket
   // mints the code) — manually promoting an unpaid paid row must not issue one.
   if (reg.payment_status !== 'pending') await ensureCheckinCode(c.env, id, rid);
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_promote', { event_id: id, registration_id: rid });
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_promoted', category: 'events',
@@ -732,6 +754,7 @@ events.get('/:id/eligibility', async (c) => {
   const comp = await isPrincipalCompEligible(c.env, rules, { userId: u.id, email: u.email }, event.host_user_id ?? null);
   const taken = await seatsTaken(c.env, id);
   return c.json({
+    ...(await registrationEligibility(c.env, event, u.id, u.email)),
     comp_eligible: comp.eligible,
     comp_source: comp.source,
     price_cents: Number(event.price_cents || 0),
@@ -813,6 +836,7 @@ events.delete('/:id/registration', async (c) => {
       }
     }
   }
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_cancelled', { event_id: id, registration_id: reg.id });
   return c.json({ ok: true });
 });
 
@@ -929,21 +953,42 @@ events.post('/:id/agenda', async (c) => {
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json().catch(() => ({} as any));
+  let location;
+  try { location = agendaLocation(body); } catch { return c.json({ error: 'invalid_location' }, 400); }
   const title = String(body.title || '').trim();
   if (!title) return c.json({ error: 'title_required' }, 400);
   const ins: any = await c.env.DB.prepare(
     `INSERT INTO event_agenda_items
-       (event_id, slug, title, description, starts_at, ends_at, speaker_user_id, speaker_name, speaker_title, display_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (event_id, slug, title, description, starts_at, ends_at, speaker_user_id, speaker_name, speaker_title, display_order, location_text, location_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     id, body.slug ?? null, title, body.description ?? null, body.starts_at ?? null, body.ends_at ?? null,
     body.speaker_user_id ?? null, body.speaker_name ?? null, body.speaker_title ?? null,
-    body.display_order != null ? Number(body.display_order) : 0,
+    body.display_order != null ? Number(body.display_order) : 0, location.location_text ?? null, location.location_url ?? null,
   ).run();
   const row = await c.env.DB.prepare(`SELECT * FROM event_agenda_items WHERE id = ?`).bind(Number(ins?.meta?.last_row_id)).first();
   // Task #7 — a founder speaker on a Demo Day agenda earns Demo Day Presenter.
   if (body.speaker_user_id) await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_created', { event_id: id, agenda_item_id: row?.id });
   return c.json({ item: shapeAgendaItem(row) }, 201);
+});
+
+events.post('/:id/agenda/reorder', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  const ids = body.item_ids;
+  if (!Array.isArray(ids) || ids.some(v => !Number.isSafeInteger(v) || v <= 0)) return c.json({ error: 'invalid_order' }, 400);
+  const rows = await c.env.DB.prepare(`SELECT id FROM event_agenda_items WHERE event_id = ?`).bind(id).all<{ id: number }>();
+  if (ids.length !== (rows.results || []).length || (rows.results || []).some(r => !ids.includes(r.id))) return c.json({ error: 'invalid_order' }, 400);
+  if (ids.length) await c.env.DB.batch(ids.map((aid, index) => c.env.DB.prepare(`UPDATE event_agenda_items SET display_order = ?, updated_at = datetime('now') WHERE id = ? AND event_id = ?`).bind(index, aid, id)));
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_reordered', { event_id: id, item_ids: ids });
+  return c.json({ ok: true });
 });
 
 events.patch('/:id/agenda/:aid', async (c) => {
@@ -956,20 +1001,26 @@ events.patch('/:id/agenda/:aid', async (c) => {
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json().catch(() => ({} as any));
+  const existing = await c.env.DB.prepare(`SELECT id FROM event_agenda_items WHERE id = ? AND event_id = ?`).bind(aid, id).first();
+  if (!existing) return c.json({ error: 'not_found' }, 404);
+  let location;
+  try { location = agendaLocation(body); } catch { return c.json({ error: 'invalid_location' }, 400); }
   const sets: string[] = [];
   const binds: unknown[] = [];
   for (const k of ['slug', 'title', 'description', 'starts_at', 'ends_at', 'speaker_user_id', 'speaker_name', 'speaker_title', 'display_order']) {
     if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ?? null); }
   }
+  for (const [key, value] of Object.entries(location)) { sets.push(`${key} = ?`); binds.push(value); }
   if (!sets.length) return c.json({ error: 'no_fields' }, 400);
   sets.push(`updated_at = datetime('now')`);
   binds.push(aid, id);
   await c.env.DB.prepare(`UPDATE event_agenda_items SET ${sets.join(', ')} WHERE id = ? AND event_id = ?`).bind(...binds).run();
-  const row = await c.env.DB.prepare(`SELECT * FROM event_agenda_items WHERE id = ?`).bind(aid).first();
+  const row = await c.env.DB.prepare(`SELECT * FROM event_agenda_items WHERE id = ? AND event_id = ?`).bind(aid, id).first();
   // Task #7 — setting/changing a founder speaker on a Demo Day item earns the badge.
   if ('speaker_user_id' in body && body.speaker_user_id) {
     await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
   }
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_updated', { event_id: id, agenda_item_id: aid });
   return c.json({ item: shapeAgendaItem(row) });
 });
 
@@ -983,6 +1034,7 @@ events.delete('/:id/agenda/:aid', async (c) => {
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
   await c.env.DB.prepare(`DELETE FROM event_agenda_items WHERE id = ? AND event_id = ?`).bind(aid, id).run();
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_deleted', { event_id: id, agenda_item_id: aid });
   return c.json({ ok: true });
 });
 
@@ -1007,6 +1059,8 @@ export async function registerPrincipal(
 ): Promise<Response> {
   const env: Env = c.env;
   const eventId = Number(event.id);
+  const eligibility = await registrationEligibility(env, event, p.userId, p.email);
+  if (!eligibility.eligible) return c.json({ error: 'audience_ineligible', reason: eligibility.reason }, 403);
 
   // Idempotency: find an existing registration for this principal.
   let existing: any = null;

@@ -74,6 +74,7 @@ function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   const schema = readFileSync(new URL('../sql/migrations/109_events_core.sql', import.meta.url), 'utf8');
   db.exec(schema);
+  db.exec(readFileSync(new URL('../sql/migrations/392_event_organiser.sql', import.meta.url), 'utf8'));
   return db;
 }
 

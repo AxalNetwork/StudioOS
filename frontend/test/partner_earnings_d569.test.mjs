@@ -36,7 +36,7 @@ import { EarningsTotals, CommissionsList, PayoutRequestForm, PayoutHistory, opti
 import { ReferralCodeCard, IntroCreditsCard, SignupsTable, filterSignups, signupRoles } from '../src/pages/partner/earnings/PartnerReferrals.jsx';
 import { RelationshipHeader, RelationshipTimeline, LogInteractionForm } from '../src/pages/partner/earnings/PartnerRelationshipLog.jsx';
 import { LeaderboardTable, ViewerStanding } from '../src/pages/partner/earnings/PartnerLeaderboard.jsx';
-import { RulesTable, RuleEditor, TakeRateCard, PayoutQueue, AllCommissionsTable, reopenedText } from '../src/pages/admin/AdminCommissions.jsx';
+import AdminCommissions, { RulesTable, RuleEditor, TakeRateCard, PayoutQueue, AllCommissionsTable, reopenedText } from '../src/pages/admin/AdminCommissions.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -854,9 +854,10 @@ test('every method the screens call reaches its Worker route', async () => {
   };
   for (const p of ['/commissions/me', '/payouts/me', '/referral/code', '/referral/list']) assert.match(gate(NETWORK, 'network.get', p), /requireAuth/);
   assert.match(gate(NETWORK, 'network.post', '/payout/request'), /requireAuth/);
-  for (const p of ['/admin/commissions', '/admin/commission-rules', '/admin/payouts']) assert.match(gate(NETWORK, 'network.get', p), /requireAdmin/);
-  assert.match(gate(NETWORK, 'network.patch', '/admin/payouts/:id/process'), /requireAdmin/);
-  assert.match(gate(NETWORK, 'network.patch', '/admin/commission-rules/:key'), /requireAdmin/);
+  // D572 part 2: the global ledger is the Super Admin's, as the take rate is.
+  for (const p of ['/admin/commissions', '/admin/commission-rules', '/admin/payouts']) assert.match(gate(NETWORK, 'network.get', p), /requireSuperAdmin/);
+  assert.match(gate(NETWORK, 'network.patch', '/admin/payouts/:id/process'), /requireSuperAdmin/);
+  assert.match(gate(NETWORK, 'network.patch', '/admin/commission-rules/:key'), /requireSuperAdmin/);
   const platform = read('cloudflare-worker/src/routes/admin_platform.ts');
   assert.match(gate(platform, 'r.get', '/take-rate'), /requireSuperAdmin/);
   assert.match(gate(platform, 'r.put', '/take-rate'), /requireSuperAdmin/);
@@ -895,4 +896,16 @@ test('the rails speak as Eadwyn may: no advisor, advice, recommendation or fiduc
   }
   // The leaderboard has no rail, by its canvas.
   assert.doesNotMatch(read('frontend/src/pages/partner/earnings/PartnerLeaderboard.jsx'), /<WorkerRail/);
+});
+
+test('D572 part 2: a plain admin is told the console is the Super Admin\'s, and it asks the Worker for nothing', () => {
+  const plain = html(h(AdminCommissions, { user: { id: 2, role: 'admin', is_super_admin: 0 } }));
+  assert.match(plain, /data-testid="admin-commissions-super-only"/);
+  assert.doesNotMatch(plain, /data-testid="admin-commissions"/);
+  const sup = html(h(AdminCommissions, { user: { id: 1, role: 'admin', is_super_admin: 1 } }));
+  assert.match(sup, /data-testid="admin-commissions"/);
+  assert.doesNotMatch(sup, /admin-commissions-super-only/);
+  // The loads sit behind the same check, so a plain admin fires no request the Worker refuses.
+  const src = codeOnly(read('frontend/src/pages/admin/AdminCommissions.jsx'));
+  assert.match(src, /useEffect\(\(\) => \{\s*if \(!superAdmin\) return;\s*loadRules\(\); loadAll\(\); loadQueue\(\); loadTake\(\);/);
 });

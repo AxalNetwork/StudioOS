@@ -16,7 +16,9 @@
  *
  * VISIBILITY IS `canSeeLearning`. Every row this file returns from the
  * Learning store is passed through it; the SQL narrows with the same
- * predicate (`MEMBER_VISIBLE`) so totals and pages agree with what is shown.
+ * predicate (`see`) so totals and pages agree with what is shown. Program
+ * content (D558) is read with `enrolledSql`, selected `AS enrolled`, so the
+ * check sees whether this caller is enrolled.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -25,7 +27,7 @@ import { refuse } from '../util/refusal';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { mapError } from './_t13t14t15_helpers';
 import {
-  canSeeLearning, LEARNING_LEVELS, PROGRESS_KINDS,
+  canSeeLearning, enrolledSql, LEARNING_LEVELS, PROGRESS_KINDS,
 } from '../services/learningAccess';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -33,22 +35,29 @@ const r = new Hono<{ Bindings: Env }>();
 export const CATALOG_KINDS = ['course', 'video', 'reading', 'article', 'publication', 'event'] as const;
 type Kind = typeof CATALOG_KINDS[number];
 
-/** The member-visible predicate, as SQL. Mirrors `canSeeLearning` for a non-Super Admin. */
-const MEMBER_VISIBLE = "status = 'published' AND visibility = 'open'";
-// `? = 1` is "the caller is the Super Admin": drafts are listed too, archived never.
-const SEE = '(? = 1 OR (' + MEMBER_VISIBLE + ")) AND status != 'archived'";
+/**
+ * The member-visible predicate, as SQL. Mirrors `canSeeLearning` for a
+ * non-Super Admin. Binds two values: whether the caller is the Super Admin
+ * (`? = 1`: drafts are listed too, archived never), then the caller's id for
+ * the enrolment check.
+ */
+const see = (kind: 'item' | 'course', uidExpr: string) =>
+  "(? = 1 OR (status = 'published' AND (visibility = 'open' OR (visibility = 'program' AND "
+  + enrolledSql(kind, uidExpr) + ")))) AND status != 'archived'";
+const ITEM_ENROLLED = enrolledSql('item', 'learning_items.uid');
+const COURSE_ENROLLED = enrolledSql('course', 'learning_courses.uid');
 const MATCH = "(? IS NULL OR topic = ?) AND (? IS NULL OR level = ?) AND (? IS NULL OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')";
 
-const ITEMS_SQL = 'SELECT uid, kind, title, summary, topic, level, duration_seconds, thumbnail_url, status, visibility, published_at, updated_at '
-  + 'FROM learning_items WHERE kind = ? AND ' + SEE + ' AND ' + MATCH
+const ITEMS_SQL = 'SELECT uid, kind, title, summary, topic, level, duration_seconds, thumbnail_url, status, visibility, published_at, updated_at, '
+  + ITEM_ENROLLED + ' AS enrolled FROM learning_items WHERE kind = ? AND ' + see('item', 'learning_items.uid') + ' AND ' + MATCH
   + ' ORDER BY COALESCE(published_at, updated_at) DESC, id DESC LIMIT ? OFFSET ?';
-const ITEMS_COUNT = 'SELECT COUNT(*) AS n FROM learning_items WHERE kind = ? AND ' + SEE + ' AND ' + MATCH;
+const ITEMS_COUNT = 'SELECT COUNT(*) AS n FROM learning_items WHERE kind = ? AND ' + see('item', 'learning_items.uid') + ' AND ' + MATCH;
 // Courses carry a level but no topic.
 const COURSE_MATCH = "(? IS NULL OR level = ?) AND (? IS NULL OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')";
-const COURSES_SQL = 'SELECT uid, slug, title, summary, cover_url, level, estimated_minutes, status, visibility, published_at, updated_at '
-  + 'FROM learning_courses WHERE ' + SEE + ' AND ' + COURSE_MATCH
+const COURSES_SQL = 'SELECT uid, slug, title, summary, cover_url, level, estimated_minutes, status, visibility, published_at, updated_at, '
+  + COURSE_ENROLLED + ' AS enrolled FROM learning_courses WHERE ' + see('course', 'learning_courses.uid') + ' AND ' + COURSE_MATCH
   + ' ORDER BY COALESCE(published_at, updated_at) DESC, id DESC LIMIT ? OFFSET ?';
-const COURSES_COUNT = 'SELECT COUNT(*) AS n FROM learning_courses WHERE ' + SEE + ' AND ' + COURSE_MATCH;
+const COURSES_COUNT = 'SELECT COUNT(*) AS n FROM learning_courses WHERE ' + see('course', 'learning_courses.uid') + ' AND ' + COURSE_MATCH;
 
 const ARTICLES_WHERE = "a.status = 'published' AND (? IS NULL OR a.title LIKE ? ESCAPE '\\' OR a.subtitle LIKE ? ESCAPE '\\')";
 const ARTICLES_SQL = 'SELECT a.slug, a.title, a.subtitle, a.excerpt, a.published_at, a.read_minutes, '
@@ -97,6 +106,7 @@ async function readKind(env: Env, user: unknown, kind: Kind, f: {
 }): Promise<{ rows: CatalogRow[]; state: SourceState }> {
   const like = likeTerm(f.q);
   const sa = user && isSuperAdmin(user as any) ? 1 : 0;
+  const me = Number((user as any)?.id ?? 0);
   // A source without the field a filter names is left out, not listed
   // unfiltered: only videos and readings have a topic, and articles,
   // publications and events have no level.
@@ -109,9 +119,9 @@ async function readKind(env: Env, user: unknown, kind: Kind, f: {
   }
   try {
     if (kind === 'video' || kind === 'reading') {
-      const args = [kind, sa, f.topic, f.topic, f.level, f.level, like, like, like];
+      const args = [kind, sa, me, f.topic, f.topic, f.level, f.level, like, like, like];
       const [res, cnt] = await Promise.all([
-        env.DB.prepare(ITEMS_SQL).bind(...args, f.limit, f.offset).all<any>(),
+        env.DB.prepare(ITEMS_SQL).bind(me, ...args, f.limit, f.offset).all<any>(),
         env.DB.prepare(ITEMS_COUNT).bind(...args).first<{ n: number }>(),
       ]);
       const rows = (res.results || []).filter((x) => canSeeLearning(user, x)).map((x): CatalogRow => ({
@@ -122,9 +132,9 @@ async function readKind(env: Env, user: unknown, kind: Kind, f: {
       return { rows, state: { status: 'ready', total: Number(cnt?.n ?? 0) } };
     }
     if (kind === 'course') {
-      const args = [sa, f.level, f.level, like, like, like];
+      const args = [sa, me, f.level, f.level, like, like, like];
       const [res, cnt] = await Promise.all([
-        env.DB.prepare(COURSES_SQL).bind(...args, f.limit, f.offset).all<any>(),
+        env.DB.prepare(COURSES_SQL).bind(me, ...args, f.limit, f.offset).all<any>(),
         env.DB.prepare(COURSES_COUNT).bind(...args).first<{ n: number }>(),
       ]);
       const rows = (res.results || []).filter((x) => canSeeLearning(user, x)).map((x): CatalogRow => ({
@@ -210,12 +220,13 @@ r.get('/catalog', async (c) => {
   return c.json({ items: rows.slice(0, limit), sources, limit, offset });
 });
 
-const COURSE_SQL = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, status, visibility, published_at, updated_at FROM learning_courses WHERE slug = ?';
+const COURSE_SQL = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, status, visibility, published_at, updated_at, '
+  + COURSE_ENROLLED + ' AS enrolled FROM learning_courses WHERE slug = ?';
 
 r.get('/courses/:slug', async (c) => {
   let user: any;
   try { user = await requireAuth(c); } catch (e) { return mapError(c, e); }
-  const course = await c.env.DB.prepare(COURSE_SQL).bind(c.req.param('slug')).first<any>();
+  const course = await c.env.DB.prepare(COURSE_SQL).bind(user.id, c.req.param('slug')).first<any>();
   // Not found and not visible answer alike: a draft's slug is not confirmed to exist.
   if (!course || !canSeeLearning(user, course)) return refuse(c, 404, { code: 'not_found', message: 'No such course.' });
   const [mods, lessons, progress] = await Promise.all([
@@ -250,18 +261,19 @@ r.get('/courses/:slug', async (c) => {
   });
 });
 
-const ITEM_SQL = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, status, visibility, published_at, updated_at FROM learning_items WHERE uid = ?';
+const ITEM_SQL = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, status, visibility, published_at, updated_at, '
+  + ITEM_ENROLLED + ' AS enrolled FROM learning_items WHERE uid = ?';
 
 r.get('/items/:uid', async (c) => {
   let user: any;
   try { user = await requireAuth(c); } catch (e) { return mapError(c, e); }
-  const item = await c.env.DB.prepare(ITEM_SQL).bind(c.req.param('uid')).first<any>();
+  const item = await c.env.DB.prepare(ITEM_SQL).bind(user.id, c.req.param('uid')).first<any>();
   if (!item || !canSeeLearning(user, item)) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
   const p = await c.env.DB.prepare(
     `SELECT status, percent, position_seconds, completed_at FROM learning_progress WHERE user_id = ? AND subject_kind = 'item' AND subject_uid = ?`,
   ).bind(user.id, item.uid).first<any>();
-  const { visibility: _v, ...shown } = item;
-  void _v;
+  const { visibility: _v, enrolled: _e, ...shown } = item;
+  void _v; void _e;
   return c.json({
     item: { ...shown, transcript: item.transcript ?? null },
     // The player's transcript panel says why it is empty rather than drawing nothing.
@@ -271,20 +283,23 @@ r.get('/items/:uid', async (c) => {
 });
 
 /** The subject a progress write names, or null when it does not exist or the caller cannot see it. */
-async function visibleSubject(env: Env, user: unknown, kind: string, uid: string): Promise<boolean> {
+async function visibleSubject(env: Env, user: any, kind: string, uid: string): Promise<boolean> {
   if (kind === 'item') {
-    const row = await env.DB.prepare('SELECT status, visibility FROM learning_items WHERE uid = ?').bind(uid).first<any>();
+    const row = await env.DB.prepare('SELECT status, visibility, ' + ITEM_ENROLLED + ' AS enrolled FROM learning_items WHERE uid = ?')
+      .bind(user.id, uid).first<any>();
     return canSeeLearning(user, row);
   }
   if (kind === 'course') {
-    const row = await env.DB.prepare('SELECT status, visibility FROM learning_courses WHERE uid = ?').bind(uid).first<any>();
+    const row = await env.DB.prepare('SELECT status, visibility, ' + COURSE_ENROLLED + ' AS enrolled FROM learning_courses WHERE uid = ?')
+      .bind(user.id, uid).first<any>();
     return canSeeLearning(user, row);
   }
   // A lesson is as visible as its course.
   const row = await env.DB.prepare(
-    `SELECT c.status, c.visibility FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id
+    `SELECT c.status, c.visibility, ${enrolledSql('course', 'c.uid')} AS enrolled FROM learning_lessons l
+       JOIN learning_course_modules m ON m.id = l.module_id
        JOIN learning_courses c ON c.id = m.course_id WHERE l.uid = ?`,
-  ).bind(uid).first<any>();
+  ).bind(user.id, uid).first<any>();
   return canSeeLearning(user, row);
 }
 
