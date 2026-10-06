@@ -613,6 +613,73 @@ export async function syncStripeForUser(env: Env, userId: number, projectId: num
   }
 }
 
+/**
+ * D587 — one succeeded charge, as much of it as the revenue ledger may keep.
+ *
+ * PERSONAL DATA STAYS IN STRIPE. A charge carries the founder's customer's
+ * name, email, address and card. None of that is read into this shape: the
+ * customer is the Stripe customer id (`cus_…`) or null, never a person.
+ */
+export interface LedgerCharge {
+  id: string;
+  amount: number;          // smallest currency unit
+  amount_refunded: number; // smallest currency unit
+  currency: string;
+  created: number;         // unix seconds
+  customer: string | null; // Stripe customer id, never a name or email
+  invoice: boolean;        // the charge paid an invoice
+}
+
+/** Charges listed per call: Stripe's page size times listAll's page cap. */
+export const LEDGER_CHARGE_CAP = 1000;
+
+/**
+ * The caller's OWN connected Stripe account's succeeded charges, read-only and
+ * paged (newest first, at most LEDGER_CHARGE_CAP). `not_connected` when the
+ * caller has no active Stripe integration; `read_failed` when Stripe or the
+ * credentials could not be read. Never an empty list standing in for a
+ * failure, which the ledger would draw as "no charges".
+ */
+export async function listLedgerChargesForUser(env: Env, userId: number): Promise<
+  | { ok: true; charges: LedgerCharge[]; capped: boolean }
+  | { ok: false; reason: 'not_connected' | 'read_failed'; detail: string }
+> {
+  const row = await env.DB.prepare(
+    "SELECT * FROM integrations WHERE provider_key = 'stripe' AND user_id = ? AND status = 'active' LIMIT 1",
+  ).bind(userId).first<IntegrationRow>();
+  if (!row) return { ok: false, reason: 'not_connected', detail: 'not_connected' };
+  let token: string;
+  try {
+    const creds = await decryptCredentials(env, row.uid, row.credentials_enc);
+    if (!creds?.access_token) return { ok: false, reason: 'not_connected', detail: 'credentials_missing' };
+    token = String(creds.access_token);
+  } catch (e) {
+    return { ok: false, reason: 'read_failed', detail: (e as Error).message?.slice(0, 300) || 'credentials unreadable' };
+  }
+  try {
+    type RawCharge = {
+      id: string; amount: number; amount_refunded?: number; currency: string; created: number;
+      status: string; paid?: boolean; customer?: string | { id?: string } | null; invoice?: string | { id?: string } | null;
+    };
+    const raw = await listAll<RawCharge>(token, '/v1/charges');
+    const charges = raw
+      .filter((ch) => ch.status === 'succeeded' && ch.paid !== false)
+      .map((ch) => ({
+        id: String(ch.id),
+        amount: Number(ch.amount),
+        amount_refunded: Number(ch.amount_refunded ?? 0),
+        currency: String(ch.currency || '').toLowerCase(),
+        created: Number(ch.created),
+        customer: typeof ch.customer === 'string' ? ch.customer
+          : (ch.customer && typeof ch.customer === 'object' && typeof ch.customer.id === 'string' ? ch.customer.id : null),
+        invoice: ch.invoice != null,
+      }));
+    return { ok: true, charges, capped: raw.length >= LEDGER_CHARGE_CAP };
+  } catch (e) {
+    return { ok: false, reason: 'read_failed', detail: (e as Error).message?.slice(0, 300) || 'stripe read failed' };
+  }
+}
+
 /** Cron entry-point — 15-min reconcile across every active Stripe integration. */
 export async function syncAllStripeIntegrations(env: Env): Promise<{ scanned: number; ok: number; failed: number }> {
   let scanned = 0, ok = 0, failed = 0;
