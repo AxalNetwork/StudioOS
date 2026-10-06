@@ -31,7 +31,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Eye } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { cssHex, hexWithAlpha } from '../../lib/brandHex';
 
 const UNAVAILABLE = Symbol('unavailable');
@@ -62,7 +62,7 @@ function BranchTile({ label, value, reason, branch, readAt }) {
   );
 }
 
-export default function HqBranchOverlay({ branch }) {
+export default function HqBranchOverlay({ branch, 'data-testid': testId }) {
   const [data, setData] = useState(null);
 
   const load = useCallback(() => {
@@ -281,9 +281,8 @@ export default function HqBranchOverlay({ branch }) {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6">
+    <RailFrame rail={rail} data-testid={testId}>
       <div className="min-w-0">{body}</div>
-      <div className="mt-6 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

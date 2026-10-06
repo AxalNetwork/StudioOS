@@ -1,5 +1,5 @@
 import React from 'react';
-import { WorkerRail } from '../../ui';
+import { RailFrame, WorkerRail } from '../../ui';
 import { branchLabel } from '../../lib/shellRole';
 
 /**
@@ -67,26 +67,22 @@ export default function BranchZone({
     : 'This rail reads this deployment\'s database and no other. There is no cross-branch read behind it, '
       + 'so a question about another territory is one it cannot ask rather than one it declines.';
   return (
-    <div
-      className="lg:grid lg:items-start lg:gap-6"
-      style={{ gridTemplateColumns: 'minmax(0,1fr) var(--fwr-track, 280px)' }}
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace={workspace}
+          role="branch_admin"
+          stance={stance}
+          note={note}
+          coverage={coverage}
+          coverageNote={coverageNote}
+          unavailable={unavailable}
+          data-testid="branch-rail"
+        />
+      )}
       data-testid="branch-zone"
     >
-      <div className="min-w-0">{children}</div>
-      <div className="mt-4 lg:mt-0">
-        <div className="lg:sticky lg:top-20">
-          <WorkerRail
-            workspace={workspace}
-            role="branch_admin"
-            stance={stance}
-            note={note}
-            coverage={coverage}
-            coverageNote={coverageNote}
-            unavailable={unavailable}
-            data-testid="branch-rail"
-          />
-        </div>
-      </div>
-    </div>
+      {children}
+    </RailFrame>
   );
 }

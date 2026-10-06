@@ -1,5 +1,5 @@
 import React from 'react';
-import { WorkerRail } from '../../ui';
+import { RailFrame, WorkerRail } from '../../ui';
 
 /**
  * The frame the five S20 landings render in — the Admin shell on accounts HQ
@@ -44,36 +44,30 @@ export default function HeldZone({
     + 'No branch is deployed yet, so there is no branch read behind it: a question about a branch '
     + 'is one it cannot ask rather than one it declines.';
   return (
-    <div
-      className="lg:grid lg:items-start lg:gap-6"
-      style={{ gridTemplateColumns: 'minmax(0,1fr) var(--fwr-track, 280px)' }}
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace={workspace}
+          role="admin"
+          stance={stance}
+          note={note}
+          coverage={coverage}
+          coverageNote={coverageNote}
+          unavailable={unavailable}
+          data-testid="held-rail"
+        />
+      )}
       data-testid="held-zone"
     >
-      <div className="min-w-0">
-        <p
-          className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11.5px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300"
-          data-testid="held-scope"
-        >
-          <span className="font-extrabold uppercase tracking-[.07em]">{HELD_SCOPE}</span>
-          {' — '}
-          {HELD_SCOPE_NOTE}
-        </p>
-        {children}
-      </div>
-      <div className="mt-4 lg:mt-0">
-        <div className="lg:sticky lg:top-20">
-          <WorkerRail
-            workspace={workspace}
-            role="admin"
-            stance={stance}
-            note={note}
-            coverage={coverage}
-            coverageNote={coverageNote}
-            unavailable={unavailable}
-            data-testid="held-rail"
-          />
-        </div>
-      </div>
-    </div>
+      <p
+        className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11.5px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300"
+        data-testid="held-scope"
+      >
+        <span className="font-extrabold uppercase tracking-[.07em]">{HELD_SCOPE}</span>
+        {' — '}
+        {HELD_SCOPE_NOTE}
+      </p>
+      {children}
+    </RailFrame>
   );
 }

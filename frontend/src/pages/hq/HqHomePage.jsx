@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Globe, Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
 import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
@@ -235,11 +235,10 @@ export default function HqHomePage() {
   // it answered in was worse on this screen than none; that was the last thing
   // standing between H13's rule 1 and the page, and it is built.
   if (viewAs) {
-    return (
-      <div className="min-w-0" data-testid="hq-home-page">
-        <HqBranchOverlay branch={viewAs} />
-      </div>
-    );
+    // D556 — the overlay is the page's outermost element, so its rail frame
+    // docks to the edge like every other HQ page's. It used to sit inside a
+    // wrapper div, which would leave the frame one level too deep to bleed.
+    return <HqBranchOverlay branch={viewAs} data-testid="hq-home-page" />;
   }
 
   const rail = (
@@ -299,7 +298,7 @@ export default function HqHomePage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-home-page">
+    <RailFrame rail={rail} data-testid="hq-home-page">
       <div className="min-w-0">
         {/* The HQ bar: the tenant switcher sits where a subsidiary's territory
             badge sits, because both answer "whose data am I looking at?". Here
@@ -668,7 +667,6 @@ export default function HqHomePage() {
         </div>
       </div>
 
-      <div className="mt-6 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

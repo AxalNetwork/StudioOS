@@ -45,7 +45,7 @@ import { Link } from 'react-router-dom';
 import { Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -501,7 +501,7 @@ export default function HqFundsPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-funds-page">
+    <RailFrame rail={rail} data-testid="hq-funds-page">
       <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#1e3a8a] px-4 py-2.5 text-white">
           <span className="flex items-center gap-2 text-[12.5px] font-bold">
@@ -577,7 +577,6 @@ export default function HqFundsPage() {
           </Link>
         </Card>
       </div>
-      <div className="mt-4 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

@@ -1,0 +1,247 @@
+/**
+ * D556 — one frame for the Worker AI rail, on every page that mounts it.
+ *
+ * The owner: "The AIRail doesn't appear properly, on the right. Check the
+ * other pages too. For reference check the Founder pages." On the founder
+ * desks the rail is a panel docked to the right edge, full height, with a
+ * seam, a ground and its own padding. About thirty other hosts put it in a
+ * bare grid column inside the padded page, where it read as loose text.
+ *
+ * What this pins:
+ *   · every file that mounts `<WorkerRail` is framed, in one of four named
+ *     ways, and a new mount that is none of them fails here;
+ *   · the shared frame is defined once, in `ui/RailFrame.jsx` and the
+ *     `.fwr-frame*` rules of `ui/workerRail.css`, and nowhere else;
+ *   · the frame is the founder panel: docked, stretched, seam, ground, inset,
+ *     a track that collapses through `--fwr-track`, a dark pair;
+ *   · the phone form (D405) still works, because the frame hides its column
+ *     below 1024px instead of unmounting the rail;
+ *   · Admin Studio has a rail, and its coverage is the studio glance.
+ *
+ * Run alone:
+ *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/rail_frame_d556.test.mjs
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { codeOnly } from './_codeOnly.mjs';
+import RailFrame from '../src/ui/RailFrame.jsx';
+import StudioRail, { studioRailCoverage } from '../src/pages/admin/StudioRail.jsx';
+import { glancesFromStudioGlance, UNAVAILABLE } from '../src/pages/admin/adminStudioOverview.js';
+
+const ROOT = resolve(process.cwd());
+const SRC = resolve(ROOT, 'frontend/src');
+const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
+const CSS = read('frontend/src/ui/workerRail.css');
+const CSS_CODE = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+const el = React.createElement;
+
+function walk(dir, ext, out = []) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) walk(p, ext, out);
+    else if (ext.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+const SOURCES = walk(SRC, /\.(jsx?|tsx?)$/).map((f) => ({ rel: relative(ROOT, f), code: codeOnly(readFileSync(f, 'utf8')) }));
+const STYLESHEETS = walk(SRC, /\.css$/).map((f) => ({ rel: relative(ROOT, f), code: readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') }));
+
+/** Every source file that mounts the rail, read without its comments. */
+const MOUNTS = SOURCES.filter((s) => /<WorkerRail\b/.test(s.code));
+
+/**
+ * A class drawn as a frame by its own stylesheet: one plain rule for exactly
+ * that class (not `.dark`, not a descendant) that sets both a border and a
+ * background. That is what the founder desks do, and it is the only reason a
+ * host may skip the shared frame.
+ */
+function drawsFrame(cls) {
+  for (const { code } of STYLESHEETS) {
+    for (const m of code.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const sels = m[1].split(',').map((x) => x.trim());
+      if (!sels.includes(`.${cls}`)) continue;
+      if (/border(-left)?\s*:/.test(m[2]) && /background(-color)?\s*:/.test(m[2])) return true;
+    }
+  }
+  return false;
+}
+
+/** Hosts whose rail is a component of their own, mounted in the frame by name. */
+const RAIL_COMPONENTS = {
+  'frontend/src/pages/admin/StudioRail.jsx': ['frontend/src/pages/admin/AdminStudioHome.jsx', /<RailFrame rail=\{<StudioRail\b/],
+};
+
+/**
+ * The trees allowed to draw the founder frame in their own stylesheet. These
+ * are the reference (founder) and the desks built from the same canvases
+ * (investor, /perks). Anywhere else must use the shared frame.
+ */
+const SELF_FRAMED_TREES = ['frontend/src/pages/founder/', 'frontend/src/pages/investor/', 'frontend/src/pages/PerksPage.jsx'];
+
+function howFramed(m) {
+  if (/<RailFrame\b[\s\S]*?\brail=/.test(m.code)) return 'frame';
+  if (/<WorkspaceShell\b[\s\S]*?\brail=/.test(m.code)) return 'shell';
+  if (RAIL_COMPONENTS[m.rel]) {
+    const [host, use] = RAIL_COMPONENTS[m.rel];
+    return use.test(codeOnly(read(host))) ? 'component' : null;
+  }
+  if (SELF_FRAMED_TREES.some((t) => m.rel.startsWith(t))) {
+    const classes = [...m.code.matchAll(/<WorkerRail\b[^>]*?\bclassName="([^"]+)"/g)].map((x) => x[1].split(/\s+/)[0]);
+    if (classes.length && classes.every(drawsFrame)) return 'self';
+  }
+  return null;
+}
+
+test('every file that mounts <WorkerRail> puts it in a frame', () => {
+  assert.ok(MOUNTS.length >= 70, `expected the known mounts, found ${MOUNTS.length}`);
+  const unframed = MOUNTS.filter((m) => !howFramed(m)).map((m) => m.rel);
+  assert.deepEqual(unframed, [],
+    'these mount the rail in no frame: pass it to RailFrame, or to WorkspaceShell as `rail`');
+  // The census, so a reader can see the split and a drift in it shows up.
+  const by = MOUNTS.reduce((acc, m) => { const k = howFramed(m); acc[k] = (acc[k] || 0) + 1; return acc; }, {});
+  assert.ok(by.frame >= 18 && by.shell >= 13 && by.self >= 40 && by.component === 1, JSON.stringify(by));
+});
+
+test('WorkspaceShell draws no frame of its own; it uses the shared one', () => {
+  const shell = codeOnly(read('frontend/src/workspaces/WorkspaceShell.jsx'));
+  assert.match(shell, /<RailFrame rail=\{rail\}>/);
+  assert.doesNotMatch(shell, /border-l\b|fwr-shell-slot|xl:block/, 'the shell drew its own rail slot again');
+});
+
+test('the frame is defined in one place', () => {
+  // Only RailFrame.jsx names the frame's classes, and only workerRail.css
+  // styles them. A page that writes `fwr-frame-rail` itself is a second frame.
+  const named = SOURCES.filter((s) => /fwr-frame/.test(s.code) && s.rel !== 'frontend/src/ui/RailFrame.jsx').map((s) => s.rel);
+  assert.deepEqual(named, [], 'only RailFrame.jsx may draw the frame');
+  const styled = STYLESHEETS.filter((s) => /\.fwr-frame/.test(s.code) && s.rel !== 'frontend/src/ui/workerRail.css').map((s) => s.rel);
+  assert.deepEqual(styled, [], 'only workerRail.css may style the frame');
+  // And the hosts converted to it no longer carry the old bare column.
+  for (const s of SOURCES.filter((x) => /<RailFrame\b/.test(x.code))) {
+    assert.doesNotMatch(s.code, /grid-cols-\[minmax\(0,1fr\)_(?:280|300)px\]/, `${s.rel} kept its old rail column beside the frame`);
+  }
+});
+
+test('the frame is the founder panel: docked, stretched, seamed, grounded, collapsible', () => {
+  const desk = CSS_CODE.slice(CSS_CODE.indexOf('@media (min-width: 1024px) {\n  .fwr-frame {'));
+  assert.ok(desk.length > 0, 'the desktop frame rules are gone');
+  const rule = (sel) => desk.match(new RegExp(`(?:^|\\n)\\s*${sel.replace(/[.[\]"=]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] || '';
+  const row = rule('.fwr-frame');
+  assert.match(row, /display:\s*flex/);
+  assert.match(row, /align-items:\s*stretch/);
+  const col = rule('.fwr-frame-rail');
+  assert.match(col, /width:\s*var\(--fwr-track,\s*280px\)/, 'the column must collapse to the spine');
+  assert.match(col, /border-left:\s*1px solid/, 'the seam against the body');
+  assert.match(col, /background:\s*#fff/, 'the panel ground');
+  assert.match(col, /padding:\s*18px 18px 28px/, 'the panel inset');
+  const dock = rule('.fwr-frame-dock');
+  assert.match(dock, /position:\s*sticky/);
+  assert.match(dock, /overflow-y:\s*auto/, 'a rail taller than the window must scroll inside its panel');
+  assert.match(dock, /max-height:/);
+  assert.match(CSS_CODE, /\.dark \.fwr-frame-rail\s*\{[^}]*border-left-color:[^}]*background:/, 'the panel needs its dark pair');
+});
+
+test('the frame docks to the edge only where it can', () => {
+  // A direct child of the padded page container takes the padding back on
+  // the right and bottom, and on the top only when it is the first child —
+  // never the left, which is the body's side, and never on a flush surface.
+  const bleed = [...CSS_CODE.matchAll(/\[data-app-main\]:not\(\.edge-to-edge-surface\) > \.fwr-frame\[data-rail="true"\](:first-child)? \{([^}]*)\}/g)];
+  assert.equal(bleed.length, 2, 'the frame lost its edge rules');
+  const always = bleed.find((m) => !m[1])[2];
+  const first = bleed.find((m) => m[1])[2];
+  assert.match(always, /margin-right:\s*-24px/);
+  assert.match(always, /margin-bottom:\s*-24px/);
+  assert.doesNotMatch(always, /margin(-left)?:\s*-|margin-top/, 'only the right and bottom bleed on every frame');
+  assert.match(first, /margin-top:\s*-24px/);
+  // Each margin taken is handed back to the body, so the body does not move.
+  assert.match(CSS_CODE, /> \.fwr-frame\[data-rail="true"\] > \.fwr-frame-main \{ padding-right: 24px; padding-bottom: 24px; \}/);
+  assert.match(CSS_CODE, /> \.fwr-frame\[data-rail="true"\]:first-child > \.fwr-frame-main \{ padding-top: 24px; \}/);
+  // App.jsx's padded container is the 24px it cancels.
+  assert.match(read('frontend/src/App.jsx'), /flushSurface \? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'/);
+});
+
+test('the frame renders the body, then the rail column; with no rail, the body alone', () => {
+  const withRail = renderToStaticMarkup(el(RailFrame, { rail: el('aside', null, 'RAIL'), 'data-testid': 'x' }, el('p', null, 'BODY')));
+  assert.match(withRail, /^<div class="fwr-frame" data-rail="true" data-testid="x"><div class="fwr-frame-main"><p>BODY<\/p><\/div><div class="fwr-frame-rail" data-testid="worker-rail-frame"><div class="fwr-frame-dock"><aside>RAIL<\/aside><\/div><\/div><\/div>$/);
+  const bare = renderToStaticMarkup(el(RailFrame, null, el('p', null, 'BODY')));
+  assert.match(bare, /data-rail="false"/);
+  assert.doesNotMatch(bare, /fwr-frame-rail/, 'no rail, no empty column');
+});
+
+test('the phone form still works: the column is hidden, never unmounted', () => {
+  // The rail's floating button and sheet (D405) are portalled from inside the
+  // component, so the component has to stay mounted below 1024px. The frame
+  // hides its column in CSS and decides nothing in JavaScript.
+  const frame = codeOnly(read('frontend/src/ui/RailFrame.jsx'));
+  assert.doesNotMatch(frame, /matchMedia|innerWidth|window\./, 'the frame must not decide the breakpoint in JS');
+  const base = CSS_CODE.slice(0, CSS_CODE.indexOf('@media (min-width: 1024px) {\n  .fwr-frame {'));
+  assert.match(base, /\.fwr-frame-rail \{ display: none; \}/, 'below 1024px the column must be hidden');
+  assert.match(read('frontend/src/ui/WorkerRail.jsx'), /createPortal\(/, 'the phone button is still portalled');
+});
+
+// --- Admin Studio ----------------------------------------------------------
+
+const HQ_GLANCE = {
+  tier: 'hq',
+  branch: null,
+  seats: { recorded: false, reason: 'Seat use is a subsidiary figure (U1).' },
+  approvals: { recorded: false, reason: 'The lanes are a subsidiary\'s (U1).' },
+  agreements: { recorded: false, reason: 'Agreements are the subsidiary\'s (U1).' },
+  revenue: { recorded: false, reason: 'The share rate is a subsidiary term (U1).' },
+  licence: { recorded: false, reason: 'No row names the licence (U1).' },
+  programme: { recorded: false, reason: 'No cohort week is open.' },
+  templates: { recorded: true, available: false, reason: 'The library could not be read.' },
+  insights: { recorded: true, benchmarks_available: true, benchmarks: [] },
+};
+const BRANCH_GLANCE = {
+  tier: 'branch',
+  seats: {
+    recorded: true,
+    seats_used_by_type: { founder: 1, investor: 0, advisor: 0, partner: 0 },
+    seats: { founder: 10, investor: 1, advisor: 1, partner: 1 },
+  },
+  approvals: { recorded: true, lanes: [{ key: 'kyc', label: 'KYC', count: 0, oldest_age_hours: null, sla: 'ok' }] },
+  programme: { recorded: false, reason: 'No cohort week is open.' },
+  agreements: { recorded: true, expiring: 0, window_days: 60 },
+  revenue: { available: false, reason: 'The share rate could not be read.' },
+  licence: { recorded: true, revenue_share_bps: 3500, status: 'active' },
+  templates: { recorded: true, available: true, items: [{ slug: 'msa' }], pushed_at: '2026-09-01T00:00:00Z' },
+  insights: { recorded: true, benchmarks_available: true, benchmarks: [] },
+};
+const hqUser = { role: 'admin', branch: null };
+const branchUser = { role: 'admin', branch: { code: 'fr', name: 'France', status: 'active', territories: ['FR'] } };
+
+test('the Studio rail says how each block of the glance answered, in the page\'s own words', () => {
+  const branch = studioRailCoverage(glancesFromStudioGlance(BRANCH_GLANCE, branchUser));
+  assert.ok(branch.includes('Seats: read'), branch.join(' | '));
+  assert.ok(branch.includes('Approvals: read'), 'a measured empty queue is a read, not an absence');
+  assert.ok(branch.includes('Programme clock: not recorded here'));
+  assert.ok(branch.includes('Template library: read'));
+  assert.ok(branch.includes('Share rate: could not be read'), 'an unreadable store must say so, not read as absent');
+  // A tier's glance draws the lines it carries, and no line for one it does not.
+  const hq = studioRailCoverage(glancesFromStudioGlance(HQ_GLANCE, hqUser));
+  assert.ok(!hq.some((l) => l.startsWith('Seats')), `an HQ admin has no seat line: ${hq.join(' | ')}`);
+  assert.ok(hq.includes('Template library: could not be read'), hq.join(' | '));
+  assert.ok(hq.some((l) => l.startsWith('Accounts: ')) && hq.some((l) => l.startsWith('Insights: ')), hq.join(' | '));
+  assert.deepEqual(studioRailCoverage(null), []);
+});
+
+test('the Studio rail renders as the "Studio" workspace, with a reason while it has no lines', () => {
+  const ready = renderToStaticMarkup(el(StudioRail, { user: branchUser, glance: BRANCH_GLANCE }));
+  assert.match(ready, /Worker AI · Studio/);
+  assert.match(ready, /data-testid="admin-studio-rail"/);
+  assert.match(ready, /Seats: read/, 'the glance did not reach the rail');
+  const failed = renderToStaticMarkup(el(StudioRail, { user: hqUser, glance: UNAVAILABLE }));
+  assert.match(failed, /The studio glance could not be read\./);
+  assert.doesNotMatch(failed, /(Seats|Accounts|Approvals|Programme clock|Template library|Insights): /,
+    'a glance that failed whole draws its one reason, not a line per block it never read');
+  // In production the page passes no glance; the rail then shares the one
+  // in-flight request the strip and the cards make, rather than a read of its own.
+  const src = codeOnly(read('frontend/src/pages/admin/StudioRail.jsx'));
+  assert.match(src, /loadStudioGlance\(\)/);
+  assert.doesNotMatch(src, /\bapi\./, 'the rail must not make a read of its own');
+});

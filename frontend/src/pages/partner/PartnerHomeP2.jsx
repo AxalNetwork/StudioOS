@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Unrecorded, Unreadable, WorkerRail } from '../../ui';
+import { RailFrame, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { NO_PARTNER_PROFILE, NoFirmAttached } from './PartnerFirmProfileCard';
 
@@ -199,7 +199,26 @@ export function PartnerHomeP2View({ state, onRetry }) {
     by.capacity.value != null ? `${by.capacity.value} over capacity` : null,
   ].filter(Boolean).join(' · ');
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]" data-testid="partner-home-p2">
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace="Home"
+          role="partner"
+          stance="Read across the firm's record"
+          note="Every tile and line reads the Delivery and Pipeline records. The brief is composed only on your click, states what the record shows, and moves nothing."
+          coverage={[
+            'Engagements, at risk and due this week — Delivery · Board',
+            'Recurring and renewals — Pipeline · Retainers',
+            'Over capacity — Delivery · Capacity, against a cap the firm stated',
+          ]}
+          unavailable={[
+            ['Client messages', 'No inbound message record feeds this page.'],
+            ['Proposal opens', 'Opening is the client’s to record, and nothing records it.'],
+          ]}
+        />
+      )}
+      data-testid="partner-home-p2"
+    >
       <div className="min-w-0 space-y-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">Where does the firm stand today?</h1>
@@ -253,23 +272,7 @@ export function PartnerHomeP2View({ state, onRetry }) {
           in the rail.
         </p>
       </div>
-
-      <WorkerRail
-        workspace="Home"
-        role="partner"
-        stance="Read across the firm's record"
-        note="Every tile and line reads the Delivery and Pipeline records. The brief is composed only on your click, states what the record shows, and moves nothing."
-        coverage={[
-          'Engagements, at risk and due this week — Delivery · Board',
-          'Recurring and renewals — Pipeline · Retainers',
-          'Over capacity — Delivery · Capacity, against a cap the firm stated',
-        ]}
-        unavailable={[
-          ['Client messages', 'No inbound message record feeds this page.'],
-          ['Proposal opens', 'Opening is the client’s to record, and nothing records it.'],
-        ]}
-      />
-    </div>
+    </RailFrame>
   );
 }
 

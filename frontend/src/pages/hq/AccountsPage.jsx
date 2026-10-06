@@ -4,7 +4,7 @@ import AdminPage from '../AdminPage';
 import SuperAdminHolders from './SuperAdminHolders';
 import HqTeamTable from './HqTeamTable';
 import HqTeamActions from './HqTeamActions';
-import { Unrecorded, WorkerRail } from '../../ui';
+import { Unrecorded, RailFrame, WorkerRail } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 
 /**
@@ -81,7 +81,7 @@ export default function HqAccountsPage({ onImpersonate }) {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-accounts-page">
+    <RailFrame rail={rail} data-testid="hq-accounts-page">
       <div className="min-w-0 space-y-5">
         <header>
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
@@ -122,7 +122,6 @@ export default function HqAccountsPage({ onImpersonate }) {
           </>
         )}
       </div>
-      <div className="mt-6 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

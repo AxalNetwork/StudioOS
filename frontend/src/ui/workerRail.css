@@ -341,10 +341,10 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
     flex-direction: column-reverse; gap: 12px; height: 100%; justify-content: flex-start;
   }
   aside.fwr[data-collapsed="true"] .fwr-toggle { margin: 0; }
-  /* The shell's own slot draws the padding for the rail it wraps
-     (WorkspaceShell.jsx), so it has to give that padding up too — 18px either
-     side of a 44px column leaves 8px for the control. */
-  :root[data-worker-rail="collapsed"] .fwr-shell-slot { padding-left: 0; padding-right: 0; }
+  /* The shared frame draws the padding for the rail it wraps (RailFrame.jsx,
+     D556), so it has to give that padding up too — 18px either side of a 44px
+     column leaves 8px for the control. */
+  :root[data-worker-rail="collapsed"] .fwr-frame-rail { padding-left: 0; padding-right: 0; }
   /* The label turns with the column instead of disappearing: a 44px spine with
      no word on it is a mystery button, and the rail's whole job is to say what
      it is. Bottom-to-top so it reads with the head at the top, matching the
@@ -463,3 +463,51 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 .dark .fwr-spine-dot { background: #6f6a80; }
 .dark .fwr-spine-dot[data-state="on"] { background: #34d399; }
 .dark .fwr-spine-spend[data-state="unreadable"] { color: #f87171; }
+
+/*
+ * D556 — THE FRAME (ui/RailFrame.jsx). The founder desks' panel, written once
+ * for every host that does not draw it in its own stylesheet: docked right,
+ * the page's full height, a hairline seam, its own ground and padding, and a
+ * track that narrows to the spine through `--fwr-track`. The figures are the
+ * ones WorkspaceShell's slot already used (280px, 18px inset, 28px under),
+ * which is where this frame came from.
+ *
+ * Below 1024px the column is hidden rather than unmounted: the rail is the
+ * floating button and sheet there (D405), and both live in the component.
+ */
+.fwr-frame-rail { display: none; }
+
+@media (min-width: 1024px) {
+  .fwr-frame { display: flex; align-items: stretch; min-height: 100%; }
+  .fwr-frame-main { flex: 1 1 auto; min-width: 0; }
+  .fwr-frame-rail {
+    display: block; flex: none;
+    width: var(--fwr-track, 280px);
+    padding: 18px 18px 28px;
+    border-left: 1px solid #ececf1;
+    background: #fff;
+  }
+  /* Sticky, and scrolled on its own when it is taller than the window: the
+     model cards stay inside the panel instead of running the page out to
+     their length. 56px is the app header; 36px the panel's own inset above
+     and below. */
+  .fwr-frame-dock {
+    position: sticky; top: 18px;
+    max-height: calc(100vh - 56px - 36px);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  /* Docked to the edge. The page container pads its content 24px at this
+     width (App.jsx, `md:p-6`); a frame that is a direct child of it takes
+     that padding back with an equal negative margin on the right and the
+     bottom, and on the top too when nothing sits above it, then hands the
+     same padding to the body, so the body does not move and the panel meets
+     the edge. The left is the body's side and keeps the container's padding.
+     A frame nested deeper does not bleed: it is not adjacent to the padding
+     it would be cancelling. */
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"] { margin-right: -24px; margin-bottom: -24px; }
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"] > .fwr-frame-main { padding-right: 24px; padding-bottom: 24px; }
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"]:first-child { margin-top: -24px; }
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"]:first-child > .fwr-frame-main { padding-top: 24px; }
+}
+
+.dark .fwr-frame-rail { border-left-color: #1f2937; background: #111827; }
