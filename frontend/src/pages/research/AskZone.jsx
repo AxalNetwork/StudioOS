@@ -110,6 +110,7 @@ ASK_STRIP.investor = ASK_STRIP.founder;
 const NARROW = {
   cited: (t) => (t.citations || []).length > 0,
   unanswered: (t) => t.reason !== 'answered',
+  discarded: (t) => t.discarded === true,
 };
 
 /**
@@ -118,7 +119,7 @@ const NARROW = {
  * two: it means the same thing over a session and over the whole history, and
  * the scope beside it decides which.
  */
-const scopeFor = (view) => (SCOPES.has(view) ? view : 'session');
+const scopeFor = (view) => (view === 'discarded' ? 'all' : SCOPES.has(view) ? view : 'session');
 
 export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [question, setQuestion] = useState('');
@@ -204,6 +205,15 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     } catch {
       setError('That answer could not be kept right now.');
     } finally { setSavingUid(''); }
+  };
+
+  const updateAnswer = async (item, changes) => {
+    setSavingUid(item.uid); setError('');
+    try {
+      await api.research.askUpdateAnswer(item.uid, changes);
+      await loadThread(scope, sessionUid);
+    } catch (cause) { setError(cause?.message || 'That answer could not be updated.'); }
+    finally { setSavingUid(''); }
   };
 
   const payload = lib.payload;
@@ -357,7 +367,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             <p className="text-[12.5px] leading-relaxed text-gray-700 dark:text-gray-300">
               {view === 'cited'
                 ? 'Every answer in this view already carries its citations, so this filter leaves nothing out.'
-                : 'Nothing here went unanswered.'}
+                : view === 'discarded' ? 'No discarded answers.' : 'Nothing here went unanswered.'}
             </p>
           </Card>
         ) : null}
@@ -389,7 +399,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 {(t.citations || []).map((ct, i) => (
                   <Pill key={`${ct.title}-${ct.chunk}-${i}`} tone="cite" className="!text-[9.5px]">
-                    {ct.n ? `[${ct.n}] ` : ''}{ct.title}
+                    {ct.document_uid ? <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`}>{ct.n ? `[${ct.n}] ` : ''}{ct.title}</Link> : <>{ct.n ? `[${ct.n}] ` : ''}{ct.title}</>}
                     {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
                   </Pill>
                 ))}
@@ -403,6 +413,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                   {t.saved ? 'Kept' : 'Keep'}
                 </button>
               </div>
+
+              <AnswerDisposition item={t} busy={savingUid === t.uid} onUpdate={(changes) => updateAnswer(t, changes)} />
 
               {t.reason === 'no_source' ? (
                 <p className="mt-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
@@ -461,4 +473,22 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       </StatedLimit>
     </div>
   );
+}
+
+/** D549: an explicit disposition and the reader's optional use note. */
+export function AnswerDisposition({ item, busy, onUpdate }) {
+  const [note, setNote] = useState(item.use_note || '');
+  return <div className="mt-3 space-y-2" data-testid="answer-disposition">
+    <div className="flex flex-wrap items-center gap-2">
+      <Pill tone={item.discarded ? 'warn' : item.saved ? 'ok' : 'neutral'}>{item.discarded ? 'Discarded' : item.saved ? 'Saved' : 'Not decided'}</Pill>
+      <button type="button" className={buttonClass} disabled={busy} onClick={() => onUpdate({ discarded: !item.discarded })}>{item.discarded ? 'Undo discard' : 'Discard'}</button>
+    </div>
+    <form onSubmit={(event) => { event.preventDefault(); onUpdate({ use_note: note.trim() || null }); }} className="flex flex-wrap items-end gap-2">
+      <label className="min-w-0 flex-1 text-[12px]">What you did with it
+        <textarea className={inputClass} value={note} maxLength={2000} disabled={busy} onChange={(event) => setNote(event.target.value)} />
+      </label>
+      <button className={buttonClass} disabled={busy} type="submit">Save note</button>
+    </form>
+    {item.use_note ? <p className="whitespace-pre-wrap text-[12px]">{item.use_note}</p> : <p className="text-[11px] text-gray-500 dark:text-gray-400">Use note: Not recorded</p>}
+  </div>;
 }

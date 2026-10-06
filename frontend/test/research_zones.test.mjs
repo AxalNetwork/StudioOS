@@ -287,13 +287,13 @@ test('each licence draws its own Library artboard’s tiles', () => {
   assert.doesNotMatch(code, /value="Not recorded"/,
     'a tile states its own absence again instead of not being drawn');
   const nulls = [...decl.matchAll(/label: '([^']+)', value: \(\) => null/g)].map((m) => m[1]);
-  assert.deepEqual(nulls, ['Primary sources'],
+  assert.deepEqual(nulls, [],
     'a second tile has been given up on, or the one with no store has been filled');
 
   // Every other tile reads the page. `x.` is the tell: a tile that never reads
   // the context is reporting something it did not measure.
   const values = [...decl.matchAll(/value: \(x\) => ([^\n]+)/g)].map((m) => m[1]);
-  assert.equal(values.length, 7, 'the two strips no longer declare seven sourced tiles between them');
+  assert.equal(values.length, 8, 'the two strips no longer declare eight sourced tiles between them');
   for (const v of values) assert.match(v, /\bx\./, `a tile value reads nothing from the page: ${v}`);
 
   // COUNTED OVER THE WHOLE LIBRARY, NEVER OVER THE CHIP-NARROWED LIST. A tile
@@ -320,7 +320,7 @@ test('the library lists documents as its artboard’s named columns', () => {
   assert.ok(head, 'the instrument card no longer declares its column heads');
   assert.deepEqual(
     head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')),
-    ['Document', 'Kind', 'Added', 'Index state', 'In Ask'],
+    ['Document', 'Kind', 'Source year', 'Index state', 'In Ask'],
   );
   assert.doesNotMatch(code, /'Year'/, 'a source year column would have nothing to fill it');
 

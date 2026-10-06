@@ -115,7 +115,7 @@ const PROFILES = {
     // 14 → 15 with `build/roadmap`'s `New scenario` (migration 254). Seven ops
     // across three Build subpages have moved to this kind in one pass, which is what
     // pinning the count is for: each one was read before it was moved.
-    handlers: 15,
+    handlers: 16,
     // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -201,7 +201,7 @@ const PROFILES = {
     //
     // FIFTEENTH: `funds/calls`'s `New call` — migration 312 built the call
     // header and receipts, and D371 put the form on the Calls page.
-    handlers: 15,
+    handlers: 16,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,

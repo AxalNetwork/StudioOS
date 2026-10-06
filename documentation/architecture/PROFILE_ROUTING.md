@@ -69,7 +69,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Founder Grow | `/founder/growth/{talent` | — (not routed) | Full page (proposed) | Not reachable yet | RESKIN | Low |
 | Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
 | Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Home | Full page (proposed) | Sidebar → Home → Raise | UPGRADE | Low |
-| Pages · Founder Research | `/market-intel` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
+| Pages · Founder Research | `/research/ask` · `/research/library` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Founder Validate | `/validate` · `/validate/{interviews` | Home | Full page (proposed) | Sidebar → Home → Validate | CURRENT | Low |
 | Pages · Fund dossier | `/research/funds/:uid` · `/research/funds` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |

@@ -363,7 +363,7 @@ export const INVESTOR_ZONE_FILTERS = {
       canvas: 'Cited in a memo',
       unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
     },
-    { canvas: 'Discarded', unbuilt: 'nothing discards an answer — the ops row offers keeping one, and an answer not kept is simply not kept' },
+    { canvas: 'Discarded', key: 'discarded' },
   ],
   // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
   // THE WORD SUGGESTS. Its own artboard code reads
@@ -427,13 +427,10 @@ export const INVESTOR_ZONE_FILTERS = {
       canvas: 'Benchmarks',
       unbuilt: 'a benchmark is a row in Benchmarking carrying its own source and sample size, not a document in this library',
     },
-    {
-      canvas: 'Primary',
-      unbuilt: 'no document records whether it is your own research or a bought report',
-    },
+    { canvas: 'Primary', key: 'primary' },
     {
       canvas: 'Stale',
-      unbuilt: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
+      unbuilt: 'a source year is recorded; age alone does not record whether a source is stale',
     },
   ],
 };

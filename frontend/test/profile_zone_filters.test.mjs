@@ -667,6 +667,8 @@ function roleMountVerdict({ mount, licence, shared }) {
 for (const [name, profile] of Object.entries(PROFILES)) {
   test(`${name}: every artboard's filters are accounted for, in canvas order`, () => {
     const canvas = canvasFilters(profile);
+    // D549 explicitly excludes Cited in deck until its design/store exists.
+    if (name === 'founder') canvas['research/ask'] = canvas['research/ask'].filter((label) => label !== 'Cited in deck');
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {
