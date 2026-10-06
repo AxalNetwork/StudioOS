@@ -10,12 +10,12 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-10-05:
+exists for each — not by how far each has been built. Counts as of 2026-10-06:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 74 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
-| `canvases/backlog/` | 30 — graded `NEW` or `DEFERRED`: no route yet. |
+| `canvases/integrated/` | 75 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/backlog/` | 29 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
@@ -30,7 +30,9 @@ exactly the drift this rule exists to prevent. 74 / 29 / 27 was counted on
 2026-09-26, after Calendar and the three Advisor canvases left this queue and
 eight new canvases arrived, four into each folder (D305). It read 74 / 29 / 27
 until 2026-10-05, when `Advisor Studio` moved from `out-of-scope/` to
-`backlog/` after the owner brought the Advisor Program into scope (#975, D565).
+`backlog/` after the owner brought the Advisor Program into scope (#975, D565),
+and 74 / 30 / 26 until 2026-10-06, when `Pages · Company analysis` moved from
+`backlog/` to `integrated/`: its route had been live since D313 (D593).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -598,8 +600,8 @@ this folder's format: the shared runtime
 
 **The four pages the owner shared on 2026-10-04 are not new canvases.** Each is
 byte-identical to one already committed, for a route that is already built:
-Companies is `canvases/backlog/Pages · Company analysis`
-(`/research/companies/:id`), Funds is `canvases/integrated/Pages · Fund dossier`
+Companies is `canvases/integrated/Pages · Company analysis` (in `backlog/`
+until 2026-10-06, D593; `/research/companies/:id`), Funds is `canvases/integrated/Pages · Fund dossier`
 (`/research/funds/:uid`), Markets is `canvases/integrated/Pages · Market reading`
 (`/research/markets/:uid`) and the Research overview is this folder's
 `Founder Workspaces Canvas` (its A7 is `/research` for founders). They stay the
@@ -667,3 +669,24 @@ The two earlier exports (`G8nEx8nxtggBJbPBei5rc4`, `BbW5Sze3zEzDC9nnRgpn3c`)
 draw the same screens as a component board split by role. They are not
 committed. Build to the app's own styling: the pages in the left sidebar are
 the reference, as with every canvas here.
+
+## Landed 2026-10-06 — three Research page re-exports (D593)
+
+The owner sent three canvases on 2026-10-06. Each one re-exports a canvas
+already committed for a live route, and adds one note board plus imports of
+the Research Page canvas, which is this folder's `Research · *` set (D546).
+Nothing new needed a file here, so none is kept in this folder:
+
+| Export (Claude Design name) | Committed as | New boards | Grade | Issue |
+| --- | --- | --- | --- | --- |
+| Pages · Founder Research Fund | `canvases/integrated/Pages · Fund dossier` | F0 (note), F1 and F2 (the funds directory and fund profile) | UPGRADE | #1220 |
+| Pages · Research Market Reading | `canvases/integrated/Pages · Market reading` | M0 (note), M1 to M3 (the Markets index, a sector page, a geography page) | UPGRADE | #1220 |
+| Pages · Founder Research Analysis | `canvases/integrated/Pages · Company analysis` (in `backlog/` until this change) | C0 (note), C1 and C2 (the company directory and company profile) | UPGRADE | #1220 |
+
+The new boards were added to the committed files, which keep their names and
+their processed logo path; every other board was already there byte for byte.
+Match a later export to these files by the Claude Design names above.
+
+What was built, and what waits on the owner, is in
+`documentation/architecture/decisions/D593.md` and the `ROUTE_MAP.md` rows
+for each route.
