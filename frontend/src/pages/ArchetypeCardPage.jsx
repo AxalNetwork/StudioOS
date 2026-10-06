@@ -11,8 +11,13 @@
  * card reads Eadwyn's conversational archetype (`GET /best-fit/me`) and
  * nothing else. A person with no conversational signal sees the empty state,
  * never a gamified-assessment result standing in for it.
+ *
+ * D619 (#1006) — below the card, the canvas's three sections (`Studio ·
+ * Archetype card` A24–A30): the two-layer skills radar, the evolution
+ * timeline, and the matches with the members who published them. Each reads
+ * its own source and retries on its own (components/profile/ArchetypeSections).
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { api, assessment } from '../lib/api';
@@ -21,7 +26,8 @@ import { Unreadable } from '../ui';
 import { XpBar } from '../components/profile/xpBar';
 import { openPaywall } from '../components/PaywallModal';
 import { archetypeLock, lockedLine, lockedPlanName } from '../lib/archetypeLock';
-import { cardArchetype } from '../lib/archetypeCardV2';
+import { cardArchetype, matchGroups, matchSlugs, radarLayers, radarModel, timelineView } from '../lib/archetypeCardV2';
+import { HistorySection, MatchesSection, SkillsSection } from '../components/profile/ArchetypeSections';
 import {
   archetypeAudienceFromRole,
   archetypeBanner,
@@ -98,6 +104,85 @@ export default function ArchetypeCardPage({ activeRole }) {
   const pct = latest ? confidencePct(latest.confidence) : null;
   const title = latest?.label || meta?.label || latest?.slug;
   const accent = meta?.accent || '#7c3aed';
+
+  // D619 — the skills radar reads its own source. Skills are never locked
+  // (D594), so it shows whatever the archetype read said.
+  const [skills, setSkills] = useState({ state: 'loading', data: null });
+  const readSkills = useCallback(() => {
+    setSkills({ state: 'loading', data: null });
+    api.skills.getMyEvidence()
+      .then((d) => setSkills(Array.isArray(d?.axes) && d.axes.length ? { state: 'ready', data: d } : { state: 'unreadable', data: null }))
+      .catch((e) => { reportError('ArchetypeCard:skills', e); setSkills({ state: 'unreadable', data: null }); });
+  }, []);
+  useEffect(() => { readSkills(); }, [readSkills]);
+  const skillsModel = useMemo(
+    () => (skills.state === 'ready' ? radarModel(radarLayers(skills.data), skills.data.corroborated_at) : null),
+    [skills],
+  );
+
+  // The timeline is the shown archetype's persona: someone with two personas
+  // sees the one the card shows.
+  const slug = latest?.slug || null;
+  const persona = latest ? (fitData?.archetype?.persona || audience) : null;
+  const [history, setHistory] = useState({ state: 'loading', items: null });
+  const readHistory = useCallback(() => {
+    if (!persona) return;
+    setHistory({ state: 'loading', items: null });
+    api.profileHistory(persona)
+      .then((d) => setHistory(Array.isArray(d?.items) ? { state: 'ready', items: d.items } : { state: 'unreadable', items: null }))
+      .catch((e) => { reportError('ArchetypeCard:history', e); setHistory({ state: 'unreadable', items: null }); });
+  }, [persona]);
+  useEffect(() => { readHistory(); }, [readHistory]);
+  const historyView = useMemo(
+    () => (history.state === 'ready' ? timelineView(history.items, persona, slug) : null),
+    [history, persona, slug],
+  );
+
+  // Matches: the types in the copy, and the members who published one of them.
+  const slugKey = useMemo(() => (slug ? matchSlugs(slug).join(',') : ''), [slug]);
+  const [members, setMembers] = useState({ state: 'loading', reply: null });
+  const readMembers = useCallback((quiet = false) => {
+    if (!slug) return;
+    if (!slugKey) { setMembers({ state: 'ready', reply: { items: [], more: false } }); return; }
+    if (!quiet) setMembers({ state: 'loading', reply: null });
+    api.profilePublishedMembers(slugKey.split(','))
+      .then((d) => setMembers(
+        d?.locked ? { state: 'locked', reply: null }
+          : Array.isArray(d?.items) ? { state: 'ready', reply: d }
+            : { state: 'unreadable', reply: null },
+      ))
+      .catch((e) => { reportError('ArchetypeCard:matches', e); setMembers({ state: 'unreadable', reply: null }); });
+  }, [slug, slugKey]);
+  useEffect(() => { readMembers(); }, [readMembers]);
+  const groups = useMemo(() => (slug ? matchGroups(slug, members.reply) : []), [slug, members.reply]);
+
+  const [publish, setPublish] = useState({ state: 'loading', published: null, saving: false, saveFailed: false });
+  const readPublish = useCallback(() => {
+    setPublish({ state: 'loading', published: null, saving: false, saveFailed: false });
+    api.archetypePublished()
+      .then((d) => setPublish(typeof d?.published === 'boolean'
+        ? { state: 'ready', published: d.published, saving: false, saveFailed: false }
+        : { state: 'unreadable', published: null, saving: false, saveFailed: false }))
+      .catch((e) => {
+        reportError('ArchetypeCard:published', e);
+        setPublish({ state: 'unreadable', published: null, saving: false, saveFailed: false });
+      });
+  }, []);
+  useEffect(() => { if (slug) readPublish(); }, [slug, readPublish]);
+  const togglePublish = useCallback((next) => {
+    setPublish((p) => ({ ...p, saving: true, saveFailed: false }));
+    api.setArchetypePublished(next)
+      .then((d) => {
+        setPublish({ state: 'ready', published: d?.published === true, saving: false, saveFailed: false });
+        // D605 compares values only for a caller who has published, so the
+        // list is read again for its values lines.
+        readMembers(true);
+      })
+      .catch((e) => {
+        reportError('ArchetypeCard:publish', e);
+        setPublish((p) => ({ ...p, saving: false, saveFailed: true }));
+      });
+  }, [readMembers]);
 
   return (
     <div className="acp-root max-w-5xl mx-auto" data-testid="archetype-card-page">
@@ -249,21 +334,33 @@ export default function ArchetypeCardPage({ activeRole }) {
               </div>
             </div>
 
-            {(meta?.matching || []).length > 0 && (
-              <div data-testid="archetype-matching">
-                <div className="acp-lbl text-[#7c3aed] dark:text-violet-300 mb-2">Who you match with</div>
-                <div className="flex flex-col gap-3">
-                  {meta.matching.map((m) => (
-                    <div key={m.label} className="border-t border-[#f0f0f3] dark:border-gray-800 pt-3 first:border-0 first:pt-0">
-                      <div className="text-[12.5px] font-bold text-[#27272a] dark:text-gray-100">{m.label}</div>
-                      <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5] mt-0.5">{m.why}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </article>
+      )}
+
+      {/* D619 — the three sections, once the archetype read has settled. Skills
+          always; the history and the matches belong to an archetype, so they
+          show with one (or the history's "not classified" line, or the
+          matches' lock when the plan withholds the archetype). */}
+      {!loading && (
+        <div className="mt-9 flex flex-col gap-9" data-testid="archetype-sections">
+          <SkillsSection state={skills.state} model={skillsModel} onRetry={readSkills} />
+          {latest && (
+            <HistorySection state={history.state} view={historyView} cardLabel={title} onRetry={readHistory} />
+          )}
+          {!latest && !lock && !failed && <HistorySection state="unclassified" />}
+          {(latest || lock) && (
+            <MatchesSection
+              state={lock ? 'locked' : members.state}
+              groups={groups}
+              reply={members.reply}
+              publish={publish}
+              onTogglePublish={togglePublish}
+              onRetryPublish={readPublish}
+              onRetry={() => readMembers()}
+            />
+          )}
+        </div>
       )}
     </div>
   );
