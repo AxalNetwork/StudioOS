@@ -32,4 +32,26 @@ export const adminLearningApi = {
   reorderLessons: (moduleUid, order) => request(`/admin/learning/modules/${enc(moduleUid)}/lessons/order`, { method: 'POST', body: body({ order }) }),
   updateLesson: (uid, b) => request(`/admin/learning/lessons/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
   deleteLesson: (uid) => request(`/admin/learning/lessons/${enc(uid)}`, { method: 'DELETE' }),
+
+  // D559 — exercises, exams and reviews.
+  listExercises: () => request('/admin/learning/exercises'),
+  createExercise: (b) => request('/admin/learning/exercises', { method: 'POST', body: body(b) }),
+  getExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}`),
+  updateExercise: (uid, b) => request(`/admin/learning/exercises/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}/unpublish`, { method: 'POST' }),
+  archiveExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}/archive`, { method: 'POST' }),
+  // { status: 'accepted' | 'needs_work', feedback }
+  reviewSubmission: (uid, b) => request(`/admin/learning/submissions/${enc(uid)}/review`, { method: 'POST', body: body(b) }),
+
+  listExams: () => request('/admin/learning/exams'),
+  createExam: (b) => request('/admin/learning/exams', { method: 'POST', body: body(b) }),
+  getExam: (uid) => request(`/admin/learning/exams/${enc(uid)}`),
+  updateExam: (uid, b) => request(`/admin/learning/exams/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishExam: (uid) => request(`/admin/learning/exams/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishExam: (uid) => request(`/admin/learning/exams/${enc(uid)}/unpublish`, { method: 'POST' }),
+  archiveExam: (uid) => request(`/admin/learning/exams/${enc(uid)}/archive`, { method: 'POST' }),
+  addQuestion: (examUid, b) => request(`/admin/learning/exams/${enc(examUid)}/questions`, { method: 'POST', body: body(b) }),
+  updateQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  deleteQuestion: (uid) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'DELETE' }),
 };

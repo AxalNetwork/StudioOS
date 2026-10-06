@@ -41,17 +41,17 @@ import {
 
 const r = new Hono<{ Bindings: Env }>();
 
-type Admin = { id: number; email?: string | null };
+export type Admin = { id: number; email?: string | null };
 
-async function gate(c: Context<{ Bindings: Env }>): Promise<Admin | Response> {
+export async function gate(c: Context<{ Bindings: Env }>): Promise<Admin | Response> {
   try { return (await requireSuperAdmin(c)) as any; } catch (e) { return mapError(c, e); }
 }
 
-const record = (c: Context<{ Bindings: Env }>, admin: Admin, action: string, details: Record<string, unknown>) =>
+export const record = (c: Context<{ Bindings: Env }>, admin: Admin, action: string, details: Record<string, unknown>) =>
   logAdminAction(c.env, Number(admin.id), String(admin.email || ''), action, details);
 
 /** A trimmed string up to `max`, `null` for empty, `undefined` when absent. */
-function text(v: unknown, max: number): string | null | undefined {
+export function text(v: unknown, max: number): string | null | undefined {
   if (v === undefined) return undefined;
   if (v === null) return null;
   if (typeof v !== 'string') return undefined;
@@ -59,21 +59,21 @@ function text(v: unknown, max: number): string | null | undefined {
   return t ? t.slice(0, max) : null;
 }
 
-class Invalid extends Error {
+export class Invalid extends Error {
   code: string;
   reason: string;
   constructor(code: string, reason: string) { super(reason); this.code = code; this.reason = reason; }
 }
-const bad = (code: string, reason: string): never => { throw new Invalid(code, reason); };
+export const bad = (code: string, reason: string): never => { throw new Invalid(code, reason); };
 
-function oneOf<T extends string>(v: unknown, set: readonly T[], field: string): T | null | undefined {
+export function oneOf<T extends string>(v: unknown, set: readonly T[], field: string): T | null | undefined {
   if (v === undefined) return undefined;
   if (v === null) return null;
   if (!(set as readonly string[]).includes(String(v))) bad(`bad_${field}`, `${field} is one of ${set.join(', ')}.`);
   return v as T;
 }
 
-function wholeOrNull(v: unknown, field: string): number | null | undefined {
+export function wholeOrNull(v: unknown, field: string): number | null | undefined {
   if (v === undefined) return undefined;
   if (v === null || v === '') return null;
   const n = Number(v);
@@ -144,7 +144,7 @@ function courseFields(b: any, creating: boolean) {
 }
 
 /** Run a handler body, turning a validation throw into its 400. */
-async function guarded(c: Context<{ Bindings: Env }>, fn: () => Promise<Response>): Promise<Response> {
+export async function guarded(c: Context<{ Bindings: Env }>, fn: () => Promise<Response>): Promise<Response> {
   try { return await fn(); } catch (e) {
     if (e instanceof Invalid) return refuse(c, 400, { code: e.code, message: e.reason });
     throw e;
@@ -224,7 +224,7 @@ r.patch('/items/:uid', async (c) => {
   });
 });
 
-const NEXT_STATUS: Record<string, 'published' | 'draft' | 'archived'> = { publish: 'published', unpublish: 'draft', archive: 'archived' };
+export const NEXT_STATUS: Record<string, 'published' | 'draft' | 'archived'> = { publish: 'published', unpublish: 'draft', archive: 'archived' };
 
 async function setItemStatus(c: Context<{ Bindings: Env }>, action: 'publish' | 'unpublish' | 'archive') {
   const admin = await gate(c); if (admin instanceof Response) return admin;
@@ -420,11 +420,18 @@ r.delete('/modules/:uid', async (c) => {
   return c.json({ course: await courseTree(c.env, mod.course_uid) });
 });
 
-/** What a lesson of each kind may point at. Exercises and exams arrive with #1160. */
+/** What a lesson of each kind may point at. */
 async function checkRef(env: Env, kind: string, ref: unknown): Promise<string> {
-  if (kind === 'exercise' || kind === 'exam') bad('lesson_kind_not_built', 'Exercises and exams are not built yet (#1160).');
   const uid = typeof ref === 'string' ? ref.trim() : '';
   if (!uid) bad('bad_ref', 'A lesson names what it opens: ref_uid.');
+  // D559 (#1160): an exercise or exam lesson names one of its own kind.
+  if (kind === 'exercise' || kind === 'exam') {
+    const found = kind === 'exercise'
+      ? await env.DB.prepare('SELECT id FROM learning_exercises WHERE uid = ?').bind(uid).first()
+      : await env.DB.prepare('SELECT id FROM learning_exams WHERE uid = ?').bind(uid).first();
+    if (!found) bad('bad_ref', `An ${kind} lesson names an ${kind}.`);
+    return uid;
+  }
   if (kind === 'webinar') {
     const ev = await env.DB.prepare('SELECT id FROM events WHERE slug = ?').bind(uid).first();
     if (!ev) bad('bad_ref', 'A webinar lesson names an event by its slug.');

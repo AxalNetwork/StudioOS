@@ -59,6 +59,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/advisor-grants → advisor_grants.ts (a founder's per-scope grant to a named advisor)
 /api/learning      → learning.ts        (the Learning center, member side: catalog, courses, items, progress; D557)
 /api/admin/learning → admin_learning.ts (authoring the Learning center; Super Admin only; D557)
+/api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
+/api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
 ```
 

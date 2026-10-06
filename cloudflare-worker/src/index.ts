@@ -188,6 +188,8 @@ import adminTicketReviews from './routes/admin_ticket_reviews';
 import communityTasksRoutes from './routes/community_tasks';
 import learningRoutes from './routes/learning';
 import adminLearningRoutes from './routes/admin_learning';
+import learningAssessmentRoutes from './routes/learning_assessment';
+import adminLearningAssessmentRoutes from './routes/admin_learning_assessment';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
@@ -801,6 +803,8 @@ app.route('/api/admin/network-profiles', adminNetworkProfiles);
 app.route('/api/admin/telegram', adminTelegram);
 // D557 (#1158) — authoring the Learning center; Super Admin only.
 app.route('/api/admin/learning', adminLearningRoutes);
+// D559 (#1160) — authoring exercises and exams, and reviewing submissions.
+app.route('/api/admin/learning', adminLearningAssessmentRoutes);
 // User-facing Telegram channel join request — pings the studio Slack
 // inbox so an admin can issue the invite link manually. Mounted under
 // /api/telegram (not /api/admin) since any authenticated user can ask.
@@ -1085,6 +1089,8 @@ app.route('/api/perks', perksRoutes);
 app.route('/api/community-tasks', communityTasksRoutes);
 // D557 (#1158) — the Learning center, member side.
 app.route('/api/learning', learningRoutes);
+// D559 (#1160) — exercises and exams, graded on the server.
+app.route('/api/learning', learningAssessmentRoutes);
 app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.

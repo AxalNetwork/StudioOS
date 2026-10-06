@@ -50,6 +50,11 @@ function builtFromMigrations(): DatabaseSync {
     }
   }
   db.exec(SQL_388);
+  // The Learning migrations after 388 (D559's 390, …), whole, as the deploy applies them.
+  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
+    .filter((x) => migrationNumber(x) > 388 && /^\d+_learning_/.test(x))) {
+    db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  }
   return db;
 }
 const BUILT = builtFromMigrations();
@@ -206,13 +211,14 @@ test('publishing needs the content: a video needs its link, a reading its text, 
   assert.equal((await admin(db, SUPER, '/courses', { method: 'POST', body: { slug: 'r', title: 'x', resources: [{ title: 't', url: 'http://x.example' }] } })).body.error, 'bad_resources');
 });
 
-test('a lesson points at an item of its own kind; exercises and exams wait for #1160', async () => {
+test('a lesson points at an item of its own kind', async () => {
   const db = seeded();
   const video = (await admin(db, SUPER, '/items', { method: 'POST', body: { kind: 'video', title: 'V', video_url: 'https://youtu.be/v' } })).body.item;
   const course = (await admin(db, SUPER, '/courses', { method: 'POST', body: { slug: 'c', title: 'C' } })).body.course;
   const mod = (await admin(db, SUPER, `/courses/${course.uid}/modules`, { method: 'POST', body: { title: 'M' } })).body.course.modules[0];
   assert.equal((await admin(db, SUPER, `/modules/${mod.uid}/lessons`, { method: 'POST', body: { kind: 'reading', title: 'x', ref_uid: video.uid } })).body.error, 'bad_ref');
-  assert.equal((await admin(db, SUPER, `/modules/${mod.uid}/lessons`, { method: 'POST', body: { kind: 'exam', title: 'x', ref_uid: 'e' } })).body.error, 'lesson_kind_not_built');
+  // Since D559 (#1160) an exam lesson names an exam; one that does not exist is refused.
+  assert.equal((await admin(db, SUPER, `/modules/${mod.uid}/lessons`, { method: 'POST', body: { kind: 'exam', title: 'x', ref_uid: 'e' } })).body.error, 'bad_ref');
   assert.equal((await admin(db, SUPER, `/modules/${mod.uid}/lessons`, { method: 'POST', body: { kind: 'webinar', title: 'Live', ref_uid: 'demo-day' } })).status, 201);
   const two = (await admin(db, SUPER, `/modules/${mod.uid}/lessons`, { method: 'POST', body: { kind: 'video', title: 'Watch', ref_uid: video.uid } })).body.course;
   const [a, b] = two.modules[0].lessons;
