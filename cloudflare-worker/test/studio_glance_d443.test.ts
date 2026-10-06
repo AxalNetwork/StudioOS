@@ -72,7 +72,7 @@ async function call(db: InstanceType<typeof DatabaseSync>, userId: number, branc
   return { status: res.status, body: text ? JSON.parse(text) : null, text };
 }
 
-test('on HQ the per-subsidiary figures stay unrecorded, and the user table is not a seat count', async () => {
+test('on HQ the per-subsidiary figures stay unrecorded, and the user table is not a seat count (HQ\'s own figures since D555)', async () => {
   const db = freshDb();
   db.exec(`CREATE TABLE legal_templates (
     id INTEGER PRIMARY KEY, slug TEXT, category TEXT, title TEXT, is_active INTEGER
@@ -88,13 +88,16 @@ test('on HQ the per-subsidiary figures stay unrecorded, and the user table is no
   assert.match(HQ_SEATS_REASON, /not shown as zero/);
   assert.equal(r.body.seats.reason, HQ_SEATS_REASON);
   assert.equal(r.body.seats.seats_used_by_type, undefined);
-  assert.equal(r.body.approvals.recorded, false);
-  assert.match(r.body.approvals.reason, /U1/);
+  // D555: the lanes are HQ's own, read through the consoles' predicates and
+  // labelled as HQ's; they are not a subsidiary's pressure.
+  assert.equal(r.body.approvals.recorded, true);
+  assert.equal(r.body.approvals.label, 'HQ-held accounts · axal.vc');
+  assert.equal(r.body.accounts.total, 3, 'HQ-held active accounts, labelled as HQ\'s, beside an unrecorded seat count');
   assert.equal(r.body.agreements.recorded, true, 'agreements are this database\'s, not a U1 refusal');
   assert.equal(r.body.agreements.expiring, null, 'a missing agreement table is unreadable, not zero');
   assert.doesNotMatch(String(r.body.agreements.reason || ''), /U1/);
-  assert.equal(r.body.insights.recorded, false);
-  assert.equal(r.body.insights.reason, 'HQ pushes the median and keeps no copy.');
+  assert.equal(r.body.insights.benchmark.recorded, false);
+  assert.match(r.body.insights.benchmark.reason, /HQ pushes the territory median and keeps no copy/);
   assert.equal(r.body.revenue.recorded, false);
   assert.match(r.body.revenue.reason, /U1/);
   assert.equal(r.body.licence.recorded, false);
@@ -150,11 +153,15 @@ test('a non-admin is refused, and the refusal is not the database talking', asyn
   assert.doesNotMatch(r.text, /no such column|no such table|SQLITE/i);
 });
 
-test('the HQ glance does not count users, and the route is not branch-only', () => {
+test('the HQ glance keeps the subsidiary refusals, never reads the benchmark copy, and the route is not branch-only', () => {
   const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/studioGlance.ts'), 'utf8');
   const hq = src.slice(src.indexOf('async function hqGlance'), src.indexOf('async function branchGlance'));
   assert.ok(hq.includes('hqPerSubsidiary'), 'the HQ refusal moved');
-  assert.doesNotMatch(hq, /FROM users|laneCounts|branchHome\(|branch_benchmarks/, 'HQ counts a subsidiary figure, or reads the benchmark copy it never writes');
+  // D555 reads HQ's own accounts and lanes (`hqAccounts`, `queuePressure`);
+  // seats are still not counted from HQ's user table, and the benchmark copy
+  // HQ never writes is still not read.
+  assert.doesNotMatch(hq, /branchHome\(|branch_benchmarks|readBranchBenchmarks/, 'HQ reads the benchmark copy it never writes');
+  assert.match(hq, /seats: \{ recorded: false|hqPerSubsidiary\(\)/);
   const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_studio_glance.ts'), 'utf8');
   assert.match(route, /requireAdmin/);
   assert.doesNotMatch(route, /requireBranchTier/);

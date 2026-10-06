@@ -26,6 +26,7 @@ import { recordCompositionFills } from '../services/fills/provenance';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { run as aiRouterRun } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { ingestContact } from './contacts';
 import { bindingKey } from '../util/schemaBootstrap';
 
@@ -251,6 +252,7 @@ async function aiTemplateContent(
     const res = await aiRouterRun(env, {
       task: 'brand_autofill',
       userId: userId || 0,
+      surface: AI_SURFACE.buildBrand,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.7,
@@ -851,6 +853,7 @@ Rules: all values must be hex; background must be light enough for dark text; in
     const res = await aiRouterRun(env, {
       task: 'brand_palette',
       userId: userId || 0,
+      surface: AI_SURFACE.buildBrand,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.8,
@@ -885,6 +888,7 @@ Rules: each tagline <= 12 words; varied angles; no emojis.`;
     const res = await aiRouterRun(env, {
       task: 'brand_taglines',
       userId: userId || 0,
+      surface: AI_SURFACE.buildBrand,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.9,

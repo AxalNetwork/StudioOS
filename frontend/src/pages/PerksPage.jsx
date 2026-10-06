@@ -517,6 +517,58 @@ const CLAIM_STATE = {
 };
 const LEDGER_WHY = { grant: 'granted by Axal', spend: 'perk claimed', admin_adjust: 'adjusted by Axal' };
 
+/** D540 — 1 credit = US$1 of perk value; the Worker sends the rate on /mine. */
+const usdOf = (credits, cents) => `US$${((Number(credits) * Number(cents ?? 100)) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+
+/**
+ * One ledger line: why it exists (the Worker's `reason`), where it came from
+ * (`source`), and — for a grant a Super Admin took back — that it was revoked.
+ */
+export function LedgerLine({ l, balanceAfter }) {
+  const delta = Number(l.delta);
+  const why = l.reason || l.note || LEDGER_WHY[l.kind] || l.kind;
+  return (
+    <div data-testid="perks-ledger-line" className="grid grid-cols-[70px_minmax(0,1fr)_70px_70px] items-baseline gap-2 border-b border-gray-100 py-2 text-[12px] last:border-0 dark:border-gray-800">
+      <div className="text-gray-500">{day(l.created_at)}</div>
+      <div className="min-w-0">
+        <div className="truncate font-semibold text-gray-900 dark:text-gray-100">{why}</div>
+        <div className="text-[10.5px] text-gray-500">
+          {LEDGER_WHY[l.kind] || l.kind}
+          {l.source ? <> · <span data-testid="perks-ledger-source">{l.source}</span></> : null}
+          {l.revoked ? <> · <span data-testid="perks-ledger-revoked" className="font-semibold text-red-700 dark:text-red-300">revoked</span></> : null}
+        </div>
+      </div>
+      <div className={`text-right font-mono font-bold ${delta < 0 ? 'text-violet-700 dark:text-violet-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+        {delta > 0 ? '+' : '−'}{n0(Math.abs(delta))}
+      </div>
+      <div className="text-right font-mono text-gray-600">{balanceAfter === undefined ? '' : n0(balanceAfter)}</div>
+    </div>
+  );
+}
+
+/**
+ * The perk-credit balance in the page header. A catalogue read that failed
+ * says so — never a zero, which would read as "you have none".
+ */
+export function CreditBalance({ catalog, failed, onRetry }) {
+  if (failed) {
+    return (
+      <div data-testid="perks-balance-unreadable" className="flex items-center gap-1.5 rounded-[10px] border border-red-200 px-3 py-1.5 text-[11px] text-red-700 dark:border-red-900 dark:text-red-300" role="alert">
+        Balance unreadable
+        {onRetry && <button type="button" onClick={onRetry} className="underline">Retry</button>}
+      </div>
+    );
+  }
+  if (!catalog || catalog.balance === undefined || catalog.balance === null) return null;
+  return (
+    <div data-testid="perks-balance" className="flex items-center gap-1.5 rounded-[10px] border border-gray-200 px-3 py-1.5 dark:border-gray-800" title="Separate from introduction credits under Network — different unit, different balance. 1 credit = US$1 of perk value; credits have no cash value and cannot be transferred.">
+      <Coins size={14} className="text-violet-600" />
+      <span className="font-mono text-[14px] font-extrabold">{n0(catalog.balance)}</span>
+      <span className="text-[11px] text-gray-500">perk credits · {usdOf(catalog.balance)} of perk value</span>
+    </div>
+  );
+}
+
 function paidWith(c) {
   if (Number(c.credits_spent) > 0) return `${n0(c.credits_spent)} perk credits`;
   if (c.kind_at_claim === 'tier') return 'included in your plan';
@@ -638,28 +690,17 @@ function MyPerks({ data, onRated }) {
       <Card padding="none" data-testid="perks-ledger">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <SectionLabel>Perk credit ledger</SectionLabel>
-          <div className="font-mono text-[11.5px] text-gray-600">balance {n0(data.balance)}</div>
+          <div className="font-mono text-[11.5px] text-gray-600">balance {n0(data.balance)} · {usdOf(data.balance, data.credit_usd_cents)}</div>
         </div>
         <p className="px-4 pt-2 text-[11px] text-gray-500">
           Every line is a grant or a spend — the balance is the sum of them, not a number stored separately.
+          Each grant says why it was earned and where it came from. 1 credit is US$1 of perk value; credits have no cash value and cannot be transferred.
         </p>
         {ledger.length === 0 ? (
           <p className="px-4 py-3 text-sm text-gray-600">No credits have been granted or spent on this account.</p>
         ) : (
           <div className="px-4 pb-2">
-            {ledger.map((l, i) => (
-              <div key={i} className="grid grid-cols-[70px_minmax(0,1fr)_70px_70px] items-baseline gap-2 border-b border-gray-100 py-2 text-[12px] last:border-0 dark:border-gray-800">
-                <div className="text-gray-500">{day(l.created_at)}</div>
-                <div className="min-w-0">
-                  <div className="truncate font-semibold text-gray-900 dark:text-gray-100">{l.note || LEDGER_WHY[l.kind] || l.kind}</div>
-                  <div className="text-[10.5px] text-gray-500">{LEDGER_WHY[l.kind] || l.kind}</div>
-                </div>
-                <div className={`text-right font-mono font-bold ${Number(l.delta) < 0 ? 'text-violet-700 dark:text-violet-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
-                  {Number(l.delta) > 0 ? '+' : '−'}{n0(Math.abs(Number(l.delta)))}
-                </div>
-                <div className="text-right font-mono text-gray-600">{n0(balances[i])}</div>
-              </div>
-            ))}
+            {ledger.map((l, i) => <LedgerLine key={l.id ?? i} l={l} balanceAfter={balances[i]} />)}
           </div>
         )}
       </Card>
@@ -1613,13 +1654,7 @@ function PerksMarket({ user }) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {catalog && (
-              <div className="flex items-center gap-1.5 rounded-[10px] border border-gray-200 px-3 py-1.5 dark:border-gray-800" title="Separate from introduction credits under Network — different unit, different balance.">
-                <Coins size={14} className="text-violet-600" />
-                <span className="font-mono text-[14px] font-extrabold">{n0(catalog.balance)}</span>
-                <span className="text-[11px] text-gray-500">perk credits</span>
-              </div>
-            )}
+            <CreditBalance catalog={catalog} failed={!!catalogErr} onRetry={loadCatalog} />
             {userTier && <Pill tone="info">{tierName(userTier)} plan</Pill>}
           </div>
         </div>

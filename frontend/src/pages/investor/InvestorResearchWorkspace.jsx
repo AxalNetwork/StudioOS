@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
+import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorResearchWorkspace.css';
 
@@ -114,6 +115,9 @@ export default function InvestorResearchWorkspace() {
           <div className="ir-head"><h2>Question desk</h2><span data-testid="text-research-question-state">{asking ? 'Asking your research library' : askError ? 'The question could not be asked' : asked?.reason === 'answered' ? 'Answered from your research library' : asked?.reason === 'no_source' ? 'No source cleared the bar' : 'No answer could be written'}</span></div>
           <AskAnswer asked={asked} error={askError} asking={asking} onRetry={runAsk} />
         </section>}
+
+        {/* D536 — the Research overview (Research · Main canvas, D546). */}
+        <ResearchOverviewPanel />
 
         <section className="ir-card" id="research-evidence">
           <div className="ir-head"><h2>Diligence pull</h2><span>{data ? `${totalSources} source records available` : 'Loading available evidence'}</span></div>

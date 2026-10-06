@@ -45,7 +45,32 @@ function meta(info) {
   };
 }
 
-function shape(stmt, binds) {
+/**
+ * D517 — A WRITE WITH `RETURNING` IS COUNTED FROM ITS ROWS, NEVER FROM `run()`.
+ *
+ * Up to Node 22.15, `StatementSync.run()` stepped a RETURNING statement once
+ * and stopped at its first row. SQLite only updates the change counter when a
+ * statement runs to completion, so `run().changes` was the PREVIOUS
+ * statement's count. In a batch of `INSERT OR IGNORE … RETURNING` lines that
+ * meant a line which wrote a row could report 0, because the line before it
+ * was ignored — capital_call_ledger's "a retry after a partial write" failed
+ * on exactly that, and passed on 22.16+ where `run()` steps to the end. D1
+ * counts these correctly, so the fault was this fixture's, version-dependent.
+ *
+ * `all()` steps to completion on every Node, and RETURNING emits one row per
+ * row written, so the row count IS the change count — for an ignored insert,
+ * zero. The same path also covers the versions where `run()` refused a
+ * RETURNING statement outright (the catch below used to report 0 changes for
+ * every one of those, written or not).
+ */
+const RETURNING = /\bRETURNING\b/i;
+function returningWrite(db, stmt, binds) {
+  const rows = stmt.all(...binds);
+  const lastId = rows.length ? db.prepare('SELECT last_insert_rowid() AS id').get()?.id : 0;
+  return { success: true, results: rows, meta: { changes: rows.length, last_row_id: Number(lastId ?? 0) } };
+}
+
+function shape(stmt, binds, sql = '', db = null) {
   return {
     async all() {
       // node:sqlite throws on a non-SELECT passed to .all(); getSQL routes
@@ -65,6 +90,7 @@ function shape(stmt, binds) {
       return col === undefined ? row : row?.[col] ?? null;
     },
     async run() {
+      if (db && RETURNING.test(sql)) return returningWrite(db, stmt, binds);
       try {
         const info = stmt.run(...binds);
         return { success: true, meta: meta(info) };
@@ -98,13 +124,14 @@ export function d1Over(db) {
       const get = () => (stmt ??= db.prepare(sql));
       const api = {
         bind(...a) { binds = a; return api; },
-        all: async () => shape(get(), binds).all(),
-        first: async (col) => shape(get(), binds).first(col),
-        run: async () => shape(get(), binds).run(),
+        all: async () => shape(get(), binds, sql, db).all(),
+        first: async (col) => shape(get(), binds, sql, db).first(col),
+        run: async () => shape(get(), binds, sql, db).run(),
         // The same answer as `run()`, synchronously — `batch` needs every
         // statement to execute before control returns to the event loop.
         runSync: () => {
           const st = get();
+          if (RETURNING.test(sql)) return returningWrite(db, st, binds);
           try {
             return { success: true, meta: meta(st.run(...binds)) };
           } catch (e) {

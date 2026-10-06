@@ -273,8 +273,13 @@ test('the self endpoint requires auth and never takes a user id from the request
   const routeSrc = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
   assert.match(routeSrc, /requireAuth\s*\(/);
-  assert.doesNotMatch(routeSrc, /req\.query\(|req\.param\(/,
+  assert.doesNotMatch(routeSrc, /req\.param\(|req\.queries\(|req\.query\(\s*\)/,
     'the caller must not be able to name whose spend they read');
+  // D552 added ONE query read, `surface`, which filters to a page of the
+  // caller's own rows. Any other key read off the query string fails here.
+  const reads = [...routeSrc.matchAll(/req\.query\(\s*([^)]*)\)/g)].map((m) => m[1].trim());
+  assert.deepEqual(reads, ["'surface'"],
+    'the spend route reads a query key other than `surface`');
 });
 
 // ---------- the pricing endpoint ----------
