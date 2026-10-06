@@ -86,16 +86,17 @@ const version = (over = {}) => ({
 const deliverable = (over = {}) => ({
   id: 1, uid: 'd-1', advisor_id: 3, engagement_id: 7, client_name: 'Halverton', title: 'Pricing model',
   client_user_id: 41, client_user_name: 'Ada Client', client_user_email: 'ada@halverton.example',
-  state: 'not_started', version_count: 1, latest_version: version(), versions: [version()],
+  state: 'not_started', due_date: null, manual_status: null, version_count: 1,
+  latest_version: version({ sent_at: ['sent', 'opened'].includes(over.state) ? '2026-10-01T10:00:00Z' : null, opened_at: over.state === 'opened' ? '2026-10-01T11:00:00Z' : null }), versions: [version()],
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
 });
 const type = (over = {}) => ({
   id: 11, uid: 't-11', name: 'Strategy session', duration_minutes: 60, cadence_note: null,
-  price_cents: 28000, is_free_intro: false, once_per_client: false, sort_order: 0, is_active: true, ...over,
+  price_cents: 28000, is_included: null, booking_count: null, is_free_intro: false, once_per_client: false, sort_order: 0, is_active: true, ...over,
 });
 const link = (over = {}) => ({
   id: 21, uid: 'l-21', slug: 'ada/strategy', session_type_id: 11, audience: 'public',
-  cohort_ref: null, requires_payout_account: true, note: null, is_active: true, ...over,
+  cohort_ref: null, requires_payout_account: true, note: null, is_active: true, opens_count: null, booking_count: null, ...over,
 });
 const logRow = (over = {}) => ({
   action: 'open_brief', created_at: '2026-10-06 09:41:00', advisor_email: 'ada@practice.example',
@@ -123,10 +124,9 @@ test('every fixture carries only fields its route sends', () => {
   assertShape(advisor(), ADVISOR_KEYS, 'advisorDto');
   assertShape(shared(), SHARED_KEYS, 'GET /advisor-grants/shared/list item');
   assertShape(logRow(), LOG_KEYS, 'GET /advisor-grants/:projectUid/access-log row');
-  // And the two columns the canvas needs that no route sends are absent from them.
-  for (const k of ['due_at', 'due_date', 'status']) assert.ok(!DELIVERABLE_KEYS.has(k), `a deliverable now sends ${k}: wire the due column`);
-  for (const k of ['opens', 'bookings', 'booking_count']) assert.ok(!LINK_KEYS.has(k), `a link now sends ${k}`);
-  assert.ok(!TYPE_KEYS.has('booking_count') && !TYPE_KEYS.has('is_included'), 'a session type now sends a count or an included flag');
+  for (const k of ['due_date', 'manual_status']) assert.ok(DELIVERABLE_KEYS.has(k), `deliverables must expose ${k}`);
+  for (const k of ['opens_count', 'booking_count']) assert.ok(LINK_KEYS.has(k), `links must expose ${k}`);
+  assert.ok(TYPE_KEYS.has('booking_count') && TYPE_KEYS.has('is_included'), 'session type facts must reach the screen');
 });
 
 test('each method the screens call exists, and hits the Worker route behind it', async () => {
@@ -180,28 +180,23 @@ test('each method the screens call exists, and hits the Worker route behind it',
   }
 });
 
-test('the GAPS are still gaps: if one closes, this fails and the screen should be wired', () => {
-  // A link cannot be switched off, opened by its address, or counted.
-  assert.ok(!/advisors\.(patch|put|delete)\('\/me\/booking-links/.test(ADVISORS), 'a route now changes a link: wire the switch');
-  assert.ok(!/path="\/b\//.test(APP), 'a page now opens /b/…: drop the not-live notice');
-  // A client cannot read an advisor's session types.
-  assert.ok(!/advisors\.get\('\/:uid\/session-types'/.test(ADVISORS), 'session types are now public: list them on the profile');
-  // The access log answers the owning founder only.
-  const handler = LOG_SELECT.slice(0, LOG_SELECT.indexOf('\n});'));
-  assert.match(handler, /ownedProject\(c, user, c\.req\.param\('projectUid'\)\)/);
-  assert.match(read('cloudflare-worker/src/services/tenancyScope.ts'), /if \(actor\?\.role !== 'founder'\) return NO_ROWS;/);
-  // A work product has no due column, and nothing writes a sign-off.
-  const m239 = read('cloudflare-worker/sql/migrations/239_advisor_deliverables.sql');
-  assert.ok(!/\bdue_(at|date|on)\b/.test(m239), 'migration 239 has a due column now');
-  assert.ok(!/SET[^;]*signed_off_at\s*=/.test(ADVISORS), 'a route now writes signed_off_at: Accepted can be reached');
+test('D573: practice routes now expose the stored facts, with client acceptance kept separate', () => {
+  assert.match(ADVISORS, /advisors\.patch\('\/me\/booking-links\/:id'/);
+  assert.match(APP, /path="\/b\/\*"/);
+  assert.match(ADVISORS, /advisors\.get\('\/me\/access-log'/);
+  assert.match(ADVISORS, /advisors\.post\('\/received\/deliverables\/:uid\/accept'/);
+  const migration = read('cloudflare-worker/sql/migrations/394_advisor_practice.sql');
+  for (const column of ['due_date', 'manual_status', 'is_included', 'session_type_id', 'booking_link_id', 'opens_count']) {
+    assert.match(migration, new RegExp(`ADD COLUMN ${column}\\b`));
+  }
 });
 
 // ─────────────────────────── A1 · deliverables per client ───────────────────────────
 
 test('A1: the canvas flow is four steps over the store\'s derived state', () => {
-  assert.deepEqual(DELIVERABLE_FLOW.map((s) => s.label), ['Not started', 'Sent', 'Opened', 'Accepted']);
+  assert.deepEqual(DELIVERABLE_FLOW.map((s) => s.label), ['Planned', 'In progress', 'Sent', 'Opened', 'Accepted']);
   assert.deepEqual(DELIVERABLE_FLOW.flatMap((s) => s.canvas), ['Planned', 'In progress', 'Delivered', 'Accepted']);
-  assert.equal(deliverableStep(deliverable({ state: 'not_started' })), 'not_started');
+  assert.equal(deliverableStep(deliverable({ state: 'not_started' })), null);
   assert.equal(deliverableStep(deliverable({ state: 'sent' })), 'sent');
   assert.equal(deliverableStep(deliverable({ state: 'opened' })), 'opened');
   assert.equal(deliverableStep(deliverable({ state: 'opened', latest_version: version({ signed_off_at: '2026-10-02T00:00:00Z' }) })), 'accepted');
@@ -260,7 +255,7 @@ test('A1: per-client cards — due Not recorded, status from the flow, send only
   assert.match(t, /Halverton 2 deliverables/);
   assert.match(t, /Zephyr 1 deliverable /);
   assert.equal((t.match(/Due Not recorded/g) || []).length, 3, 'every row reads Not recorded for due, never a date');
-  assert.match(markup, /title="No due date is stored for a work product\."/);
+  assert.match(markup, /title="No due date has been set\."/);
   assert.match(markup, /data-testid="send-a1-1"/, 'an unsent row with a client account can be sent');
   assert.doesNotMatch(markup, /send-a1-2|send-a1-3/, 'a sent row, and a row with no account, offer no send');
   assert.match(t, /No client account, so it cannot be sent/);
@@ -274,8 +269,8 @@ test('A1: per-client cards — due Not recorded, status from the flow, send only
   assert.match(markup, /data-testid="attach-a1-1"/);
   assert.doesNotMatch(markup, /attach-a1-2/, 'a row with a link has no Attach');
   for (const id of [1, 2, 3]) assert.match(markup, new RegExp(`data-testid="edit-a1-${id}"`));
-  assert.match(t, /Status flow: Not started → Sent → Opened → Accepted/);
-  assert.match(text(h(FlowLegend)), /Accepted needs the client's sign-off, which nothing records yet/);
+  assert.match(t, /Status flow: Planned → In progress → Sent → Opened → Accepted/);
+  assert.match(text(h(FlowLegend)), /Accepted is the client's sign-off on the latest version/);
 });
 
 test('A1: the editor and the attach form say what they will write', () => {
@@ -292,20 +287,20 @@ test('A1: the editor and the attach form say what they will write', () => {
 
 test('A2: four price modes, and a null price is never read as zero', () => {
   assert.equal(priceMode(type()), 'price');
-  assert.equal(priceMode(type({ price_cents: 0 })), 'included');
+  assert.equal(priceMode(type({ price_cents: 0 })), 'price');
   assert.equal(priceMode(type({ price_cents: null })), 'unset');
   assert.equal(priceMode(type({ price_cents: null, is_free_intro: true })), 'free');
   assert.deepEqual(PRICE_MODES.map((m) => m.key), ['price', 'included', 'free', 'unset']);
   assert.match(text(h(PriceCell, { type: type({ price_cents: null }) })), /^Not recorded · no price set$/);
   assert.doesNotMatch(text(h(PriceCell, { type: type({ price_cents: null }) })), /\$0/);
-  assert.match(text(h(PriceCell, { type: type({ price_cents: 0 }) })), /^Included no separate charge$/);
+  assert.match(text(h(PriceCell, { type: type({ price_cents: 0, is_included: true }) })), /^Included no separate charge$/);
   assert.equal(text(h(PriceCell, { type: type() })), '$280');
   assert.equal(text(h(PriceCell, { type: type({ price_cents: null, is_free_intro: true }) })), 'Free intro');
 });
 
 test('A2: the canvas rule — no price, not bookable — in the body, the switch and the stored contradiction', () => {
   assert.equal(canBeBookable(type({ price_cents: null })), false);
-  assert.equal(canBeBookable(type({ price_cents: 0 })), true, 'included counts as set');
+  assert.equal(canBeBookable(type({ price_cents: 0 })), true, 'a recorded zero price counts as set');
   assert.equal(canBeBookable(type({ price_cents: null, is_free_intro: true })), true);
   assert.equal(bookableState(type({ price_cents: null, is_active: true })), 'unpriced_on');
   assert.equal(bookableState(type({ price_cents: null, is_active: false })), 'off');
@@ -314,13 +309,13 @@ test('A2: the canvas rule — no price, not bookable — in the body, the switch
   assert.deepEqual(sessionTypeBody({ name: 'Deep dive', duration: '90', mode: 'unset', bookable: true }),
     { error: 'A type with no price cannot be bookable. Set a price or mark it included first.' });
   assert.deepEqual(sessionTypeBody({ name: 'Deep dive', duration: '90', mode: 'unset', bookable: false }), {
-    body: { name: 'Deep dive', duration_minutes: 90, cadence_note: null, price_cents: null, is_free_intro: false, is_active: false },
+    body: { name: 'Deep dive', duration_minutes: 90, cadence_note: null, price_cents: null, is_free_intro: false, is_included: false, is_active: false },
   });
   assert.equal(sessionTypeBody({ name: 'Retainer call', mode: 'included', bookable: true }).body.price_cents, 0);
   assert.deepEqual(sessionTypeBody({ name: 'Intro', mode: 'free', bookable: true }).body,
-    { name: 'Intro', duration_minutes: null, cadence_note: null, price_cents: null, is_free_intro: true, is_active: true });
+    { name: 'Intro', duration_minutes: null, cadence_note: null, price_cents: null, is_free_intro: true, is_included: false, is_active: true });
   assert.equal(sessionTypeBody({ name: 'Single', mode: 'price', amount: '$1,250.50', bookable: true }).body.price_cents, 125050);
-  assert.equal(sessionTypeBody({ name: 'Single', mode: 'price', amount: '0', bookable: true }).error, 'Enter the price, or choose Included.');
+  assert.equal(sessionTypeBody({ name: 'Single', mode: 'price', amount: '0', bookable: true }).body.price_cents, 0);
   assert.equal(sessionTypeBody({ name: '', mode: 'free' }).error, 'A session type needs a name.');
   assert.equal(sessionTypeBody({ name: 'X', mode: 'free', duration: '0' }).error, 'Length is whole minutes, from 1 to 1440.');
   assert.deepEqual(parseAmount('12.345'), { error: 'Enter an amount like 150 or 150.50' });
@@ -395,17 +390,17 @@ test('A3: one card per link under its type, a create offer for a type with none,
   const markup = html(h(BookingLinksPanel, { links, types, read: true, typesRead: true }));
   const t = text(h(BookingLinksPanel, { links, types, read: true, typesRead: true }));
   assert.match(markup, /data-testid="unlinked-a3-12"/);
-  assert.match(t, /No page opens these addresses yet\./);
+  assert.match(t, /A copied link opens its session type\./);
   assert.match(t, /Session type not found/);
   assert.match(t, /No session type/);
-  assert.match(t, /Opens and bookings per link are not recorded/);
+  assert.match(t, /Opens count accepted page-open requests/);
   const card = html(h(LinkCard, { link: link(), typeName: 'Strategy session' }));
   assert.match(card, /axal\.vc\/b\/ada\/strategy/);
   assert.match(card, /data-testid="copy-a3-21"/);
   const toggle = /<button[^>]*data-testid="toggle-a3-21"[^>]*>/.exec(card)[0];
   assert.match(toggle, /role="switch"/);
-  assert.match(toggle, /\sdisabled=""/, 'no route switches a link, so the switch cannot be pressed');
-  assert.match(toggle, /title="No control changes a link once it is created\."/);
+  assert.doesNotMatch(toggle, /\sdisabled=""/, 'the mounted PATCH route enables the switch');
+  assert.match(toggle, /aria-checked="true"/);
   assert.match(text(h(LinkCard, { link: link({ is_active: false }), typeName: 'X' })), /Disabled/);
   assert.match(text(h(LinkCard, { link: link(), typeName: 'X' })), /Opens: Not recorded Bookings: Not recorded/);
   assert.match(text(h(BookingLinksPanel, { links: [], types: [], read: false, onChanged: () => {} })),
@@ -468,25 +463,19 @@ test('A4: the log is read-only — no row carries a control — and filterable',
   assert.doesNotMatch(html(h(AccessLogTable, { rows, showClient: false })), /filter-access-client/);
 });
 
-test('A4: the advisor side lists the clients and says the rows are not readable here; it never asks the founder route', () => {
-  assert.match(html(h(AdvisorAccessLogView, { state: { loading: true } })), /aria-busy="true"/);
-  const bad = text(h(AdvisorAccessLogView, { state: { loading: false, error: 'x' }, onRetry: () => {} }));
-  assert.match(bad, /Your client list could not be read\. This is not a claim that no client has opened a record to you\./);
-  assert.doesNotMatch(bad, /No client has opened a record/);
-  assert.match(text(h(AdvisorAccessLogView, { state: { loading: false, error: '', items: [] } })), /No client has opened a record to you/);
-  assert.match(text(h(AdvisorAccessLogView, { state: { loading: false, error: '', items: [], detail: 'Only an advisor holds client grants' } })),
-    /Only an advisor holds client grants/);
-  const t = text(h(AdvisorAccessLogView, { state: { loading: false, error: '', items: [shared(), shared({ grant_uid: 'g-2', project_name: 'Zephyr', scope_project: false })] } }));
-  assert.match(t, /Advisor view Every record you opened, across your clients\. Not recorded/);
-  assert.match(t, /Client company view Every record of theirs you opened\. Same rows, their side\./);
-  assert.match(t, /Halverton Open to you: their record · since/);
-  assert.match(t, /Zephyr Open to you: nothing, every part is closed/);
-  assert.equal((t.match(/Rows: Not recorded/g) || []).length, 2);
+test('A4: the advisor reads only their own access rows and preserves loading, failure and empty states', () => {
+  assert.match(html(h(AdvisorAccessLogView, { state: { loading: true, items: [] } })), /aria-busy="true"/);
+  const bad = text(h(AdvisorAccessLogView, { state: { loading: false, error: 'failed', items: [] } }));
+  assert.match(bad, /Your access log could not be read\. This is not a claim that no record was opened\./);
+  assert.doesNotMatch(bad, /No client record opens recorded yet/);
+  assert.match(text(h(AdvisorAccessLogView, { state: { loading: false, items: [] } })), /No client record opens recorded yet/);
+  const t = text(h(AdvisorAccessLogView, { state: { loading: false, items: [logRow({ client: 'Halverton' })] } }));
+  assert.match(t, /Client brief Halverton Opened/);
   assert.match(t, /Read-only\. Rows cannot be edited or removed by anyone\./);
   const src = codeOnly(read('frontend/src/pages/advisor/practice/ClientAccessLog.jsx'));
   const advisorSide = src.slice(src.indexOf('export default function AdvisorAccessLog'), src.indexOf('export function ClientCompanyAccessLog'));
-  assert.doesNotMatch(advisorSide, /advisorClientAccessLog/, 'the advisor side would only be refused');
-  assert.equal((src.match(/api\.advisorClientAccessLog\(/g) || []).length, 1);
+  assert.match(advisorSide, /api\.listMyAdvisorAccessLog\(/);
+  assert.doesNotMatch(advisorSide, /api\.advisorClientAccessLog\(/);
 });
 
 test('A4: the client company\'s side reads the real log in four states', () => {
@@ -512,7 +501,7 @@ test('A5: the profile renders what the route holds, and Not recorded where a cli
   assert.match(t, /Not recorded Engagements 2025 On Axal since Not recorded Response/);
   assert.match(t, /Stages Seed Languages Not recorded Timezone Europe\/Paris Availability Not recorded LinkedIn Profile ↗/);
   assert.match(t, /Hourly rate Not recorded/);
-  assert.match(t, /Session types Not recorded on this page/);
+  assert.match(t, /Session types Session types not recorded/);
   const markup = html(h(AdvisorProfileView, { state: { status: 'ready', advisor: advisor() } }));
   assert.doesNotMatch(markup, />Book</, 'no Book button that would open nothing');
   assert.doesNotMatch(markup, /ada@practice\.example/, 'the advisor\'s address is not shown to a client');
@@ -551,9 +540,7 @@ test('the canvas addresses land on the zone sections, behind the zones\' own gua
   ]) {
     assert.ok(APP.includes(`<Route path="${path}" element={guard(['admin', 'advisor'], <Navigate to="${to}" replace />)} />`), path);
   }
-  const directory = /<Route path="\/advisors" element=\{guard\((labRoles\(\[[^\]]*\]\))/.exec(APP);
-  assert.ok(APP.includes(`<Route path="/advisors/:uid" element={guard(${directory[1]}, <AdvisorProfilePage />)} />`),
-    'the profile admits the directory\'s roles, since the route answers any signed-in caller');
+  assert.ok(APP.includes('<Route path="/advisors/:uid" element={<AdvisorProfilePage />} />'), 'the approved profile is publicly readable');
   assert.match(APP, /const AdvisorProfilePage = lazy\(\(\) => import\('\.\/pages\/advisor\/AdvisorProfilePage'\)\);/);
 
   const delivery = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));

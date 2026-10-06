@@ -89,6 +89,8 @@ function fresh() {
     enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true,
   });
   db.exec(T13);
+  // This store belongs to 239; bootstrap heals its 394 fields without creating it.
+  db.exec(migration('239_advisor_deliverables').match(/CREATE TABLE IF NOT EXISTS advisor_deliverables[\s\S]*?;/)![0]);
   return db;
 }
 
@@ -103,6 +105,13 @@ test('the bootstrap produces the same schema the migrations do', async () => {
   const migrated = fresh();
   for (const m of MIGRATIONS) migrated.exec(migration(m));
 
+  // Compare the catalogue/link stores adopted by D573 against their canonical CREATEs.
+  const config = migration('240_advisor_sessions_config');
+  for (const table of ['advisor_session_types', 'advisor_booking_links']) {
+    migrated.exec(config.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}[\\s\\S]*?;`))![0]);
+  }
+  migrated.exec(migration('394_advisor_practice'));
+
   const healed = fresh();
   await ensureAdvisorStoresSchema({ DB: makeD1(healed) } as any);
 
@@ -110,7 +119,8 @@ test('the bootstrap produces the same schema the migrations do', async () => {
   for (const t of ['advisors', 'advisor_bookings', 'advisor_services',
                    'advisor_proof_items', 'advisor_proof_consents',
                    'advisor_cohort_assignments',
-                   'cohort_advisor_notices', 'cohort_advisor_optouts']) {
+                   'cohort_advisor_notices', 'cohort_advisor_optouts',
+                   'advisor_deliverables', 'advisor_session_types', 'advisor_booking_links']) {
     assert.deepEqual(cols(healed, t), cols(migrated, t), `same columns on ${t}`);
   }
 });

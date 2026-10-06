@@ -63,6 +63,31 @@ const BOOKING_COLUMNS: Array<[string, string]> = [
  * every database.
  */
 const TABLES = [
+  // Migration 240: the public catalogue and links must exist on adopted stores too.
+  `CREATE TABLE IF NOT EXISTS advisor_session_types (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+     advisor_id INTEGER NOT NULL, name TEXT NOT NULL, duration_minutes INTEGER,
+     cadence_note TEXT, price_cents INTEGER, is_free_intro INTEGER NOT NULL DEFAULT 0,
+     once_per_client INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0,
+     is_active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_session_types_advisor
+     ON advisor_session_types(advisor_id, sort_order)`,
+  `CREATE TABLE IF NOT EXISTS advisor_booking_links (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+     advisor_id INTEGER NOT NULL,
+     slug TEXT NOT NULL UNIQUE,
+     session_type_id INTEGER REFERENCES advisor_session_types(id) ON DELETE SET NULL,
+     audience TEXT NOT NULL DEFAULT 'public' CHECK (audience IN ('public', 'cohort', 'private')),
+     cohort_ref TEXT, requires_payout_account INTEGER NOT NULL DEFAULT 0, note TEXT,
+     is_active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_booking_links_advisor
+     ON advisor_booking_links(advisor_id, is_active)`,
   `CREATE TABLE IF NOT EXISTS advisor_services (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
      uid TEXT NOT NULL UNIQUE,
@@ -286,6 +311,21 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await renameLegacySlotOwnerColumn(env);
     await addMissingColumns(env, 'PRAGMA table_info(advisors)', PROFILE_COLUMNS);
     await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', BOOKING_COLUMNS);
+    // D573 / migration 394: nullable facts, including databases adopted by baseline.
+    await addMissingColumns(env, 'PRAGMA table_info(advisor_deliverables)', [
+      ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],
+      ['manual_status', 'ALTER TABLE advisor_deliverables ADD COLUMN manual_status TEXT'],
+    ]);
+    await addMissingColumns(env, 'PRAGMA table_info(advisor_session_types)', [
+      ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
+    ]);
+    await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', [
+      ['session_type_id', 'ALTER TABLE advisor_bookings ADD COLUMN session_type_id INTEGER'],
+      ['booking_link_id', 'ALTER TABLE advisor_bookings ADD COLUMN booking_link_id INTEGER'],
+    ]);
+    await addMissingColumns(env, 'PRAGMA table_info(advisor_booking_links)', [
+      ['opens_count', 'ALTER TABLE advisor_booking_links ADD COLUMN opens_count INTEGER'],
+    ]);
     READY.set(key, true);
   } catch (e) {
     // Not fatal, and deliberately not swallowed silently: on a database that

@@ -255,6 +255,7 @@ const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
 const AdvisorProfilePage = lazy(() => import('./pages/advisor/AdvisorProfilePage'));
+const PublicAdvisorBookingPage = lazy(() => import('./pages/advisor/PublicAdvisorBookingPage'));
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
 const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsentPage'));
 const AdvisorCohortAssignments = lazy(() => import('./pages/admin/AdvisorCohortAssignments'));
@@ -2931,7 +2932,8 @@ function AppInner() {
           A5). Same roles as the directory, because `GET /api/advisors/:uid`
           answers any signed-in caller. A founder is NOT sent to the team tab
           here: the founder is the client this page is drawn for. */}
-      <Route path="/advisors/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <AdvisorProfilePage />)} />
+      <Route path="/advisors/:uid" element={<AdvisorProfilePage />} />
+      <Route path="/b/*" element={<PublicAdvisorBookingPage />} />
       {/* /office-hours is RETIRED (task #124's freeze lifted; UNRESOLVED_ITEMS
           U4 resolved). It coupled the storefront to booking and was broken at
           both jobs: it read five keys the DTOs never emitted, so every slot

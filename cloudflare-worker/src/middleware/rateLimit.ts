@@ -64,6 +64,11 @@ export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$
 export const ADVISOR_SESSION_CHARGE = /^\/api\/(advisors|mentors)\/bookings\/[^/]+\/pay$/;
 
 const BUCKETS: Bucket[] = [
+  // D573: public link resolution records one accepted open request.
+  {
+    name: 'advisor_booking_link', limit: 20, windowSec: 60, scope: 'ip', failClosed: true,
+    test: (p, m) => m === 'POST' && /^\/api\/(advisors|mentors)\/booking-links\/open$/.test(p),
+  },
   // 5 spin-out executions / hour, admin/partner only
   {
     name: 'spinout',

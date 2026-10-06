@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 133 canonical canvases at `design/canvases/`, listed
-173 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 134 canonical canvases at `design/canvases/`, listed
+176 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 63 canvases
+## Founder — 64 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -59,6 +59,7 @@ it, where in their nav, and how do they get there.*
 | Liquidity & Secondaries | `/liquidity` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
 | Metrics | `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
 | Office Hours | `/spinout-lab/office-hours` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Home | Full page (proposed) | Sidebar → Home → Grow | CURRENT | Low |
 | Pages · Benchmark | `/research/benchmarking/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Company | `/research/companies/:analysisId/:candidateId` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Company analysis | `/research/companies/:id` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
@@ -95,7 +96,7 @@ it, where in their nav, and how do they get there.*
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 
-## Advisor — 16 canvases
+## Advisor — 17 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -104,6 +105,7 @@ it, where in their nav, and how do they get there.*
 | Advisor Studio | `/spinout-lab/advisors` | Home | Full page | Sidebar → Home → Spin-Out Lab | NEW | High |
 | Advisory Practice | `/expertise/*` · `/practice/*` | Home | Full page | Sidebar → Home → Expertise | DONE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Home | Full page (proposed) | Sidebar → Home → Practice | CURRENT | Low |
 | Pages · Advisor Cohorts | `/guidance` · `/calendar` · `/weeks` · `/admin/advisor-cohorts` | — (no nav entry) | Full page | Deep link / in-page action | PARTIAL | Medium |
 | Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Home | Full page (proposed) | Sidebar → Home → Expertise | UPGRADE | Low |
 | Pages · Advisor Network | `/network/*` | Home | Full page (proposed) | Sidebar → Home → Network | UPGRADE | Low |
@@ -230,7 +232,7 @@ it, where in their nav, and how do they get there.*
 | Trust Center | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Trust Center v2 | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Public (pre-login) — 9 canvases
+## Public (pre-login) — 10 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -238,6 +240,7 @@ it, where in their nav, and how do they get there.*
 | Axal VC Website | `/` · `/about` · `/for-founders` · `/for-investors` · `/spinout-lab/brief` · `/contact` · `/articles` · `/directory` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | — (not routed) | Full page (proposed) | Not reachable yet | CURRENT | Low |
 | Pricing | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab · Intro | `/spinout-lab` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab · Programme Brief | `/spinout-lab/brief` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -256,7 +259,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 98 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 44 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 31 | Not routed. Proposed route only. |
+| Low | 34 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

@@ -4,27 +4,12 @@ import { Card, Pill, SectionLabel, Skeleton, Unreadable, Unrecorded } from '../.
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
 import { initialsOf, profileSub, safeHref, sinceYear } from './practice/practiceTools';
+import { PriceCell } from './practice/SessionTypesPanel';
 
 /**
- * `/advisors/:uid` — an advisor's profile as a client sees it. The Ops
- * canvas's A5 (`advpub-profile`, D571), drawn for desktop and phone.
- *
- * ONE READ, `getAdvisor` → `GET /api/advisors/:uid`, which any signed-in user
- * may make: the profile fields the advisor keeps on Expertise · Profile
- * (migration 202) and nothing private. The address is the advisor's `uid`: the
- * canvas says `[handle]`, and no advisor has a handle.
- *
- * WHAT THE CANVAS DRAWS AND NO ROUTE GIVES A CLIENT, each "Not recorded" with
- * its reason rather than a figure or a button that goes nowhere:
- *   · the session types and their Book buttons. Session types are stored, and
- *     only their advisor can read them (`GET /me/session-types`); a booking
- *     link has no page that opens it. So the Sessions card lists none, and
- *     sends the reader to the directory, where open hours are booked today;
- *   · the engagement count and the response time. Engagements are the
- *     advisor's private record, and nothing stores a response commitment.
- *
- * No Worker AI rail, as the canvas draws it (`rail: false`): a page about
- * another person, outside every workspace bucket.
+ * Ops A5 public advisor profile (D571/D573). Publishes active session types
+ * and enabled public links. Private counts and response commitments remain
+ * Not recorded. Ownership is checked through the caller's own profile.
  */
 
 export default function AdvisorProfilePage() {
@@ -36,18 +21,20 @@ export default function AdvisorProfilePage() {
     setState({ status: 'loading', advisor: null });
     try {
       const advisor = await api.getAdvisor(encodeURIComponent(uid || ''));
+      let isOwner = false;
+      if (auth?.user?.role === 'advisor') {
+        try { isOwner = (await api.getMyAdvisor())?.uid === advisor?.uid; } catch { /* ownership is unconfirmed */ }
+      }
       // `/advisors/me` and `/advisors/match` are routes of their own on the
       // Worker; neither answers with a profile, and neither is drawn as one.
-      setState(advisor?.uid ? { status: 'ready', advisor } : { status: 'missing', advisor: null });
+      setState(advisor?.uid ? { status: 'ready', advisor, isOwner } : { status: 'missing', advisor: null });
     } catch (e) {
       setState({ status: e?.status === 404 ? 'missing' : 'unreadable', advisor: null });
     }
-  }, [uid]);
+  }, [uid, auth?.user?.id, auth?.user?.role]);
   useEffect(() => { load(); }, [load]);
 
-  const viewer = auth?.user?.id;
-  const isOwner = Boolean(state.advisor && viewer != null && state.advisor.user_id === viewer);
-  return <AdvisorProfileView state={state} onRetry={load} isOwner={isOwner} />;
+  return <AdvisorProfileView state={state} onRetry={load} isOwner={state.isOwner === true} />;
 }
 
 function Frame({ children }) {
@@ -68,7 +55,7 @@ function listValue(value, empty) {
 }
 
 /** The page from its state, so a guard can render each one. */
-export function AdvisorProfileView({ state, onRetry, isOwner = false }) {
+export function AdvisorProfileView({ state, onRetry, isOwner = false, onBook }) {
   if (state?.status === 'loading') {
     return <Frame><div className="space-y-3" aria-busy="true"><Skeleton className="h-8" /><Skeleton className="h-40" /></div></Frame>;
   }
@@ -199,16 +186,24 @@ export function AdvisorProfileView({ state, onRetry, isOwner = false }) {
           </div>
           <div className="px-4 py-3" data-testid="advisor-profile-session-types">
             <div className="text-[12.5px] font-semibold">Session types</div>
-            <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">
-              <Unrecorded>Not recorded</Unrecorded> on this page: an advisor&rsquo;s session types are stored, and
-              only the advisor can read them yet. So there is no list to book from here, and no Book button that
-              would open nothing.
-            </p>
+            {!Array.isArray(a.session_types) ? <Unrecorded>Session types not recorded</Unrecorded>
+              : a.session_types.length === 0 ? <p className="mt-2 text-[12px] text-axal-muted">No session types published yet.</p>
+              : a.session_types.map(type => {
+                const link = a.booking_links?.find(l => l.session_type_id === type.id && l.is_active !== false);
+                return <div key={type.id} className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800">
+                  <div><strong className="text-[12.5px]">{type.name}</strong>
+                    <p className="text-[12px] text-axal-muted">{type.duration_minutes == null ? 'Length not recorded' : `${type.duration_minutes} min`}</p>
+                    <PriceCell type={type} />
+                  </div>
+                  {link ? onBook
+                    ? <button type="button" className="text-[12px] font-semibold text-emerald-700 underline dark:text-emerald-300" onClick={() => onBook(type, link)}>Book</button>
+                    : <Link className="text-[12px] font-semibold text-emerald-700 underline dark:text-emerald-300" to={`/b/${link.slug}`}>Book</Link>
+                    : <Unrecorded reason="No public booking link is enabled for this session type.">Booking link not recorded</Unrecorded>}
+                </div>;
+              })}
           </div>
-          <div className="border-t border-axal-hairline px-4 py-3 text-[12px] leading-relaxed text-axal-muted dark:border-gray-800">
-            Booking opens the advisor&rsquo;s link for a session type once a page opens those links. Until then,
-            book this advisor&rsquo;s open hours from the{' '}
-            <Link to="/advisors" className="font-semibold text-emerald-700 underline dark:text-emerald-300">advisor directory</Link>.
+          <div className="border-t border-axal-hairline px-4 py-3 text-[12px] text-axal-muted dark:border-gray-800">
+            Booking opens a session type's link. Sign in to choose a time and request the session.
           </div>
         </Card>
       </div>

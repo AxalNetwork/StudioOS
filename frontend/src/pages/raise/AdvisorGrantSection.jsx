@@ -211,6 +211,7 @@ function DocumentShares({ projectUid, grants, busyOuter }) {
 function ReceivedWorkProducts() {
   const [state, setState] = useState({ loading: true, error: null, items: [], totals: null });
   const [busy, setBusy] = useState('');
+  const [actionError, setActionError] = useState('');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
@@ -233,6 +234,12 @@ function ReceivedWorkProducts() {
     catch { /* the row simply stays unopened; the next load is the truth */ }
     finally { setBusy(''); }
   };
+  const accept = async (uid) => {
+    setBusy(uid); setActionError('');
+    try { await api.acceptReceivedDeliverableVersion(uid); await load(); }
+    catch { setActionError('Acceptance could not be recorded. Retry before assuming this version was accepted.'); }
+    finally { setBusy(''); }
+  };
 
   if (state.loading) return null;
   if (state.error) {
@@ -248,6 +255,7 @@ function ReceivedWorkProducts() {
   return (
     <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800" data-testid="received-pr3c">
       <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">From your advisors</h4>
+      {actionError && <p role="alert" className="mt-2 text-xs text-amber-700 dark:text-amber-300">{actionError}</p>}
       <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
         Work products your advisors have sent you, newest first. Marking one open is the only
         record either of you has that it was read — nothing on their side can set it, and it is
@@ -297,6 +305,9 @@ function ReceivedWorkProducts() {
                           {busy === v.uid ? 'Recording…' : 'Mark open'}
                         </button>
                       )}
+                      {v.signed_off_at ? <span className="font-semibold text-emerald-700 dark:text-emerald-300">Accepted {shortMoment(v.signed_off_at)}</span>
+                        : <button type="button" disabled={busy === v.uid} onClick={() => accept(v.uid)}
+                          className="rounded-lg border border-axal-hairline px-2.5 py-1 text-[11px] font-semibold dark:border-gray-700">Accept version</button>}
                     </li>
                   ))}
                 </ul>
@@ -314,9 +325,9 @@ function ReceivedWorkProducts() {
             ))}
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-            <strong>Signing a work product off is not recorded anywhere yet.</strong> The store
-            carries the column beside the open receipt, and nothing writes it — no screen on
-            either side asks for a sign-off, so a control here would save a fact nobody reads.
+            <strong>Acceptance records your sign-off on that version.</strong> Your advisor can see
+            the first acceptance time. Accept only a version you have reviewed; a newer version
+            needs its own acceptance.
           </p>
         </>
       )}
