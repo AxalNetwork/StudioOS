@@ -516,9 +516,14 @@ test('the timeline: one log failing keeps the other; a refusal is said as one; b
   assert.match(html(h(RelationshipTimeline, { events: { status: 'loading' }, interactions: { status: 'loading' } })), /animate-pulse/);
 });
 
-test('the header reads the book; a relationship stores no company', () => {
+test('the header reads the book, and the counterpart\'s own company (D572 part 3)', () => {
   const head = text(h(RelationshipHeader, { state: 'ready', rel: REL }));
   assert.match(head, /Robin Operator Operator and partner Role Partner Company Not recorded In your book since Sep 2, 2026 Last interaction Oct 5, 2026/);
+  const named = text(h(RelationshipHeader, { state: 'ready', rel: { ...REL, other: { ...REL.other, company: 'Robin Ventures' } } }));
+  assert.match(named, /Company Robin Ventures In your book since/);
+  const failed = text(h(RelationshipHeader, { state: 'ready', rel: { ...REL, companies_unreadable: true } }));
+  assert.match(failed, /Their company could not be read\. This is not a claim that they have none\./);
+  assert.doesNotMatch(failed, /Company Not recorded/);
   assert.match(text(h(RelationshipHeader, { state: 'ready', rel: null })), /not among your accepted relationships/);
   assert.match(html(h(RelationshipHeader, { state: 'loading' })), /animate-pulse/);
 });
