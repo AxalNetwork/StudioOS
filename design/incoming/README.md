@@ -10,13 +10,13 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-09-26:
+exists for each — not by how far each has been built. Counts as of 2026-10-05:
 
 | Folder | Meaning |
 | --- | --- |
 | `canvases/integrated/` | 74 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
-| `canvases/backlog/` | 29 — graded `NEW` or `DEFERRED`: no route yet. |
-| `canvases/out-of-scope/` | 27 — deliberately not being built. |
+| `canvases/backlog/` | 30 — graded `NEW` or `DEFERRED`: no route yet. |
+| `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
 is not counted here. The table read 53 / 27 / 27 until 2026-09-04: one canvas
@@ -28,7 +28,9 @@ It then read 61 / 26 / 27 until 2026-09-26, while the folders moved to
 66 / 25 / 27. Five arrivals and one graduation went uncounted here, which is
 exactly the drift this rule exists to prevent. 74 / 29 / 27 was counted on
 2026-09-26, after Calendar and the three Advisor canvases left this queue and
-eight new canvases arrived, four into each folder (D305).
+eight new canvases arrived, four into each folder (D305). It read 74 / 29 / 27
+until 2026-10-05, when `Advisor Studio` moved from `out-of-scope/` to
+`backlog/` after the owner brought the Advisor Program into scope (#975, D565).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
