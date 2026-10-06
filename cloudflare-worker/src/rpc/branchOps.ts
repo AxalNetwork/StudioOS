@@ -21,6 +21,7 @@
  * nothing" rather than "nobody has built this yet" — the same rule
  * `DERIVED_UNAVAILABLE` states for the licence page.
  */
+import { nextObligationsByFund } from '../services/entityObligations';
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { laneCounts } from '../services/approvalSources';
@@ -898,6 +899,14 @@ export type RegistryFund = {
   jurisdiction?: string | null;
   /** The same, for the fund's linked GP entity (`gp_entity_id`). */
   gp_entity_jurisdiction?: string | null;
+  /**
+   * D417 — the earliest OPEN filing deadline across the fund's linked GP and
+   * vehicle entities (F2's store, migration 374): its kind, its date and the
+   * days left (negative when overdue). Null when neither entity has an open,
+   * dated obligation or none is linked; absent when the store could not be
+   * read — see `obligations_available`. No title or note crosses the RPC.
+   */
+  next_obligation?: { kind: string; due_date: string; days_left: number } | null;
   flags: RegistryFlags;
 };
 
@@ -913,6 +922,8 @@ export type FundsRegistry = {
   distributions_reason?: string;
   entities_available: boolean;
   entities_reason?: string;
+  obligations_available: boolean;
+  obligations_reason?: string;
 };
 
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
@@ -1007,6 +1018,8 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
   let distributionsReason: string | undefined;
   let entitiesAvailable = true;
   let entitiesReason: string | undefined;
+  let obligationsAvailable = true;
+  let obligationsReason: string | undefined;
   if (funds.length) {
     try {
       // The newest period of each STATUS per fund: the issued one is the last
@@ -1097,6 +1110,17 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
       entitiesReason = 'The fund entities could not be read on this database, so each fund\'s jurisdiction '
         + `is unknown rather than unrecorded: ${readError(e)}`;
     }
+
+    // D417 — the next filing deadline, from F2's store. Its own read: a
+    // database without migration 374 still answers, with this unknown.
+    try {
+      const next = await nextObligationsByFund(env, new Date().toISOString().slice(0, 10));
+      for (const f of funds) f.next_obligation = next.get(f.id) ?? null;
+    } catch (e) {
+      obligationsAvailable = false;
+      obligationsReason = 'The entity obligations could not be read on this database, so each fund\'s next '
+        + `filing deadline is unknown rather than none: ${readError(e)}`;
+    }
   }
 
   return {
@@ -1110,6 +1134,8 @@ export async function readFundsRegistry(env: Env): Promise<FundsRegistry> {
     ...(distributionsReason ? { distributions_reason: distributionsReason } : {}),
     entities_available: entitiesAvailable,
     ...(entitiesReason ? { entities_reason: entitiesReason } : {}),
+    obligations_available: obligationsAvailable,
+    ...(obligationsReason ? { obligations_reason: obligationsReason } : {}),
   };
 }
 

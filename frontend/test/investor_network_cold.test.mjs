@@ -41,8 +41,9 @@ test('the book reads the log’s MAX, and the cold chip narrows on the shared wi
   // tell a chip that narrows from one that selects everything (found by
   // mutation).
   const branch = PAGE.slice(PAGE.indexOf("const visibleRelationships"));
-  assert.match(branch, /bookView === 'cold'\s*\?\s*\(relationships \|\| \[\]\)\.filter\(\(item\) => \{ const d = daysSince\(lastTouchAt\(item\)\); return d !== null && d > COLD_AFTER_DAYS; \}\)/,
+  assert.match(branch, /bookView === 'cold'\s*\?\s*coldRows/,
     'the cold chip selects everything');
+  assert.match(PAGE, /coldView\(/, 'the cold rule left coldView');
   assert.equal(COLD_AFTER_DAYS, 60, 'the canvas’s cold window moved — re-check the chip');
   // A tie with no recorded touch is unknown, not cold — said in the empty view.
   assert.match(PAGE, /unknown, not cold/, 'an untouched tie must not read as cold');

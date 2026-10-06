@@ -82,6 +82,7 @@ const CompanyProfile = lazy(() => import('./pages/research/CompanyProfile'));
 const BenchmarkDetail = lazy(() => import('./pages/research/BenchmarkDetail'));
 const MarketReading = lazy(() => import('./pages/research/MarketReading'));
 const MarketSectorProfile = lazy(() => import('./pages/research/MarketSectorProfile'));
+const GeographyProfile = lazy(() => import('./pages/research/GeographyProfile'));
 const GtmIntelligence = lazy(() => import('./pages/research/GtmIntelligence'));
 const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
 const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
@@ -2447,6 +2448,9 @@ function AppInner() {
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/markets/sector/:slug" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketSectorProfile role={researchRole} />)} />
       <Route path="/research/markets/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <MarketReading role={researchRole} />)} />
+      {/* D533/D546 (#1080) — Geographies, guarded like /research/markets. */}
+      <Route path="/research/geographies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/geographies/:code" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GeographyProfile role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/gtm" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GtmIntelligence />)} />
       <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyProfile role={researchRole} />)} />

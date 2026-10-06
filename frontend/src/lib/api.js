@@ -2756,6 +2756,7 @@ export const api = {
   // cold flag reads the log's MAX; a reminder surfaces on the desk when due.
   partnerInteractionLog: (id) => request(`/partnernet/relationships/${id}/interactions`),
   partnerInteractionAdd: (id, data) => request(`/partnernet/relationships/${id}/interactions`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerInteractionVoid: (id, uid) => request(`/partnernet/relationships/${id}/interactions/${encodeURIComponent(uid)}/void`, { method: 'POST', body: '{}' }),
   partnerReminders: (all) => request(`/partnernet/reminders${all ? '?all=1' : ''}`),
   partnerReminderSet: (id, data) => request(`/partnernet/relationships/${id}/reminders`, { method: 'POST', body: JSON.stringify(data) }),
   partnerReminderDone: (uid, done) => request(`/partnernet/reminders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ done }) }),

@@ -38167,6 +38167,92 @@ Eight mutations were each caught:
 
 The existing D410, D411, de-admin and D451 e-sign tests pass unchanged.
 
+## D417
+
+**A fund-fabric entity has a filings calendar. Migration 374 stores one row
+per obligation occurrence; admins enter or seed them, and file or waive them.
+HQ · Funds raises a fund's next open deadline from its linked GP and vehicle
+entities.** Funds · Fabric canvas, F2 "Entity dossier" ("the filings calendar
+is the working half"). Issue #1002. Worker first. Migration 374. Four new
+routes in D376's `legal_entities.ts`; no new `api.js` method (the dossier UI
+that calls them is F2's page, still to come).
+
+**What was there.** Filing deadlines were stored only for founder companies
+(`compliance_events`, each row against a project). A GP entity or fund vehicle
+had nowhere to hold "Delaware LLC tax, due 1 June", so D375 printed "Filing
+deadlines: Not recorded" on HQ · Funds with the reason "no obligation store
+for a fund's entities".
+
+**Migration 374, `entity_obligations`.** One new table and one index, no
+ALTER, no transaction, no tenant column (the database is the branch, D245).
+- `kind` is one of franchise_tax, registered_agent, annual_report,
+  board_meeting, regulatory_filing, other; `cadence` is annual, quarterly,
+  monthly, one_time or event; `due_date` is a `YYYY-MM-DD` date, NULL only
+  for an event-driven obligation.
+- `status` is open, filed or waived, and `CHECK ((status = 'open') =
+  (resolved_on IS NULL))`. A row is never deleted.
+- `UNIQUE (entity_id, kind, title, due_date)`: the same obligation is not
+  entered twice for one date, which also makes seeding idempotent. SQLite
+  counts each NULL as distinct, so a partial unique index
+  (`idx_entity_obligations_undated_open`, on entity, kind and title where
+  `due_date IS NULL AND status = 'open'`) keeps an undated obligation open at
+  most once; once filed, the same event can be entered again.
+- `next_uid` links a filed row to the occurrence its filing opened.
+
+**The rules (`services/entityObligations.ts`).**
+- `nextDue` steps by the cadence and clamps to the month's end (31 January
+  monthly → 28 or 29 February).
+- **US packs only.** `us_de_llc` and `us_de_ccorp` are read from
+  `compliance.ts`'s `STANDARD_EVENTS`, the ruleset the founder calendar runs
+  on, not retyped. The canvas says every other jurisdiction inherits a pack
+  HQ defines once, which is F9; until F9 exists any other pack is refused
+  (`pack_unknown`).
+- A fixed-date rule takes its next occurrence on or after today. A rule
+  stated as days after formation needs the entity's `incorporation_date`;
+  without one it is **skipped with its reason**, never dated from the day
+  someone pressed the button.
+
+**Worker (`routes/legal_entities.ts`).** Read by staff, written by an admin
+(`admin_only` for anyone else), every write recorded in `activity_logs`
+through `logAdminAction` with the entity id and obligation uid.
+- `GET /api/legal/entities/:id/obligations` → `{ as_of, obligations }`, open
+  ones soonest first (undated last), then the resolved history; an open,
+  dated row carries `days_left`.
+- `POST …/obligations` `{ kind, title, cadence, due_date?, note? }`. Refuses
+  `kind_invalid`, `title_required`, `cadence_invalid`, `date_invalid`,
+  `due_date_required`; a duplicate is `409 already_recorded`.
+- `POST …/obligations/pack` `{ pack }` → `{ pack, added,
+  already_on_calendar, skipped }`.
+- `POST …/obligations/:uid/file` `{ on?, note? }` and `…/waive` `{ note, on? }`.
+  Waiving needs a reason of at least 8 characters (`reason_required`).
+  Resolving twice, or losing a race to another admin, is `409
+  already_resolved`: the update is guarded on `status = 'open'`, and the
+  next-occurrence insert runs only where that update wrote this request's
+  `next_uid`. Filing a recurring obligation opens the next one in the same
+  batch; if that occurrence is already on the calendar the filed row links to
+  the existing one, and the audit entry names that existing uid. Waiving opens
+  nothing.
+
+**The line it feeds.** `readFundsRegistry` gains `obligations_available`
+(and `obligations_reason`), and each fund `next_obligation`: the earliest
+open, dated obligation across `gp_entity_id` and `vehicle_entity_id`, as
+`{ kind, due_date, days_left }` — no title, note or entity name crosses the
+unauthenticated RPC (D375). Null when nothing is linked or entered; absent
+when the store could not be read, which is reported as unknown, never none.
+HQ · Funds flags an overdue deadline as bad ("Franchise tax overdue") and one
+due within 30 days as a warning ("… due in N days"). The feed's line counts
+funds with a deadline on record apart from funds with none recorded (with the
+Worker's reason, now "…which is not the same as having none due") and funds
+from a branch on an earlier build (Not reported), and names a source whose
+store was unreadable.
+
+**Tests.** `cloudflare-worker/test/entity_obligations_d417.test.ts` (the
+migration, the rules, the gates, each write and refusal, the race, the
+registry's leak check and unreadable state);
+`frontend/test/hq_funds_obligations_d417.test.mjs` (the flag thresholds,
+order, and the line's counts). D375's key-set tests now include the two new
+fields.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,
@@ -40471,6 +40557,93 @@ versioning decision) and stays unbuilt past its line.
   Root `npm run build`, then `check-docs-fresh --strict`, exits 0. No browser
   probe.
 
+## D467
+
+**IC decisions are scoped by firm, and a recorded transfer carries the firm
+that made it.** Wave 9, item 7, the first of three; issue #1018, slot S08
+(moved from S16). Migration 340. No new route and no new `api.js` method.
+Session 1 decided this on the owner's behalf. If the owner strikes it, IC
+reads fall back to author-and-voters only, and the transfer's firm column
+stays unwritten.
+
+**The decision.** D461–D464 left open whose IC work a member may see. The
+answer is the firm. `icDecisionScope` (`services/tenancyScope.ts`) already
+admits three callers: a decision's author, its voters, and members of the
+firm in `ic_decisions.company_id` (migration 219, which excludes the NULL
+branch). D467 records that as the decided rule.
+
+**Every IC read and write was checked against it.**
+- In `routes/ic.ts`, the list, the detail, the update, the vote, adding a
+  condition, resolving a condition and the conditions list all go through
+  the scope. So do `scopedDecisions` and the commit room's decisions.
+- The dashboard's IC count reads only decisions the caller wrote or voted
+  on, which is narrower than the scope.
+- One IC read did not go through it: the wire gate in
+  `routes/deals.ts`. It counted every firm's open conditions on the deal
+  and returned that count in its 409, so a partner learned how many open
+  conditions another firm's committee had on a shared deal.
+  - The count is now `openConditionsOnDeal` in `ic.ts`, read through
+    `icDecisionScope`, which is why it lives in that file.
+  - Another firm's open condition still refuses the wire, so the fraud
+    gate is not weakened. That refusal names no count and no text, only
+    that a decision the caller cannot see blocks it.
+  - A failed gate read used to be caught into 0, which let the transfer
+    through. It now refuses with `503 transfer_gate_unreadable`.
+- Not changed, and asked on #1018: the commit room picks "the latest
+  meeting on this deal" for its attendee counts and minutes without
+  checking that meeting's firm. That block sits in the IC panel's lines
+  (the roster and quorum), which this slot does not edit.
+
+**Transfers carry their firm (migration 340).** `deal_transfers` gains a
+nullable `company_id`, added by `ALTER`, with no backfill.
+`POST /deals/:id/transfers` stamps a firm only when the caller can be
+shown to act for it:
+- the verified active company (`activeCompanyFor` checks the switcher's
+  header against `user_company_links`);
+- otherwise the caller's only firm. With one membership there is nothing
+  to choose between, so this is not a guess.
+- A caller in several firms who has not chosen one gets `400
+  transfer_firm_required`, and nothing is written. A forged or stale
+  header counts as not chosen.
+- A caller in no firm writes NULL.
+
+Both reads (`GET /deals/transfers` and `GET /deals/:id/transfers`) and the
+write's response return `company_id` and `company_name` from
+`company_profiles`. A row with no firm, which includes every row written
+before migration 340, gets `firm_not_recorded: "No firm is recorded for
+this transfer."` and is never given a firm. The Closing zone's Wires view
+does not show the firm yet: that page is not this issue's file.
+
+Nothing creates `deal_transfers` at runtime, so D235 needs no matching
+runtime declaration.
+
+**Ported, not this PR's own.** `check-folder-docs` is red on main because
+`documentation/architecture/decisions/` holds 10 files and is not in
+`DOCUMENTED`. This PR carries the same one-line fix as #1093 and #1092, and
+it becomes a no-op once either merges.
+
+**Guards.**
+- `cloudflare-worker/test/deal_transfer_firm_d467.test.ts` has 10 tests.
+  They drive the real `deals` router against real SQLite, with migrations
+  335 and 340 themselves executed. They cover:
+  - the column added nullable, with no backfill;
+  - one firm, several firms (no choice, a forged choice, a verified
+    choice) and no firm;
+  - both reads for a recorded firm and for a row with none;
+  - the gate: the caller's own count, another firm's conditions withheld
+    from the refusal, both at once, and a failed read refusing.
+- On the code as it was, 8 of the 10 fail. The other 2 are controls: the
+  migration itself, and the caller's own count, which was already right.
+- `deal_closing_money.test.ts` keeps its 8 tests. Its fixture gains the
+  tables the gate now reads through, and the column.
+- Mutation-checked both ways: 16 of 16 caught, each with a non-zero exit
+  and a `not ok` line, and every file was restored and checked by sha256.
+  The mutations restore every firm branch, guessing among several firms,
+  dropping the refusal, writing NULL, inventing a firm name, dropping the
+  not-recorded sentence from either read, unscoping the gate (with its
+  binds intact), counting another firm's conditions, failing open on a
+  failed read, and a NOT NULL column.
+
 ## D469
 
 **Only an admin changes a deal's amount through `PUT /deals/:id`.** Wave 9,
@@ -42074,6 +42247,24 @@ alone.
 **Next.** Slot S06 can retire `/branch`.
 
 No migration.
+
+## D513
+
+**Investor relationship book: void a touch, refuse a bad date, show a write failure.** Issue #1015. Migration **343**.
+
+**Void.** The recorder voids one of their touches (`POST /relationships/:id/interactions/:uid/void`). `voided_at` / `voided_by` are migration 343; 338 is not edited. The book's `MAX(interacted_at)` skips voided rows and skips a touch recorded by someone who is not a party.
+
+**Dates.** A touch or a reminder accepts `YYYY-MM-DD` or a zoned ISO instant. Anything else is `date_unparseable` (an unparseable touch with a note is no longer stored as now). A touch in the future is `date_in_future`. A year outside 1990–2100 is `date_absurd`. A reminder may be in the future — that is what a reminder is. A date-only reminder is stored as the calendar day; the desk treats it as due on the viewer's local day (`reminderDue`), tested for Tokyo and Los Angeles at the same instant.
+
+**Book.** `coldView` / `coldestDays` in `networkBook.js` are the cold rule. `isCold` and the founder readers are unchanged. Going cold replaces a high strength on the row. The Coldest tile names the oldest cold touch, or says it is not recorded. The header counts the rows on screen. Write failures render on the relationships zone. Notes say they are kept to 2,000 (touch, private note) or 500 (reminder) characters.
+
+**Admin.** A non-party admin who uses the bypass is recorded with `logAdminAction` (`partnernet_admin_bypass`). Their touch does not move last-touched.
+
+**Already fixed, confirmed.** The backdating field and the header's coverage wording shipped with D490. The Set reminders comment matches the code (D307).
+
+**Relayed, not edited.** Slot S11 still says there is no interaction date in `RelationshipsZone.jsx`, `advisorZoneFilters.js`, and `advisor_network_zones.test.mjs`. Slot S14 still says strength, notes and reminders are not recorded in `founderZoneActions.js` and `FounderNetworkDesk.jsx`.
+
+**Tests.** `partnernet_book_d513.test.ts`, `network_book_d513.test.mjs`. The D465 calendar-reminder pin now expects the calendar day.
 
 ## D514
 
