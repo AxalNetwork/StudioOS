@@ -191,6 +191,7 @@ import learningRoutes from './routes/learning';
 import adminLearningRoutes from './routes/admin_learning';
 import learningAssessmentRoutes from './routes/learning_assessment';
 import adminLearningAssessmentRoutes from './routes/admin_learning_assessment';
+import { adminLearningVideo, learningVideo } from './routes/learning_video';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
@@ -806,6 +807,8 @@ app.route('/api/admin/telegram', adminTelegram);
 app.route('/api/admin/learning', adminLearningRoutes);
 // D559 (#1160) — authoring exercises and exams, and reviewing submissions.
 app.route('/api/admin/learning', adminLearningAssessmentRoutes);
+// D561 — the Super Admin's video upload to R2.
+app.route('/api/admin/learning', adminLearningVideo);
 // User-facing Telegram channel join request — pings the studio Slack
 // inbox so an admin can issue the invite link manually. Mounted under
 // /api/telegram (not /api/admin) since any authenticated user can ask.
@@ -1094,6 +1097,8 @@ app.route('/api/community-tasks', communityTasksRoutes);
 app.route('/api/learning', learningRoutes);
 // D559 (#1160) — exercises and exams, graded on the server.
 app.route('/api/learning', learningAssessmentRoutes);
+// D561 — gated video playback from R2, with Range.
+app.route('/api/learning', learningVideo);
 app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.
@@ -1603,6 +1608,17 @@ export default {
         const hqCadences = branchOf(env) === null;
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
+        }
+        // D561 — Learning videos no item uses any more, and the videos of
+        // items archived for over 30 days, are removed from R2 once a day.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 40) {
+          try {
+            const { sweepLearningVideos } = await import('./services/learningVideo');
+            const r = await sweepLearningVideos(env, now);
+            if (r.deleted) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] learning video sweep failed', e);
+          }
         }
         // Cohort Timing & Gating — every-minute tick: materializes monthly
         // cycles, unlocks weeks at their Delaware-midnight boundaries,

@@ -15,6 +15,17 @@ export const adminLearningApi = {
   unpublishItem: (uid) => request(`/admin/learning/items/${enc(uid)}/unpublish`, { method: 'POST' }),
   archiveItem: (uid) => request(`/admin/learning/items/${enc(uid)}/archive`, { method: 'POST' }),
 
+  // D561 — upload a video to R2 in parts (routes/learning_video.ts). Start
+  // with the type and size; send each Blob slice of `part_size` with its
+  // number; complete with every {part_number, etag}; or abort.
+  startVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads`, { method: 'POST', body: body(b) }),
+  uploadVideoPart: (uid, { key, upload_id, part_number }, blob) => request(
+    `/admin/learning/items/${enc(uid)}/video/uploads/part?key=${enc(key)}&upload_id=${enc(upload_id)}&part_number=${enc(part_number)}`,
+    { method: 'PUT', body: blob, headers: { 'Content-Type': 'application/octet-stream' } },
+  ),
+  completeVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/complete`, { method: 'POST', body: body(b) }),
+  abortVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/abort`, { method: 'POST', body: body(b) }),
+
   listCourses: () => request('/admin/learning/courses'),
   createCourse: (b) => request('/admin/learning/courses', { method: 'POST', body: body(b) }),
   getCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}`),

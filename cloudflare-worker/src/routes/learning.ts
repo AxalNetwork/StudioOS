@@ -263,7 +263,13 @@ r.get('/items/:uid', async (c) => {
   const { visibility: _v, ...shown } = item;
   void _v;
   return c.json({
-    item: { ...shown, transcript: item.transcript ?? null },
+    item: {
+      ...shown,
+      transcript: item.transcript ?? null,
+      // D561 — an uploaded video plays from the gated stream route; the
+      // bucket key is never sent. Null when the item plays a link or nothing.
+      video_stream_url: item.video_source === 'r2' ? `/api/learning/items/${encodeURIComponent(item.uid)}/video` : null,
+    },
     // The player's transcript panel says why it is empty rather than drawing nothing.
     transcript_recorded: item.transcript != null && item.transcript !== '',
     progress: p ?? null,
