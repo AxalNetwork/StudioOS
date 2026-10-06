@@ -1,38 +1,8 @@
-/**
- * Fund analytics — every number here comes from a D1 row, and every number
- * that has no row is null.
- *
- * These two surfaces (/funds/performance, /funds/accounting) previously
- * rendered a fixture that invented NAV, IRR, TVPI, RVPI and DPI for four
- * funds that do not exist. Invented fiduciary figures are the one thing the
- * funds honesty rule forbids outright, so the replacement reports only what
- * the schema can actually support:
- *
- *   committed   vc_funds.fund_size_cents, or legacy total_commitment dollars
- *   called      Σ limited_partners.invested_amount  (legacy dollars)
- *   deployed    vc_funds.deployed_capital           (legacy dollars)
- *   distributed Σ fund_distributions.amount_cents WHERE status = 'paid'
- *   dpi         distributed / called, null when nothing has been called
- *
- * and refuses the rest, each with the reason it cannot be computed:
- *
- *   nav         there is no fund-level valuation mark anywhere in the schema.
- *               portfolio_positions carries marks per PROJECT, and nothing
- *               attributes a position to a fund, so a fund NAV would be a
- *               guess at which positions belong to which vehicle.
- *   rvpi, tvpi  both are NAV over (or plus) paid-in. No NAV, no ratio.
- *   irr         needs dated contributions. A per-fund capital call is
- *               recorded as a `capital_call_notice` job, not as a dated cash
- *               receipt, so the contribution dates do not exist.
- *               limited_partners.commitment_date is a promise, not a
- *               transfer, and using it here would manufacture a plausible
- *               IRR out of the wrong dates — worse than reporting none.
- *
- * When capital calls start settling into dated rows, `irr` becomes a
- * computeFundMetrics() call over those flows and this comment loses a
- * paragraph. Nothing else about the shape changes.
+/** Fund analytics from recorded rows. Receipt totals use migration 312's
+ * append-only ledger; performance calculations remain outside D550's scope.
+ * Legacy invested_amount still supplies DPI's paid-in denominator.
  */
-
+import type { Env } from '../types';
 
 /** One vc_funds row joined with its two correlated sums, straight from D1. */
 export interface FundRollupRow {
@@ -57,7 +27,13 @@ export interface FundRollup {
   status: string;
   lp_count: number;
   committed_cents: number;
-  called_cents: number;
+  called_cents: number | null;
+  paid_in_cents: number;
+  collected_cents: number | null;
+  outstanding_cents: number | null;
+  capital_state: 'recorded' | 'not_recorded' | 'unreadable';
+  capital_reason: string | null;
+  lp_capital: LpCapitalRollup[];
   deployed_cents: number;
   distributed_cents: number;
   dpi: number | null;
@@ -74,7 +50,7 @@ export const FUND_METRIC_UNAVAILABLE = {
   nav_cents: 'No fund-level valuation marks are recorded. Marks exist per portfolio project, and no position is attributed to a fund.',
   rvpi: 'Requires NAV.',
   tvpi: 'Requires NAV.',
-  irr: 'Requires dated contributions. Capital calls are recorded as notices, not as dated cash receipts.',
+  irr: 'Dated capital-call receipts are recorded, but a complete dated cash-flow history and terminal fund valuation are not recorded.',
   fee_accrual: 'The management fee and carry RATES are contracted terms and are shown. Accrued amounts per period have no table to read from.',
   expenses: 'No fund expense ledger exists in the schema.',
 } as const;
@@ -104,6 +80,12 @@ export function rollUpFundRow(r: FundRollupRow): FundRollup {
     lp_count: Number(r.lp_rows) || 0,
     committed_cents: committed,
     called_cents: called,
+    paid_in_cents: called,
+    collected_cents: null,
+    outstanding_cents: null,
+    capital_state: 'not_recorded',
+    capital_reason: NO_RECEIPTS,
+    lp_capital: [],
     deployed_cents: dollarsToCents(r.deployed_capital),
     distributed_cents: distributed,
     dpi: ratioOrNull(distributed, called),
@@ -119,24 +101,87 @@ export function rollUpFundRow(r: FundRollupRow): FundRollup {
 }
 
 export function totalFundRollups(items: FundRollup[]) {
-  const sum = (k: 'committed_cents' | 'called_cents' | 'deployed_cents' | 'distributed_cents') =>
+  const sum = (k: 'committed_cents' | 'paid_in_cents' | 'deployed_cents' | 'distributed_cents') =>
     items.reduce((a, f) => a + f[k], 0);
-  const called = sum('called_cents');
+  const knownSum = (k: 'called_cents' | 'collected_cents' | 'outstanding_cents') =>
+    items.length && items.every(f => f[k] != null) ? items.reduce((a, f) => a + f[k]!, 0) : null;
+  const called = knownSum('called_cents');
   const distributed = sum('distributed_cents');
   return {
     fund_count: items.length,
     lp_count: items.reduce((a, f) => a + f.lp_count, 0),
     committed_cents: sum('committed_cents'),
     called_cents: called,
+    collected_cents: knownSum('collected_cents'),
+    outstanding_cents: knownSum('outstanding_cents'),
     deployed_cents: sum('deployed_cents'),
     distributed_cents: distributed,
-    // Blended DPI is the family's distributions over the family's called
-    // capital, not the mean of per-fund DPIs — averaging ratios would weight
-    // a $2m fund the same as a $200m one.
-    dpi: ratioOrNull(distributed, called),
+    // Preserve the existing paid-in denominator; D550 changes receipt
+    // reporting, not the performance calculations awaiting #1138.
+    dpi: ratioOrNull(distributed, sum('paid_in_cents')),
     nav_cents: null as null,
     rvpi: null as null,
     tvpi: null as null,
     irr: null as null,
   };
+}
+
+
+const NO_RECEIPTS = 'No dated capital-call receipts are recorded.';
+const NO_CALLS = 'No capital-call lines are recorded.';
+const UNREADABLE_CAPITAL = 'Capital-call lines and receipts could not be read.';
+
+interface LpCapitalRow {
+  id: number; name: string | null; call_count: number; called_cents: number | null;
+  receipt_count: number; collected_cents: number | null;
+}
+export interface LpCapitalRollup {
+  limited_partner_id: number; name: string | null;
+  called_cents: number | null; collected_cents: number | null; outstanding_cents: number | null;
+  capital_state: 'recorded' | 'not_recorded'; capital_reason: string | null;
+}
+
+/** Only called with fund IDs already selected through the GP/admin scope.
+ * Independent sums prevent multiple receipts from multiplying call amounts.
+ * A failed ledger read leaves the fund visible, with explicitly unknown cash.
+ */
+export async function readFundCapital(env: Env, fund: FundRollup): Promise<FundRollup> {
+  try {
+    const result = await env.DB.prepare(
+      `SELECT lp.id, lp.name,
+        (SELECT COUNT(*) FROM capital_calls cc WHERE cc.limited_partner_id = lp.id) AS call_count,
+        (SELECT SUM(COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER)))
+          FROM capital_calls cc WHERE cc.limited_partner_id = lp.id) AS called_cents,
+        (SELECT COUNT(*) FROM capital_call_receipts r
+          WHERE r.limited_partner_id = lp.id AND r.fund_id = ?) AS receipt_count,
+        (SELECT SUM(r.amount_cents) FROM capital_call_receipts r
+          WHERE r.limited_partner_id = lp.id AND r.fund_id = ?) AS collected_cents
+       FROM limited_partners lp WHERE lp.fund_id = ? ORDER BY lp.id`
+    ).bind(fund.id, fund.id, fund.id).all<LpCapitalRow>();
+    if (!result.success) throw new Error('Ledger read failed');
+    const rows = result.results || [];
+    const lp_capital: LpCapitalRollup[] = rows.map(r => {
+      const called = Number(r.call_count) > 0 ? Number(r.called_cents) : null;
+      const collected = Number(r.receipt_count) > 0 ? Number(r.collected_cents) : null;
+      return {
+        limited_partner_id: Number(r.id), name: r.name,
+        called_cents: called, collected_cents: collected,
+        outstanding_cents: called != null && collected != null ? called - collected : null,
+        capital_state: collected == null ? 'not_recorded' : 'recorded',
+        capital_reason: collected == null ? NO_RECEIPTS : called == null ? NO_CALLS : null,
+      };
+    });
+    const called = rows.some(r => Number(r.call_count) > 0)
+      ? rows.reduce((n, r) => n + Number(r.called_cents || 0), 0) : null;
+    const collected = rows.some(r => Number(r.receipt_count) > 0)
+      ? rows.reduce((n, r) => n + Number(r.collected_cents || 0), 0) : null;
+    return { ...fund, called_cents: called, collected_cents: collected,
+      outstanding_cents: called != null && collected != null ? called - collected : null,
+      capital_state: collected == null ? 'not_recorded' : 'recorded',
+      capital_reason: collected == null ? NO_RECEIPTS : called == null ? NO_CALLS : null,
+      lp_capital };
+  } catch {
+    return { ...fund, called_cents: null, collected_cents: null, outstanding_cents: null,
+      capital_state: 'unreadable', capital_reason: UNREADABLE_CAPITAL, lp_capital: [] };
+  }
 }
