@@ -77,3 +77,14 @@ test('D602: the client asks the Worker route by its archetype list', () => {
   assert.match(read('frontend/src/lib/api.js'),
     /profilePublishedMembers: \(slugs\) =>\s*request\(`\/profile\/published-members\?archetypes=\$\{encodeURIComponent\(\(slugs \|\| \[\]\)\.join\(','\)\)\}`\)/);
 });
+
+test('D605: a match\'s values band reads as one line; null is not enough recorded, never aligned', async () => {
+  const { valuesFitLine, VALUES_FIT_COPY } = await import('../src/lib/archetypeCardV2.js');
+  assert.equal(valuesFitLine({ band: 'aligned', compared: 6 }), 'Values: aligned');
+  assert.equal(valuesFitLine({ band: 'mixed', compared: 6 }), 'Values: some differences');
+  assert.equal(valuesFitLine({ band: 'far_apart', compared: 6 }), 'Values: far apart');
+  assert.equal(valuesFitLine({ band: null, compared: 1 }), 'Values: not enough recorded');
+  assert.equal(valuesFitLine(null), null, 'no comparison (caller unpublished) draws no line');
+  assert.equal(Object.keys(VALUES_FIT_COPY).length, 4);
+  assert.doesNotMatch(Object.values(VALUES_FIT_COPY).join(' '), /advi[sc]e|recommend|fiduciary/i);
+});
