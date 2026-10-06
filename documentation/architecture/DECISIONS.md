@@ -35866,6 +35866,22 @@ the application said the company is incorporated. A test pins both halves.
   - a test pins that neither side has quietly taken a side. It is the test
     to change, together with `GATES_DECISION`, when the call is made.
 
+**Settled 2026-10-06: the owner answered A on #979 (#1236).** One set of
+gates for everyone. The Programme Brief prints the set the Lab enforces.
+- **What it prints.** Its gate page renders `PIPELINE_PHASES`, the same list
+  the Lab intro and the workspace render, so no second copy is typed for the
+  Brief.
+- **What is gone.** `TRACK_GATES` and `GATES_DECISION` are removed, with the
+  open-decision sentence on both pages. The Brief and the intro say once that
+  the gates are the same for every track, and that the track changes which
+  tools lead, not what a gate requires.
+- **Per-track milestones (option B)** stay unbuilt, unless the tracks
+  diverge.
+- **The test.** `spinout_landing_d385.test.mjs`'s "open call" tests are
+  rewritten. The Brief's gates must equal the enforced set read from
+  `PIPELINE_PHASES`, and no per-track copy or open-decision notice may
+  remain.
+
 **Not built, because nothing stores it** (unchanged from D38, and still true
 of the Landing canvas):
 - the "Yours" tag;

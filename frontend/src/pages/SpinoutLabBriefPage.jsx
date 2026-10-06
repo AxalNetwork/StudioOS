@@ -6,13 +6,13 @@ import { reportError } from '../lib/log';
 import { Unrecorded } from '../ui';
 import { inZone, dateInZone } from '../lib/zoneTime';
 import {
-  COHORT_WEEKS, LAB_APPLY_HREF, useSpinoutStats, companiesLabel,
+  COHORT_WEEKS, LAB_APPLY_HREF, PIPELINE_PHASES, pipelineItemsFor, useSpinoutStats, companiesLabel,
 } from '../lib/spinoutLab';
 import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, leadsWithFor,
 } from '../lib/spinoutLabArsenal';
 import {
-  WEEKS, TRACK_GATES, GATES_DECISION, TERMS, JURISDICTIONS, DELIVERABLES, COMMUNITY, SUPPORT,
+  WEEKS, TERMS, JURISDICTIONS, DELIVERABLES, COMMUNITY, SUPPORT,
   FIT, NOT_FIT, TOOL_EXAMPLE_READS, EXAMPLE_LABEL, numberWord, numberWordCap,
 } from '../lib/spinoutBrief';
 
@@ -369,52 +369,40 @@ export function BriefDocument({ brief, err, stats = [] }) {
         <div className="px-[42px] pt-[34px] flex-1 flex flex-col">
           <Eyebrow accent>The {numberWord(WEEKS.length)} weeks</Eyebrow>
           <h2 className="m-0 mt-1.5 text-[24px] font-black tracking-[-.025em] leading-[1.15]">
-            Same gates, {numberWord(LAB_TRACKS.length)} different weeks.
+            One set of gates, the same for every track.
           </h2>
           <p className="text-[12.5px] leading-[1.62] mt-2 mb-0" style={{ color: BODY }}>
-            Each column is one track. Read down for what a founder does in each week; read across
-            for what every track must prove at the same gate. The last gate is the same on every
-            track — a raise the record supports.
+            Each week ends at a gate that opens on evidence rather than attendance. These are the
+            gates the Lab checks, and they are the same whichever of the {numberWord(LAB_TRACKS.length)} tracks
+            a founder starts on: the track changes which tools lead, not what a gate requires.
           </p>
-          <div className="grid grid-cols-3 gap-3 mt-4 mb-5" data-testid="brief-gate-grid">
-            {LAB_TRACKS.map((t, i) => (
-              <div key={t.id} className="flex flex-col gap-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] font-mono font-bold" style={{ color: V }}>
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="text-[15px] font-extrabold tracking-[-.02em]">{t.name}</span>
+          {/* D385 (owner's answer A on #979): the gates the Lab enforces, read
+              from PIPELINE_PHASES — the list the Lab page and the workspace
+              render — never a second copy typed for the Brief. */}
+          <div className="grid grid-cols-4 gap-3 mt-4 mb-5" data-testid="brief-gate-grid">
+            {PIPELINE_PHASES.map((g, gi) => (
+              <div key={g.name} className="rounded-[10px] p-3 flex flex-col" style={{ background: PAPER, border: `1px solid ${HAIR}` }}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[12px] font-bold">{g.name}</span>
+                  <span className="text-[9px] font-mono" style={{ color: MUT }}>{WEEKS[gi]?.days}</span>
                 </div>
-                {(TRACK_GATES[t.id] || []).map((g, gi) => (
-                  <div key={g.name} className="rounded-[10px] p-3" style={{ background: PAPER, border: `1px solid ${HAIR}` }}>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-[12px] font-bold">{g.name}</span>
-                      <span className="text-[9px] font-mono" style={{ color: MUT }}>{WEEKS[gi]?.days}</span>
-                    </div>
-                    <ul className="list-none m-0 p-0 mt-1.5 flex flex-col gap-1">
-                      {g.items.map((it) => (
-                        <li key={it} className="flex gap-1.5 text-[10.5px] leading-[1.45]" style={{ color: BODY }}>
-                          <span aria-hidden="true" style={{ color: V }}>·</span>
-                          <span>{it}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div
-                      className="text-[9.5px] font-mono mt-2 pt-1.5"
-                      style={{ color: MUT, borderTop: `1px solid ${HAIR}` }}
-                    >
-                      Gate opens on <span style={{ color: V }}>{g.gate}</span>
-                    </div>
-                  </div>
-                ))}
+                <ul className="list-none m-0 p-0 mt-1.5 flex flex-col gap-1">
+                  {pipelineItemsFor(g).map((it) => (
+                    <li key={it} className="flex gap-1.5 text-[10.5px] leading-[1.45]" style={{ color: BODY }}>
+                      <span aria-hidden="true" style={{ color: V }}>·</span>
+                      <span>{it}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div
+                  className="text-[9.5px] font-mono mt-auto pt-1.5"
+                  style={{ color: MUT, borderTop: `1px solid ${HAIR}` }}
+                >
+                  Gate opens on <span style={{ color: V }}>{g.gate}</span>
+                </div>
               </div>
             ))}
           </div>
-          {/* D385 — the open product call, stated where the per-track gates are
-              printed. See GATES_DECISION in lib/spinoutBrief.js. */}
-          <p className="text-[10.5px] leading-[1.5] -mt-2 mb-4" style={{ color: MUT }} data-testid="brief-gates-decision">
-            {GATES_DECISION.brief}
-          </p>
         </div>
         <PageFoot n={2} year={year} />
       </section>

@@ -12,7 +12,6 @@ import {
 import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, labTrack, leadsWithFor,
 } from '../../lib/spinoutLabArsenal';
-import { GATES_DECISION } from '../../lib/spinoutBrief';
 
 /**
  * The Spin-Out Lab introduction — one design, two surfaces.
@@ -41,10 +40,9 @@ import { GATES_DECISION } from '../../lib/spinoutBrief';
  *     the worker's spinoutLabCatalog — identically for everyone. Four invented
  *     gate sets would tell a founder that week 2 asks something it does not.
  *     The gates render from `PIPELINE_PHASES` and the page says out loud that
- *     they are the same whichever track you pick. The Programme Brief DOES
- *     print per-track gates (`TRACK_GATES`), so the two surfaces disagree;
- *     which one is right is the owner's open call (D385), and both print
- *     `GATES_DECISION` from lib/spinoutBrief.js until it is made.
+ *     they are the same whichever track you pick. The owner settled it (D385,
+ *     answer A on #979): one set for everyone, and the Programme Brief prints
+ *     that same set, read from the same list.
  *
  *   · A "YOURS" TAG on tools the member supposedly already has. Nothing
  *     answers that question. `state.unlocked_features` describes the week a
@@ -280,9 +278,8 @@ export function LabGates({ jurisdiction }) {
           </h2>
         </div>
         <p className={`max-w-[380px] ${LAB_LEDE}`}>
-          The four gates are the same for every track today. The track you pick changes
-          which tools lead, not what the gates require.{' '}
-          <span data-testid="intro-gates-decision">{GATES_DECISION.intro}</span>
+          The four gates are the same for every track. The track you pick changes
+          which tools lead, not what the gates require.
         </p>
       </div>
 

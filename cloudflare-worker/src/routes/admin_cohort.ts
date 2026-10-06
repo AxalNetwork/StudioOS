@@ -299,12 +299,31 @@ r.get('/applications', async (c) => {
         if (entry) { const { applicant_id: _drop, ...rest } = row; entry.interview = rest; }
       }
     } catch { /* migrations 315–316 not applied here: lifecycle fields stay absent */ }
+    // D576 — each applicant's Week 1 plan, for the admin to see. Read on its
+    // own, so a database without migration 396 still lists its applicants;
+    // there each says the plan could not be read rather than that none exists.
+    const plans = new Map<number, unknown>();
+    let plansUnreadable = false;
+    try {
+      const { planView } = await import('../services/week1Plan');
+      const pr = await c.env.DB.prepare(
+        `SELECT p.user_id, p.rule_key, p.steps_json, p.started, p.computed_by, p.created_at, p.updated_at
+           FROM spinout_week1_plans p
+           JOIN cohort_applicants ca ON ca.user_id = p.user_id
+          WHERE ca.cohort_cycle_id = ?`,
+      ).bind(cy.id).all<import('../services/week1Plan').PlanRow>();
+      for (const row of pr.results || []) plans.set(Number(row.user_id), planView(row));
+    } catch { plansUnreadable = true; }
     out.push({
       ...cy,
       label: monthLabel(Number(cy.year), Number(cy.month)),
       applicant_counts: byStatus,
       meets_minimum: settings ? ((byStatus['approved'] ?? 0) + (byStatus['activated'] ?? 0)) >= settings.min : null,
-      applicants: (applicants.results || []).map((a) => ({ ...a, ...(lifecycle.get(Number(a.id)) || {}) })),
+      applicants: (applicants.results || []).map((a) => ({
+        ...a, ...(lifecycle.get(Number(a.id)) || {}),
+        week1_plan: plans.get(Number(a.user_id)) ?? null,
+        week1_plan_unreadable: plansUnreadable,
+      })),
     });
   }
   return c.json({ cycles: out, settings, settings_unreadable: settings === null, server_time: new Date().toISOString() });
