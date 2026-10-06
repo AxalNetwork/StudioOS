@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
 import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS } from '../src/services/slaWindow.ts';
-import { ticketSlaBand, ticketMappingText, readOpenTicketTaxonomy, HQ_TICKET_SLA_HOURS } from '../src/services/supportSlaPolicy.ts';
+import { ticketSlaBand, ticketMappingText, readOpenTicketTaxonomy, HQ_TICKET_SLA_HOURS, SLA_TIERS } from '../src/services/supportSlaPolicy.ts';
 import { slaBand, escalationSlaBand, SLA_HOURS, ESCALATION_KINDS } from '../src/rpc/hqOps.ts';
 import { summariseTickets, QUEUE_PERSONAS, TICKET_PERSONAS } from '../src/services/supportQueues.ts';
 import { slaPolicyBody } from '../src/routes/admin_hq_support.ts';
@@ -92,26 +92,34 @@ test('bands only on the two queues: the three outside them send null, not zeros 
 });
 
 test('the panel names both SLA tables, each with its window', () => {
-  const body = slaPolicyBody();
-  assert.deepEqual(body.tiers.map((t: any) => [t.id, t.hours, t.due_soon_hours]),
+  // D482: the tiers are HQ's store; here, the seed migration 333 writes.
+  const seed = SLA_TIERS.map((t) => ({ id: t, hours: HQ_TICKET_SLA_HOURS[t], description: t, updated_at: null, updated_by_name: null }));
+  const body = slaPolicyBody({ available: true, tiers: seed, hours: { ...HQ_TICKET_SLA_HOURS } });
+  assert.ok(body.tiers.available);
+  assert.deepEqual((body.tiers as any).items.map((t: any) => [t.id, t.hours, t.due_soon_hours]),
     [['P1', HQ_TICKET_SLA_HOURS.P1, 12], ['P2', 48, 24], ['P3', 96, 24]]);
   assert.deepEqual(body.escalation_kinds.map((k: any) => k.kind), [...ESCALATION_KINDS]);
   assert.deepEqual(body.escalation_kinds.find((k: any) => k.kind === 'moderation'), { kind: 'moderation', hours: 24, due_soon_hours: 12 });
-  assert.doesNotMatch(body.note, /set here|inherited by every/i);
+  // The ticket tiers are set at HQ now (D482); the escalation hours are still code's.
+  assert.match(body.note, /Set here/);
+  assert.match(body.note, /escalation hours are fixed in code/);
 });
 
 test('the mapping sentence is built from the rule', () => {
   assert.equal(ticketMappingText(), 'urgent → P1 · high → P2 · medium and low → P3');
 });
 
-test('taxonomy: binds the one definition of open, and folds a blank type into task', async () => {
+test('taxonomy: binds the one definition of open, counts all eight categories, and keeps the uncategorised apart', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE tickets (id INTEGER PRIMARY KEY, type TEXT, status TEXT)`);
-  const ins = db.prepare('INSERT INTO tickets (type, status) VALUES (?, ?)');
-  for (const [t, s] of [['task', 'open'], ['', 'open'], [null, 'in_progress'], ['bug', 'open'], ['bug', 'resolved'], ['feature', 'closed']]) ins.run(t, s);
+  db.exec(`CREATE TABLE tickets (id INTEGER PRIMARY KEY, category TEXT, status TEXT)`);
+  const ins = db.prepare('INSERT INTO tickets (category, status) VALUES (?, ?)');
+  for (const [cat, st] of [['billing', 'open'], ['billing', 'in_progress'], [null, 'open'], ['other', 'open'], ['billing', 'resolved'], ['contracts', 'closed']]) ins.run(cat, st);
   const env = { DB: { prepare: (sql: string) => ({ bind: (...b: unknown[]) => ({ all: async () => ({ results: db.prepare(sql).all(...(b as any[])) }) }) }) } } as any;
   const r = await readOpenTicketTaxonomy(env);
   assert.ok(r.available);
-  assert.deepEqual((r as any).items, [{ type: 'task', open: 3 }, { type: 'bug', open: 1 }],
-    "a blank or null type and 'task' are one row, and only open and in-progress count");
+  const items = (r as any).items.map((x: any) => [x.category, x.open]);
+  assert.deepEqual(items, [['fund_administration', 0], ['contracts', 0], ['access_permissions', 0], ['licence_seats', 0],
+    ['billing', 2], ['data_reporting', 0], ['onboarding', 0], ['other', 1]],
+    'the eight in canvas order, and only open and in-progress count');
+  assert.equal((r as any).uncategorised, 1, 'a ticket with no category was folded into a category');
 });

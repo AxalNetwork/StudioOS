@@ -36,7 +36,7 @@
 import type { Env } from '../types';
 import { ageHours } from './approvalSources';
 import {
-  ticketSlaBandForPriority, tallySlaBands, type SlaBand,
+  ticketSlaBandForPriority, tallySlaBands, HQ_TICKET_SLA_HOURS, type SlaBand, type TierHours,
 } from './supportSlaPolicy';
 
 /**
@@ -220,8 +220,14 @@ export type TicketQueues = {
 };
 
 /** Sort one read into its five buckets. Pure, so it is tested without a database. */
+/**
+ * `tierHours` is HQ's stored SLA tiers (D482). Null when the store could not
+ * be read: then no ticket is banded (`sla_band` null, `bands` null), rather
+ * than banded against hours HQ may since have changed.
+ */
 export function summariseTickets(
   read: { complete: boolean; rows: OpenTicketRow[] }, nowMs: number,
+  tierHours: TierHours | null = HQ_TICKET_SLA_HOURS,
 ): TicketQueues {
   const buckets = {} as Record<TicketPersona, PersonaBucket>;
   const bandScratch = {} as Record<TicketPersona, Array<SlaBand | null>>;
@@ -232,7 +238,7 @@ export function summariseTickets(
   for (const row of read.rows) {
     const bucket = buckets[personaOf(row)];
     const age = ageHours(row.created_at, nowMs);
-    const slaBand = ticketSlaBandForPriority(age, String(row.priority ?? ''));
+    const slaBand = tierHours ? ticketSlaBandForPriority(age, String(row.priority ?? ''), tierHours) : null;
     bucket.count = (bucket.count || 0) + 1;
     bandScratch[personaOf(row)].push(slaBand);
     // Rows arrive oldest first, so the first dated row a bucket sees is its oldest.
@@ -257,7 +263,7 @@ export function summariseTickets(
       buckets[p].count = null;
       buckets[p].bands = null;
     }
-  } else {
+  } else if (tierHours) {
     for (const p of QUEUE_PERSONAS) {
       buckets[p].bands = tallySlaBands(bandScratch[p]);
     }
