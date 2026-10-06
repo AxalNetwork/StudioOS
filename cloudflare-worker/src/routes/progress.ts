@@ -31,6 +31,7 @@
  * payloads here align with the FastAPI contract instead. See replit.md
  * Gotchas for the rationale.
  */
+import { logAdminAction } from '../services/adminAudit';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { projectInActiveCompany } from '../services/tenancyScope';
@@ -2149,6 +2150,7 @@ const METRIC_TARGET_KEYS: Record<string, 'up' | 'down'> = {
 };
 
 interface MetricTargetRow {
+  is_focus?: number | null;
   id: number;
   project_id: number;
   metric_key: string;
@@ -2196,6 +2198,11 @@ async function ensureMetricTargetsSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_metric_targets_project ON metric_targets(project_id)',
     );
+    const columns = await env.DB.prepare('PRAGMA table_info(metric_targets)').all<{ name: string }>();
+    if (!(columns.results || []).some((col) => col.name === 'is_focus')) {
+      await env.DB.exec('ALTER TABLE metric_targets ADD COLUMN is_focus INTEGER CHECK (is_focus IN (0, 1))');
+    }
+    await env.DB.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_metric_targets_focus ON metric_targets(project_id) WHERE is_focus = 1');
     METRIC_TARGETS_READY.set(readyKey, true);
   } catch (e) {
     console.error('[progress] ensureMetricTargetsSchema:', (e as Error).message);
@@ -2206,6 +2213,7 @@ function serializeTarget(row: MetricTargetRow) {
   return {
     id: row.id,
     metric_key: row.metric_key,
+    is_focus: row.is_focus == null ? null : row.is_focus === 1,
     target_value: row.target_value,
     direction: row.direction === 'down' ? 'down' : 'up',
     label: row.label ?? null,
@@ -2225,12 +2233,13 @@ progress.get('/metrics/:projectId/targets', async (c) => {
   let items: ReturnType<typeof serializeTarget>[] = [];
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, project_id, metric_key, target_value, direction, label, updated_at
+      `SELECT id, project_id, metric_key, target_value, direction, label, is_focus, updated_at
          FROM metric_targets WHERE project_id = ? ORDER BY metric_key`,
     ).bind(projectId).all<MetricTargetRow>();
     items = (rows.results || []).map(serializeTarget);
   } catch (e) {
     console.error('[progress] targets GET:', (e as Error).message);
+    return c.json({ detail: 'Metric targets are unreadable' }, 503);
   }
   // `keys` travels with the rows so the editor's picker is the route's own list
   // rather than a second copy in the SPA that can drift from what a write accepts.
@@ -2267,9 +2276,39 @@ progress.put('/metrics/:projectId/targets', async (c) => {
     }, 400);
   }
 
+  const hasFocus = Object.prototype.hasOwnProperty.call(body, 'is_focus');
+  if (hasFocus && typeof body.is_focus !== 'boolean') {
+    return c.json({ detail: 'is_focus must be a boolean' }, 400);
+  }
+  if (body.is_focus === true) {
+    const other = await c.env.DB.prepare(
+      'SELECT id FROM metric_targets WHERE project_id = ? AND is_focus = 1 AND metric_key != ? LIMIT 1'
+    ).bind(projectId, metricKey).first();
+    if (other) return c.json({ detail: 'Clear the current focus before choosing another metric' }, 409);
+  }
+  if (hasFocus && body.target_value === undefined) {
+    let written;
+    try {
+      written = await c.env.DB.prepare(
+        "UPDATE metric_targets SET is_focus = ?, updated_at = datetime('now') WHERE project_id = ? AND metric_key = ?"
+      ).bind(body.is_focus ? 1 : 0, projectId, metricKey).run();
+    } catch (e) {
+      if (/UNIQUE constraint failed/.test(String((e as Error).message))) {
+        return c.json({ detail: 'This project already has a focus metric' }, 409);
+      }
+      throw e;
+    }
+    if (!written.meta?.changes) return c.json({ detail: 'Set a target before choosing it as the focus' }, 404);
+    await logAdminAction(c.env, user.id, user.email, 'metric_target_focus_updated', { project_id: projectId, metric_key: metricKey, is_focus: body.is_focus });
+    const row = await c.env.DB.prepare('SELECT * FROM metric_targets WHERE project_id = ? AND metric_key = ?')
+      .bind(projectId, metricKey).first<MetricTargetRow>();
+    return c.json({ ok: true, target: row ? serializeTarget(row) : null });
+  }
+
   if (body.target_value === null) {
     await c.env.DB.prepare('DELETE FROM metric_targets WHERE project_id = ? AND metric_key = ?')
       .bind(projectId, metricKey).run();
+    await logAdminAction(c.env, user.id, user.email, 'metric_target_cleared', { project_id: projectId, metric_key: metricKey });
     return c.json({ ok: true, cleared: metricKey });
   }
 
@@ -2285,18 +2324,27 @@ progress.put('/metrics/:projectId/targets', async (c) => {
     ? String(body.label).trim().slice(0, 120)
     : null;
 
-  await c.env.DB.prepare(
-    `INSERT INTO metric_targets (project_id, metric_key, target_value, direction, label, created_by)
-          VALUES (?, ?, ?, ?, ?, ?)
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO metric_targets (project_id, metric_key, target_value, direction, label, created_by, is_focus)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(project_id, metric_key) DO UPDATE
         SET target_value = excluded.target_value,
             direction    = excluded.direction,
             label        = excluded.label,
+            is_focus     = CASE WHEN ? = 1 THEN excluded.is_focus ELSE metric_targets.is_focus END,
             updated_at   = datetime('now')`,
-  ).bind(projectId, metricKey, value, direction, label, user.id).run();
+  ).bind(projectId, metricKey, value, direction, label, user.id, hasFocus ? (body.is_focus ? 1 : 0) : null, hasFocus ? 1 : 0).run();
+  } catch (e) {
+    if (/UNIQUE constraint failed/.test(String((e as Error).message))) {
+      return c.json({ detail: 'This project already has a focus metric' }, 409);
+    }
+    throw e;
+  }
+  await logAdminAction(c.env, user.id, user.email, 'metric_target_updated', { project_id: projectId, metric_key: metricKey });
 
   const fresh = await c.env.DB.prepare(
-    `SELECT id, project_id, metric_key, target_value, direction, label, updated_at
+    `SELECT id, project_id, metric_key, target_value, direction, label, is_focus, updated_at
        FROM metric_targets WHERE project_id = ? AND metric_key = ?`,
   ).bind(projectId, metricKey).first<MetricTargetRow>();
   return c.json({ ok: true, target: fresh ? serializeTarget(fresh) : null });

@@ -32,19 +32,9 @@ const SECTIONS = [
   ['Cadence', 'cadence'], ['KPI entry', 'kpi'],
 ];
 
-/**
- * The four board columns A3 draws, and the one the store cannot fill.
- *
- * `mvp_tasks.status` is `todo | in_progress | done` — there is no review state
- * anywhere in the schema, and the desk drew three columns without saying why
- * the artboard has four. Folding review into In progress would be worse than
- * either: a card waiting on someone else's read is not a card being worked, and
- * the count a founder reads on a Monday would be wrong in the direction that
- * makes the week look busier than it is. So the column is drawn, empty, with
- * the reason on it (D56/D68).
- */
+/** A3's four columns use the status the board stores, including review (D548). */
 const BOARD_COLUMNS = [
-  ['Backlog', 'todo'], ['In progress', 'in_progress'], ['Review', null], ['Shipped', 'done'],
+  ['Backlog', 'todo'], ['In progress', 'in_progress'], ['Review', 'review'], ['Shipped', 'done'],
 ];
 
 /**
@@ -202,7 +192,6 @@ export default function FounderBuildDesk() {
     const selectedDeal = deals.find((deal) => Number(deal.id) === Number(projectId));
     const taskCounts = selectedDeal?.task_counts || {};
     // THREE DIFFERENT ABSENCES, AND ONLY ONE OF THEM IS A ZERO.
-    //   · Review has no status behind it at all — no count, ever.
     //   · The rows read but this column is empty — that is a real zero.
     //   · The board could not be read — unknown, and a zero here would tell a
     //     founder their board is empty when it is merely unreachable. The old
@@ -210,7 +199,6 @@ export default function FounderBuildDesk() {
     //     claim whenever `pipelineActive` failed, because the failure was
     //     caught into an empty array.
     const board = BOARD_COLUMNS.map(([label, key]) => {
-      if (key === null) return { label, key, count: null, note: 'No review state is recorded' };
       const rows = Array.isArray(cards) ? cards.filter((card) => card.status === key) : null;
       if (rows) return { label, key, count: rows.length, note: columnNote(rows, key) };
       // The server's own GROUP BY, when the detail read is the thing that

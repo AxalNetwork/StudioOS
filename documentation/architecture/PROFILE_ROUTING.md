@@ -65,8 +65,8 @@ it, where in their nav, and how do they get there.*
 | Pages · Company analysis | `/research/companies/:id` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
 | Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Founder Build | `/execution` · `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
-| Pages · Founder Grow | `/founder/growth/{talent` | — (not routed) | Full page (proposed) | Not reachable yet | RESKIN | Low |
+| Pages · Founder Build | `/build` · `/build/board` · `/build/roadmap` · `/build/kpi` | Home | Full page (proposed) | Sidebar → Home → Build | UPGRADE | Low |
+| Pages · Founder Grow | `/grow` · `/grow/focus` | Home | Full page (proposed) | Sidebar → Home → Grow | UPGRADE | Low |
 | Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
 | Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Home | Full page (proposed) | Sidebar → Home → Raise | UPGRADE | Low |
 | Pages · Founder Research | `/market-intel` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
@@ -258,9 +258,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 98 | Live route, reachable from that workspace’s sidebar. |
+| High | 97 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 45 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 34 | Not routed. Proposed route only. |
+| Low | 35 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
