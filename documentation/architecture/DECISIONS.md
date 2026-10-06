@@ -40990,6 +40990,8 @@ test throws if that element is gone. No migration.
 
 **Tests.** `frontend/test/branch_digest_redirect_d473.test.mjs`. The redirect is rendered: `/branch?kept=1#sec` lands on `/studio?kept=1#sec`, and `/branch/accounts` stays. The programme sentence is called, not scanned.
 
+**Verification.** Four mutations, four caught, each with a non-zero exit and a `not ok` line, restored from a snapshot: the redirect removed, the query and hash dropped, the pending count dropped, and a zero count treated as missing. `npm run build`, then `npm run test:drift`: EXIT=1. Frontend 4904 pass, 2 fail. Both failures are the learning pins already failing on main (`learning_assessments_d559.test.mjs`, `learning_programs_d558_ui.test.mjs`). This change does not touch those files. The suite stops there, so the worker and retention jobs did not run.
+
 ## D474
 
 **Branch Contracts: Expiring soon, and Use template on the current library cards.** Issue #1027. No migration. `admin_contracts.ts` is not edited.
