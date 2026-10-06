@@ -2878,7 +2878,12 @@ export const api = {
   // numbers instead of taking them as props. Distinguishes "no record" from
   // "$0": `recorded: false` means the usage table could not be read, and the
   // meter must say so rather than drawing an empty bar as a fact.
-  myAiSpend: () => request('/ai/me/spend'),
+  //
+  // D552 step 3 — with `surface`, one page's month and last run instead
+  // (`?surface=<the page's path, as the router records it>`).
+  myAiSpend: (surface) => request(surface == null
+    ? '/ai/me/spend'
+    : `/ai/me/spend?surface=${encodeURIComponent(surface)}`),
 
   // The router's own routing table and price list. The rail quotes a cost
   // before a run and shows a receipt after it; assistCost.js already forces

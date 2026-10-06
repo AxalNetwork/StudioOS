@@ -21,23 +21,41 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { loadMyAiSpend, loadMyAiSpendForSurface } from '../services/aiSpend';
-import { AI_SURFACES, isAiSurface } from '../services/aiSurfaces';
+import { AI_SURFACES } from '../services/aiSurfaces';
 import { refuse } from '../util/refusal';
-import { ROUTE, PRICE_USD_PER_1M_TOKENS, run as aiRun } from '../services/aiRouter';
+import { ROUTE, PRICE_USD_PER_1M_TOKENS, run as aiRun, normaliseSurface } from '../services/aiRouter';
 import { classifyInput } from '../services/advisor/guardrails';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
 
 const ai = new Hono<{ Bindings: Env }>();
 
+/**
+ * A page path exactly as the router records one (see `/me/spend`). Every fixed
+ * name in `services/aiSurfaces.ts` is such a path — a test there pins it — so
+ * this accepts those too without a second list.
+ */
+export function isSpendSurface(value: unknown): value is string {
+  return typeof value === 'string' && normaliseSurface(value) === value;
+}
+
 // GET /api/ai/me/spend — the caller's own month-to-date and today figures,
 // the caps the router enforces, and their last run.
 //
 // D552 — `?surface=<name>` narrows the answer to ONE PAGE: that page's month
-// and that page's last run, from the caller's own rows only. The value must be
-// one of the fixed names in `services/aiSurfaces.ts`, exactly; anything else,
-// an empty value included, is refused rather than read as "no page" or folded
-// into a name it resembles. It filters; it never names whose spend is read.
+// and that page's last run, from the caller's own rows only. It filters; it
+// never names whose spend is read.
+//
+// WHICH VALUES (D552 step 3, the A/B/C on #1145 settled as B). A value is
+// accepted when it is an app path exactly as the router would record it as a
+// surface (`normaliseSurface(v) === v`: a leading slash, the router's
+// character set, no trailing slash, nothing trimmed). Every fixed name in
+// `services/aiSurfaces.ts` is such a path. The rail records the path of
+// whatever page it sits on (D404), on dozens of pages, many of them
+// parameterised (`/research/funds/catalog/:id`), so a fixed list of rail pages
+// would be a second route table that drifts. Anything else, an empty value
+// included, is refused rather than read as "no page" or folded into a path it
+// resembles.
 ai.get('/me/spend', async (c) => {
   const user = await requireAuth(c);
   const surface = c.req.query('surface');
@@ -45,7 +63,7 @@ ai.get('/me/spend', async (c) => {
     const report = await loadMyAiSpend(c.env, user as any, new Date());
     return c.json({ ok: true, ...report });
   }
-  if (!isAiSurface(surface)) {
+  if (!isSpendSurface(surface)) {
     return refuse(c, 400, {
       code: 'unknown_surface',
       message: 'That page does not record AI runs, so it has no spend to show.',
