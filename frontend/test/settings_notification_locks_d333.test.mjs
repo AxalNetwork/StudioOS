@@ -46,7 +46,9 @@ test('a locked channel renders checked and disabled, overriding prefs', () => {
     /const locked = \(ev\.lockedChannels \|\| \[\]\)\.includes\(c\.key\);/,
     'the table render has no per-cell lock check',
   );
-  assert.match(src, /const checked = locked \|\| !!prefs\[ev\.key\]\?\.\[c\.key\];/);
+  // D568 — an unset channel is drawn ON, as notify.ts's resolveChannels sends
+  // it; `channelOn` is that rule. The lock still wins over any stored value.
+  assert.match(src, /const checked = locked \|\| channelOn\(prefs, ev\.key, c\.key\);/);
   assert.match(src, /const disabled = !!c\.disabled \|\| locked;/);
 });
 

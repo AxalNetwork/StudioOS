@@ -2368,6 +2368,11 @@ function AppInner() {
       <Route path="/account/email/revoke" element={<EmailChangeRevokePage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
+      {/* D568 — the Account center's Developer section reads GET
+          /settings/developer, which answers 403 to every role but admin, so
+          its address carries the same gate. The static path outranks
+          `:section` below; the page also lists the section for admins only. */}
+      <Route path="/account/developer" element={guard(['admin'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 

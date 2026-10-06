@@ -4,18 +4,28 @@ import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { useToast } from '../components/useToast';
 import {
-  User, ShieldCheck, Bell,
-  Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
-  Plus, X, KeyRound, Palette, Plug, CreditCard,
-  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
+  User, ShieldCheck,
+  Camera, Save, AlertTriangle, CheckCircle2, Trash2, Download,
+  Plus, X, KeyRound,
+  Sun, Moon, Check, Ban, Scale, Loader2,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
-import { Unreadable, Unrecorded } from '../ui';
+import { SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../ui';
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
+// D568 — the Account center canvas (`ac-*`): its section list, the five
+// profile cards, the push devices and sessions cards, the plan line and
+// orders, and the two sections the page did not have (Following, Developer).
+import { AccountSectionNav, Outcome, Switch, accountRailCoverage, useAccountRead } from './account/AccountCenter';
+import ProfileIdentityCanvas from './account/AccountProfile';
+import { PushDevices, SessionsCard } from './account/AccountDevices';
+import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
+import FollowingSection from './account/AccountFollowing';
+import DeveloperSection from './account/AccountDeveloper';
+import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
@@ -136,12 +146,15 @@ const JURISDICTIONS = [
 // Channel keys are the canonical names used by services/notify.{py,ts}.
 // `inapp` is kept as an alias-only column for legacy `notification_prefs`
 // rows, but the new subsystem reads/writes `in_app`.
+//
+// D568 — in the canvas's order. Slack is drawn only once it is connected, and
+// the reserved SMS column is gone: `NotifyChannel` in notify.ts is in_app,
+// email and slack, so an SMS switch could never have been honoured. Push has
+// its own column in the matrix, which says it follows in-app.
 const NOTIFICATION_CHANNELS = [
-  { key: 'email', label: 'Email' },
   { key: 'in_app', label: 'In-app' },
+  { key: 'email', label: 'Email' },
   { key: 'slack', label: 'Slack' },
-  // SMS column reserved — wired in the table as disabled until Twilio is provisioned.
-  { key: 'sms', label: 'SMS', disabled: true, hint: 'Coming soon' },
 ];
 
 // Wave 2 — notification presets.
@@ -194,20 +207,28 @@ const NOTIFICATION_PRESETS = [
 
 const ActivityPage = lazy(() => import('./ActivityPage'));
 
-// Task #1 — Settings expansion (tabbed). Nine tabs per the audit-plan brief.
-// `roles` controls visibility per signed-in role; absence = visible to all.
+// Task #1 — Settings expansion (tabbed). `roles` controls visibility per
+// signed-in role; absence = visible to all.
+//
+// D568 — THE ACCOUNT CENTER'S SECTION LIST, in the canvas's order and with its
+// names (`acNav` in `design/incoming/ops-data.js`): Profile and identity,
+// Notifications, Sign-in and security, Billing and orders, Following, and
+// Developer for the one role its routes answer. The ids did not change, so
+// every deep link that names a section still lands on it. The four sections
+// the canvas does not draw are kept, under "More" (`group: 'more'`), rather
+// than dropped with the screens they hold.
 const SECTIONS = [
-  { id: 'account', label: 'Account', icon: User },
-  { id: 'onboarding', label: 'Onboarding', icon: CheckCircle2 },
-  { id: 'security-privacy', label: 'Security & Privacy', icon: ShieldCheck },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'billing', label: 'Billing', icon: CreditCard },
-  // Task #4 — the merged Referrals workspace (Refer & Earn + Payouts) now lives
-  // here as a section. Gated to the roles that carried the standalone /refer
-  // item (admin/founder/partner/investor); hidden for advisor.
-  { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'activity', label: 'Activity Log', icon: Activity },
+  { id: 'account', label: 'Profile and identity' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'security-privacy', label: 'Sign-in and security' },
+  { id: 'billing', label: 'Billing and orders' },
+  { id: 'following', label: 'Following' },
+  // `GET /settings/developer` answers 403 to every role but admin.
+  { id: 'developer', label: 'Developer', roles: ['admin'] },
+  { id: 'onboarding', label: 'Onboarding', group: 'more' },
+  { id: 'integrations', label: 'Integrations', group: 'more' },
+  { id: 'appearance', label: 'Appearance', group: 'more' },
+  { id: 'activity', label: 'Activity Log', group: 'more' },
 ];
 
 // ---------- Page ------------------------------------------------------------
@@ -226,6 +247,14 @@ const PATH_TO_SECTION = {
   integrations: 'integrations',
   billing: 'billing',
   appearance: 'appearance',
+  // D568 — the two new sections, the canvas's own anchors for the renamed
+  // ones (`/account#sign-in`, `#billing` in ops-data.js), and Activity Log,
+  // which the nav could open but a reload of its URL could not.
+  following: 'following',
+  developer: 'developer',
+  'sign-in': 'security-privacy',
+  orders: 'billing',
+  activity: 'activity',
   // Back-compat: old deep links still resolve to a sensible new tab.
   jurisdictions: 'account',
   email: 'account',
@@ -242,6 +271,10 @@ export default function SettingsPage() {
     // on that render rather than falling through to the default.
     const m = location.pathname.match(/^\/(?:account|settings)\/([^/]+)/);
     if (m && PATH_TO_SECTION[m[1]]) return PATH_TO_SECTION[m[1]];
+    // D568 — account recovery sends the reader to
+    // `/account#security-recovery-codes` (auth_recover.ts). That card is on
+    // the sign-in pane, so the anchor opens it rather than the profile.
+    if (location.hash === '#security-recovery-codes') return 'security-privacy';
     return 'profile';
   })();
   const [data, setData] = useState(null);
@@ -288,8 +321,28 @@ export default function SettingsPage() {
     if (!allowed.has(active)) setActive('profile');
   }, [data, active]);
 
+  // D568 — an anchor in the address names a card that only exists once the
+  // page has read the account and drawn the pane, which is after the browser
+  // has given up looking for it. Scroll to it then.
+  useEffect(() => {
+    if (!data || !location.hash || typeof document === 'undefined') return;
+    let id = location.hash.slice(1);
+    try { id = decodeURIComponent(id); } catch { /* a malformed escape is looked up as written */ }
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ block: 'start' });
+  }, [data, active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // D568 — a failed root read is retried in place instead of leaving a red box
+  // and a reload as the only way back.
+  const [attempt, setAttempt] = useState(0);
+  // Bumped when the profile cards save, so the editors under them remount and
+  // re-read instead of holding a copy the cards just replaced.
+  const [profileRev, setProfileRev] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError(null);
     (async () => {
       try {
         const d = await api.getSettings();
@@ -301,7 +354,7 @@ export default function SettingsPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [attempt]);
 
   const flash = (message, kind = 'success') => setToastSafe({ message, kind });
 
@@ -331,10 +384,21 @@ export default function SettingsPage() {
     }
   };
 
-  if (loading) return <div className="text-gray-600 dark:text-gray-400 text-center py-20">Loading…</div>;
-  if (error) return (
-    <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 max-w-xl">
-      Could not load your settings: {error}
+  if (loading && !data) {
+    return (
+      <div className="max-w-5xl space-y-4" data-testid="settings-page-loading">
+        <Skeleton h={28} w="30%" />
+        <Skeleton h={14} w="55%" />
+        <div className="grid gap-6 lg:grid-cols-[200px_1fr]">
+          <Skeleton.Card />
+          <div className="space-y-4"><Skeleton.Card /><Skeleton.Card /></div>
+        </div>
+      </div>
+    );
+  }
+  if (error && !data) return (
+    <div className="max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="settings-page-unreadable">
+      <Unreadable what="Your account settings" claim={error} onRetry={() => setAttempt((n) => n + 1)} />
     </div>
   );
   if (!data) return null;
@@ -346,11 +410,16 @@ export default function SettingsPage() {
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
+  const activeLabel = sections.find((s) => s.id === safeActive)?.label;
+  const reloadAccount = () => api.getSettings().then(setData);
 
+  // D568 — the page sits beside the Worker AI rail, the way the sidebar pages
+  // do (`SendForSignaturePage.jsx`'s grid, collapsible through --fwr-track).
   return (
-    <div className="max-w-5xl" data-testid="settings-page" data-active-section={safeActive}>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Account</h1>
-      <p className="text-gray-600 dark:text-gray-400 mb-6">Account, security, notifications, and preferences for your Axal VC profile.</p>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]">
+    <div className="min-w-0" data-testid="settings-page" data-active-section={safeActive}>
+      <h1 className="mb-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Account</h1>
+      <p className="mb-6 text-[13.5px] leading-relaxed text-axal-muted dark:text-gray-400">Who you are on the platform, how it reaches you, how you sign in, what you pay for and who you follow.</p>
 
       {toast && (
         <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -365,38 +434,32 @@ export default function SettingsPage() {
       <ProfileCompletionBanner onJump={() => setActive('profile')} />
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
-        <div className="lg:hidden mb-2">
-          <SectionDropdown sections={sections} active={safeActive} onChange={setActive} />
-        </div>
-        <nav className="hidden lg:block space-y-1 text-sm sticky top-4 self-start">
-          {sections.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setActive(s.id)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
-                safeActive === s.id ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50'
-              }`}
-            >
-              <s.icon size={14} />
-              {s.label}
-            </button>
-          ))}
-        </nav>
+        <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive} />
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {safeActive === 'account' && (
             <>
-              <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
-              <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
+              <ProfileIdentityCanvas
+                data={data}
+                onAccountChange={(delta) => setData((prev) => ({ ...prev, ...delta }))}
+                onSaved={() => setProfileRev((n) => n + 1)}
+              />
+              <SectionLabel as="h2" className="pt-2">Full profile and account</SectionLabel>
+              <ProfileTabs key={profileRev} data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
+              <EmailSection data={data} flash={flash} reload={reloadAccount} />
               <YourCompaniesSection flash={flash} />
               <RolesAccessCard data={data} onJump={() => setActive('billing')} />
               <DocumentsAgreementsSection />
-              <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
+              <AccountDeletionCard data={data} flash={flash} reload={reloadAccount} />
             </>
           )}
           {safeActive === 'security-privacy' && (
             <>
-              <AuthSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
+              <AuthSection data={data} flash={flash} reload={reloadAccount} />
+              {/* The canvas draws no privacy section. These cards stay on this
+                  pane, under their own label: the worker's cohort-access
+                  notice links `/account/security-privacy` to one of them. */}
+              <SectionLabel as="h2" className="pt-2">Privacy</SectionLabel>
               <PrivacyCoreCard flash={flash} />
               <CohortAdvisorAccessCard flash={flash} />
               <InvestorSignalsContributionCard flash={flash} role={data?.role} />
@@ -408,10 +471,13 @@ export default function SettingsPage() {
           )}
           {safeActive === 'notifications' && (
             <>
-              <NotificationsSection data={data} patch={patch} />
+              <NotificationsSection data={data} flash={flash} />
+              <PushDevices />
               <DigestQuietHoursCard flash={flash} />
             </>
           )}
+          {safeActive === 'following' && <FollowingSection />}
+          {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
@@ -424,74 +490,19 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-// ---------- Mobile section dropdown ----------------------------------------
-
-function SectionDropdown({ sections, active, onChange }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const current = sections.find(s => s.id === active) || sections[0];
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-  const Icon = current.icon;
-  return (
-    <div className="relative" ref={wrapRef}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="w-full flex items-center justify-between gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm shadow-sm hover:border-gray-300 transition-colors"
-      >
-        <span className="flex items-center gap-2.5 min-w-0">
-          <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-700 flex items-center justify-center flex-shrink-0">
-            <Icon size={14} />
-          </span>
-          <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{current.label}</span>
-        </span>
-        <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-40 py-1 max-h-[70vh] overflow-y-auto"
-        >
-          {sections.map(s => {
-            const SIcon = s.icon;
-            const isActive = s.id === active;
-            return (
-              <li key={s.id} role="option" aria-selected={isActive}>
-                <button
-                  type="button"
-                  onClick={() => { onChange(s.id); setOpen(false); }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors ${
-                    isActive ? 'bg-violet-50 text-violet-700' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    isActive ? 'bg-violet-100 text-violet-700' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                  }`}>
-                    <SIcon size={14} />
-                  </span>
-                  <span className="flex-1 font-medium">{s.label}</span>
-                  {isActive && <Check size={14} className="text-violet-600" />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+    <WorkerRail
+      workspace="Account"
+      // A literal, as on Send for signature: the Account canvas draws this
+      // page in violet for every role, which is the founder accent.
+      role="founder"
+      className="self-start lg:sticky lg:top-4"
+      stance="Your settings, changed by you"
+      note="Eadwyn reads the account lines below and changes nothing on this page. Every setting here is saved by the button beside it."
+      coverage={accountRailCoverage(data, activeLabel)}
+      unavailable={[
+        ['Bio draft', 'The canvas offers a two-line bio drafted from your role, company and sectors. Nothing drafts one yet, so no proposal is made here.'],
+      ]}
+    />
     </div>
   );
 }
@@ -2098,7 +2109,9 @@ function PasskeyPanel({ flash }) {
 
 // SMS as a backup 2FA factor (Google Cloud Identity Platform). Phone numbers
 // at rest server-side; the UI only ever sees the last 4 digits.
-function SmsPanel({ data, flash }) {
+// D568 — `onChanged` tells the pane an enrolment or removal landed, so the SMS
+// factor row above (read from GET /settings/security) re-reads with it.
+function SmsPanel({ data, flash, onChanged }) {
   const { role: liveRole } = useAuth();
   const isAdmin = String(liveRole || '').toLowerCase() === 'admin';
   const [status, setStatus] = useState(null);
@@ -2138,6 +2151,7 @@ function SmsPanel({ data, flash }) {
       flash('SMS 2FA enabled.');
       setStep('idle'); setPhone(''); setCode(''); setSession(null);
       await refresh();
+      onChanged?.();
     } catch (e) {
       flash(e?.message || 'Verification failed.', 'error');
     } finally { setBusy(false); }
@@ -2154,6 +2168,7 @@ function SmsPanel({ data, flash }) {
       await api.smsDisable();
       flash('SMS 2FA disabled.');
       await refresh();
+      onChanged?.();
     } catch (e) {
       flash(e?.message || 'Could not disable SMS.', 'error');
     } finally { setBusy(false); }
@@ -2539,8 +2554,18 @@ function factorDate(iso) {
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
   return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString();
 }
-function SignInFactorsCard({ data, remaining }) {
+// D568 — the canvas's "Sign-in factors" card is this one, extended rather than
+// drawn twice. It gains the SMS row the canvas draws (from `security`, the
+// page's one read of GET /settings/security, passed down so this card still
+// makes no fetch of its own) and a button per row that takes the reader to the
+// flow for that factor further down the pane.
+function scrollToCard(id) {
+  if (typeof document === 'undefined') return;
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function SignInFactorsCard({ data, remaining, security }) {
   const paired = factorDate(data.totp_paired_at);
+  const sec = security?.status === 'ready' ? security.data || {} : null;
   const rows = [
     {
       key: 'password',
@@ -2556,6 +2581,19 @@ function SignInFactorsCard({ data, remaining }) {
       meta: data.totp_configured
         ? (paired ? `Paired ${paired} · required for sensitive actions` : 'Paired — date not recorded for this enrolment · required for sensitive actions')
         : 'Set one up below — the strongest everyday protection for your account.',
+      action: { label: data.totp_configured ? 'Re-pair' : 'Set up', target: 'account-authenticator' },
+    },
+    {
+      key: 'sms',
+      label: 'SMS',
+      status: !sec ? (security?.status === 'unreadable' ? 'Unreadable' : 'Reading…') : (sec.sms_configured ? 'Verified' : 'Not set up'),
+      tone: !sec ? (security?.status === 'unreadable' ? 'danger' : 'neutral') : (sec.sms_configured ? 'ok' : 'neutral'),
+      meta: !sec
+        ? (security?.status === 'unreadable' ? 'Whether an SMS number is set could not be read.' : '')
+        : (sec.sms_configured
+          ? `Ending ${sec.sms_last4 || '(last digits not recorded)'}${sec.sms_country ? ` · ${sec.sms_country}` : ''} · backup only`
+          : 'A backup factor: a 6-digit code by text.'),
+      action: { label: sec?.sms_configured ? 'Change number' : 'Add a number', target: 'account-sms' },
     },
     {
       key: 'recovery',
@@ -2565,6 +2603,7 @@ function SignInFactorsCard({ data, remaining }) {
       meta: remaining > 0
         ? 'Each code signs you in once if you lose your authenticator.'
         : 'No codes generated — you could be locked out if you lose your authenticator.',
+      action: { label: remaining > 0 ? 'Regenerate' : 'Generate', target: 'security-recovery-codes' },
     },
     {
       key: 'email',
@@ -2574,29 +2613,46 @@ function SignInFactorsCard({ data, remaining }) {
       meta: data.email || '',
     },
   ];
-  const toneCls = (t) => (t === 'ok'
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
-    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800');
+  const toneCls = (t) => ({
+    ok: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
+    neutral: 'bg-axal-ground text-axal-muted border-axal-hairline dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+    danger: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+  }[t] || 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800');
   return (
-    <Card title="Sign-in & factors" description="Summarised as status rows — each opens its own flow below rather than sitting as a permanent form.">
-      <div className="divide-y divide-gray-100 dark:divide-gray-800" data-testid="signin-factors">
+    <div data-card className="overflow-hidden rounded-axal-lg border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900">
+      <div className="border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+        <h2 className="text-sm font-bold text-axal-ink dark:text-gray-100">Sign-in factors</h2>
+      </div>
+      <div className="divide-y divide-axal-hairline px-4 dark:divide-gray-800" data-testid="signin-factors">
         {rows.map((r) => (
-          <div key={r.key} className="flex items-center justify-between gap-3 py-2.5" data-testid={`factor-${r.key}`}>
+          <div key={r.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 py-2.5" data-testid={`factor-${r.key}`}>
             <div className="min-w-0">
-              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{r.label}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{r.label}</span>
+                {r.status !== null && (
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${toneCls(r.tone)}`}>
+                    {r.status}
+                  </span>
+                )}
+              </div>
               {r.status === null
                 ? <div className="text-xs text-gray-500 dark:text-gray-400"><Unrecorded reason={r.reason}>Not recorded</Unrecorded> — {r.reason}.</div>
-                : <div className="text-xs text-gray-500 dark:text-gray-400">{r.meta}</div>}
+                : r.meta ? <div className="text-xs text-axal-muted dark:text-gray-400">{r.meta}</div> : null}
             </div>
-            {r.status !== null && (
-              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${toneCls(r.tone)}`}>
-                {r.status}
-              </span>
+            {r.action && (
+              <button
+                type="button"
+                onClick={() => scrollToCard(r.action.target)}
+                data-testid={`factor-action-${r.key}`}
+                className="whitespace-nowrap rounded-axal-sm border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:border-axal-violet/40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                {r.action.label}
+              </button>
             )}
           </div>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -2604,10 +2660,12 @@ function AuthSection({ data, flash, reload }) {
   const [code, setCode] = useState('');
   const [qrPayload, setQrPayload] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [revoking, setRevoking] = useState(false);
   // Task #11 — first-time optional enrolment (magic-link / Google / classic
   // signups that skipped the authenticator step).
   const [enrolling, setEnrolling] = useState(false);
+  // D568 — the pane's one read of GET /settings/security: the SMS factor row
+  // and the active-session count come from it. Re-read when SMS changes.
+  const security = useAccountRead(() => api.getSecuritySettings());
 
   // Sessions list (per-device revocation, populated from /settings/sessions).
   const [sessions, setSessions] = useState(null);
@@ -2646,21 +2704,10 @@ function AuthSection({ data, flash, reload }) {
     }
   };
 
-  const revokeAll = async () => {
-    if (!window.confirm('Sign out all active sessions including this one?')) return;
-    setRevoking(true);
-    try {
-      await api.revokeAllSessions();
-      flash('All sessions revoked. You will be signed out shortly.');
-      window.setTimeout(() => {
-        try { localStorage.clear(); } catch {}
-        window.location.href = '/login';
-      }, 1500);
-    } catch (e) {
-      flash(e.message || 'Failed to revoke sessions', 'error');
-      setRevoking(false);
-    }
-  };
+  // D568 — "Sign out everywhere" moved to the canvas's Sessions and alerts card
+  // (`SessionsCard`, POST /auth/sign-out-everywhere, the same jwt_min_iat bump
+  // as the revoke-all route this button used), confirmed in place rather than
+  // through `window.confirm`. One button, one place.
 
   const revokeOne = async (sess) => {
     if (sess.is_current && !window.confirm('This is your current session — revoking will sign you out. Continue?')) return;
@@ -2711,14 +2758,19 @@ function AuthSection({ data, flash, reload }) {
     URL.revokeObjectURL(url);
   };
 
+  // D568 — the canvas's order: the factor rows, then the authenticator, the
+  // SMS number and the sessions card, then the flows the canvas does not draw
+  // (Google sign-in, recovery codes, passkeys, trusted contacts, the recovery
+  // log, the per-device session list), all kept. Each factor row's button
+  // scrolls to the card that holds its flow, by these ids.
   return (
     <>
-      <SignInFactorsCard data={data} remaining={remaining} />
-      <ConnectedAccountsPanel flash={flash} />
-      <Card title="Two-factor authentication"
+      <SignInFactorsCard data={data} remaining={remaining} security={security} />
+      <div id="account-authenticator" className="scroll-mt-4">
+      <Card title={data.totp_configured ? 'Authenticator app' : 'Set up an authenticator app'}
         description={data.totp_configured
           ? 'Re-pair your authenticator if you lost or replaced your device.'
-          : 'Protect sign-in with a 6-digit code from an authenticator app.'}>
+          : 'Scan the QR code in your authenticator app, enter the 6-digit code it shows, and you are set. Recovery codes are shown once, at the end.'}>
         {!qrPayload ? (
           <div className="space-y-3">
             <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -2778,7 +2830,19 @@ function AuthSection({ data, flash, reload }) {
           </div>
         )}
       </Card>
+      </div>
 
+      <div id="account-sms" className="scroll-mt-4">
+        <SmsPanel data={data} flash={flash} onChanged={security.reload} />
+      </div>
+
+      <SessionsCard security={security} />
+
+      <ConnectedAccountsPanel flash={flash} />
+
+      {/* `/account#security-recovery-codes` is where account recovery sends
+          the reader (auth_recover.ts); this id is what that anchor names. */}
+      <div id="security-recovery-codes" className="scroll-mt-4">
       <Card title="Recovery codes"
         description="One-time codes you can use to sign in if you lose access to your authenticator app.">
         {generatedCodes ? (
@@ -2827,16 +2891,15 @@ function AuthSection({ data, flash, reload }) {
           </div>
         )}
       </Card>
+      </div>
 
       <PasskeyPanel flash={flash} />
-
-      <SmsPanel data={data} flash={flash} />
 
       <TrustedContactsPanel flash={flash} />
 
       <RecoveryActivityPanel />
 
-      <Card title="Active sessions" description="See every device with an active session and revoke individual ones — or sign everything out at once.">
+      <Card title="Active sessions" description="Every device with an active session. Revoke one here; Sign out everywhere is in Sessions and alerts above.">
         {sessionsErr && <div className="text-sm text-red-600 mb-3">{sessionsErr}</div>}
         {sessions === null ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">Loading sessions…</div>
@@ -2887,17 +2950,41 @@ function AuthSection({ data, flash, reload }) {
             </table>
           </div>
         )}
-        <button onClick={revokeAll} disabled={revoking}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium flex items-center gap-2">
-          <LogOut size={14} /> {revoking ? 'Signing out…' : 'Sign out everywhere'}
-        </button>
       </Card>
     </>
   );
 }
 
-function NotificationsSection({ data, patch }) {
-  const prefs = data.notification_prefs || {};
+// D568 — THE CANVAS'S TYPE × CHANNEL MATRIX, extended in place rather than
+// drawn a second time. Three things changed and the rest did not.
+//
+// 1. It reads and writes its own route, GET/PUT /notifications/prefs, rather
+//    than the copy of `notification_prefs` the page loaded with the root
+//    payload and the root PATCH. Same column, read fresh, and a failed read
+//    is "Unreadable" instead of a matrix of switches drawn from nothing.
+// 2. An unset switch is drawn ON. `resolveChannels` in services/notify.ts
+//    delivers a channel unless the stored value is exactly `false`, so the old
+//    `!!prefs[type][channel]` showed a new account every switch OFF while
+//    every notification was being sent. `channelOn` is that rule.
+// 3. The columns are the canvas's: In-app, Email and Push, with Slack beside
+//    them once Slack is connected. Push is not a stored channel — notify.ts
+//    pushes to registered devices whenever it writes the in-app row — so its
+//    column states that per row and has no switch to set. The reserved "SMS ·
+//    Coming soon" column is gone: notify.ts has no SMS channel.
+//
+// Presets, the D333 locks and the partner block are unchanged.
+function NotificationsSection({ data }) {
+  const read = useAccountRead(() => api.getNotificationPrefs());
+  // What the route served, until this page writes; then what it wrote. Derived
+  // in render, so the first frame after the read is already the stored state.
+  const served = read.status === 'ready' && read.data?.prefs && typeof read.data.prefs === 'object' ? read.data.prefs : {};
+  const [written, setWritten] = useState(null);
+  const prefs = written || served;
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+  const [saving, setSaving] = useState(false);
+  const [outcome, setOutcome] = useState(null);
+  const setPrefs = (next) => { prefsRef.current = next; setWritten(next); };
   // Task #1 (Slack, 2026-05-10) — Slack column is gated on whether the
   // signed-in user has an active Slack integration. We poll the
   // integrations list once on mount; on failure we treat Slack as
@@ -2913,12 +3000,10 @@ function NotificationsSection({ data, patch }) {
     }).catch(() => { if (!cancelled) setSlackConnected(false); });
     return () => { cancelled = true; };
   }, []);
-  const channels = React.useMemo(() => NOTIFICATION_CHANNELS.map(c => {
-    if (c.key !== 'slack') return c;
-    return slackConnected
-      ? c
-      : { ...c, disabled: true, hint: 'Connect Slack first' };
-  }), [slackConnected]);
+  const channels = React.useMemo(
+    () => NOTIFICATION_CHANNELS.filter((c) => c.key !== 'slack' || slackConnected),
+    [slackConnected],
+  );
 
   const lockedEvent = (eventKey) => {
     const ev = NOTIFICATION_EVENTS.find((e) => e.key === eventKey)
@@ -2926,67 +3011,76 @@ function NotificationsSection({ data, patch }) {
     return ev?.lockedChannels || [];
   };
 
+  // One writer for the grid and the presets alike: the whole prefs object, as
+  // PUT /notifications/prefs replaces it. Drawn at once, put back if refused.
+  const savePrefs = async (next) => {
+    const before = prefsRef.current;
+    setPrefs(next);
+    setSaving(true);
+    setOutcome(null);
+    try {
+      await api.putNotificationPrefs(next);
+      setOutcome({ tone: 'ok', text: 'Saved.' });
+    } catch (e) {
+      setPrefs(before);
+      setOutcome({ tone: 'error', text: e?.message || 'Your notification settings could not be saved. Nothing changed.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const setEvent = (eventKey, channel, value) => {
     // Defense in depth: a locked channel ignores the write even if some
     // other path (preset apply, a stale click) tries to flip it off.
     if (lockedEvent(eventKey).includes(channel)) return;
-    const cur = { ...(prefs[eventKey] || {}) };
+    const prefsNow = prefsRef.current;
+    const cur = { ...(prefsNow[eventKey] || {}) };
     cur[channel] = value;
     // Keep `inapp`/`in_app` mirrored so the new bell subsystem and any
     // legacy reader stay consistent during the transition.
     if (channel === 'in_app') cur.inapp = value;
     if (channel === 'inapp') cur.in_app = value;
-    const next = { ...prefs, [eventKey]: cur };
-    patch({ notification_prefs: next });
+    const next = { ...prefsNow, [eventKey]: cur };
+    savePrefs(next);
   };
 
+  // Two literal templates, so Tailwind emits both: In-app, Email, Push, and
+  // Slack when it is connected. Below 32rem of card the canvas's phone rule
+  // applies: the type on its own line, its channels two to a row beneath it.
+  const rowGrid = channels.length > 2
+    ? '@lg:grid-cols-[minmax(0,1fr)_repeat(4,72px)]'
+    : '@lg:grid-cols-[minmax(0,1fr)_repeat(3,72px)]';
+
   const renderTable = (events) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left px-2 py-2 text-xs text-gray-500 dark:text-gray-400 font-medium">Event</th>
-            {channels.map(c => (
-              <th key={c.key}
-                className="text-center px-2 py-2 text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider"
-                title={c.disabled ? c.hint : undefined}>
-                {c.label}
-                {c.key === 'slack' && !slackConnected && (
-                  <div className="text-[10px] normal-case font-normal text-violet-500 tracking-normal">
-                    <a href="/account/integrations" className="hover:underline">Connect Slack</a>
-                  </div>
-                )}
-                {c.disabled && c.key !== 'slack' && (
-                  <div className="text-[10px] normal-case font-normal text-gray-400 tracking-normal">
-                    {c.hint}
-                  </div>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {events.map(ev => (
-            <tr key={ev.key} className="border-b border-gray-100 dark:border-gray-800">
-              <td className="px-2 py-2 text-gray-800 dark:text-gray-200">{ev.label}</td>
-              {channels.map(c => {
-                const locked = (ev.lockedChannels || []).includes(c.key);
-                const checked = locked || !!prefs[ev.key]?.[c.key];
-                const disabled = !!c.disabled || locked;
-                const title = locked ? 'Always sent — this notification cannot be turned off' : (c.disabled ? c.hint : undefined);
-                return (
-                  <td key={c.key} className="text-center px-2 py-2">
-                    <input type="checkbox" checked={checked} disabled={disabled}
-                      onChange={e => setEvent(ev.key, c.key, e.target.checked)}
-                      title={title}
-                      className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500 disabled:opacity-40 disabled:cursor-not-allowed" />
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="@container" role="table" aria-label="Notification types and channels">
+      <div role="row" className={`hidden border-b border-axal-hairline pb-2 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-axal-muted dark:border-gray-800 dark:text-gray-400 @lg:grid @lg:items-end @lg:gap-2.5 ${rowGrid}`}>
+        <span role="columnheader">TYPE</span>
+        {channels.map((c) => <span key={c.key} role="columnheader" className="text-center">{c.label.toUpperCase()}</span>)}
+        <span role="columnheader" className="text-center" title="Push follows in-app">PUSH<span className="block font-sans text-[9.5px] font-normal tracking-normal normal-case">follows in-app</span></span>
+      </div>
+      {events.map(ev => (
+        <div key={ev.key} role="row" data-testid={`notif-row-${ev.key}`} className={`grid grid-cols-2 items-center gap-x-3 gap-y-2 border-b border-axal-hairline py-2.5 last:border-b-0 dark:border-gray-800 @lg:gap-2.5 ${rowGrid}`}>
+          <span role="rowheader" className="col-span-2 text-[13px] font-semibold text-axal-ink dark:text-gray-100 @lg:col-span-1">{ev.label}</span>
+          {channels.map(c => {
+            const locked = (ev.lockedChannels || []).includes(c.key);
+            const checked = locked || channelOn(prefs, ev.key, c.key);
+            const disabled = !!c.disabled || locked;
+            const title = locked ? 'Always sent — this notification cannot be turned off' : (c.disabled ? c.hint : undefined);
+            return (
+              <span role="cell" key={c.key} className="flex items-center gap-2 @lg:justify-center">
+                <Switch checked={checked} disabled={disabled || saving} onChange={(v) => setEvent(ev.key, c.key, v)}
+                  title={title} label={`${ev.label}: ${c.label}`} data-testid={`switch-${ev.key}-${c.key}`} />
+                <span className="text-[12px] text-axal-muted dark:text-gray-400 @lg:sr-only">{c.label}{locked ? ' · always sent' : ''}</span>
+              </span>
+            );
+          })}
+          <span role="cell" className="flex items-center gap-2 text-[12px] text-axal-muted dark:text-gray-400 @lg:justify-center"
+            title="Push follows in-app: it reaches your registered devices whenever the in-app notification is sent.">
+            <span className="@lg:sr-only">Push:</span>
+            {channelOn(prefs, ev.key, 'in_app') ? 'On' : 'Off'}
+          </span>
+        </div>
+      ))}
     </div>
   );
 
@@ -2998,14 +3092,26 @@ function NotificationsSection({ data, patch }) {
       ...NOTIFICATION_EVENTS.map((e) => e.key),
       ...(data.role === 'partner' ? PARTNER_NOTIFICATION_EVENTS.map((e) => e.key) : []),
     ];
-    const next = { ...prefs };
+    const prefsNow = prefsRef.current;
+    const next = { ...prefsNow };
     for (const k of keys) {
-      const applied = { ...(prefs[k] || {}), ...preset.apply(k) };
+      const applied = { ...(prefsNow[k] || {}), ...preset.apply(k) };
       for (const lockedChannel of lockedEvent(k)) applied[lockedChannel] = true;
       next[k] = applied;
     }
-    patch({ notification_prefs: next });
+    savePrefs(next);
   };
+
+  if (read.status === 'loading') {
+    return <Card title="Notifications" description="Each type against each channel."><Skeleton.Text lines={5} /></Card>;
+  }
+  if (read.status === 'unreadable') {
+    return (
+      <Card title="Notifications" description="Each type against each channel.">
+        <Unreadable what="Your notification settings" claim={read.message || 'This is not a claim that any switch is on or off.'} onRetry={read.reload} />
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -3018,8 +3124,9 @@ function NotificationsSection({ data, patch }) {
             <button
               key={p.id}
               onClick={() => applyPreset(p)}
+              disabled={saving}
               title={p.hint}
-              className="text-left px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-violet-400 transition-colors"
+              className="text-left px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-violet-400 transition-colors disabled:opacity-50"
             >
               <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{p.label}</div>
               <div className="text-[11px] text-gray-500 dark:text-gray-400">{p.hint}</div>
@@ -3028,8 +3135,14 @@ function NotificationsSection({ data, patch }) {
         </div>
       </Card>
 
-      <Card title="Notifications" description="Choose where each kind of alert is delivered.">
+      <Card title="Notifications" description="Each type against each channel. Devices registered for push are listed below.">
         {renderTable(NOTIFICATION_EVENTS)}
+        {!slackConnected && (
+          <p className="mt-2 text-[11.5px] text-axal-muted dark:text-gray-400">
+            Slack joins this table once it is connected in <a href="/account/integrations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Integrations</a>.
+          </p>
+        )}
+        <div className="mt-2"><Outcome outcome={outcome} /></div>
       </Card>
       {data.role === 'partner' && (
         <Card title="Partner notification triggers"
@@ -3499,6 +3612,9 @@ function ProfileExtrasCard({ flash }) {
     try {
       const res = await api.updateProfileSettings(delta);
       setRow({ ...next, ...res });
+      // D568 — the Personal details card above shows the language and the
+      // username this card edits; tell it to re-read.
+      try { window.dispatchEvent(new CustomEvent('axal:profile_saved')); } catch { /* no window */ }
       flash('Saved');
     } catch (e) {
       flash(e.message || 'Failed to save', 'error');
@@ -3546,9 +3662,12 @@ function ProfileExtrasCard({ flash }) {
             <option value="both">Show both</option>
           </select>
         </Field>
+        {/* D568 — the hint said this "Becomes /u/<slug>" and allowed 2–40
+            characters. `/u/:handle` reads the account id, not this, and the
+            worker takes 3 to 32 (SLUG_RE in services/userSettings.ts). */}
         <Field label="Public profile slug"
-          hint="2–40 lowercase letters, numbers, or hyphens. Becomes /u/<slug>.">
-          <input value={row.profile_slug || ''} maxLength={40}
+          hint="3 to 32 lowercase letters, numbers or hyphens. Saved on your account; your public profile link (/u/…) does not use it yet.">
+          <input value={row.profile_slug || ''} maxLength={32}
             onChange={e => setRow({ ...row, profile_slug: e.target.value.toLowerCase() })}
             onBlur={() => save({ profile_slug: row.profile_slug || null })}
             placeholder="jane-doe" className={inputCls} />
@@ -4431,19 +4550,34 @@ function IntegrationsTab() {
 //
 // Task #7 (W-2) — Investors hit the same tab but see InvestorBillingPanel
 // (Pro / Institutional plans, ROI quotas, seat management for institutional).
+//
+// D568 — Billing and orders. The canvas's plan line and orders list sit on
+// top (`PlanHeader`, `Orders`), and the role's panel follows. The plan is read
+// ONCE here and handed to both, so the line and the panel cannot disagree and
+// a change made in the panel refreshes the line; each panel's own "Current
+// plan" card is the line now and was removed.
 function BillingTab({ data, flash }) {
   const role = String(data?.role || '').toLowerCase();
+  const billing = useBillingStatus(role);
+  let panel;
   if (role === 'investor') {
-    return <InvestorBillingPanel data={data} flash={flash} />;
+    panel = <InvestorBillingPanel data={data} flash={flash} billing={billing} />;
+  } else if (role === 'founder') {
+    panel = <FounderBillingPanel data={data} flash={flash} billing={billing} />;
+  } else {
+    // Every other signed-in role (partner, advisor, …) gets the generic
+    // account-plan pipeline: a persona plan ladder + native subscription
+    // management. Roles with no plan_group / no persona plans fall back inside
+    // PersonaBillingPanel to the saved-cards-and-receipts view — no regression.
+    panel = <PersonaBillingPanel data={data} flash={flash} billing={billing} />;
   }
-  if (role === 'founder') {
-    return <FounderBillingPanel data={data} flash={flash} />;
-  }
-  // Every other signed-in role (partner, advisor, …) gets the generic
-  // account-plan pipeline: a persona plan ladder + native subscription
-  // management. Roles with no plan_group / no persona plans fall back inside
-  // PersonaBillingPanel to the saved-cards-and-receipts view — no regression.
-  return <PersonaBillingPanel data={data} flash={flash} />;
+  return (
+    <>
+      <PlanHeader role={role} billing={billing} />
+      <Orders />
+      {panel}
+    </>
+  );
 }
 
 // Task #39 — billing surface for roles without a subscription plan ladder.
@@ -4497,20 +4631,15 @@ const PERSONA_PLANS = {
 // (the persona subscription lives on the general Stripe customer, which
 // scope="founder" reads). Falls back to the saved-cards view for any role that
 // has no persona plan.
-function PersonaBillingPanel({ data, flash }) {
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+function PersonaBillingPanel({ flash, billing }) {
+  // D568 — the plan read is BillingTab's (`billing`, GET /billing/plan/status),
+  // shared with the plan line above. A failed read leaves `status` null, which
+  // falls back to the saved-cards view exactly as the panel's own read did.
+  const status = billing.status === 'ready' ? billing.data : null;
+  const loading = billing.status === 'loading';
+  const refresh = billing.reload;
   const [checkout, setCheckout] = useState(null); // { clientSecret } once checkout starts
   const [busy, setBusy] = useState(false);
-
-  const refresh = React.useCallback(() => {
-    setLoading(true);
-    api.planStatus()
-      .then(setStatus)
-      .catch(() => setStatus(null))
-      .finally(() => setLoading(false));
-  }, []);
-  useEffect(() => { refresh(); }, [refresh]);
 
   // Flash on return from a (dev-upgrade) redirect, mirroring the other panels.
   useEffect(() => {
@@ -4538,7 +4667,6 @@ function PersonaBillingPanel({ data, flash }) {
   const isSubscribed = ['active', 'trialing', 'past_due'].includes(subStatus);
   const trialEnds = subStatus === 'trialing' && status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
   const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86_400_000)) : null;
-  const renews = status?.renews_at ? new Date(status.renews_at) : null;
   const hasCustomer = !!status?.has_customer;
 
   const startCheckout = async () => {
@@ -4554,30 +4682,10 @@ function PersonaBillingPanel({ data, flash }) {
     } finally { setBusy(false); }
   };
 
-  const currentName = isSubscribed ? defs.pro.name : defs.starter.name;
-
   return (
     <>
-      <Card title="Current plan" description={`Your ${defs.label.toLowerCase()} subscription.`}>
-        <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{defs.label}</div>
-            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              {currentName}
-              {subStatus === 'trialing' && (
-                <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">Trial</span>
-              )}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Status: <span className="capitalize">{isSubscribed ? subStatus : 'free'}</span>
-              {subStatus === 'trialing' && trialEnds
-                ? <> · Trial ends {trialEnds.toLocaleDateString()}</>
-                : renews && isSubscribed ? <> · Renews {renews.toLocaleDateString()}</> : null}
-            </div>
-          </div>
-        </div>
-      </Card>
-
+      {/* D568 — the "Current plan" card that stood here is the plan line at
+          the top of the pane now (PlanHeader), read from the same status. */}
       {/* Trial status card — clear countdown + first-charge date. */}
       {subStatus === 'trialing' && trialEnds && (
         <Card title="Trial status" description="You're trialing a paid plan.">
@@ -4672,19 +4780,15 @@ function PersonaBillingPanel({ data, flash }) {
   );
 }
 
-function FounderBillingPanel({ data, flash }) {
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+function FounderBillingPanel({ flash, billing }) {
+  // D568 — the tier read is BillingTab's (`billing`, GET /billing/tier/status),
+  // shared with the plan line above. It used to fall back to
+  // `data.subscription_tier` on a failed read, a field the root settings
+  // payload does not carry, so a failed read drew the Free ladder as if it
+  // were true. Now a failed read draws nothing here; the plan line above says
+  // it could not be read and offers a retry.
+  const status = billing.status === 'ready' ? billing.data : null;
   const [busy, setBusy] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.tierStatus()
-      .then(s => { if (!cancelled) setStatus(s); })
-      .catch(() => { /* keep null → fall back to data prop */ })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
 
   // Auto-flash when the URL carries an upgrade-completion param.
   useEffect(() => {
@@ -4702,10 +4806,11 @@ function FounderBillingPanel({ data, flash }) {
     }
   }, [flash]);
 
-  const tier = String(status?.tier || data?.subscription_tier || 'free').toLowerCase();
-  const subStatus = String(status?.status || data?.subscription_status || 'active').toLowerCase();
-  const renews = status?.renews_at || data?.subscription_renews_at;
-  const hasCustomer = status?.has_customer ?? !!data?.stripe_customer_id;
+  if (!status) return null;
+
+  const tier = String(status.tier || 'free').toLowerCase();
+  const subStatus = String(status.status || 'active').toLowerCase();
+  const hasCustomer = !!status.has_customer;
   // Trial + Spin-Out Lab billing state (from /api/billing/tier/status).
   const trialEnds = subStatus === 'trialing' && status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
   const spinoutLab = status?.spinout_lab?.active ? status.spinout_lab : null;
@@ -4721,7 +4826,7 @@ function FounderBillingPanel({ data, flash }) {
     finally { setBusy(null); }
   };
 
-  const refreshStatus = () => { api.tierStatus().then(setStatus).catch(() => {}); };
+  const refreshStatus = billing.reload;
 
   const TIER_LABEL = { free: 'Free', growth: 'Growth — $79/mo', studio: 'Studio — $249/mo' };
   const ladder = ['free', 'growth', 'studio'];
@@ -4757,32 +4862,8 @@ function FounderBillingPanel({ data, flash }) {
         </Card>
       )}
 
-      <Card title="Current plan" description="Your founder workspace subscription.">
-        {loading ? (
-          <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
-        ) : (
-          <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Tier</div>
-              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {TIER_LABEL[tier] || tier}
-                {subStatus === 'trialing' && (
-                  <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
-                    Trial
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Status: <span className="capitalize">{subStatus}</span>
-                {subStatus === 'trialing' && trialEnds
-                  ? <> · Trial ends {trialEnds.toLocaleDateString()}</>
-                  : renews ? <> · Renews {new Date(renews).toLocaleDateString()}</> : null}
-              </div>
-            </div>
-          </div>
-        )}
-      </Card>
-
+      {/* D568 — the "Current plan" card that stood here is the plan line at
+          the top of the pane now (PlanHeader), read from the same status. */}
       {/* Trial status card — clear countdown + when the first charge lands, so
           founders on a paid-plan trial always know what happens next and how to
           stop it. Managing/cancelling happens in the subscription card below. */}
@@ -4970,21 +5051,15 @@ function EmbeddedCheckoutCard({ flash, onPaid }) {
 //      toggle and Stripe-checkout buttons.
 //   3. Quotas card — warm intros / quarter (used vs cap) and deal-room cap.
 //   4. Seat management — only for Institutional plans (list/invite/revoke).
-function InvestorBillingPanel({ data, flash }) {
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+function InvestorBillingPanel({ flash, billing }) {
+  // D568 — the status read is BillingTab's (`billing`, GET
+  // /billing/investor/status), shared with the plan line above. A failed read
+  // used to raise a toast and then draw the Free ladder and zero quotas below
+  // it; now the plan line says it could not be read and this draws nothing.
+  const status = billing.status === 'ready' ? billing.data : null;
+  const refresh = billing.reload;
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [busy, setBusy] = useState(null);
-
-  const refresh = React.useCallback(() => {
-    setLoading(true);
-    api.investorBillingStatus()
-      .then((s) => setStatus(s))
-      .catch((e) => flash?.(e.message || 'Could not load billing', 'error'))
-      .finally(() => setLoading(false));
-  }, [flash]);
-
-  useEffect(() => { refresh(); }, [refresh]);
 
   // Stripe-redirect flash banners (mirrors FounderBillingPanel).
   useEffect(() => {
@@ -5000,13 +5075,11 @@ function InvestorBillingPanel({ data, flash }) {
     }
   }, [flash]);
 
-  const tier = String(status?.tier || 'free').toLowerCase();
-  const rawTier = String(status?.raw_tier || tier).toLowerCase();
-  const subStatus = String(status?.status || 'free').toLowerCase();
-  const trialEnds = status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
-  const renews = status?.renews_at ? new Date(status.renews_at) : null;
-  const hasCustomer = !!status?.has_customer;
-  const quotas = status?.quotas || {};
+  if (!status) return null;
+
+  const tier = String(status.tier || 'free').toLowerCase();
+  const hasCustomer = !!status.has_customer;
+  const quotas = status.quotas || {};
 
   const upgrade = async (target) => {
     const plan = `investor_${target === 'professional' ? 'pro' : 'inst'}_${billingCycle === 'yearly' ? 'yearly' : 'monthly'}`;
@@ -5034,31 +5107,10 @@ function InvestorBillingPanel({ data, flash }) {
 
   return (
     <>
-      <Card title="Current plan" description="Your investor subscription.">
-        {loading ? (
-          <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
-        ) : (
-          <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Tier</div>
-              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 capitalize">
-                {tier}
-                {subStatus === 'trialing' && (
-                  <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
-                    Trial
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Status: <span className="capitalize">{subStatus}</span>
-                {trialEnds && subStatus === 'trialing' && <> · Trial ends {trialEnds.toLocaleDateString()}</>}
-                {renews && subStatus !== 'trialing' && <> · Renews {renews.toLocaleDateString()}</>}
-                {rawTier !== tier && <> · Effective tier: {tier}</>}
-              </div>
-            </div>
-          </div>
-        )}
-      </Card>
+      {/* D568 — the "Current plan" card that stood here is the plan line at
+          the top of the pane now (PlanHeader), read from the same status,
+          including the subscribed tier when it differs from the one that
+          applies. */}
 
       <Card title="Quotas this period" description="Limits reset each calendar quarter.">
         <div className="grid sm:grid-cols-3 gap-3">
