@@ -118,7 +118,8 @@ test('D595: the public tab labels each row by source, prints the API\'s counts a
   assert.match(t, /signal_companies · 21 listed companies · bands as the source sets them · as of 2026-10-02/);
   assert.match(t, /SEC EDGAR · 10,213 companies · read 2026-10-06 · US government work, not subject to copyright in the United States \(17 U\.S\.C\. § 105\)/);
   assert.match(t, /7 of its tickers are also a signal company, listed once per source/);
-  assert.equal((out.match(new RegExp(`href="${EDGAR_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g')) || []).length, 3, 'each EDGAR row and the source line link the file');
+  // Counted as an exact string, so no pattern is built from the URL (CodeQL: incomplete hostname regex).
+  assert.equal(out.split(`href="${EDGAR_URL}"`).length - 1, 3, 'each EDGAR row and the source line link the file');
   assert.doesNotMatch(out, /disabled="" [^>]*>Previous/, 'Previous is live past the first page');
   const first = text(h(PublicPanel, { listed: ready({ ...data, offset: 0, items: data.items.slice(0, 1), total: 1, sources: [] }) }));
   assert.doesNotMatch(first, /Previous|Next/, 'one page needs no pager');
