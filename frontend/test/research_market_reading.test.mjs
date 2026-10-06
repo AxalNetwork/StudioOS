@@ -15,7 +15,8 @@ import {
 } from '../src/pages/research/marketReadingRead.js';
 
 const page = readFileSync(new URL('../src/pages/research/MarketReading.jsx', import.meta.url), 'utf8');
-const list = readFileSync(new URL('../src/pages/research/MarketZone.jsx', import.meta.url), 'utf8');
+// The list that is mounted at `/research/markets` (D593), not `MarketZone`.
+const list = readFileSync(new URL('../src/pages/research/MarketDirectoryZone.jsx', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 const api = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
 
@@ -72,7 +73,7 @@ test('the reading page is a route for the same licences as the list', () => {
   assert.match(app, /path="\/research\/markets\/:uid"/);
   assert.match(app, /guard\(labRoles\(\['admin', 'founder', 'partner', 'investor', 'advisor'\]\), <MarketReading/);
   assert.match(api, /marketReadingGet: \(uid\) => request\(`\/research\/market-readings\/\$\{encodeURIComponent\(uid\)\}`\)/);
-  assert.match(list, /r\.uid \?/);
+  assert.match(list, /\.filter\(\(r\) => r\.uid\)/);
   assert.match(list, /\/research\/markets\/\$\{encodeURIComponent\(r\.uid\)\}/);
 });
 
@@ -90,5 +91,7 @@ test('the page states the limits and does not stamp fixture data as SAMPLE', () 
   assert.doesNotMatch(page, /SAMPLE/);
   assert.doesNotMatch(page, /Add an engagement/);
   assert.doesNotMatch(page, /zoneDraftRun/);
-  assert.match(page, /hidden grid-cols-3/);
+  // Four columns, the canvas's, and still none below `sm` (D593).
+  assert.match(page, /hidden grid-cols-\[1fr_1\.4fr_1\.2fr_1\.4fr\]/);
+  assert.match(page, /<span>Date<\/span>\s*<span>Engagement went for<\/span>\s*<span>Source<\/span>\s*<span>URL or file<\/span>/);
 });

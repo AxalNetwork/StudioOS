@@ -39,7 +39,18 @@
   </style>
 </helmet>
 
-<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+<section class="ab" id="c0">
+  <div class="ab-hd"><a class="ab-id" href="#c0">C0</a><span class="ab-nm">Companies tab · Directory (300) is the default view · Saved analyses is the landscape page below, unchanged</span></div>
+  <div style="font:400 12.5px/1.6 Inter,sans-serif;color:#6b6577;max-width:900px;margin:0 0 12px">On the landscape page a competitor row links to its directory profile when one exists; a hand-typed name with no profile (Helios) stays plain text.</div>
+</section>
+<section class="ab" id="c-companies">
+  <div class="ab-hd"><a class="ab-id" href="#c-companies">C1</a><span class="ab-nm">Companies directory · /research/companies</span></div>
+  <div style="width:1440px;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7"><dc-import name="Research Page" page="companies" hint-size="1440px,1500px"></dc-import></div>
+</section>
+<section class="ab" id="c-company">
+  <div class="ab-hd"><a class="ab-id" href="#c-company">C2</a><span class="ab-nm">Company profile · reached from a directory row · /research/companies/[company]</span></div>
+  <div style="width:1440px;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7"><dc-import name="Research Page" page="company" hint-size="1440px,1700px"></dc-import></div>
+</section><sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
   <section class="ab" id="{{ b.id }}">
     <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/companies/{{ b.a.id }}</span></div>
     <div class="ab-sub">{{ b.blurb }}</div>

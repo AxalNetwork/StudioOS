@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
@@ -150,9 +150,17 @@ export default function ZoneDraft({
   onAccepted,
   // The host's `useAiSpend()` result, for the cost before a run (D424).
   ai,
+  // D593 — why the run cannot start yet, when the host already knows it would
+  // be refused: the fund dossier passes "Record a thesis or a note first —
+  // there is nothing to draft from." while the row holds neither, which the
+  // Worker answers with 409 `nothing_to_draft`. The run button is disabled up
+  // front and the sentence is shown beside it. Left out — every other mount —
+  // the button is enabled as before, and a refusal is learnt from the 409.
+  blocked = null,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
+  const blockedId = useId();
   const [item, setItem] = useState(null);
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
@@ -174,6 +182,7 @@ export default function ZoneDraft({
   useEffect(() => { load(); }, [load]);
 
   const doRun = async () => {
+    if (blocked) return;
     setBusy('run'); setNote('');
     try {
       const r = await api.research.zoneDraftRun(surface, scopeKey, bandPage());
@@ -274,9 +283,20 @@ export default function ZoneDraft({
           <p className="mt-2 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{empty}</p>
           <RunEstimate ai={ai} task={DRAFT_TASK} shared="the rail's read-back" testId={`text-zone-draft-estimate-${surface.replace(/[^a-z0-9]+/gi, '-')}`} />
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button type="button" className={skin.button} onClick={doRun} disabled={busy !== ''}>
+            <button
+              type="button"
+              className={skin.button}
+              onClick={doRun}
+              disabled={busy !== '' || Boolean(blocked)}
+              aria-describedby={blocked ? blockedId : undefined}
+            >
               {busy === 'run' ? 'Drafting…' : run}
             </button>
+            {blocked ? (
+              <span id={blockedId} data-testid="zone-draft-blocked" className="text-[11px] text-gray-700 dark:text-gray-300">
+                {blocked}
+              </span>
+            ) : null}
             {foot ? <span className="ml-auto text-[10px] text-gray-600 dark:text-gray-400">{foot}</span> : null}
           </div>
         </>

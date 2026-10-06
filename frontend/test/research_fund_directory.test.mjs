@@ -29,5 +29,6 @@ test('the directory is read from the Worker, and its rows are added to the priva
   assert.match(directory, /researchFundsApi\.list\(toParams\(query\)\)/);
   assert.match(page, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\}/);
   assert.match(page, /fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null \}\)/);
-  assert.match(directory, /'Add to my list'/);
+  // D593: the canvas's F0 names the button "Add to my funds".
+  assert.match(directory, /'Add to my funds'/);
 });

@@ -28,7 +28,7 @@ import {
   NOT_RECORDED, UNREADABLE, analysisHref, employees, indexRows, lastRound, latestOnly, money, relatedSignals,
   sectorLabelHref, signedPct,
 } from '../../lib/companyDirectoryView.js';
-import { companyHref } from './CompanyDirectoryZone.jsx';
+import { companyHref } from '../../lib/companyDirectoryView.js';
 
 const SECTIONS = [
   ['metrics', 'Key metrics'], ['market', 'Market context'], ['competitors', 'Competitors'],
@@ -225,9 +225,9 @@ export function Funds({ tracked, focusRead, hqRead, country }) {
     <section id="funds" className="space-y-3">
       <div><h2 className={h2}>Funds</h2><p className={lede}>Funds whose stated focus maps to this company’s tracked sector, and funds headquartered in its country. Focus and HQ are free text, matched through the crosswalk.</p></div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {tracked?.slug ? <FundList title={`Focus maps to ${tracked.name || tracked.slug}`} read={focusRead} more="/research/funds" />
+        {tracked?.slug ? <FundList title={`Focus maps to ${tracked.name || tracked.slug}`} read={focusRead} more="/research/funds?view=directory" />
           : <Card><h3 className="text-[13px] font-bold">By focus</h3><p className="mt-1 text-[12px] text-axal-muted"><strong>{NOT_RECORDED}.</strong> No tracked sector to match a focus on.</p></Card>}
-        {tracked?.country_code ? <FundList title={`Headquartered in ${country || tracked.country_code}`} read={hqRead} more="/research/funds" />
+        {tracked?.country_code ? <FundList title={`Headquartered in ${country || tracked.country_code}`} read={hqRead} more="/research/funds?view=directory" />
           : <Card><h3 className="text-[13px] font-bold">By headquarters</h3><p className="mt-1 text-[12px] text-axal-muted"><strong>{NOT_RECORDED}.</strong> The crosswalk places this company in no country.</p></Card>}
       </div>
       <p className={faint}>research_fund_directory · sizes as the sources report them.</p>

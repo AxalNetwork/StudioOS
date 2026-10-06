@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { Card } from '../../ui';
+import { Card, Pill } from '../../ui';
 import { Unreadable, Unrecorded } from '../../ui/Honesty';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { api } from '../../lib/api';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
+import { researchSectorsApi } from '../../lib/api/researchSectors.js';
+import { SaveNote } from '../advisor/expertise/kit';
+import { STALE_AT, ageBand, daysSince } from './MarketZone';
+import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } from './marketReadingRead';
 
 /**
  * Research · Markets (`/research/markets`), to the Markets canvas
@@ -14,8 +18,9 @@ import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
  * EVERY NUMBER HERE IS READ FROM THE WORKER. The page used to print the
  * bundled `marketDirectory.json` and an ETF snapshot whose 1D/1Y line was red
  * whatever its sign. It now reads `/api/research/markets`,
- * `/api/research/listed-companies`, `/api/research/geographies` and the
- * signals feed, and prints the totals those answer with.
+ * `/api/research/sectors`, `/api/research/listed-companies`,
+ * `/api/research/geographies` and the signals feed, and prints the totals
+ * those answer with.
  *
  * FOUR STATES, PER SECTION. Each card loads on its own, so one failed read
  * says "could not be read" on that card and leaves the others standing:
@@ -25,6 +30,23 @@ import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
  * WHAT NO SOURCE HOLDS reads "Not recorded" with the reason: government-owned
  * companies (no source names an owner; #1083 Q3 settles only the wording) and
  * the top movers, which come from the Research overview (#1092) once it lands.
+ *
+ * D593 — EVERY TRACKED SECTOR IS A GROUP, and each opens its own page. The
+ * sector list is `GET /api/research/sectors` (D547), not a list written here:
+ * a sector no market maps to yet still has a group, saying so, with its
+ * "Open sector →" link. The markets no sector claims sit last, under
+ * "Not mapped yet" (canvas M1).
+ *
+ * D593 — A COMPARABLE RANGE IS RECORDED HERE AGAIN. `MarketZone` held the only
+ * "Record a reading" form, and nothing has mounted it since the directory
+ * replaced it, so nobody could record a first reading. The form now sits in the
+ * "Your market readings" card. `POST /api/research/market-readings` asks only
+ * that the caller is signed in (its service line, when one is named, must be
+ * theirs), and `MarketZone` checked no licence either, so every licence that
+ * reaches this page gets it once its list has been read. That includes an
+ * empty list, where `MarketZone` showed only its empty state: the Worker takes
+ * a reading named by what it prices, with no catalog service line behind it.
+ * A save opens the new reading.
  */
 
 export const MARKET_TABS = [
@@ -44,12 +66,20 @@ const fmt = (n) => (n == null ? null : Number(n).toLocaleString('en-US'));
 /** The slug the sector page (#1139, D546) is keyed by: the tracked sector's own name, slugged. */
 export const sectorSlug = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+/** The group of markets no tracked sector claims, in the canvas's words (M1, D593). */
+export const UNMAPPED_LABEL = 'Not mapped yet';
+
 /**
  * Markets → groups by tracked sector, largest group first. A market with no
  * tracked sector is in its own group at the end, marked as such: no index
  * applies to it, and it is not folded into a sector it does not belong to.
+ *
+ * `tracked` is the sector list `GET /api/research/sectors` returns. A tracked
+ * sector no market maps to joins as a group with no markets, after the groups
+ * that have some (D593). Pass it only when `items` is every market: over a
+ * search, or a page of the list, "no market is mapped" would be a guess.
  */
-export function groupMarkets(items) {
+export function groupMarkets(items, tracked = null) {
   const groups = new Map();
   const unmapped = [];
   for (const m of items) {
@@ -59,9 +89,15 @@ export function groupMarkets(items) {
   }
   const sum = (ms) => ms.reduce((s, m) => s + (Number(m.supplied_count) || 0), 0);
   const out = [...groups.entries()]
-    .map(([name, markets]) => ({ name, slug: sectorSlug(name), markets, companies: sum(markets), mapped: true }))
-    .sort((a, b) => b.companies - a.companies || a.name.localeCompare(b.name));
-  if (unmapped.length) out.push({ name: 'Not mapped to a tracked sector', slug: null, markets: unmapped, companies: sum(unmapped), mapped: false });
+    .map(([name, markets]) => ({ name, slug: sectorSlug(name), markets, companies: sum(markets), mapped: true }));
+  for (const s of tracked || []) {
+    if (!s?.name || groups.has(s.name)) continue;
+    groups.set(s.name, []);
+    out.push({ name: s.name, slug: s.slug || sectorSlug(s.name), markets: [], companies: 0, mapped: true });
+  }
+  out.sort((a, b) => Number(b.markets.length > 0) - Number(a.markets.length > 0)
+    || b.companies - a.companies || a.name.localeCompare(b.name));
+  if (unmapped.length) out.push({ name: UNMAPPED_LABEL, slug: null, markets: unmapped, companies: sum(unmapped), mapped: false });
   return out;
 }
 
@@ -99,7 +135,17 @@ function Bar({ value, max }) {
   return <span className="block h-1.5 rounded-full bg-violet-100 dark:bg-violet-950"><span className="block h-1.5 rounded-full bg-violet-500" style={{ width: `${w}%` }} /></span>;
 }
 
-export function PrivatePanel({ markets }) {
+/** A tracked sector's own page (D547), `/research/markets/sector/:slug`. */
+function OpenSector({ group }) {
+  return (
+    <Link to={`/research/markets/sector/${encodeURIComponent(group.slug)}`}
+      className="ml-auto text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">
+      Open sector<span className="sr-only"> {group.name}</span> →
+    </Link>
+  );
+}
+
+export function PrivatePanel({ markets, sectors = null }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState(MARKET_SORTS[0].value);
   const [grouped, setGrouped] = useState(true);
@@ -115,6 +161,14 @@ export function PrivatePanel({ markets }) {
   const total = markets.data?.total;
   const held = (markets.data?.items || []).reduce((s, m) => s + (Number(m.supplied_count) || 0), 0);
   const asOf = markets.data?.items?.[0]?.as_of;
+  // A sector with no group is only said to have no market over the WHOLE list:
+  // not while a search narrows it, and not if the read held fewer markets than
+  // it counted. Otherwise the groups are the sectors the markets name, as before.
+  const searching = query.trim() !== '';
+  const whole = !searching && (markets.data?.items || []).length >= (Number(total) || 0);
+  // A list route answering 404 has not said there are no sectors; it is unread too.
+  const sectorsUnread = sectors?.status === 'unreadable' || sectors?.status === 'not_found';
+  const tracked = whole && !sectorsUnread && sectors?.data ? (sectors.data.items || []) : null;
 
   if (markets.status === 'loading' && !markets.data) return <Loading what="the markets" />;
   if (markets.status === 'unreadable') {
@@ -162,22 +216,32 @@ export function PrivatePanel({ markets }) {
         <p className="mt-4 text-[12.5px] text-axal-muted">No market matches “{query.trim()}”.</p>
       ) : grouped ? (
         <div className="mt-4 space-y-2">
-          {groupMarkets(visible).map((g, i) => (
+          {!searching && sectors?.status === 'loading' && !sectors.data ? <Loading what="the tracked sectors" /> : null}
+          {!searching && sectorsUnread ? (
+            <Unreadable what="The tracked sectors" claim="The groups below are only the sectors a market maps to; a sector missing from them is unread, not empty." onRetry={sectors.reload} />
+          ) : null}
+          {groupMarkets(visible, tracked).map((g, i) => (g.markets.length === 0 ? (
+            // Nothing to expand, so not a <details>: the row says why it is empty
+            // and still opens the sector, whose indexes do not wait on a market.
+            <div key={g.name} data-testid="sector-group-empty" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-axal-hairline px-4 py-3 dark:border-gray-800">
+              <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{g.name}</span>
+              <span className="text-[12px] text-axal-muted dark:text-gray-400">No market is mapped to this sector yet</span>
+              <OpenSector group={g} />
+            </div>
+          ) : (
             <details key={g.name} open={i < 2} className="rounded-xl border border-axal-hairline px-4 py-2 dark:border-gray-800">
-              <summary className="flex cursor-pointer items-center justify-between gap-3 py-1">
+              <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 py-1">
                 <span>
                   <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{g.name}</span>
                   <span className="ml-2 text-[12px] text-axal-muted">
                     {g.markets.length} markets · {g.mapped ? `${fmt(g.companies)} companies` : 'no index applies'}
                   </span>
                 </span>
-                {/* No "Open sector" link yet: today's sector page resolves market
-                    slugs only, so a tracked-sector slug reads "Market not found".
-                    The per-sector page is #1139's (D546); the link lands with it. */}
+                {g.slug ? <OpenSector group={g} /> : null}
               </summary>
               <ul className="mt-1">{g.markets.map(row)}</ul>
             </details>
-          ))}
+          )))}
         </div>
       ) : (
         <ul className="mt-4">{visible.map(row)}</ul>
@@ -330,35 +394,279 @@ export function LatestSignals({ sigs }) {
   );
 }
 
-export function Readings({ readings }) {
+// ---- Your market readings, and recording one ---------------------------------
+
+/** The reading page's own sentence for a range that runs backwards. */
+export const RANGE_BACKWARDS = 'High is below low. Nothing is saved until the range reads forward.';
+
+/** What each refusal of `POST /api/research/market-readings` means, said plainly. */
+const REFUSED = {
+  metric_required: 'Name what the range prices.',
+  range_required: RANGE_BACKWARDS,
+  comparable_count_required: 'How many engagements the range came from. Refused if 0.',
+  ran_at_required: 'A reading needs the date you ran it.',
+  not_found: 'That service line is not in your catalog, so nothing was saved.',
+};
+
+const AGE_PILL = { current: ['Current', 'ok'], ageing: ['Ageing', 'warn'], stale: ['Stale', 'danger'] };
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * The form for a new reading. `row` is a service line or a reading from the
+ * list, or nothing for a blank form. Either way the dollars start blank and the
+ * run date is today (`freshReadingForm`): a re-run is a new reading, and the
+ * old range does not come forward.
+ */
+export function readingForm(row = null, on = today()) {
+  return freshReadingForm({
+    offering_uid: row?.offering_uid || '',
+    metric: row?.metric || '',
+    n: row?.comparable_count ? String(row.comparable_count) : '',
+  }, on);
+}
+
+/**
+ * The form → the body `POST /api/research/market-readings` takes, or the
+ * sentence that refuses it. These are the Worker's own refusals, made first
+ * with the reading page's helpers, so nothing is sent that it would turn away:
+ * something to price, a range that reads forward, a comparable count above
+ * zero, and the date it was run.
+ */
+export function readingPayload(form) {
+  const metric = String(form?.metric || '').trim();
+  if (!form?.offering_uid && !metric) return { error: REFUSED.metric_required };
+  const low = dollarsToCents(form.low);
+  const high = dollarsToCents(form.high);
+  if (low.error || high.error) return { error: low.error || high.error };
+  if (high.cents < low.cents) return { error: RANGE_BACKWARDS };
+  const count = comparableCount(form.n);
+  if (count.n == null) return { error: count.error };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(form.ran_at || ''))) return { error: REFUSED.ran_at_required };
+  return {
+    payload: {
+      ...(form.offering_uid ? { offering_uid: form.offering_uid } : {}),
+      metric,
+      range_low_cents: low.cents,
+      range_high_cents: high.cents,
+      comparable_count: count.n,
+      ran_at: form.ran_at,
+    },
+  };
+}
+
+/** A refusal from the Worker, in the sentence the form shows. */
+export const refusalText = (err) => REFUSED[err?.code] || err?.message || 'That reading could not be saved.';
+
+/**
+ * Record the form as a new reading and open it. A form the checks above refuse
+ * sends nothing. Answers the note the form shows, or `{ opened }` with the path
+ * it went to. `create` and `go` are the API call and the navigation, passed in.
+ */
+export async function submitReading(form, { create, go }) {
+  const { payload, error } = readingPayload(form);
+  if (error) return { ok: false, text: error };
+  try {
+    const saved = await create(payload);
+    const uid = saved?.item?.uid;
+    if (!uid) return { ok: true, text: 'Recorded. It is in your list below.' };
+    const to = `/research/markets/${encodeURIComponent(uid)}`;
+    go(to);
+    return { ok: true, opened: to };
+  } catch (err) {
+    return { ok: false, text: refusalText(err) };
+  }
+}
+
+/**
+ * The reading `Re-run stale` opens the form on: the first past ninety days,
+ * else the first service line never read — as `MarketZone` chose it. Null when
+ * there is neither.
+ */
+export function nextToRerun(items = []) {
+  const rows = items.map((r) => ({ ...r, band: ageBand(daysSince(r.ran_at)) }));
+  return rows.find((r) => r.band === 'stale') || rows.find((r) => r.band === null) || null;
+}
+
+const FIELD = 'mt-1 w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink '
+  + 'focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 '
+  + 'dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:focus:border-violet-400 dark:focus:ring-violet-400';
+const LABEL = 'block text-[11px] font-semibold text-axal-muted dark:text-gray-400';
+
+export function RecordReading({ form, lines = [], onChange, onCancel, onSave, busy = false, note = null }) {
+  const forward = rangeReadsForward(form.low, form.high);
+  const set = (key) => (e) => onChange({ ...form, [key]: e.target.value });
+  const pick = (e) => {
+    const line = lines.find((l) => l.offering_uid === e.target.value);
+    onChange({ ...form, offering_uid: line ? line.offering_uid : '', metric: line ? line.metric : '' });
+  };
+  // Focus lands on the first field still to fill, which also scrolls a form
+  // opened from the header row into view.
+  const first = form.offering_uid || form.metric ? 'low' : (lines.length ? 'line' : 'metric');
+  const backwards = forward === false ? ' border-red-300 dark:border-red-800' : '';
+  return (
+    <form data-testid="record-reading" onSubmit={onSave} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800">
+      <h3 className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Record a reading</h3>
+      <p className="mt-0.5 text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400">
+        What comparable engagements went for, how many there were, and the date you ran it. A save writes a new reading; it never edits an old one.
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        {lines.length ? (
+          <label className={`${LABEL} sm:col-span-2`}>
+            Service line
+            <select aria-label="Service line" autoFocus={first === 'line'} value={form.offering_uid} onChange={pick} className={FIELD}>
+              <option value="">Not a catalog service line</option>
+              {lines.map((l) => <option key={l.offering_uid} value={l.offering_uid}>{l.metric}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {form.offering_uid ? null : (
+          <label className={`${LABEL} sm:col-span-2`}>
+            What it prices
+            <input aria-label="What it prices" autoFocus={first === 'metric'} maxLength={200} value={form.metric} onChange={set('metric')} className={FIELD} />
+          </label>
+        )}
+        <label className={LABEL}>
+          Low (USD)
+          <input aria-label="Low (USD)" autoFocus={first === 'low'} inputMode="decimal" value={form.low} onChange={set('low')} aria-invalid={forward === false} className={`${FIELD}${backwards}`} />
+        </label>
+        <label className={LABEL}>
+          High (USD)
+          <input aria-label="High (USD)" inputMode="decimal" value={form.high} onChange={set('high')} aria-invalid={forward === false} className={`${FIELD}${backwards}`} />
+        </label>
+        <label className={LABEL}>
+          Comparables
+          <input aria-label="Comparables" inputMode="numeric" value={form.n} onChange={set('n')} className={FIELD} />
+        </label>
+        <label className={LABEL}>
+          Run date
+          <input aria-label="Run date" type="date" value={form.ran_at} onChange={set('ran_at')} className={FIELD} />
+        </label>
+      </div>
+      <p className="mt-2 text-[11px] text-axal-muted dark:text-gray-400">How many engagements the range came from. Refused if 0.</p>
+      {forward === false ? <SaveNote note={{ ok: false, text: RANGE_BACKWARDS }} /> : null}
+      <SaveNote note={note} />
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={busy || forward === false}
+          className="rounded-lg bg-violet-700 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-600 dark:text-white dark:hover:bg-violet-500">
+          {busy ? 'Recording…' : 'Record this reading'}
+        </button>
+        <button type="button" onClick={onCancel} className="text-[12px] font-semibold text-axal-muted underline dark:text-gray-400">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The caller's readings, the way back into `/research/markets/:uid`, and the
+ * form that records one. `record` carries the form's state and handlers; the
+ * form is offered only once the list has been read, because the list is where
+ * the service lines it offers come from.
+ */
+export function Readings({ readings, record = null }) {
   let body;
   if (readings.status === 'loading' && !readings.data) body = <Loading what="your readings" />;
   else if (readings.status === 'unreadable') body = <Unreadable what="Your market readings" claim="This is not a sign you have none." onRetry={readings.reload} />;
   else {
     const run = (readings.data?.items || []).filter((r) => r.uid);
     body = run.length === 0
-      ? <p className="text-[12.5px] text-axal-muted">You have not run a market reading yet. A reading records the comparable range for one of your service lines, with its date.</p>
+      ? <p className="text-[12.5px] text-axal-muted dark:text-gray-400">You have not run a market reading yet. A reading records the comparable range for something you sell, how many engagements it came from, and the date you ran it.</p>
       : (
         <ul className="divide-y divide-axal-hairline dark:divide-gray-800">
-          {run.map((r) => (
-            <li key={r.uid} className="flex items-center justify-between gap-3 py-2">
-              <Link to={`/research/markets/${encodeURIComponent(r.uid)}`} className="text-[13px] font-semibold text-axal-ink hover:text-axal-violet dark:text-gray-100">{r.metric}</Link>
-              <span className="text-[11.5px] text-axal-muted">{r.ran_at ? `run ${String(r.ran_at).slice(0, 10)}` : <Unrecorded />}</span>
-            </li>
-          ))}
+          {run.map((r) => {
+            const days = daysSince(r.ran_at);
+            const band = ageBand(days);
+            return (
+              <li key={r.uid} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
+                <Link to={`/research/markets/${encodeURIComponent(r.uid)}`} className="text-[13px] font-semibold text-axal-ink hover:text-axal-violet dark:text-gray-100 dark:hover:text-violet-300">{r.metric}</Link>
+                <span className="flex items-center gap-2 text-[11.5px] text-axal-muted dark:text-gray-400">
+                  {r.ran_at ? `run ${String(r.ran_at).slice(0, 10)}${days == null ? '' : ` · ${days} d old`}` : <Unrecorded />}
+                  {band ? <Pill tone={AGE_PILL[band][1]}>{AGE_PILL[band][0]}</Pill> : null}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       );
   }
-  return <Card data-testid="markets-readings"><h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Your market readings</h2><div className="mt-2">{body}</div></Card>;
+  const lines = [];
+  for (const r of readings.data?.items || []) {
+    if (r.offering_uid && !lines.some((l) => l.offering_uid === r.offering_uid)) lines.push({ offering_uid: r.offering_uid, metric: r.metric });
+  }
+  const offer = record && readings.status === 'ready';
+  return (
+    <Card data-testid="markets-readings">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Your market readings</h2>
+        {offer && !record.form ? (
+          <button type="button" onClick={() => record.onOpen()} className="text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">
+            Record a reading →
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-2">{body}</div>
+      {offer && record.form ? (
+        <RecordReading key={record.opened} form={record.form} lines={lines} onChange={record.onChange} onCancel={record.onCancel}
+          onSave={record.onSave} busy={record.busy} note={record.note} />
+      ) : null}
+      {!record?.form && record?.note ? <SaveNote note={record.note} /> : null}
+    </Card>
+  );
 }
 
 export default function MarketDirectoryZone({ role = 'founder', zoneActions = null }) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState('private');
   const [markets, reloadMarkets] = useRead(() => researchMarketsApi.list({ limit: 100 }));
+  const [sectors, reloadSectors] = useRead(() => researchSectorsApi.list());
   const [listed, reloadListed] = useRead(() => researchMarketsApi.listedCompanies({ limit: 100 }));
   const [geos, reloadGeos] = useRead(() => researchMarketsApi.geographies({ sort: 'company_count', limit: 100 }));
   const [sigs, reloadSigs] = useRead(() => api.signals.list({ limit: 3, mode: role === 'advisor' ? 'advisor' : 'founder' }), role);
   const [readings, reloadReadings] = useRead(() => api.research.marketReadings());
+  const [form, setForm] = useState(null);
+  const [opened, setOpened] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  const openForm = (row = null) => {
+    setNote(null);
+    setForm(readingForm(row));
+    setOpened((n) => n + 1);
+  };
+
+  // A save opens the new reading, which is where its age, its comparables and
+  // its proposal attachment are. Only a refusal leaves the form open.
+  const save = async (e) => {
+    e.preventDefault();
+    if (!form || busy) return;
+    setBusy(true);
+    setNote(null);
+    const result = await submitReading(form, { create: api.research.marketReadingCreate, go: navigate });
+    setBusy(false);
+    if (result.opened) return;
+    setNote({ ok: result.ok, text: result.text });
+    if (result.ok) {
+      setForm(null);
+      reloadReadings();
+    }
+  };
+
+  // `Re-run stale` on the partner row (D593). Re-reading is work a person does,
+  // so the op opens the form on the reading that needs it and runs nothing.
+  const rerun = readings.status === 'ready' ? nextToRerun(readings.data?.items || []) : null;
+  const opsHandlers = {
+    reRunStale: {
+      onClick: () => { if (rerun) openForm(rerun); },
+      disabled: !rerun,
+      title: readings.status === 'unreadable'
+        ? 'Your readings could not be read, so this page cannot tell which are stale.'
+        : readings.status !== 'ready'
+          ? 'Your readings are still loading.'
+          : (rerun
+            ? `Record a fresh reading for ${rerun.metric}.`
+            : `No reading is past ${STALE_AT} days, and every service line has one.`),
+    },
+  };
 
   const tabCount = {
     private: markets.status === 'ready' ? `${fmt(markets.data?.total ?? 0)} markets` : null,
@@ -368,7 +676,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
 
   return (
     <div data-testid="market-directory" className="space-y-4">
-      {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(markets.data?.items || [])} /> : null}
+      {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(markets.data?.items || [], opsHandlers)} /> : null}
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Markets</h1>
         <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-axal-muted">
@@ -385,7 +693,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
           ))}
         </div>
         <div className="mt-4">
-          {tab === 'private' ? <PrivatePanel markets={{ ...markets, reload: reloadMarkets }} /> : null}
+          {tab === 'private' ? <PrivatePanel markets={{ ...markets, reload: reloadMarkets }} sectors={{ ...sectors, reload: reloadSectors }} /> : null}
           {tab === 'public' ? <PublicPanel listed={{ ...listed, reload: reloadListed }} /> : null}
           {tab === 'government' ? <GovernmentPanel /> : null}
         </div>
@@ -396,7 +704,15 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LatestSignals sigs={{ ...sigs, reload: reloadSigs }} />
-        <Readings readings={{ ...readings, reload: reloadReadings }} />
+        <Readings
+          readings={{ ...readings, reload: reloadReadings }}
+          record={{
+            form, opened, busy, note, onSave: save,
+            onOpen: () => openForm(null),
+            onChange: setForm,
+            onCancel: () => { setForm(null); setNote(null); },
+          }}
+        />
       </div>
       <p className="text-[11px] leading-relaxed text-axal-faint">
         Markets come from the Axal sector taxonomy; their company counts are the taxonomy source’s own and are not market size. Indexes are worldwide only. What no source holds reads “Not recorded”.

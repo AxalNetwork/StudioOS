@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Field, StatedLimit } from '../advisor/expertise/kit';
-import { NO_STORE, gapCount, missingChecklist, updatedAgo } from './fundDossierRead';
+import { NO_STORE, gapCount, missingChecklist, nothingToDraft, updatedAgo } from './fundDossierRead';
 import FundReportsPanel from './FundReportsPanel';
 
 /**
@@ -19,10 +19,16 @@ import FundReportsPanel from './FundReportsPanel';
  * THE BRIEF IS DRAFTED FROM THIS ROW ALONE (D312). The `research/funds` draft
  * surface reads this one fund, owner-scoped, and marks every unrecorded fact
  * as a question to ask rather than a fact. It is never drafted on page load,
- * and not at all while the row holds neither a thesis nor a note. Accept
- * appends it to `note`, after what is already written; it does not email the
- * fund. The local "approach note" band it replaced put its own explanatory
- * sentence into the note on Accept.
+ * and not at all while the row holds neither a thesis nor a note — which the
+ * band says before the press, its Draft button disabled with the reason
+ * (D593), as well as after a 409. Accept appends it to `note`, after what is
+ * already written; it does not email the fund. The local "approach note"
+ * band it replaced put its own explanatory sentence into the note on Accept.
+ *
+ * D593 ALSO: a source recorded without http(s) is shown as written, not as
+ * "no source URL"; an unassessed stage and a path other than warm are drawn
+ * in muted ink on their tiles; and below lg a live fund's Pass reason card
+ * is left out, as the phone canvas (M1) draws it.
  *
  * THE CHECKLIST COUNTS ONLY WHAT THIS PAGE CAN CLOSE. Rows derived from the
  * fund's columns are done or a gap. The canvas also draws a sourced
@@ -41,6 +47,18 @@ const STATUS = { researching: 'Researching', passed: 'Passed' };
 const stageLabel = (v) => STAGE[v] || 'Stage not assessed';
 const pathLabel = (v) => PATH[v] || 'Route not recorded';
 const statusLabel = (v) => STATUS[v] || 'Researching';
+
+/**
+ * The Stage and Path tiles' ink, as the canvas draws it (D593): a read in its
+ * own colour, and "Stage not assessed", "No route in" and "Route not
+ * recorded" in muted ink — an absent or cold read is not a finding to
+ * highlight. The pills above keep their own neutral tone.
+ */
+export const stageTileTone = (v) => (v === 'right' ? 'ok' : v === 'wrong' ? 'warn' : 'muted');
+export const pathTileTone = (v) => (v === 'warm' ? 'ok' : 'muted');
+
+/** The draft band's refusal, said before the press as well as after a 409. */
+const NOTHING_TO_DRAFT = 'Record a thesis or a note first — there is nothing to draft from.';
 
 const usd = (cents) => (cents == null
   ? null
@@ -98,14 +116,19 @@ function Nr() {
   );
 }
 
-function Tile({ k, v, sub, nr, tone = 'ink' }) {
-  const ink = tone === 'ok'
-    ? 'text-emerald-700 dark:text-emerald-300'
-    : tone === 'warn'
-      ? 'text-amber-800 dark:text-amber-300'
-      : tone === 'danger'
-        ? 'text-red-700 dark:text-red-300'
-        : 'text-axal-ink';
+const TILE_INK = {
+  ok: 'text-emerald-700 dark:text-emerald-300',
+  warn: 'text-amber-800 dark:text-amber-300',
+  danger: 'text-red-700 dark:text-red-300',
+  // The same muted ink as the tile's own sub-line, as the canvas draws both
+  // in `t.muted`; #9ca3af on the dark card.
+  muted: 'text-axal-muted dark:text-gray-400',
+  // The dark pair is the one the app's skin already gives `text-axal-ink`.
+  ink: 'text-axal-ink dark:text-gray-200',
+};
+
+export function Tile({ k, v, sub, nr, tone = 'ink' }) {
+  const ink = TILE_INK[tone] || TILE_INK.ink;
   return (
     <Card>
       <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{k}</div>
@@ -115,6 +138,56 @@ function Tile({ k, v, sub, nr, tone = 'ink' }) {
       <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">{sub}</p>
     </Card>
   );
+}
+
+/**
+ * The header's source line (D593). Three cases, and the middle one was the
+ * bug: a value recorded without http(s), such as "acme.vc", read "Not
+ * recorded · no source URL on this row" — false, the row has one. It is now
+ * shown as written, unlinked, with the reason. Only an http(s) value is a
+ * link, and only a blank is Not recorded. example.com stays "placeholder".
+ */
+export function SourceLine({ value }) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <Nr />
+        <span className="text-[12px] text-axal-muted">no source URL on this row</span>
+      </span>
+    );
+  }
+  if (/^https?:\/\//i.test(text)) {
+    return (
+      <>
+        <a href={text} target="_blank" rel="noreferrer" className="text-[12px] font-semibold text-violet-700 underline dark:text-violet-300">
+          Their site →
+        </a>
+        <span className="ml-2 font-mono text-[10px] text-axal-muted">
+          {text}{exampleHost(text) ? ' · placeholder' : ''}
+        </span>
+      </>
+    );
+  }
+  return (
+    <span data-testid="fund-dossier-source-unlinked" className="inline-flex flex-wrap items-center gap-2">
+      <span className="font-mono text-[11px] text-axal-ink dark:text-gray-100">
+        {text}{exampleHost(`https://${text}`) ? ' · placeholder' : ''}
+      </span>
+      <span className="text-[12px] text-axal-muted">recorded without http(s), so it is not linked</span>
+    </span>
+  );
+}
+
+/**
+ * The Pass reason card's classes. A pass with no reason carries the red edge.
+ * A live fund's card only says the field appears once it is Passed, so below
+ * lg it is left out, as M1 draws the phone stack (D593); on lg and up it
+ * stays, as before.
+ */
+export function passCardClass(fund) {
+  if (fund?.status !== 'passed') return 'hidden lg:block';
+  return fund.pass_reason ? '' : 'border-red-200 dark:border-red-800';
 }
 
 export default function FundDossier({ role = 'founder' }) {
@@ -199,7 +272,6 @@ export default function FundDossier({ role = 'founder' }) {
   const ch = fund ? chequeTile(fund.cheque_min_cents, fund.cheque_max_cents) : null;
   const passed = fund?.status === 'passed';
   const passMissing = passed && !fund?.pass_reason;
-  const httpSource = fund?.source_url && /^https?:\/\//i.test(fund.source_url) ? fund.source_url : null;
 
   return (
     <WorkspaceShell
@@ -259,21 +331,7 @@ export default function FundDossier({ role = 'founder' }) {
                     <Pill tone={fund.path === 'warm' ? 'ok' : 'neutral'}>{pathLabel(fund.path)}</Pill>
                   </div>
                   <div className="mt-2">
-                    {httpSource ? (
-                      <a href={httpSource} target="_blank" rel="noreferrer" className="text-[12px] font-semibold text-violet-700 underline dark:text-violet-300">
-                        Their site →
-                      </a>
-                    ) : (
-                      <span className="inline-flex flex-wrap items-center gap-2">
-                        <Nr />
-                        <span className="text-[12px] text-axal-muted">no source URL on this row</span>
-                      </span>
-                    )}
-                    {httpSource && (
-                      <span className="ml-2 font-mono text-[10px] text-axal-muted">
-                        {fund.source_url}{exampleHost(fund.source_url) ? ' · placeholder' : ''}
-                      </span>
-                    )}
+                    <SourceLine value={fund.source_url} />
                   </div>
                   {(editingSource || !fund.source_url) && (
                     <div className="mt-2 max-w-md">
@@ -353,13 +411,13 @@ export default function FundDossier({ role = 'founder' }) {
                 k="Stage"
                 v={stageLabel(fund.stage_fit)}
                 sub="your read, not theirs"
-                tone={fund.stage_fit === 'right' ? 'ok' : fund.stage_fit === 'wrong' ? 'warn' : 'ink'}
+                tone={stageTileTone(fund.stage_fit)}
               />
               <Tile
                 k="Path"
                 v={pathLabel(fund.path)}
                 sub={fund.path === 'warm' ? 'a route exists' : fund.path === 'cold' ? 'no route recorded in' : 'route not yet recorded'}
-                tone={fund.path === 'warm' ? 'ok' : 'ink'}
+                tone={pathTileTone(fund.path)}
               />
               <Tile
                 k="Last updated"
@@ -472,7 +530,7 @@ export default function FundDossier({ role = 'founder' }) {
                   Stored as cents; the UI is dollars. A blank stays blank — it is never written as 0.
                 </p>
               </Card>
-              <Card className={passMissing ? 'border-red-200 dark:border-red-800' : ''}>
+              <Card data-testid="fund-dossier-pass-card" className={passCardClass(fund)}>
                 <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Pass reason</div>
                 {passed ? (
                   <>
@@ -552,7 +610,8 @@ export default function FundDossier({ role = 'founder' }) {
               run="Draft the brief"
               accept="Write into the note"
               empty="A short brief from this row alone: their thesis quoted back, your note, and every gap above turned into a question to ask. It will not name a partner, cite an AUM, or assume an introduction."
-              nothingToDraft="Record a thesis or a note first — there is nothing to draft from."
+              nothingToDraft={NOTHING_TO_DRAFT}
+              blocked={nothingToDraft(fund) ? NOTHING_TO_DRAFT : null}
               foot="Accept writes your note. It does not email them."
               onAccepted={load}
             />
