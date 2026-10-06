@@ -93,7 +93,7 @@ async function listOwned(c: any) {
      ORDER BY invited_at DESC`
   ).bind(user.id).all();
   return c.json({
-    seats: (rows.results || []).map((row) => seatForInviter(c.env, row as Record<string, unknown>)),
+    seats: (rows.results || []).map((row: Record<string, unknown>) => seatForInviter(c.env, row)),
     cap: INVESTOR_QUOTAS.institutional.seats,
   });
 }
