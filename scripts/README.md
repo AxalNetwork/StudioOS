@@ -146,6 +146,7 @@ pull.
 | File | What it writes |
 | --- | --- |
 | `import-wikidata-companies.mjs` | Migration 403: Research directory companies from Wikidata's SPARQL endpoint, chosen by the crosswalk's industries (D533) and by country, round-robin across industries to a cap, figures left NULL (D537). Its functions are pure and exported, tested on fixtures in `cloudflare-worker/test/research_wikidata_companies_d537.test.mjs`. Run it with `node --experimental-strip-types`, because it imports the crosswalk's TypeScript. |
+| `import-sec-edgar.mjs` | Migration 404: SEC EDGAR's public company list (the company tickers exchange file on sec.gov), one row per CIK with its name, ticker and exchange, each citing EDGAR, its URL, its licence and the date read (D595). It never writes to a database. The SEC requires a descriptive User-Agent, and this one names `SECURITY.md`'s public contact. `node scripts/import-sec-edgar.mjs`, or `--from` a saved copy with `--as-of YYYY-MM-DD` to read a copy. The rules live in `lib/secEdgarCompanies.mjs`. |
 | `import-research-funds.py` | Migration 378: the fund directory and its reports, rebuilt from the two public spreadsheets in `attached_assets/` (D535). |
 | `import-eurotech-funds.py` | Migration 365, the earlier fund snapshot that 378 replaced. |
 

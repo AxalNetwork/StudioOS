@@ -15,6 +15,7 @@ import AdminCohortTiming from './AdminCohortTiming';
 import AdminCohortApplications from './AdminCohortApplications';
 import AdminSpinoutCertificates from './AdminSpinoutCertificates';
 import AdminLabHosts from './AdminLabHosts';
+import AdminSection83bReview from './AdminSection83bReview';
 
 // ---------------------------------------------------------------------------
 // Deliverables shown in the admin milestones panel (all 4 weeks).
@@ -759,6 +760,15 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
         >
           <Building2 size={14} /> Office-hours hosts
         </button>
+        <button
+          role="tab"
+          aria-selected={section === 'review83b'}
+          onClick={() => setSection('review83b')}
+          data-testid="tab-83b-review"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 ${section === 'review83b' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          <Check size={14} /> 83(b) review
+        </button>
       </div>
 
       {section === 'applications' ? (
@@ -774,6 +784,9 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
       ) : section === 'hosts' ? (
         // D377 — who Lab founders see on /spinout-lab/office-hours.
         <AdminLabHosts />
+      ) : section === 'review83b' ? (
+        // D580 — assign each startup's 83(b) operator and record reviews.
+        <AdminSection83bReview />
       ) : (
         <>
           <ParticipantsSection

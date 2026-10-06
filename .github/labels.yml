@@ -1,5 +1,6 @@
 # The labels the agents' task protocol runs on (AGENTS.md; DECISIONS.md D503).
-# It also holds Dependabot's labels (.github/dependabot.yml).
+# It also holds Dependabot's labels (.github/dependabot.yml), and the
+# support-ticket triage labels (AGENTS.md, "Support-ticket triage"; D543).
 #
 # .github/workflows/labels-sync.yml creates each label below, or updates its
 # colour and description, on a push to main that changes this file. It never
@@ -105,3 +106,31 @@
 - name: "dev-backend"
   color: "F9D0C4"
   description: "A dev-only FastAPI dependency bump"
+# Support-ticket triage (D543). Only Session 1 adds a bounty:* label, as the
+# owner account; the platform acts on one from no other sender (D542). The
+# feature:* labels are added by the platform when the Super Admin decides on a
+# feature request (D544), never by hand.
+- name: "bounty:confirmed"
+  color: "FEF2C0"
+  description: "Bug reproduced by Session 1; a fix is being made"
+- name: "bounty:not-a-bug"
+  color: "D4D8DD"
+  description: "Not a bug; Session 1's comment says why"
+- name: "bounty:duplicate"
+  color: "D4D8DD"
+  description: "Same as an earlier ticket; Session 1's comment links it"
+- name: "bounty:verified-high"
+  color: "BF8700"
+  description: "Fix live and checked in production; graded High"
+- name: "bounty:verified-medium"
+  color: "D4A72C"
+  description: "Fix live and checked in production; graded Medium"
+- name: "bounty:verified-low"
+  color: "EAC54F"
+  description: "Fix live and checked in production; graded Low"
+- name: "feature:approved"
+  color: "C2E0C6"
+  description: "Feature approved by the Super Admin; Session 1 files the build task"
+- name: "feature:declined"
+  color: "F9D0C4"
+  description: "Feature declined by the Super Admin; the member was told why"

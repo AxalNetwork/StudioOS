@@ -21,6 +21,7 @@ import {
   fetchIssue, fetchComments,
 } from '../services/githubSync';
 import { refusalBody } from '../util/refusal';
+import { bountySummaries } from '../services/bugBounties';
 import { parseTicketCategory } from '../services/ticketCategories';
 
 const tickets = new Hono<{ Bindings: Env }>();
@@ -51,7 +52,9 @@ tickets.get('/', async (c) => {
       : await sql`SELECT * FROM tickets WHERE user_id = ${user.id} ORDER BY created_at DESC`;
   }
   await sql.end();
-  return c.json(rows);
+  // D542 (#1105) — each ticket's bounty state, and what a fixed one paid.
+  const bounties = await bountySummaries(c.env, rows as any[]);
+  return c.json((rows as any[]).map((r) => ({ ...r, bounty: bounties.get(Number(r.id)) ?? null })));
 });
 
 tickets.post('/sync', async (c) => {

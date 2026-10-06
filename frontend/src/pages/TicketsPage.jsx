@@ -7,6 +7,7 @@ import {
   Plus, ChevronDown, RefreshCw, MessageSquare, Clock, ArrowLeft,
 } from 'lucide-react';
 import VirtualList from '../components/VirtualList';
+import BountyBadge from '../components/tickets/BountyBadge';
 
 // T24 — Title + 1-line description + py-3.
 const TICKET_ROW_HEIGHT = 64;
@@ -528,8 +529,9 @@ export default function TicketsPage() {
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[t.priority]}`}>{t.priority}</span>
                       {t.type && t.type !== 'task' && <span className={`text-[10px] px-2 py-0.5 rounded-full ${TYPE_COLORS[t.type] || TYPE_COLORS.task}`}>{t.type}</span>}
                     </div>
-                    <div className="px-5 py-3">
+                    <div className="px-5 py-3 flex flex-wrap items-center gap-1">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[t.status]}`}>{t.status?.replace('_', ' ')}</span>
+                      <BountyBadge bounty={t.bounty} />
                     </div>
                     <div className="px-5 py-3 hidden lg:block text-xs text-gray-500">
                       {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
@@ -563,7 +565,10 @@ export default function TicketsPage() {
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[t.priority]}`}>{t.priority}</span>
                       </td>
                       <td className="px-5 py-3">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[t.status]}`}>{t.status?.replace('_', ' ')}</span>
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[t.status]}`}>{t.status?.replace('_', ' ')}</span>
+                          <BountyBadge bounty={t.bounty} />
+                        </span>
                       </td>
                       <td className="px-5 py-3 hidden lg:table-cell text-xs text-gray-500">
                         {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
