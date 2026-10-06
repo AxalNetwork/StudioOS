@@ -7,10 +7,10 @@ import { api } from '../lib/api';
 import { Card, Pill, RailFrame, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
 import {
   CANVAS_SCORES, MORE_SCORES, TOPICS, MAX_TAGS, NOT_STORED_REASON, HISTORY_ROW_CAP,
-  ROUTE_SCORE_KEYS, isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
+  isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
   answeredCount, pastWeeks, formatDay, formatWhen, splitBookings, bookingStatus, canRate,
   resourceKind, resourceFacts, safeHref, homeCoverage, countRange,
-  canMemberCancel, storedStars, MEMBER_CANCELLABLE,
+  canMemberCancel, storedStars, MEMBER_CANCELLABLE, AGGREGATE_SCORE_KEYS, resourceHref,
 } from './wellbeing/wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
 
@@ -215,7 +215,7 @@ export function PastWeeksCard({ status, weeks = [], onRetry }) {
             <p data-testid="text-past-weeks-count">
               {recorded} of {weeks.length} weeks have a check-in. A week without one is a gap in the line, never a zero.
             </p>
-            <p>Support and decisions are not recorded: the check-in has no field for either yet.</p>
+            <p>Weeks saved before support and decisions were asked have neither: those are gaps, never zeros.</p>
             {unread.length > 0 && (
               <p data-testid="text-past-weeks-unread">
                 Weeks up to {formatDay(unread[unread.length - 1].week)} are left blank: they are older than the {HISTORY_ROW_CAP} most recent check-ins this page reads.
@@ -376,7 +376,7 @@ export function ResourcesCard({ status, resources = [], expanded = false, onTogg
         <>
           <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="list-resources">
             {shown.map((r) => {
-              const href = safeHref(r.url);
+              const href = resourceHref(r);
               const facts = resourceFacts(r);
               return (
                 <li key={r.id ?? r.uid} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
@@ -500,7 +500,7 @@ function AdminAggregate() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-              {ROUTE_SCORE_KEYS.map((k) => (
+              {AGGREGATE_SCORE_KEYS.map((k) => (
                 <div key={k} className="rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700">
                   <SectionLabel>{AGGREGATE_LABELS[k]}</SectionLabel>
                   <div className="mt-1 text-2xl font-semibold text-axal-ink dark:text-gray-100">

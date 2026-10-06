@@ -35866,6 +35866,22 @@ the application said the company is incorporated. A test pins both halves.
   - a test pins that neither side has quietly taken a side. It is the test
     to change, together with `GATES_DECISION`, when the call is made.
 
+**Settled 2026-10-06: the owner answered A on #979 (#1236).** One set of
+gates for everyone. The Programme Brief prints the set the Lab enforces.
+- **What it prints.** Its gate page renders `PIPELINE_PHASES`, the same list
+  the Lab intro and the workspace render, so no second copy is typed for the
+  Brief.
+- **What is gone.** `TRACK_GATES` and `GATES_DECISION` are removed, with the
+  open-decision sentence on both pages. The Brief and the intro say once that
+  the gates are the same for every track, and that the track changes which
+  tools lead, not what a gate requires.
+- **Per-track milestones (option B)** stay unbuilt, unless the tracks
+  diverge.
+- **The test.** `spinout_landing_d385.test.mjs`'s "open call" tests are
+  rewritten. The Brief's gates must equal the enforced set read from
+  `PIPELINE_PHASES`, and no per-track copy or open-decision notice may
+  remain.
+
 **Not built, because nothing stores it** (unchanged from D38, and still true
 of the Landing canvas):
 - the "Yours" tag;
@@ -35883,6 +35899,23 @@ of the Landing canvas):
   - `spinout_brief_live_data.test.mjs`: the CTA reads the record.
   - `spinout_brief_d141.test.ts`: gains the `end_date` test.
 - **Mutations.** 12 run, 12 caught on the first run.
+
+## D386
+
+**The investor question bank v2.** Session 10 of Profiling v2. No migration. Ids already in the bank are unchanged.
+
+**What was added, in the formats the other banks use.**
+- Six situational pick-ones. At least three put Thesis-Driven Backer against Disciplined Allocator. Each option is one of the four investor archetypes, and the first option rotates.
+- Two reverse-keyed probes per trait. A 5 on those pulls the trait down.
+- A behavioural question for engineering, design and marketing_brand, the three radar axes this bank had never asked.
+- A situation for risk appetite, growth versus sustain, and the three Schwartz dimensions this role asks, plus a situation for each of the six Axal values.
+- A re-ask wording on every question, including the shared rows, worded for an investor.
+
+The new archetype items come first, so the six answers that reach the archetype floor are four reverse-keyed probes and two close-pair situations.
+
+**The fixture.** Each of the four investor archetype personas answers every new archetype question: the reverse-keyed value is `5` minus that persona's centroid on the trait, and the pick-one is the option written for their own archetype.
+
+**Tests.** `investor_bank_v2_d386.test.ts`. The persona fixture test already requires every archetype persona to answer every trait question of its role.
 
 ## D390
 
@@ -38884,6 +38917,42 @@ the test and not in the component. The helper now takes the role as given.
 New test: `mobile_tab_bar_d425.test.mjs` (10 tests), which renders the bar and
 the sheet with `react-dom/server` under a `MemoryRouter`.
 
+## D426
+
+**The 16 displayed archetypes keep a complete profile, both banners, and copy
+that never calls Eadwyn's output advice.** The copy half of Profiling v2
+Session 14. The profiles and the 32 banners were already on main (D320, D325).
+This entry adds the guard that keeps them there. No migration, no route, no
+`api.js` method, and no new copy.
+
+**What the test holds** (`frontend/test/archetype_copy_d426.test.mjs`).
+- The engine's displayed set (`ARCHETYPES` in `archetypeScoring.ts`) is four
+  slugs each for founder, investor, partner and advisor, and coach shares the
+  advisor set. Those 16 keys are exactly the keys of `assessmentMeta.js`.
+- Each profile has a label, tagline, lean, summary, description, icon and
+  accent, five strengths, five blind spots and five matches. The label and
+  the tagline are the engine's own, and the complement chips are the match
+  labels.
+- Each slug has both cinematic banners, `{slug}.webp` and `{slug}_f.webp`.
+  The banner directory is those 32 files, and `archetypeBanner` resolves
+  each of them.
+- Scout and Steward stay on `ARCHETYPES_V2` only. They have no profile and
+  no banner. Adding copy for them waits on the owner's question (#982).
+- A string in a profile, on the archetype card, or in the profile band that
+  names Eadwyn does not contain the word advice. "Advice" about a human
+  operator stays, as D320 allowed: the Embedded Operator's line does not
+  name Eadwyn.
+
+**Left for later.** The values-compatibility half of Session 14 waits for
+the investor bank. It is not part of this entry.
+
+**Verification.** Five mutations, five caught, each with a non-zero exit and
+a `not ok` line, restored from a sha256-checked snapshot: a dropped strength,
+a missing banner, the card calling Eadwyn's output advice, the human-operator
+line losing that word, and coach no longer sharing the advisor array.
+`npm run build`, then `npm run test:drift`: EXIT=0. Frontend 4819 pass,
+worker 5686 pass, retention 121.
+
 ## D430
 
 **Recovery codes get a single writer: regenerating them and then re-pairing
@@ -40918,6 +40987,27 @@ walks back to that character and checks the six letters on their own, with
 the angle bracket kept out of that string. The text is never served. The
 test throws if that element is gone. No migration.
 
+## D473
+
+**`/branch` redirects to `/studio`.** The digest is no longer a page a person opens. `/branch/*` stays. No migration. The admin guard stays `guard(['admin'])`. A bookmark's query string and hash travel with the redirect.
+
+**What the digest did, and where Studio does it.**
+- **Queue pressure, oldest first.** The Approvals card and the Approvals tile (`approvalsGlance`) name the oldest open lane, its age, its window and its count, from the same `queue_pressure` the digest sorted. The card opens `/branch/approvals`, which is the eleven lanes item by item.
+- **Programme clock, with the zone.** The Programs card and tile (`programmeGlance`) print the open week, the close formatted in the programme zone, and the zone name. A recorded `pending_accounts` count, including zero, is part of that sentence. A missing count is left off the sentence and is not printed as zero. Hours left still rank the tile (due within 24 hours) rather than being printed beside the close.
+- **Revenue share, as a rate, and no amount.** The Insights card and the share chip print the percentage from the same basis points (`insightsGlance`). They do not multiply it by a base. The complement "you keep" stays on `/branch/insights/analytics`. The digest's month-to-date line said the amount is not recorded. Studio draws no amount line, so it does not invent one.
+
+**The five blocks with no source.** The digest's rail listed an AI digest, rail flags, a local clock, a help desk and security alerts as absent, each with the worker's reason on `GET /api/branch/home`. Studio's rail reports the glance blocks it read. It does not repeat those five absences. The worker route still returns them.
+
+**Nothing in the app linked to the bare path.** The sidebar's first row is already `/studio`. The route stays so a bookmark lands on Studio.
+
+**`BranchHome.jsx` stays, unmounted.** `pctFromBps` is imported by the studio overview, and the digest tests still read the component. Deleting the file would take the rate helper with it. The default export has no route caller.
+
+**Relayed, not edited.** `sidebarConfig.js` still says `/branch` stays registered as the digest. That comment is slot S05's. The route is still registered. It redirects.
+
+**Tests.** `frontend/test/branch_digest_redirect_d473.test.mjs`. The redirect is rendered: `/branch?kept=1#sec` lands on `/studio?kept=1#sec`, and `/branch/accounts` stays. The programme sentence is called, not scanned.
+
+**Verification.** Four mutations, four caught, each with a non-zero exit and a `not ok` line, restored from a snapshot: the redirect removed, the query and hash dropped, the pending count dropped, and a zero count treated as missing. `npm run build`, then `npm run test:drift`: EXIT=1. Frontend 4904 pass, 2 fail. Both failures are the learning pins already failing on main (`learning_assessments_d559.test.mjs`, `learning_programs_d558_ui.test.mjs`). This change does not touch those files. The suite stops there, so the worker and retention jobs did not run.
+
 ## D474
 
 **Branch Contracts: Expiring soon, and Use template on the current library cards.** Issue #1027. No migration. `admin_contracts.ts` is not edited.
@@ -41095,6 +41185,73 @@ caught, including:
 
 `hq_security_sessions_d481.test.mjs` (12 tests) renders the panel and the
 cards. Eight mutations were each caught.
+
+## D482
+
+**HQ · Support: a ticket's category is one of eight, and HQ's ticket SLA hours
+are a store HQ edits (issue #1022, migration 333).** Slot S07. The owner chose A
+on #1022: migration 333 only, and `services/githubSync.ts`'s runtime ALTERs are
+not touched.
+
+**The category.** Canvas Y1 (`Support Security · Super.dc.html`) draws a fixed
+taxonomy of eight: Fund administration, Contracts, Access & permissions,
+Licence & seats, Billing, Data & reporting, Onboarding, Other. The page said
+the opposite ("Free-text categories would not stay comparable") while counting
+tickets by type.
+
+- `tickets.category` (migration 333) holds one of eight slugs, under a CHECK.
+  `services/ticketCategories.ts` holds the labels. The filing form's copy,
+  `frontend/src/lib/ticketCategories.js`, is held to the CHECK by a test that
+  runs migration 333.
+- NULL is "no category recorded". That covers every ticket filed before 333,
+  and any ticket filed without a category. It is never Other.
+- `POST /api/tickets` stores the category, refuses a value outside the set
+  (400), and stores NULL when none is named.
+- `PUT /api/tickets/:id` changes the category only when the body names the
+  key, alone or beside another field; `null` clears it.
+- The filing form (`TicketsPage.jsx`) asks for a category. The Personal
+  Advisor's ticket path names none, so it files NULL.
+- The panel's taxonomy counts open tickets by category: all eight, in the
+  canvas's order, with zeros, plus the uncategorised count apart.
+
+**The SLA tier store.** D459 settled the P1/P2/P3 band rule and left the hours
+as constants.
+
+- They are now `hq_support_sla_tiers` (migration 333), seeded with D459's
+  24 / 48 / 96, so nothing bands differently the day it applies.
+- `PUT /api/admin/hq-support/sla-tiers`, gated by `requireSuperAdmin` like the
+  page's read, takes all three tiers at once. Each needs whole hours from 1 to
+  720 and a description, with P1 ≤ P2 ≤ P3. A violation is refused 400 and
+  nothing is written.
+- A write that changes something writes one `logAdminAction` row
+  (`hq_support.sla_tiers.update`) carrying each changed tier's before and
+  after. A write that changes nothing writes no row.
+- `GET /api/admin/hq-support` reads the store on every call and bands tickets
+  with it.
+- If the store cannot be read, or is missing a tier, `sla_policy.tiers` is
+  unavailable with its reason. No ticket is banded (`sla_band` and `bands`
+  null), and the seed does not stand in. The queues and their counts stay.
+- The escalation kinds' hours (`rpc/hqOps.ts` `SLA_HOURS`) stay in code. They
+  stamp `due_at` when a branch raises an escalation, which is a second promise.
+
+**Held: the branch copy.** A branch would carry these hours in its licence copy,
+and that is `routes/licence.ts`, slot S05's. Until then a branch bands with the
+hours it shipped with. The panel says so (`branch_copy.held`, "Branch copy
+held"), and so does the page's rail.
+
+**Tests.**
+- `cloudflare-worker/test/support_category_sla_store_d482.test.ts` (6 tests)
+  pins the migration's CHECKs and seed, the category on create and update, the
+  tier write's gate, validation and audit, banding with the stored hours, the
+  category taxonomy, and the unreadable or partial store.
+- `frontend/test/ticket_categories_d482.test.mjs` (5 tests) pins the panel's
+  states, the rail, and the form's list against migration 333.
+- Existing fixtures that build `tickets` now apply 333:
+  `ticket_creation_recovery`, `support_queues_d204`.
+- `support_sla_band_d459` and `hq_support_sla_d455` now read the store-shaped
+  policy and the category taxonomy.
+
+28 mutations were made and every one was caught.
 
 ## D490
 

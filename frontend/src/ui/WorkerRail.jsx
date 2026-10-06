@@ -6,7 +6,7 @@ import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
-import { formatCost, formatRate, formatSpend, lastRunReceipt, pageSpendLine, spendMeter } from './assistCost';
+import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, pageMonthLine, splitByPage, spendMeter } from './assistCost';
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY } from './railModels';
 import { Unreadable } from './Honesty';
@@ -342,6 +342,156 @@ export function RailSheet({ id, workspace, onEvent, closeRef, style, children })
  * first three is ever drawn as $0.00. In Manual it is not drawn at all, as the
  * canvas says, and the label on the spine still names the rail.
  */
+/**
+ * The Usage block's per-page half (D552 step 3): this page's month, this
+ * page's last run, and the month split by page. Its own component so each
+ * honest state can be rendered and tested without the rail around it.
+ *
+ * `spend` is `/api/ai/me/spend` (the account read, known to be `recorded`);
+ * `pageSpend` / `pageSpendError` are `useAiSpend`'s page read, null without
+ * one. `pagePath` is the page as the router records it.
+ */
+export function RailPageUsage({ spend, pagePath, pageSpend, pageSpendError, onRetry }) {
+  const pageRecordable = isRecordablePage(pagePath);
+  // The page read, only when it answered. A report left from an earlier read
+  // is not shown beside a failed one: both lines below go to Unreadable.
+  const page = pageRecordable && !pageSpendError && pageSpend?.recorded === true ? pageSpend : null;
+  return (
+    <>
+      {/*
+        THIS PAGE (D552 step 3) — the canvas's "This page this
+        month" and this page's last run, from
+        `/api/ai/me/spend?surface=<pagePath>`: the caller's own
+        rows recorded against this page, and nobody else's. Before
+        D552 every AI call but two wrote no page, so a figure
+        derived from `by_surface` was a fraction of what the page
+        had cost; the read is now direct. Its honest states:
+          · the read failed            → Unreadable, with a retry;
+          · runs this month            → their spend and count;
+          · none, and none ever        → "No run on this page yet";
+          · none this month            → "No run on this page this
+            month", never "yet", which would be a claim;
+        and beside a zero, the month's runs that carry no page,
+        because some may be this page's from before it was
+        recorded (D404).
+
+        A path the router does not record (`isRecordablePage`) is
+        not read at all: its runs are stored with no page, and the
+        line says that rather than showing a refused read as a
+        failure.
+      */}
+      {!pageRecordable
+        ? (
+          <p className="fwr-page-spend" data-testid="text-worker-rail-page-spend">
+            Runs from this page are not recorded against it, so they count among the month's runs with no page.
+          </p>
+        )
+        : !page
+          ? (
+            <div data-testid="text-worker-rail-page-spend">
+              <Unreadable
+                what="This page's spend"
+                claim="That is not a claim that this page has cost nothing."
+                onRetry={onRetry}
+              />
+            </div>
+          )
+          : (
+            <p className="fwr-page-spend" data-testid="text-worker-rail-page-spend">
+              {pageMonthLine(page)}
+            </p>
+          )}
+      {/*
+        THE LASTING RECEIPT (D401), now THIS PAGE's (D552 step 3):
+        the canvas's "Last run · in/out · cost", from the page
+        read's `last_run` — the caller's most recent run recorded
+        against this page, in any month. A failed read of it is
+        Unreadable, not "no runs"; the Worker reports the two apart
+        with `last_run_recorded`. With no run, the line above has
+        already said "No run on this page yet", so nothing is
+        drawn twice.
+
+        On a page whose path the router does not record there is
+        no page receipt to show, so the account's is shown, labelled
+        as the account's: a label that read as "this page" there
+        would state a fact the log lacks.
+      */}
+      {pageRecordable
+        ? (page && (page.last_run_recorded === false
+          ? (
+            <div data-testid="text-worker-rail-last-run">
+              <Unreadable
+                what="This page's last run"
+                claim="That is not a claim that it has none."
+                onRetry={onRetry}
+              />
+            </div>
+          )
+          : page.last_run && (
+            <p className="fwr-last-run" data-testid="text-worker-rail-last-run">
+              <b>Last run · this page</b>
+              {lastRunReceipt(page.last_run, MODEL_COPY[page.last_run.model]?.name)}
+            </p>
+          )))
+        : (spend.last_run_recorded === false
+          ? (
+            <div data-testid="text-worker-rail-last-run">
+              <Unreadable
+                what="Your last run"
+                claim="That is not a claim that you have none."
+                onRetry={onRetry}
+              />
+            </div>
+          )
+          : spend.last_run && (
+            <p className="fwr-last-run" data-testid="text-worker-rail-last-run">
+              <b>Last run · your account, any page</b>
+              {lastRunReceipt(spend.last_run, MODEL_COPY[spend.last_run.model]?.name)}
+            </p>
+          ))}
+      {/*
+        BY PAGE (D552 step 3) — the month split across the pages it
+        was spent on, from `by_surface` (migration 319's column,
+        grouped). The costliest few, this page among them wherever
+        it ranks, the rest folded into one line so the rows still
+        add up to the month, and the runs with no page as their own
+        row. A failed grouping is Unreadable, never an empty list.
+      */}
+      {spend.by_surface_recorded === false
+        ? (
+          <div data-testid="list-worker-rail-by-page">
+            <Unreadable
+              what="Spend by page"
+              claim="That is not a claim that no page has spent."
+              onRetry={onRetry}
+            />
+          </div>
+        )
+        : (() => {
+          const split = splitByPage(spend.by_surface, pagePath);
+          if (!split.rows.length) return null;
+          return (
+            <ul className="fwr-by-page" data-testid="list-worker-rail-by-page" aria-label="Spend by page this month">
+              {split.rows.map((r) => (
+                <li key={r.surface ?? '(none)'} className={r.current ? 'fwr-by-page-current' : undefined}
+                  aria-current={r.current ? 'page' : undefined}>
+                  <span>{r.label}</span>
+                  <span>{formatCost(r.spend_usd)} · {r.calls} run{r.calls === 1 ? '' : 's'}</span>
+                </li>
+              ))}
+              {split.rest && (
+                <li>
+                  <span>{split.rest.pages} more page{split.rest.pages === 1 ? '' : 's'}</span>
+                  <span>{formatCost(split.rest.spend_usd)} · {split.rest.calls} run{split.rest.calls === 1 ? '' : 's'}</span>
+                </li>
+              )}
+            </ul>
+          );
+        })()}
+    </>
+  );
+}
+
 export function spineSpend({ spend, loading, spendError }) {
   if (loading) return { state: 'loading', text: '…', label: 'Usage this month: loading' };
   if (spendError || spend?.recorded === false) {
@@ -432,7 +582,13 @@ export default function WorkerRail({
   footer = 'Read-only summary · no automated actions',
   'data-testid': testId = 'worker-rail',
 }) {
-  const { spend, pricing, spendError, pricingError, loading, reload } = useAiSpend();
+  const pathname = useRailPathname();
+  // The page as the router records it: no trailing slash, the same shape
+  // `normaliseSurface` stores, so the lookup below matches the rows (D404).
+  const pagePath = String(pathname || '').replace(/\/+$/, '') || (pathname === '/' ? '/' : '');
+  // D552 step 3 — this page's own month and last run come from a third read,
+  // `?surface=<pagePath>`, made only for a path the router records.
+  const { spend, pricing, pageSpend, spendError, pricingError, pageSpendError, loading, reload } = useAiSpend({ page: pagePath });
   const bodyId = `${useId()}-worker-rail-body`;
 
   // One preference for the whole product, not one per page. The stored value
@@ -499,10 +655,6 @@ export default function WorkerRail({
   // workspace's — the same stored key — and the rail shows it read-only with
   // a link back to where it is chosen, rather than a menu whose every click
   // silently changes the whole workspace.
-  const pathname = useRailPathname();
-  // The page as the router records it: no trailing slash, the same shape
-  // `normaliseSurface` stores, so the lookup below matches the rows (D404).
-  const pagePath = String(pathname || '').replace(/\/+$/, '') || (pathname === '/' ? '/' : '');
   const inherited = railInheritance(role, pathname);
   const activeEntry = models.find((m) => m.id === activeModel) || null;
 
@@ -915,62 +1067,16 @@ export default function WorkerRail({
                   )}
                   <p>
                     {spend.month.calls
-                      ? `${spend.month.calls} run${spend.month.calls === 1 ? '' : 's'} across the platform this month. Nothing on this page spends.`
+                      ? `${spend.month.calls} run${spend.month.calls === 1 ? '' : 's'} across the platform this month.`
                       : 'No runs recorded this month.'}
                   </p>
-                  {/*
-                    THE LASTING RECEIPT (D401) — the canvas's "Last run · in/out
-                    · cost", from `/api/ai/me/spend`'s `last_run`. It is the
-                    caller's most recent row ANYWHERE on the platform, not this
-                    page's, and the label says so: `ai_usage_logs` records no
-                    page, so "this page's last run" is not a fact the log holds
-                    (item 5 adds the column). A failed read of it is
-                    Unreadable, not "no runs"; the Worker reports the two apart
-                    with `last_run_recorded`.
-                  */}
-                  {/*
-                    THIS PAGE THIS MONTH (D404) — the canvas's per-page figure,
-                    from `by_surface`, which groups the month's rows by the
-                    page they were asked from (migration 319). Three honest
-                    states and no fourth:
-                      · the read failed           → Unreadable, with a retry;
-                      · this page has rows        → its spend and run count;
-                      · it has none               → "No runs from this page
-                        this month", and — when the month has runs that carry
-                        no page — how many, because those may include this
-                        page's own runs from before pages were recorded.
-                  */}
-                  {spend.by_surface_recorded === false
-                    ? (
-                      <div data-testid="text-worker-rail-page-spend">
-                        <Unreadable
-                          what="This page's spend"
-                          claim="That is not a claim that this page has cost nothing."
-                          onRetry={reload}
-                        />
-                      </div>
-                    )
-                    : Array.isArray(spend.by_surface) && (
-                      <p className="fwr-page-spend" data-testid="text-worker-rail-page-spend">
-                        {pageSpendLine(spend.by_surface, pagePath)}
-                      </p>
-                    )}
-                  {spend.last_run_recorded === false
-                    ? (
-                      <div data-testid="text-worker-rail-last-run">
-                        <Unreadable
-                          what="Your last run"
-                          claim="That is not a claim that you have none."
-                          onRetry={reload}
-                        />
-                      </div>
-                    )
-                    : spend.last_run && (
-                      <p className="fwr-last-run" data-testid="text-worker-rail-last-run">
-                        <b>Last run · your account, any page</b>
-                        {lastRunReceipt(spend.last_run, MODEL_COPY[spend.last_run.model]?.name)}
-                      </p>
-                    )}
+                  <RailPageUsage
+                    spend={spend}
+                    pagePath={pagePath}
+                    pageSpend={pageSpend}
+                    pageSpendError={pageSpendError}
+                    onRetry={reload}
+                  />
                 </>
               )
               : (

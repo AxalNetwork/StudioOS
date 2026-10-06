@@ -3,23 +3,21 @@
  * apart from React so `frontend/test/wellbeing_d570.test.mjs` can drive it
  * against fixtures and against the Worker's own validator.
  *
- * WHAT THE WORKER ACTUALLY STORES, because the canvas and the brief both drew
- * something else. `POST /api/wellbeing/checkins` (routes/wellbeing.ts,
- * `submitCanonicalCheckin`) validates with `validateDailyBody` and upserts ONE
- * ROW PER DAY into `wellbeing_daily_pulses`, keyed `(user_id, day)`. It takes
- * six optional 1–5 scores — mood, stress, sleep, energy, focus, social — plus
- * `free_text` and `tags`, and needs at least one score. Support and decisions
- * belong to the legacy weekly schema (`CHECKIN_KEYS`) that nothing writes any
- * more, and "one per week" is the dev FastAPI's `week_anchor`, not the
- * Worker's. So:
+ * WHAT THE WORKER STORES. `POST /api/wellbeing/checkins` (routes/wellbeing.ts,
+ * `submitCanonicalCheckin`) validates with `validateDailyBody` and writes
+ * `wellbeing_daily_pulses`. Since D574 (migration 395) it takes eight optional
+ * 1–5 scores — the canvas's stress, sleep, support, decisions and energy, and
+ * mood, focus and social under "More" — plus `free_text` and `tags`, and
+ * needs at least one score.
  *
- *   - Stress, sleep and energy are kept; support and decisions are drawn as
- *     "Not recorded" with the reason, never offered as inputs a save would drop.
- *   - One check-in per week is kept by THIS page: when the week already has an
- *     entry, a save sends that entry's `day`, and the route's per-day upsert
- *     replaces it. Nothing refuses a second save, because nothing does.
- *   - The upsert overwrites every column, so a save sends back every value the
+ *   - ONE CHECK-IN PER WEEK is the route's rule (D574): a save in a week that
+ *     already has a row replaces that row, on its own day, and is never
+ *     refused. This page still sends the week's `day` when it has one, which
+ *     the route would choose anyway.
+ *   - The write overwrites every column, so a save sends back every value the
  *     form was prefilled with. Leaving one out would erase it.
+ *   - A week saved before D574 has no support or decisions: those read as gaps
+ *     for that week, never as zero.
  */
 import { titleCase } from '../../lib/absence';
 
@@ -28,7 +26,9 @@ import { titleCase } from '../../lib/absence';
  * ------------------------------------------------------------------ */
 
 /** The six scores the check-in route stores, in its own order (`DAILY_KEYS`). */
-export const ROUTE_SCORE_KEYS = ['mood', 'stress', 'sleep', 'energy', 'focus', 'social'];
+export const ROUTE_SCORE_KEYS = ['mood', 'stress', 'sleep', 'energy', 'focus', 'social', 'support', 'decisions'];
+/** The six scores `GET /aggregate` averages for the admin pulse. */
+export const AGGREGATE_SCORE_KEYS = ['mood', 'stress', 'sleep', 'energy', 'focus', 'social'];
 
 /** Why support and decisions are drawn and never asked. */
 export const NOT_STORED_REASON = 'The check-in has no field for this score yet, so an answer could not be kept.';
@@ -40,8 +40,8 @@ export const NOT_STORED_REASON = 'The check-in has no field for this score yet, 
 export const CANVAS_SCORES = [
   { key: 'stress', label: 'Stress', field: 'stress', low: 'Calm', high: 'Overwhelmed' },
   { key: 'sleep', label: 'Sleep', field: 'sleep', low: 'Poor', high: 'Restful' },
-  { key: 'support', label: 'Support', field: null },
-  { key: 'decisions', label: 'Decisions', field: null },
+  { key: 'support', label: 'Support', field: 'support', low: 'On my own', high: 'Well supported' },
+  { key: 'decisions', label: 'Decisions', field: 'decisions', low: 'Stuck', high: 'Clear' },
   { key: 'energy', label: 'Energy', field: 'energy', low: 'Drained', high: 'Charged' },
 ];
 
@@ -704,14 +704,74 @@ export function resourceFacts(resource) {
 
 export const EMPTY_RESOURCE = {
   name: '', category: '', url: '', description: '', region: '', is_24_7: false, is_free: false, sort_order: '100',
+  kind: '', topic: '', id: null, file: null,
 };
 
-/** A resource draft as `POST /resources` takes it, or the field errors. */
-export function resourceBody(draft) {
+/** D574 — the canvas's formats (`RESOURCE_KINDS` on the route), and a topic's length. */
+export const RESOURCE_FORMATS = ['article', 'audio', 'video', 'link'];
+export const RESOURCE_FORMAT_LABELS = { article: 'Article', audio: 'Audio', video: 'Video', link: 'Link' };
+export const RESOURCE_TOPIC_MAX = 60;
+export const resourceFormat = (kind) => RESOURCE_FORMAT_LABELS[kind] || null;
+
+/** D574 part 4 — the types and size `PUT /resources/:id/file` takes (`RESOURCE_FILE_TYPES`). */
+export const RESOURCE_FILE_TYPES = {
+  'application/pdf': 'PDF', 'audio/mpeg': 'MP3', 'audio/mp4': 'M4A', 'video/mp4': 'MP4', 'video/webm': 'WebM',
+};
+export const RESOURCE_FILE_MAX_MB = 95;
+
+/** The route's gated path for a resource's file, and only that: never another origin. */
+const FILE_PATH = /^\/api\/wellbeing\/resources\/[^/?#]+\/file$/;
+export function resourceHref(r) {
+  const link = safeHref(r?.url);
+  if (link) return link;
+  const path = String(r?.file?.url ?? '');
+  return FILE_PATH.test(path) ? path : null;
+}
+
+/** "PDF · 1.2 MB", or null without a file. */
+export function fileLabel(file) {
+  if (!file) return null;
+  const type = RESOURCE_FILE_TYPES[file.type] || 'File';
+  const bytes = Number(file.size);
+  if (!Number.isFinite(bytes) || bytes <= 0) return type;
+  const size = bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${type} · ${size}`;
+}
+
+/** Why a chosen file cannot be uploaded, or null when it can. */
+export function fileProblem(file) {
+  if (!file) return 'Choose a file.';
+  if (!RESOURCE_FILE_TYPES[file.type]) return 'A library file is a PDF, an MP3 or M4A, or an MP4 or WebM video.';
+  if (file.size > RESOURCE_FILE_MAX_MB * 1024 * 1024) return `A library file is at most ${RESOURCE_FILE_MAX_MB} MB.`;
+  return null;
+}
+
+/** D574 — a stored row as the editor holds it, to edit in place. */
+export function draftOf(row) {
+  return {
+    id: row?.id ?? null,
+    name: String(row?.name ?? ''), category: String(row?.category ?? ''), url: String(row?.url ?? ''),
+    description: String(row?.description ?? ''), region: String(row?.region ?? ''),
+    is_24_7: !!row?.is_24_7, is_free: !!row?.is_free, sort_order: String(row?.sort_order ?? '100'),
+    kind: String(row?.kind ?? ''), topic: String(row?.topic ?? ''),
+    file: row?.file ?? null,
+  };
+}
+
+/**
+ * A resource draft as `POST /resources` or `PATCH /resources/:id` takes it,
+ * or the field errors. `status` is the button pressed: save as a draft, or
+ * publish.
+ */
+export function resourceBody(draft, status = 'published') {
   const fields = {};
   const name = String(draft?.name || '').trim();
   if (!name) fields.name = 'A resource needs a title.';
-  if (!RESOURCE_CATEGORIES.includes(draft?.category)) fields.category = 'Choose a kind.';
+  if (!RESOURCE_CATEGORIES.includes(draft?.category)) fields.category = 'Choose a category.';
+  const kind = String(draft?.kind || '');
+  if (kind && !RESOURCE_FORMATS.includes(kind)) fields.kind = 'Choose a format.';
+  const topic = String(draft?.topic || '').trim();
+  if (topic.length > RESOURCE_TOPIC_MAX) fields.topic = `A topic is at most ${RESOURCE_TOPIC_MAX} characters.`;
   const url = String(draft?.url || '').trim();
   if (url && !safeHref(url)) fields.url = 'A link starts with https:// or http://.';
   const rawOrder = String(draft?.sort_order ?? '').trim();
@@ -729,6 +789,9 @@ export function resourceBody(draft) {
       is_24_7: !!draft?.is_24_7,
       is_free: !!draft?.is_free,
       sort_order: order,
+      kind: kind || null,
+      topic: topic || null,
+      status: status === 'draft' ? 'draft' : 'published',
     },
   };
 }
@@ -819,9 +882,13 @@ export function practiceCoverage({ services, windows, upcoming }) {
 
 export function libraryCoverage(resources) {
   if (!Array.isArray(resources)) return [];
-  const lines = [`${resources.length} resource${resources.length === 1 ? '' : 's'} published`];
+  // D574 — an admin's read carries drafts; they are counted apart, never as published.
+  const published = resources.filter((r) => r?.status !== 'draft');
+  const drafts = resources.length - published.length;
+  const lines = [`${published.length} resource${published.length === 1 ? '' : 's'} published`];
+  if (drafts) lines.push(`${drafts} draft${drafts === 1 ? '' : 's'} not yet published`);
   for (const category of RESOURCE_CATEGORIES) {
-    const n = resources.filter((r) => r?.category === category).length;
+    const n = published.filter((r) => r?.category === category).length;
     if (n) lines.push(`${resourceKind(category)}: ${n}`);
   }
   return lines;

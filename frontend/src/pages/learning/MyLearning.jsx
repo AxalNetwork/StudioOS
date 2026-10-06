@@ -3,15 +3,17 @@ import { Link } from 'react-router-dom';
 import { CirclePlay, PenLine } from 'lucide-react';
 import { Pill, Unrecorded } from '../../ui';
 import { SectionCard, stateBlock } from './LearningStates';
-import { NOT_LIVE, SUBMISSION_STATUS, durationLabel, formatDay } from './learningModel';
+import { NOT_LIVE, SUBMISSION_STATUS, UNLISTED, durationLabel, formatDay } from './learningModel';
 
 /**
  * Everything one member has started, finished, submitted or sat (D562).
  *
  * THREE STORES, THREE STATES. The progress rows are #1158's `GET
  * /api/learning/me`; exercise submissions and exam attempts are #1160's. They
- * merge separately and can fail separately, so each prop carries its own
- * `{ status, data, onRetry }` and one failed read never blanks the others.
+ * can fail separately, so each prop carries its own `{ status, data, onRetry }`
+ * and one failed read never blanks the others. D559 serves submissions and
+ * attempts one exercise or exam at a time and lists neither across them, so
+ * those two parts stay "Not recorded" and say where each one is (`UNLISTED`).
  *
  *   progress   data: { in_progress: [row], completed: [row] }, each row
  *              { subject_kind: 'course' | 'item' | 'lesson', subject_uid, title,
@@ -50,7 +52,7 @@ export default function MyLearning({ progress = { status: 'unrecorded' }, exerci
             </RowLine>
           )}
         </Part>
-        <Part title="Exercises" state={exercises} rows={exercises.data || []} reason={NOT_LIVE.exercises} what="your exercises" empty="No exercise submitted yet." testid="my-exercises">
+        <Part title="Exercises" state={exercises} rows={exercises.data || []} reason={UNLISTED.submissions} what="your exercises" empty="No exercise submitted yet." testid="my-exercises">
           {(row) => (
             <RowLine href={row.href} title={row.title} icon={PenLine}>
               {SUBMISSION_STATUS[row.status]
@@ -61,7 +63,7 @@ export default function MyLearning({ progress = { status: 'unrecorded' }, exerci
         </Part>
       </div>
       <div className="min-w-0 space-y-4">
-        <Part title="Exam results" state={exams} rows={exams.data || []} reason={NOT_LIVE.exams} what="your exam results" empty="No exam sat yet." testid="my-exams">
+        <Part title="Exam results" state={exams} rows={exams.data || []} reason={UNLISTED.attempts} what="your exam results" empty="No exam sat yet." testid="my-exams">
           {(row) => (
             <RowLine href={row.href} title={row.title}>
               {row.score_percent !== null && row.score_percent !== undefined

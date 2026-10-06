@@ -43,12 +43,71 @@
  *             that option would return. A fund whose HQ names two countries
  *             counts under both; an HQ or focus string the crosswalk places
  *             nowhere counts under neither (`facets_unmapped` says how many).
+ *
+ * D597 (#1232) — each list's publisher and terms (migration 406):
+ *   SERVED_FUNDS  every read of fund rows goes through it, never through the
+ *                 table: it leaves out each row of a list whose terms forbid
+ *                 republishing (`research_fund_sources.verdict = 'not allowed'`).
+ *   source        on every row and in the profile: the list's name, publisher,
+ *                 link and terms verdict. A list with no review row is still
+ *                 served, and says its terms were not reviewed.
+ *   removed_sources  the lists taken down, with why and how many funds are withheld.
  */
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
 
 /** The source whose sizes are euros (`fund_size_cents` = euro cents). */
 export const EUR_SOURCE = 'EuroTech VC Funds (public spreadsheet)';
+
+/** The three terms verdicts migration 406's CHECK allows, and no other. */
+export const FUND_SOURCE_VERDICTS = ['republish allowed', 'cite only', 'not allowed'] as const;
+export type FundSourceVerdict = typeof FUND_SOURCE_VERDICTS[number];
+
+/**
+ * D597 (#1232): the fund rows the API may serve — every row of
+ * `research_fund_directory` except those of a list whose verdict is
+ * 'not allowed' in `research_fund_sources` (migration 406). Read fund rows
+ * as `FROM ${SERVED_FUNDS} AS f`, never from the table. A literal of this
+ * file: no request value reaches it. If the sources table cannot be read,
+ * the query fails and the page says "Unreadable"; it never serves every list.
+ */
+export const SERVED_FUNDS = `(SELECT * FROM research_fund_directory d WHERE NOT EXISTS (
+  SELECT 1 FROM research_fund_sources s WHERE s.source_name = d.source_name AND s.verdict = 'not allowed'))`;
+
+/** One list's review, as migration 406 records it. */
+export interface FundSourceRow {
+  source_name: string; title: string; publisher: string | null; published_url: string | null;
+  terms_status: 'found' | 'not found'; terms_quote: string | null; evidence_url: string | null; evidence: string;
+  verdict: FundSourceVerdict; verdict_reason: string; reviewed_on: string;
+  repo_copy: string | null; repo_copy_note: string | null;
+}
+
+export const SOURCE_NOT_REVIEWED = 'Not recorded: this list\'s terms have not been reviewed';
+
+/** Every list's review, by source name. */
+export async function loadFundSources(env: Env): Promise<Map<string, FundSourceRow>> {
+  const r = await env.DB.prepare(
+    `SELECT source_name, title, publisher, published_url, terms_status, terms_quote, evidence_url, evidence,
+            verdict, verdict_reason, reviewed_on, repo_copy, repo_copy_note
+       FROM research_fund_sources`,
+  ).all<FundSourceRow>();
+  return new Map((r.results || []).map((s) => [s.source_name, s]));
+}
+
+/**
+ * How a fund cites its list: name, publisher, link and terms verdict. The
+ * link is where the list is published, else where the row was read from. A
+ * list with no review row has no verdict, and `reason` says so.
+ */
+export function citeSource(name: string, rowUrl: string | null, s: FundSourceRow | undefined) {
+  if (!s) {
+    return { name, title: null, publisher: null, url: rowUrl, verdict: null, terms_status: null,
+      terms_quote: null, evidence_url: null, reviewed_on: null, reason: SOURCE_NOT_REVIEWED };
+  }
+  return { name, title: s.title, publisher: s.publisher, url: s.published_url ?? rowUrl, verdict: s.verdict,
+    terms_status: s.terms_status, terms_quote: s.terms_quote, evidence_url: s.evidence_url,
+    reviewed_on: s.reviewed_on, reason: s.verdict_reason };
+}
 
 export const SORTS: Readonly<Record<string, string>> = {
   'name': 'name COLLATE NOCASE ASC, uid ASC',
@@ -171,7 +230,7 @@ async function rawCounts(env: Env, column: 'hq' | 'sector_focus', clause: string
   // `column` is one of two literals of this file, never a request value; `clause`
   // is built by `conditions` from literals, with every value in `binds`.
   const rows = await env.DB.prepare(
-    `SELECT ${column} AS v, COUNT(*) AS n FROM research_fund_directory ${clause} GROUP BY ${column}`,
+    `SELECT ${column} AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f ${clause} GROUP BY ${column}`,
   ).bind(...binds).all<{ v: string | null; n: number }>();
   return rows.results || [];
 }
@@ -180,7 +239,7 @@ async function rawCounts(env: Env, column: 'hq' | 'sector_focus', clause: string
 async function rawValuesMappingTo(env: Env, column: 'hq' | 'sector_focus', target: string, overrides: Overrides): Promise<string[]> {
   // `column` is one of two literals of this file, never a request value.
   const rows = await env.DB.prepare(
-    `SELECT DISTINCT ${column} AS v FROM research_fund_directory WHERE TRIM(COALESCE(${column}, '')) <> ''`,
+    `SELECT DISTINCT ${column} AS v FROM ${SERVED_FUNDS} AS f WHERE TRIM(COALESCE(${column}, '')) <> ''`,
   ).all<{ v: string }>();
   const map = column === 'hq' ? mapFundHq : mapFundFocus;
   return (rows.results || []).map((r) => r.v).filter((v) => map(v, overrides).targets.includes(target));
@@ -294,7 +353,7 @@ async function vintageFacet(env: Env, q: DirectoryQuery, r: Resolved) {
   const clause = whereClause(where);
   // `clause` is built from literals of `conditions`; every value is in `binds`.
   const rows = await env.DB.prepare(
-    `SELECT fund_year AS v, COUNT(*) AS n FROM research_fund_directory ${clause} GROUP BY fund_year ORDER BY fund_year DESC`,
+    `SELECT fund_year AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f ${clause} GROUP BY fund_year ORDER BY fund_year DESC`,
   ).bind(...binds).all<{ v: number | null; n: number }>();
   const list = rows.results || [];
   const none = list.filter((x) => x.v == null).reduce((t, x) => t + Number(x.n), 0);
@@ -315,7 +374,7 @@ async function sizeFacet(env: Env, q: DirectoryQuery, r: Resolved) {
   // `clause` is built from literals of `conditions`; every value is in `binds`.
   const rows = await env.DB.prepare(
     `SELECT CASE WHEN source_name = ? THEN fund_size_cents END AS c, COUNT(*) AS n
-       FROM research_fund_directory ${clause} GROUP BY c`,
+       FROM ${SERVED_FUNDS} AS f ${clause} GROUP BY c`,
   ).bind(EUR_SOURCE, ...binds).all<{ c: number | null; n: number }>();
   const bands = SIZE_BANDS.map((b) => ({ value: b.value, label: b.label, count: 0 }));
   let notComparable = 0;
@@ -340,14 +399,18 @@ async function backingFacet(env: Env, q: DirectoryQuery, r: Resolved, field: 'ei
     `SELECT SUM(CASE WHEN ${column} = 1 THEN 1 ELSE 0 END) AS backed,
             SUM(CASE WHEN ${column} = 0 AND TRIM(COALESCE(notable_lps, '')) <> '' THEN 1 ELSE 0 END) AS not_backed,
             SUM(CASE WHEN ${column} = 0 AND TRIM(COALESCE(notable_lps, '')) = '' THEN 1 ELSE 0 END) AS unknown
-       FROM research_fund_directory ${clause}`,
+       FROM ${SERVED_FUNDS} AS f ${clause}`,
   ).bind(...binds).first<{ backed: number | null; not_backed: number | null; unknown: number | null }>();
   return { backed: Number(row?.backed ?? 0), not_backed: Number(row?.not_backed ?? 0), unknown: Number(row?.unknown ?? 0) };
 }
 
-/** How many rows of the whole directory carry each field, and the lists it holds. */
-async function coverageAndSources(env: Env) {
-  const [cov, src] = await Promise.all([
+/**
+ * How many rows of the whole served directory carry each field, the lists it
+ * holds with each one's review, and the lists taken down (D597) with how many
+ * funds each withholds — a count, never a row.
+ */
+async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>) {
+  const [cov, src, gone] = await Promise.all([
     env.DB.prepare(
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN source_name = ? AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_eur,
@@ -360,13 +423,19 @@ async function coverageAndSources(env: Env) {
               SUM(CASE WHEN TRIM(COALESCE(notable_lps, '')) <> '' THEN 1 ELSE 0 END) AS notable_lps,
               SUM(CASE WHEN TRIM(COALESCE(fund_number, '')) <> '' THEN 1 ELSE 0 END) AS fund_number,
               MAX(as_of) AS as_of
-         FROM research_fund_directory`,
+         FROM ${SERVED_FUNDS} AS f`,
     ).bind(EUR_SOURCE, EUR_SOURCE).first<Record<string, number | string | null>>(),
     env.DB.prepare(
       `SELECT source_name AS name, MAX(source_url) AS url, COUNT(*) AS n, MAX(as_of) AS as_of
-         FROM research_fund_directory GROUP BY source_name ORDER BY COUNT(*) DESC, source_name`,
+         FROM ${SERVED_FUNDS} AS f GROUP BY source_name ORDER BY COUNT(*) DESC, source_name`,
     ).all<{ name: string; url: string | null; n: number; as_of: string | null }>(),
+    env.DB.prepare(
+      `SELECT source_name AS name, COUNT(*) AS n FROM research_fund_directory
+        WHERE source_name IN (SELECT source_name FROM research_fund_sources WHERE verdict = 'not allowed')
+        GROUP BY source_name`,
+    ).all<{ name: string; n: number }>(),
   ]);
+  const withheld = new Map((gone.results || []).map((g) => [g.name, Number(g.n)]));
   const n = (k: string) => Number(cov?.[k] ?? 0);
   return {
     coverage: {
@@ -379,11 +448,29 @@ async function coverageAndSources(env: Env) {
         fund_year: n('fund_year'), notable_lps: n('notable_lps'), fund_number: n('fund_number'),
       },
     },
-    sources: (src.results || []).map((s) => ({
-      name: s.name, url: s.url, rows: Number(s.n), as_of: s.as_of,
-      size_currency: s.name === EUR_SOURCE ? 'EUR' : null,
-    })),
+    sources: (src.results || []).map((s) => {
+      const cite = citeSource(s.name, s.url, reviews.get(s.name));
+      return {
+        name: s.name, url: s.url, rows: Number(s.n), as_of: s.as_of,
+        size_currency: s.name === EUR_SOURCE ? 'EUR' : null,
+        title: cite.title, publisher: cite.publisher, published_url: cite.url, verdict: cite.verdict,
+        terms_status: cite.terms_status, terms_quote: cite.terms_quote, evidence_url: cite.evidence_url,
+        reviewed_on: cite.reviewed_on, reason: cite.reason,
+      };
+    }),
+    removed_sources: [...reviews.values()].filter((s) => s.verdict === 'not allowed')
+      .sort((a, b) => a.source_name.localeCompare(b.source_name))
+      .map((s) => ({
+        name: s.source_name, title: s.title, publisher: s.publisher, published_url: s.published_url,
+        verdict: s.verdict, reason: s.verdict_reason, terms_quote: s.terms_quote, evidence_url: s.evidence_url,
+        reviewed_on: s.reviewed_on, funds_withheld: withheld.get(s.source_name) ?? 0,
+      })),
   };
+}
+
+/** A served row as the API shows it, citing its list (D597). */
+function presentCited(r: DirectoryRow, reviews: Map<string, FundSourceRow>) {
+  return { ...presentFund(r), source: citeSource(r.source_name, r.source_url, reviews.get(r.source_name)) };
 }
 
 /** Labels for the facet values: country names (migration 376) and market names (229). */
@@ -397,7 +484,7 @@ async function facetLabels(env: Env) {
 }
 
 export async function listDirectory(env: Env, q: DirectoryQuery) {
-  const overrides = await loadOverrides(env);
+  const [overrides, reviews] = await Promise.all([loadOverrides(env), loadFundSources(env)]);
   const [hqRaw, focusRaw] = await Promise.all([
     q.hq_country && q.hq_country !== 'none' ? rawValuesMappingTo(env, 'hq', q.hq_country, overrides) : null,
     q.focus && q.focus !== 'none' ? rawValuesMappingTo(env, 'sector_focus', q.focus, overrides) : null,
@@ -407,10 +494,10 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
   const clause = whereClause(where);
   // `clause` is built from literals of `conditions`; every value is in `binds`.
   const [count, page, whole, labels] = await Promise.all([
-    env.DB.prepare(`SELECT COUNT(*) AS n FROM research_fund_directory ${clause}`).bind(...binds).first<{ n: number }>(),
-    env.DB.prepare(`SELECT ${COLUMNS} FROM research_fund_directory ${clause} ORDER BY ${SORTS[q.sort]} LIMIT ? OFFSET ?`)
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM ${SERVED_FUNDS} AS f ${clause}`).bind(...binds).first<{ n: number }>(),
+    env.DB.prepare(`SELECT ${COLUMNS} FROM ${SERVED_FUNDS} AS f ${clause} ORDER BY ${SORTS[q.sort]} LIMIT ? OFFSET ?`)
       .bind(...binds, q.limit, q.offset).all<DirectoryRow>(),
-    coverageAndSources(env),
+    coverageAndSources(env, reviews),
     facetLabels(env),
   ]);
   const [hq, focus, vintage, size, eif, eifo] = await Promise.all([
@@ -422,7 +509,7 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     backingFacet(env, q, r, 'eifo'),
   ]);
   return {
-    items: (page.results || []).map(presentFund),
+    items: (page.results || []).map((row) => presentCited(row, reviews)),
     total: Number(count?.n ?? 0),
     limit: q.limit,
     offset: q.offset,
@@ -430,6 +517,7 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     size_basis: 'Sizes are compared and sorted in euros, on the EuroTech list only; other lists record no size in a known currency.',
     coverage: whole.coverage,
     sources: whole.sources,
+    removed_sources: whole.removed_sources,
     facets: {
       hq_country: hq.values,
       focus: focus.values,
@@ -448,11 +536,22 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
  * One fund and its reports. A failed reports read is reported on its own
  * (`reports_status: 'unreadable'`), never passed off as a fund with no reports.
  * `reports` stays an array so the existing page keeps reading it.
+ *
+ * A fund of a list taken down (D597) answers `{ removed }`: the list, its
+ * publisher and why — never the fund's own fields.
  */
 export async function getFund(env: Env, uid: string) {
-  const row = await env.DB.prepare(`SELECT ${COLUMNS} FROM research_fund_directory WHERE uid = ?`)
-    .bind(uid).first<DirectoryRow>();
-  if (!row) return null;
+  const [row, reviews] = await Promise.all([
+    env.DB.prepare(`SELECT ${COLUMNS} FROM ${SERVED_FUNDS} AS f WHERE uid = ?`).bind(uid).first<DirectoryRow>(),
+    loadFundSources(env),
+  ]);
+  if (!row) {
+    const held = await env.DB.prepare(`SELECT source_name FROM research_fund_directory WHERE uid = ?`)
+      .bind(uid).first<{ source_name: string }>();
+    const review = held ? reviews.get(held.source_name) : undefined;
+    if (review?.verdict !== 'not allowed') return null;
+    return { removed: citeSource(review.source_name, review.published_url, review) };
+  }
   try {
     const r = await env.DB.prepare(
       `SELECT period, report_date, fund_size_cents, source_url
@@ -465,8 +564,8 @@ export async function getFund(env: Env, uid: string) {
       fund_size_cents: eur ? x.fund_size_cents : null,
       size_currency: eur && x.fund_size_cents != null ? 'EUR' : null,
     }));
-    return { item: presentFund(row), reports, reports_status: 'ok' as const };
+    return { item: presentCited(row, reviews), reports, reports_status: 'ok' as const };
   } catch {
-    return { item: presentFund(row), reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable' };
+    return { item: presentCited(row, reviews), reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable' };
   }
 }

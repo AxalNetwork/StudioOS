@@ -53,6 +53,8 @@ function fixture() {
   for (const f of ['228_research_company_directory.sql', '229_research_market_directory.sql',
     '365_research_eurotech_fund_directory.sql', '136_signals.sql', '030_market_intel.sql']) db.exec(ddl(f));
   db.exec(readFileSync(resolve(here, '../sql/migrations/379_market_intel_index_basis.sql'), 'utf8'));
+  // D597: fund rows are read only through each list's terms review.
+  db.exec(readFileSync(resolve(here, '../sql/migrations/406_research_fund_sources.sql'), 'utf8'));
   // The crosswalk (D533): its tables and its country and market-sector rows, no directory rows.
   db.exec(readFileSync(resolve(here, '../sql/migrations/376_research_taxonomy.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'founder', 'Fay', 'fay@axal.example')`).run(USER);
@@ -530,4 +532,28 @@ test('buildOpportunity keeps the known text fields and nothing else', () => {
   assert.equal(buildOpportunity('[1]'), null);
   assert.equal(buildOpportunity(null), null);
   assert.deepEqual(buildOpportunity('{"headline":" A ","risks":"B","moat":3}'), { headline: 'A', risks: 'B' });
+});
+
+test('D597: a fund list taken down for its terms is neither counted nor named in the overview', async () => {
+  const removed = 'A list whose terms forbid republishing';
+  const db = seeded();
+  fund(db, 'x1', 'USA', 40_000_000_00, 2012, 'Fintech', removed);
+  fund(db, 'x2', 'USA', 60_000_000_00, 2013, 'Fintech', EUR_SOURCE);
+  const served = (await get(db)).body;
+  assert.equal(served.totals.funds.value, 5, 'served while its list stands');
+  db.prepare(`INSERT INTO research_fund_sources (source_name, title, terms_status, evidence, verdict, verdict_reason, reviewed_on)
+              VALUES (?, ?, 'not found', 'e', 'not allowed', 'Its terms forbid republishing.', '2026-10-06')`).run(removed, removed);
+  const { totals, money } = (await get(db)).body;
+  assert.equal(totals.funds.value, 4);
+  assert.deepEqual(totals.fund_sources.names, [{ name: EUR_SOURCE, funds: 4 }]);
+  assert.equal(money.total_funds, 4);
+  assert.deepEqual(money.vintages.map((v: any) => v.year), [2010, 2013, 2024, 2025]);
+  assert.deepEqual(money.by_hq.map((x: any) => [x.code, x.funds]), [['DE', 2], ['FR', 1], ['US', 1]]);
+  assert.equal(money.size_bands.reduce((n: number, b: any) => n + b.funds, 0), 4);
+  // The euro list itself taken down: no band counts its sizes, though another list is still served.
+  fund(db, 'x3', 'France', null, 2020, 'AI', 'Deep Tech Investors Mapping (public spreadsheet)');
+  db.prepare(`UPDATE research_fund_sources SET verdict = 'not allowed' WHERE source_name = ?`).run(EUR_SOURCE);
+  const left = (await get(db)).body.money;
+  assert.equal(left.total_funds, 1);
+  assert.deepEqual(left.size_bands, []);
 });

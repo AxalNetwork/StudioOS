@@ -65,5 +65,5 @@ test('the chat and the profile band name Eadwyn where they used to say "the advi
   const pfs = codeOnly(read('frontend/src/components/profile/ProfileFitSection.jsx'));
   assert.doesNotMatch(pfs, /\b(in|to|with) the advisor\b/i, 'the chat is Eadwyn, not an advisor');
   assert.match(codeOnly(read('frontend/src/components/advisor/AdvisorFilledBanner.jsx')), /Review with Eadwyn/);
-  assert.match(codeOnly(read('frontend/src/pages/founder/FounderStudioHome.jsx')), /<span>Live interview<\/span>/);
+  assert.match(codeOnly(read('frontend/src/pages/founder/FounderStudioBody.jsx')), /<span>Live interview<\/span>/);
 });

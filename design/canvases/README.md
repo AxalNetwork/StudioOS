@@ -5,8 +5,8 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 75 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
-| `backlog/` | 29 | Graded `NEW` or `DEFERRED`. No route yet. |
+| `integrated/` | 76 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
 | `assets/`, `scraps/`, `uploads/` | — | Images and stale duplicates from the export. Not part of the 107. |
@@ -69,9 +69,13 @@ imports of the Research Page canvas (D546). The new boards were added to the
 committed files, which keep their names and their processed logo path, so no
 number moved for those two.
 
+**2026-10-06 (D564), one canvas graduated.** `Founder Studio` moved from
+`backlog/` to `integrated/` when the founder's `/studio` was built to it
+(#1168): `integrated/` went **75 → 76** and `backlog/` went **29 → 28**.
+
 **The `107` in the title is the first audit's corpus, not today's total.** It
 is `54 + 26 + 27` — the sum as it stood when `integrated/` read 54. The three
-folders hold `75 + 29 + 26 = 130` as of 2026-10-06, counted by listing them,
+folders hold `76 + 28 + 26 = 130` as of 2026-10-06, counted by listing them,
 and the title keeps 107 because the paragraph below uses it for the audit it
 names.
 

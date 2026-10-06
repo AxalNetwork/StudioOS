@@ -23,9 +23,13 @@ import { fileURLToPath } from 'node:url';
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-// D323 retired the VentureNextStep strip with the old "Welcome back" page.
-// Its successor is the founder Studio home's "Venture next step" card.
+// D323 retired the VentureNextStep strip with the old "Welcome back" page, and
+// D564 retired the "Venture next step" card with the 69dc42f3 body: the
+// founder's /studio leads with the canvas's "Do these next", read from the
+// same lifecycle checklist.
 const HOME = read('../src/pages/founder/FounderStudioHome.jsx');
+const BODY = read('../src/pages/founder/FounderStudioBody.jsx');
+const MODEL = read('../src/pages/founder/founderStudioModel.js');
 const EXPLORING = read('../src/pages/ExploringDashboard.jsx');
 const API = read('../src/lib/api.js');
 const GOOGLE = read('../../cloudflare-worker/src/routes/auth_google.ts');
@@ -33,37 +37,33 @@ const AUTH = read('../../cloudflare-worker/src/routes/auth.ts');
 
 /* ───────────────────────── /studio entry point ────────────────────────── */
 
-test('the founder home leads its modules with the venture next step', () => {
-  // Canvas 69dc42f3 S1 draws the profile band above the modules, and the live
-  // home follows it; what stays first is the venture card among the modules.
-  const src = code(HOME);
-  const firstCard = src.match(/<StudioCard\s+title="([^"]+)"/);
-  assert.ok(firstCard, 'the home draws its cards');
-  assert.equal(firstCard[1], 'Venture next step');
+test('the founder Studio leads its zones with Do these next', () => {
+  const firstZone = code(BODY).match(/<Zone\s+title="([^"]+)"/);
+  assert.ok(firstZone, 'the Studio draws its zones');
+  assert.equal(firstZone[1], 'Do these next');
 });
 
-test('the venture card does not link at the Operations console or a dead Command Center tab', () => {
-  const src = code(HOME);
+test('the founder Studio does not link at the Operations console or a dead Command Center tab', () => {
+  const src = code(HOME) + code(BODY) + code(MODEL);
   assert.doesNotMatch(src, /tab=studio-ops/);
   assert.doesNotMatch(src, /\/studio-ops/);
   assert.doesNotMatch(src, /command-center/, 'the removed page must not be linked');
 });
 
 test('the next action comes from the same endpoint LifecycleModule uses', () => {
-  // Two sources would let the card and the lifecycle rail tell a founder two
+  // Two sources would let the Studio and the lifecycle rail tell a founder two
   // different next steps.
-  const src = code(HOME);
-  assert.match(src, /api\.getLifecycle\(/);
-  assert.match(src, /checklist\?\.find\(\(item\) => !item\.done\)/);
+  assert.match(code(HOME), /api\.getLifecycle\(/);
+  assert.match(code(MODEL), /lifecycle\.checklist : \[\]\)\.filter\(\(i\) => !i\.done\)/);
 });
 
-test('with no venture the card says so, and a failed read says it failed', () => {
+test('with no venture the Studio says so, and a failed read says it failed', async () => {
   // The retired strip rendered nothing in both cases. D321 made the home say
-  // which: an absent project prompts for one, and a failed read is Unreadable.
-  const src = code(HOME);
-  const card = src.slice(src.indexOf('title="Venture next step"'), src.indexOf('</StudioCard>'));
-  assert.match(card, /empty=\{!project\}/);
-  assert.match(card, /error=\{failures\.projects \|\| failures\.lifecycle\}/);
+  // which, and the D564 Studio keeps it: an absent project prompts for one,
+  // and a failed read is Unreadable.
+  const { actionsOf, failedRead } = await import('../src/pages/founder/founderStudioModel.js');
+  assert.deepEqual(actionsOf({ project: null, lifecycle: null }).items.map((a) => a.title), ['Create your startup record']);
+  assert.equal(actionsOf({ project: { id: 1 }, lifecycle: failedRead('down') }).state, 'unreadable');
 });
 
 /* ──────────────────── admission-funnel lane parity ────────────────────── */

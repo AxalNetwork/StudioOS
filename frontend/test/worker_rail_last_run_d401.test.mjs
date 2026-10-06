@@ -92,21 +92,38 @@ function usageBlock() {
   return src.slice(from, src.indexOf('</section>', from));
 }
 
-test('the rail draws the lasting receipt in the Usage block, labelled account-wide', () => {
-  const block = usageBlock();
+/** The per-page half of the Usage block, from source (D552 step 3 moved the receipt there). */
+function pageUsage() {
+  const src = codeOnly(read(RAIL));
+  const from = src.indexOf('export function RailPageUsage(');
+  assert.ok(from > 0, 'RailPageUsage was not found');
+  return src.slice(from, src.indexOf('\nexport function ', from + 1));
+}
+
+test('the Usage block mounts the per-page half, which draws the lasting receipt', () => {
+  assert.match(usageBlock(), /<RailPageUsage[\s\S]*?onRetry=\{reload\}/,
+    'the Usage block no longer draws the page usage, or its retry re-reads nothing');
+  const block = pageUsage();
+  // D552 step 3: on a page the router records, the receipt is THIS PAGE's,
+  // from the page read, and labelled so.
+  assert.match(block, /lastRunReceipt\(page\.last_run, MODEL_COPY\[page\.last_run\.model\]\?\.name\)/);
+  assert.match(block, /<b>Last run · this page<\/b>/);
+  // Elsewhere it is the account's, labelled as the account's. A label that
+  // read as "this page" there would state a fact the log lacks.
   assert.match(block, /lastRunReceipt\(spend\.last_run, MODEL_COPY\[spend\.last_run\.model\]\?\.name\)/,
     'the receipt is not drawn from the spend report\'s last_run');
-  // The label must say whose run it is. `ai_usage_logs` records no page, so a
-  // label that reads as "this page's last run" states a fact the log lacks.
   assert.match(block, /<b>Last run · your account, any page<\/b>/,
     'the receipt is not labelled as the account\'s');
 });
 
 test('a failed last-run read is Unreadable with a retry, not "no runs"', () => {
-  const block = usageBlock();
+  const block = pageUsage();
   assert.match(block,
-    /spend\.last_run_recorded === false\s*\?\s*\(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,160}?onRetry=\{reload\}/,
-    'an unreadable last run renders as if there were none');
+    /spend\.last_run_recorded === false\s*\?\s*\(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,160}?onRetry=\{onRetry\}/,
+    'an unreadable account last run renders as if there were none');
+  assert.match(block,
+    /page\.last_run_recorded === false\s*\?\s*\(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,160}?onRetry=\{onRetry\}/,
+    'an unreadable page last run renders as if there were none');
 });
 
 test('a successful run re-reads the report, so the receipt is current', () => {

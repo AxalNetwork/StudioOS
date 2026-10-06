@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { isRecordablePage } from '../ui/assistCost';
 
 /**
  * The caller's own AI spend, and the router's real price list.
@@ -22,15 +23,25 @@ import { api } from '../lib/api';
  * log sum. They can disagree (KV has no atomic increment and its keys expire),
  * and merging them would show one as the other.
  *
+ * `page` (D552 step 3) adds a third read: `/api/ai/me/spend?surface=<page>`,
+ * that page's month and last run from the caller's own rows. It is made only
+ * for a path the router records (`isRecordablePage`); for any other, and
+ * without `page`, `pageSpend` stays null and no request is sent. Its failure
+ * is `pageSpendError`, kept apart from the account read's for the same reason
+ * the two above are.
+ *
  * Fetched once per mount, not polled. Spend moves when the user runs something,
  * and a rail that re-fetches on a timer would spend more D1 reads describing
  * the cost than the runs it describes.
  */
-export default function useAiSpend({ enabled = true } = {}) {
+export default function useAiSpend({ enabled = true, page = null } = {}) {
   const [spend, setSpend] = useState(null);
   const [pricing, setPricing] = useState(null);
   const [spendError, setSpendError] = useState(null);
   const [pricingError, setPricingError] = useState(null);
+  const [pageSpend, setPageSpend] = useState(null);
+  const [pageSpendError, setPageSpendError] = useState(null);
+  const pageKey = isRecordablePage(page) ? page : null;
   const [loading, setLoading] = useState(!!enabled);
   // Bumped by `reload`, which is what an Unreadable's Retry calls. A counter
   // rather than a callback that re-runs the fetch inline, so the one effect
@@ -45,7 +56,8 @@ export default function useAiSpend({ enabled = true } = {}) {
     Promise.all([
       api.myAiSpend().catch((e) => ({ __err: e })),
       api.aiPricing().catch((e) => ({ __err: e })),
-    ]).then(([s, p]) => {
+      pageKey ? api.myAiSpend(pageKey).catch((e) => ({ __err: e })) : null,
+    ]).then(([s, p, ps]) => {
       if (!live) return;
       // A failed fetch is NOT "recorded: true, spend 0". Leaving `spend` null
       // keeps the two indistinguishable states apart at the component
@@ -58,14 +70,17 @@ export default function useAiSpend({ enabled = true } = {}) {
       // to offer. D400 splits them so a caller can say which read failed.
       if (s && !s.__err) { setSpend(s); setSpendError(null); } else { setSpend(null); setSpendError(s?.__err ?? new Error('spend read failed')); }
       if (p && !p.__err) { setPricing(p); setPricingError(null); } else { setPricing(null); setPricingError(p?.__err ?? new Error('pricing read failed')); }
+      if (!pageKey) { setPageSpend(null); setPageSpendError(null); }
+      else if (ps && !ps.__err) { setPageSpend(ps); setPageSpendError(null); }
+      else { setPageSpend(null); setPageSpendError(ps?.__err ?? new Error('page spend read failed')); }
       setLoading(false);
     });
     return () => { live = false; };
-  }, [enabled, attempt]);
+  }, [enabled, attempt, pageKey]);
 
   // `error` stays for the callers that read it: the spend read's failure, as
   // it always was.
-  return { spend, pricing, error: spendError, spendError, pricingError, loading, reload };
+  return { spend, pricing, pageSpend, error: spendError, spendError, pricingError, pageSpendError, loading, reload };
 }
 
 /**

@@ -57,6 +57,8 @@ function fixture(funds: Fund[] = FUNDS) {
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
                                jwt_min_iat INTEGER, name TEXT, email TEXT);`);
   db.exec(ddl('365_research_eurotech_fund_directory.sql'));
+  // D597: each list's terms review; the route serves fund rows only through it.
+  db.exec(readFileSync(resolve(here, '../sql/migrations/406_research_fund_sources.sql'), 'utf8'));
   db.exec(readFileSync(resolve(here, '../sql/migrations/376_research_taxonomy.sql'), 'utf8'));
   db.exec(ddl('229_research_market_directory.sql'));
   db.prepare(`INSERT INTO research_market_directory (slug, name, company_count, source_name, source_boundary, as_of)
@@ -110,7 +112,9 @@ test('coverage counts each field over the whole directory, whatever the filters'
 
 test('sources: each list, its rows, and whether its sizes are in a known currency', async () => {
   const { body } = await get(fixture(), '/fund-directory');
-  assert.deepEqual(body.sources, [
+  // D597 adds each list's review to these (research_fund_terms_d597.test.ts pins it).
+  const steps45 = ({ name, url, rows, as_of, size_currency }: Record<string, unknown>) => ({ name, url, rows, as_of, size_currency });
+  assert.deepEqual(body.sources.map(steps45), [
     { name: EUR_SOURCE, url: 'https://example.org/eurotech', rows: 7, as_of: '2026-10-04', size_currency: 'EUR' },
     { name: DEEP, url: 'https://example.org/deep', rows: 1, as_of: '2026-09-01', size_currency: null },
   ]);

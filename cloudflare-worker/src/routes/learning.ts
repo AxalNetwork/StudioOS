@@ -29,6 +29,7 @@ import { mapError } from './_t13t14t15_helpers';
 import {
   canSeeLearning, enrolledSql, LEARNING_LEVELS, PROGRESS_KINDS,
 } from '../services/learningAccess';
+import { streamUrl } from '../services/learningVideo';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -274,13 +275,23 @@ r.get('/items/:uid', async (c) => {
   ).bind(user.id, item.uid).first<any>();
   const { visibility: _v, enrolled: _e, ...shown } = item;
   void _v; void _e;
+  // D561 (#1250) — the key is read here only to version the stream address;
+  // it is hashed, and never sent.
+  let videoStreamUrl: string | null = null;
+  if (item.video_source === 'r2') {
+    const k = await c.env.DB.prepare('SELECT r2_key FROM learning_items WHERE uid = ?').bind(item.uid).first<{ r2_key: string | null }>();
+    if (k?.r2_key) videoStreamUrl = await streamUrl(item.uid, k.r2_key);
+  }
   return c.json({
     item: {
       ...shown,
       transcript: item.transcript ?? null,
       // D561 — an uploaded video plays from the gated stream route; the
-      // bucket key is never sent. Null when the item plays a link or nothing.
-      video_stream_url: item.video_source === 'r2' ? `/api/learning/items/${encodeURIComponent(item.uid)}/video` : null,
+      // bucket key is never sent. Null when the item plays a link or nothing,
+      // or has no object recorded (the stream route would answer 404). The
+      // `?v=` changes with each upload (#1250), so the hour-long cache never
+      // serves a replaced file.
+      video_stream_url: videoStreamUrl,
     },
     // The player's transcript panel says why it is empty rather than drawing nothing.
     transcript_recorded: item.transcript != null && item.transcript !== '',

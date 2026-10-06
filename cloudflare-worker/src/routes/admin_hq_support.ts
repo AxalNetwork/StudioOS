@@ -4,6 +4,7 @@
  *   GET /    escalations from subsidiaries, HQ-held users, and subsidiary
  *            administrators about the Admin product; the tenant × queue matrix;
  *            and the ticket→GitHub mirror strip.
+ *   PUT /sla-tiers   HQ sets the P1/P2/P3 ticket hours (D482), audited.
  *
  * SUPER ADMIN ONLY. A route that names another account's standing and which
  * licence it administers is a cross-admin read whatever it renders — the rule
@@ -33,8 +34,10 @@ import {
   type TicketQueues,
 } from '../services/supportQueues';
 import {
-  HQ_SUPPORT_SLA_POLICY, readOpenTicketTaxonomy, ticketMappingText,
+  readOpenTicketTaxonomy, ticketMappingText, readSlaTiers, parseSlaTiers, SLA_TIERS,
 } from '../services/supportSlaPolicy';
+import { logAdminAction } from '../services/adminAudit';
+import { refuse } from '../util/refusal';
 import { dueSoonWindowHours } from '../services/slaWindow';
 
 /**
@@ -43,14 +46,25 @@ import { dueSoonWindowHours } from '../services/slaWindow';
  * (`SLA_HOURS`). They are different promises about different things, so the
  * panel shows both rather than mapping one onto the other. Each row carries
  * the due-soon window its limit gives, from the one module that defines it.
+ *
+ * D482: the ticket tiers are HQ's store, read on every call. When it cannot be
+ * read, `tiers` is unavailable with its reason, and nothing stands in for it.
  */
-export function slaPolicyBody() {
+export function slaPolicyBody(tiersRead: Awaited<ReturnType<typeof readSlaTiers>>) {
   return {
-    tiers: HQ_SUPPORT_SLA_POLICY.map((t) => ({ ...t, due_soon_hours: dueSoonWindowHours(t.hours) })),
+    tiers: tiersRead.available
+      ? { available: true as const, items: tiersRead.tiers.map((t) => ({ ...t, due_soon_hours: dueSoonWindowHours(t.hours) })) }
+      : { available: false as const, reason: tiersRead.reason },
     escalation_kinds: ESCALATION_KINDS.map((kind) => ({
       kind, hours: SLA_HOURS[kind], due_soon_hours: dueSoonWindowHours(SLA_HOURS[kind]),
     })),
-    note: 'Fixed in code and the same on every subsidiary: a subsidiary can escalate a ticket’s priority but cannot redefine what P1 means, and nothing on this page edits the hours.',
+    note: 'Set here and inherited whole: a subsidiary can escalate a ticket’s priority but cannot redefine what P1 means. The escalation hours are fixed in code.',
+    // Held (D482): a branch reads these hours only once its licence copy carries
+    // them, and that copy is `routes/licence.ts`, slot S05's.
+    branch_copy: {
+      held: true as const,
+      reason: 'Branches do not carry these hours yet: the licence copy that would send them is held (slot S05, routes/licence.ts). A branch bands its tickets with the hours it shipped with.',
+    },
     ticket_mapping: ticketMappingText(),
   };
 }
@@ -136,12 +150,13 @@ r.get('/', async (c) => {
 
   // Each of these catches its own failure and answers `available: false`, so
   // the parallel read cannot reject as a whole.
-  const [ticketsRead, licences, deployments, sync, taxonomy] = await Promise.all([
+  const [ticketsRead, licences, deployments, sync, taxonomy, tiersRead] = await Promise.all([
     readOpenTickets(env),
     readSupportLicences(env),
     readSupportDeployments(env),
     readTicketSync(env),
     readOpenTicketTaxonomy(env),
+    readSlaTiers(env),
   ]);
 
   let escalationsRead: EscalationsRead;
@@ -153,7 +168,7 @@ r.get('/', async (c) => {
 
   const escalations = escalationQueue(escalationsRead, nowMs);
   const tickets = ticketsRead.available
-    ? { available: true as const, ...summariseTickets(ticketsRead, nowMs) }
+    ? { available: true as const, ...summariseTickets(ticketsRead, nowMs, tiersRead.available ? tiersRead.hours : null) }
     : { available: false as const, reason: ticketsRead.reason };
 
   const matrix = licences.available
@@ -177,9 +192,39 @@ r.get('/', async (c) => {
     tickets,
     matrix,
     sync,
-    sla_policy: slaPolicyBody(),
+    sla_policy: slaPolicyBody(tiersRead),
     taxonomy,
   });
+});
+
+/**
+ * D482 — HQ sets the three ticket tiers at once, so the P1 ≤ P2 ≤ P3 order is
+ * checked on the whole set. Each change is one `logAdminAction` row carrying
+ * the hours before and after; a write that changes nothing writes no row.
+ */
+r.put('/sla-tiers', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const parsed = parseSlaTiers(await c.req.json().catch(() => null));
+  if (!parsed.ok) return refuse(c, 400, { code: 'invalid_tiers', message: parsed.error });
+  const before = await readSlaTiers(c.env);
+  if (!before.available) return refuse(c, 503, { code: 'sla_tiers_unreadable', message: before.reason });
+  const changed = SLA_TIERS.filter((t) => {
+    const was = before.tiers.find((x) => x.id === t)!;
+    return was.hours !== parsed.value[t].hours || was.description !== parsed.value[t].description;
+  });
+  if (changed.length) {
+    await c.env.DB.batch(changed.map((t) => c.env.DB.prepare(
+      `UPDATE hq_support_sla_tiers SET hours = ?, description = ?, updated_at = datetime('now'), updated_by = ? WHERE tier = ?`,
+    ).bind(parsed.value[t].hours, parsed.value[t].description, admin.id, t)));
+    await logAdminAction(c.env, admin.id, admin.email || '', 'hq_support.sla_tiers.update', {
+      changed: changed.map((t) => {
+        const was = before.tiers.find((x) => x.id === t)!;
+        return { tier: t, hours: [was.hours, parsed.value[t].hours], description: [was.description, parsed.value[t].description] };
+      }),
+    });
+  }
+  const after = await readSlaTiers(c.env);
+  return c.json({ changed, sla_policy: slaPolicyBody(after) });
 });
 
 export default r;

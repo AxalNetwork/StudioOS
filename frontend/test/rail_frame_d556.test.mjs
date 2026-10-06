@@ -19,21 +19,20 @@
  *   · a docked frame reaches the window's edge and the footer, not the
  *     centred 1280px column's edge and the end of its content, and the HQ
  *     section strip moves into it so the panel runs from the header;
- *   · Admin Studio has a rail, and its coverage is the studio glance.
+ *   · Admin Studio (/studio) has no rail: D556 gave it one, and the owner
+ *     removed it (D598).
  *
  * Run alone:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/rail_frame_d556.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import RailFrame, { RailStripSlot } from '../src/ui/RailFrame.jsx';
-import StudioRail, { studioRailCoverage } from '../src/pages/admin/StudioRail.jsx';
-import { glancesFromStudioGlance, UNAVAILABLE } from '../src/pages/admin/adminStudioOverview.js';
 
 const ROOT = resolve(process.cwd());
 const SRC = resolve(ROOT, 'frontend/src');
@@ -74,10 +73,12 @@ function drawsFrame(cls) {
   return false;
 }
 
-/** Hosts whose rail is a component of their own, mounted in the frame by name. */
-const RAIL_COMPONENTS = {
-  'frontend/src/pages/admin/StudioRail.jsx': ['frontend/src/pages/admin/AdminStudioHome.jsx', /<RailFrame rail=\{<StudioRail\b/],
-};
+/**
+ * Hosts whose rail is a component of their own, mounted in the frame by name:
+ * `'<rail file>': ['<host file>', /<RailFrame rail=\{<Name\b/]`. None since
+ * D598 removed Admin Studio's, the only one.
+ */
+const RAIL_COMPONENTS = {};
 
 /**
  * The trees allowed to draw the founder frame in their own stylesheet. These
@@ -107,7 +108,7 @@ test('every file that mounts <WorkerRail> puts it in a frame', () => {
     'these mount the rail in no frame: pass it to RailFrame, or to WorkspaceShell as `rail`');
   // The census, so a reader can see the split and a drift in it shows up.
   const by = MOUNTS.reduce((acc, m) => { const k = howFramed(m); acc[k] = (acc[k] || 0) + 1; return acc; }, {});
-  assert.ok(by.frame >= 18 && by.shell >= 13 && by.self >= 40 && by.component === 1, JSON.stringify(by));
+  assert.ok(by.frame >= 18 && by.shell >= 13 && by.self >= 40 && !by.component, JSON.stringify(by));
 });
 
 test('WorkspaceShell draws no frame of its own; it uses the shared one', () => {
@@ -248,65 +249,17 @@ test('the phone form still works: the column is hidden, never unmounted', () => 
   assert.match(read('frontend/src/ui/WorkerRail.jsx'), /createPortal\(/, 'the phone button is still portalled');
 });
 
-// --- Admin Studio ----------------------------------------------------------
+// --- Admin Studio (D598) -----------------------------------------------------
 
-const HQ_GLANCE = {
-  tier: 'hq',
-  branch: null,
-  seats: { recorded: false, reason: 'Seat use is a subsidiary figure (U1).' },
-  approvals: { recorded: false, reason: 'The lanes are a subsidiary\'s (U1).' },
-  agreements: { recorded: false, reason: 'Agreements are the subsidiary\'s (U1).' },
-  revenue: { recorded: false, reason: 'The share rate is a subsidiary term (U1).' },
-  licence: { recorded: false, reason: 'No row names the licence (U1).' },
-  programme: { recorded: false, reason: 'No cohort week is open.' },
-  templates: { recorded: true, available: false, reason: 'The library could not be read.' },
-  insights: { recorded: true, benchmarks_available: true, benchmarks: [] },
-};
-const BRANCH_GLANCE = {
-  tier: 'branch',
-  seats: {
-    recorded: true,
-    seats_used_by_type: { founder: 1, investor: 0, advisor: 0, partner: 0 },
-    seats: { founder: 10, investor: 1, advisor: 1, partner: 1 },
-  },
-  approvals: { recorded: true, lanes: [{ key: 'kyc', label: 'KYC', count: 0, oldest_age_hours: null, sla: 'ok' }] },
-  programme: { recorded: false, reason: 'No cohort week is open.' },
-  agreements: { recorded: true, expiring: 0, window_days: 60 },
-  revenue: { available: false, reason: 'The share rate could not be read.' },
-  licence: { recorded: true, revenue_share_bps: 3500, status: 'active' },
-  templates: { recorded: true, available: true, items: [{ slug: 'msa' }], pushed_at: '2026-09-01T00:00:00Z' },
-  insights: { recorded: true, benchmarks_available: true, benchmarks: [] },
-};
-const hqUser = { role: 'admin', branch: null };
-const branchUser = { role: 'admin', branch: { code: 'fr', name: 'France', status: 'active', territories: ['FR'] } };
-
-test('the Studio rail says how each block of the glance answered, in the page\'s own words', () => {
-  const branch = studioRailCoverage(glancesFromStudioGlance(BRANCH_GLANCE, branchUser));
-  assert.ok(branch.includes('Seats: read'), branch.join(' | '));
-  assert.ok(branch.includes('Approvals: read'), 'a measured empty queue is a read, not an absence');
-  assert.ok(branch.includes('Programme clock: not recorded here'));
-  assert.ok(branch.includes('Template library: read'));
-  assert.ok(branch.includes('Share rate: could not be read'), 'an unreadable store must say so, not read as absent');
-  // A tier's glance draws the lines it carries, and no line for one it does not.
-  const hq = studioRailCoverage(glancesFromStudioGlance(HQ_GLANCE, hqUser));
-  assert.ok(!hq.some((l) => l.startsWith('Seats')), `an HQ admin has no seat line: ${hq.join(' | ')}`);
-  assert.ok(hq.includes('Template library: could not be read'), hq.join(' | '));
-  assert.ok(hq.some((l) => l.startsWith('Accounts: ')) && hq.some((l) => l.startsWith('Insights: ')), hq.join(' | '));
-  assert.deepEqual(studioRailCoverage(null), []);
-});
-
-test('the Studio rail renders as the "Studio" workspace, with a reason while it has no lines', () => {
-  const ready = renderToStaticMarkup(el(StudioRail, { user: branchUser, glance: BRANCH_GLANCE }));
-  assert.match(ready, /Worker AI · Studio/);
-  assert.match(ready, /data-testid="admin-studio-rail"/);
-  assert.match(ready, /Seats: read/, 'the glance did not reach the rail');
-  const failed = renderToStaticMarkup(el(StudioRail, { user: hqUser, glance: UNAVAILABLE }));
-  assert.match(failed, /The studio glance could not be read\./);
-  assert.doesNotMatch(failed, /(Seats|Accounts|Approvals|Programme clock|Template library|Insights): /,
-    'a glance that failed whole draws its one reason, not a line per block it never read');
-  // In production the page passes no glance; the rail then shares the one
-  // in-flight request the strip and the cards make, rather than a read of its own.
-  const src = codeOnly(read('frontend/src/pages/admin/StudioRail.jsx'));
-  assert.match(src, /loadStudioGlance\(\)/);
-  assert.doesNotMatch(src, /\bapi\./, 'the rail must not make a read of its own');
+test('Admin Studio (/studio) carries no Worker AI rail, and nothing draws a "Studio" rail (D598)', () => {
+  // The owner, 2026-10-06: "In Admin profile /studio page should never contain
+  // WORKER AI · STUDIO sidebar, remove it". D556 had given the page one.
+  const home = codeOnly(read('frontend/src/pages/admin/AdminStudioHome.jsx'));
+  assert.doesNotMatch(home, /<RailFrame\b|<WorkerRail\b|StudioRail|\brail=/, 'Admin Studio mounts a rail again');
+  assert.match(home, /<div data-testid="admin-studio-home">/);
+  assert.equal(existsSync(resolve(ROOT, 'frontend/src/pages/admin/StudioRail.jsx')), false, 'StudioRail.jsx is back');
+  const studio = MOUNTS.filter((m) => /<WorkerRail\b[^>]*\bworkspace="Studio"/.test(m.code)).map((m) => m.rel);
+  assert.deepEqual(studio, [], 'a Worker AI rail on the "Studio" workspace is mounted somewhere');
+  // The page an admin gets at /studio is still this one.
+  assert.match(codeOnly(read('frontend/src/pages/Dashboard.jsx')), /<AdminStudioHome user=\{authUser\} \/>/);
 });

@@ -31,121 +31,121 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| 83b Election Tracker | `/spinout-lab/83b` · `/raise/legal-engine/equity` · `/incorporate/83b` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Raise | OUT OF SCOPE | High |
-| Advisors | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Apply and Status | `/spinout-lab/apply` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Brand & Landing Page | `/spinout-lab/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap Table | `/spinout-lab/captable` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
-| Capital | `/spinout-lab/capital` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Co-founder Match | `/spinout-lab/cofounder-match` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| 83b Election Tracker | `/spinout-lab/83b` · `/raise/legal-engine/equity` · `/incorporate/83b` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Raise | OUT OF SCOPE | High |
+| Advisors | `/spinout-lab/advisors` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Apply and Status | `/spinout-lab/apply` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Brand & Landing Page | `/spinout-lab/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Co-founder Match | `/spinout-lab/cofounder-match` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Company Settings | `/company-settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Compliance | `/spinout-lab/compliance` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Customer Acquisition Landing Page | `/spinout-lab/brand` | Home | Full page | Sidebar → Home → Spin-Out Lab | CURRENT | High |
-| Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Home | Full page | Sidebar → Home → Grow | CURRENT | High |
-| Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Validate | OUT OF SCOPE | High |
-| Customer Templates | `/spinout-lab/brand` · `/build/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Grow | OUT OF SCOPE | High |
-| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Home | Full page | Sidebar → Home → Raise | CURRENT | High |
+| Compliance | `/spinout-lab/compliance` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Customer Acquisition Landing Page | `/spinout-lab/brand` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | CURRENT | High |
+| Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Headerless | Full page | Sidebar → Headerless → Grow | CURRENT | High |
+| Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Validate | OUT OF SCOPE | High |
+| Customer Templates | `/spinout-lab/brand` · `/build/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Grow | OUT OF SCOPE | High |
+| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Raise | CURRENT | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Founder Studio | `/studio` | Home | Full page | Sidebar → Home → Studio | DEFERRED | High |
+| Founder Studio | `/studio` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Founder Wellbeing | `/wellbeing` · `/wellbeing/expert-dashboard` · `/wellbeing/expert/:uid` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Founder Workspaces Canvas | `/validate` · `/build` · `/raise` · `/grow` · `/network` · `/research` | Home | Full page | Sidebar → Home → Validate | UPGRADE | High |
+| Founder Workspaces Canvas | `/validate` · `/build` · `/raise` · `/grow` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Validate | UPGRADE | High |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
-| Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Home | Full page + print stylesheet | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Liquidity & Secondaries | `/liquidity` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
-| Metrics | `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
-| Office Hours | `/spinout-lab/office-hours` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Home | Full page (proposed) | Sidebar → Home → Grow | CURRENT | Low |
-| Pages · Benchmark | `/research/benchmarking/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Company | `/research/companies/:analysisId/:candidateId` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Company analysis | `/research/companies/:id` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Founder Build | `/build` · `/build/board` · `/build/roadmap` · `/build/kpi` | Home | Full page (proposed) | Sidebar → Home → Build | UPGRADE | Low |
-| Pages · Founder Grow | `/grow` · `/grow/focus` | Home | Full page (proposed) | Sidebar → Home → Grow | UPGRADE | Low |
-| Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
-| Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Home | Full page (proposed) | Sidebar → Home → Raise | UPGRADE | Low |
-| Pages · Founder Research | `/research/ask` · `/research/library` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Founder Validate | `/validate` · `/validate/{interviews` | Home | Full page (proposed) | Sidebar → Home → Validate | CURRENT | Low |
-| Pages · Fund dossier | `/research/funds/:uid` · `/research/funds` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
-| Pages · Market reading | `/research/markets/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Perks & Products | `/perks` | Home | Full page | Sidebar → Home → Grow | NEW | High |
-| Pitch Deck Builder | `/spinout-lab/pitch-deck` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Profiling | `/spinout-lab/profiling` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Research · Companies | `/research/companies` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Company | `/research/companies/company/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Funds (directory) | `/research/funds` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Funds (fund profile) | `/research/funds/catalog/:id` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Main | `/research` · `/market-intel` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
-| Research · Markets | `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Sector | `/research/markets/sector/:slug` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Revenue | `/spinout-lab/revenue` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Round Manager | `/raise/capital/pipeline` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
-| Scoring Engine | `/spinout-lab/scoring` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
-| Spin-Out Lab · Intro | `/spinout-lab` | Home | Full page | Sidebar → Home → Spin-Out Lab | UPGRADE | High |
-| Spin-Out Lab · Landing | `/spinout-lab` | Home | Full page | Sidebar → Home → Spin-Out Lab | UPGRADE | High |
-| Spin-Out Lab Workspace | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Liquidity & Secondaries | `/liquidity` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Metrics | `/build/metrics` | Headerless | Full page | Sidebar → Headerless → Build | UPGRADE | High |
+| Office Hours | `/spinout-lab/office-hours` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | CURRENT | Low |
+| Pages · Benchmark | `/research/benchmarking/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Company | `/research/companies/:analysisId/:candidateId` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Company analysis | `/research/companies/:id` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Diligence room | `/research/diligence/:grantUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Founder Build | `/build` · `/build/board` · `/build/roadmap` · `/build/kpi` | Headerless | Full page (proposed) | Sidebar → Headerless → Build | UPGRADE | Low |
+| Pages · Founder Grow | `/grow` · `/grow/focus` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | UPGRADE | Low |
+| Pages · Founder Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | RESKIN | High |
+| Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
+| Pages · Founder Research | `/research/ask` · `/research/library` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Founder Validate | `/validate` · `/validate/{interviews` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | CURRENT | Low |
+| Pages · Fund dossier | `/research/funds/:uid` · `/research/funds` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Pages · Market reading | `/research/markets/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Grow | NEW | High |
+| Pitch Deck Builder | `/spinout-lab/pitch-deck` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Profiling | `/spinout-lab/profiling` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Research · Companies | `/research/companies` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Company | `/research/companies/company/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Funds (directory) | `/research/funds` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Funds (fund profile) | `/research/funds/catalog/:id` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Revenue | `/spinout-lab/revenue` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Round Manager | `/raise/capital/pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Scoring Engine | `/spinout-lab/scoring` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Signals | `/signals` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Spin-Out Lab · Intro | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
+| Spin-Out Lab · Landing | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
+| Spin-Out Lab Workspace | `/spinout-lab` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
-| Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Use of Funds | `/spinout-lab/use-of-funds` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 
 ## Advisor — 17 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Advisor Canvas | `/studio` · `/advisor/advisory/*` · `/office-hours` · `/network` · `/signals` | Home | Full page | Sidebar → Home → Studio | UPGRADE | High |
-| Advisor Detail · Practice | `/advisor/advisory/opportunities` · `/clients` · `/engagements` · `/delivery` · `/contracts` | Home | Full page | Sidebar → Home → Practice | UPGRADE | High |
-| Advisor Studio | `/spinout-lab/advisors` | Home | Full page | Sidebar → Home → Spin-Out Lab | NEW | High |
-| Advisory Practice | `/expertise/*` · `/practice/*` | Home | Full page | Sidebar → Home → Expertise | DONE | High |
+| Advisor Canvas | `/studio` · `/advisor/advisory/*` · `/office-hours` · `/network` · `/signals` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
+| Advisor Detail · Practice | `/advisor/advisory/opportunities` · `/clients` · `/engagements` · `/delivery` · `/contracts` | Headerless | Full page | Sidebar → Headerless → Practice | UPGRADE | High |
+| Advisor Studio | `/spinout-lab/advisors` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | NEW | High |
+| Advisory Practice | `/expertise/*` · `/practice/*` | Headerless | Full page | Sidebar → Headerless → Expertise | DONE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Home | Full page (proposed) | Sidebar → Home → Practice | CURRENT | Low |
+| Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Practice | CURRENT | Low |
 | Pages · Advisor Cohorts | `/guidance` · `/calendar` · `/weeks` · `/admin/advisor-cohorts` | — (no nav entry) | Full page | Deep link / in-page action | PARTIAL | Medium |
-| Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Home | Full page (proposed) | Sidebar → Home → Expertise | UPGRADE | Low |
-| Pages · Advisor Network | `/network/*` | Home | Full page (proposed) | Sidebar → Home → Network | UPGRADE | Low |
-| Pages · Advisor Research | `/research/*` | Home | Full page (proposed) | Sidebar → Home → Research | UPGRADE | Low |
-| Research · Companies | `/research/companies` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Company | `/research/companies/company/:uid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Main | `/research` · `/market-intel` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
-| Research · Markets | `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Sector | `/research/markets/sector/:slug` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
+| Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Headerless | Full page (proposed) | Sidebar → Headerless → Expertise | UPGRADE | Low |
+| Pages · Advisor Network | `/network/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Network | UPGRADE | Low |
+| Pages · Advisor Research | `/research/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Research | UPGRADE | Low |
+| Research · Companies | `/research/companies` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Company | `/research/companies/company/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Signals | `/signals` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 
 ## LP / Investor — 25 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
+| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Explore the Spin-Out Lab | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Home | Full page + print stylesheet | Sidebar → Home → Spin-Out Lab | CURRENT | High |
-| Investor LP Canvas | `/studio` · `/deals` · `/portfolio` · `/funds` · `/network` · `/research` | Home | Full page | Sidebar → Home → Studio | UPGRADE | High |
+| Explore the Spin-Out Lab | `/spinout-lab` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | CURRENT | High |
+| Investor LP Canvas | `/studio` · `/deals` · `/portfolio` · `/funds` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Home | Full page | Sidebar → Home → Axal VC Fund | UPGRADE | High |
-| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Diligence room | `/research/diligence/:grantUid` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Home | Full page | Sidebar → Home → Fund | UPGRADE | High |
-| Pages · Investor Deals | `/deals` · `/pipeline` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
-| Pages · Investor Fund | `/funds` · `/funds/calls` · `/funds/accounting` · `/funds/ledger` · `/lp-reports` | Home | Full page (proposed) | Sidebar → Home → Fund | PARTIAL | Low |
-| Pages · Investor Network | `/network` | Home | Full page | Sidebar → Home → Network | PARTIAL | High |
-| Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Home | Full page (proposed) | Sidebar → Home → Portfolio | UPGRADE | Low |
-| Pages · Investor Research | `/advisor/research*` · `/market-intel` · `/research/ask` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
-| Portfolio | `/portfolio/value-add` | Home | Full page | Sidebar → Home → Portfolio | UPGRADE | High |
-| Quarterly Report | `/lp-reports` · `/spinout-lab/investor-workspace` · `/lp-portal` | Home | Full page + print stylesheet | Sidebar → Home → Axal VC Fund | UPGRADE | High |
-| Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Main | `/research` · `/market-intel` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
-| Research · Markets | `/research/markets` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
-| Research · Sector | `/research/markets/sector/:slug` | Home | Full page | Sidebar → Home → Research | CURRENT | High |
+| LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Headerless | Full page | Sidebar → Headerless → Axal VC Fund | UPGRADE | High |
+| Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Diligence room | `/research/diligence/:grantUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Headerless | Full page | Sidebar → Headerless → Fund | UPGRADE | High |
+| Pages · Investor Deals | `/deals` · `/pipeline` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
+| Pages · Investor Fund | `/funds` · `/funds/calls` · `/funds/accounting` · `/funds/ledger` · `/lp-reports` | Headerless | Full page (proposed) | Sidebar → Headerless → Fund | PARTIAL | Low |
+| Pages · Investor Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | PARTIAL | High |
+| Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Headerless | Full page (proposed) | Sidebar → Headerless → Portfolio | UPGRADE | Low |
+| Pages · Investor Research | `/advisor/research*` · `/market-intel` · `/research/ask` | Headerless | Full page | Sidebar → Headerless → Research | RESKIN | High |
+| Portfolio | `/portfolio/value-add` | Headerless | Full page | Sidebar → Headerless → Portfolio | UPGRADE | High |
+| Quarterly Report | `/lp-reports` · `/spinout-lab/investor-workspace` · `/lp-portal` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Axal VC Fund | UPGRADE | High |
+| Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
 ## Partner / Operator — 12 canvases

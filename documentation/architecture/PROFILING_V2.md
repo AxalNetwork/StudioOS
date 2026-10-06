@@ -111,6 +111,13 @@ component. They stay an internal signal of the fit decision. The card page
 shows only the four per role that the owner named, and the persona fixture's
 expectations are over those four.
 
+**Owner's decision (#982, answer A, 2026-10-06).** Scout and Steward stay
+internal until the card shows `fit_v2`. Until then they get no copy, no
+sprites and no banner. They are not keys of `ARCHETYPES` in
+`frontend/src/lib/assessmentMeta.js`, so the sprite-coverage test
+(`frontend/test/studio_archetype_sprite.test.mjs`) does not ask for their
+files.
+
 ### 2.4 Coach
 
 Coach shares the advisor archetype set (`ARCHETYPES.coach =
@@ -288,7 +295,7 @@ Axes each bank does not ask about today:
 | Role | Axes with no self-rating question |
 | --- | --- |
 | Founder | none (Session 9, D319 added legal_compliance) |
-| Investor | engineering, design, marketing_brand |
+| Investor | none since D386 (engineering, design and marketing_brand were added) |
 | Partner | none since D491 (engineering, design and marketing_brand were added) |
 | Advisor | none (Session 12 added engineering, design and legal_compliance) |
 | Coach | none (Session 12 added all eight; before, no `skill_axis` question) |
@@ -427,6 +434,15 @@ for a partner whose specialisation includes that axis.
 | `skill_finance_ops` | finance_ops | `office_hours_completed`, `engagement_milestone` |
 | `skill_legal` | legal_compliance | `office_hours_completed`, `engagement_milestone` |
 | `network_depth` | capital_network | `office_hours_completed`, `perk_redeemed` |
+
+### 5.7 Investor skill items (D386)
+
+The investor bank now asks every radar axis. The three it had never asked
+are behavioural: how often the person is in a technical design, a product
+as a new user would meet it, or a company's story. Investor evidence
+(`dd_section_signed_off`, `commitment`, `deal_worked`, §5.4) still lands on
+capital_network, finance_ops and legal_compliance. Engineering, design and
+marketing_brand stay self-rated until a source names them.
 
 ---
 

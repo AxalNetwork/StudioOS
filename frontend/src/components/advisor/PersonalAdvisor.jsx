@@ -60,6 +60,7 @@ import { useEscapeClose } from '../useEscapeClose';
 import { predictTarget } from '../../lib/advisor/router';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
+import MyBugReports from '../tickets/MyBugReports';
 
 const STORAGE_KEY = 'advisor:state';
 
@@ -1374,9 +1375,11 @@ function AdvisorTicketPanel({ onFiled, onClose }) {
           </button>
         </div>
       </div>
+      <MyBugReports />
     </div>
   );
 }
+
 
 function CurrentQuestion({ q, onExplain }) {
   return (

@@ -24,9 +24,21 @@ import { FundDetails, UnreadableBadge } from './FundDirectory';
  * THE TWO ETF ROWS ARE GONE WITH THE BUNDLE. `fundDirectory.json` carried two
  * public-market ETFs (SPY, QQQ) with tearsheet figures; the D1 directory never
  * held them, and a VC fund directory is the wrong home for them.
+ *
+ * A REMOVED LIST SAYS SO (D597, #1232). A fund whose list was taken down for
+ * its terms answers 410 with the list and why; the page prints that, links
+ * the list, and shows none of the fund.
  */
 
 const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+/** The page's state after a failed read. A 410 keeps the removed list and why (D597). */
+export function failedRead(e) {
+  return {
+    loading: false, error: e?.message || 'Unreadable.', status: e?.status ?? null, data: null,
+    ...(e?.status === 410 ? { removed: e?.data?.removed || null, reason: e?.data?.reason || null } : {}),
+  };
+}
 const GHOST = 'inline-flex items-center gap-1 rounded-lg border border-axal-hairline px-3 py-2 text-[12px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
 
 /**
@@ -44,6 +56,22 @@ export function FundCatalogView({ fund, list = { loading: false, error: null, ex
   );
   if (fund.loading) {
     return <div className="space-y-3">{back}<Card variant="dashed" padding="lg" aria-busy="true"><p className="text-[12.5px] text-axal-muted">Loading this fund…</p></Card></div>;
+  }
+  if (fund.status === 410) {
+    const list = fund.removed || {};
+    const href = typeof list.url === 'string' && /^https?:\/\//i.test(list.url) ? list.url : null;
+    return (
+      <div className="space-y-3">{back}
+        <Card variant="dashed" padding="lg" data-testid="fund-catalog-removed">
+          <h1 className="text-sm font-extrabold">This fund’s list was removed</h1>
+          <p className="mt-2 text-[12.5px] text-axal-muted">{fund.reason || 'Its list was taken down for its terms.'}</p>
+          <p className="mt-1 text-[12.5px] text-axal-muted">
+            List: {href ? <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-axal-violet underline dark:text-violet-300">{list.title || list.name}</a> : (list.title || list.name || 'Not recorded')}
+            {list.publisher ? `, published by ${list.publisher}` : ''}. None of the fund’s own fields are shown.
+          </p>
+        </Card>
+      </div>
+    );
   }
   if (fund.status === 404) {
     return (
@@ -115,7 +143,7 @@ export default function FundCatalogProfile({ role = 'founder' }) {
       const data = await researchFundsApi.get(id);
       setFund({ loading: false, error: null, status: 200, data });
     } catch (e) {
-      setFund({ loading: false, error: e?.message || 'Unreadable.', status: e?.status ?? null, data: null });
+      setFund(failedRead(e));
     }
   }, [id]);
   useEffect(() => { load(); }, [load]);

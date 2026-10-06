@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { enqueueJob } from './queue';
 import { bindingKey } from '../util/schemaBootstrap';
+import { syncIncorporationMilestoneForOrder } from './labIncorporationMilestone';
 
 const MIGRATED = new WeakMap<object, boolean>();
 
@@ -105,6 +106,9 @@ export async function recordPaidIncorporation(
     }, {
       idempotency_key: `incorp_packet:${incorporationId}`,
     });
+    // D585: payment is the moment a Lab founder's formation milestone is
+    // recorded (the owner's answer A). Never throws; a replay records nothing.
+    await syncIncorporationMilestoneForOrder(env, incorporationId);
   }
 }
 
@@ -208,6 +212,7 @@ export async function recordPaidIncorporationFromPaymentIntent(
     }, {
       idempotency_key: `incorp_packet:${incorporationId}`,
     });
+    await syncIncorporationMilestoneForOrder(env, incorporationId);
   }
 }
 

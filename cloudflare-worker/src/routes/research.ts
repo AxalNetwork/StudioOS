@@ -3932,6 +3932,10 @@ research.get('/fund-directory/:uid', async (c) => {
     return c.json({ detail: 'Unreadable', reason: 'The fund could not be read' }, 503);
   }
   if (!fund) return c.json({ detail: 'Not found' }, 404);
+  // D597: a fund of a list taken down for its terms says so, and why — never its fields.
+  if (fund.removed) {
+    return c.json({ detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
+  }
   return c.json({ ...fund, source_boundary: FUND_DIRECTORY_BOUNDARY });
 });
 

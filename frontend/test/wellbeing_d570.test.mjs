@@ -56,20 +56,19 @@ const UTC = { timeZone: 'UTC' };
 
 // ── The check-in, against the real route ─────────────────────────────────────
 
-test('the real route: six stored scores, one row per day, and no weekly rule to refuse a second save', () => {
+test('the real route: eight stored scores, and one check-in per week that replaces, never refuses (D574)', () => {
   assert.deepEqual(M.ROUTE_SCORE_KEYS, [...DAILY_KEYS], 'the page stores what the validator accepts, in its order');
   assert.deepEqual(M.CANVAS_SCORES.map((s) => s.key), ['stress', 'sleep', 'support', 'decisions', 'energy'], 'the canvas’s five, in its order');
-  for (const s of M.CANVAS_SCORES) {
-    if (s.field) assert.ok(DAILY_KEYS.includes(s.field), `${s.key} is stored`);
-    else assert.ok(!DAILY_KEYS.includes(s.key) && CHECKIN_KEYS.includes(s.key), `${s.key} belongs to the legacy weekly keys nothing writes`);
-  }
+  for (const s of M.CANVAS_SCORES) assert.ok(DAILY_KEYS.includes(s.field), `${s.key} is stored`);
   for (const s of M.MORE_SCORES) assert.ok(DAILY_KEYS.includes(s.field));
+  assert.ok(CHECKIN_KEYS.every((k) => k === 'support' || k === 'decisions' || DAILY_KEYS.includes(k)), 'every canvas question is now a stored score');
 
-  // Why the page never sends support, decisions or notes: the route keeps none
-  // of them and says nothing — a 'notes' key is not even the note.
+  // D574: support and decisions are kept; a 'notes' key is still not the note.
   const v = validateDailyBody({ stress: 3, support: 4, decisions: 2, notes: 'kept?' });
   assert.equal(v.ok, true);
   assert.deepEqual(Object.keys(v.values), [...DAILY_KEYS]);
+  assert.equal(v.values.support, 4);
+  assert.equal(v.values.decisions, 2);
   assert.equal(v.free_text, null);
 
   const submit = ROUTE.slice(ROUTE.indexOf('export async function submitCanonicalCheckin'), ROUTE.indexOf("wellbeing.post('/checkins'"));
@@ -77,19 +76,21 @@ test('the real route: six stored scores, one row per day, and no weekly rule to 
   assert.match(submit, /INSERT INTO wellbeing_daily_pulses/);
   assert.match(submit, /ON CONFLICT\(user_id, day\) DO UPDATE SET/, 'a second save on the same day replaces the first');
   assert.match(submit, /free_text_enc = excluded\.free_text_enc, tags_enc = excluded\.tags_enc/, 'the upsert overwrites every column');
-  assert.doesNotMatch(submit, /week_anchor|409/, 'nothing weekly, and nothing that refuses');
+  assert.match(submit, /const week = weekSpan\(v\.day\);/, 'the route keeps one check-in per week');
+  assert.match(submit, /const day = existing\?\.day \?\? v\.day;/, 'a second save that week replaces the week\'s row');
+  assert.doesNotMatch(submit, /week_anchor|409/, 'and nothing refuses a second save');
   assert.match(handler("wellbeing.get('/checkins'"), /clampLimit\(c\.req\.query\('limit'\), 30, 200\)/);
   assert.equal(M.HISTORY_ROW_CAP, 30);
-  assert.match(read('backend/app/api/routes/wellbeing.py'), /week_anchor/, 'the weekly rule the brief described is the dev FastAPI’s');
+  assert.match(read('cloudflare-worker/sql/migrations/395_wellbeing_weekly_and_library.sql'), /support_enc[\s\S]*decisions_enc/);
 });
 
 test('the body: only answered scores, the note as free_text, and day only to replace this week', () => {
-  const body = M.buildCheckinPayload({ values: { stress: 4, sleep: 2, energy: 3, mood: null }, note: '   ', tags: ['executive_coach'] });
-  assert.deepEqual(body, { stress: 4, sleep: 2, energy: 3, free_text: null, tags: ['executive_coach'] });
-  for (const k of ['support', 'decisions', 'notes', 'day']) assert.equal(k in body, false, `${k} is never sent here`);
+  const body = M.buildCheckinPayload({ values: { stress: 4, sleep: 2, energy: 3, support: 5, mood: null }, note: '   ', tags: ['executive_coach'] });
+  assert.deepEqual(body, { stress: 4, sleep: 2, energy: 3, support: 5, free_text: null, tags: ['executive_coach'] });
+  for (const k of ['decisions', 'notes', 'day']) assert.equal(k in body, false, `${k} is not sent when unanswered or not this page's`);
   const v = validateDailyBody(body);
   assert.equal(v.ok, true);
-  assert.deepEqual(v.values, { mood: null, stress: 4, sleep: 2, energy: 3, focus: null, social: null }, 'an unanswered score is absent, never a default 3');
+  assert.deepEqual(v.values, { mood: null, stress: 4, sleep: 2, energy: 3, focus: null, social: null, support: 5, decisions: null }, 'an unanswered score is absent, never a default 3');
   assert.equal(v.day, new Date().toISOString().slice(0, 10), 'no day: the route writes its own today');
 
   const none = M.buildCheckinPayload({ values: {} });
@@ -142,13 +143,10 @@ test('the check-in card: each state, the five canvas rows, and a second save thi
   assert.match(empty, /Save check-in/);
   assert.match(empty, /Private note \(optional\)/);
   assert.match(empty, /Stored encrypted\. Only you can read it\./);
-  assert.match(empty, /Support Not recorded The check-in has no field for this score yet/);
-  assert.match(empty, /Decisions Not recorded/);
-  for (const k of ['stress', 'sleep', 'energy']) assert.match(emptyMarkup, new RegExp(`data-testid="score-${k}"`));
-  for (const k of ['support', 'decisions']) {
-    assert.doesNotMatch(emptyMarkup, new RegExp(`data-testid="score-${k}"`), `${k} is drawn, never offered as an input the route would drop`);
-    assert.match(emptyMarkup, new RegExp(`data-testid="score-${k}-not-recorded"`));
-  }
+  // D574: the canvas's five are all asked, support and decisions included.
+  assert.match(empty, /Support 1 2 3 4 5 1 · On my own — 5 · Well supported Decisions 1 2 3 4 5 1 · Stuck — 5 · Clear/);
+  for (const k of ['stress', 'sleep', 'support', 'decisions', 'energy']) assert.match(emptyMarkup, new RegExp(`data-testid="score-${k}"`));
+  assert.doesNotMatch(emptyMarkup, /not-recorded/);
   assert.doesNotMatch(emptyMarkup, /aria-checked="true"/, 'nothing is pre-answered');
   assert.doesNotMatch(emptyMarkup, /<details[^>]* open=""/, 'the extra scores stay folded when unused');
 
@@ -206,7 +204,7 @@ test('past weeks: a week without a check-in is a gap, never a zero; a full page 
   assert.ok(M.pastWeeks(thirty.slice(0, 29), TODAY).every((w) => !w.unread), 'a short page read everything there is');
 });
 
-test('the past-weeks card: each state, with support and decisions not recorded and why', () => {
+test('the past-weeks card: each state, and support and decisions as lines with gaps for older weeks (D574)', () => {
   assert.match(html(h(PastWeeksCard, { status: 'loading' })), /animate-pulse/);
   assert.match(text(h(PastWeeksCard, { status: 'unreadable', onRetry: () => {} })), /Your past weeks could not be read\. This is not a sign that you skipped them\./);
   assert.match(text(h(PastWeeksCard, { status: 'ready', weeks: M.pastWeeks([], TODAY) })), /No past weeks yet\./);
@@ -216,9 +214,11 @@ test('the past-weeks card: each state, with support and decisions not recorded a
   const t = text(h(PastWeeksCard, { status: 'ready', weeks }));
   assert.match(t, /My past weeks 8 weeks · 1 = low · 5 = high/);
   assert.match(t, /2 of 8 weeks have a check-in\. A week without one is a gap in the line, never a zero\./);
-  assert.match(t, /Support and decisions are not recorded: the check-in has no field for either yet\./);
-  for (const k of ['stress', 'sleep', 'energy']) assert.match(markup, new RegExp(`data-testid="spark-${k}"`));
-  assert.doesNotMatch(markup, /spark-support|spark-decisions/);
+  assert.match(t, /Weeks saved before support and decisions were asked have neither: those are gaps, never zeros\./);
+  for (const k of ['stress', 'sleep', 'support', 'decisions', 'energy']) assert.match(markup, new RegExp(`data-testid="spark-${k}"`));
+  assert.match(markup, /aria-label="Support, oldest week first: (no check-in, ){7}no check-in"/, 'a week with no support answer is a gap');
+  const answered = html(h(PastWeeksCard, { status: 'ready', weeks: M.pastWeeks([{ ...ENTRY, support: 4 }], TODAY) }));
+  assert.match(answered, /aria-label="Support, oldest week first: (no check-in, ){7}4"/);
   assert.match(markup, /aria-label="Stress, oldest week first: no check-in, no check-in, no check-in, no check-in, no check-in, 2, no check-in, 4"/);
   assert.match(t, /Also recorded Mood .*Connection/, 'scores the canvas does not draw are still shown when recorded');
 
@@ -682,20 +682,37 @@ test('the profile keeps to the route’s own lists, and an empty hourly rate is 
 
 // ── The admin resource library ────────────────────────────────────────────────
 
-test('the library mirrors the route: its five kinds, its fields, and an admin gate on both writes', () => {
+test('the library mirrors the route: its five categories, four kinds, its fields, and an admin gate on every write', () => {
   const allowed = /ALLOWED_RESOURCE_CATEGORIES = new Set\(\[([^\]]*)\]\)/.exec(ROUTE)?.[1];
   assert.ok(allowed);
   assert.deepEqual([...M.RESOURCE_CATEGORIES].sort(), [...allowed.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort());
   assert.match(handler("wellbeing.post('/resources'"), /const a = await admin\(c\);[\s\S]*requireBranchNotSuspended\(c\)/);
   assert.match(handler("wellbeing.delete('/resources/:id'"), /const a = await admin\(c\);/);
-  const ok = M.resourceBody({ ...M.EMPTY_RESOURCE, name: ' Sleep, a primer ', category: 'reading', url: 'https://example.org/sleep', region: 'UK', is_free: true });
+  assert.match(handler("wellbeing.patch('/resources/:id'"), /const a = await admin\(c\);[\s\S]*requireBranchNotSuspended\(c\)/);
+  const kinds = /RESOURCE_KINDS = \[([^\]]*)\]/.exec(ROUTE)?.[1];
+  assert.deepEqual([...M.RESOURCE_FORMATS], [...kinds.matchAll(/'([a-z]+)'/g)].map((m) => m[1]));
+  assert.match(ROUTE, new RegExp(`RESOURCE_TOPIC_MAX = ${M.RESOURCE_TOPIC_MAX};`));
+  const ok = M.resourceBody({ ...M.EMPTY_RESOURCE, name: ' Sleep, a primer ', category: 'reading', url: 'https://example.org/sleep', region: 'UK', is_free: true, kind: 'article', topic: ' Sleep ' });
   assert.deepEqual(ok, {
     ok: true,
-    body: { category: 'reading', name: 'Sleep, a primer', description: null, url: 'https://example.org/sleep', region: 'uk', is_24_7: false, is_free: true, sort_order: 100 },
+    body: {
+      category: 'reading', name: 'Sleep, a primer', description: null, url: 'https://example.org/sleep', region: 'uk',
+      is_24_7: false, is_free: true, sort_order: 100, kind: 'article', topic: 'Sleep', status: 'published',
+    },
   });
-  for (const key of Object.keys(ok.body)) assert.match(handler("wellbeing.post('/resources'"), new RegExp(`\\?\\.${key}\\b`), `the route reads ${key}`);
-  const bad = M.resourceBody({ ...M.EMPTY_RESOURCE, url: 'javascript:alert(1)', sort_order: '1.5' });
-  assert.deepEqual(Object.keys(bad.fields).sort(), ['category', 'name', 'sort_order', 'url']);
+  assert.equal(M.resourceBody({ ...M.EMPTY_RESOURCE, name: 'x', category: 'reading' }, 'draft').body.status, 'draft');
+  // Every field the page sends is one the route's checker reads.
+  const checker = ROUTE.slice(ROUTE.indexOf('export function resourceFields'), ROUTE.indexOf('function serializeResource'));
+  for (const key of Object.keys(ok.body)) assert.match(checker, new RegExp(`'${key}'`), `the route reads ${key}`);
+  const bad = M.resourceBody({ ...M.EMPTY_RESOURCE, url: 'javascript:alert(1)', sort_order: '1.5', kind: 'podcast', topic: 't'.repeat(61) });
+  assert.deepEqual(Object.keys(bad.fields).sort(), ['category', 'kind', 'name', 'sort_order', 'topic', 'url']);
+  assert.deepEqual(M.draftOf({ id: 4, name: 'A', category: 'reading', kind: 'video', topic: 'Sleep', sort_order: 3, is_free: true }),
+    { id: 4, name: 'A', category: 'reading', url: '', description: '', region: '', is_24_7: false, is_free: true, sort_order: '3', kind: 'video', topic: 'Sleep', file: null });
+  // D574 part 4: the file's types and limit are the route's own.
+  const SVC = read('cloudflare-worker/src/services/wellbeing/resourceFiles.ts');
+  const types = /RESOURCE_FILE_TYPES[^=]*= \{([^}]*)\}/.exec(SVC)?.[1];
+  assert.deepEqual(Object.keys(M.RESOURCE_FILE_TYPES).sort(), [...types.matchAll(/'([a-z]+\/[a-z0-9.+-]+)'/g)].map((m) => m[1]).sort());
+  assert.match(SVC, new RegExp(`RESOURCE_FILE_MAX_BYTES = ${M.RESOURCE_FILE_MAX_MB} \\* 1024 \\* 1024;`));
 });
 
 test('the library list: search, kind and sort over the route’s rows, counted "1–25 of N" and paged', () => {
@@ -713,26 +730,48 @@ test('the library list: search, kind and sort over the route’s rows, counted "
   assert.match(text(h(LibraryToolbar, { q: '', category: '', sort: 'order', count: '1–25 of 30' })), /Any kind Crisis line Therapy Peer group Coaching Reading .*Sort: Members’ order .*1–25 of 30/);
 });
 
-test('the library table and editor: published rows, topic not recorded, and delete only after a confirmation', () => {
+test('the library table and editor: kind, topic, state and date as stored, edit in place, and delete only after a confirmation (D574)', () => {
   const t = text(h(ResourceTable, { rows: RESOURCES }));
   const markup = html(h(ResourceTable, { rows: RESOURCES }));
-  assert.match(t, /Kind Title Topic State Added/);
+  assert.match(t, /Kind Title Topic State Date/);
   // One row, two layouts: the stacked line for a narrow card, then the table's
   // cells for a wide one. The card's own width decides (a container query).
-  assert.match(t, /Crisis line 988 Suicide & Crisis Lifeline \(US\) 24\/7 · Free · US Topic: not recorded Published Added 1 Sep 2026 Not recorded Published 1 Sep 2026 Delete/);
+  // A row from before D574 has no kind and no topic: said, never guessed.
+  assert.match(t, /Not recorded 988 Suicide & Crisis Lifeline \(US\) Crisis line · 24\/7 · Free · US Topic: none Published Added 1 Sep 2026 None Published Added 1 Sep 2026 Edit Delete/);
+  const stored = text(h(ResourceTable, { rows: [{ ...RESOURCES[0], kind: 'article', topic: 'Crisis', status: 'draft', edited_at: '2026-10-02T09:00:00.000Z' }] }));
+  assert.match(stored, /Article 988 Suicide & Crisis Lifeline \(US\) Crisis line · 24\/7 · Free · US Topic: Crisis Draft Edited 2 Oct 2026 Crisis Draft Edited 2 Oct 2026 Edit Delete/);
+  assert.match(markup, /data-testid="button-edit-resource-1"/);
   assert.match(markup, /class="@container" data-testid="table-library"/);
   assert.match(markup, /@2xl:grid-cols-\[6rem_minmax\(0,2fr\)_minmax\(0,1fr\)_5\.5rem_6\.5rem_4\.5rem\]/);
-  assert.match(t, /The library stores no topic\. Every saved resource is listed to members, so each one is published; there are no drafts/);
+  assert.match(t, /Members see published resources only\. A draft is listed here, to admins, until it is published\./);
+  assert.deepEqual(M.libraryCoverage([...RESOURCES, { ...RESOURCES[1], id: 9, status: 'draft' }]).slice(0, 2), ['4 resources published', '1 draft not yet published']);
   assert.doesNotMatch(markup, /href="javascript/i);
   assert.doesNotMatch(markup, /confirm-delete-resource/);
   const asking = text(h(ResourceTable, { rows: RESOURCES, confirmingId: 1 }));
   assert.match(asking, /Delete “988 Suicide & Crisis Lifeline \(US\)”\? Members stop seeing it at once\. This cannot be undone\. Delete resource Keep/);
 
   const editor = text(h(ResourceEditor, { draft: M.EMPTY_RESOURCE }));
-  assert.match(editor, /Title Kind Choose a kind Crisis line Therapy Peer group Coaching Reading Topic Not recorded The library stores no topic\./);
-  assert.match(editor, /A link only: nothing can be uploaded\./);
-  assert.match(editor, /Publishing lists it to every member at once\. There is no draft to save first\. Publish/);
-  assert.doesNotMatch(editor, /Save draft/);
+  assert.match(editor, /Title Category Choose a category Crisis line Therapy Peer group Coaching Reading Kind Not set Article Audio Video Link Topic \(optional\)/);
+  assert.match(editor, /File \(optional\) Save the resource first, then attach a file to it\./, 'a file belongs to a saved row');
+  assert.doesNotMatch(editor, /nothing can be uploaded/);
+  const withFile = M.draftOf({ ...RESOURCES[0], file: { type: 'application/pdf', size: 1258291, url: '/api/wellbeing/resources/r1/file' } });
+  assert.match(text(h(ResourceEditor, { draft: withFile })), /Attached: PDF · 1\.2 MB Remove .*Replace file A PDF, MP3, M4A, MP4 or WebM, at most 95 MB\./);
+  assert.match(text(h(ResourceEditor, { draft: M.draftOf(RESOURCES[0]) })), /No file attached\. .*Upload file/);
+  assert.match(html(h(ResourceEditor, { draft: M.draftOf(RESOURCES[0]) })), /disabled=""[^>]*data-testid="button-upload-file"/, 'nothing chosen, nothing to upload');
+  assert.equal(M.fileProblem({ type: 'text/html', size: 10 }), 'A library file is a PDF, an MP3 or M4A, or an MP4 or WebM video.');
+  assert.equal(M.fileProblem({ type: 'video/mp4', size: 96 * 1024 * 1024 }), 'A library file is at most 95 MB.');
+  assert.equal(M.fileProblem({ type: 'audio/mpeg', size: 10 }), null);
+  // A file is opened through the gated path only; a stored link still wins.
+  assert.equal(M.resourceHref({ url: null, file: { url: '/api/wellbeing/resources/r1/file' } }), '/api/wellbeing/resources/r1/file');
+  assert.equal(M.resourceHref({ url: 'https://x.test/a', file: { url: '/api/wellbeing/resources/r1/file' } }), 'https://x.test/a');
+  assert.equal(M.resourceHref({ url: null, file: { url: 'https://evil.test/api/wellbeing/resources/r1/file' } }), null);
+  assert.equal(M.resourceHref({ url: 'javascript:alert(1)', file: null }), null);
+  assert.match(text(h(ResourceTable, { rows: [{ ...RESOURCES[3], file: { type: 'audio/mpeg', size: 2048, url: '/api/wellbeing/resources/r4/file' } }] })), /Coaching · GLOBAL · MP3 · 2 KB/);
+  assert.match(html(h(ResourceTable, { rows: [{ ...RESOURCES[3], file: { type: 'audio/mpeg', size: 2048, url: '/api/wellbeing/resources/r4/file' } }] })), /href="\/api\/wellbeing\/resources\/r4\/file"/);
+  assert.match(editor, /Publishing lists it to every member at once\. A draft is kept for admins until it is published\. Publish Save draft/);
+  assert.doesNotMatch(editor, /Stop editing/, 'a new resource has nothing to stop editing');
+  assert.match(text(h(ResourceEditor, { draft: M.draftOf({ ...RESOURCES[0], kind: 'link' }) })), /Stop editing/);
+  assert.match(html(h(ResourceEditor, { draft: M.draftOf({ ...RESOURCES[0], kind: 'link' }) })), /<option value="link" selected="">Link<\/option>/);
   const refused = text(h(ResourceEditor, { draft: M.EMPTY_RESOURCE, fields: { name: 'A resource needs a title.' }, error: 'Admin required' }));
   assert.match(refused, /A resource needs a title\./);
   assert.match(refused, /Admin required/);

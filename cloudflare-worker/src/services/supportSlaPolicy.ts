@@ -4,18 +4,29 @@
  * Escalations carry `due_at` and use `slaBand()` in `rpc/hqOps.ts`. Tickets
  * carry priority (`urgent` | `high` | `medium` | `low`) and no due date, so
  * their band is derived from age against the tier HQ assigns from priority.
- * The hours are fixed here and inherited by every subsidiary — the canvas's
- * P1/P2/P3 table — not editable on this page.
+ *
+ * THE HOURS ARE A STORE (D482, #1022). HQ edits the P1/P2/P3 hours at
+ * `PUT /api/admin/hq-support/sla-tiers` (`hq_support_sla_tiers`, migration
+ * 333), each change audited. `HQ_TICKET_SLA_HOURS` is the seed migration 333
+ * writes, not the live rule: a read that cannot reach the store says so, and
+ * its tickets are not banded against these numbers in its place.
  */
 import { OPEN_TICKET_STATUSES } from './supportQueues';
+import { TICKET_CATEGORIES, type TicketCategory } from './ticketCategories';
 import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS, type SlaBand } from './slaWindow';
 
 export type { SlaBand };
 export { SLA_DUE_SOON_HOURS };
 
+/** Migration 333's seed (D459's hours). */
 export const HQ_TICKET_SLA_HOURS = { P1: 24, P2: 48, P3: 96 } as const;
 
 export type SupportSlaTier = keyof typeof HQ_TICKET_SLA_HOURS;
+export type TierHours = Record<SupportSlaTier, number>;
+export const SLA_TIERS = ['P1', 'P2', 'P3'] as const satisfies readonly SupportSlaTier[];
+/** The bounds migration 333's CHECK sets: an hour to thirty days. */
+export const SLA_TIER_HOURS_MIN = 1;
+export const SLA_TIER_HOURS_MAX = 720;
 
 export const HQ_SUPPORT_SLA_POLICY: ReadonlyArray<{
   id: SupportSlaTier;
@@ -64,9 +75,80 @@ export function ticketSlaBand(
   return bandForRemaining(limitHours - ageHours, dueSoonHours);
 }
 
-export function ticketSlaBandForPriority(ageHours: number | null, priority: string): SlaBand | null {
+export function ticketSlaBandForPriority(
+  ageHours: number | null, priority: string, hours: TierHours = HQ_TICKET_SLA_HOURS,
+): SlaBand | null {
   const tier = ticketPriorityTier(priority);
-  return ticketSlaBand(ageHours, HQ_TICKET_SLA_HOURS[tier]);
+  return ticketSlaBand(ageHours, hours[tier]);
+}
+
+export type StoredSlaTier = {
+  id: SupportSlaTier; hours: number; description: string;
+  updated_at: string | null; updated_by_name: string | null;
+};
+
+export const SLA_TIERS_UNREADABLE =
+  'The hq_support_sla_tiers table could not be read on this database (migration 333), so the ticket SLA hours are unknown and no ticket is banded.';
+
+/**
+ * The ticket SLA tiers as HQ last set them. All three or none: a store missing
+ * a tier cannot band that tier's tickets, so it reads as unreadable too.
+ */
+export async function readSlaTiers(
+  env: { DB: import('../types').Env['DB'] },
+): Promise<{ available: true; tiers: StoredSlaTier[]; hours: TierHours } | { available: false; reason: string }> {
+  let rows: any[];
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.tier, t.hours, t.description, t.updated_at, COALESCE(u.display_name, u.name) AS updated_by_name
+         FROM hq_support_sla_tiers t LEFT JOIN users u ON u.id = t.updated_by
+        ORDER BY t.tier`,
+    ).all<any>();
+    rows = res.results || [];
+  } catch {
+    return { available: false, reason: SLA_TIERS_UNREADABLE };
+  }
+  const by = new Map(rows.map((r) => [String(r.tier), r]));
+  if (!SLA_TIERS.every((t) => by.has(t))) {
+    return { available: false, reason: 'The SLA tier store is missing a tier, so the ticket SLA hours are incomplete and no ticket is banded.' };
+  }
+  const tiers = SLA_TIERS.map((t) => {
+    const r = by.get(t);
+    return {
+      id: t, hours: Number(r.hours), description: String(r.description),
+      updated_at: r.updated_at ?? null, updated_by_name: r.updated_by_name ?? null,
+    };
+  });
+  const hours = Object.fromEntries(tiers.map((t) => [t.id, t.hours])) as TierHours;
+  return { available: true, tiers, hours };
+}
+
+export type SlaTierInput = Record<SupportSlaTier, { hours: number; description: string }>;
+
+/**
+ * The body of `PUT /sla-tiers`: all three tiers, each a whole number of hours
+ * within the CHECK's bounds and a description, and P1 ≤ P2 ≤ P3 — a P1 that
+ * waits longer than a P2 inverts what the tiers mean.
+ */
+export function parseSlaTiers(body: unknown): { ok: true; value: SlaTierInput } | { ok: false; error: string } {
+  const src = body && typeof body === 'object' ? (body as any).tiers : null;
+  if (!src || typeof src !== 'object') return { ok: false, error: 'tiers must name P1, P2 and P3' };
+  const out = {} as SlaTierInput;
+  for (const t of SLA_TIERS) {
+    const row = src[t];
+    if (!row || typeof row !== 'object') return { ok: false, error: `tiers.${t} is missing` };
+    const hours = Number(row.hours);
+    if (!Number.isInteger(hours) || hours < SLA_TIER_HOURS_MIN || hours > SLA_TIER_HOURS_MAX) {
+      return { ok: false, error: `tiers.${t}.hours must be a whole number from ${SLA_TIER_HOURS_MIN} to ${SLA_TIER_HOURS_MAX}` };
+    }
+    const description = typeof row.description === 'string' ? row.description.trim() : '';
+    if (!description || description.length > 200) return { ok: false, error: `tiers.${t}.description must be 1-200 characters` };
+    out[t] = { hours, description };
+  }
+  if (!(out.P1.hours <= out.P2.hours && out.P2.hours <= out.P3.hours)) {
+    return { ok: false, error: 'P1 must not wait longer than P2, nor P2 longer than P3' };
+  }
+  return { ok: true, value: out };
 }
 
 /**
@@ -84,36 +166,38 @@ export function tallySlaBands(bands: Array<SlaBand | null>): { ok: number; due_s
   return out;
 }
 
-export type TicketTaxonomyRow = { type: string; open: number };
+export type TicketTaxonomyRow = { category: TicketCategory; label: string; open: number };
 
 /**
- * Count open tickets by `type`. Unknown types are returned as their stored
- * string rather than folded into "other", so a new type is visible immediately.
+ * Open tickets by category (D482): every one of the eight, in the canvas's
+ * order, with its count (0 is a count here: the eight are fixed, so a category
+ * nobody filed under has none open). Tickets with no category recorded —
+ * every ticket filed before migration 333 — are counted apart as
+ * `uncategorised`, never folded into Other.
  */
 export async function readOpenTicketTaxonomy(
   env: { DB: import('../types').Env['DB'] },
-): Promise<{ available: true; items: TicketTaxonomyRow[] } | { available: false; reason: string }> {
+): Promise<{ available: true; items: TicketTaxonomyRow[]; uncategorised: number } | { available: false; reason: string }> {
   try {
     // The `?` pair binds `OPEN_TICKET_STATUSES` itself, the one definition of
-    // open; its tuple type makes a third status a compile error here. GROUP BY 1
-    // groups by the folded type the row reports, not the raw column, so a blank
-    // type and 'task' are one row.
+    // open; its tuple type makes a third status a compile error here.
     const res = await env.DB.prepare(
-      `SELECT COALESCE(NULLIF(TRIM(type), ''), 'task') AS type, COUNT(*) AS n
+      `SELECT category, COUNT(*) AS n
          FROM tickets
         WHERE status IN (?, ?)
-        GROUP BY 1
-        ORDER BY n DESC, type ASC`,
-    ).bind(...OPEN_TICKET_STATUSES).all<{ type: string; n: number }>();
-    const items = (res.results || []).map((r) => ({
-      type: String(r.type),
-      open: Number(r.n),
-    }));
-    return { available: true, items };
+        GROUP BY category`,
+    ).bind(...OPEN_TICKET_STATUSES).all<{ category: string | null; n: number }>();
+    const counts = new Map<string | null, number>();
+    for (const r of res.results || []) counts.set(r.category ?? null, Number(r.n));
+    return {
+      available: true,
+      items: TICKET_CATEGORIES.map((c) => ({ category: c.id, label: c.label, open: counts.get(c.id) ?? 0 })),
+      uncategorised: counts.get(null) ?? 0,
+    };
   } catch {
     return {
       available: false,
-      reason: 'The tickets table could not be read on this database, so open counts by type are unknown.',
+      reason: 'The tickets table, or its category column (migration 333), could not be read on this database, so open counts by category are unknown.',
     };
   }
 }
