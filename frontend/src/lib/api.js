@@ -1685,6 +1685,9 @@ export const api = {
     request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`, { method: 'POST', body: JSON.stringify(entry) }),
   revenueEntriesImport: (projectId, rows) =>
     request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import`, { method: 'POST', body: JSON.stringify({ rows }) }),
+  // D587 — the founder's own Stripe charges, one verified entry each.
+  revenueEntriesImportStripe: (projectId) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import-stripe`, { method: 'POST' }),
   revenueEntryUpdate: (projectId, uid, patch) =>
     request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   revenueEntryDelete: (projectId, uid) =>

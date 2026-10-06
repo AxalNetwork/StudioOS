@@ -5,17 +5,17 @@
 //
 // Every figure is a sum of the Worker's integer cents (lib/revenueLedger.js).
 // Verification is the Worker's: an entry is "Supported" once a document on
-// this startup is attached and "Manual" until then. "Verified" is reserved
-// for a Stripe charge sync, which does not exist yet, so "Verified revenue"
-// reads Not recorded with that reason rather than 0%.
+// this startup is attached and "Manual" until then. "Verified" is written only
+// by the Stripe charge import (D587): until a charge has been imported,
+// "Verified revenue" reads Not recorded with that reason rather than 0%.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, FileText, Loader2, Plus, Trash2, Upload, X } from 'lucide-react';
+import { CreditCard, Eye, EyeOff, FileText, Loader2, Plus, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Unreadable, Unrecorded } from '../../ui';
 import {
   IMPORT_FIELDS, LEDGER_FILTERS, LEDGER_STATUS, LEDGER_TYPES,
-  fmtLedgerCents, guessMapping, mapImportRows, parseCsv, summarizeLedger,
+  fmtLedgerCents, guessMapping, mapImportRows, parseCsv, stripeImportLine, summarizeLedger,
 } from '../../lib/revenueLedger';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -55,6 +55,7 @@ export default function RevenueLedger({ project, canEdit }) {
   const [csv, setCsv] = useState(null); // { name, headers, rows, mapping, defaultType }
   const [importResult, setImportResult] = useState(null);
   const [rowErr, setRowErr] = useState({ uid: null, message: '' });
+  const [stripeResult, setStripeResult] = useState(null); // the last Stripe import's answer
 
   const load = useCallback(async () => {
     setRead((r) => ({ ...r, status: 'loading' }));
@@ -140,6 +141,21 @@ export default function RevenueLedger({ project, canEdit }) {
     } finally { setBusy(false); }
   };
 
+  // D587 — import the founder's own Stripe charges as verified entries. A
+  // refusal (not connected, a failed read) is shown as said, never as "0".
+  const runStripeImport = async () => {
+    if (busy) return;
+    setBusy(true); setErr(''); setStripeResult(null);
+    try {
+      const res = await api.revenueEntriesImportStripe(project.id);
+      setStripeResult(res);
+      await load();
+    } catch (e) {
+      reportError('spinout-revenue:ledger-stripe', e);
+      setErr(e?.message || 'Your Stripe charges could not be imported.');
+    } finally { setBusy(false); }
+  };
+
   const attachProof = async (entry, docId) => {
     setRowErr({ uid: null, message: '' });
     try {
@@ -171,13 +187,13 @@ export default function RevenueLedger({ project, canEdit }) {
         {[
           { k: 'total', label: 'Ledger total', value: read.status === 'failed' ? null : fmtLedgerCents(summary.totalCents), sub: `${summary.count} entr${summary.count === 1 ? 'y' : 'ies'}` },
           { k: 'customers', label: 'Paying customers (ledger)', value: read.status === 'failed' ? null : String(summary.customers), sub: 'distinct customer names' },
-          { k: 'verified', label: 'Verified revenue', value: summary.verifiedShare === null ? 'unrecorded' : `${Math.round(summary.verifiedShare * 100)}%`, sub: 'Stripe-synced share' },
+          { k: 'verified', label: 'Verified revenue', value: read.status === 'failed' ? null : summary.verifiedShare === null ? 'unrecorded' : `${Math.round(summary.verifiedShare * 100)}%`, sub: 'Stripe-synced share' },
           { k: 'proof', label: 'Proof coverage', value: read.status === 'failed' ? null : `${summary.proofBacked} of ${summary.count}`, sub: 'entries with a document' },
         ].map((kpi) => (
           <div key={kpi.k} className={`${CARD} !p-4`} data-testid={`ledger-kpi-${kpi.k}`}>
             <div className="text-[17px] font-extrabold text-gray-900 dark:text-gray-50 tabular-nums truncate">
               {read.status === 'loading' ? <Loader2 size={14} className="animate-spin text-gray-400" /> : kpi.value === 'unrecorded'
-                ? <Unrecorded reason="Verified means synced from a Stripe charge, and no charge sync exists yet — the Stripe import records MRR and customer counts only." />
+                ? <Unrecorded reason="Verified means imported from a Stripe charge, and no charge has been imported yet." />
                 : kpi.value === null ? <Unrecorded reason="The ledger could not be read.">Unreadable</Unrecorded> : kpi.value}
             </div>
             <div className="text-[11px] font-bold text-gray-600 dark:text-gray-300 mt-0.5">{kpi.label}</div>
@@ -213,8 +229,22 @@ export default function RevenueLedger({ project, canEdit }) {
             <button type="button" onClick={() => { setErr(''); setCsv(null); setImportResult(null); setModal('import'); }} data-testid="ledger-import" className="text-[12px] font-bold text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg px-3 py-1.5 inline-flex items-center gap-1.5">
               <Upload size={13} /> Import CSV
             </button>
+            <button type="button" onClick={runStripeImport} disabled={busy} data-testid="ledger-import-stripe" className="text-[12px] font-bold text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg px-3 py-1.5 inline-flex items-center gap-1.5 disabled:opacity-50">
+              <CreditCard size={13} /> {busy ? 'Importing…' : 'Import charges from Stripe'}
+            </button>
           </div>
         )}
+        {canEdit && stripeResult && (
+          <div className="mb-3 text-[11.5px] text-gray-600 dark:text-gray-300" data-testid="ledger-stripe-result">
+            <p>{stripeImportLine(stripeResult)}</p>
+            {Array.isArray(stripeResult.rejected) && stripeResult.rejected.length > 0 && (
+              <ul className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                {stripeResult.rejected.map((r) => <li key={r.charge_id}>{r.charge_id}: {r.message}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+        {canEdit && !modal && err && <p className="mb-3 text-[11.5px] text-red-600 dark:text-red-400" role="alert" data-testid="ledger-error">{err}</p>}
         {read.status === 'loading' ? (
           <div className="py-6 text-center"><Loader2 size={16} className="animate-spin text-gray-400 inline" /></div>
         ) : read.status === 'failed' ? (
@@ -297,7 +327,9 @@ export default function RevenueLedger({ project, canEdit }) {
               {['supported', 'manual'].map((v) => (
                 <span key={v}>{LEDGER_STATUS[v].label}: <b className="font-mono">{fmtLedgerCents(summary.byVerification[v])}</b> ({pct(summary.byVerification[v])}%)</span>
               ))}
-              <span>Verified: <Unrecorded reason="No Stripe charge sync exists yet." /></span>
+              {summary.verifiedShare === null
+                ? <span>Verified: <Unrecorded reason="No Stripe charge has been imported yet." /></span>
+                : <span>{LEDGER_STATUS.verified.label}: <b className="font-mono">{fmtLedgerCents(summary.byVerification.verified)}</b> ({pct(summary.byVerification.verified)}%)</span>}
             </div>
           </div>
         </div>

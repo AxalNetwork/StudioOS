@@ -7,8 +7,9 @@
 //     five filters, investor view, manual entry, CSV import with column
 //     mapping, proof attachment, mix and confidence bars — lives in
 //     components/spinout/RevenueLedger.jsx over /api/revenue. Money is integer
-//     cents; verification is the Worker's. "Verified revenue" reads Not
-//     recorded: it means Stripe-synced charges, and no charge sync exists.
+//     cents; verification is the Worker's. "Verified revenue" is the share
+//     imported from the founder's own Stripe charges (D587), and reads Not
+//     recorded until one has been imported.
 //   - Revenue log: real metric snapshots — the Worker's `project_metrics`
 //     table (migration 249; GET/POST /progress/metrics/:projectId) — with
 //     source badges (stripe/manual), manual logging, and deletion. The

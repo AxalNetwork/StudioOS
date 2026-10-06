@@ -82,6 +82,25 @@ export function addDaysISO(isoDate: string, n: number): string {
   return new Date(dayMsUTC(isoDate) + n * 86400000).toISOString().slice(0, 10);
 }
 
+/** The 83(b) election window: 30 days from the grant (IRC §83(b)(2)). */
+export const ELECTION_WINDOW_DAYS = 30;
+
+/**
+ * D584 — the 83(b) filing deadline for a grant date: the 30th calendar day
+ * after it, whatever day of the week that is.
+ *
+ * THE ONE PLACE THE DEADLINE IS COMPUTED. The create route stores what this
+ * returns as `deadline_date`. Whether a deadline that falls on a Saturday,
+ * Sunday or legal holiday rolls to the next business day (the IRC §7503
+ * question) is still with counsel (D361, #1211). Until counsel answers, the
+ * deadline does not roll: the 30th day is never later than the real deadline,
+ * so a founder who files by it is never late. If counsel says it rolls, the
+ * rolled date is added beside this one at read time and no stored row changes.
+ */
+export function electionDeadline(grantDate: string): string {
+  return addDaysISO(grantDate, ELECTION_WINDOW_DAYS);
+}
+
 export interface Section83bRow {
   id: number;
   uid: string;
