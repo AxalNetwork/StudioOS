@@ -15,7 +15,8 @@ import {
 } from '../src/pages/research/marketReadingRead.js';
 
 const page = readFileSync(new URL('../src/pages/research/MarketReading.jsx', import.meta.url), 'utf8');
-const list = readFileSync(new URL('../src/pages/research/MarketZone.jsx', import.meta.url), 'utf8');
+// The list that is mounted at `/research/markets` (D593), not `MarketZone`.
+const list = readFileSync(new URL('../src/pages/research/MarketDirectoryZone.jsx', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 const api = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
 
@@ -72,7 +73,7 @@ test('the reading page is a route for the same licences as the list', () => {
   assert.match(app, /path="\/research\/markets\/:uid"/);
   assert.match(app, /guard\(labRoles\(\['admin', 'founder', 'partner', 'investor', 'advisor'\]\), <MarketReading/);
   assert.match(api, /marketReadingGet: \(uid\) => request\(`\/research\/market-readings\/\$\{encodeURIComponent\(uid\)\}`\)/);
-  assert.match(list, /r\.uid \?/);
+  assert.match(list, /\.filter\(\(r\) => r\.uid\)/);
   assert.match(list, /\/research\/markets\/\$\{encodeURIComponent\(r\.uid\)\}/);
 });
 
