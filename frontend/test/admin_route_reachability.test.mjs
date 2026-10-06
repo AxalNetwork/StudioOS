@@ -226,7 +226,7 @@ const SIDEBAR_ROWS = Object.entries(SIDEBAR_GROUPS).flatMap(([role, groups]) =>
  * mounted on every page. These are doors no route owns.
  */
 const CHROME = (() => {
-  const open = APP.indexOf('<Routes>');
+  const open = APP.indexOf('<Routes');
   const close = APP.indexOf('</Routes>');
   return open >= 0 && close > open ? APP.slice(0, open) + APP.slice(close) : APP;
 })();

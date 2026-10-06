@@ -15,6 +15,8 @@ import StudioInterview from '../../components/advisor/StudioInterview';
 import { AdminStudioOverview } from './AdminStudioOverview';
 import StudioPosture from './StudioPosture';
 import { StudioNeedsDecisionView } from './StudioNeedsDecision';
+import StudioRail from './StudioRail';
+import { RailFrame } from '../../ui';
 
 /**
  * D512 — NO READS OF ITS OWN. The four branch reads this page used to make
@@ -25,9 +27,16 @@ import { StudioNeedsDecisionView } from './StudioNeedsDecision';
  * in (a render test); in production it is undefined and each component loads
  * the glance itself.
  */
+/**
+ * D556 — THE RAIL. Every other Admin page had one and this, the front door,
+ * did not. It is the Worker AI rail, workspace "Studio", in the one frame
+ * every host shares, and its coverage is the same studio glance the strip and
+ * the cards read. Eadwyn above is the conversation; the rail is the read-back
+ * of what this page shows, the same pairing the founder desks have.
+ */
 export default function AdminStudioHome({ user, glance }) {
   return (
-    <div data-testid="admin-studio-home">
+    <RailFrame rail={<StudioRail user={user} glance={glance} />} data-testid="admin-studio-home">
       <header className="mb-4">
         <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink">Studio</h1>
       </header>
@@ -38,6 +47,6 @@ export default function AdminStudioHome({ user, glance }) {
         The other Admin pages, in the order the sidebar lists them.
       </p>
       <AdminStudioOverview user={user} glance={glance} />
-    </div>
+    </RailFrame>
   );
 }

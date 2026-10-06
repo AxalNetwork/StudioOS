@@ -11,6 +11,7 @@ import { boardFor } from './boards';
 import { api } from '../lib/api';
 import { NETWORK_ORG_COPY, ORG_BACKED } from './noStoreCopy';
 import RelationshipRequests from '../components/RelationshipRequests';
+import { relationshipLogPath } from '../lib/partnerEarnings';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -329,8 +330,9 @@ export default function NetworkWorkspace({ role = 'founder' }) {
       intro={isRoot ? 'Work your relationships — people, introductions, and the organizations behind them.' : (INTRO[slug] || INTRO.relationships)}
     >
       {/* D493 — requests to record a relationship, either way, on every
-          licence's Relationships zone. Draws nothing when none are open. */}
-      {slug === 'relationships' && <RelationshipRequests />}
+          licence's Relationships zone. Draws nothing when none are open.
+          D569 — on the partner shell each accepted record links to its log. */}
+      {slug === 'relationships' && <RelationshipRequests logPath={role === 'partner' ? relationshipLogPath : undefined} />}
       {body}
     </WorkspaceShell>
   );

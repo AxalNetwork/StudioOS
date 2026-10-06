@@ -350,6 +350,10 @@ export default function AdvisorBucketRoutes({ preview = false }) {
         // and sends the settlement question to Earnings, which reads it. D75.
         ['Money movement', 'A session amount is your own bookkeeping note, and a platform rate is recorded against each priced session. Axal issues no invoice, runs no checkout and holds nothing on your behalf. Whether anything has been charged is stated on Earnings, which reads that live.'],
         ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other sessions. Every amount here is one you typed.'],
+        // D571 — the Ops canvas puts a proposal on its deliverables, session
+        // types and booking links screens. `routes/research.ts` registers no
+        // draft surface for any of the three, so the rail says so instead.
+        ['Drafts for clients', 'Eadwyn drafts no status update on Delivery, and no session description or booking follow-up on Sessions. None of the three has a draft source yet.'],
       ],
     },
     '/cohorts': {

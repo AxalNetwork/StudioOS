@@ -65,7 +65,9 @@ test('the bridge is one module-level component, mounted once at the top of every
   assert.equal((CODE.match(/^function ComplianceBridge\(\)/gm) || []).length, 1);
   assert.equal((CODE.match(/<ComplianceBridge \/>/g) || []).length, 1, 'mounted exactly once');
   // Above the pane grid, not inside one section: every pane gets it.
-  const page = slice(CODE, 'export default function SettingsPage', 'function SectionDropdown');
+  // D568 replaced the phone dropdown (`SectionDropdown`) with the canvas's
+  // section list, so the page now ends where the local `Card` begins.
+  const page = slice(CODE, 'export default function SettingsPage', 'function Card(');
   assert.ok(page.indexOf('<ComplianceBridge />') < page.indexOf('<div className="grid lg:grid-cols-[200px_1fr]'), 'the strip sits above the section grid');
   // The old badge, which rendered nothing on failure, is gone with its mount.
   assert.doesNotMatch(CODE, /function ProfileTrustBadge|<ProfileTrustBadge/);

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Landmark, Radar, RefreshCw, Search } from 'lucide-react';
-import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import './founderResearchDesk.css';
+import { LensNavLink } from '../../workspaces/lens';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const firstText = (...values) => values.find((value) => value !== null && value !== undefined && String(value).trim() !== '');
@@ -187,7 +188,7 @@ export default function FounderResearchDesk() {
           <form className="a7-question" onSubmit={ask}><Search size={16} /><input data-testid="input-research-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about a market or company" maxLength={1000} /><button type="submit" data-testid="button-research-ask" disabled={asking || !question.trim()}>{asking ? 'Asking…' : 'Ask'}</button></form>
           <div className="a7-honesty">Eadwyn answers only from the documents in your research library, and cites each one. Every question joins your thread on the Ask page.</div>
           <AskResult asked={asked} error={askError} />
-          <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <NavLink data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state} className={zonePillClass}>{label}</NavLink>)}</nav>
+          <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <LensNavLink data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state} className={zonePillClass}>{label}</LensNavLink>)}</nav>
         </header>
         {error && <div className="a7-error" data-testid="status-research-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-research" type="button" onClick={() => setRetry((value) => value + 1)}><RefreshCw size={13} />Retry</button></div>}
         {/* D536 — the Research overview (Research · Main canvas, D546): the

@@ -9,6 +9,7 @@ imports. The bucket roots and the zone routing live in
 | `pipeline/` | Pipeline zones: Leads, Proposals, Negotiations, Retainers, Analytics. |
 | `delivery/` | Delivery zones: Board (with the engagement lifecycle and invoice ledger, D395), Deliverables, Capacity, Status reports, Health (with Founder reviews, D390). |
 | `offers/` | Offers zones: Catalog, Visibility, Proof, Audience fit. |
+| `earnings/` | The four earnings screens at the canvas's own routes (D569): `/partner/earnings`, `/partner/referrals`, `/partner/relationships/:id` and `/partner/leaderboard`. Not a bucket of the shell, so they draw their own pill row (`EARNINGS_AREA`). `parts.jsx` is what they share with the admin console `/admin/commissions`; the rules about what a figure means are in `frontend/src/lib/partnerEarnings.js`. |
 | `kit.jsx` | The one import surface for partner zones; its header lists the three traps it exists to defuse. |
 | `PartnerStudioHome.jsx` | What `/studio` renders for a partner today. |
 | `PartnerHomeP2.jsx` | The canvas's P2 Home, built and tested but not mounted until the owner signs it off (D394). |

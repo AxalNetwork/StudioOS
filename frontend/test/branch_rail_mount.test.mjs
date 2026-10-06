@@ -275,14 +275,19 @@ test('the branch tier mounts exactly one rail, and BranchZone is where it is', (
 
 test('the branch rail column collapses with the rail', () => {
   // `workerRail.css` sets `--fwr-track: 44px` on
-  // `:root[data-worker-rail="collapsed"]`, so a host declaring its column as
+  // `:root[data-worker-rail="collapsed"]`, so a column declared as
   // `var(--fwr-track, <own width>)` narrows when the reader collapses.
-  // `WorkspaceShell.jsx` is the precedent; the five HQ pages hardcode `280px`
-  // in a Tailwind literal and do NOT collapse, which is a separate defect this
-  // guard deliberately does not pretend to cover.
+  //
+  // RE-AIMED BY D556. BranchZone no longer draws its own grid: it puts the
+  // rail in `RailFrame`, the frame every host without a stylesheet frame of
+  // its own shares, and that frame's column is the one that reads the
+  // property. The HQ pages' `280px` Tailwind literal, the defect this comment
+  // used to say it did not cover, went with the same change.
   const zone = codeOnlyJsx(read('frontend/src/pages/branch/BranchZone.jsx'));
-  assert.match(zone, /var\(--fwr-track, 280px\)/, 'the branch rail column must read --fwr-track, or collapsing the rail leaves a hole');
+  assert.match(zone, /<RailFrame\b/, 'the branch rail must sit in the shared frame, or collapsing the rail leaves a hole');
   assert.doesNotMatch(zone, /grid-cols-\[minmax\(0,1fr\)_280px\]/, 'do not copy the HQ literal — it cannot collapse');
+  assert.match(read('frontend/src/ui/workerRail.css'), /\.fwr-frame-rail\s*\{[^}]*width:\s*var\(--fwr-track,\s*280px\)/,
+    'the shared frame column must read --fwr-track');
 });
 
 test('the deployment sentence belongs to the frame, not to a page', () => {

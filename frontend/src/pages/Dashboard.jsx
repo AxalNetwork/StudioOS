@@ -110,19 +110,23 @@ export default function Dashboard({ activeRole, authUser }) {
   // fall through to skills, values and archetype. Eadwyn and the Admin page
   // cards render from the branch reads, which answer on their own.
   if (activeRole === 'admin' && authUser) {
+    // D556 — a fragment, not a wrapper: Admin Studio's rail frame has to be a
+    // direct child of the page container to dock to its edge (RailFrame).
     return (
-      <div className="space-y-6">
+      <>
         {googleNotice && (
-          <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
-            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
-            sign you out of Google globally — if you're on a shared device, also sign
-            out of your Google account in this browser. You can manage this anytime
-            under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
-          </InfoStrip>
+          <div className="mb-6">
+            <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+              <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
+              sign you out of Google globally — if you're on a shared device, also sign
+              out of your Google account in this browser. You can manage this anytime
+              under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
+            </InfoStrip>
+          </div>
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <AdminStudioHome user={authUser} />
-      </div>
+      </>
     );
   }
 

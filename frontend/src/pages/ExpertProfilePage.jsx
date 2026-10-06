@@ -1,8 +1,41 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, Globe, Calendar, ExternalLink, FileText, ArrowLeft, Shield } from 'lucide-react';
+import { Star, Globe, Calendar, FileText, ArrowLeft, ArrowRight, Shield } from 'lucide-react';
 import { api } from '../lib/api';
-import AxalCheckout from '../components/AxalCheckout';
+import { safeReadJSON } from '../lib/storage';
+import { NotRecorded } from './wellbeing/WellbeingParts';
+import { SERVICE_GAP } from './wellbeing/WellbeingBookPage';
+
+/**
+ * /wellbeing/expert/:uid — an expert's public profile, and a card that sends a
+ * member to book them.
+ *
+ * THE CARD DOES NOT BOOK. `/wellbeing/book` is the one booking flow (D570).
+ * This card used to post its own booking, and failed three ways against
+ * `routes/wellbeing.ts`:
+ *   - it asked for a note, which a booking never carries (D331);
+ *   - it sent no time, so `POST /experts/:uid/book` refused every expert who
+ *     has no scheduler of their own ("scheduled_at is required");
+ *   - it offered services, and a payment for one, that `GET /experts/:uid`
+ *     never returns (`services: null`).
+ * It now hands this expert's card to the flow, which lists them first
+ * (`withArrived`) and books them the way it books anyone.
+ */
+
+/** Who may open `/wellbeing/book`: App.jsx guards the route to these roles. */
+export const BOOKING_ROLES = ['admin', 'founder'];
+
+/** The signed-in user as the app shows them: an admin's View As role, else their own. */
+export function viewerOf(user, viewMode) {
+  const role = String(user?.role || '').toLowerCase();
+  return { id: user?.id ?? null, role: role === 'admin' && viewMode ? viewMode : role };
+}
+
+function readViewer() {
+  let viewMode = null;
+  try { viewMode = localStorage.getItem('viewMode'); } catch { /* storage blocked: the account's own role */ }
+  return viewerOf(safeReadJSON('user', {}), viewMode);
+}
 
 function StarRow({ value }) {
   const v = Math.round((Number(value) || 0) * 2) / 2;
@@ -15,6 +48,90 @@ function StarRow({ value }) {
   );
 }
 
+/**
+ * The Services tab. The route sends `services: null` to members today, so
+ * the tab says so rather than "none listed"; a list, when one is sent, is
+ * shown to read. It is not picked from: the booking flow attaches no service.
+ */
+export function ServicesPanel({ services }) {
+  if (!Array.isArray(services)) {
+    return <NotRecorded label="Services not recorded" reason={SERVICE_GAP} testId="text-services-gap" />;
+  }
+  if (!services.length) {
+    return <div className="text-sm text-slate-500 dark:text-slate-400">This expert lists no services.</div>;
+  }
+  return (
+    <div className="space-y-3">
+      {services.map((s) => (
+        <div key={s.uid} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <div>
+            <div className="font-medium text-slate-900 dark:text-white">{s.title}</div>
+            {s.description && (
+              <div className="text-sm text-slate-600 dark:text-slate-300">{s.description}</div>
+            )}
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {s.duration_minutes} min
+            </div>
+          </div>
+          <div className="text-right font-semibold text-slate-900 dark:text-white">
+            {s.price_cents > 0
+              ? `${(s.price_cents / 100).toLocaleString(undefined, { style: 'currency', currency: (s.currency || 'usd').toUpperCase() })}`
+              : 'Free'}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Book a session. Closed when the route would refuse the booking (an
+ * incomplete or hidden profile); the expert's own view of their profile; a
+ * link into the flow for the roles that can open it; and a plain line for the
+ * rest, whom the flow's route guard would turn away.
+ */
+export function BookingCard({ expert, viewer = {} }) {
+  const closed = expert.hidden
+    ? 'This expert is not taking bookings at the moment.'
+    : expert.profile_completion_pct != null && expert.profile_completion_pct < 70
+      ? 'This expert hasn’t completed their profile yet, so bookings are not open.'
+      : null;
+  const own = viewer.id != null && expert.user_id != null && String(viewer.id) === String(expert.user_id);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800" data-testid="card-book">
+      <h2 className="font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+        <Calendar size={18} /> Book a session
+      </h2>
+      {closed ? (
+        <div className="text-sm text-amber-700 dark:text-amber-400" data-testid="text-booking-closed">{closed}</div>
+      ) : own ? (
+        <div className="text-sm text-slate-600 dark:text-slate-300" data-testid="text-booking-own">
+          This is the profile members see. They book you from the booking flow, and the bookings arrive in{' '}
+          <Link to="/wellbeing/practice" className="font-medium text-indigo-600 hover:underline">your practice</Link>.
+        </div>
+      ) : BOOKING_ROLES.includes(viewer.role) ? (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            Choose one of {expert.name}’s open times in the booking flow. A booking is visible to you and the expert alone, and carries no note.
+          </div>
+          <Link
+            to={`/wellbeing/book?expert=${encodeURIComponent(expert.uid)}`}
+            state={{ expert }}
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            data-testid="link-book-expert"
+          >
+            Choose a time <ArrowRight size={14} />
+          </Link>
+        </div>
+      ) : (
+        <div className="text-sm text-slate-500 dark:text-slate-400" data-testid="text-booking-founders">
+          Booking a wellbeing expert is open to founders.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ExpertProfilePage() {
   const { uid } = useParams();
   const [expert, setExpert] = useState(null);
@@ -22,10 +139,6 @@ export default function ExpertProfilePage() {
   const [tab, setTab] = useState('about');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [bookingState, setBookingState] = useState({ status: 'idle', message: '' });
-  const [payIntent, setPayIntent] = useState(null);
-  const [selectedService, setSelectedService] = useState(null);
-  const [bookerNote, setBookerNote] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -34,9 +147,6 @@ export default function ExpertProfilePage() {
       .then((data) => {
         if (cancelled) return;
         setExpert(data);
-        if (Array.isArray(data?.services) && data.services.length > 0) {
-          setSelectedService(data.services[0].uid);
-        }
         if (data?.user_id) {
           api.articlesByAuthor(data.user_id)
             .then((r) => { if (!cancelled) setArticles(r?.articles || r || []); })
@@ -47,33 +157,6 @@ export default function ExpertProfilePage() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [uid]);
-
-  async function handleBook() {
-    if (!expert) return;
-    setBookingState({ status: 'pending', message: '' });
-    setPayIntent(null);
-    try {
-      const data = {};
-      if (selectedService) data.service_uid = selectedService;
-      if (bookerNote.trim()) data.booker_note = bookerNote.trim().slice(0, 1000);
-      const res = await api.wellbeingExpertBook(expert.uid, data);
-      if (res?.client_secret) {
-        // Paid session — pay inline via the embedded Axal VC terminal (no redirect
-        // to Stripe). The Connect destination transfer to the expert is baked
-        // into the server-created PaymentIntent.
-        setPayIntent({
-          clientSecret: res.client_secret,
-          amountCents: res.amount_cents,
-          currency: res.currency,
-        });
-        setBookingState({ status: 'pay', message: '' });
-        return;
-      }
-      setBookingState({ status: 'ok', message: res?.message || 'Booking submitted.' });
-    } catch (e) {
-      setBookingState({ status: 'err', message: e?.message || 'Could not book this expert.' });
-    }
-  }
 
   if (loading) return <div className="p-8 text-slate-500 dark:text-slate-400">Loading…</div>;
   if (error || !expert) {
@@ -86,9 +169,6 @@ export default function ExpertProfilePage() {
       </div>
     );
   }
-
-  const services = expert.services || [];
-  const acceptsPayments = !!expert.accepts_payments;
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -169,46 +249,7 @@ export default function ExpertProfilePage() {
             </div>
           )}
 
-          {tab === 'services' && (
-            <div className="space-y-3">
-              {services.length === 0 && (
-                <div className="text-sm text-slate-500 dark:text-slate-400">
-                  No specific services listed — use the booking action below.
-                </div>
-              )}
-              {services.map((s) => (
-                <label key={s.uid} className={`flex items-start justify-between gap-3 rounded-lg border p-3 cursor-pointer ${
-                  selectedService === s.uid ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950' : 'border-slate-200 dark:border-slate-700'
-                }`}>
-                  <div className="flex items-start gap-2">
-                    <input
-                      type="radio"
-                      name="svc"
-                      checked={selectedService === s.uid}
-                      onChange={() => setSelectedService(s.uid)}
-                      className="mt-1"
-                    />
-                    <div>
-                      <div className="font-medium text-slate-900 dark:text-white">{s.title}</div>
-                      {s.description && (
-                        <div className="text-sm text-slate-600 dark:text-slate-300">{s.description}</div>
-                      )}
-                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        {s.duration_minutes} min
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-slate-900 dark:text-white">
-                      {s.price_cents > 0
-                        ? `${(s.price_cents / 100).toLocaleString(undefined, { style: 'currency', currency: (s.currency || 'usd').toUpperCase() })}`
-                        : 'Free'}
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          )}
+          {tab === 'services' && <ServicesPanel services={expert.services} />}
 
           {tab === 'articles' && (
             <div className="space-y-2">
@@ -234,77 +275,7 @@ export default function ExpertProfilePage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-          <Calendar size={18} /> Book a session
-        </h2>
-        {expert.profile_completion_pct != null && expert.profile_completion_pct < 70 ? (
-          <div className="text-sm text-amber-700 dark:text-amber-400">
-            This expert hasn't completed their profile yet — bookings are temporarily unavailable.
-          </div>
-        ) : (
-          <>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
-              Note to the expert (optional)
-            </label>
-            <textarea
-              value={bookerNote}
-              onChange={(e) => setBookerNote(e.target.value)}
-              maxLength={1000}
-              rows={3}
-              placeholder="Share what you'd like to focus on. The expert never sees your check-ins."
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-            />
-            <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                {acceptsPayments
-                  ? 'Paid sessions are charged securely in-app via Stripe — you never leave Axal VC. A 15% platform fee is applied.'
-                  : 'Free intro or external scheduler — no payment required here.'}
-              </div>
-              {bookingState.status !== 'pay' && (
-                <button
-                  onClick={handleBook}
-                  disabled={bookingState.status === 'pending'}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {bookingState.status === 'pending' ? 'Working…' : 'Book this expert'}
-                  <ExternalLink size={14} />
-                </button>
-              )}
-            </div>
-
-            {bookingState.status === 'pay' && payIntent && (
-              <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                <div className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-                  {payIntent.amountCents != null
-                    ? `Complete payment · ${(payIntent.amountCents / 100).toLocaleString(undefined, { style: 'currency', currency: (payIntent.currency || 'usd').toUpperCase() })}`
-                    : 'Complete payment'}
-                </div>
-                <AxalCheckout
-                  clientSecret={payIntent.clientSecret}
-                  submitLabel={payIntent.amountCents != null
-                    ? `Pay ${(payIntent.amountCents / 100).toLocaleString(undefined, { style: 'currency', currency: (payIntent.currency || 'usd').toUpperCase() })}`
-                    : 'Pay now'}
-                  onSuccess={() => {
-                    setPayIntent(null);
-                    setBookingState({
-                      status: 'ok',
-                      message: 'Payment successful — your session is confirmed. Check your email for the meeting link.',
-                    });
-                  }}
-                  onError={(err) => setBookingState({ status: 'err', message: err?.message || 'Payment failed. Please try again.' })}
-                />
-              </div>
-            )}
-
-            {bookingState.message && (
-              <div className={`mt-3 text-sm ${bookingState.status === 'err' ? 'text-red-600' : 'text-emerald-700'}`}>
-                {bookingState.message}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+      <BookingCard expert={expert} viewer={readViewer()} />
     </div>
   );
 }

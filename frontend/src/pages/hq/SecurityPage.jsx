@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
  * HQ · Security — canvas H23 (Admin · Super), which "completes Y2/H7".
@@ -960,7 +960,7 @@ export default function HqSecurityPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-security-page">
+    <RailFrame rail={rail} data-testid="hq-security-page">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#881337] px-4 py-2.5 text-white">
           <span className="text-[12.5px] font-bold">All subsidiaries</span>
@@ -1312,7 +1312,6 @@ export default function HqSecurityPage() {
         </div>
       </div>
 
-      <div className="mt-6 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

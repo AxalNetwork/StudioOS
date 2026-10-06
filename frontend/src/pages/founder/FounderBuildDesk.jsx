@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, Route, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
@@ -11,6 +11,7 @@ import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import './founderBuildDesk.css';
+import { LensNavLink } from '../../workspaces/lens';
 
 /**
  * Five labels, five routes, IN THE ARTBOARD'S ORDER.
@@ -274,7 +275,7 @@ export default function FounderBuildDesk() {
               // comments and cannot strip `{/* … */}`, so prose here would read
               // to founder_shell's anchor ban as if it were markup.
               SECTIONS.map(([label, slug], index) => (
-                <NavLink data-testid={`link-build-anchor-${index}`} key={label} to={links[slug]} className={zonePillClass}>{label}</NavLink>
+                <LensNavLink data-testid={`link-build-anchor-${index}`} key={label} to={links[slug]} className={zonePillClass}>{label}</LensNavLink>
               ))
             }
           </nav>

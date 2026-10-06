@@ -67,7 +67,7 @@ test('App.jsx carries the two blocks, one above the imports and one above the ca
   assert.ok(APP.indexOf('// ── end route modules') < APP.indexOf('{/* ── Route modules (D528)'), 'the import block is not above the composition block');
   // Above the catch-all: a module's routes must be matched before `*`.
   assert.ok(APP.indexOf('{/* ── end route modules') < APP.indexOf('<Route path="*"'), 'the composition block sits below the catch-all');
-  assert.ok(APP.indexOf('<Routes>') < APP.indexOf('{/* ── Route modules (D528)'), 'the composition block is outside <Routes>');
+  assert.ok(APP.indexOf('<Routes') < APP.indexOf('{/* ── Route modules (D528)'), 'the composition block is outside <Routes>');
   // `routeTools` is what a module is handed, built from this file's own gates.
   // It exists exactly when a module does: declared with none to read it, it is
   // a dead variable (CodeQL flagged the first draft); declared by the first

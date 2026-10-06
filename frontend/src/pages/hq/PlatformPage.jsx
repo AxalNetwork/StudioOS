@@ -51,7 +51,7 @@ import { Link } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
@@ -934,7 +934,7 @@ export default function PlatformPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-platform-page">
+    <RailFrame rail={rail} data-testid="hq-platform-page">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#3730a3] px-4 py-2.5 text-white">
           <span className="text-[12.5px] font-bold">All subsidiaries</span>
@@ -1343,7 +1343,6 @@ export default function PlatformPage() {
         </div>
       </div>
 
-      <div className="mt-4 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Loader2, Power } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { SWITCH_TONE, operatorLine, setByLabel } from '../../lib/platformSwitches';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 /**
  * HQ · Platform → Switches — the kills HQ can throw without a deploy (D203).
@@ -227,7 +227,7 @@ export default function PlatformSwitchesPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-switches-page">
+    <RailFrame rail={rail} data-testid="hq-switches-page">
       <div className="min-w-0 space-y-4">
         <div>
           <Link to="/admin/platform" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">
@@ -273,7 +273,6 @@ export default function PlatformSwitchesPage() {
         )}
       </div>
 
-      <div className="mt-4 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

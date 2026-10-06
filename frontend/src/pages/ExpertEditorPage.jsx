@@ -1,440 +1,413 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, CreditCard, RefreshCcw, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CreditCard, Plus, RefreshCcw } from 'lucide-react';
 import { api } from '../lib/api';
+import { Card, SectionLabel, Skeleton, Unrecorded, Unreadable, RailFrame, WorkerRail } from '../ui';
+import {
+  EXPERT_MODALITIES, EXPERT_PRICING_MODELS, browserTimeZone, gridTimeZone, practiceCoverage,
+  profileBody, profileDraft, splitBookings,
+} from './wellbeing/wellbeingModel';
+import { BTN, FIELD, PageHeader, CardHead, Outcome } from './wellbeing/WellbeingParts';
+import { AvailabilityCard, PracticeBookingsCard, ServicesCard } from './wellbeing/PracticeZones';
 
-const MODALITY_OPTIONS = ['video', 'in_person', 'chat', 'phone'];
-const PRICING_OPTIONS = ['free', 'paid', 'sliding_scale', 'insurance'];
+/**
+ * /wellbeing/practice — the expert's practice (canvas `wbx-practice`, D570),
+ * and /wellbeing/expert-dashboard, which now redirects here.
+ *
+ * ONE PAGE, EXTENDED RATHER THAN DUPLICATED. This was the expert dashboard:
+ * a profile form, payouts, and plain lists of services, availability windows
+ * and bookings. The canvas's practice — services with an active switch and
+ * edit, a weekly grid, upcoming bookings with names and times only — now
+ * leads the page, and the profile and payouts it already had follow under
+ * their own label. The old route redirects so the notification links and the
+ * Stripe return URL (`?stripe=return`) still land somewhere real.
+ *
+ * Each zone reads on its own: services from `wellbeingExpertMyServices`,
+ * windows from `wellbeingExpertMyAvailability`, bookings from
+ * `wellbeingExpertMyBookings`, and the profile from `wellbeingExpertMe`.
+ * Writes that change completion (a service, a window) re-read the profile's
+ * completion without touching a profile edit in progress.
+ *
+ * THE BRIEF'S "RATE" IS NOT `wellbeingExpertRate`. That method posts a
+ * member's star rating of an expert (`POST /experts/:uid/rate`), and lives on
+ * the member's past bookings. An expert's prices are each service's rate here,
+ * and the directory's hourly rate is the profile's.
+ */
 
-function Field({ label, children }) {
+const IDLE = { busy: false, error: null, ok: null };
+
+function Field({ label, htmlFor, children, error }) {
   return (
-    <label className="block">
-      <span className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{label}</span>
+    <div>
+      <label className={FIELD.label} htmlFor={htmlFor}>{label}</label>
       {children}
-    </label>
+      {error && <p role="alert" className={FIELD.error}>{error}</p>}
+    </div>
   );
 }
 
-function TextInput(props) {
+export function BecomeExpert({ busy, error, onApply }) {
   return (
-    <input
-      {...props}
-      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-    />
+    <Card padding="lg" className="max-w-2xl space-y-3" data-testid="card-become-expert">
+      <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Become a wellbeing expert</h2>
+      <p className="text-[13px] text-axal-muted dark:text-gray-400">
+        Create your expert profile to appear in the wellbeing directory once it is complete and verified.
+        You can then list services, open weekly hours and set up payouts.
+      </p>
+      <button type="button" className={BTN.primary} onClick={onApply} disabled={busy}>
+        {busy ? 'Creating…' : 'Create my expert profile'}
+      </button>
+      <Outcome error={error} />
+    </Card>
   );
-}
-
-function TextArea(props) {
-  return (
-    <textarea
-      {...props}
-      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-    />
-  );
-}
-
-function csv(value) {
-  return Array.isArray(value) ? value.join(', ') : '';
-}
-function parseCsv(s) {
-  return String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 }
 
 export default function ExpertEditorPage() {
-  const [expert, setExpert] = useState(null);
-  const [services, setServices] = useState([]);
-  const [availability, setAvailability] = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [stripe, setStripe] = useState({ account_id: null, charges_enabled: false, payouts_enabled: false });
-  const [loading, setLoading] = useState(true);
-  const [missing, setMissing] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [toast, setToast] = useState(null);
+  const fallbackZone = useMemo(() => browserTimeZone(), []);
+  const [me, setMe] = useState({ status: 'loading', expert: null });
+  const [services, setServices] = useState({ status: 'loading', rows: [] });
+  const [windows, setWindows] = useState({ status: 'loading', rows: [] });
+  const [bookings, setBookings] = useState({ status: 'loading', rows: [] });
+  const [creating, setCreating] = useState(false);
+  const [availability, setAvailability] = useState(IDLE);
+  const [bookingAct, setBookingAct] = useState({ busyUid: null, error: null, ok: null });
   const [draft, setDraft] = useState(null);
-  const [newSvc, setNewSvc] = useState({ title: '', duration_minutes: 30, price_cents: 0, currency: 'usd', description: '' });
-  const [newAvail, setNewAvail] = useState({ day_of_week: 1, start_minute: 540, end_minute: 1020, timezone: 'UTC' });
+  const [profile, setProfile] = useState({ ...IDLE, fields: {} });
+  const [stripe, setStripe] = useState({ account_id: null, charges_enabled: false, payouts_enabled: false });
+  const [payouts, setPayouts] = useState(IDLE);
+  const [apply, setApply] = useState(IDLE);
 
-  async function reload() {
-    setLoading(true);
+  // `fillDraft` is false for the re-reads a practice write triggers, so a
+  // profile edit in progress is never replaced by the stored one.
+  const loadMe = useCallback(async ({ fillDraft = true } = {}) => {
     try {
-      const me = await api.wellbeingExpertMe();
-      setExpert(me);
-      setDraft({
-        name: me.name || '',
-        headline: me.headline || '',
-        bio: me.bio || '',
-        photo_url: me.photo_url || '',
-        website_url: me.website_url || '',
-        calendly_url: me.calendly_url || '',
-        booking_url: me.booking_url || '',
-        categories: csv(me.categories),
-        sectors: csv(me.sectors),
-        languages: csv(me.languages),
-        timezones: csv(me.timezones),
-        modalities: me.modalities || ['video'],
-        pricing_model: me.pricing_model || 'paid',
-        hourly_rate_usd: me.hourly_rate_usd ?? '',
-        first_session_free: !!me.first_session_free,
-      });
-      setServices(me.services || []);
-      setAvailability(me.availability || []);
-      setStripe(me.stripe || { account_id: null, charges_enabled: false, payouts_enabled: false });
-      setMissing(false);
-      const bks = await api.wellbeingExpertMyBookings().catch(() => ({ bookings: [] }));
-      setBookings(bks.bookings || []);
+      const expert = await api.wellbeingExpertMe();
+      setMe({ status: 'ready', expert });
+      setStripe(expert?.stripe || { account_id: null, charges_enabled: false, payouts_enabled: false });
+      if (fillDraft) setDraft(profileDraft(expert));
     } catch (e) {
-      if (String(e?.message || '').match(/No expert profile|404/i)) setMissing(true);
-      else setToast({ kind: 'err', msg: e?.message || 'Failed to load' });
-    } finally {
-      setLoading(false);
+      setMe({ status: e?.status === 404 ? 'missing' : 'unreadable', expert: null });
     }
-  }
-  useEffect(() => { reload(); }, []);
+  }, []);
 
-  async function handleApply() {
+  const loadServices = useCallback(async () => {
     try {
-      await api.wellbeingExpertApply({});
-      setToast({ kind: 'ok', msg: 'Expert profile created — finish filling it in below.' });
-      await reload();
-    } catch (e) {
-      setToast({ kind: 'err', msg: e?.message || 'Could not create profile.' });
+      const r = await api.wellbeingExpertMyServices();
+      setServices({ status: 'ready', rows: Array.isArray(r?.services) ? r.services : [] });
+    } catch {
+      setServices({ status: 'unreadable', rows: [] });
     }
-  }
-
-  async function handleSaveProfile() {
-    if (!draft) return;
-    setSavingProfile(true);
+  }, []);
+  const loadWindows = useCallback(async () => {
     try {
-      const payload = {
-        ...draft,
-        categories: parseCsv(draft.categories),
-        sectors: parseCsv(draft.sectors),
-        languages: parseCsv(draft.languages),
-        timezones: parseCsv(draft.timezones),
-        hourly_rate_usd: draft.hourly_rate_usd === '' ? null : Number(draft.hourly_rate_usd),
-      };
-      await api.wellbeingExpertMeUpdate(payload);
-      setToast({ kind: 'ok', msg: 'Profile saved.' });
-      await reload();
-    } catch (e) {
-      setToast({ kind: 'err', msg: e?.message || 'Save failed.' });
-    } finally {
-      setSavingProfile(false);
+      const r = await api.wellbeingExpertMyAvailability();
+      setWindows({ status: 'ready', rows: Array.isArray(r?.availability) ? r.availability : [] });
+    } catch {
+      setWindows({ status: 'unreadable', rows: [] });
     }
-  }
+  }, []);
+  const loadBookings = useCallback(async () => {
+    try {
+      const r = await api.wellbeingExpertMyBookings();
+      setBookings({ status: 'ready', rows: Array.isArray(r?.bookings) ? r.bookings : [] });
+    } catch {
+      setBookings({ status: 'unreadable', rows: [] });
+    }
+  }, []);
 
-  async function handleConnect() {
+  useEffect(() => { loadMe(); }, [loadMe]);
+  // On arriving at `ready` only. A later re-read of the profile keeps the
+  // status `ready`, so it does not re-read the zones; each zone re-reads
+  // itself after its own writes.
+  const isReady = me.status === 'ready';
+  useEffect(() => {
+    if (!isReady) return;
+    loadServices();
+    loadWindows();
+    loadBookings();
+  }, [isReady, loadServices, loadWindows, loadBookings]);
+
+  const timeZone = gridTimeZone(windows.rows, fallbackZone);
+
+  // --- services ----------------------------------------------------------
+  const afterServiceWrite = async () => { await loadServices(); await loadMe({ fillDraft: false }); };
+  const createService = async (body) => { await api.wellbeingExpertServiceCreate(body); await afterServiceWrite(); };
+  const updateService = async (uid, patch) => { await api.wellbeingExpertServiceUpdate(uid, patch); await afterServiceWrite(); };
+  const deleteService = async (uid) => { await api.wellbeingExpertServiceDelete(uid); await afterServiceWrite(); };
+
+  // --- availability --------------------------------------------------------
+  const availabilityWrite = async (fn, ok) => {
+    setAvailability({ busy: true, error: null, ok: null });
+    try {
+      await fn();
+      setAvailability({ busy: false, error: null, ok });
+    } catch (e) {
+      setAvailability({ busy: false, error: e?.message || 'That change could not be saved.', ok: null });
+    }
+    await loadWindows();
+    await loadMe({ fillDraft: false });
+  };
+  const openHour = (body) => availabilityWrite(() => api.wellbeingExpertAvailabilityCreate(body), 'Hour opened.');
+  const closeHour = (uid) => availabilityWrite(() => api.wellbeingExpertAvailabilityDelete(uid), 'Hour closed.');
+  const removeWindows = (uids) => availabilityWrite(async () => {
+    // One delete per window. A failure part-way is reported with what was
+    // already removed, because the grid re-read below shows the rest.
+    let removed = 0;
+    for (const uid of uids) {
+      try {
+        await api.wellbeingExpertAvailabilityDelete(uid);
+        removed += 1;
+      } catch (e) {
+        throw new Error(`${removed ? `${removed} window${removed === 1 ? '' : 's'} removed, then: ` : ''}${e?.message || 'a window could not be removed.'}`);
+      }
+    }
+  }, uids.length === 1 ? 'Window removed.' : 'Windows removed.');
+
+  // --- bookings ------------------------------------------------------------
+  const bookingAction = async (booking, status) => {
+    setBookingAct({ busyUid: booking.uid, error: null, ok: null });
+    try {
+      await api.wellbeingExpertBookingPatch(booking.uid, { status });
+      setBookingAct({ busyUid: null, error: null, ok: { confirmed: 'Booking confirmed.', cancelled: 'Booking cancelled. The member is told.', completed: 'Marked completed.' }[status] || 'Booking updated.' });
+      await loadBookings();
+    } catch (e) {
+      setBookingAct({ busyUid: null, error: e?.message || 'The booking could not be updated.', ok: null });
+    }
+  };
+
+  // --- profile and payouts ---------------------------------------------------
+  const saveProfile = async () => {
+    const parsed = profileBody(draft);
+    if (!parsed.ok) { setProfile({ ...IDLE, fields: parsed.fields }); return; }
+    setProfile({ busy: true, error: null, ok: null, fields: {} });
+    try {
+      await api.wellbeingExpertMeUpdate(parsed.body);
+      setProfile({ busy: false, error: null, ok: 'Profile saved.', fields: {} });
+      await loadMe();
+    } catch (e) {
+      setProfile({ busy: false, error: e?.message || 'The profile could not be saved.', ok: null, fields: {} });
+    }
+  };
+  const connectStripe = async () => {
+    setPayouts({ busy: true, error: null, ok: null });
     try {
       const r = await api.wellbeingExpertStripeConnect();
       if (r?.url) window.location.href = r.url;
+      else setPayouts({ busy: false, error: 'Stripe returned no onboarding link.', ok: null });
     } catch (e) {
-      setToast({ kind: 'err', msg: e?.message || 'Stripe Connect failed.' });
+      setPayouts({ busy: false, error: e?.message || 'Stripe Connect could not be started.', ok: null });
     }
-  }
-  async function handleRefreshStripe() {
+  };
+  const refreshStripe = async () => {
+    setPayouts({ busy: true, error: null, ok: null });
     try {
       const r = await api.wellbeingExpertStripeStatus();
       setStripe(r);
-      setToast({ kind: 'ok', msg: 'Stripe status refreshed.' });
+      setPayouts({ busy: false, error: r?.error ? 'Stripe could not be reached; this is the last status on record.' : null, ok: r?.error ? null : 'Payout status refreshed.' });
     } catch (e) {
-      setToast({ kind: 'err', msg: e?.message || 'Refresh failed.' });
+      setPayouts({ busy: false, error: e?.message || 'The payout status could not be read.', ok: null });
     }
-  }
-
-  async function addService() {
-    if (!newSvc.title.trim()) return;
+  };
+  const applyNow = async () => {
+    setApply({ busy: true, error: null, ok: null });
     try {
-      await api.wellbeingExpertServiceCreate({
-        ...newSvc,
-        price_cents: Math.round(Number(newSvc.price_cents) || 0),
-        duration_minutes: Math.round(Number(newSvc.duration_minutes) || 30),
-      });
-      setNewSvc({ title: '', duration_minutes: 30, price_cents: 0, currency: 'usd', description: '' });
-      await reload();
+      await api.wellbeingExpertApply({});
+      setApply(IDLE);
+      await loadMe();
     } catch (e) {
-      setToast({ kind: 'err', msg: e?.message || 'Add service failed' });
+      setApply({ busy: false, error: e?.message || 'The profile could not be created.', ok: null });
     }
-  }
-  async function delService(uid) {
-    if (!confirm('Delete this service?')) return;
-    try { await api.wellbeingExpertServiceDelete(uid); await reload(); }
-    catch (e) { setToast({ kind: 'err', msg: e?.message || 'Delete failed' }); }
-  }
+  };
 
-  async function addAvail() {
-    try { await api.wellbeingExpertAvailabilityCreate(newAvail); await reload(); }
-    catch (e) { setToast({ kind: 'err', msg: e?.message || 'Add slot failed' }); }
-  }
-  async function delAvail(uid) {
-    try { await api.wellbeingExpertAvailabilityDelete(uid); await reload(); }
-    catch (e) { setToast({ kind: 'err', msg: e?.message || 'Delete failed' }); }
-  }
-
-  async function patchBooking(uid, status) {
-    try { await api.wellbeingExpertBookingPatch(uid, { status }); await reload(); }
-    catch (e) { setToast({ kind: 'err', msg: e?.message || 'Update failed' }); }
-  }
-
-  if (loading) return <div className="p-8 text-slate-500">Loading…</div>;
-
-  if (missing) {
-    return (
-      <div className="max-w-3xl mx-auto p-6 space-y-4">
-        <Link to="/wellbeing" className="text-sm text-indigo-600 hover:underline inline-flex items-center gap-1">
-          <ArrowLeft size={14} /> Back
-        </Link>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Become a wellbeing expert</h1>
-        <p className="text-slate-600 dark:text-slate-300">
-          Create your expert profile to appear in the Axal VC wellbeing directory. You'll be able to add services,
-          set availability, and accept paid bookings via Stripe Connect.
-        </p>
-        <button onClick={handleApply}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-          Create my expert profile
-        </button>
-      </div>
-    );
-  }
-
-  const completionPct = Number(expert?.profile_completion_pct ?? 0);
+  const ready = me.status === 'ready';
+  const upcoming = bookings.status === 'ready' ? splitBookings(bookings.rows).upcoming.length : null;
+  const expert = me.expert;
+  const completion = Number(expert?.profile_completion_pct);
+  const set = (key) => (e) => setDraft((d) => ({ ...d, [key]: e.target.value }));
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <Link to="/wellbeing" className="text-sm text-indigo-600 hover:underline inline-flex items-center gap-1">
-          <ArrowLeft size={14} /> Back
-        </Link>
-        {expert?.uid && (
-          <Link to={`/wellbeing/expert/${expert.uid}`} className="text-sm text-indigo-600 hover:underline">
-            View public profile →
-          </Link>
-        )}
-      </div>
-
-      {toast && (
-        <div className={`rounded-lg border p-3 text-sm ${toast.kind === 'err' ? 'border-red-300 bg-red-50 text-red-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700'}`}>
-          {toast.msg}
-        </div>
+    <RailFrame
+      data-testid="wellbeing-practice"
+      rail={(
+        <WorkerRail
+          workspace="Wellbeing practice"
+          role="advisor"
+          stance="Your practice, as stored"
+          note="Eadwyn reads back counts only: services, open hours and upcoming bookings. It never sees a member’s name or note, and it changes nothing here."
+          coverage={practiceCoverage({
+            services: services.status === 'ready' ? services.rows : null,
+            windows: windows.status === 'ready' ? windows.rows : null,
+            upcoming,
+          })}
+          coverageNote="Counts only. A member’s name never leaves this page."
+          unavailable={[
+            ['Which hours to open', 'No route records the times members asked for and could not get, so there is nothing to suggest from.'],
+          ]}
+        />
       )}
-
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-slate-700 dark:text-slate-200">Profile completion</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              You need ≥ 70% to appear in the directory and accept bookings.
-            </div>
-          </div>
-          <div className="text-2xl font-semibold text-slate-900 dark:text-white">{completionPct}%</div>
-        </div>
-        <div className="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden dark:bg-slate-700">
-          <div className={`h-full ${completionPct >= 70 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${completionPct}%` }} />
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Profile</h2>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Display name"><TextInput value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
-          <Field label="Headline"><TextInput value={draft.headline} onChange={(e) => setDraft({ ...draft, headline: e.target.value })} /></Field>
-          <Field label="Photo URL"><TextInput value={draft.photo_url} onChange={(e) => setDraft({ ...draft, photo_url: e.target.value })} /></Field>
-          <Field label="Website"><TextInput value={draft.website_url} onChange={(e) => setDraft({ ...draft, website_url: e.target.value })} /></Field>
-          <Field label="External scheduler URL (optional)"><TextInput value={draft.calendly_url} onChange={(e) => setDraft({ ...draft, calendly_url: e.target.value })} /></Field>
-          <Field label="Pricing model">
-            <select value={draft.pricing_model}
-              onChange={(e) => setDraft({ ...draft, pricing_model: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
-              {PRICING_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </Field>
-          <Field label="Hourly rate (USD)"><TextInput type="number" value={draft.hourly_rate_usd} onChange={(e) => setDraft({ ...draft, hourly_rate_usd: e.target.value })} /></Field>
-          <Field label="Categories (comma-separated)"><TextInput value={draft.categories} onChange={(e) => setDraft({ ...draft, categories: e.target.value })} /></Field>
-          <Field label="Sectors (comma-separated)"><TextInput value={draft.sectors} onChange={(e) => setDraft({ ...draft, sectors: e.target.value })} /></Field>
-          <Field label="Languages (comma-separated)"><TextInput value={draft.languages} onChange={(e) => setDraft({ ...draft, languages: e.target.value })} /></Field>
-          <Field label="Timezones (comma-separated IANA)"><TextInput value={draft.timezones} onChange={(e) => setDraft({ ...draft, timezones: e.target.value })} /></Field>
-        </div>
-        <div className="mt-4">
-          <Field label="Bio">
-            <TextArea rows={5} value={draft.bio} onChange={(e) => setDraft({ ...draft, bio: e.target.value })} />
-          </Field>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <div className="text-sm text-slate-700 dark:text-slate-200">Modalities:</div>
-          {MODALITY_OPTIONS.map((m) => (
-            <label key={m} className="text-sm inline-flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={draft.modalities.includes(m)}
-                onChange={(e) => {
-                  const set = new Set(draft.modalities);
-                  if (e.target.checked) set.add(m); else set.delete(m);
-                  setDraft({ ...draft, modalities: Array.from(set) });
-                }}
-              />
-              {m}
-            </label>
-          ))}
-          <label className="text-sm inline-flex items-center gap-1 ml-4">
-            <input type="checkbox" checked={draft.first_session_free}
-              onChange={(e) => setDraft({ ...draft, first_session_free: e.target.checked })} />
-            First session free
-          </label>
-        </div>
-        <div className="mt-4 text-right">
-          <button onClick={handleSaveProfile} disabled={savingProfile}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-            {savingProfile ? 'Saving…' : 'Save profile'}
-          </button>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-          <CreditCard size={18} /> Payments — Stripe Connect
-        </h2>
-        {stripe.account_id ? (
-          <div className="space-y-2">
-            <div className="text-sm text-slate-600 dark:text-slate-300">
-              Account: <code className="text-xs">{stripe.account_id}</code>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <span className={`inline-flex items-center gap-1 ${stripe.charges_enabled ? 'text-emerald-700' : 'text-amber-700'}`}>
-                {stripe.charges_enabled ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />} Charges {stripe.charges_enabled ? 'enabled' : 'pending'}
-              </span>
-              <span className={`inline-flex items-center gap-1 ${stripe.payouts_enabled ? 'text-emerald-700' : 'text-amber-700'}`}>
-                {stripe.payouts_enabled ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />} Payouts {stripe.payouts_enabled ? 'enabled' : 'pending'}
-              </span>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button onClick={handleConnect}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
-                Continue onboarding
-              </button>
-              <button onClick={handleRefreshStripe}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm inline-flex items-center gap-1 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
-                <RefreshCcw size={14} /> Refresh
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Connect Stripe to accept paid sessions. Axal VC applies a 15% platform fee.
-            </p>
-            <button onClick={handleConnect}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-              Set up payouts
+    >
+      <section className="min-w-0 space-y-4" aria-label="My practice">
+        <PageHeader
+          title="My practice"
+          sub="Your services, weekly availability and upcoming bookings. Bookings show names and times only."
+          action={ready ? (
+            <button type="button" className={BTN.primary} onClick={() => setCreating(true)} data-testid="button-new-service">
+              <Plus size={14} aria-hidden="true" /> New service
             </button>
-          </div>
-        )}
-      </div>
+          ) : null}
+        />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">Services</h2>
-        <div className="space-y-2">
-          {services.map((s) => (
-            <div key={s.uid} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-              <div>
-                <div className="font-medium text-slate-900 dark:text-white">{s.title}</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {s.duration_minutes} min · {s.price_cents > 0
-                    ? `${(s.price_cents / 100).toLocaleString(undefined, { style: 'currency', currency: (s.currency || 'usd').toUpperCase() })}`
-                    : 'Free'}
-                </div>
+        {me.status === 'loading' ? <Skeleton.Card /> : me.status === 'missing' ? (
+          <BecomeExpert busy={apply.busy} error={apply.error} onApply={applyNow} />
+        ) : me.status === 'unreadable' ? (
+          <Card><Unreadable what="Your practice" claim="This is not a sign that you have no expert profile." onRetry={() => loadMe()} /></Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+              <div className="space-y-4">
+                <ServicesCard
+                  status={services.status}
+                  services={services.rows}
+                  creating={creating}
+                  onCreatingChange={setCreating}
+                  onCreate={createService}
+                  onUpdate={updateService}
+                  onDelete={deleteService}
+                  onRetry={loadServices}
+                />
+                <AvailabilityCard
+                  status={windows.status}
+                  windows={windows.rows}
+                  bookings={bookings.rows}
+                  timeZone={timeZone}
+                  busy={availability.busy}
+                  error={availability.error}
+                  ok={availability.ok}
+                  onRetry={loadWindows}
+                  onOpen={openHour}
+                  onClose={closeHour}
+                  onRemove={removeWindows}
+                />
               </div>
-              <button onClick={() => delService(s.uid)} className="text-red-600 hover:text-red-700">
-                <Trash2 size={16} />
-              </button>
+              <PracticeBookingsCard
+                status={bookings.status}
+                bookings={bookings.rows}
+                busyUid={bookingAct.busyUid}
+                error={bookingAct.error}
+                ok={bookingAct.ok}
+                onAction={bookingAction}
+                onRetry={loadBookings}
+              />
             </div>
-          ))}
-          {services.length === 0 && (
-            <div className="text-sm text-slate-500 dark:text-slate-400">No services yet — add your first below.</div>
-          )}
-        </div>
-        <div className="mt-4 grid sm:grid-cols-5 gap-2 items-end">
-          <div className="sm:col-span-2"><Field label="Title"><TextInput value={newSvc.title} onChange={(e) => setNewSvc({ ...newSvc, title: e.target.value })} /></Field></div>
-          <Field label="Min"><TextInput type="number" value={newSvc.duration_minutes} onChange={(e) => setNewSvc({ ...newSvc, duration_minutes: e.target.value })} /></Field>
-          <Field label="Price (cents)"><TextInput type="number" value={newSvc.price_cents} onChange={(e) => setNewSvc({ ...newSvc, price_cents: e.target.value })} /></Field>
-          <button onClick={addService}
-            className="h-[38px] rounded-lg bg-indigo-600 px-3 text-sm text-white inline-flex items-center justify-center gap-1 hover:bg-indigo-700">
-            <Plus size={14} /> Add
-          </button>
-        </div>
-      </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">Availability</h2>
-        <div className="space-y-2">
-          {availability.map((a) => (
-            <div key={a.uid} className="flex items-center justify-between rounded-lg border border-slate-200 p-2 dark:border-slate-700">
-              <div className="text-sm text-slate-700 dark:text-slate-200">
-                Day {a.day_of_week} · {Math.floor(a.start_minute / 60)}:{String(a.start_minute % 60).padStart(2, '0')} – {Math.floor(a.end_minute / 60)}:{String(a.end_minute % 60).padStart(2, '0')} ({a.timezone})
-              </div>
-              <button onClick={() => delAvail(a.uid)} className="text-red-600 hover:text-red-700"><Trash2 size={16} /></button>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 grid grid-cols-5 gap-2 items-end">
-          <Field label="Day (0=Sun)"><TextInput type="number" min={0} max={6} value={newAvail.day_of_week} onChange={(e) => setNewAvail({ ...newAvail, day_of_week: Number(e.target.value) })} /></Field>
-          <Field label="Start (min)"><TextInput type="number" value={newAvail.start_minute} onChange={(e) => setNewAvail({ ...newAvail, start_minute: Number(e.target.value) })} /></Field>
-          <Field label="End (min)"><TextInput type="number" value={newAvail.end_minute} onChange={(e) => setNewAvail({ ...newAvail, end_minute: Number(e.target.value) })} /></Field>
-          <Field label="Timezone"><TextInput value={newAvail.timezone} onChange={(e) => setNewAvail({ ...newAvail, timezone: e.target.value })} /></Field>
-          <button onClick={addAvail}
-            className="h-[38px] rounded-lg bg-indigo-600 px-3 text-sm text-white inline-flex items-center justify-center gap-1 hover:bg-indigo-700">
-            <Plus size={14} /> Add
-          </button>
-        </div>
-      </div>
+            <SectionLabel as="h2" className="pt-2">Profile and payouts</SectionLabel>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">Bookings</h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          You see only the booker's note — never their wellbeing check-ins.
-        </p>
-        <div className="space-y-2">
-          {bookings.length === 0 && <div className="text-sm text-slate-500">No bookings yet.</div>}
-          {bookings.map((b) => (
-            <div key={b.uid} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-              <div className="flex items-center justify-between flex-wrap gap-2">
+            <Card data-testid="card-completion">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="font-medium text-slate-900 dark:text-white">
-                    {b.booker_name || 'Founder'} · <span className="text-xs font-normal text-slate-500">{b.status}</span>
-                    {b.payment_status && b.payment_status !== 'free' && (
-                      <span className="ml-2 text-xs text-slate-500">payment: {b.payment_status}</span>
-                    )}
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {b.scheduled_at ? new Date(b.scheduled_at).toUTCString() : 'Time TBD'} · {b.duration_minutes} min
-                  </div>
-                  {b.meet_link && (
-                    <a href={b.meet_link} target="_blank" rel="noreferrer"
-                      className="text-xs text-indigo-600 hover:underline">Meeting link</a>
-                  )}
+                  <div className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">Profile completion</div>
+                  <div className="text-xs text-axal-muted dark:text-gray-400">At 70% or more, a verified profile is listed in the directory and can take bookings.</div>
                 </div>
-                <div className="flex gap-2">
-                  {b.status !== 'confirmed' && b.status !== 'cancelled' && (
-                    <button onClick={() => patchBooking(b.uid, 'confirmed')}
-                      className="text-xs rounded border border-emerald-300 text-emerald-700 px-2 py-1 hover:bg-emerald-50">Confirm</button>
-                  )}
-                  {b.status !== 'cancelled' && (
-                    <button onClick={() => patchBooking(b.uid, 'cancelled')}
-                      className="text-xs rounded border border-red-300 text-red-700 px-2 py-1 hover:bg-red-50">Cancel</button>
-                  )}
-                  {b.status === 'confirmed' && (
-                    <button onClick={() => patchBooking(b.uid, 'completed')}
-                      className="text-xs rounded border border-slate-300 text-slate-700 px-2 py-1 hover:bg-slate-50">Complete</button>
-                  )}
+                <div className="text-2xl font-extrabold tabular-nums text-axal-ink dark:text-gray-100">
+                  {Number.isFinite(completion) ? `${completion}%` : <Unrecorded reason="The profile carries no completion figure.">Not recorded</Unrecorded>}
                 </div>
               </div>
-              {b.booker_note && (
-                <div className="mt-2 text-sm text-slate-700 dark:text-slate-200">
-                  <span className="text-xs uppercase tracking-wide text-slate-500">Booker note:</span> {b.booker_note}
+              {Number.isFinite(completion) && (
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
+                  <div className={`h-full ${completion >= 70 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${Math.max(0, Math.min(100, completion))}%` }} />
                 </div>
               )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+              {expert?.uid && (
+                <Link to={`/wellbeing/expert/${expert.uid}`} className={`${BTN.link} mt-2`}>View public profile →</Link>
+              )}
+            </Card>
+
+            {draft && (
+              <Card padding="lg" data-testid="card-profile">
+                <CardHead title="Profile" />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Display name" htmlFor="pf-name"><input id="pf-name" className={FIELD.input} value={draft.name} onChange={set('name')} /></Field>
+                  <Field label="Headline" htmlFor="pf-headline"><input id="pf-headline" className={FIELD.input} value={draft.headline} onChange={set('headline')} /></Field>
+                  <Field label="Photo URL" htmlFor="pf-photo"><input id="pf-photo" className={FIELD.input} value={draft.photo_url} onChange={set('photo_url')} /></Field>
+                  <Field label="Website" htmlFor="pf-website"><input id="pf-website" className={FIELD.input} value={draft.website_url} onChange={set('website_url')} /></Field>
+                  <Field label="External scheduler URL (optional)" htmlFor="pf-calendly"><input id="pf-calendly" className={FIELD.input} value={draft.calendly_url} onChange={set('calendly_url')} /></Field>
+                  <Field label="Pricing model" htmlFor="pf-pricing">
+                    <select id="pf-pricing" className={FIELD.input} value={draft.pricing_model} onChange={set('pricing_model')}>
+                      {EXPERT_PRICING_MODELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Hourly rate, shown on your directory card (USD)" htmlFor="pf-rate" error={profile.fields?.hourly_rate_usd}>
+                    <input id="pf-rate" className={FIELD.input} inputMode="decimal" value={draft.hourly_rate_usd} onChange={set('hourly_rate_usd')} placeholder="Not recorded" />
+                  </Field>
+                  <Field label="Categories (comma-separated)" htmlFor="pf-categories"><input id="pf-categories" className={FIELD.input} value={draft.categories} onChange={set('categories')} /></Field>
+                  <Field label="Sectors (comma-separated)" htmlFor="pf-sectors"><input id="pf-sectors" className={FIELD.input} value={draft.sectors} onChange={set('sectors')} /></Field>
+                  <Field label="Languages (comma-separated)" htmlFor="pf-languages"><input id="pf-languages" className={FIELD.input} value={draft.languages} onChange={set('languages')} /></Field>
+                  <Field label="Time zones (comma-separated IANA)" htmlFor="pf-timezones"><input id="pf-timezones" className={FIELD.input} value={draft.timezones} onChange={set('timezones')} /></Field>
+                </div>
+                <div className="mt-3">
+                  <Field label="Bio" htmlFor="pf-bio"><textarea id="pf-bio" rows={5} className={FIELD.input} value={draft.bio} onChange={set('bio')} /></Field>
+                </div>
+                <fieldset className="mt-3 flex flex-wrap items-center gap-3 text-[13px] text-axal-ink dark:text-gray-100">
+                  <legend className="sr-only">How you meet members</legend>
+                  <span className="text-xs font-semibold">How you meet:</span>
+                  {EXPERT_MODALITIES.map(([m, l]) => (
+                    <label key={m} className="inline-flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={draft.modalities.includes(m)}
+                        onChange={(e) => setDraft((d) => {
+                          const next = new Set(d.modalities);
+                          if (e.target.checked) next.add(m); else next.delete(m);
+                          return { ...d, modalities: [...next] };
+                        })}
+                      />
+                      {l}
+                    </label>
+                  ))}
+                  <label className="inline-flex items-center gap-1.5 sm:ml-3">
+                    <input type="checkbox" checked={draft.first_session_free} onChange={(e) => setDraft((d) => ({ ...d, first_session_free: e.target.checked }))} />
+                    First session free
+                  </label>
+                </fieldset>
+                <p className={`${FIELD.note} mt-2`}>An hourly rate left empty is kept as it is: the directory shows “Rate not recorded” until one is set.</p>
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+                  <Outcome ok={profile.ok} error={profile.error} testId="profile" />
+                  <button type="button" className={BTN.primary} onClick={saveProfile} disabled={profile.busy}>
+                    {profile.busy ? 'Saving…' : 'Save profile'}
+                  </button>
+                </div>
+              </Card>
+            )}
+
+            <Card padding="lg" data-testid="card-payouts">
+              <CardHead title={<span className="inline-flex items-center gap-2"><CreditCard size={16} aria-hidden="true" /> Payouts · Stripe Connect</span>} />
+              {stripe.account_id ? (
+                <div className="space-y-2 text-[13px]">
+                  <div className="text-axal-muted dark:text-gray-400">Account: <code className="text-xs">{stripe.account_id}</code></div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className={`inline-flex items-center gap-1 ${stripe.charges_enabled ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-amber-deep dark:text-amber-300'}`}>
+                      {stripe.charges_enabled ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />} Charges {stripe.charges_enabled ? 'enabled' : 'pending'}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 ${stripe.payouts_enabled ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-amber-deep dark:text-amber-300'}`}>
+                      {stripe.payouts_enabled ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />} Payouts {stripe.payouts_enabled ? 'enabled' : 'pending'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button type="button" className={BTN.ghost} onClick={connectStripe} disabled={payouts.busy}>Continue onboarding</button>
+                    <button type="button" className={BTN.ghost} onClick={refreshStripe} disabled={payouts.busy}><RefreshCcw size={14} aria-hidden="true" /> Refresh</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[13px] text-axal-muted dark:text-gray-400">Connect Stripe to take paid sessions. Axal VC applies a 15% platform fee.</p>
+                  <button type="button" className={BTN.primary} onClick={connectStripe} disabled={payouts.busy}>Set up payouts</button>
+                </div>
+              )}
+              <div className="mt-2"><Outcome ok={payouts.ok} error={payouts.error} testId="payouts" /></div>
+            </Card>
+          </>
+        )}
+      </section>
+    </RailFrame>
   );
 }

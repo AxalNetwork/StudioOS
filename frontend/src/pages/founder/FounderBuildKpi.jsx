@@ -9,6 +9,7 @@ import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { metricLabel, readTarget } from '../../lib/metricTargets';
 import { DefinitionsDialog, ImportCsvDialog } from './KpiDialogs';
+import { LensLink } from '../../workspaces/lens';
 
 /**
  * Every metric column `project_metrics` has, which was SEVEN of twelve.
@@ -241,11 +242,11 @@ export default function FounderBuildKpi() {
               <div><h1>KPI entry</h1><p className="fb-kpi-subtitle">Bulk entry, imports, metric definitions, targets and history from the selected startup's stored ledger.</p></div>
             </div>
             <nav className="fb-kpi-zone-nav" aria-label="Build sections">
-              <Link to={linkFor('/build/this-week')}>This week</Link>
-              <Link to={linkFor('/build/board')}>Board</Link>
-              <Link to={linkFor('/build/roadmap')}>Roadmap</Link>
-              <Link to={linkFor('/build/cadence')}>Cadence</Link>
-              <Link to={linkFor('/build/kpi')} className="is-active" data-testid="link-kpi-zone">KPI entry</Link>
+              <LensLink to={linkFor('/build/this-week')}>This week</LensLink>
+              <LensLink to={linkFor('/build/board')}>Board</LensLink>
+              <LensLink to={linkFor('/build/roadmap')}>Roadmap</LensLink>
+              <LensLink to={linkFor('/build/cadence')}>Cadence</LensLink>
+              <LensLink to={linkFor('/build/kpi')} className="is-active" data-testid="link-kpi-zone">KPI entry</LensLink>
             </nav>
             <ZoneToolbar
               filters={founderZoneFilters('build/kpi', { value: period, onChange: setPeriod, counts: { all: orderedSnapshots.length } })}

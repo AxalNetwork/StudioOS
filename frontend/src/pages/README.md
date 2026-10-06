@@ -29,12 +29,15 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
+| `wellbeing/` | Wellbeing's booking flow, the expert's practice zones and the admin resource library, with the pure model they share (D570). The member home is `WellbeingPage.jsx` and the practice page is `ExpertEditorPage.jsx`, both here. |
 | `subsidiary/` | A territory licence holder's read of their own licence. |
 | `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
 | `branch/` | The subsidiary shell's own pages, S1–S11, all eight rows built (D107 for why every row shipped with a route rather than only the built ones; D155 for the last of them). Start at `branch/README.md`. |
 | `insights/` | Insight reader and its public variant. |
+| `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |
+| `account/` | The Account center's sections (D568), mounted by `SettingsPage.jsx`, which is still `/account`: the section list and shared kit in `AccountCenter.jsx`, one file per canvas section, and the pure helpers in `accountCenterModel.js`. Keep it under eight files or document it in `scripts/check-folder-docs.mjs`. |
 
 ## Rules
 
