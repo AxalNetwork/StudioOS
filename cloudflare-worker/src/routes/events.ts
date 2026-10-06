@@ -56,6 +56,7 @@ import {
   awardCheckinBadges,
   awardAgendaSpeakerBadge,
 } from '../services/eventBadges';
+import { archetypeAccess } from '../services/archetypeEntitlement';
 
 const events = new Hono<{ Bindings: Env }>();
 
@@ -261,6 +262,8 @@ events.get('/suggested', async (c) => {
       if (r.archetype_slug) archetype = { slug: r.archetype_slug, label: r.archetype_label || null };
     }
   } catch { /* cold assessment schema → no personalization */ }
+  // D594: a free plan does not see its own archetype here either; the track still personalises.
+  if (archetype && (await archetypeAccess(c.env, u as any)).locked) archetype = null;
 
   const rows = await c.env.DB.prepare(
     `SELECT * FROM events e
