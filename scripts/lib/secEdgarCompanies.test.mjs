@@ -77,7 +77,7 @@ test('rows go in batches small enough for one D1 statement', () => {
 test('the User-Agent names the public contact in SECURITY.md, and the committed migration is the importer\'s output', () => {
   const security = readFileSync(resolve(ROOT, 'SECURITY.md'), 'utf8');
   const contact = EDGAR_USER_AGENT.match(/[\w.+-]+@[\w.-]+/)[0];
-  assert.match(security, new RegExp(`\\*\\*Contact:\\*\\* \`${contact.replace(/\./g, '\\.')}\``));
+  assert.match(security, new RegExp(`\\*\\*Contact:\\*\\* \`${contact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
   const committed = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/404_research_public_companies.sql'), 'utf8');
   assert.match(committed, /^-- WRITTEN BY scripts\/import-sec-edgar\.mjs/m);
   const db = new DatabaseSync(':memory:');
