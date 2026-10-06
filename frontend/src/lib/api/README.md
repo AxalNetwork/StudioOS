@@ -11,16 +11,15 @@ adding a domain.
 
 ## Adding a domain
 
-1. Create `<domain>.js` here, camelCase (`ventureReviews.js`). Export the
-   client object the way `api.js` does today, and call the Worker through
-   `request` from `api.js`:
+1. Create one module here for the domain, named in camelCase, as
+   `communityTasks.js` is. Export the client object the way `api.js` does
+   today, and call the Worker through `request` from `api.js`:
 
    ```js
    import { request } from '../api.js';
 
-   export const ventureReviewsApi = {
-     list: () => request('/venture-reviews'),
-     create: (body) => request('/venture-reviews', { method: 'POST', body: JSON.stringify(body) }),
+   export const communityTasksApi = {
+     list: () => request('/community-tasks'),
    };
    ```
 
@@ -29,11 +28,8 @@ adding a domain.
    top-level call would run before `request` is defined.
 
 2. Add ONE line to the re-export block near the top of `api.js`, between
-   `// api-modules:begin` and `// api-modules:end`, in alphabetical order:
-
-   ```js
-   export * from './api/ventureReviews.js';
-   ```
+   `// api-modules:begin` and `// api-modules:end`, in alphabetical order. For
+   the module above, it is `export * from './api/communityTasks.js';`.
 
    The block sits under the imports, away from the end of the file where other
    pull requests append, so two new domains touch two different lines.
@@ -45,7 +41,7 @@ adding a domain.
 ## What checks it
 
 `scripts/check-api-drift.mjs` (run by `npm run test:drift`) reads `api.js` and
-every `.js` file here. A `request()` in a module must match a mounted Worker
+every module here. A `request()` in a module must match a mounted Worker
 route exactly as one in `api.js` must, and the check fails if the re-export
 block does not name exactly the files in this folder, one well-formed line
 each, in alphabetical order. The rules themselves live in
