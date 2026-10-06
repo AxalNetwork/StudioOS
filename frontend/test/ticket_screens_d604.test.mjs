@@ -39,7 +39,7 @@ import { readingMinutes } from '../src/pages/docs/helpCenter.js';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const html = (el, at = '/') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [at] }, el));
-const text = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const text = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
 // ---------------------------------------------------------------------------
 // H4 — the form
