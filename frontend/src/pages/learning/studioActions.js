@@ -11,6 +11,7 @@
  */
 import { adminLearningApi } from '../../lib/api/adminLearning.js';
 import { byPosition, formatLength, moveInOrder, parseLength } from './learningModel';
+import { UPLOAD_CANCELLED, VIDEO_UPLOAD, videoFileProblem, videoTypeOf } from './videoUpload';
 
 const listOf = (reply, key, what) => {
   const list = reply?.[key];
@@ -110,6 +111,79 @@ const ITEM_STATUS = {
 /** Publish, unpublish or archive an item. Resolves to the stored item. */
 export async function setItemStatus(uid, action) {
   return (await ITEM_STATUS[action](uid)).item;
+}
+
+// ── A video's file, uploaded in parts (D561, `routes/learning_video.ts`) ──
+
+function cancelledError() {
+  const err = new Error('The upload was cancelled, so nothing was attached.');
+  err.code = UPLOAD_CANCELLED;
+  return err;
+}
+
+/**
+ * Upload one file to a video item, through D561's four routes:
+ *
+ *   1. start     `POST …/items/:uid/video/uploads` with the type and size,
+ *                which answers the key, the upload id and the part size;
+ *   2. parts     `PUT …/video/uploads/part`, each `part_size` slice of the
+ *                file in turn with its number, each answering its etag;
+ *   3. complete  `POST …/video/uploads/complete` with every
+ *                `{part_number, etag}`: the route checks the stored object's
+ *                real size and type, attaches it and clears any link;
+ *   4. abort     `POST …/video/uploads/abort`, on a cancel or on any failure
+ *                after the start, so R2 is left holding no half-sent upload.
+ *
+ * A file the route would refuse is refused here before anything is sent. A
+ * refusal is not caught: the error is the route's own, its sentence the
+ * message, and the abort that follows it never replaces it. The key is passed
+ * from one step to the next and never returned to the page.
+ *
+ *   onProgress({ sent, total, part, parts, step })  after the start and each part, and before completing
+ *   isCancelled()                                   asked before each part and before completing
+ *
+ * Resolves to `{ attached, item }`: the completion reply, and the item read
+ * again as stored (null when that read fails, since the file is attached
+ * either way).
+ */
+export async function uploadVideo({ uid, file, onProgress = () => {}, isCancelled = () => false }) {
+  const problem = videoFileProblem(file);
+  if (problem) throw new Error(problem);
+  const total = file.size;
+  const start = await adminLearningApi.startVideoUpload(uid, { content_type: videoTypeOf(file), size_bytes: total });
+  const ref = { key: start?.key, upload_id: start?.upload_id };
+  let attached;
+  try {
+    const partSize = Number(start?.part_size);
+    if (typeof ref.key !== 'string' || !ref.key || typeof ref.upload_id !== 'string' || !ref.upload_id
+      || !Number.isSafeInteger(partSize) || partSize <= 0 || partSize > VIDEO_UPLOAD.partMaxBytes) {
+      throw new Error('The upload could not start: the reply came back in a shape this page cannot read.');
+    }
+    const parts = Math.ceil(total / partSize);
+    const sent = [];
+    onProgress({ sent: 0, total, part: 0, parts, step: 'parts' });
+    for (let n = 1; n <= parts; n += 1) {
+      if (isCancelled()) throw cancelledError();
+      const end = Math.min(n * partSize, total);
+      const reply = await adminLearningApi.uploadVideoPart(uid, { ...ref, part_number: n }, file.slice((n - 1) * partSize, end));
+      if (typeof reply?.etag !== 'string' || !reply.etag) {
+        throw new Error(`Part ${n} of ${parts} came back without its etag, so the upload cannot be finished.`);
+      }
+      sent.push({ part_number: n, etag: reply.etag });
+      onProgress({ sent: end, total, part: n, parts, step: 'parts' });
+    }
+    if (isCancelled()) throw cancelledError();
+    onProgress({ sent: total, total, part: parts, parts, step: 'complete' });
+    attached = await adminLearningApi.completeVideoUpload(uid, { ...ref, parts: sent });
+  } catch (err) {
+    if (ref.key && ref.upload_id) {
+      try { await adminLearningApi.abortVideoUpload(uid, ref); } catch { /* the route's sentence for the failure stands; R2 aborts an unfinished upload after seven days */ }
+    }
+    throw err;
+  }
+  let item = null;
+  try { item = (await adminLearningApi.getItem(uid))?.item || null; } catch { /* attached either way; the editor draws the completion reply */ }
+  return { attached, item };
 }
 
 /** A course form as the studio holds it. */

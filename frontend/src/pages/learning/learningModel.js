@@ -302,32 +302,45 @@ export function sourceStates(sources) {
     .map((kind) => ({ kind, ...sources[kind] }));
 }
 
-// ── Items: how a video plays (D557's allow-list; R2 streaming is #1162) ────
+// ── Items: how a video plays (D557's allow-list; an uploaded file, D561) ──
 
 const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com'];
 const VIDEO_ID = /^[\w-]{6,32}$/;
 const STREAM_ID = /^[a-f0-9]{32}$/i;
 
+/** The one address an item's uploaded file plays from: D561's gated route for that item. */
+export const itemStreamPath = (uid) => `/api/learning/items/${encodeURIComponent(clean(uid))}/video`;
+
 /**
  * How a video item plays here. `{ src, embed: true }` is an iframe in the
- * platform's own embed form; `{ reason, href }` is a video this page cannot
+ * platform's own embed form; `{ src, embed: false }` is an uploaded file in
+ * the browser's own player; `{ reason, href }` is a video this page cannot
  * play, with the reason and, for a link, the link itself.
  *
+ *   - An uploaded file (D561) plays from `video_stream_url`, which the item
+ *     read sends in place of any bucket address: the path of `GET
+ *     /api/learning/items/:uid/video`. That route asks the same question as
+ *     the item read, takes the session cookie and answers HTTP Range, so a
+ *     same-origin `<video src>` plays it and can seek. Only that route, for
+ *     this item, is played: any other address is refused with its reason. An
+ *     upload whose read sent no address is "Not recorded", with the reason.
  *   - YouTube (`watch?v=`, `youtu.be/`, `/embed/`, `/shorts/`, `/live/`) →
  *     `www.youtube-nocookie.com/embed/<id>`;
  *   - Vimeo (`vimeo.com/<id>`, `player.vimeo.com/video/<id>`) →
  *     `player.vimeo.com/video/<id>`;
  *   - Cloudflare Stream (`<customer>.cloudflarestream.com/<id>`,
  *     `videodelivery.net/<id>`) → the `iframe` player for that id.
- *
- * An upload (`video_source = 'r2'`) streams through `GET
- * /api/learning/items/:uid/video`, which #1162 has not built, so it is "Not
- * recorded" here until it is.
  */
 export function videoPlayback(item) {
   if (!item || item.kind !== 'video') return null;
+  const stream = clean(item.video_stream_url);
+  if (stream) {
+    // A query string (a version, say) may follow; the path is what decides.
+    if (stream.split(/[?#]/)[0] === itemStreamPath(item.uid)) return { src: stream, embed: false };
+    return { reason: 'The stream address sent with this video is not this item’s own, so it is not played here.' };
+  }
   if (item.video_source === 'r2') {
-    return { reason: 'This video was uploaded to be streamed here, and streaming is not live yet.' };
+    return { reason: 'This video was uploaded, but the page was not sent an address to stream it from.' };
   }
   const raw = clean(item.video_url);
   if (!raw) return { reason: 'No video link is recorded for this item.' };

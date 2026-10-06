@@ -192,7 +192,7 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   // A webinar lesson names an event by its slug.
   assert.ok(admin.includes("A webinar lesson names an event by its slug."));
   // A file is attached only through D561's upload routes, never by setting
-  // video_source on the item: the studio still offers a link until it calls them.
+  // video_source on the item: the studio's upload calls them (learning_video_d561_ui).
   assert.ok(admin.includes("bad('video_source_by_upload'"));
 });
 
@@ -496,7 +496,7 @@ function readItemShape(reply) {
   return { item: reply.item, transcriptRecorded: reply.transcript_recorded === true, progress: reply.progress || null };
 }
 
-test('how a video plays: each allow-listed host embedded its own way, an upload not recorded until #1162', () => {
+test('how a video plays: each allow-listed host embedded its own way, an upload sent without its stream address not recorded', () => {
   const play = (video_url, extra = {}) => videoPlayback({ kind: 'video', video_source: 'url', video_url, ...extra });
   assert.deepEqual(play('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), { src: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', embed: true });
   assert.deepEqual(play('https://youtu.be/dQw4w9WgXcQ?t=4'), { src: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', embed: true });
@@ -510,14 +510,14 @@ test('how a video plays: each allow-listed host embedded its own way, an upload 
   assert.deepEqual(play('https://www.youtube.com/@axal'), { reason: 'This link cannot be played on this page.', href: 'https://www.youtube.com/@axal' });
   assert.match(play('http://youtu.be/dQw4w9WgXcQ').reason, /not https/);
   assert.match(play('').reason, /No video link is recorded/);
-  // An upload has no stream route yet.
+  // An upload whose read sent no `video_stream_url` (D561) has nothing to play from.
   const r2 = videoPlayback(ITEM_R2.item);
   assert.equal(r2.src, undefined);
-  assert.match(r2.reason, /streaming is not live yet/);
+  assert.match(r2.reason, /was not sent an address to stream it from/);
   assert.equal(videoPlayback(ITEM_READING.item), null, 'a reading is not a video');
   const view = html(h(ItemView, { state: { status: 'ready', ...readItemShape(ITEM_R2) } }));
   assert.match(view, /data-testid="lesson-video-absent"/);
-  assert.match(flat(view), /Not recorded · This video was uploaded to be streamed here, and streaming is not live yet\./);
+  assert.match(flat(view), /Not recorded · This video was uploaded, but the page was not sent an address to stream it from\./);
   assert.match(flat(view), /No transcript is recorded for this video\./);
   assert.match(view, /data-testid="text-lesson-completed"/, 'the stored progress is shown');
   const elsewhere = html(h(ItemView, { state: { status: 'ready', item: { ...VIDEO, video_url: 'https://www.youtube.com/@axal' }, progress: null } }));
@@ -608,10 +608,15 @@ test('the studio: the table from both lists, a failed list named, each row openi
   assert.doesNotMatch(open, /studio-content/);
 });
 
-test('the item editor: a link not an upload, the fields the route takes, the status actions by status', () => {
+test('the item editor: a link or an upload, the fields the route takes, the status actions by status', () => {
+  // D561: a new video has no uid for the upload routes yet, so its file waits for the draft;
+  // a stored video takes a file (learning_video_d561_ui.test.mjs covers the upload itself).
   const fresh = html(h(StudioItemEditor, { item: null, kind: 'video', onSave: () => {}, onStatus: () => {} }));
   assert.match(tagOf(fresh, 'input-item-upload'), /disabled=""/);
-  assert.match(flat(fresh), /Uploading a video file is not live yet\. Paste a link instead\./);
+  assert.match(flat(fresh), /Create the draft first, then upload its file\./);
+  const stored = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {} }));
+  assert.doesNotMatch(tagOf(stored, 'input-item-upload'), /disabled=""/);
+  assert.match(flat(stored), /MP4 or WebM, at most 2 GB\./);
   assert.match(fresh, /data-testid="input-item-video-url"/);
   assert.doesNotMatch(fresh, /input-item-body|studio-status-actions/);
   assert.match(flat(fresh), /Create draft/);
