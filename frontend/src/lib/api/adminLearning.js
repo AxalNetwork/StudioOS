@@ -54,4 +54,16 @@ export const adminLearningApi = {
   addQuestion: (examUid, b) => request(`/admin/learning/exams/${enc(examUid)}/questions`, { method: 'POST', body: body(b) }),
   updateQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
   deleteQuestion: (uid) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'DELETE' }),
+
+  // D560 — webinars.
+  listWebinars: () => request('/admin/learning/webinars'),
+  createWebinar: (b) => request('/admin/learning/webinars', { method: 'POST', body: body(b) }),
+  getWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}`),
+  updateWebinar: (uid, b) => request(`/admin/learning/webinars/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/unpublish`, { method: 'POST' }),
+  cancelWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/cancel`, { method: 'POST' }),
+  // itemUid: a video item's uid, or null to detach.
+  setWebinarRecording: (uid, itemUid) => request(`/admin/learning/webinars/${enc(uid)}/recording`, { method: 'PUT', body: body({ item_uid: itemUid }) }),
+  recordAttendance: (uid, userUid, attended) => request(`/admin/learning/webinars/${enc(uid)}/registrations/${enc(userUid)}`, { method: 'PATCH', body: body({ attended }) }),
 };

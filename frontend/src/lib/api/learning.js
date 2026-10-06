@@ -36,4 +36,13 @@ export const learningApi = {
   // Read-only review of learners' work, for whoever may review it (D559).
   reviewSubmissions: (exerciseUid) => request(`/learning/review/exercises/${encodeURIComponent(exerciseUid)}/submissions`),
   reviewAttempts: (examUid) => request(`/learning/review/exams/${encodeURIComponent(examUid)}/attempts`),
+
+  // D560 — webinars. `join_url` arrives only for a registered member, from 15
+  // minutes before the start until the end; a list never carries it.
+  webinars: (when = 'upcoming') => request(`/learning/webinars?when=${encodeURIComponent(when)}`),
+  webinar: (uid) => request(`/learning/webinars/${encodeURIComponent(uid)}`),
+  registerForWebinar: (uid) => request(`/learning/webinars/${encodeURIComponent(uid)}/registration`, { method: 'POST' }),
+  unregisterFromWebinar: (uid) => request(`/learning/webinars/${encodeURIComponent(uid)}/registration`, { method: 'DELETE' }),
+  // The .ics download, for an <a href>; the request carries the session cookie.
+  webinarIcsHref: (uid) => `/api/learning/webinars/${encodeURIComponent(uid)}/calendar.ics`,
 };
