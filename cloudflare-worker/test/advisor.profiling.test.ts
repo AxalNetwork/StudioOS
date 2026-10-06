@@ -32,7 +32,7 @@ import {
 // advisor bank so a advisor's effort is comparable to other personas (Task #41).
 const EXPECTED: Record<string, number> = {
   founder: 97, // Profiling v2 Session 9 (D319): +8 pick-ones, +8 reverse-keyed, +8 skills, +9 values, +6 Axal situations
-  investor: 54,
+  investor: 82, // D386 investor bank v2
   partner: 83, // D491 partner bank
   advisor: 85, // Session 12 advisor bank; the coach bank is not on the completion card
 };
@@ -41,7 +41,7 @@ const EXPECTED: Record<string, number> = {
 // questions to satisfy each module's confidence floor (Task #45).
 const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
   founder:  { skills: 15, work_values: 14, archetype: 45, axal_fit: 23 },
-  investor: { skills: 5, work_values: 5, archetype: 29, axal_fit: 15 },
+  investor: { skills: 8, work_values: 10, archetype: 43, axal_fit: 21 }, // D386
   partner:  { skills: 8, work_values: 9, archetype: 45, axal_fit: 21 },
   advisor:   { skills: 13, work_values: 8, archetype: 41, axal_fit: 23 },
 };

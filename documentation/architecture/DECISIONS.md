@@ -35884,6 +35884,23 @@ of the Landing canvas):
   - `spinout_brief_d141.test.ts`: gains the `end_date` test.
 - **Mutations.** 12 run, 12 caught on the first run.
 
+## D386
+
+**The investor question bank v2.** Session 10 of Profiling v2. No migration. Ids already in the bank are unchanged.
+
+**What was added, in the formats the other banks use.**
+- Six situational pick-ones. At least three put Thesis-Driven Backer against Disciplined Allocator. Each option is one of the four investor archetypes, and the first option rotates.
+- Two reverse-keyed probes per trait. A 5 on those pulls the trait down.
+- A behavioural question for engineering, design and marketing_brand, the three radar axes this bank had never asked.
+- A situation for risk appetite, growth versus sustain, and the three Schwartz dimensions this role asks, plus a situation for each of the six Axal values.
+- A re-ask wording on every question, including the shared rows, worded for an investor.
+
+The new archetype items come first, so the six answers that reach the archetype floor are four reverse-keyed probes and two close-pair situations.
+
+**The fixture.** Each of the four investor archetype personas answers every new archetype question: the reverse-keyed value is `5` minus that persona's centroid on the trait, and the pick-one is the option written for their own archetype.
+
+**Tests.** `investor_bank_v2_d386.test.ts`. The persona fixture test already requires every archetype persona to answer every trait question of its role.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
