@@ -44,11 +44,12 @@ export default function researchBoard(role, api) {
       // lives. `advisor_bucket_overview.test.mjs` now asserts it there.
       card('client-prep', 'Client prep',
         'One client per brief, assembled from what they opened to you and what you already hold.'),
-      // D391 — the zone this card opens is `MarketZone`: comparable ranges the
-      // firm enters for its own service lines (migration 223), each with its run
-      // date and an age gate. It stopped being the signals feed when that zone
-      // was rebuilt, and this blurb still described the feed.
-      card('markets', 'Markets', 'Comparable ranges you entered for your own work, each with the date it was run and how old it is.'),
+      // D391 — this card stopped describing the signals feed when the zone was
+      // rebuilt. D593 — the zone it opens is `MarketDirectoryZone` now, not
+      // `MarketZone`: the taxonomy's markets by tracked sector, and the readings
+      // card where a comparable range is recorded (migration 223), each shown
+      // with its run date and age. The blurb names both.
+      card('markets', 'Markets', 'Comparable ranges you entered for your own work, each with its run date and age, beside the taxonomy’s markets by tracked sector.'),
       // D546 (#1080) — Geographies sits beside Markets in every Research bucket.
       card('geographies', 'Geographies', 'Where the directory’s companies are based and its funds are headquartered.'),
       ...(isPartner ? [] : [

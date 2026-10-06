@@ -18,6 +18,9 @@ export const DIRECTORY_SORTS = [
 
 export const PAGE_SIZES = [25, 50, 100];
 
+/** A directory company's profile page. */
+export const companyHref = (uid) => `/research/companies/company/${encodeURIComponent(uid)}`;
+
 /** The "Only companies with" checkboxes: the API's `has` values. */
 export const HAS_OPTIONS = [
   { value: 'funding', label: 'Funding total recorded' },

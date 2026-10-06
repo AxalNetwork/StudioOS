@@ -68,9 +68,11 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
             // the role's border and ink on hover, and keyboard focus draws the
             // role's outline. The current pill is already accented and does not
             // change on hover. In dark mode an idle pill takes neutral greys (it was
-            // painted white there, since no dark skin reads an inline style); the
-            // current pill keeps its accent tint.
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? '' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
+            // painted white there, since no dark skin reads an inline style).
+            // D593: the current pill takes the role's dark pair — `tintDark`
+            // ground, `deepDark` ink — where it used to keep its light tint, a
+            // pale lozenge on the dark ground that the canvases never drew.
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? ' dark:bg-[var(--zn-bg-dark)] dark:text-[color:var(--zn-ink-dark)] dark:border-[color:var(--zn-line-dark)]' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
             style={{
               fontWeight: on ? 700 : 600,
               '--zn-ink': on ? accent.deep : '#615c6e',
@@ -78,6 +80,11 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
               '--zn-line': on ? accent.border : '#ececf1',
               '--zn-hover-ink': accent.deep,
               '--zn-hover-line': on ? accent.border : accent.ink,
+              ...(on ? {
+                '--zn-ink-dark': accent.deepDark,
+                '--zn-bg-dark': accent.tintDark,
+                '--zn-line-dark': `color-mix(in srgb, ${accent.deepDark} 40%, transparent)`,
+              } : {}),
               outlineColor: accent.ink,
             }}
           >

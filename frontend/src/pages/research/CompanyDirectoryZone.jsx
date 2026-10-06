@@ -23,7 +23,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import {
   COVERAGE_LABELS, DIRECTORY_SORTS, EMPTY_FILTERS, HAS_OPTIONS, NOT_RECORDED, PAGE_SIZES,
-  activeFilters, directoryParams, employees, lastRound, latestOnly, listState, pageList, pageWindow, withoutFilter,
+  activeFilters, companyHref, directoryParams, employees, lastRound, latestOnly, listState, pageList, pageWindow, withoutFilter,
 } from '../../lib/companyDirectoryView.js';
 
 const CompetitorAnalysis = lazy(() => import('../../components/CompetitorAnalysis'));
@@ -31,7 +31,7 @@ const CompetitorAnalysis = lazy(() => import('../../components/CompetitorAnalysi
 const field = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[12.5px] text-axal-ink focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const label = 'mb-1 block text-[11px] font-bold text-axal-muted';
 
-export const companyHref = (uid) => `/research/companies/company/${encodeURIComponent(uid)}`;
+export { companyHref };
 
 /** "What the directory records": each field's filled count, of the whole directory. */
 export function CoverageCard({ coverage }) {
@@ -272,7 +272,7 @@ function useDebounced(value, ms) {
   return v;
 }
 
-function Directory({ role, zoneActions, initial }) {
+function Directory({ role, zoneActions, initial, onTotal }) {
   const [filters, setFilters] = useState({ ...EMPTY_FILTERS, ...initial });
   const [read, setRead] = useState({ loading: true, error: null, data: null });
   const [shape, setShape] = useState(null);
@@ -290,11 +290,12 @@ function Directory({ role, zoneActions, initial }) {
       if (!reads.isCurrent(id)) return;
       setRead({ loading: false, error: null, data });
       setShape({ coverage: data.coverage, facets: data.facets });
+      onTotal?.(data.coverage?.of ?? null);
     } catch (error) {
       if (!reads.isCurrent(id)) return;
       setRead({ loading: false, error, data: null });
     }
-  }, [key, reads]);
+  }, [key, reads, onTotal]);
   useEffect(() => { load(); }, [load]);
 
   const state = listState(read);
@@ -313,9 +314,29 @@ const TABS = [
   { key: 'analyses', label: 'Saved analyses' },
 ];
 
+/**
+ * D593 (the C0 board): the Directory tab carries the directory's size, from
+ * the API's `coverage.of` — every company, not the filtered page — and no
+ * number at all until one has been read. On Saved analyses, where the
+ * directory is not mounted, one row is read for it.
+ */
+export function directoryTabLabel(total) {
+  return Number.isFinite(total) ? `Directory (${total.toLocaleString('en-US')})` : 'Directory';
+}
+
 export default function CompanyDirectoryZone({ role = 'founder', zoneActions = null }) {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'analyses' ? 'analyses' : 'directory';
+  const [total, setTotal] = useState(null);
+  const onTotal = useCallback((n) => { if (Number.isFinite(n)) setTotal(n); }, []);
+  useEffect(() => {
+    if (tab !== 'analyses' || total != null) return undefined;
+    let live = true;
+    researchCompaniesApi.list({ limit: 1 })
+      .then((data) => { if (live) onTotal(data?.coverage?.of ?? null); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [tab, total, onTotal]);
   const pick = (key) => {
     const next = new URLSearchParams(params);
     if (key === 'directory') { next.delete('tab'); next.delete('market'); next.delete('website'); } else next.set('tab', key);
@@ -333,13 +354,13 @@ export default function CompanyDirectoryZone({ role = 'founder', zoneActions = n
         {TABS.map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => pick(t.key)}
             className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] font-semibold ${tab === t.key ? 'border-violet-700 text-violet-800 dark:text-violet-200' : 'border-transparent text-axal-muted hover:text-axal-ink dark:hover:text-gray-100'}`}>
-            {t.label}
+            {t.key === 'directory' ? directoryTabLabel(total) : t.label}
           </button>
         ))}
       </div>
       {tab === 'directory' ? (
         <>
-          <Directory role={role} zoneActions={zoneActions}
+          <Directory role={role} zoneActions={zoneActions} onTotal={onTotal}
             initial={{ sector_label: params.get('sector_label') || '', country: params.get('country') || '' }} />
           <p className="text-[11px] leading-relaxed text-axal-faint">
             <strong>Source boundary:</strong> company records come from Wikidata (CC0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.

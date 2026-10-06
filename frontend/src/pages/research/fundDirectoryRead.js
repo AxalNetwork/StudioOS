@@ -138,4 +138,22 @@ export function directoryLine(coverage, sources) {
   return `${num(coverage?.total || 0)} funds from ${lists} public fund ${lists === 1 ? 'list' : 'lists'}`;
 }
 
+/**
+ * D593 — the N in the Funds page's "Directory (N)" tab: the API's
+ * `coverage.total`, which counts the whole directory, never the filtered
+ * `total` of the page on screen. Null until a read has answered and after a
+ * failed one, so the tab reads "Directory" rather than a count it was not
+ * given. It follows the directory's own header line: a refetch keeps the
+ * answer already on screen until the new one arrives.
+ */
+export function directoryTotalOf(result) {
+  const n = result?.error ? null : result?.data?.coverage?.total;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+/** "Directory (2,616)" once the directory has answered; "Directory" while it has not, or could not. */
+export function directoryTabLabel(total) {
+  return typeof total === 'number' && Number.isFinite(total) ? `Directory (${num(total)})` : 'Directory';
+}
+
 export { num as formatCount };

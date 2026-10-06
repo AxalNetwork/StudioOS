@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Card } from '../../ui';
 import { Unreadable, Unrecorded } from '../../ui/Honesty';
+import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { useRead } from './MarketDirectoryZone';
 
@@ -10,6 +11,11 @@ import { useRead } from './MarketDirectoryZone';
  * Research · Geographies · one country (`/research/geographies/:code`), to the
  * Geography canvas (`design/incoming/Research · Geography.dc.html`, D546).
  * Issue #1080, D533. Reads `GET /api/research/geographies/:code`.
+ *
+ * D593 — INSIDE THE RESEARCH SHELL, as the fund and sector pages are: the
+ * crumb reads Research ‹ Geographies ‹ the country, and the zone pills stay
+ * on the row with Geographies current. It rendered bare before: no crumb, no
+ * pills, only its own back link.
  *
  * WHAT IT DOES NOT CLAIM.
  * - Demand per country reads "Not recorded": the sector indexes are computed
@@ -281,15 +287,26 @@ export function GeographyState({ geo, code, role = 'founder', reload }) {
   return <GeographyBody data={geo.data} role={role} />;
 }
 
+/**
+ * The whole page from its read, inside `WorkspaceShell` (D593). The shell's
+ * title — and so the crumb's last step — is the country once it has been read,
+ * and "Country" until then, as the fund page says "Fund profile".
+ */
+export function GeographyPage({ geo, code, role = 'founder', reload }) {
+  return (
+    <WorkspaceShell role={role} title={geo.data?.item?.name || 'Country'} activeSlug="geographies">
+      <div data-testid="geography-profile" className="space-y-4">
+        <Link to="/research/geographies" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300"><ArrowLeft size={13} /> Geographies</Link>
+        <CountryStrip code={code} />
+        <GeographyState geo={geo} code={code} role={role} reload={reload} />
+      </div>
+    </WorkspaceShell>
+  );
+}
+
 export default function GeographyProfile({ role = 'founder' }) {
   const { code = '' } = useParams();
   const upper = code.toUpperCase();
   const [geo, reload] = useRead(() => researchMarketsApi.geography(upper), upper);
-  return (
-    <div data-testid="geography-profile" className="space-y-4">
-      <Link to="/research/geographies" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300"><ArrowLeft size={13} /> Geographies</Link>
-      <CountryStrip code={upper} />
-      <GeographyState geo={geo} code={upper} role={role} reload={reload} />
-    </div>
-  );
+  return <GeographyPage geo={geo} code={upper} role={role} reload={reload} />;
 }

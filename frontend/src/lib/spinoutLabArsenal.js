@@ -30,6 +30,9 @@
  * loud instead of leaving it to be inferred.
  */
 
+import { SLIDE_META } from './pitchDeckViewModel';
+import { numberWordCap } from './numberWords';
+
 /** The five groups, in the order the arsenal draws them. */
 export const TOOL_GROUPS = ['Company', 'Evidence', 'Build', 'Formation', 'Capital'];
 
@@ -65,7 +68,7 @@ export const LAB_TOOLS = [
 
   { id: 'roadmap', group: 'Build', name: 'Roadmap and OKRs', blurb: 'MVP scope, value-rated.', route: '/spinout-lab/roadmap' },
   { id: 'brand', group: 'Build', name: 'Brand and landing pages', blurb: 'Sixteen templates, with lead routing.', route: '/spinout-lab/brand' },
-  { id: 'deck', group: 'Build', name: 'Pitch deck', blurb: 'Eleven slides from your own data.', route: '/spinout-lab/pitch-deck' },
+  { id: 'deck', group: 'Build', name: 'Pitch deck', blurb: `${numberWordCap(SLIDE_META.length)} slides from your own data.`, route: '/spinout-lab/pitch-deck' },
 
   { id: 'inc', group: 'Formation', name: 'Incorporation', blurb: 'Entity choice and Delaware formation documents.', route: '/spinout-lab/incorporate' },
   { id: 'cap', group: 'Formation', name: 'Cap table', blurb: 'Ownership, SAFEs and dilution, modeled.', route: '/spinout-lab/captable' },

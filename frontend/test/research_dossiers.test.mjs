@@ -30,7 +30,11 @@ test('fund dossier exposes source-backed quarterly reports rather than placehold
 test('company records navigate from the full row and profiles separate identity from diligence', () => {
   const directory = read('pages/research/CompanyDirectoryZone.jsx');
   const profile = read('pages/research/CompanyProfile.jsx');
-  assert.match(directory, /research\/companies\/company/);
+  // D593 moved `companyHref` into the directory's view helpers, so the
+  // analysis and competitor pages can link a profile without loading the zone.
+  const view = read('lib/companyDirectoryView.js');
+  assert.match(view, /export const companyHref = \(uid\) => `\/research\/companies\/company\/\$\{encodeURIComponent\(uid\)\}`;/);
+  assert.match(directory, /onClick=\{\(\) => navigate\(companyHref\(x\.uid\)\)\}/);
   assert.match(directory, /role="link"/);
   // D534 (#1079): the profile is built to the Research · Company canvas. Each
   // metric shows its source and date or Not recorded, and diligence reads the

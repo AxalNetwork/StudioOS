@@ -25,6 +25,20 @@
  * from each track's tool ids, so it cannot drift from the cards.
  */
 
+import { SLIDE_META } from './pitchDeckViewModel';
+import { numberWord, numberWordCap } from './numberWords';
+
+// The brief spells its counts out; `numberWords.js` holds the words, so the
+// arsenal can say the deck's length the same way without importing this file.
+export { numberWord, numberWordCap };
+
+/**
+ * The Spin-Out pitch deck's length, said once (D581). It is `SLIDE_META.length`
+ * — the eleven slides of the `axal_spinout_demoday` template the Lab builds —
+ * so changing that array changes every sentence that counts the deck.
+ */
+export const DECK_SLIDES = SLIDE_META.length;
+
 /** The four week windows. Derived from the month, which is why no route sets them. */
 export const WEEKS = [
   { n: '1', days: 'Days 1–7' },
@@ -111,7 +125,7 @@ export const JURISDICTIONS = [
 
 /** What a founder leaves with. */
 export const DELIVERABLES = [
-  'Incorporated entity', 'Vesting cap table', 'Equity filing', '12-slide pitch deck',
+  'Incorporated entity', 'Vesting cap table', 'Equity filing', `${numberWordCap(DECK_SLIDES)}-slide pitch deck`,
   '3-year financial model', '5–10 warm introductions', '2 matched advisors', 'Data room',
   'Alumni badge',
 ];
@@ -172,7 +186,7 @@ export const TOOL_EXAMPLE_READS = {
   market: { read: '$2.4B · $340M · $34M · cited', rings: [{ size: 28, left: 0, c: VT }, { size: 17, left: 5, c: VL }, { size: 8, left: 10, c: V }] },
   revenue: { read: '6 months · verified by source', cols: [{ pct: 18, c: VL }, { pct: 26, c: VL }, { pct: 34, c: VL }, { pct: 48, c: V }, { pct: 66, c: V }, { pct: 100, c: V }] },
   brand: { read: '2 pages live · leads routed', tiles: [{ c: VT }, { c: VL }, { c: VT }] },
-  deck: { read: '12 slides from recorded data', tiles: [{ c: '#141118' }, { c: VT }, { c: VT }, { c: VT }, { c: VL }] },
+  deck: { read: `${numberWordCap(DECK_SLIDES)} slides from recorded data`, tiles: [{ c: '#141118' }, { c: VT }, { c: VT }, { c: VT }, { c: VL }] },
   raise: { read: '$1.5M target · 30% committed', segs: [{ k: 'Wired', pct: 12, c: G }, { k: 'Signed', pct: 18, c: V }, { k: 'Open', pct: 70, c: '#f0eff3' }] },
   uof: { read: '18 months of runway', segs: [{ k: 'Eng', pct: 55, c: V }, { k: 'GTM', pct: 30, c: VL }, { k: 'Ops', pct: 15, c: VT }] },
   office: { read: '2 booked · partner sessions', slots: [VT, VT, V, VT, VT, VT, V, VT, VT, VT].map((c) => ({ c })) },
@@ -186,38 +200,3 @@ export const TOOL_EXAMPLE_READS = {
  */
 export const EXAMPLE_LABEL = 'Example — the shape this tool draws, not your data';
 
-/**
- * A small number as the word the brief's prose spells it with.
- *
- * WHY THIS EXISTS RATHER THAN THE HEADING BEING TYPED. The arsenal section is
- * headed *"Nineteen working tools. Count them."* — an invitation to check, so
- * the count had better be the count. `TOOL_COUNT` is `LAB_TOOLS.length`
- * (`spinoutLabArsenal.js`), which is what the Lab's own intro renders and what
- * `spinout_lab_intro.test.mjs` already pins against `App.jsx`'s routes. Typing
- * "Nineteen" into the brief would make the twentieth tool a silent lie on the
- * one page a founder prints and forwards. Same for the three tracks and the
- * four weeks.
- *
- * Lowercase, because most of the brief's uses are mid-sentence ("four evidence
- * gates", "nineteen tools"); the one heading that starts with it capitalises
- * at the call site. Out of range returns the digits, which is a worse sentence
- * but never a wrong number.
- */
-const NUMBER_WORDS = [
-  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
-  'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
-  'seventeen', 'eighteen', 'nineteen', 'twenty', 'twenty-one', 'twenty-two',
-  'twenty-three', 'twenty-four', 'twenty-five', 'twenty-six', 'twenty-seven',
-  'twenty-eight', 'twenty-nine', 'thirty',
-];
-
-export function numberWord(n) {
-  if (!Number.isInteger(n) || n < 0 || n >= NUMBER_WORDS.length) return String(n);
-  return NUMBER_WORDS[n];
-}
-
-/** The same word with its first letter capitalised, for a sentence opening. */
-export function numberWordCap(n) {
-  const w = numberWord(n);
-  return w.charAt(0).toUpperCase() + w.slice(1);
-}

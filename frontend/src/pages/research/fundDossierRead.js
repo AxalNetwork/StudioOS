@@ -1,6 +1,7 @@
 /**
  * The dossier's readings that its tests run in Node: the "What's missing"
- * checklist (canvas c0834993, FS4d) and the Last-updated tile.
+ * checklist (canvas c0834993, FS4d), the Last-updated tile, and whether the
+ * draft band has anything to draft from (D593).
  *
  * THE CHECKLIST HAS TWO KINDS OF ROW, and they are never counted together.
  * A row derived from a column on the fund is done or a gap. A row the canvas
@@ -49,6 +50,17 @@ export function missingChecklist(fund) {
 /** Gaps the founder can close here: derived rows that are not done. */
 export function gapCount(rows) {
   return rows.filter((r) => r.done === false).length;
+}
+
+/**
+ * True while the stored row holds neither a thesis nor a note (D593). The
+ * Worker's `fundMaterial` drafts from nothing else and answers such a row
+ * with 409 `nothing_to_draft`, so the draft band says so before the press
+ * rather than after it. It reads the saved row, as the Worker does, not
+ * text still being typed.
+ */
+export function nothingToDraft(fund) {
+  return Boolean(fund) && !fund.thesis && !fund.note;
 }
 
 /**

@@ -303,8 +303,11 @@ const PROFILES = {
     // `partner_fit_rules.statement` is exactly that field, the one the form
     // labels "The sentence a pass quotes". None is a destination, which is why
     // none is a `to:`.
-    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13.
-    handlers: 14,
+    // `research/markets`: `Re-run stale` (D593), prose about sector counts
+    // while the page could record no reading; the directory's readings card
+    // has the record form again, and the op opens it on the stale reading.
+    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13, then 14.
+    handlers: 15,
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.

@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals, substituteBindings, coverage } from '../../scripts/check-sqlite-columns.mjs';
-import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
+import { stripSqlLiterals, knownTables, unknownReferences } from '../../scripts/check-sqlite-tables.mjs';
 import { routedWrites, mapColumns, assignmentBrace, unroutableColumns, unroutableSavedTo } from '../../scripts/check-write-router-columns.mjs';
 import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-sqlite-table-collisions.mjs';
 import { isMoney, nonIntegerCents, floatMoney } from '../../scripts/check-money-cents.mjs';
@@ -759,4 +759,12 @@ test('exactly one query reads workflow_tasks.assignee_user_id', () => {
   const dash = fs.readFileSync(new URL('../src/routes/dashboard.ts', import.meta.url), 'utf8');
   const inDash = (dash.match(/workflow_tasks[\s\S]{0,200}?assignee_user_id/gi) || []).length;
   assert.equal(inDash, 1, 'dashboard.ts myTasks is the one reader');
+});
+
+test('json_each and json_tree are SQLite functions, never reported as missing tables (D593)', () => {
+  // A bound JSON array read as rows (`SELECT value FROM json_each(?)`) is how
+  // the worker binds a list; the guard exempts these as it does `pragma_*`.
+  const found = unknownReferences();
+  assert.equal(found.has('json_each'), false);
+  assert.equal(found.has('json_tree'), false);
 });
