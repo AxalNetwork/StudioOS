@@ -136,6 +136,12 @@ step — and each has unit tests over its pure helpers that *are* in the suite.
 | --- | --- |
 | `read-canvas.mjs` | Turns a published Claude Design artifact back into the `.dc.html` canvas `design/canvases/` is already full of. An artifact looks like it needs a browser and does not: it is a bundler shell with gzip+base64 assets in `<script type="__bundler/manifest">` and the design itself in `<script type="__bundler/template">`, and decoded, that template is exactly the `<x-dc>` / `DCLogic` format 124 files under `design/` already use. So a design arriving as a URL can land in `design/incoming/` where the intake pipeline handles it — reviewable in a diff, greppable, diffable against the next revision. It points the runtime at the one shared copy in `design/canvases/shared/support.js` (which every canvas references as a relative `support.js`, rather than inlining 69KB of runtime into each file), replaces the ~35 inlined `@font-face` rules with the Google Fonts link every other canvas uses (families and weights read **out of the block**, never assumed — a hard-coded Inter link silently dropped Roboto Mono from a canvas that sets its code samples in it), strips the publisher's watermark, and un-mangles the camelCase attributes a DOM round-trip flattened (`dangerouslySetInnerHTML` comes back as `sc-camel-dangerously-set-inner-h-t-m-l`, and leaving it renders the canvas without its inline SVG icons). It never substitutes an unrecognised asset uuid with a `data:` URI — it names the uuid and exits 1, because a canvas that silently drops an asset is worse than one that says which asset it could not place. `node scripts/read-canvas.mjs <artifact.html> <out.dc.html>`, then follow `design/incoming/README.md`. |
 
+## Importing research data
+
+| File | What it does |
+| --- | --- |
+| `import-sec-edgar.mjs` | Writes migration 404 from SEC EDGAR's public company list (company_tickers_exchange.json, on sec.gov): one row per CIK with its name, ticker and exchange, each citing EDGAR, its URL, its licence and the date read (D595, #1230). It never writes to a database. The SEC requires a descriptive User-Agent, and this one names `SECURITY.md`'s public contact. `node scripts/import-sec-edgar.mjs`, or `--from <saved copy> --as-of YYYY-MM-DD` to read a copy. The rules live in `lib/secEdgarCompanies.mjs`. |
+
 ## Subfolders
 
 | Folder | What lives there |
