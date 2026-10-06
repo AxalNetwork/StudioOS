@@ -8,6 +8,7 @@ import './founderBuildThisWeek.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { LensLink } from '../../workspaces/lens';
 
 
 const formatProgress = (item) => {
@@ -134,11 +135,11 @@ export default function FounderBuildThisWeek() {
               <div><h1>This week · {weekRange()}</h1><p className="fb-week-subtitle">Current commitments read from the selected startup's roadmap.</p></div>
             </div>
             <nav className="fb-week-zone-nav" aria-label="Build sections">
-              <Link to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`} className="is-active" data-testid="link-week-zone">This week</Link>
-              <Link to={`/build/board${selectedId ? `?project_id=${selectedId}` : ''}`}>Board</Link>
-              <Link to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Roadmap</Link>
-              <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
-              <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
+              <LensLink to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`} className="is-active" data-testid="link-week-zone">This week</LensLink>
+              <LensLink to={`/build/board${selectedId ? `?project_id=${selectedId}` : ''}`}>Board</LensLink>
+              <LensLink to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Roadmap</LensLink>
+              <LensLink to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</LensLink>
+              <LensLink to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</LensLink>
             </nav>
             <ZoneToolbar
               filters={founderZoneFilters('build/this-week', { value: view, onChange: setView, counts })}

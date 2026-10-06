@@ -10,6 +10,7 @@ import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { dayLabel, kindLabel, scheduleLabel, todayIso } from '../../lib/cadence';
 import { RitualDialog, RunDialog, TemplatesDialog } from './CadenceDialogs';
+import { LensLink } from '../../workspaces/lens';
 
 /**
  * FB4 — Build · Cadence, the FEED.
@@ -207,11 +208,11 @@ export default function FounderBuildCadence() {
                   startups inside one company has no other way to switch here. */}
             </div>
             <nav aria-label="Build sections">
-              <Link to={`/build/this-week${query}`}>This week</Link>
-              <Link to={`/build/board${query}`}>Board</Link>
-              <Link to={`/build/roadmap${query}`}>Roadmap</Link>
-              <Link to={`/build/cadence${query}`} className="is-active">Cadence</Link>
-              <Link to={`/build/kpi${query}`}>KPI entry</Link>
+              <LensLink to={`/build/this-week${query}`}>This week</LensLink>
+              <LensLink to={`/build/board${query}`}>Board</LensLink>
+              <LensLink to={`/build/roadmap${query}`}>Roadmap</LensLink>
+              <LensLink to={`/build/cadence${query}`} className="is-active">Cadence</LensLink>
+              <LensLink to={`/build/kpi${query}`}>KPI entry</LensLink>
             </nav>
             <ZoneToolbar
               filters={founderZoneFilters('build/cadence', { value: filter, onChange: setFilter, counts })}

@@ -9,6 +9,7 @@ import './founderGrowLaunch.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { LensLink } from '../../workspaces/lens';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -80,7 +81,7 @@ export default function FounderGrowLaunch() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-launch" data-testid="founder-grow-launch"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/launch', { value: view, onChange: setView })}
               actions={founderZoneActions('grow/launch', { query, view: { scope: project?.name, header: ['Item', 'Starts', 'Ends', 'State'], rows: events, cells: (r) => [r.title, r.start_at, r.end_at, r.status || r.state] } })}

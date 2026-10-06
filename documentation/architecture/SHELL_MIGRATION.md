@@ -40,7 +40,11 @@ collapsed by this migration** unless product explicitly requests it.
    overview and is how the founder overviews were lost the first time. Each
    bucket root renders its compressed canvas; `ZoneNav` below it opens zones.
 2. **Zone pills are real routes.** No `href="#…"` anchors. Targets are composed
-   only from `shellConfig.js` via `zonePath()`.
+   only from `shellConfig.js` via `zonePath()`. On a desktop a pill navigates
+   to its route. On a phone (below 1024px) it opens that route's page in place
+   as a lens, with no route change and no history entry (D575, canvas M2): every
+   pill is a `LensNavLink` or `LensLink` from `workspaces/lens.jsx`, never a bare
+   `NavLink` or `Link`.
 3. **Worker AI rail is one component.** `ui/WorkerRail.jsx` (indigo accent for
    investor, violet for founder). No per-page hand-built `<aside>` rails. Spend
    meter is live (`GET /api/ai/me/spend`); model picker and per-run cost stay

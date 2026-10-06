@@ -8,6 +8,7 @@ import { STRENGTHS, daysSince, followUp, isCold, lastNote, organizationOf, stren
 import './founderNetworkRelationships.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { LensLink } from '../../workspaces/lens';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -117,7 +118,7 @@ export default function FounderNetworkRelationships({ embedded = false, role = '
   const query = project?.id ? `?project_id=${project.id}` : '';
 
   return <main className={`fn-rel${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-relationships"><div className="fn-rel-shell"><section className="fn-rel-main">
-    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Relationships</strong></div><div className="fn-rel-title-row"><div><h1>Relationship book</h1><p>Project-linked contacts, relationship context and explicit last activity.</p></div></div><nav aria-label="Network sections"><Link className="is-active" to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
+    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Relationships</strong></div><div className="fn-rel-title-row"><div><h1>Relationship book</h1><p>Project-linked contacts, relationship context and explicit last activity.</p></div></div><nav aria-label="Network sections"><LensLink className="is-active" to={`/network/relationships${query}`}>Relationships</LensLink><LensLink to={`/network/introductions${query}`}>Introductions</LensLink><LensLink to={`/network/organizations${query}`}>Organizations</LensLink></nav></header>}
     {/* Outside the header on purpose. These three zones only ever render
         through NetworkWorkspace, which passes `embedded` and draws the crumb,
         heading and zone nav itself — so everything inside that guard is dead
