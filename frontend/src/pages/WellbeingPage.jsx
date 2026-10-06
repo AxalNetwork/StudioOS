@@ -10,6 +10,7 @@ import {
   ROUTE_SCORE_KEYS, isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
   answeredCount, pastWeeks, formatDay, formatWhen, splitBookings, bookingStatus, canRate,
   resourceKind, resourceFacts, safeHref, homeCoverage, countRange,
+  canMemberCancel, storedStars, MEMBER_CANCELLABLE,
 } from './wellbeing/wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
 
@@ -36,7 +37,7 @@ import { BTN, FIELD, PageHeader, CardHead, NotRecorded, ScoreDots, Sparkline, Ou
 
 function readUser() { return safeReadJSON('user', {}); }
 
-const IDLE_SAVE = { saving: false, ok: null, error: null, fieldErrors: {} };
+const IDLE_SAVE = { saving: false, ok: null, error: null, fieldErrors: {}, encrypted: null };
 
 // ---------------------------------------------------------------------------
 // This week's check-in
@@ -149,9 +150,15 @@ export function CheckinCard({
           </details>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
-            <span className="inline-flex items-center gap-1.5 text-xs text-axal-muted dark:text-gray-400">
-              <Lock size={12} aria-hidden="true" /> Stored encrypted. Only you can read it.
-            </span>
+            {save.encrypted === false ? (
+              <span role="alert" className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300" data-testid="text-checkin-not-encrypted">
+                <Lock size={12} aria-hidden="true" /> Saved, but not encrypted: the server could not encrypt it this time. Only you can read it.
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs text-axal-muted dark:text-gray-400" data-testid="text-checkin-encrypted">
+                <Lock size={12} aria-hidden="true" /> {save.encrypted === true ? 'Saved encrypted.' : 'Stored encrypted.'} Only you can read it.
+              </span>
+            )}
             <button type="button" className={BTN.primary} onClick={onSave} disabled={save.saving} data-testid="button-save-checkin">
               {save.saving ? 'Saving…' : entry ? 'Update this week' : 'Save check-in'}
             </button>
@@ -225,8 +232,11 @@ export function PastWeeksCard({ status, weeks = [], onRetry }) {
 // My bookings
 // ---------------------------------------------------------------------------
 function RateStars({ booking, state, onRate }) {
-  if (state?.stars && !state.busy && !state.error) {
-    return <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300" role="status">Rated {state.stars} of 5.</span>;
+  // D574 — the stars already stored come with the booking, so a rating
+  // survives a reload; a rating given on this page replaces them.
+  const stars = state?.stars ?? (state ? null : storedStars(booking));
+  if (stars && !state?.busy && !state?.error) {
+    return <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300" role="status">Rated {stars} of 5.</span>;
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-1" data-testid={`rate-${booking.uid}`}>
@@ -248,7 +258,25 @@ function RateStars({ booking, state, onRate }) {
   );
 }
 
-function BookingRow({ booking, past, now, rate, onRate, timeZone }) {
+function CancelBooking({ booking, state, onCancel }) {
+  if (state?.stage === 'confirm') {
+    return (
+      <span className="inline-flex items-center gap-1.5" data-testid={`cancel-confirm-${booking.uid}`}>
+        <span className="text-xs text-axal-muted dark:text-gray-400">Cancel this session?</span>
+        <button type="button" className={BTN.link} disabled={state.busy} onClick={() => onCancel?.(booking, 'go')}>Yes, cancel</button>
+        <button type="button" className={BTN.link} disabled={state.busy} onClick={() => onCancel?.(booking, 'keep')}>Keep it</button>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button type="button" className={BTN.link} onClick={() => onCancel?.(booking, 'ask')} data-testid={`button-cancel-${booking.uid}`}>Cancel</button>
+      {state?.error && <span role="alert" className="text-xs text-red-700 dark:text-red-300">{state.error}</span>}
+    </span>
+  );
+}
+
+function BookingRow({ booking, past, now, rate, onRate, cancel, onCancel, timeZone }) {
   const status = bookingStatus(booking.status);
   const when = formatWhen(booking.scheduled_at, { timeZone });
   const call = safeHref(booking.meet_link);
@@ -258,7 +286,8 @@ function BookingRow({ booking, past, now, rate, onRate, timeZone }) {
         <div className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">
           {booking.expert_name || <Unrecorded reason="The booking names no expert.">Expert not recorded</Unrecorded>}
           {' · '}
-          <Unrecorded reason="A booking does not record which service it was for.">service not recorded</Unrecorded>
+          {String(booking.service_title ?? '').trim()
+            || <Unrecorded reason="No service was chosen for this booking.">no service chosen</Unrecorded>}
         </div>
         <div className="text-xs tabular-nums text-axal-muted dark:text-gray-400">
           {when || <Unrecorded reason="Booked through the expert’s own scheduler, which keeps the time.">Time not recorded</Unrecorded>}
@@ -269,6 +298,7 @@ function BookingRow({ booking, past, now, rate, onRate, timeZone }) {
       <div className="flex flex-wrap items-center gap-2">
         <Pill tone={status.tone}>{status.label}</Pill>
         {!past && call && <a href={call} target="_blank" rel="noopener noreferrer" className={BTN.link}>Join call <ExternalLink size={12} aria-hidden="true" /></a>}
+        {!past && canMemberCancel(booking, now) && <CancelBooking booking={booking} state={cancel} onCancel={onCancel} />}
         {past && canRate(booking, now) && <RateStars booking={booking} state={rate} onRate={onRate} />}
       </div>
     </li>
@@ -276,7 +306,7 @@ function BookingRow({ booking, past, now, rate, onRate, timeZone }) {
 }
 
 export function MyBookingsCard({
-  status, bookings = [], tab = 'upcoming', onTab, now = Date.now(), rated = {}, onRate, onRetry, timeZone,
+  status, bookings = [], tab = 'upcoming', onTab, now = Date.now(), rated = {}, onRate, cancels = {}, onCancel, onRetry, timeZone,
 }) {
   const { upcoming, past } = splitBookings(bookings, now);
   const rows = tab === 'past' ? past : upcoming;
@@ -306,7 +336,7 @@ export function MyBookingsCard({
       ) : rows.length ? (
         <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid={`list-bookings-${tab}`}>
           {rows.map((b) => (
-            <BookingRow key={b.uid} booking={b} past={tab === 'past'} now={now} rate={rated[b.uid]} onRate={onRate} timeZone={timeZone} />
+            <BookingRow key={b.uid} booking={b} past={tab === 'past'} now={now} rate={rated[b.uid]} onRate={onRate} cancel={cancels[b.uid]} onCancel={onCancel} timeZone={timeZone} />
           ))}
         </ul>
       ) : (
@@ -314,16 +344,16 @@ export function MyBookingsCard({
           {tab === 'past' ? 'No past bookings.' : 'No upcoming bookings.'}
         </p>
       )}
-      {status === 'ready' && tab === 'upcoming' && upcoming.length > 0 && (
-        <p className="mt-2 text-xs text-axal-muted dark:text-gray-400" data-testid="text-cancel-unavailable">
-          Cancelling a booking from this page is not available yet.
+      {status === 'ready' && tab === 'upcoming' && upcoming.some((b) => b.payment_status === 'paid' && MEMBER_CANCELLABLE.includes(b.status)) && (
+        <p className="mt-2 text-xs text-axal-muted dark:text-gray-400" data-testid="text-cancel-paid">
+          A paid session is cancelled by the expert, so its payment is refunded with it.
         </p>
       )}
       {status === 'ready' && tab === 'past' && past.some((b) => canRate(b, now)) && (
         <p className="mt-2 text-xs text-axal-muted dark:text-gray-400">One rating per expert; rating again replaces it.</p>
       )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-3 text-xs text-axal-muted dark:border-gray-700 dark:text-gray-400">
-        <span>Only you and the expert see a booking. A booking made here carries no note, and none records its service.</span>
+        <span>Only you and the expert see a booking. A booking made here carries no note.</span>
         <Link to="/wellbeing/book" className={BTN.link} data-testid="link-book-expert">Book an expert →</Link>
       </div>
     </Card>
@@ -578,15 +608,32 @@ export default function WellbeingPage() {
     }
     setSave({ ...IDLE_SAVE, saving: true });
     try {
-      await api.wellbeingSubmit(body);
+      const saved = await api.wellbeingSubmit(body);
       setSave({
         ...IDLE_SAVE,
         ok: entry ? 'Updated this week’s check-in.' : `Saved for the week of ${formatDay(weekStart(history.today))}.`,
+        // D574 — the route says whether this save was encrypted.
+        encrypted: typeof saved?.stored_encrypted === 'boolean' ? saved.stored_encrypted : null,
       });
       await loadHistory();
     } catch (e) {
       const fields = e?.status === 400 && e?.data?.fields && typeof e.data.fields === 'object' ? e.data.fields : {};
       setSave({ ...IDLE_SAVE, fieldErrors: fields, error: e?.message || 'The check-in could not be saved.' });
+    }
+  };
+
+  // D574 — cancelling asks first, then reloads the list from the route.
+  const [cancels, setCancels] = useState({});
+  const cancelBooking = async (booking, step) => {
+    if (step === 'ask') { setCancels((c) => ({ ...c, [booking.uid]: { stage: 'confirm' } })); return; }
+    if (step === 'keep') { setCancels((c) => ({ ...c, [booking.uid]: null })); return; }
+    setCancels((c) => ({ ...c, [booking.uid]: { stage: 'confirm', busy: true } }));
+    try {
+      await api.wellbeingCancelBooking(booking.uid);
+      setCancels((c) => ({ ...c, [booking.uid]: null }));
+      await loadBookings();
+    } catch (e) {
+      setCancels((c) => ({ ...c, [booking.uid]: { error: e?.message || 'The booking was not cancelled.' } }));
     }
   };
 
@@ -659,6 +706,8 @@ export default function WellbeingPage() {
               onTab={setTab}
               rated={rated}
               onRate={rate}
+              cancels={cancels}
+              onCancel={cancelBooking}
               onRetry={loadBookings}
             />
             <ResourcesCard

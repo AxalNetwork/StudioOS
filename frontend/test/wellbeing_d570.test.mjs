@@ -169,6 +169,11 @@ test('the check-in card: each state, the five canvas rows, and a second save thi
   assert.match(refused, /stress must be an integer 1\.\.5/);
   assert.match(refused, /Invalid input/);
   const saved = text(h(CheckinCard, { status: 'ready', today: TODAY, entry: ENTRY, form: M.formFromEntry(ENTRY), save: { ok: 'Updated this week’s check-in.', fieldErrors: {} } }));
+  // D574: the route says whether the save was encrypted; a plaintext backstop save is never called encrypted.
+  const card = (encrypted) => text(h(CheckinCard, { status: 'ready', today: TODAY, entry: ENTRY, form: M.formFromEntry(ENTRY), save: { ok: 'Saved.', fieldErrors: {}, encrypted } }));
+  assert.match(card(true), /Saved encrypted\. Only you can read it\./);
+  assert.match(card(false), /Saved, but not encrypted: the server could not encrypt it this time\./);
+  assert.doesNotMatch(card(false), /Stored encrypted|Saved encrypted/);
   assert.match(saved, /Updated this week’s check-in\./);
 });
 
@@ -242,17 +247,33 @@ test('bookings split into upcoming and past; only a held session can be rated', 
   assert.equal(M.bookingStatus(null).label, 'Status not recorded');
 });
 
-test('my bookings card: names, times and status; no service, no note, and no cancel the route cannot do', () => {
-  const props = { status: 'ready', bookings: MY_BOOKINGS, now: NOW, timeZone: 'UTC', onTab: () => {}, onRate: () => {} };
+test('my bookings card: names, the service, times and status; a cancel for what the route allows; no note (D574)', () => {
+  const withService = MY_BOOKINGS.map((b) => (b.uid === 'b1' ? { ...b, service_title: 'Intro call' } : b));
+  const props = { status: 'ready', bookings: withService, now: NOW, timeZone: 'UTC', onTab: () => {}, onRate: () => {} };
   const up = text(h(MyBookingsCard, { ...props, tab: 'upcoming' }));
   const upMarkup = html(h(MyBookingsCard, { ...props, tab: 'upcoming' }));
   assert.match(up, /Upcoming · 2 Past · 3/);
-  assert.match(up, /Dr Ada · service not recorded Thu 8 Oct · 10:00 · 30 min Scheduled Join call/);
-  assert.match(up, /Sam Coach · service not recorded Time not recorded · 30 min Requested/);
+  assert.match(up, /Dr Ada · Intro call Thu 8 Oct · 10:00 · 30 min Scheduled Join call Cancel/);
+  assert.match(up, /Sam Coach · no service chosen Time not recorded · 30 min Requested Cancel/);
   assert.match(upMarkup, /href="https:\/\/meet\.jit\.si\/axal-b1"/);
-  assert.match(up, /Cancelling a booking from this page is not available yet\./);
-  assert.doesNotMatch(upMarkup, />\s*Cancel\s*</, 'no member cancel route exists, so there is no button');
-  assert.match(up, /A booking made here carries no note, and none records its service\./);
+  assert.match(upMarkup, /data-testid="button-cancel-b1"/);
+  assert.doesNotMatch(up, /not available yet/);
+  assert.match(text(h(MyBookingsCard, { ...props, tab: 'upcoming', cancels: { b1: { stage: 'confirm' } } })), /Cancel this session\? Yes, cancel Keep it/);
+  assert.match(text(h(MyBookingsCard, { ...props, tab: 'upcoming', cancels: { b1: { error: 'This session is paid for.' } } })), /This session is paid for\./);
+  // A paid session is the expert's to cancel, with its refund: no button, and the card says why.
+  const paid = withService.map((b) => (b.uid === 'b1' ? { ...b, payment_status: 'paid', status: 'confirmed' } : b));
+  const paidUp = html(h(MyBookingsCard, { ...props, bookings: paid, tab: 'upcoming' }));
+  assert.doesNotMatch(paidUp, /button-cancel-b1/);
+  assert.match(text(h(MyBookingsCard, { ...props, bookings: paid, tab: 'upcoming' })), /A paid session is cancelled by the expert, so its payment is refunded with it\./);
+  assert.deepEqual([
+    { status: 'scheduled', scheduled_at: '2026-10-08T10:00:00.000Z' },
+    { status: 'scheduled', scheduled_at: '2026-09-01T10:00:00.000Z' },
+    { status: 'confirmed', payment_status: 'paid', scheduled_at: '2026-10-08T10:00:00.000Z' },
+    { status: 'completed', scheduled_at: '2026-10-08T10:00:00.000Z' },
+    { status: 'requested', scheduled_at: null },
+  ].map((b) => M.canMemberCancel(b, NOW)), [true, false, false, false, true], 'the route\'s own rules: open, unpaid, not started');
+  assert.match(up, /A booking made here carries no note\./);
+  assert.doesNotMatch(up, /none records its service/);
   assert.match(upMarkup, /href="\/wellbeing\/book"/);
 
   const pastMarkup = html(h(MyBookingsCard, { ...props, tab: 'past' }));
@@ -260,6 +281,10 @@ test('my bookings card: names, times and status; no service, no note, and no can
   assert.doesNotMatch(pastMarkup, /rate-b4|rate-b5/, 'no rating for a cancelled or unpaid session');
   assert.doesNotMatch(pastMarkup, /javascript:/, 'a stored link that is not http(s) is never a href');
   assert.match(text(h(MyBookingsCard, { ...props, tab: 'past', rated: { b3: { stars: 4 } } })), /Rated 4 of 5\./);
+  // D574: the stars already stored come with the booking, so they survive a reload.
+  const stored = withService.map((b) => (b.uid === 'b3' ? { ...b, my_stars: 3 } : b));
+  assert.match(text(h(MyBookingsCard, { ...props, bookings: stored, tab: 'past' })), /Rated 3 of 5\./);
+  assert.match(text(h(MyBookingsCard, { ...props, bookings: stored, tab: 'past', rated: { b3: { stars: 5 } } })), /Rated 5 of 5\./, 'a new rating replaces the stored one');
   assert.match(text(h(MyBookingsCard, { ...props, tab: 'past', rated: { b3: { error: 'stars must be integer 1..5' } } })), /stars must be integer 1\.\.5/);
   for (const tab of ['upcoming', 'past']) assert.doesNotMatch(html(h(MyBookingsCard, { ...props, tab })), /PRIVATE NOTE/);
 
@@ -312,21 +337,24 @@ const SLOTS = {
   e3: { status: 'unreadable' },
 };
 
-test('the booking body: the slot and the route’s 30-minute length, never a note or a service', () => {
+test('the booking body: the slot, the route’s 30-minute length and the chosen service, never a note (D574)', () => {
   assert.deepEqual(M.bookingPayload({ slot: '2026-10-08T10:00:00.000Z' }), { scheduled_at: '2026-10-08T10:00:00.000Z', duration_minutes: 30 });
+  assert.deepEqual(M.bookingPayload({ slot: '2026-10-08T10:00:00.000Z', serviceUid: 's2' }),
+    { scheduled_at: '2026-10-08T10:00:00.000Z', duration_minutes: 30, service_uid: 's2' });
   assert.deepEqual(M.bookingPayload({ external: true }), {});
-  assert.match(ROUTE, /function generateInternalSlots\(expert: ExpertRow, days = 14, slotMinutes = 30\)/, 'slots are 30 minutes, so a booking asks for 30');
+  assert.deepEqual(M.bookingPayload({ external: true, serviceUid: 's2' }), { service_uid: 's2' });
+  assert.match(read('cloudflare-worker/src/services/wellbeing/slots.ts'), /export const SLOT_MINUTES = 30;/, 'slots are 30 minutes, so a booking asks for 30');
   assert.equal(M.SESSION_MINUTES, 30);
   const book = handler("wellbeing.post('/experts/:uid/book'");
   assert.match(book, /body as any\)\?\.notes/, 'the route would store a note if one were sent, which is why none is');
   assert.match(book, /scheduled_at is required when the expert has no external scheduler/);
   assert.match(book, /That slot was just taken/);
-  // No member route returns an expert's services: the reason step 2 is "Not recorded".
-  assert.match(ROUTE, /services: opts\.services \?\? null/);
-  assert.doesNotMatch(handler("wellbeing.get('/experts/:uid'"), /services:/);
-  assert.doesNotMatch(handler("wellbeing.get('/experts'"), /services:/);
-  // And the slots never read the expert's weekly grid.
-  assert.doesNotMatch(handler("wellbeing.get('/experts/:uid/slots'"), /expert_availability/);
+  // D574: both member reads return the expert's active services, and the
+  // slots are cut from the expert's weekly grid.
+  assert.match(handler("wellbeing.get('/experts/:uid'"), /services: services\.get\(expert\.id\) \?\? \[\]/);
+  assert.match(handler("wellbeing.get('/experts'"), /services: services\.get\(s\.expert\.id\) \?\? \[\]/);
+  assert.match(handler("wellbeing.get('/experts/:uid/slots'"), /offeredSlots\(await loadAvailability\(c\.env, expert\.id\)\)/);
+  assert.match(book, /slot_not_offered/);
 });
 
 test('slots group by the viewer’s own day, and each card says when the expert is next open', () => {
@@ -363,11 +391,22 @@ test('step 1 · expert: cards with specialties, rate, ratings and next opening, 
   assert.match(text(h(DirectoryToolbar, { filters: { q: '', category: '', language: '', modality: '', price_max: '' }, count: '1–3 of 7' })), /1–3 of 7 · Sort: best match/);
 });
 
-test('steps 2 to 4: no service to pick, a slot in the viewer’s time, and a confirmation that sends no note', () => {
+test('steps 2 to 4: the expert’s services to pick, a slot in the viewer’s time, and a confirmation that sends no note', () => {
   const service = text(h(ServiceColumn, { expert: EXPERTS[0] }));
-  assert.match(service, /Services not recorded No route lists an expert’s services to members yet/);
+  assert.match(service, /Services not read This expert’s services could not be read/, 'null is "not read", never "none"');
   assert.match(service, /A 30-minute session Dr Ada’s published rate: \$150 \/ hr/);
   assert.equal(SERVICE_GAP.includes('30-minute'), true);
+  assert.match(text(h(ServiceColumn, { expert: { ...EXPERTS[0], services: [] } })), /Dr Ada lists no services\. A 30-minute session/);
+  const SERVICES = [
+    { uid: 's1', title: 'Intro call', duration_minutes: 25, price_cents: 0, currency: 'usd' },
+    { uid: 's2', title: 'Deep session', duration_minutes: 50, price_cents: 9050, currency: 'eur' },
+  ];
+  const withServices = { ...EXPERTS[0], services: SERVICES };
+  assert.match(text(h(ServiceColumn, { expert: withServices })), /Intro call 25 min · Free Deep session 50 min · EUR 90\.50 A 30-minute session/);
+  assert.match(html(h(ServiceColumn, { expert: withServices, serviceUid: 's2' })), /aria-pressed="true"[^>]*data-testid="service-s2"/);
+  assert.match(html(h(ServiceColumn, { expert: withServices })), /aria-pressed="true"[^>]*data-testid="service-plain"/, 'no service chosen is the plain session');
+  assert.match(text(h(ConfirmColumn, { expert: withServices, slotState: SLOTS.e1, chosen: '2026-10-08T10:00:00.000Z', serviceUid: 's2', timeZone: 'UTC' })),
+    /Service Deep session · 50 min When/);
   assert.match(text(h(ServiceColumn, { expert: null })), /Choose an expert first\./);
 
   const chosen = '2026-10-08T10:00:00.000Z';
@@ -377,9 +416,13 @@ test('steps 2 to 4: no service to pick, a slot in the viewer’s time, and a con
   assert.match(text(h(TimeColumn, { expert: EXPERTS[1], slotState: SLOTS.e2, timeZone: 'UTC' })), /Sam Coach books through their own scheduler\. Confirming records the booking here and opens it/);
   assert.match(text(h(TimeColumn, { expert: EXPERTS[2], slotState: SLOTS.e3, timeZone: 'UTC', onRetry: () => {} })), /Availability could not be read\. This is not a sign that the expert is fully booked\./);
   assert.match(text(h(TimeColumn, { expert: EXPERTS[0], slotState: { status: 'ready', slots: [] }, timeZone: 'UTC' })), /No open slot in the next few days\. Try another expert\./);
+  // D574: the default hours are said as such, never as the expert's own.
+  assert.match(text(h(TimeColumn, { expert: EXPERTS[0], slotState: { ...SLOTS.e1, source: 'default_hours' }, timeZone: 'UTC' })),
+    /Dr Ada has not set weekly hours, so these are the default ones: weekdays, 09:00 to 17:00 UTC\./);
+  assert.doesNotMatch(text(h(TimeColumn, { expert: EXPERTS[0], slotState: { ...SLOTS.e1, source: 'grid' }, timeZone: 'UTC' })), /default ones/);
 
   const confirm = text(h(ConfirmColumn, { expert: EXPERTS[0], slotState: SLOTS.e1, chosen, timeZone: 'UTC' }));
-  assert.match(confirm, /Expert Dr Ada Service Not recorded · 30 min When Thu 8 Oct · 10:00 Rate \$150 \/ hr/);
+  assert.match(confirm, /Expert Dr Ada Service A 30-minute session When Thu 8 Oct · 10:00 Rate \$150 \/ hr/);
   assert.match(confirm, /No note is stored with the booking, and no payment is taken when you confirm\./);
   assert.doesNotMatch(html(h(ConfirmColumn, { expert: EXPERTS[0], slotState: SLOTS.e1, chosen, timeZone: 'UTC' })), /data-testid="button-confirm-booking"[^>]*disabled/);
   assert.match(html(h(ConfirmColumn, { expert: EXPERTS[0], slotState: SLOTS.e1, chosen: null, timeZone: 'UTC' })), /disabled=""[^>]*data-testid="button-confirm-booking"/);
@@ -431,7 +474,7 @@ test('the profile’s card hands the expert to the booking flow, which opens wit
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   const at = new URL(link.props.to, 'https://axal.vc');
   const landed = land({ pathname: at.pathname, search: at.search, state: link.props.state });
-  assert.match(landed, /4 · Confirm Expert Dr Ada Service Not recorded · 30 min When Choose a time Rate \$150 \/ hr/);
+  assert.match(landed, /4 · Confirm Expert Dr Ada Service A 30-minute session When Choose a time Rate \$150 \/ hr/);
   assert.match(land({ pathname: at.pathname, search: at.search }), /4 · Confirm Choose an expert and a time\./, 'no state: nothing to show before the directory loads');
   assert.match(land({ pathname: at.pathname, search: '?expert=e2', state: link.props.state }), /4 · Confirm Choose an expert and a time\./,
     'state naming someone the address does not: ignored');
@@ -467,9 +510,9 @@ test('the profile’s card is closed where the route would refuse, and the exper
   assert.ok(bookLink({ ...PROFILE, user_id: null }, FOUNDER), 'an expert with no account is booked like any other');
 });
 
-test('the profile’s services tab: not recorded and why, never "none listed", and nothing to pick', () => {
+test('the profile’s services tab: the list to read, "not read" for null, never "none listed" (D574)', () => {
   const gap = text(h(ServicesPanel, { services: null }));
-  assert.match(gap, /Services not recorded No route lists an expert’s services to members yet/);
+  assert.match(gap, /Services not read This expert’s services could not be read/);
   assert.doesNotMatch(gap, /No specific services|lists no services/);
   assert.match(text(h(ServicesPanel, { services: [] })), /This expert lists no services\./);
   const services = [
@@ -477,7 +520,7 @@ test('the profile’s services tab: not recorded and why, never "none listed", a
     { uid: 's2', title: 'Deep session', description: 'Fifty minutes', duration_minutes: 50, price_cents: 9000, currency: 'eur' },
   ];
   assert.match(text(h(ServicesPanel, { services })), /Intro call 25 min Free Deep session Fifty minutes 50 min .*90/);
-  assert.doesNotMatch(html(h(ServicesPanel, { services })), /<input/, 'the booking flow attaches no service, so none is picked here');
+  assert.doesNotMatch(html(h(ServicesPanel, { services })), /<input/, 'picked in the booking flow, not here');
 });
 
 test('the booking flow lists the expert a profile sent first, even outside the directory’s twelve', () => {
@@ -527,7 +570,8 @@ test('services: name, length, rate and an active switch, edited and deleted only
 
   const card = text(h(ServicesCard, { status: 'ready', services: [free, paid] }));
   assert.match(card, /Services 2 listed/);
-  assert.match(card, /Members do not see these services yet: no route lists them to members/);
+  assert.match(card, /Members see your active services when they book, or can book a plain 30-minute session\./, 'D574: the list reaches members');
+  assert.doesNotMatch(card, /do not see these services/);
   assert.match(text(h(ServicesCard, { status: 'ready', services: [] })), /No services yet\./);
   assert.match(text(h(ServicesCard, { status: 'unreadable', onRetry: () => {} })), /Your services could not be read\. This is not a sign that you have none\./);
   assert.match(html(h(ServicesCard, { status: 'ready', services: [], creating: true })), /data-testid="form-service-create"/);
@@ -541,7 +585,7 @@ const WINDOWS = [
   { uid: 'w5', day_of_week: 4, start_minute: 780, end_minute: 960, timezone: 'UTC' },
 ];
 const EXPERT_BOOKINGS = [
-  { uid: 'p1', status: 'scheduled', payment_status: 'free', scheduled_at: '2026-10-13T10:00:00.000Z', duration_minutes: 30, booker_name: 'Mina Founder', booker_note: 'PRIVATE NOTE', meet_link: 'https://meet.jit.si/axal-p1' },
+  { uid: 'p1', status: 'scheduled', payment_status: 'free', scheduled_at: '2026-10-13T10:00:00.000Z', duration_minutes: 30, booker_name: 'Mina Founder', booker_note: 'PRIVATE NOTE', meet_link: 'https://meet.jit.si/axal-p1', service_title: 'Intro call' },
   { uid: 'p2', status: 'confirmed', scheduled_at: '2026-10-01T10:00:00.000Z', duration_minutes: 30, booker_name: 'Old Booker', booker_note: 'PRIVATE NOTE' },
   { uid: 'p3', status: 'requested', scheduled_at: null, duration_minutes: 30, booker_name: null, booker_note: 'PRIVATE NOTE' },
   { uid: 'p4', status: 'cancelled', scheduled_at: '2026-10-10T10:00:00.000Z', duration_minutes: 30, booker_name: 'Gone Away' },
@@ -580,7 +624,7 @@ test('the weekly grid: open, booked and closed from the stored windows, widened 
   assert.deepEqual(M.cellAction({ windows: exact, cells: grid.cells, day: 5, hour: 15, timeZone: 'UTC' }), { kind: 'close', uid: 'w6' }, 'unbooked, the same hour closes');
 });
 
-test('the availability card and grid: cells say what they are, and the expert is told members do not book from them', () => {
+test('the availability card and grid: cells say what they are, and the expert is told members book from them (D574)', () => {
   const grid = M.availabilityGrid({ windows: WINDOWS, bookings: EXPERT_BOOKINGS, timeZone: 'UTC', now: NOW });
   const markup = html(h(AvailabilityGrid, { grid }));
   assert.match(markup, /disabled=""[^>]*aria-label="Tuesday 10:00, booked"[^>]*data-state="booked"/);
@@ -590,7 +634,8 @@ test('the availability card and grid: cells say what they are, and the expert is
   assert.match(card, /Weekly availability Open Booked Closed/);
   assert.match(card, /Times in UTC\. Click a cell to open or close it\. Booked cells cannot be closed\./);
   assert.match(card, /Set in another time zone, not drawn above: Thu 10:00–11:00 \(Europe\/Paris\) Remove/);
-  assert.match(card, /Members are not offered these hours yet\. The slots they book from are weekday half-hours, 09:00 to 17:00 UTC/);
+  assert.match(card, /Members are offered half-hours inside these windows, read in each window’s own timezone\. With no window set, they are offered weekdays 09:00 to 17:00 UTC\./);
+  assert.doesNotMatch(card, /not offered these hours/);
   assert.match(html(h(AvailabilityCard, { status: 'loading' })), /animate-pulse/);
   assert.match(text(h(AvailabilityCard, { status: 'unreadable', onRetry: () => {} })), /Your weekly availability could not be read\. This is not a sign that every hour is closed\./);
 });
@@ -600,8 +645,8 @@ test('upcoming bookings: names and times only, never the note the route returns'
   const t = text(h(PracticeBookingsCard, { status: 'ready', bookings: EXPERT_BOOKINGS, now: NOW, timeZone: 'UTC' }));
   const markup = html(h(PracticeBookingsCard, { status: 'ready', bookings: EXPERT_BOOKINGS, now: NOW, timeZone: 'UTC' }));
   assert.match(t, /Upcoming bookings 2/);
-  assert.match(t, /Mina Founder Service not recorded Tue 13 Oct · 10:00 30 min Scheduled Confirm Cancel/);
-  assert.match(t, /Name not recorded Service not recorded Time not recorded 30 min Requested Confirm Cancel/);
+  assert.match(t, /Mina Founder Intro call Tue 13 Oct · 10:00 30 min Scheduled Confirm Cancel/);
+  assert.match(t, /Name not recorded No service chosen Time not recorded 30 min Requested Confirm Cancel/);
   assert.match(t, /Earlier bookings · 2/);
   assert.match(t, /Old Booker .* Confirmed Cancel Mark completed/);
   assert.match(t, /Gone Away .* Cancelled/);
