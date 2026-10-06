@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Pill, SectionLabel, Unrecorded } from '../../../ui';
-import { PAYOUT_CURRENCY_GAP, currencyOf, formatMoney } from '../../../lib/partnerEarnings';
+import { PAYOUT_CURRENCY_GAP, currencyOf, formatMoney, payoutCurrency } from '../../../lib/partnerEarnings';
 
 /**
  * The pieces the four earnings screens and the admin commissions console
@@ -33,9 +33,13 @@ export function Money({ cents, currency, className = '', noCurrencyReason = 'The
   );
 }
 
-/** A payout's amount. Its row's currency is the table default, not a record (`PAYOUT_CURRENCY_GAP`). */
-export function PayoutMoney({ cents, className = '' }) {
-  return <Money cents={cents} currency={null} noCurrencyReason={PAYOUT_CURRENCY_GAP} className={className} />;
+/**
+ * A payout's amount, in the currency the payout recorded (`payoutCurrency`).
+ * A payout from before D572 recorded none: its row holds the table default,
+ * which is not shown as a fact (`PAYOUT_CURRENCY_GAP`).
+ */
+export function PayoutMoney({ payout, className = '' }) {
+  return <Money cents={payout?.amount_cents} currency={payoutCurrency(payout)} noCurrencyReason={PAYOUT_CURRENCY_GAP} className={className} />;
 }
 
 /**

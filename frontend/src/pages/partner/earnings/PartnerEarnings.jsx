@@ -9,7 +9,7 @@ import { Field, StatedLimit, inputClass } from '../kit';
 import {
   COMMISSION_STATUS, EARNINGS_AREA, PAYOUT_CURRENCY_GAP, PAYOUT_METHODS, PAYOUT_MIN_CENTS, PAYOUT_STATUS, PERIODS,
   dayOf, filterCommissions, formatMoney, payoutDetails, payoutOptions, payoutRequestBody,
-  payoutsInFlight, sourceLabel, sourcesIn, statusOf, totalsByStatus, currencyOf,
+  payoutClaims, payoutsInFlight, sourceLabel, sourcesIn, statusOf, totalsByStatus,
 } from '../../../lib/partnerEarnings';
 import {
   ConfirmPanel, Money, MoneyLines, Panel, PayoutMoney, RowTable, StatusPill, UnreadableValue, WriteNote, ghostButton, primaryButton,
@@ -74,12 +74,15 @@ export function EarningsTotals({ commissions, payouts }) {
           : payouts.status === 'unreadable' ? <UnreadableValue reason="The payout history could not be read." testid="total-in-flight-unreadable" />
             : flight?.count ? (
               <span className="flex flex-col gap-0.5" data-testid="total-in-flight">
-                <span className="text-[17px] font-semibold tabular-nums text-axal-ink dark:text-gray-100">
+                {flight.sums.length ? <MoneyLines sums={flight.sums} testid="total-in-flight-sums" /> : null}
+                <span className={flight.sums.length ? 'text-[11.5px] tabular-nums text-axal-muted dark:text-gray-400' : 'text-[17px] font-semibold tabular-nums text-axal-ink dark:text-gray-100'}>
                   {flight.count} request{flight.count === 1 ? '' : 's'}
                 </span>
-                <span className="text-[11px] leading-snug text-axal-muted dark:text-gray-400">
-                  Not added up: <Unrecorded reason={PAYOUT_CURRENCY_GAP}>a payout’s currency is not recorded</Unrecorded>
-                </span>
+                {flight.apart ? (
+                  <span className="text-[11px] leading-snug text-axal-muted dark:text-gray-400" data-testid="total-in-flight-apart">
+                    {flight.apart === flight.count ? 'Not added up' : `${flight.apart} not added up`}: <Unrecorded reason={PAYOUT_CURRENCY_GAP}>requested before payouts recorded their currency</Unrecorded>
+                  </span>
+                ) : null}
               </span>
             ) : <span className="text-[12.5px] text-axal-muted" data-testid="total-in-flight">No request open</span>}
       </Tile>
@@ -213,7 +216,9 @@ export function optionLabel(option, isAll) {
  */
 export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, result, onDraft, onReview, onConfirm, onCancel, formRef }) {
   const options = plan?.options || [];
-  const chosen = options[draft?.optionIndex ?? options.length - 1] || null;
+  const fallback = plan?.defaultIndex ?? options.length - 1;
+  const chosen = options[draft?.optionIndex ?? fallback] || null;
+  const held = (plan?.currencies || []).filter((c) => c.options.length);
   const method = PAYOUT_METHODS.find((m) => m.value === draft?.method) || null;
   let body;
   if (state === 'loading') body = <Skeleton.Text lines={3} />;
@@ -224,10 +229,10 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
   } else if (!options.length) {
     body = (
       <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="text-no-option">
-        {plan.stoppedAt === 'currency'
-          ? 'Your oldest accrued commissions are in more than one currency, and a request claims them oldest first in one currency only. None of the runs it could claim reaches the minimum.'
-          : plan.stoppedAt === 'amount'
-            ? 'One of your oldest accrued commissions has no readable amount, and a request claims them oldest first, so none can be built past it.'
+        {plan.stoppedAt === 'amount'
+          ? 'One of your oldest accrued commissions has no readable amount, and a request claims them oldest first, so none can be built past it.'
+          : plan.currencies?.length > 1
+            ? `In each currency you hold (${plan.currencies.map((c) => c.currency || 'one not recorded').join(', ')}), your accrued commissions do not yet reach the minimum a request takes.`
             : `Your accrued commissions do not yet reach the minimum a request takes: ${formatMoney(PAYOUT_MIN_CENTS, plan.currency)}${plan.currency ? ` ${plan.currency}` : ''}.`}
       </p>
     );
@@ -240,7 +245,7 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
         rows={[
           ['Amount', money],
           ['Method', method.label],
-          ['Claims', `the ${chosen.count === 1 ? 'oldest accrued commission' : `${chosen.count} oldest accrued commissions`}`],
+          ['Claims', `the ${chosen.count === 1 ? 'oldest accrued commission' : `${chosen.count} oldest accrued commissions`}${held.length > 1 && chosen.currency ? ` in ${chosen.currency}` : ''}`],
           ...(String(draft?.note ?? '').trim() ? [['Note', String(draft.note).trim()]] : []),
         ]}
         consequence={`The ${chosen.count === 1 ? 'commission it claims is' : `${chosen.count} commissions it claims are`} marked Paid as soon as the request is recorded. The payout stays Requested until an admin processes it, and nothing on this page sends money.`}
@@ -253,10 +258,24 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
   } else {
     body = (
       <div className="space-y-3">
-        <Field label="Amount" hint="A request claims whole commissions, oldest first, so these are the amounts it can take.">
-          <select className={inputClass} value={String(draft?.optionIndex ?? options.length - 1)}
+        <Field
+          label="Amount"
+          hint={held.length > 1
+            ? 'A request claims one currency, and whole commissions in it, oldest first. These are the amounts it can take in each.'
+            : 'A request claims whole commissions, oldest first, so these are the amounts it can take.'}
+        >
+          <select className={inputClass} value={String(draft?.optionIndex ?? fallback)}
             onChange={(e) => onDraft?.({ optionIndex: Number(e.target.value) })} data-testid="select-payout-amount">
-            {options.map((o, i) => <option key={o.count} value={String(i)}>{optionLabel(o, i === options.length - 1 && o.count === plan.accruedCount)}</option>)}
+            {held.length > 1
+              ? held.map((c) => (
+                <optgroup key={c.currency || 'none'} label={c.currency || 'Currency not recorded'}>
+                  {c.options.map((o) => {
+                    const i = options.indexOf(o);
+                    return <option key={`${o.currency}-${o.count}`} value={String(i)}>{optionLabel(o, o.all)}</option>;
+                  })}
+                </optgroup>
+              ))
+              : options.map((o, i) => <option key={`${o.currency}-${o.count}`} value={String(i)}>{optionLabel(o, o.all)}</option>)}
           </select>
         </Field>
         <Field label="Method">
@@ -269,9 +288,9 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
           <input className={inputClass} value={draft?.note || ''} maxLength={500}
             onChange={(e) => onDraft?.({ note: e.target.value })} data-testid="input-payout-note" />
         </Field>
-        {plan.stoppedAt === 'currency' ? (
-          <p className="text-[11.5px] leading-relaxed text-axal-muted" data-testid="text-currency-stop">
-            Only your oldest commissions in {currencyOf(chosen?.currency) || 'one currency'} are offered: the next one is in another currency, and one request covers one currency.
+        {plan.stoppedAt === 'amount' ? (
+          <p className="text-[11.5px] leading-relaxed text-axal-muted" data-testid="text-amount-stop">
+            One of your accrued commissions has no readable amount, so the amounts stop before it.
           </p>
         ) : null}
         <div className="flex justify-end">
@@ -310,11 +329,13 @@ export function PayoutHistory({ state, rows, onRetry }) {
           const details = payoutDetails(p?.payout_details);
           const requested = dayOf(p?.created_at);
           const completed = dayOf(p?.completed_at);
+          const failed = dayOf(p?.failed_at);
+          const claims = payoutClaims(p);
           return (
             <li key={p.id} className="space-y-1 px-4 py-2.5" data-testid={`row-payout-${p.id}`}>
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px]">
                 <span className="flex flex-wrap items-center gap-2">
-                  <PayoutMoney cents={p?.amount_cents} />
+                  <PayoutMoney payout={p} />
                   {method ? <span className="text-axal-muted">{method}</span> : <Unrecorded>Method not recorded</Unrecorded>}
                   <StatusPill status={status} />
                 </span>
@@ -323,12 +344,19 @@ export function PayoutHistory({ state, rows, onRetry }) {
                   {status.key === 'completed'
                     ? <> · {completed ? `completed ${completed}` : <Unrecorded>completion date not recorded</Unrecorded>}</>
                     : null}
+                  {status.key === 'failed'
+                    ? <> · {failed ? `failed ${failed}` : <Unrecorded reason="Failed before payouts recorded the day they failed.">the day it failed is not recorded</Unrecorded>}</>
+                    : null}
                 </span>
               </div>
               {status.key === 'failed' ? (
                 <p className="text-[12px] text-red-700 dark:text-red-300" data-testid={`text-payout-reason-${p.id}`}>
                   {String(p?.failure_reason ?? '').trim() || <Unrecorded>No reason recorded</Unrecorded>}
-                  <span className="text-axal-muted"> · the day it failed is not recorded</span>
+                  <span className="text-axal-muted" data-testid={`text-payout-returned-${p.id}`}>
+                    {claims
+                      ? ` · ${claims.length === 1 ? 'its commission went' : `its ${claims.length} commissions went`} back to Accrued when it failed`
+                      : ' · requested before payouts recorded their commissions, so none went back to Accrued'}
+                  </span>
                 </p>
               ) : null}
               {details ? (
@@ -386,7 +414,7 @@ export default function PartnerEarnings() {
   const plan = useMemo(() => payoutOptions(rows), [rows]);
   useEffect(() => { setShown(PAGE); }, [status, source, period, query]);
 
-  const chosen = plan.options[draft.optionIndex ?? plan.options.length - 1] || null;
+  const chosen = plan.options[draft.optionIndex ?? plan.defaultIndex ?? plan.options.length - 1] || null;
   const review = () => { setResult(null); setStage('confirm'); };
   const cancel = () => setStage('form');
   const confirm = async () => {
@@ -479,7 +507,7 @@ export default function PartnerEarnings() {
         </div>
         <StatedLimit title="What this page does not claim">
           <p><strong>Paid means claimed by a payout request.</strong> The ledger marks a commission Paid the moment a request claims it, before any money moves. The payout’s own status says whether it was settled.</p>
-          <p className="mt-2"><strong>A payout does not list its commissions.</strong> Nothing links a commission to the payout that claimed it, and a failed payout does not return its commissions to Accrued.</p>
+          <p className="mt-2"><strong>Older payouts recorded less.</strong> A payout requested before payouts recorded their currency and their commissions shows no currency, and if it fails, none of its commissions go back to Accrued. Since then, a failed payout returns them.</p>
           <p className="mt-2"><strong>Totals are per currency.</strong> Amounts in different currencies are never added together, and a request covers one currency.</p>
         </StatedLimit>
       </div>

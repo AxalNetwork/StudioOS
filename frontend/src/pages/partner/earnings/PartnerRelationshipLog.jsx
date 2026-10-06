@@ -6,7 +6,7 @@ import { titleCase } from '../../../lib/absence';
 import { Card, EmptyState, Pill, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../../../ui';
 import WorkspaceShell from '../../../workspaces/WorkspaceShell';
 import { Field, StatedLimit, inputClass } from '../kit';
-import { INTERACTION_KINDS, RELATIONSHIP_TYPES, dayOf, interactionBody, timeline } from '../../../lib/partnerEarnings';
+import { INTERACTION_KINDS, OUTCOME_MAX, RELATIONSHIP_TYPES, dayOf, interactionBody, timeline } from '../../../lib/partnerEarnings';
 import { Panel, WriteNote, primaryButton } from './parts';
 
 /**
@@ -148,6 +148,11 @@ export function RelationshipTimeline({ events, interactions, onRetry, onLog }) {
                 {e.detail
                   ? <p className={`mt-1 whitespace-pre-line text-[13px] leading-relaxed text-axal-muted dark:text-gray-400 ${e.voided ? 'line-through' : ''}`}>{e.detail}</p>
                   : (e.kind === 'interaction' ? <p className="mt-1"><Unrecorded reason="Logged with a date and no note.">No note</Unrecorded></p> : null)}
+                {e.outcome ? (
+                  <p className={`mt-1 text-[12.5px] text-axal-ink dark:text-gray-200 ${e.voided ? 'line-through' : ''}`} data-testid={`outcome-${e.key}`}>
+                    <span className="font-semibold">Outcome:</span> {e.outcome}
+                  </p>
+                ) : null}
                 {e.by ? <p className="mt-0.5 text-[11px] text-axal-faint">Logged by {e.by}</p> : null}
               </li>
             ))}
@@ -189,9 +194,13 @@ export function LogInteractionForm({ draft, busy, result, closed, onDraft, onSub
                   <input className={inputClass} type="time" value={draft.time} onChange={(e) => onDraft?.({ time: e.target.value })} data-testid="input-interaction-time" />
                 </Field>
               </div>
-              <Field label="Summary" hint="One or two lines. The log keeps what you write here and the type, date and time; it has no outcome field.">
+              <Field label="Summary" hint="One or two lines: what was said or done.">
                 <textarea className={inputClass} rows={3} maxLength={2000} value={draft.note}
                   onChange={(e) => onDraft?.({ note: e.target.value })} data-testid="input-interaction-note" />
+              </Field>
+              <Field label="Outcome" hint={`Optional: how it went, in a line. At most ${OUTCOME_MAX} characters.`}>
+                <input className={inputClass} maxLength={OUTCOME_MAX} value={draft.outcome || ''}
+                  onChange={(e) => onDraft?.({ outcome: e.target.value })} data-testid="input-interaction-outcome" />
               </Field>
               <div className="flex justify-end">
                 <button type="submit" className={primaryButton('partner')} disabled={busy} data-testid="button-log-interaction">
@@ -207,7 +216,7 @@ export function LogInteractionForm({ draft, busy, result, closed, onDraft, onSub
   );
 }
 
-const EMPTY_DRAFT = { kind: 'call', date: '', time: '', note: '' };
+const EMPTY_DRAFT = { kind: 'call', date: '', time: '', note: '', outcome: '' };
 
 export default function PartnerRelationshipLog() {
   const { id } = useParams();
@@ -286,7 +295,6 @@ export default function PartnerRelationshipLog() {
           coverageNote={coverage.length ? undefined : 'Nothing has been read yet, so there is nothing to report.'}
           unavailable={[
             ['Next step', 'Eadwyn drafts no next message here yet: no draft surface reads this log.'],
-            ['Outcome', 'An interaction is stored with a type, a date and a note, and no outcome.'],
           ]}
         />
       )}
@@ -315,7 +323,7 @@ export default function PartnerRelationshipLog() {
         </div>
         <StatedLimit title="What this page does not claim">
           <p><strong>Only this relationship’s own records.</strong> A commission or an introduction is not linked to a relationship, so neither appears on this timeline.</p>
-          <p className="mt-2"><strong>No outcome.</strong> The interaction log keeps a type, a date and a note; there is nowhere to record how it went apart from the note.</p>
+          <p className="mt-2"><strong>Outcomes are what was written.</strong> An interaction logged before outcomes were kept has none, and an outcome is never inferred from the note.</p>
         </StatedLimit>
       </div>
     </WorkspaceShell>
