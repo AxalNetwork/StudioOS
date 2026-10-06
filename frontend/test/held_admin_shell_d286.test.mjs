@@ -168,24 +168,26 @@ test('off a branch, Studio card Open links are the S20 rows and never /branch/*'
  * S22 — the sixteen lanes
  * ------------------------------------------------------------------ */
 
+// D555 — the State column is read: each laned queue's pending count and
+// oldest age (`LaneState`), and "No queue" for the four with no pending notion.
 const S22_LANES = [
-  [1, 'Core', 'LP applications', '/admin/lp-applications', 'Links to its console'],
-  [2, 'Core', 'Referrals', '/admin/refer-earn', 'Links to its console'],
-  [3, 'Core', 'Cohort applications', '/admin/spinout-lab', 'Links to its console'],
+  [1, 'Core', 'LP applications', '/admin/lp-applications', '<LaneState glance={glance} laneKey="lp" />'],
+  [2, 'Core', 'Referrals', '/admin/refer-earn', '<LaneState glance={glance} laneKey="referrals" />'],
+  [3, 'Core', 'Cohort applications', '/admin/spinout-lab', '<LaneState glance={glance} laneKey="cohort" />'],
   // D506 — lane 4 links the console D442 built; HQ-held accounts reach held cases from here.
-  [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', 'Links to its console'],
+  [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', '<LaneState glance={glance} laneKey="moderation" />'],
   [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
-  [6, 'Absorbed', 'KYC', '/admin?tab=kyc', 'Links to its console'],
-  [7, 'Absorbed', 'Partner profiles', '/admin?tab=profiles', 'Links to its console'],
-  [8, 'Absorbed', 'Directory', '/admin?tab=directory', 'Links to its console'],
-  [9, 'Absorbed', 'Exploring', '/admin/exploring', 'Links to its console'],
-  [10, 'Absorbed', 'Jobs', '/admin/jobs', 'Links to its console'],
-  [11, 'Absorbed', 'Events', '/admin/events', 'Links to its console'],
-  [12, 'Absorbed', 'Circles', '/admin/circles', 'Links to its console'],
-  [13, 'Absorbed', 'Partner invitations', '/admin/partners', 'Links to its console'],
-  [14, 'Absorbed', 'Best-Fit', '/admin/best-fit', 'Links to its console'],
-  [15, 'Absorbed', 'Due diligence', '/admin/due-diligence', 'Links to its console'],
-  [16, 'Absorbed', 'Advisor cohort access', '/admin/advisor-cohorts', 'Links to its console'],
+  [6, 'Absorbed', 'KYC', '/admin?tab=kyc', '<LaneState glance={glance} laneKey="kyc" />'],
+  [7, 'Absorbed', 'Partner profiles', '/admin?tab=profiles', '<LaneState glance={glance} laneKey="partner_profiles" />'],
+  [8, 'Absorbed', 'Directory', '/admin?tab=directory', '<LaneState glance={glance} noQueue="Directory" />'],
+  [9, 'Absorbed', 'Exploring', '/admin/exploring', '<LaneState glance={glance} laneKey="exploring" />'],
+  [10, 'Absorbed', 'Jobs', '/admin/jobs', '<LaneState glance={glance} laneKey="jobs" />'],
+  [11, 'Absorbed', 'Events', '/admin/events', '<LaneState glance={glance} laneKey="events" />'],
+  [12, 'Absorbed', 'Circles', '/admin/circles', '<LaneState glance={glance} noQueue="Circles" />'],
+  [13, 'Absorbed', 'Partner invitations', '/admin/partners', '<LaneState glance={glance} noQueue="Partner invitations" />'],
+  [14, 'Absorbed', 'Best-Fit', '/admin/best-fit', '<LaneState glance={glance} laneKey="best_fit" />'],
+  [15, 'Absorbed', 'Due diligence', '/admin/due-diligence', '<LaneState glance={glance} laneKey="due_diligence" />'],
+  [16, 'Absorbed', 'Advisor cohort access', '/admin/advisor-cohorts', '<LaneState glance={glance} noQueue="Advisor cohort access" />'],
 ];
 
 /** The lanes as the JSX draws them: one `<tr data-lane>` each, cells in S22's order. */
@@ -240,9 +242,10 @@ test('Programs links its five consoles; Accounts links the Users table, Explorin
     ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
 });
 
-test('Insights carries S20\'s sentence verbatim and links nowhere', () => {
-  assert.ok(SRC[LANDINGS.Insights].includes('No console fits yet for HQ-held accounts. This row will hold the territory '));
-  assert.ok(SRC[LANDINGS.Insights].includes('benchmark and activity funnel once there is a store for these accounts. It does not borrow an HQ-only page.'));
+test('Insights draws HQ\'s figures (D555), not S20\'s sentence, and links nowhere', () => {
+  // D555 replaced S20's "No console fits yet" with the figures the owner asked for.
+  assert.doesNotMatch(SRC[LANDINGS.Insights], /No console fits yet for HQ-held accounts/);
+  assert.match(SRC[LANDINGS.Insights], /useHeldGlance\(\)/);
   assert.doesNotMatch(CODE[LANDINGS.Insights], /<Link\b|\bto="\//, 'Insights borrowed a page');
   assert.doesNotMatch(CODE[LANDINGS.Insights], /admin\/analytics|branch\/insights/, 'Insights borrowed an HQ-only or branch page');
 });

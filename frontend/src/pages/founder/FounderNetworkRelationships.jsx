@@ -4,7 +4,7 @@ import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'luc
 import { api } from '../../lib/api';
 import { NOT_RECORDED, text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
-import { daysSince, isCold } from '../../lib/networkBook';
+import { STRENGTHS, daysSince, followUp, isCold, lastNote, organizationOf, strengthLabel } from '../../lib/networkBook';
 import './founderNetworkRelationships.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
@@ -15,6 +15,46 @@ const list = (value, ...keys) => {
   return [];
 };
 const title = (value) => titleCase(value) || NOT_RECORDED;
+/**
+ * One contact's strength and organisation, edited in place (D551). Saves
+ * through `PUT /api/contacts/:uid`, which only the contact's owner may call;
+ * a failed save says so and keeps what was stored.
+ */
+/** What a save sends: a blank clears the value (null), never an empty string. */
+export const profileBody = (strength, organization) => ({
+  strength: strength || null,
+  organization: String(organization || '').trim() || null,
+});
+
+export function ContactProfileEditor({ row, onSaved, save = (uid, body) => api.contactUpdate(uid, body) }) {
+  const [strength, setStrength] = useState(row.strength || '');
+  const [organization, setOrganization] = useState(organizationOf(row));
+  const [state, setState] = useState('idle');
+  const dirty = strength !== (row.strength || '') || organization.trim() !== organizationOf(row);
+  const submit = async (event) => {
+    event.preventDefault();
+    setState('saving');
+    try {
+      const fresh = await save(row.uid, profileBody(strength, organization));
+      setState('saved');
+      onSaved?.(fresh);
+    } catch {
+      setState('failed');
+    }
+  };
+  return <form className="fn-rel-edit" onSubmit={submit} data-testid={`form-contact-profile-${row.id || row.uid}`}>
+    <select aria-label={`Strength for ${text(row.name, 'this contact')}`} value={strength} onChange={(e) => { setStrength(e.target.value); setState('idle'); }}>
+      <option value="">Not recorded</option>
+      {STRENGTHS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+    </select>
+    <input aria-label={`Organization for ${text(row.name, 'this contact')}`} value={organization} placeholder="Organization" maxLength={200}
+      onChange={(e) => { setOrganization(e.target.value); setState('idle'); }} />
+    <button type="submit" disabled={!dirty || state === 'saving'}>{state === 'saving' ? 'Saving…' : 'Save'}</button>
+    {state === 'failed' ? <small className="is-cold" role="alert">Not saved. The stored values are unchanged.</small> : null}
+    {state === 'saved' ? <small role="status">Saved</small> : null}
+  </form>;
+}
+
 const lastTouch = (value) => {
   const days = daysSince(value);
   if (days === null) return 'Not recorded';
@@ -93,22 +133,25 @@ export default function FounderNetworkRelationships({ embedded = false, role = '
     {status === 'loading' && <RelationshipSkeleton />}
     {status === 'empty' && <NoProject />}
     {status === 'error' && !project && <NoProject error />}
-    {status === 'ready' && project && <><div className="fn-rel-context"><div><span>Selected startup</span><strong data-testid="text-network-relationships-project">{text(project.name)}</strong><small>{text(project.sector, 'Sector not recorded')}</small></div><div><span>Source</span><strong>Project-linked authorized contacts</strong><small>Strength, notes and reminders are not exposed</small></div></div>
+    {status === 'ready' && project && <><div className="fn-rel-context"><div><span>Selected startup</span><strong data-testid="text-network-relationships-project">{text(project.name)}</strong><small>{text(project.sector, 'Sector not recorded')}</small></div><div><span>Source</span><strong>Project-linked authorized contacts</strong><small>Strength and organization as you set them; follow-ups from each contact's tasks</small></div></div>
       {/* THE FOUR CHIPS MOVED UP INTO THE ZONE HEADER ROW, which is where the
           canvas draws them and where the ops half already sat. Same four
           labels, same four predicates, one row instead of two. What stays here
           is the link out, which is navigation rather than a view. */}
       <div className="fn-rel-tabs"><Link data-testid="link-open-network-relationships-workspace" to={`/network?mode=workspace&tab=contacts&project_id=${project.id}`}>Open contacts <ChevronRight size={13} /></Link></div>
-      <div className="fn-rel-stats"><Stat label="In the book" value={contacts.length} note={`${knownTypes.size} recorded type${knownTypes.size === 1 ? '' : 's'}`} /><Stat label="Strong" value="Unavailable" note="No relationship strength source" muted /><Stat label="Going cold" value={cold.length} note="Past 60 days of explicit activity" /><Stat label="Coldest" value={cold.length ? `${Math.max(...cold.map((row) => daysSince(row.last_activity_at)))} d` : 'Unavailable'} note={cold.length ? 'From stored last activity' : 'No cold relationship recorded'} muted={!cold.length} /></div>
-      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>The book</h2></div><span>Cold flag uses explicit last activity only</span></div><RelationshipTable rows={visible} /><p className="fn-rel-note">Contact status is not relationship strength. A contact is flagged going cold when `last_activity_at` is more than 60 days old — and that column is stamped when the contact is created, so a record nobody has touched ages into this set on its 61st day. The flag is honest about the column it reads; the column does not yet distinguish a touch from an arrival.</p></section>
-      <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Relationship intelligence</h2></div><span>Unavailable</span></div><strong>No project-scoped relationship history is connected.</strong><p>Notes, reminders, organization membership, strength scoring, and message context require a dedicated relationship-book source. FN1 does not derive them from email domains, lead status, landing pages, or contact age.</p></section>
+      <div className="fn-rel-stats"><Stat label="In the book" value={contacts.length} note={`${knownTypes.size} recorded type${knownTypes.size === 1 ? '' : 's'}`} /><Stat label="Strong" value={contacts.filter((row) => row.strength === 'strong').length} note={`${contacts.filter((row) => !row.strength).length} not scored`} muted={!contacts.some((row) => row.strength === 'strong')} /><Stat label="Going cold" value={cold.length} note="Past 60 days of explicit activity" /><Stat label="Coldest" value={cold.length ? `${Math.max(...cold.map((row) => daysSince(row.last_activity_at)))} d` : 'Unavailable'} note={cold.length ? 'From stored last activity' : 'No cold relationship recorded'} muted={!cold.length} /></div>
+      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>The book</h2></div><span>Cold flag uses explicit last activity only</span></div><RelationshipTable rows={visible} onSaved={(fresh) => setContacts((all) => all.map((row) => (row.uid === fresh?.uid ? { ...row, ...fresh } : row)))} /><p className="fn-rel-note">Contact status is not relationship strength. A contact is flagged going cold when `last_activity_at` is more than 60 days old — and that column is stamped when the contact is created, so a record nobody has touched ages into this set on its 61st day. The flag is honest about the column it reads; the column does not yet distinguish a touch from an arrival.</p></section>
+      <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>What the book records</h2></div><span>Set by you</span></div><strong>Strength and organization are what you set on a contact; follow-ups and the last note come from its tasks and replies.</strong><p>None of them is derived from email domains, lead status, landing pages, or contact age. A contact nobody has scored reads Not recorded.</p></section>
     </>}
   </section>{!embedded && <RelationshipRail project={project} contacts={contacts} cold={cold} errors={errors} />}</div></main>;
 }
 
-function RelationshipTable({ rows }) {
+export function RelationshipTable({ rows, onSaved, save }) {
   if (!rows.length) return <div className="fn-rel-empty"><UsersRound size={18} /><div><strong>No matching project-linked contacts are recorded.</strong><p>This filter contains no stored relationship records.</p></div></div>;
-  return <div className="fn-rel-table-wrap"><table><thead><tr><th>Person</th><th>Context</th><th>Type</th><th>State</th><th>Last touch</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.uid || index} data-testid={`row-network-relationship-${row.id || index}`}><td><strong>{text(row.name, text(row.email, 'Name not recorded'))}</strong><small>{row.name && row.email ? row.email : 'Authorized contact'}</small></td><td>{text(row.landing_page_name, text(row.source, 'Context not recorded'))}</td><td>{title(row.audience)}</td><td><span className={isCold(row) ? 'is-cold' : ''}>{isCold(row) ? 'Going cold' : 'Not scored'}</span></td><td>{lastTouch(row.last_activity_at)}</td></tr>)}</tbody></table></div>;
+  return <div className="fn-rel-table-wrap"><table><thead><tr><th>Person</th><th>Context</th><th>Type</th><th>Strength</th><th>Last touch</th><th>Follow-up</th><th>Last note</th><th>Edit</th></tr></thead><tbody>{rows.map((row, index) => {
+    const due = followUp(row);
+    return <tr key={row.id || row.uid || index} data-testid={`row-network-relationship-${row.id || index}`}><td><strong>{text(row.name, text(row.email, 'Name not recorded'))}</strong><small>{organizationOf(row) || (row.name && row.email ? row.email : 'Authorized contact')}</small></td><td>{text(row.landing_page_name, text(row.source, 'Context not recorded'))}</td><td>{title(row.audience)}</td><td>{strengthLabel(row)}</td><td><span className={isCold(row) ? 'is-cold' : ''}>{lastTouch(row.last_activity_at)}{isCold(row) ? ' · going cold' : ''}</span></td><td><span className={due.state === 'overdue' ? 'is-cold' : ''}>{due.text}</span></td><td>{lastNote(row)}</td><td><ContactProfileEditor row={row} onSaved={onSaved} {...(save ? { save } : {})} /></td></tr>;
+  })}</tbody></table></div>;
 }
 function Stat({ label, value, note, muted }) { return <div className={muted ? 'is-muted' : ''}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function RelationshipRail({ project, contacts, cold, errors }) {
@@ -119,7 +162,7 @@ function RelationshipRail({ project, contacts, cold, errors }) {
     note="This view does not draft outreach, set reminders, add people, export contacts, or change records."
     coverage={[project ? text(project.name) : 'No project selected']}
     coverageNote={errors.includes('relationship contacts') ? 'Contact source unavailable.' : `${contacts.length} project-linked contact${contacts.length === 1 ? '' : 's'} · ${cold.length} going cold.`}
-    unavailable={[['Re-engagement lines', 'No message or discussion history is connected.'], ['Strength and reminders', 'No project-scoped relationship-book source exposes them.']]}
+    unavailable={[['Re-engagement lines', 'Drafted on the Network desk, from the replies a contact has logged.']]}
     footer="Read-only summary · no automated actions"
   />;
 }

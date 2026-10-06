@@ -281,6 +281,21 @@ export class UnfilledFieldsError extends Error {
   }
 }
 
+/**
+ * D416 — thrown by createAndSendEnvelope({ renderedBody }) before anything is
+ * written, when the rendered document is unusable (no title or no body) or is
+ * sent with `mergeFields`, which a finished document has no slots for. A
+ * typed error rather than a null return, because null already means "the send
+ * failed" and this is the caller's mistake, not the platform's.
+ */
+export class RenderedBodyError extends Error {
+  reason: 'missing_title' | 'missing_body' | 'merge_fields_with_rendered_body';
+  constructor(reason: RenderedBodyError['reason']) {
+    super('rendered_body_invalid');
+    this.reason = reason;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Internal helper exported for use from other routes (e.g. profiling/verify).
 // Returns { envelope_id, signing_url } or null on send failure.
@@ -323,6 +338,23 @@ export async function createAndSendEnvelope(
      * POST /send sets it; the operator flows keep their existing behaviour.
      */
     refuseUnfilled?: boolean;
+    /**
+     * D416 — AN ALREADY-RENDERED DOCUMENT, sent as it is. Per-party signing
+     * (D354) renders one agreement and sends it to each party, and every party
+     * must sign the same bytes: re-rendering per recipient from the template
+     * would merge each party's own name into `recipient_name` and give every
+     * signer a different document. With this set, the template lookup and the
+     * merge are skipped and the body is stored and hashed exactly as given, so
+     * each party's envelope carries the same `body_sha256`.
+     *
+     * Everything after the body is unchanged: the one-pending-send key, the
+     * recipients row in the same batch, the email, the audit trail. A body
+     * with a `{{token}}` still in it is refused (UnfilledFieldsError) whether
+     * or not `refuseUnfilled` is set — a finished document with a hole in it
+     * is never one the sender meant to send. `mergeFields` alongside it is
+     * refused (RenderedBodyError) rather than silently ignored.
+     */
+    renderedBody?: { title: string; body: string };
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
   await ensureSchema(env);
@@ -339,10 +371,22 @@ export async function createAndSendEnvelope(
   // `buildTemplateBody` placeholder. This makes the editable store the source
   // of truth for what is actually rendered into the signed envelope. The
   // lookup is `templateBodyFor`, which the preview route shares (D411).
-  const source = await templateBodyFor(env, opts.documentType);
+  const rendered = opts.renderedBody;
+  if (rendered !== undefined) {
+    if (!rendered || typeof rendered.title !== 'string' || !rendered.title.trim()) {
+      throw new RenderedBodyError('missing_title');
+    }
+    if (typeof rendered.body !== 'string' || !rendered.body.trim()) throw new RenderedBodyError('missing_body');
+    if (opts.mergeFields && Object.keys(opts.mergeFields).length) {
+      throw new RenderedBodyError('merge_fields_with_rendered_body');
+    }
+  }
+  const source = rendered ? null : await templateBodyFor(env, opts.documentType);
   let tpl: AgreementTemplate;
   const appliedMergeKeys: string[] = [];
-  if (source) {
+  if (rendered) {
+    tpl = { title: rendered.title.trim(), body: rendered.body };
+  } else if (source) {
     // Y-1 markdown — `renderLegalTemplate` already does {{key}}
     // substitution. We always seed a sane set of default merge values
     // (recipient_name/email + effective_date) and let the caller
@@ -442,7 +486,7 @@ export async function createAndSendEnvelope(
       appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
     }
   }
-  if (opts.refuseUnfilled) {
+  if (opts.refuseUnfilled || rendered) {
     const left = [...mergeTokensIn(tpl.body)];
     if (left.length) throw new UnfilledFieldsError(left);
   }
@@ -583,7 +627,7 @@ export async function createAndSendEnvelope(
           signer_email: null,
           action: 'envelope_created',
           ip: opts.actorIp || 'admin',
-          meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id },
+          meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
         });
         return {
           envelope_id: envelopeId,
@@ -626,7 +670,10 @@ export async function createAndSendEnvelope(
     signer_email: null,
     action: 'envelope_created',
     ip: opts.actorIp || 'admin',
-    meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail },
+    // D416 — which path produced the body, because "rendered by the caller"
+    // and "rendered here from the template" are different claims about who
+    // decided the document's words.
+    meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
   });
 
   const emailSent = await sendAgreementAssignedEmail(
