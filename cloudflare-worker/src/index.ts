@@ -191,6 +191,8 @@ import learningRoutes from './routes/learning';
 import adminLearningRoutes from './routes/admin_learning';
 import learningAssessmentRoutes from './routes/learning_assessment';
 import adminLearningAssessmentRoutes from './routes/admin_learning_assessment';
+import learningProgramsRoutes from './routes/learning_programs';
+import adminLearningProgramsRoutes from './routes/admin_learning_programs';
 import learningWebinarsRoutes from './routes/learning_webinars';
 import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
 import adminHq from './routes/admin_hq';
@@ -808,6 +810,8 @@ app.route('/api/admin/telegram', adminTelegram);
 app.route('/api/admin/learning', adminLearningRoutes);
 // D559 (#1160) — authoring exercises and exams, and reviewing submissions.
 app.route('/api/admin/learning', adminLearningAssessmentRoutes);
+// D558 (#1159) — authoring programs: contents, assigned admins, enrolments.
+app.route('/api/admin/learning', adminLearningProgramsRoutes);
 // D560 (#1161) — authoring webinars: schedule, publish, cancel, recording, attendance.
 app.route('/api/admin/learning', adminLearningWebinarsRoutes);
 // User-facing Telegram channel join request — pings the studio Slack
@@ -1098,6 +1102,8 @@ app.route('/api/community-tasks', communityTasksRoutes);
 app.route('/api/learning', learningRoutes);
 // D559 (#1160) — exercises and exams, graded on the server.
 app.route('/api/learning', learningAssessmentRoutes);
+// D558 (#1159) — programs: self-enrolment, and the assigned admin's read-only learner view.
+app.route('/api/learning', learningProgramsRoutes);
 // D560 (#1161) — webinars: registration within capacity, a time-gated join link, recordings.
 app.route('/api/learning', learningWebinarsRoutes);
 app.route('/api/cofounder', cofounderRoutes);

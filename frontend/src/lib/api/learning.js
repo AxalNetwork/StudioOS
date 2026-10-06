@@ -37,6 +37,16 @@ export const learningApi = {
   reviewSubmissions: (exerciseUid) => request(`/learning/review/exercises/${encodeURIComponent(exerciseUid)}/submissions`),
   reviewAttempts: (examUid) => request(`/learning/review/exams/${encodeURIComponent(examUid)}/attempts`),
 
+  // D558 — programs. A member lists the open ones and self-enrols into one;
+  // an assigned admin follows their programs' learners, read-only.
+  programs: () => request('/learning/programs'),
+  myEnrolledPrograms: () => request('/learning/programs/enrolled'),
+  program: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}`),
+  enrolInProgram: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}/enrol`, { method: 'POST' }),
+  assignedPrograms: () => request('/learning/programs/mine'),
+  programLearners: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}/learners`),
+  programLearner: (uid, userUid) => request(`/learning/programs/${encodeURIComponent(uid)}/learners/${encodeURIComponent(userUid)}`),
+
   // D560 — webinars. `join_url` arrives only for a registered member, from 15
   // minutes before the start until the end; a list never carries it.
   webinars: (when = 'upcoming') => request(`/learning/webinars?when=${encodeURIComponent(when)}`),

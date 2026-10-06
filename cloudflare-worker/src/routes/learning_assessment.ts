@@ -27,7 +27,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError, newUid } from './_t13t14t15_helpers';
-import { canSeeLearning, canReadLearnerWork, canReviewLearning } from '../services/learningAccess';
+import { canSeeLearning, canReadLearnerWork, canReviewLearning, enrolledSql } from '../services/learningAccess';
 import {
   deadlineMs, grade, memberQuestion, normaliseAnswers, revealed, shuffled, SUBMIT_GRACE_SECONDS, type StoredQuestion,
 } from '../services/learningAssessment';
@@ -43,7 +43,9 @@ const nowIso = () => new Date().toISOString();
 
 // ---- exercises -----------------------------------------------------------------------
 
-const EXERCISE_SQL = 'SELECT id, uid, title, instructions, submission_kind, checklist_json, visibility, status, published_at FROM learning_exercises WHERE uid = ?';
+// `enrolled` (D558) binds the caller's id first, then the uid.
+const EXERCISE_SQL = 'SELECT id, uid, title, instructions, submission_kind, checklist_json, visibility, status, published_at, '
+  + enrolledSql('exercise', 'learning_exercises.uid') + ' AS enrolled FROM learning_exercises WHERE uid = ?';
 
 function exerciseView(x: any) {
   let checklist: string[] | null = null;
@@ -55,7 +57,7 @@ const SUBMISSION_COLS = 'uid, body, status, feedback, submitted_at, reviewed_at'
 
 r.get('/exercises/:uid', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
-  const ex = await c.env.DB.prepare(EXERCISE_SQL).bind(c.req.param('uid')).first<any>();
+  const ex = await c.env.DB.prepare(EXERCISE_SQL).bind(user.id, c.req.param('uid')).first<any>();
   if (!ex || !canSeeLearning(user, ex)) return refuse(c, 404, { code: 'not_found', message: 'No such exercise.' });
   const subs = await c.env.DB.prepare(
     'SELECT ' + SUBMISSION_COLS + ' FROM learning_exercise_submissions WHERE exercise_id = ? AND user_id = ? ORDER BY id DESC LIMIT 50',
@@ -65,7 +67,7 @@ r.get('/exercises/:uid', async (c) => {
 
 r.post('/exercises/:uid/submissions', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
-  const ex = await c.env.DB.prepare(EXERCISE_SQL).bind(c.req.param('uid')).first<any>();
+  const ex = await c.env.DB.prepare(EXERCISE_SQL).bind(user.id, c.req.param('uid')).first<any>();
   if (!ex || !canSeeLearning(user, ex)) return refuse(c, 404, { code: 'not_found', message: 'No such exercise.' });
   const b = await c.req.json().catch(() => ({} as any));
   let body: string;
@@ -99,7 +101,8 @@ r.post('/exercises/:uid/submissions', async (c) => {
 
 // ---- exams ---------------------------------------------------------------------------
 
-const EXAM_SQL = 'SELECT id, uid, title, intro, pass_mark_percent, time_limit_minutes, max_attempts, shuffle, reveal, visibility, status, published_at FROM learning_exams WHERE uid = ?';
+const EXAM_SQL = 'SELECT id, uid, title, intro, pass_mark_percent, time_limit_minutes, max_attempts, shuffle, reveal, visibility, status, published_at, '
+  + enrolledSql('exam', 'learning_exams.uid') + ' AS enrolled FROM learning_exams WHERE uid = ?';
 const QUESTIONS_SQL = 'SELECT uid, prompt, kind, options_json, correct_json, position FROM learning_exam_questions WHERE exam_id = ? ORDER BY position, id';
 
 function examIntro(x: any, questionCount: number) {
@@ -128,7 +131,7 @@ async function closeExpired(env: Env, exam: any, userId: number) {
 }
 
 async function visibleExam(c: C, user: any): Promise<any | Response> {
-  const exam = await c.env.DB.prepare(EXAM_SQL).bind(c.req.param('uid')).first<any>();
+  const exam = await c.env.DB.prepare(EXAM_SQL).bind(user.id, c.req.param('uid')).first<any>();
   if (!exam || !canSeeLearning(user, exam)) return refuse(c, 404, { code: 'not_found', message: 'No such exam.' });
   return exam;
 }

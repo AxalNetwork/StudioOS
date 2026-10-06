@@ -1,0 +1,25 @@
+/* D567: Ops canvas cards, with a phone stack and contained roster scrolling. */
+.evo { min-width: 0; color: #282332; }
+.evo-card { background: #fff; border: 1px solid #ececf1; border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.evo-card h2 { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+.evo-card p { margin: 8px 0; font-size: 12.5px; }
+.evo-grid { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 12px; align-items: start; }
+.evo-tabs, .evo-toolbar, .evo-pager { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.evo button, .evo-tabs a { border: 1px solid #ececf1; padding: 7px 10px; border-radius: 8px; font-size: 12px; }
+.evo button:disabled { opacity: .45; }
+.evo .evo-primary, .evo [aria-pressed=true], .evo [aria-current=page] { background: #7c3aed; color: #fff; }
+.evo input:not([type=radio]):not([type=checkbox]), .evo select { border: 1px solid #ececf1; border-radius: 8px; padding: 7px 10px; max-width: 100%; min-width: 0; }
+.evo form > label { display: block; margin: 10px 0; font-size: 13px; }
+.evo form > label > input:not([type=radio]):not([type=checkbox]) { display: block; width: 100%; margin-top: 4px; }
+.evo fieldset { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.evo fieldset label { font-size: 12px; }
+.evo-table-wrap { overflow-x: auto; }
+.evo table { width: 100%; font-size: 12px; text-align: left; }
+.evo th, .evo td { padding: 10px; border-bottom: 1px solid #ececf1; vertical-align: top; }
+.evo td input { display: block; margin: 5px 0; }
+.evo-agenda-row { padding: 12px 0; border-bottom: 1px solid #ececf1; }
+.evo [role=alert] { color: #9f1239; }
+.dark .evo { color: #e8e4ef; }
+.dark .evo-card { background: #18151f; border-color: #38313f; }
+.dark .evo input, .dark .evo select { background: #211c29; border-color: #38313f; }
+@media (max-width: 700px) { .evo-grid { grid-template-columns: minmax(0,1fr); } .evo-card { padding: 12px; } }

@@ -105,6 +105,8 @@ export function shapeAgendaItem(row: any) {
     speaker_user_id: row.speaker_user_id ?? null,
     speaker_name: row.speaker_name ?? null,
     speaker_title: row.speaker_title ?? null,
+    location_text: row.location_text ?? null,
+    location_url: row.location_url ?? null,
     display_order: Number(row.display_order || 0),
   };
 }
