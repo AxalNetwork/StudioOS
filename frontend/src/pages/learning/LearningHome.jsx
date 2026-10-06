@@ -424,7 +424,6 @@ export default function LearningHome({ gated, links = [] }) {
 
   return (
     <RailFrame
-      data-testid="learning-home"
       rail={(
         <WorkerRail
           workspace="Learning"
@@ -439,21 +438,24 @@ export default function LearningHome({ gated, links = [] }) {
             : [['Courses, videos, webinars, exercises and exams', NOT_LIVE_LINE]]}
         />
       )}
+      data-testid="learning-home"
     >
-      <LearningHomeView
-        gated={gated}
-        tab={tab}
-        onTab={onTab}
-        query={query}
-        onQuery={setQuery}
-        q={q}
-        articles={articles}
-        publications={publications}
-        events={events}
-        onArticlesPage={(step) => setPage((p) => Math.max(0, p + step))}
-        onRetry={{ article: retry('article'), publication: retry('publication'), event: retry('event') }}
-        links={links}
-      />
+      <div className="space-y-4">
+        <LearningHomeView
+          gated={gated}
+          tab={tab}
+          onTab={onTab}
+          query={query}
+          onQuery={setQuery}
+          q={q}
+          articles={articles}
+          publications={publications}
+          events={events}
+          onArticlesPage={(step) => setPage((p) => Math.max(0, p + step))}
+          onRetry={{ article: retry('article'), publication: retry('publication'), event: retry('event') }}
+          links={links}
+        />
+      </div>
     </RailFrame>
   );
 }

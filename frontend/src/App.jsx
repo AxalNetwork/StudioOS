@@ -54,6 +54,7 @@ import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
 import { LensProvider, useLensLocation } from './workspaces/lens';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
+import { RailStripSlot } from './ui/RailFrame';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
@@ -1004,6 +1005,40 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // syntax and a `.map` over data is not a door it can see; the guard holds
   // this markup equal to that list.
   const hqStrip = shellRole === 'super_admin' ? stripFor(location.pathname, location.search) : null;
+  // The strip is drawn above the page container, unless the page docks a
+  // Worker AI rail: then the rail's frame takes it into the top of its body,
+  // so the panel runs from the header rather than from under the strip
+  // (RailFrame's `RailStripSlot`). The frame says when it holds it.
+  const [stripInFrame, setStripInFrame] = useState(false);
+  const hqStripNav = (
+    <>
+      {hqStrip === 'Platform' && (
+        <HqSubNavStrip label="Platform">
+          <StripLink to="/admin/platform">Overview</StripLink>
+          <StripLink to="/admin/platform/switches">Switches</StripLink>
+          <StripLink to="/admin/platform/topology">Topology</StripLink>
+          <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
+          <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
+          <StripLink to="/admin?tab=payments">Payments</StripLink>
+          <StripLink to="/admin?tab=promos">Promo codes</StripLink>
+          <StripLink to="/monitoring">Monitoring</StripLink>
+          <StripLink to="/admin/telegram">Telegram</StripLink>
+        </HqSubNavStrip>
+      )}
+      {hqStrip === 'Content' && (
+        <HqSubNavStrip label="Content">
+          <StripLink to="/admin/content">Overview</StripLink>
+          <StripLink to="/admin/articles">Content queue</StripLink>
+          <StripLink to="/admin/publications">Publications</StripLink>
+          <StripLink to="/admin/assessment">Assessment Studio</StripLink>
+          <StripLink to="/admin?tab=personas">Personas</StripLink>
+          <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
+          <StripLink to="/admin/team">Public team page</StripLink>
+        </HqSubNavStrip>
+      )}
+    </>
+  );
+  const railStrip = hqStrip ? { strip: hqStripNav, inFrame: stripInFrame, dock: setStripInFrame } : null;
   // D287 / S21 — read only where the strip could apply: the plain Admin
   // shell off a branch, the person's own session. The hook memoises one read
   // per user; the strip above the top bar and the badge inside it both draw
@@ -1276,30 +1311,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
-            {hqStrip === 'Platform' && (
-              <HqSubNavStrip label="Platform">
-                <StripLink to="/admin/platform">Overview</StripLink>
-                <StripLink to="/admin/platform/switches">Switches</StripLink>
-                <StripLink to="/admin/platform/topology">Topology</StripLink>
-                <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
-                <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
-                <StripLink to="/admin?tab=payments">Payments</StripLink>
-                <StripLink to="/admin?tab=promos">Promo codes</StripLink>
-                <StripLink to="/monitoring">Monitoring</StripLink>
-                <StripLink to="/admin/telegram">Telegram</StripLink>
-              </HqSubNavStrip>
-            )}
-            {hqStrip === 'Content' && (
-              <HqSubNavStrip label="Content">
-                <StripLink to="/admin/content">Overview</StripLink>
-                <StripLink to="/admin/articles">Content queue</StripLink>
-                <StripLink to="/admin/publications">Publications</StripLink>
-                <StripLink to="/admin/assessment">Assessment Studio</StripLink>
-                <StripLink to="/admin?tab=personas">Personas</StripLink>
-                <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
-                <StripLink to="/admin/team">Public team page</StripLink>
-              </HqSubNavStrip>
-            )}
+            {stripInFrame ? null : hqStripNav}
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
@@ -1308,9 +1320,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 happened to refetch. `savedCompanyId` is the id restored before
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
-            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
-              {children}
-            </div>
+            <RailStripSlot.Provider value={railStrip}>
+              <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
+                {children}
+              </div>
+            </RailStripSlot.Provider>
             {!onboardingCanvas && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
@@ -2552,7 +2566,7 @@ function AppInner() {
           so the guard is `['admin']` and never `hqOnly`. Its one HQ-only
           zone, the take rate, is `requireSuperAdmin`; the page asks only when
           `/me` carries the elevation and says so otherwise. */}
-      <Route path="/admin/commissions" element={guard(['admin'], <AdminCommissions user={user} />)} />
+      <Route path="/admin/commissions" element={guard(['admin'], hqOnly(<AdminCommissions user={user} />))} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}

@@ -565,14 +565,15 @@ test('the notification matrix reads its own route, says when it cannot, and puts
   assert.match(notify, /export type NotifyChannel = 'in_app' \| 'email' \| 'slack';/);
 });
 
-test('the Worker AI rail sits beside the page with a literal accent and a collapsible track', () => {
+test('the Worker AI rail sits beside the page, in the shared frame (D556), with a literal accent', () => {
   const page = read('frontend/src/pages/SettingsPage.jsx');
   const rail = page.slice(page.indexOf('<WorkerRail'), page.indexOf('/>', page.indexOf('<WorkerRail')));
   assert.match(rail, /workspace="Account"/);
   assert.match(rail, /role="founder"/);
   assert.match(rail, /coverage=\{accountRailCoverage\(data, activeLabel\)\}/);
-  // D556's shared frame, whose track narrows through --fwr-track.
-  assert.match(page, /<RailFrame\b[\s\S]*?\brail=\{\(\s*<WorkerRail\b/);
+  // RailFrame docks it to the edge and collapses it through --fwr-track.
+  assert.match(page, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Account"/);
+  assert.doesNotMatch(page, /grid-cols-\[minmax\(0,1fr\)_var\(--fwr-track/, 'no bare rail column beside the frame');
   // The voice rule, on the copy this page hands the rail.
   assert.doesNotMatch(rail, /advis|recommend|fiduciary/i);
 });

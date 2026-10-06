@@ -2,15 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { bpsPercent } from '../../lib/bps';
 import { isSuperAdminUser } from '../../lib/shellRole';
-import { Card, Pill, SectionLabel, Skeleton, Unreadable, Unrecorded, RailFrame, WorkerRail } from '../../ui';
+import { Card, Pill, RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import {
-  COMMISSION_STATUS, PAYOUT_ACTIONS, PAYOUT_METHODS, PAYOUT_STATUS, PERIODS, TABLE_DEFAULT_CURRENCY,
-  dayOf, filterCommissions, payoutActionsFor, payoutDetails, personOf, ruleActive, ruleAmount,
-  sourceLabel, sourcesIn, statusOf, takeRateInput,
+  COMMISSION_STATUS, PAYOUT_ACTIONS, PAYOUT_METHODS, PAYOUT_STATUS, PERIODS, RULE_LIMITS, TABLE_DEFAULT_CURRENCY,
+  dayOf, filterCommissions, payoutActionsFor, payoutClaims, payoutDetails, personOf, ruleActive, ruleAmount,
+  ruleChanges, ruleDraftOf, ruleEditInput, rulePaysText, sourceLabel, sourcesIn, statusOf, takeRateInput,
 } from '../../lib/partnerEarnings';
 import {
-  ConfirmPanel, Money, Panel, RowTable, StatusPill, WriteNote, ghostButton, primaryButton,
+  ConfirmPanel, Money, Panel, PayoutMoney, RowTable, StatusPill, WriteNote, ghostButton, primaryButton,
 } from '../partner/earnings/parts';
 
 /**
@@ -19,15 +19,19 @@ import {
  *
  * FOUR READS, EACH WITH ITS OWN STATES, and every one `requireAdmin` but the
  * last:
- *   `GET /network/admin/commission-rules`  the rules, read-only
+ *   `GET /network/admin/commission-rules`  the rules, with who last edited each
  *   `GET /network/admin/commissions`       every commission, newest 500
  *   `GET /network/admin/payouts`           the queue, newest 200
  *   `GET /admin/platform/take-rate`        super admin only (`requireSuperAdmin`)
  *
- * THE RULES CANNOT BE EDITED HERE BECAUSE NOTHING CAN EDIT THEM. No route
- * creates, changes or switches off a rule; they are seeded in `network.ts`.
- * The canvas's "New rule", "Edit" and the active toggles are drawn as what
- * they are — a disabled control with the reason, and a read-only state.
+ * A RULE IS EDITED, NEVER CREATED. `PATCH /network/admin/commission-rules/:key`
+ * (D572) changes what a seeded rule pays, its description and whether it is on,
+ * and logs the values before and after. No route creates a rule, so the
+ * canvas's "New rule" is drawn disabled, with the reason.
+ *
+ * A FAILED PAYOUT GIVES ITS COMMISSIONS BACK (D572), when the payout recorded
+ * which it claimed. One requested before payouts recorded them gives none
+ * back, and its confirmation says so before the click.
  *
  * THE TAKE RATE IS NOT A COMMISSION RATE. The canvas called it "applied to
  * every commission before the partner's share"; the route says, and the code
@@ -43,7 +47,7 @@ import {
 const ADMIN_INPUT = 'w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] '
   + 'focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 dark:border-gray-700 dark:bg-gray-900';
 
-const RULE_COLS = 'md:grid-cols-[minmax(0,1.3fr)_120px_130px_minmax(0,1.6fr)_80px]';
+const RULE_COLS = 'md:grid-cols-[minmax(0,1.3fr)_120px_130px_minmax(0,1.6fr)_80px_64px]';
 const ALL_COLS = 'md:grid-cols-[minmax(0,1.5fr)_130px_150px_96px_104px_104px]';
 const QUEUE_VIEWS = [
   { key: 'open', label: 'Open', statuses: ['requested', 'processing'] },
@@ -52,44 +56,145 @@ const QUEUE_VIEWS = [
   { key: 'all', label: 'All', statuses: null },
 ];
 
-/** The rules, as the route returns them. */
-export function RulesTable({ state, rows, onRetry }) {
+/**
+ * One rule's editor, stateless: the draft in, the route's checks made before
+ * sending (`ruleEditInput`), then a confirmation of what changes from what to
+ * what. Review stays off until the draft is valid and changes something.
+ */
+export function RuleEditor({ rule, stage = 'edit', draft, busy, onDraft, onReview, onConfirm, onCancel }) {
+  const parsed = ruleEditInput(draft);
+  const changes = parsed.body ? ruleChanges(rule, parsed.body) : [];
+  if (stage === 'confirm' && parsed.body && changes.length) {
+    return (
+      <div className="border-t border-axal-hairline px-4 py-3 dark:border-gray-700">
+        <ConfirmPanel
+          testid="confirm-rule"
+          accent="admin"
+          title={`Change ${rule.rule_key}`}
+          rows={changes.map(([k, from, to]) => [k, `${from} → ${to}`])}
+          consequence="Milestones that fire after the change accrue under the rule as saved; a rule switched off accrues nothing. Commissions already accrued keep their amounts. The edit is logged with the values before and after."
+          confirmLabel="Save rule"
+          busy={busy}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
+      </div>
+    );
+  }
+  const fixed = draft?.kind !== 'percentage';
+  return (
+    <div className="space-y-2.5 border-t border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="form-rule">
+      <SectionLabel>Edit {rule.rule_key}</SectionLabel>
+      <fieldset className="flex flex-wrap gap-4 text-[12.5px]">
+        <legend className="sr-only">How the rule pays</legend>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="rule-kind" checked={fixed} onChange={() => onDraft?.({ kind: 'fixed', value: '' })} data-testid="radio-rule-fixed" />
+          A flat amount
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="rule-kind" checked={!fixed} onChange={() => onDraft?.({ kind: 'percentage', value: '' })} data-testid="radio-rule-percentage" />
+          A share of the amount
+        </label>
+      </fieldset>
+      <label className="block">
+        <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{fixed ? `Amount (${TABLE_DEFAULT_CURRENCY})` : 'Share (%)'}</span>
+        <input
+          className={`mt-1 ${ADMIN_INPUT}`}
+          inputMode="decimal" value={draft?.value ?? ''} onChange={(e) => onDraft?.({ value: e.target.value })} data-testid="input-rule-value"
+        />
+        <span className="mt-1 block text-[11px] text-axal-faint" data-testid="text-rule-check">
+          {parsed.error
+            || (changes.length ? `Pays ${changes.find(([k]) => k === 'Pays')?.[2] || rulePaysText(rule) || 'nothing'}.` : 'Nothing has changed yet.')}
+        </span>
+      </label>
+      <label className="block">
+        <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Description</span>
+        <input
+          className={`mt-1 ${ADMIN_INPUT}`}
+          value={draft?.description ?? ''} maxLength={RULE_LIMITS.descriptionMax} onChange={(e) => onDraft?.({ description: e.target.value })} data-testid="input-rule-description"
+        />
+      </label>
+      <label className="flex items-center gap-2 text-[12.5px]">
+        <input type="checkbox" checked={draft?.active !== false} onChange={(e) => onDraft?.({ active: e.target.checked })} data-testid="checkbox-rule-active" />
+        Active: a milestone accrues a commission under this rule
+      </label>
+      <div className="flex justify-end gap-2">
+        <button type="button" className={ghostButton} onClick={onCancel} data-testid="button-cancel-rule">Cancel</button>
+        <button type="button" className={primaryButton('admin')} disabled={!parsed.body || !changes.length} onClick={onReview} data-testid="button-review-rule">Review</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The rules, as the route returns them, each with who last edited it, and the
+ * editor for one. `editing` is the open edit — `{ key, stage, draft }` — and
+ * `result` is the last write's outcome, `{ key, ok, text }`.
+ */
+export function RulesTable({ state, rows, onRetry, editing, busy, result, onEdit, onDraft, onReview, onConfirm, onCancel }) {
   let body;
   if (state === 'loading') body = <div className="p-4"><Skeleton.Table rows={3} cols={4} /></div>;
   else if (state === 'unreadable') {
     body = <div className="p-4"><Unreadable what="The commission rules" claim="This is not a claim that there are none." onRetry={onRetry} /></div>;
   } else {
+    const open = editing ? rows.find((r) => r.rule_key === editing.key) : null;
     body = (
-      <RowTable
-        testid="table-rules"
-        cols={RULE_COLS}
-        head={['Key', 'Source', 'Amount', 'Description', 'Active']}
-        empty={<p className="text-[12.5px] text-axal-muted" data-testid="empty-rules">No commission rule is stored, so no milestone accrues a commission.</p>}
-        rows={rows.map((r) => {
-          const amount = ruleAmount(r);
-          const on = ruleActive(r);
-          return {
-            key: r.id ?? r.rule_key,
-            testid: `row-rule-${r.rule_key}`,
-            cells: [
-              <span className="break-all font-semibold text-axal-ink dark:text-gray-100">{r.rule_key}</span>,
-              sourceLabel(r.source_type) || <Unrecorded>Not recorded</Unrecorded>,
-              amount ? (
-                <span className="whitespace-nowrap" title={amount.kind === 'fixed' ? `The rule stores no currency. A commission it accrues is written in the table default, ${TABLE_DEFAULT_CURRENCY}.` : 'A percentage of the amount the milestone carries.'}>
-                  <span className="font-semibold tabular-nums">{amount.text}</span>{' '}
-                  <span className="text-[10.5px] text-axal-faint">{amount.kind === 'fixed' ? `${amount.currency} · fixed` : 'of the amount'}</span>
-                </span>
-              ) : <Unrecorded reason="The rule holds neither a fixed amount nor a percentage, so it accrues nothing.">Not recorded</Unrecorded>,
-              String(r.description ?? '').trim() ? <span className="text-axal-muted">{r.description}</span> : <Unrecorded>No description</Unrecorded>,
-              <Pill tone={on ? 'ok' : 'neutral'} data-testid={`pill-rule-active-${r.rule_key}`}>{on ? 'Active' : 'Off'}</Pill>,
-            ],
-          };
-        })}
-      />
+      <>
+        <RowTable
+          testid="table-rules"
+          cols={RULE_COLS}
+          head={['Key', 'Source', 'Amount', 'Description', 'Active', '']}
+          empty={<p className="text-[12.5px] text-axal-muted" data-testid="empty-rules">No commission rule is stored, so no milestone accrues a commission.</p>}
+          rows={rows.map((r) => {
+            const amount = ruleAmount(r);
+            const on = ruleActive(r);
+            const edited = dayOf(r.updated_at);
+            return {
+              key: r.id ?? r.rule_key,
+              testid: `row-rule-${r.rule_key}`,
+              cells: [
+                <span className="break-all font-semibold text-axal-ink dark:text-gray-100">{r.rule_key}</span>,
+                sourceLabel(r.source_type) || <Unrecorded>Not recorded</Unrecorded>,
+                amount ? (
+                  <span className="whitespace-nowrap" title={amount.kind === 'fixed' ? `The rule stores no currency. A commission it accrues is written in the table default, ${TABLE_DEFAULT_CURRENCY}.` : 'A percentage of the amount the milestone carries.'}>
+                    <span className="font-semibold tabular-nums">{amount.text}</span>{' '}
+                    <span className="text-[10.5px] text-axal-faint">{amount.kind === 'fixed' ? `${amount.currency} · fixed` : 'of the amount'}</span>
+                  </span>
+                ) : <Unrecorded reason="The rule holds neither a fixed amount nor a percentage, so it accrues nothing.">Not recorded</Unrecorded>,
+                <span className="flex flex-col">
+                  {String(r.description ?? '').trim() ? <span className="text-axal-muted">{r.description}</span> : <Unrecorded>No description</Unrecorded>}
+                  {edited ? (
+                    <span className="text-[11px] text-axal-faint" data-testid={`text-rule-edited-${r.rule_key}`}>
+                      Edited {edited}{String(r.updated_by_name ?? '').trim() ? ` by ${r.updated_by_name}` : ''}
+                    </span>
+                  ) : null}
+                </span>,
+                <Pill tone={on ? 'ok' : 'neutral'} data-testid={`pill-rule-active-${r.rule_key}`}>{on ? 'Active' : 'Off'}</Pill>,
+                editing ? null : (
+                  <button type="button" className={ghostButton} onClick={() => onEdit?.(r)} data-testid={`button-edit-rule-${r.rule_key}`}>Edit</button>
+                ),
+              ],
+            };
+          })}
+        />
+        {open ? (
+          <RuleEditor
+            rule={open}
+            stage={editing.stage}
+            draft={editing.draft}
+            busy={busy}
+            onDraft={onDraft}
+            onReview={onReview}
+            onConfirm={onConfirm}
+            onCancel={onCancel}
+          />
+        ) : null}
+        {result ? <div className="border-t border-axal-hairline px-4 py-2.5 dark:border-gray-700"><WriteNote note={{ ...result, text: `${result.key}: ${result.text}` }} testid="note-rule" /></div> : null}
+      </>
     );
   }
   return (
-    <Panel title="Commission rules" meta={state === 'ready' ? 'Read-only: no route edits a rule' : null} testid="panel-rules">
+    <Panel title="Commission rules" meta={state === 'ready' ? 'Every edit is logged with the values before and after' : null} testid="panel-rules">
       {body}
     </Panel>
   );
@@ -198,7 +303,12 @@ function consequenceOf(action, payout) {
     return `Marks the payout Completed and records you as its processor. Nothing here sends money: pay it by ${method} yourself before you confirm.`;
   }
   if (action === 'process') return 'Marks the payout Processing and records you as its processor. The partner’s activity log says it is being processed.';
-  return 'Marks the payout Failed with your reason, which the partner reads. The commissions it claimed stay marked Paid: the route does not return them to Accrued.';
+  const claims = payoutClaims(payout);
+  let back;
+  if (!claims) back = 'It was requested before payouts recorded their commissions, so none go back to Accrued: its commissions stay marked Paid.';
+  else if (claims.length === 1) back = 'The commission it claimed goes back to Accrued, so the partner can request it again.';
+  else back = `The ${claims.length} commissions it claimed go back to Accrued, so the partner can request them again.`;
+  return `Marks the payout Failed with your reason, which the partner reads. ${back}`;
 }
 
 /**
@@ -233,6 +343,8 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
           const details = payoutDetails(p?.payout_details);
           const requested = dayOf(p?.created_at);
           const completed = dayOf(p?.completed_at);
+          const failed = dayOf(p?.failed_at);
+          const processed = dayOf(p?.processed_at);
           const actions = payoutActionsFor(status.key);
           const open = pending && String(pending.id) === String(p.id);
           return (
@@ -240,7 +352,7 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-[13px]">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-axal-ink dark:text-gray-100">{personOf(p) || <Unrecorded>Partner not recorded</Unrecorded>}</span>
-                  <Money cents={p?.amount_cents} currency={p?.currency} />
+                  <PayoutMoney payout={p} />
                   {method ? <span className="text-axal-muted">{method}</span> : <Unrecorded>Method not recorded</Unrecorded>}
                   <StatusPill status={status} />
                   <span className="text-[11.5px] tabular-nums text-axal-faint">{requested ? `requested ${requested}` : 'request date not recorded'}</span>
@@ -267,12 +379,17 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
               {status.key === 'failed' ? (
                 <p className="text-[12px] text-red-700 dark:text-red-300" data-testid={`text-queue-reason-${p.id}`}>
                   {String(p?.failure_reason ?? '').trim() || <Unrecorded>No reason recorded</Unrecorded>}
+                  <span className="text-axal-muted">
+                    {' · '}{failed ? `failed ${failed}` : <Unrecorded reason="Failed before payouts recorded the day they failed.">the day it failed is not recorded</Unrecorded>}
+                  </span>
                 </p>
               ) : null}
               {p?.processed_by != null ? (
                 <p className="text-[12px] text-axal-muted" data-testid={`text-processed-by-${p.id}`}>
-                  Recorded by account #{p.processed_by}{' '}
-                  <Unrecorded reason="The queue returns the processor's account id, not their name.">(name not returned)</Unrecorded>
+                  {'Recorded by '}
+                  {String(p?.processed_by_name ?? '').trim()
+                    || <Unrecorded reason="The account that recorded it has no name on file.">account #{p.processed_by}</Unrecorded>}
+                  {processed ? ` on ${processed}` : null}
                 </p>
               ) : (['completed', 'failed', 'processing'].includes(status.key)
                 ? <p className="text-[12px]"><Unrecorded reason="This payout was moved before processing was recorded.">Processor not recorded</Unrecorded></p>
@@ -290,7 +407,7 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
                   title={`${PAYOUT_ACTIONS[pending.action]?.label || 'Change payout'} · confirm`}
                   rows={[
                     ['Partner', personOf(p) || 'Not recorded'],
-                    ['Amount', <Money cents={p?.amount_cents} currency={p?.currency} />],
+                    ['Amount', <PayoutMoney payout={p} />],
                     ['Method', method || 'Not recorded'],
                   ]}
                   consequence={consequenceOf(pending.action, p)}
@@ -387,6 +504,15 @@ export function AllCommissionsTable({ state, rows, total, onRetry, filters }) {
   );
 }
 
+/** What a fail's response says came back: `commissions_reopened`, or `unlinked` for a payout from before D572. */
+export function reopenedText(r) {
+  if (r?.status !== 'failed') return '';
+  if (r?.unlinked) return ' It was requested before payouts recorded their commissions, so none went back to Accrued.';
+  const n = Number(r?.commissions_reopened);
+  if (!Number.isFinite(n)) return '';
+  return n === 1 ? ' 1 commission went back to Accrued.' : ` ${n} commissions went back to Accrued.`;
+}
+
 /** One read into one state: loading, then ready with the data or unreadable. */
 function readInto(fn, set, shape = (d) => d) {
   set({ status: 'loading', data: null });
@@ -414,6 +540,9 @@ export default function AdminCommissions({ user }) {
   const [takeDraft, setTakeDraft] = useState('');
   const [takeBusy, setTakeBusy] = useState(false);
   const [takeResult, setTakeResult] = useState(null);
+  const [ruleEdit, setRuleEdit] = useState(null);
+  const [ruleBusy, setRuleBusy] = useState(false);
+  const [ruleResult, setRuleResult] = useState(null);
 
   const loadRules = useCallback(() => readInto(() => api.adminCommissionRules(), setRules, asList), []);
   const loadAll = useCallback(() => readInto(() => api.adminCommissions(), setAll, asList), []);
@@ -441,12 +570,28 @@ export default function AdminCommissions({ user }) {
     try {
       const r = await api.adminProcessPayout(pending.id, pending.action === 'fail' ? { action: 'fail', failure_reason: reason } : { action: pending.action });
       const label = statusOf(PAYOUT_STATUS, r?.status).label;
-      setResult({ id: pending.id, ok: true, text: r?.status ? `Marked ${label}.` : 'Saved.' });
+      setResult({ id: pending.id, ok: true, text: r?.status ? `Marked ${label}.${reopenedText(r)}` : 'Saved.' });
       setPending(null);
       loadQueue();
     } catch (e) {
       setResult({ id: pending.id, ok: false, text: e?.message || 'The payout was not changed.' });
     } finally { setBusy(false); }
+  };
+
+  const saveRule = async () => {
+    if (!ruleEdit) return;
+    const parsed = ruleEditInput(ruleEdit.draft);
+    if (!parsed.body) return;
+    setRuleBusy(true); setRuleResult(null);
+    try {
+      await api.adminUpdateCommissionRule(ruleEdit.key, parsed.body);
+      setRuleResult({ key: ruleEdit.key, ok: true, text: 'Saved. Milestones from now on accrue under the rule as saved.' });
+      setRuleEdit(null);
+      loadRules();
+    } catch (e) {
+      setRuleResult({ key: ruleEdit.key, ok: false, text: e?.message || 'The rule was not changed.' });
+      setRuleEdit((r) => (r ? { ...r, stage: 'edit' } : r));
+    } finally { setRuleBusy(false); }
   };
 
   const saveTake = async () => {
@@ -472,7 +617,6 @@ export default function AdminCommissions({ user }) {
 
   return (
     <RailFrame
-      data-testid="admin-commissions"
       rail={(
         <WorkerRail
           workspace="Commissions"
@@ -483,10 +627,11 @@ export default function AdminCommissions({ user }) {
           coverageNote={coverage.length ? undefined : 'Nothing has been read yet, so there is nothing to report.'}
           unavailable={[
             ['Queue note', 'Eadwyn drafts no note on the queue yet: no draft surface reads payouts.'],
-            ['Rule editing', 'No route creates or edits a commission rule.'],
+            ['New rules', 'No route creates a commission rule. The seeded rules can be edited.'],
           ]}
         />
       )}
+      data-testid="admin-commissions"
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -498,11 +643,23 @@ export default function AdminCommissions({ user }) {
         <ZoneToolbar
           role="admin"
           className="mb-3"
-          actions={[{ label: 'New rule', testid: 'button-new-rule', disabled: true, title: 'No route creates or edits a commission rule.' }]}
+          actions={[{ label: 'New rule', testid: 'button-new-rule', disabled: true, title: 'No route creates a commission rule. The seeded rules can be edited.' }]}
         />
         <div className="space-y-3">
           <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <RulesTable state={rules.status} rows={ruleRows} onRetry={loadRules} />
+            <RulesTable
+              state={rules.status}
+              rows={ruleRows}
+              onRetry={loadRules}
+              editing={ruleEdit}
+              busy={ruleBusy}
+              result={ruleResult}
+              onEdit={(r) => { setRuleResult(null); setRuleEdit({ key: r.rule_key, stage: 'edit', draft: ruleDraftOf(r) }); }}
+              onDraft={(patch) => setRuleEdit((r) => (r ? { ...r, draft: { ...r.draft, ...patch } } : r))}
+              onReview={() => setRuleEdit((r) => (r ? { ...r, stage: 'confirm' } : r))}
+              onConfirm={saveRule}
+              onCancel={() => setRuleEdit(null)}
+            />
             <TakeRateCard
               allowed={superAdmin}
               state={take.status}
@@ -571,9 +728,9 @@ export default function AdminCommissions({ user }) {
           <Card variant="sunken" padding="md">
             <SectionLabel tone="faint">What this console does not claim</SectionLabel>
             <div className="mt-1.5 max-w-2xl space-y-2 text-[12px] leading-relaxed text-axal-muted">
-              <p><strong>A payout does not list its commissions.</strong> Nothing links a commission to the payout that claimed it, so marking a payout failed cannot return its commissions to Accrued, and does not.</p>
-              <p><strong>A failed payout is not reopened here.</strong> No route retries one or returns its commissions, so its amount stays claimed.</p>
-              <p><strong>The processor is an account number.</strong> The queue returns who processed a payout as an id, not a name.</p>
+              <p><strong>Older payouts recorded less.</strong> A payout requested before payouts recorded their currency and their commissions shows no currency, and marking it failed returns none of its commissions to Accrued.</p>
+              <p><strong>A failed payout is final.</strong> No route retries one or moves it again. Its commissions, once back in Accrued, go into the partner’s next request.</p>
+              <p><strong>A rule is edited, not created.</strong> No route adds a commission rule, so the rules are the seeded ones.</p>
             </div>
           </Card>
         </div>

@@ -50,7 +50,7 @@ export { default as AssistLayout } from './AssistLayout';
 export { default as WorkerRail } from './WorkerRail';
 // D556 — the one frame every host that does not draw the founder desks' own
 // panel puts its rail in. See RailFrame.jsx.
-export { default as RailFrame } from './RailFrame';
+export { default as RailFrame, RailStripSlot } from './RailFrame';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 
