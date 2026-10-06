@@ -41,7 +41,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const text = (el) => html(el).replace(/<[^>]+>/g, ' ').replace(/&#x27;|&rsquo;|’/g, "'")
-  .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&ldquo;|&rdquo;|“|”/g, '"').replace(/\s+/g, ' ').trim();
+  .replace(/&quot;/g, '"').replace(/&ldquo;|&rdquo;|“|”/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
 const ADVISORS = read('cloudflare-worker/src/routes/advisors.ts');
 const GRANTS = read('cloudflare-worker/src/routes/advisor_grants.ts');

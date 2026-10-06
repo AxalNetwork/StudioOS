@@ -39,7 +39,7 @@ const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const text = (el) => html(el)
   .replace(/<[^>]+>/g, ' ')
-  .replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
   .replace(/\s+/g, ' ');
 const ROUTE = read('cloudflare-worker/src/routes/wellbeing.ts');
 /** One handler's source, from its declaration to the next `wellbeing.` route. */
