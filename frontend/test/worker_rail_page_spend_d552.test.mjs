@@ -56,7 +56,6 @@ const report = (over = {}) => ({
 const render = (props) => renderToStaticMarkup(React.createElement(RailPageUsage, {
   spend: SPEND, pagePath: PAGE, pageSpend: report(), pageSpendError: null, onRetry: () => {}, ...props,
 }));
-const text = (props) => renderedText(render(props));
 /** The rendered text of one `data-testid`'s element. */
 function part(html, id) {
   const at = html.indexOf(`data-testid="${id}"`);
