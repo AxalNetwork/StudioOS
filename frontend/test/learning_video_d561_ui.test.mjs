@@ -338,8 +338,10 @@ test('the editor\'s upload stopped: the route\'s words, or a cancel asked for wh
   assert.deepEqual(upload.get(), { phase: 'failed', file, message: tooBig.message });
   assert.equal(form.get().video_url, LINKED.video_url, 'a failed upload left the link in place');
   assert.deepEqual([uploaded.seen, told], [[], []]);
-  // "Cancel upload" pressed while part 2 is on its way: it finishes, the field keeps saying
-  // "cancelling" through its progress, and the upload is closed before part 3.
+  // "Cancel upload" pressed while part 2 is on its way, with a token that holds no controller
+  // (no AbortController): it finishes, the field keeps saying "cancelling" through its
+  // progress, and the upload is closed before part 3. With one, the part on its way is
+  // stopped too (learning_stage3_d562.test.mjs).
   const token = { cancelled: false };
   const calls = await withFetch([{ status: 201, body: START }, ...PARTS_OK.slice(0, 2), { aborted: true }], () => run(token), (call) => {
     if (call.path === partPath(2).slice(4)) { token.cancelled = true; upload.set(cancelling); }
@@ -350,11 +352,12 @@ test('the editor\'s upload stopped: the route\'s words, or a cancel asked for wh
   assert.deepEqual([uploaded.seen, told], [[], []]);
   // A cancel arriving after the upload ended changes nothing.
   assert.deepEqual(cancelling({ phase: 'done', file }), { phase: 'done', file });
-  // The editor's own wiring: Upload runs this, Cancel and leaving the editor set the token.
+  // The editor's own wiring: Upload runs this, Cancel and leaving the editor stop the token.
   const src = codeOnly(read('frontend/src/pages/learning/StudioItemEditor.jsx'));
+  assert.match(src, /const token = uploadToken\(\);\s*running\.current = token;/);
   assert.match(src, /await runVideoUpload\(\{\s*uid: item\.uid, file, token, latestItem: \(\) => latest\.current, setUpload, setUploaded, setForm, onUploaded,/);
-  assert.match(src, /const cancelUpload = \(\) => \{\s*if \(running\.current\) running\.current\.cancelled = true;\s*setUpload\(cancelling\);/);
-  assert.match(src, /useEffect\(\(\) => \(\) => \{ if \(running\.current\) running\.current\.cancelled = true; \}, \[\]\);/);
+  assert.match(src, /const cancelUpload = \(\) => \{\s*stopUpload\(running\.current\);\s*setUpload\(cancelling\);/);
+  assert.match(src, /useEffect\(\(\) => \(\) => stopUpload\(running\.current\), \[\]\);/);
   assert.match(src, /onStart=\{startUpload\}\s*onCancel=\{cancelUpload\}/);
   // While a file is on its way, saving and the status actions wait.
   assert.match(src, /<StatusActions status=\{current\.status\} what=\{noun\} onStatus=\{onStatus\} busy=\{busy \|\| sending\} \/>/);

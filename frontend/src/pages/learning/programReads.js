@@ -1,8 +1,8 @@
 /**
  * Learning programs: every call the program pages make (D562 stage 3, on
- * D558's routes). The third file in this folder that touches the client,
- * beside `learningReads.js` and `studioActions.js`, and like them it calls
- * only methods the client already declares.
+ * D558's routes). One of the five files in this folder that touch the
+ * client (the README names them), and like the others it calls only methods
+ * the client already declares.
  *
  *   A member (`routes/learning_programs.ts`, /api/learning):
  *     learningApi.myEnrolledPrograms → GET  /programs/enrolled

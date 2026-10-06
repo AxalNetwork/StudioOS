@@ -4,14 +4,17 @@ import { CalendarPlus, ChevronLeft, ChevronRight, Search, SquarePen } from 'luci
 import { Card, Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, NOT_LIVE, TAB_KIND, TAB_NOT_LIVE,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, TAB_KIND, TAB_NOT_LIVE,
   durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode,
 } from './learningModel';
 import { readArticles, readCatalog, readEvents, readMe, readPublications } from './learningReads';
+import { readWebinars } from './webinarReads';
 import {
   ComingSoonCard, LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, NotLiveYet,
   RouteUnreadable, SectionCard,
 } from './LearningStates';
+import { MyProgramsSection, useMyPrograms } from './MyPrograms';
+import { UpcomingWebinarsList, WebinarsTabPanel, useNow } from './LearningWebinars';
 import useLearningRead from './useLearningRead';
 
 /** The canvas's one header action, kept for every profile: Articles stay open. */
@@ -335,6 +338,7 @@ function TabBar({ tab, gated, onTab }) {
 }
 
 const IDLE = { status: 'idle' };
+const PROGRAMS_IDLE = { enrolled: IDLE, open: IDLE };
 
 /**
  * The catalog read as the open tab may draw it. A tab switch renders once
@@ -355,12 +359,17 @@ export function catalogFor(state, kind) {
  *   query     the search box; q the settled query the reads used
  *   catalog   `readCatalog`'s state, for All, Courses and Videos
  *   articles, publications, events   each tab's own read
+ *   upcoming, past   `readWebinars`' states (D560): upcoming for the
+ *             Webinars tab and "Upcoming webinars", past for the tab only
  *   me        `readMe`'s state, for Continue learning
+ *   programs  `useMyPrograms()`'s reads and enrol (D558), for My programs
+ *   now       the clock the webinar rows are placed against
  *   links     extra links for an admin: [{ to, label }]
  */
 export function LearningHomeView({
   gated, tab, onTab = () => {}, query = '', onQuery = () => {}, q = '',
   catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
+  upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(),
   onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
 }) {
   const mode = tabMode(tab, gated);
@@ -384,7 +393,7 @@ export function LearningHomeView({
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
-          <SectionCard title="My programs" testid="section-programs"><NotLiveYet line={NOT_LIVE.programs} /></SectionCard>
+          <MyProgramsSection {...programs} />
         </div>
       )}
       <Card padding="none" data-testid="learning-catalogue">
@@ -399,7 +408,7 @@ export function LearningHomeView({
                 type="search"
                 value={query}
                 onChange={(e) => onQuery(e.target.value)}
-                placeholder={gated ? 'Search articles' : 'Search courses, videos, articles, publications and events'}
+                placeholder={gated ? 'Search articles' : 'Search courses, videos, webinars, articles, publications and events'}
                 className="w-full rounded-axal-md border border-axal-hairline bg-white py-2 pl-9 pr-3 text-[13px] text-axal-ink placeholder:text-axal-faint dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
                 data-testid="input-learning-search"
               />
@@ -411,20 +420,25 @@ export function LearningHomeView({
           {mode === 'not_live' && <NotLiveYet line={TAB_NOT_LIVE[tab]} />}
           {mode === 'live' && tab === 'all' && <CatalogList state={catalog} q={q} onRetry={onRetry.catalog} />}
           {mode === 'live' && TAB_KIND[tab] && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
+          {mode === 'live' && tab === 'webinars' && (
+            <WebinarsTabPanel upcoming={upcoming} past={past} q={q} now={now} onRetry={{ upcoming: onRetry.upcoming, past: onRetry.past }} />
+          )}
           {mode === 'live' && tab === 'articles' && <ArticleList state={articles} q={q} onPage={onArticlesPage} onRetry={onRetry.article} />}
           {mode === 'live' && tab === 'publications' && <PublicationList state={publications} q={q} onRetry={onRetry.publication} />}
           {mode === 'live' && tab === 'events' && <EventList state={events} q={q} onRetry={onRetry.event} />}
         </div>
       </Card>
       {!gated && (
-        <SectionCard title="Upcoming webinars" testid="section-webinars"><NotLiveYet line={NOT_LIVE.webinars} /></SectionCard>
+        <SectionCard title="Upcoming webinars" testid="section-webinars">
+          <UpcomingWebinarsList state={upcoming} now={now} onRetry={onRetry.upcoming} />
+        </SectionCard>
       )}
     </>
   );
 }
 
 /** What the rail says it is looking at: one line per read this page actually made. */
-export function homeCoverage({ gated, q, catalog, articles, publications, events, me }) {
+export function homeCoverage({ gated, q, catalog, articles, publications, events, me, upcoming, programs }) {
   const s = (n) => (n === 1 ? '' : 's');
   const lines = [];
   if (catalog?.status === 'ready') {
@@ -438,6 +452,8 @@ export function homeCoverage({ gated, q, catalog, articles, publications, events
   if (!gated && publications?.status === 'ready') lines.push(`${publications.rows.length} publication${s(publications.rows.length)}`);
   if (!gated && events?.status === 'ready') lines.push(`${events.rows.length} upcoming event${s(events.rows.length)} read`);
   if (!gated && me?.status === 'ready') lines.push(`${me.in_progress.length} started by you`);
+  if (!gated && upcoming?.status === 'ready') lines.push(`${upcoming.rows.length} upcoming webinar${s(upcoming.rows.length)} read`);
+  if (!gated && programs?.enrolled?.status === 'ready') lines.push(`${programs.enrolled.rows.length} program${s(programs.enrolled.rows.length)} you are in`);
   return lines;
 }
 
@@ -472,6 +488,13 @@ export default function LearningHome({ gated, links = [] }) {
   const [events, retryEvents] = useLearningRead(() => readEvents({ q }), [q],
     { enabled: live && tab === 'events', scope: 'events' });
   const [me, retryMe] = useLearningRead(readMe, [], { enabled: !gated, scope: 'me' });
+  // Upcoming webinars feed both the home's section and the Webinars tab, so they
+  // are read once; the past ones only while that tab is open.
+  const [upcoming, retryUpcoming] = useLearningRead(() => readWebinars('upcoming'), [], { enabled: !gated, scope: 'webinars-upcoming' });
+  const [past, retryPast] = useLearningRead(() => readWebinars('past'), [],
+    { enabled: live && tab === 'webinars', scope: 'webinars-past' });
+  const programs = useMyPrograms(!gated);
+  const now = useNow(60 * 1000);
 
   // A new tab starts from its first page.
   const onTab = useCallback((key) => {
@@ -489,11 +512,11 @@ export default function LearningHome({ gated, links = [] }) {
           // Learning in #7c3aed for every profile it serves.
           role="founder"
           stance="Read-only catalogue"
-          note="Eadwyn reads back the lines this page has loaded, on a click. It does not write an article, register you for an event or mark anything complete."
-          coverage={homeCoverage({ gated, q, catalog, articles, publications, events, me })}
+          note="Eadwyn reads back the lines this page has loaded, on a click. It does not write an article, register you for an event or a webinar, enrol you in a program or mark anything complete."
+          coverage={homeCoverage({ gated, q, catalog, articles, publications, events, me, upcoming, programs })}
           unavailable={gated
             ? [['Courses, videos, webinars and more', COMING_SOON_LINE]]
-            : [['Webinars, exercises, exams and programs', 'Their stores are not live yet, so nothing here reads them.']]}
+            : [['Exercises and exams', 'No route lists them on their own, so the home reads neither. Each opens from the course or program that holds it.']]}
         />
       )}
       data-testid="learning-home"
@@ -511,9 +534,16 @@ export default function LearningHome({ gated, links = [] }) {
           publications={publications}
           events={events}
           me={me}
+          upcoming={upcoming}
+          past={past}
+          programs={programs}
+          now={now}
           onCatalogPage={(step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT))}
           onArticlesPage={(step) => setPage((p) => Math.max(0, p + step))}
-          onRetry={{ catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe }}
+          onRetry={{
+            catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe,
+            upcoming: retryUpcoming, past: retryPast,
+          }}
           links={links}
         />
       </div>

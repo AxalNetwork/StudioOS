@@ -38,8 +38,9 @@ export async function readStudioCourse(uid) {
 
 /**
  * The content table's rows, items and courses as one list, the newest edit
- * first. `programs` is null on every row: no program store exists until
- * #1159, so that column is "Not recorded" rather than "None".
+ * first. `programs` is null on every row: the item and course lists do not
+ * say which programs hold a row (D558 keeps that on each program), so that
+ * column is "Not recorded" rather than "None".
  */
 export function studioRows(items, courses) {
   const enc = encodeURIComponent;
@@ -141,12 +142,15 @@ function cancelledError() {
  *
  *   onProgress({ sent, total, part, parts, step })  after the start and each part, and before completing
  *   isCancelled()                                   asked before each part and before completing
+ *   signal                                          an AbortSignal: stops the part on its way, and
+ *                                                   counts as cancelled from then on
  *
  * Resolves to `{ attached, item }`: the completion reply, and the item read
  * again as stored (null when that read fails, since the file is attached
  * either way).
  */
-export async function uploadVideo({ uid, file, onProgress = () => {}, isCancelled = () => false }) {
+export async function uploadVideo({ uid, file, onProgress = () => {}, isCancelled = () => false, signal }) {
+  const stopped = () => isCancelled() || Boolean(signal?.aborted);
   const problem = videoFileProblem(file);
   if (problem) throw new Error(problem);
   const total = file.size;
@@ -163,23 +167,24 @@ export async function uploadVideo({ uid, file, onProgress = () => {}, isCancelle
     const sent = [];
     onProgress({ sent: 0, total, part: 0, parts, step: 'parts' });
     for (let n = 1; n <= parts; n += 1) {
-      if (isCancelled()) throw cancelledError();
+      if (stopped()) throw cancelledError();
       const end = Math.min(n * partSize, total);
-      const reply = await adminLearningApi.uploadVideoPart(uid, { ...ref, part_number: n }, file.slice((n - 1) * partSize, end));
+      const reply = await adminLearningApi.uploadVideoPart(uid, { ...ref, part_number: n }, file.slice((n - 1) * partSize, end), { signal });
       if (typeof reply?.etag !== 'string' || !reply.etag) {
         throw new Error(`Part ${n} of ${parts} came back without its etag, so the upload cannot be finished.`);
       }
       sent.push({ part_number: n, etag: reply.etag });
       onProgress({ sent: end, total, part: n, parts, step: 'parts' });
     }
-    if (isCancelled()) throw cancelledError();
+    if (stopped()) throw cancelledError();
     onProgress({ sent: total, total, part: parts, parts, step: 'complete' });
     attached = await adminLearningApi.completeVideoUpload(uid, { ...ref, parts: sent });
   } catch (err) {
     if (ref.key && ref.upload_id) {
       try { await adminLearningApi.abortVideoUpload(uid, ref); } catch { /* the route's sentence for the failure stands; R2 aborts an unfinished upload after seven days */ }
     }
-    throw err;
+    // A cancel that stopped the part on its way arrives as the fetch's abort: it is the cancel.
+    throw stopped() ? cancelledError() : err;
   }
   let item = null;
   try { item = (await adminLearningApi.getItem(uid))?.item || null; } catch { /* attached either way; the editor draws the completion reply */ }

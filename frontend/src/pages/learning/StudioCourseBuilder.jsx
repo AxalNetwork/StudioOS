@@ -63,7 +63,7 @@ export default function StudioCourseBuilder({ course, items = [], exercises = []
               {LEVELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </Field>
-          <Field id={id('visibility')} label="Visibility" hint="Program-only content stays hidden from members until programs are live.">
+          <Field id={id('visibility')} label="Visibility" hint="Program-only content reaches a member once they are enrolled in a published program that holds it.">
             <select id={id('visibility')} className={INPUT} value={form.visibility} onChange={set('visibility')}>
               <option value="open">Open to every member</option>
               <option value="program">Program-only</option>

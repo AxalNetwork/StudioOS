@@ -524,7 +524,7 @@ test('how a video plays: each allow-listed host embedded its own way, an upload 
   assert.match(tagOf(elsewhere, 'link-video-elsewhere'), /href="https:\/\/www\.youtube\.com\/@axal"/);
 });
 
-test('a lesson that opens elsewhere: a webinar opens its event, an exercise waits on #1160', () => {
+test('a lesson that opens elsewhere: a webinar opens its event, an exercise or exam its own page with the course along', () => {
   const courseState = { status: 'ready', ...COURSE_REPLY };
   const webinar = html(h(LessonView, { courseState, itemState: { status: 'idle' }, lessonUid: 'l3' }));
   assert.match(webinar, /data-testid="lesson-elsewhere"/);
@@ -533,7 +533,15 @@ test('a lesson that opens elsewhere: a webinar opens its event, an exercise wait
     ...courseState,
     modules: [{ uid: 'm9', title: 'Practice', position: 0, lessons: [{ uid: 'l9', title: 'Write it', position: 0, kind: 'exercise', ref_uid: 'e1', required: true, progress: null }] }],
   };
-  assert.match(text(h(LessonView, { courseState: withExercise, itemState: { status: 'idle' }, lessonUid: 'l9' })), /Not recorded Exercises are not live yet\./);
+  // Stage 3 (D559): the exercise's own page, with the course carried along so that page leads back here.
+  const exercise = html(h(LessonView, { courseState: withExercise, itemState: { status: 'idle' }, lessonUid: 'l9' }));
+  assert.match(tagOf(exercise, 'link-lesson-assessment'), /href="\/learning\/exercises\/e1\?course=seed-basics"/);
+  assert.match(text(h(LessonView, { courseState: withExercise, itemState: { status: 'idle' }, lessonUid: 'l9' })), /This lesson is an exercise\. You submit an answer, and it is reviewed\. Open the exercise/);
+  assert.doesNotMatch(exercise, /learning-not-live/);
+  const withExam = { ...withExercise, modules: [{ ...withExercise.modules[0], lessons: [{ ...withExercise.modules[0].lessons[0], kind: 'exam', ref_uid: 'x1' }] }] };
+  const exam = html(h(LessonView, { courseState: withExam, itemState: { status: 'idle' }, lessonUid: 'l9' }));
+  assert.match(tagOf(exam, 'link-lesson-assessment'), /href="\/learning\/exams\/x1\?course=seed-basics"/);
+  assert.match(flat(exam), /Open the exam/);
   assert.deepEqual(findLesson(COURSE_REPLY.modules, 'l2').prev.uid, 'l1');
   assert.equal(findLesson(COURSE_REPLY.modules, 'l3').next, null);
   // The stored positions decide the order, not the order the rows arrive in.
@@ -743,7 +751,8 @@ test('the gate still holds: a gated profile reads nothing from Learning and keep
   assert.match(homeSrc, /const live = tabMode\(tab, gated\) === 'live';/);
   assert.match(homeSrc, /\{ enabled: live && \(tab === 'all' \|\| Boolean\(kind\)\), scope: 'catalog' \}/);
   assert.match(homeSrc, /useLearningRead\(readMe, \[\], \{ enabled: !gated, scope: 'me' \}\)/);
-  assert.match(codeOnly(read('frontend/src/pages/learning/LearningPage.jsx')), /if \(!gated && Wired\) return <Wired/);
+  // Every view is wired since stage 3, so the gate is the one test before a view mounts.
+  assert.match(codeOnly(read('frontend/src/pages/learning/LearningPage.jsx')), /if \(!gated\) return <Wired params=\{params\} config=\{config\} \/>;/);
   // The studio stays the Super Admin's: an admin is admitted by the route's guard and the page is the studio.
   const route = readRoutesSource();
   assert.ok(route.includes(`<Route path="/learning/studio" element={guard(['admin'], hqOnly(<LearningPage view="studio"`));

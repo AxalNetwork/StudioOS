@@ -1,7 +1,7 @@
 /**
  * Webinars' reads and writes (D560, #1161), for the member and for the Super
- * Admin. With `learningReads.js` and `studioActions.js`, the only files in
- * this folder that call the client, and only through methods it declares:
+ * Admin. One of the five files in this folder that call the client (the
+ * README names them), and only through methods it declares:
  *
  *   learningApi.webinars(when)         → GET    /api/learning/webinars?when=upcoming|past
  *   learningApi.webinar(uid)           → GET    /api/learning/webinars/:uid

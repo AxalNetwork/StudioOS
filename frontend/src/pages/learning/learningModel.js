@@ -19,16 +19,23 @@
  *   events        `GET /api/public/events` (`routes/events_public.ts`),
  *                 `{ events }`, each `shapeEvent`, upcoming by default.
  *
- * THE REST WAITS ON A STORE THAT DOES NOT EXIST YET: programs on #1159,
- * exercises and exams on #1160, webinars on #1161, playback of an uploaded
- * video on #1162. Those surfaces say so in one line rather than drawing a row.
+ * STAGE 3 READS THE REST, each through its own module: programs
+ * (`programReads.js`, D558), exercises and exams (`assessmentReads.js`,
+ * D559), webinars (`webinarReads.js`, D560), and an uploaded video's upload
+ * and playback (`videoUpload.js`, `studioActions.js`, D561). What no route
+ * serves still says so in one line rather than drawing a row: no route lists
+ * exercises or exams on their own (`UNLISTED`).
  */
 import { titleCase } from '../../lib/absence';
 
 /** The one line the home's not-live tabs and sections carry (the brief's words). */
 export const NOT_LIVE_LINE = 'The course catalogue is not live yet.';
 
-/** The line each deeper surface carries until its store merges. */
+/**
+ * The line each deeper surface carried until its store merged. Every store is
+ * live since stage 3; a component still takes its line as the default
+ * `reason`, drawn only when it is handed `status: 'unrecorded'`.
+ */
 export const NOT_LIVE = {
   catalogue: NOT_LIVE_LINE,
   progress: 'Learning progress is not recorded yet.',
@@ -40,15 +47,28 @@ export const NOT_LIVE = {
 };
 
 /**
+ * What stays "Not recorded" with every store live: D559 serves one exercise or
+ * exam at a time, with the caller's own submissions and attempts on its page,
+ * and no route LISTS them, for the home's tabs or for My learning.
+ */
+export const UNLISTED = {
+  exercises: 'Exercises open from the courses and programs that hold them. No route lists them on their own yet.',
+  exams: 'Exams open from the courses and programs that hold them. No route lists them on their own yet.',
+  submissions: 'No route lists your submissions across exercises yet. Each exercise shows yours on its own page.',
+  attempts: 'No route lists your attempts across exams yet. Each exam shows yours on its own page.',
+};
+
+/**
  * The canvas's nine tabs, in its order. `live` marks the ones a route fills:
- * All, Courses and Videos read D557's catalog; Articles, Publications and
- * Events their own routes. The other three wait on their stores.
+ * All, Courses and Videos read D557's catalog; Webinars D560's list (stage
+ * 3); Articles, Publications and Events their own routes. Exercises and
+ * Exams have no list route (`UNLISTED`).
  */
 export const LEARNING_TABS = [
   { key: 'all', label: 'All', live: true },
   { key: 'courses', label: 'Courses', live: true },
   { key: 'videos', label: 'Videos', live: true },
-  { key: 'webinars', label: 'Webinars', live: false },
+  { key: 'webinars', label: 'Webinars', live: true },
   { key: 'articles', label: 'Articles', live: true },
   { key: 'publications', label: 'Publications', live: true },
   { key: 'events', label: 'Events', live: true },
@@ -56,11 +76,10 @@ export const LEARNING_TABS = [
   { key: 'exams', label: 'Exams', live: false },
 ];
 
-/** The line each tab that waits on a store says, and the store it waits on. */
+/** The line each tab no route fills says, and why. */
 export const TAB_NOT_LIVE = {
-  webinars: NOT_LIVE.webinars,
-  exercises: NOT_LIVE.exercises,
-  exams: NOT_LIVE.exams,
+  exercises: UNLISTED.exercises,
+  exams: UNLISTED.exams,
 };
 
 export const ARTICLES_PAGE_SIZE = 20;
@@ -430,9 +449,11 @@ export const lessonKindLabel = (kind) => (LESSON_KINDS.includes(kind) ? titleCas
 
 /**
  * Where a lesson opens. A video or reading plays in the lesson player. An
- * exercise or exam lesson points at its own page through `ref_uid`. A webinar
- * lesson names an EVENT by its slug (D557: `checkRef` looks it up in
- * `events`), so it opens the event's page until #1161's webinars exist.
+ * exercise or exam lesson points at its own page through `ref_uid`, with the
+ * course along as `?course=` so that page names the course and leads back to
+ * it (D559; `assessmentHref` builds the same address). A webinar lesson names
+ * an EVENT by its slug (D557: `checkRef` looks it up in `events`), so it
+ * opens the event's page (D562 departure 12).
  */
 export function lessonHref(courseSlug, lesson) {
   const slug = clean(courseSlug);
@@ -443,7 +464,7 @@ export function lessonHref(courseSlug, lesson) {
   }
   if (lesson.kind === 'exercise' || lesson.kind === 'exam') {
     const ref = clean(lesson.ref_uid);
-    return ref ? `/learning/${lesson.kind}s/${encodeURIComponent(ref)}` : null;
+    return ref ? `/learning/${lesson.kind}s/${encodeURIComponent(ref)}${slug ? `?course=${encodeURIComponent(slug)}` : ''}` : null;
   }
   const uid = clean(lesson.uid);
   return slug && uid ? `/learning/courses/${encodeURIComponent(slug)}/${encodeURIComponent(uid)}` : null;
@@ -542,29 +563,3 @@ export const SUBMISSION_STATUS = {
 
 /** A content row's status, as a pill tone. */
 export const CONTENT_STATUS_TONE = { published: 'ok', draft: 'warn', archived: 'neutral', cancelled: 'danger' };
-
-/**
- * One cell of the members-against-content matrix (#1159): a tick for done, the
- * best score for an exam, the review status for an exercise, the percent for
- * something started, and a dash for a member who never opened it. A cell the
- * route marks `unavailable` (a store that is not there yet) says so instead.
- */
-export function learnerCell(cell, kind) {
-  if (cell?.unavailable) return { mark: 'Not recorded', tone: 'absent', label: 'Not recorded' };
-  if (kind === 'exam' && cell && cell.score_percent !== null && cell.score_percent !== undefined && Number.isFinite(Number(cell.score_percent))) {
-    const passed = cell.passed === true || cell.passed === 1;
-    return { mark: `${Math.round(Number(cell.score_percent))}%`, tone: passed ? 'ok' : 'warn', label: `Best score ${Math.round(Number(cell.score_percent))}%${passed ? ', passed' : ''}` };
-  }
-  if (kind === 'exercise' && cell?.submission_status && SUBMISSION_STATUS[cell.submission_status]) {
-    const s = SUBMISSION_STATUS[cell.submission_status];
-    return { mark: s.label, tone: s.tone, label: s.label };
-  }
-  if (cell?.status === 'completed') return { mark: '✓', tone: 'ok', label: 'Completed' };
-  if (cell?.status === 'started') {
-    const p = Number(cell.percent);
-    return Number.isFinite(p) && cell.percent !== null && cell.percent !== undefined
-      ? { mark: `${Math.round(p)}%`, tone: 'neutral', label: `Started, ${Math.round(p)}%` }
-      : { mark: 'Started', tone: 'neutral', label: 'Started' };
-  }
-  return { mark: '—', tone: 'none', label: 'Not started' };
-}

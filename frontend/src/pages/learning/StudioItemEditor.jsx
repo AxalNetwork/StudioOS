@@ -49,8 +49,8 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
   const latest = useRef(item);
   const running = useRef(null);
   useEffect(() => { latest.current = item; });
-  // Leaving the editor stops an upload: the part on its way finishes, then the upload is closed.
-  useEffect(() => () => { if (running.current) running.current.cancelled = true; }, []);
+  // Leaving the editor stops an upload: the part on its way is stopped, then the upload is closed.
+  useEffect(() => () => stopUpload(running.current), []);
 
   const current = shownItem(item, uploaded);
   const isVideo = (item?.kind || kind) === 'video';
@@ -62,7 +62,7 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
   const startUpload = async () => {
     const file = upload.file;
     if (!item?.uid || !file) return;
-    const token = { cancelled: false };
+    const token = uploadToken();
     running.current = token;
     try {
       await runVideoUpload({
@@ -73,7 +73,7 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
     }
   };
   const cancelUpload = () => {
-    if (running.current) running.current.cancelled = true;
+    stopUpload(running.current);
     setUpload(cancelling);
   };
 
@@ -135,7 +135,7 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
             {LEVELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </Field>
-        <Field id={id('visibility')} label="Visibility" hint="Program-only content stays hidden from members until programs are live." full>
+        <Field id={id('visibility')} label="Visibility" hint="Program-only content reaches a member once they are enrolled in a published program that holds it." full>
           <select id={id('visibility')} className={INPUT} value={form.visibility} onChange={set('visibility')}>
             <option value="open">Open to every member</option>
             <option value="program">Program-only</option>
@@ -154,8 +154,20 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
   );
 }
 
-/** "Cancel upload" pressed: the upload stops before its next part (the token), and the field says so. */
+/** "Cancel upload" pressed: the upload stops, the part on its way included (the token), and the field says so. */
 export const cancelling = (s) => (s.phase === 'uploading' ? { ...s, phase: 'cancelling' } : s);
+
+/** One upload's way to stop: the flag asked before each part, and the controller that stops the part on its way. */
+export function uploadToken() {
+  return { cancelled: false, controller: typeof AbortController === 'undefined' ? null : new AbortController() };
+}
+
+/** Stop an upload, if one runs: no next part, and the part on its way is aborted. */
+export function stopUpload(token) {
+  if (!token) return;
+  token.cancelled = true;
+  token.controller?.abort();
+}
 
 /**
  * One upload, from "Upload" to its outcome, as the editor's state. The
@@ -165,7 +177,7 @@ export const cancelling = (s) => (s.phase === 'uploading' ? { ...s, phase: 'canc
  * upload stopped, in the words it stopped with. Exported so the sequence can
  * be read without a browser.
  *
- *   token        { cancelled }, set by "Cancel upload" and by leaving the editor
+ *   token        `uploadToken()`, stopped by "Cancel upload" and by leaving the editor
  *   latestItem() the item the page hands the editor now
  */
 export async function runVideoUpload({ uid, file, token, latestItem, setUpload, setUploaded, setForm, onUploaded }) {
@@ -176,6 +188,7 @@ export async function runVideoUpload({ uid, file, token, latestItem, setUpload, 
       file,
       onProgress: (p) => setUpload((s) => (s.phase === 'uploading' || s.phase === 'cancelling' ? { ...s, ...p } : s)),
       isCancelled: () => token.cancelled,
+      signal: token.controller?.signal,
     });
     const from = latestItem();
     const row = storedAfterUpload(from, done);

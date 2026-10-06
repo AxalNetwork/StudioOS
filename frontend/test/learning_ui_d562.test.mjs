@@ -33,8 +33,9 @@ import {
   COMING_SOON_LINE, LEARNING_COMING_SOON, learningComingSoon,
 } from '../src/pages/learning/learningAccess.js';
 import {
-  LEARNING_TABS, NOT_LIVE, TAB_NOT_LIVE, articleRow, eventRow, publicationRow, resolveTab, tabMode,
+  LEARNING_TABS, TAB_NOT_LIVE, UNLISTED, articleRow, eventRow, publicationRow, resolveTab, tabMode,
 } from '../src/pages/learning/learningModel.js';
+import { webinarRow } from '../src/pages/learning/webinarModel.js';
 import { readArticles, readEvents, readPublications } from '../src/pages/learning/learningReads.js';
 import LearningPage, { adminLinks } from '../src/pages/learning/LearningPage.jsx';
 import { ArticleList, EventList, LearningHomeView, PublicationList, homeCoverage } from '../src/pages/learning/LearningHome.jsx';
@@ -364,10 +365,21 @@ const homeView = (props) => h(LearningHomeView, {
   articles: ARTICLES_READY, publications: PUBLICATIONS_READY, events: EVENTS_READY, ...props,
 });
 
-test('an admin: the three tabs and two sections still waiting on a store are not recorded, each with its line, and no row is drawn', () => {
-  // Stage 2: Courses and Videos read D557's catalog; Webinars (#1161), Exercises and Exams (#1160) wait.
-  assert.deepEqual(LEARNING_TABS.filter((t) => !t.live).map((t) => t.key), ['webinars', 'exercises', 'exams']);
-  for (const [tab, line] of [['webinars', 'Webinars are not live yet.'], ['exercises', 'Exercises are not live yet.'], ['exams', 'Exams are not live yet.']]) {
+/** One row of `GET /api/learning/webinars` (D560's `memberWebinar`), as `readWebinars` keeps it. */
+const UPCOMING_ROW = webinarRow({
+  uid: 'w1', title: 'Pricing a seed round, live', abstract: null, host_name: 'Ada Founder', status: 'published',
+  starts_at: '2026-10-20T16:00:00.000Z', ends_at: '2026-10-20T17:00:00.000Z', timezone: 'Europe/Oslo',
+  capacity: null, registered_count: 3, seats_left: null, registered: false, join: 'not_registered',
+}, (uid) => `/api/learning/webinars/${encodeURIComponent(uid)}/ics`);
+const BEFORE_IT = Date.parse('2026-10-19T09:00:00.000Z');
+
+test('an admin: Exercises and Exams, which no route lists, are not recorded with the reason; Webinars and both sections read', () => {
+  // Stage 3: Webinars read D560's list. D559 serves one exercise or exam at a time and lists
+  // neither, so those two tabs say so, and draw no row.
+  assert.deepEqual(LEARNING_TABS.filter((t) => !t.live).map((t) => t.key), ['exercises', 'exams']);
+  assert.equal(UNLISTED.exercises, 'Exercises open from the courses and programs that hold them. No route lists them on their own yet.');
+  assert.equal(UNLISTED.exams, 'Exams open from the courses and programs that hold them. No route lists them on their own yet.');
+  for (const [tab, line] of [['exercises', UNLISTED.exercises], ['exams', UNLISTED.exams]]) {
     assert.equal(tabMode(tab, false), 'not_live');
     assert.equal(TAB_NOT_LIVE[tab], line);
     const markup = html(homeView({ gated: false, tab }));
@@ -376,18 +388,53 @@ test('an admin: the three tabs and two sections still waiting on a store are not
     assert.ok(flat(panel).includes(`Not recorded ${line}`), `the ${tab} tab does not say it is not recorded`);
     assert.doesNotMatch(panel, /data-testid="row-|catalog-row-|list-/, `the ${tab} tab draws a row`);
   }
-  for (const tab of ['all', 'courses', 'videos']) assert.equal(tabMode(tab, false), 'live');
+  assert.equal(TAB_NOT_LIVE.webinars, undefined);
+  for (const tab of ['all', 'courses', 'videos', 'webinars']) assert.equal(tabMode(tab, false), 'live');
+  // The Webinars tab draws its two lists, loading until each read answers.
+  const tabLoading = html(homeView({ gated: false, tab: 'webinars' }));
+  assert.match(tagOf(tabLoading, 'panel-webinars'), /data-mode="live"/);
+  const loadingPanel = tabLoading.slice(tabLoading.indexOf('data-testid="panel-webinars"'));
+  assert.match(loadingPanel, /data-testid="webinars-tab"/);
+  assert.match(loadingPanel, /data-testid="learning-loading"/);
+  assert.doesNotMatch(loadingPanel, /learning-not-live/);
+  assert.match(tabLoading, /placeholder="Search courses, videos, webinars, articles, publications and events"/);
+  // My programs (D558) and Upcoming webinars (D560) read: before the read each is loading, never "not live".
   const home = html(homeView({ gated: false, tab: 'all' }));
-  for (const [section, line] of [['section-programs', NOT_LIVE.programs], ['section-webinars', NOT_LIVE.webinars]]) {
+  for (const section of ['section-programs', 'section-webinars']) {
     const at = home.indexOf(`data-testid="${section}"`);
     assert.ok(at >= 0, `${section} is missing`);
-    assert.ok(flat(home.slice(at, at + 900)).includes(`Not recorded ${line}`), `${section} does not say it is not recorded`);
+    const block = home.slice(at, at + 1500);
+    assert.match(block, /data-testid="learning-loading"/, `${section} does not read its store`);
+    assert.doesNotMatch(block, /learning-not-live/, `${section} still says its store is not live`);
   }
+  // One upcoming read feeds the section and the tab alike.
+  const upcoming = ready([UPCOMING_ROW], { when: 'upcoming' });
+  const withRows = html(homeView({ gated: false, tab: 'webinars', upcoming, past: ready([], { when: 'past' }), now: BEFORE_IT }));
+  const section = withRows.slice(withRows.indexOf('data-testid="section-webinars"'));
+  assert.match(section, /data-testid="list-upcoming-webinars"/);
+  assert.match(tagOf(section, 'link-upcoming-register'), /href="\/learning\/webinars\/w1"/);
+  // In the tab, the upcoming read is drawn under "Upcoming and live", and the past one under "Past".
+  const upcomingPart = withRows.slice(withRows.indexOf('id="webinars-upcoming-title"'), withRows.indexOf('id="webinars-past-title"'));
+  assert.ok(flat(upcomingPart).includes('Pricing a seed round, live'), 'the Webinars tab does not draw the upcoming read under Upcoming and live');
+  assert.match(upcomingPart, /href="\/learning\/webinars\/w1"/);
+  const pastPart = withRows.slice(withRows.indexOf('id="webinars-past-title"'), withRows.indexOf('data-testid="section-webinars"'));
+  assert.ok(!flat(pastPart).includes('Pricing a seed round, live'), 'the upcoming read is drawn as past');
+  // A failed upcoming read is Unreadable in both places, never "none scheduled".
+  const failed = flat(html(homeView({ gated: false, tab: 'webinars', upcoming: { status: 'unreadable' }, past: ready([], { when: 'past' }) })));
+  assert.doesNotMatch(failed, /No webinar scheduled/);
+  assert.equal((failed.match(/This is not a claim that none is scheduled\./g) || []).length, 2, 'the tab and the section do not both say the read failed');
   // Continue learning reads `GET /me` now: before the read it is loading, never "not live".
   const continuing = home.slice(home.indexOf('data-testid="section-continue"'), home.indexOf('data-testid="section-programs"'));
   assert.match(continuing, /learning-loading/);
   assert.doesNotMatch(continuing, /learning-not-live/);
   assert.doesNotMatch(home, /learning-coming-soon/);
+  // The rail counts the webinars and programs it read, and nothing it did not.
+  assert.deepEqual(
+    homeCoverage({ gated: false, q: '', upcoming, programs: { enrolled: ready([{ program: { uid: 'p1' } }]) } }),
+    ['1 upcoming webinar read', '1 program you are in'],
+  );
+  assert.deepEqual(homeCoverage({ gated: false, q: '', upcoming: { status: 'unreadable' }, programs: { enrolled: { status: 'loading' } } }), []);
+  assert.deepEqual(homeCoverage({ gated: true, q: '', upcoming, programs: { enrolled: ready([{ program: { uid: 'p1' } }]) } }), []);
 });
 
 test('a gated profile: Articles open by default, every other tab and section one coming-soon card', () => {
@@ -426,17 +473,17 @@ test('a gated profile: Articles open by default, every other tab and section one
 });
 
 test('a gated profile on a deep Learning route sees the coming-soon card in place', () => {
-  // `wired` views read D557 (stage 2): before the read an admin sees them loading.
-  // The rest still wait on their stores, and an admin sees them not recorded.
-  for (const [url, pattern, view, body, wired] of [
-    ['/learning/courses/seed-basics', '/learning/courses/:slug', 'course', 'course-outline', true],
-    ['/learning/courses/seed-basics/l1', '/learning/courses/:slug/:lesson', 'lesson', 'lesson-player', true],
-    ['/learning/videos/v1', '/learning/videos/:uid', 'item', 'lesson-player', true],
-    ['/learning/items/r1', '/learning/items/:uid', 'item', 'lesson-player', true],
-    ['/learning/webinars/w1', '/learning/webinars/:slug', 'webinar', 'webinar-panel', false],
-    ['/learning/exercises/e1', '/learning/exercises/:slug', 'exercise', 'exercise-panel', false],
-    ['/learning/exams/x1', '/learning/exams/:slug', 'exam', 'exam-flow', false],
-    ['/learning/me', '/learning/me', 'me', 'my-learning', true],
+  // Every view reads its store (D557 in stage 2; D559's exercises and exams and D560's
+  // webinars in stage 3): before the read an admin sees it loading, never "not live".
+  for (const [url, pattern, view, body] of [
+    ['/learning/courses/seed-basics', '/learning/courses/:slug', 'course', 'course-outline'],
+    ['/learning/courses/seed-basics/l1', '/learning/courses/:slug/:lesson', 'lesson', 'lesson-player'],
+    ['/learning/videos/v1', '/learning/videos/:uid', 'item', 'lesson-player'],
+    ['/learning/items/r1', '/learning/items/:uid', 'item', 'lesson-player'],
+    ['/learning/webinars/w1', '/learning/webinars/:slug', 'webinar', 'webinar-panel'],
+    ['/learning/exercises/e1', '/learning/exercises/:slug', 'exercise', 'exercise-panel'],
+    ['/learning/exams/x1', '/learning/exams/:slug', 'exam', 'exam-flow'],
+    ['/learning/me', '/learning/me', 'me', 'my-learning'],
   ]) {
     for (const role of ['founder', 'investor', 'partner', 'advisor']) {
       const markup = page(url, pattern, { view, user: { role }, activeRole: role });
@@ -449,8 +496,8 @@ test('a gated profile on a deep Learning route sees the coming-soon card in plac
     const admin = page(url, pattern, { view, user: ADMIN, activeRole: 'admin' });
     assert.doesNotMatch(admin, /learning-coming-soon/);
     assert.ok(admin.includes(`data-testid="${body}"`), `the admin at ${url} does not see the ${view} body`);
-    if (wired) assert.match(admin, /data-testid="learning-loading"/, `${url} does not read its store`);
-    else assert.match(admin, /data-testid="learning-not-live"/);
+    assert.match(admin, /data-testid="learning-loading"/, `${url} does not read its store`);
+    assert.doesNotMatch(flat(admin), /(Webinars|Exercises|Exams|Regional programs) are not live yet\./, `${url} still says a store is not live`);
   }
 });
 
@@ -528,7 +575,8 @@ test('CourseOutline: modules then lessons, kind, length and tick; a module total
   assert.match(markup, /data-testid="lesson-done-l2"/);
   assert.doesNotMatch(markup, /lesson-done-l3|lesson-done-l4/);
   assert.match(markup, /href="\/learning\/courses\/seed-basics\/l1"/);
-  assert.match(markup, /href="\/learning\/exams\/x1"/);
+  // An exam lesson opens the exam with its course along (D559), so the exam page leads back here.
+  assert.match(markup, /href="\/learning\/exams\/x1\?course=seed-basics"/);
   // "Continue" goes to the first lesson not yet ticked.
   const go = linkOf(markup, 'link-course-continue');
   assert.equal(go.label, 'Continue');

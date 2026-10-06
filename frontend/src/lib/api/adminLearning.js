@@ -1,10 +1,23 @@
 // D557 — authoring the Learning center: items, courses, modules and lessons;
 // D559's exercises and exams, D558's programs. Super Admin only. Worker:
 // routes/admin_learning*.ts, mounted at /api/admin/learning.
-import { request } from '../api.js';
+import { LONG_TIMEOUT_MS, request } from '../api.js';
 
 const enc = encodeURIComponent;
 const body = (b) => JSON.stringify(b ?? {});
+
+/**
+ * D561 — one video part's deadline. A part takes as long as the uploader's
+ * connection needs, not the server, so it gets what a 1 Mbit/s line needs for
+ * its size, and never less than `LONG_TIMEOUT_MS`. The 30-second default would
+ * cut a 10 MB part off on anything slower than about 2.7 Mbit/s. A size that is
+ * not a number gets the long deadline, never none.
+ */
+const partDeadlineMs = (bytes) => {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return LONG_TIMEOUT_MS;
+  return Math.max(LONG_TIMEOUT_MS, Math.ceil((n * 8) / 1_000_000) * 1000);
+};
 
 export const adminLearningApi = {
   listItems: () => request('/admin/learning/items'),
@@ -17,11 +30,16 @@ export const adminLearningApi = {
 
   // D561 — upload a video to R2 in parts (routes/learning_video.ts). Start
   // with the type and size; send each Blob slice of `part_size` with its
-  // number; complete with every {part_number, etag}; or abort.
+  // number; complete with every {part_number, etag}; or abort. A part's
+  // deadline follows its size (`partDeadlineMs`), and `signal` lets the
+  // editor's Cancel stop the part in flight.
   startVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads`, { method: 'POST', body: body(b) }),
-  uploadVideoPart: (uid, { key, upload_id, part_number }, blob) => request(
+  uploadVideoPart: (uid, { key, upload_id, part_number }, blob, { signal, timeoutMs } = {}) => request(
     `/admin/learning/items/${enc(uid)}/video/uploads/part?key=${enc(key)}&upload_id=${enc(upload_id)}&part_number=${enc(part_number)}`,
-    { method: 'PUT', body: blob, headers: { 'Content-Type': 'application/octet-stream' } },
+    {
+      method: 'PUT', body: blob, headers: { 'Content-Type': 'application/octet-stream' },
+      signal, timeoutMs: timeoutMs === undefined ? partDeadlineMs(blob?.size) : timeoutMs,
+    },
   ),
   completeVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/complete`, { method: 'POST', body: body(b) }),
   abortVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/abort`, { method: 'POST', body: body(b) }),

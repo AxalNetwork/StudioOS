@@ -30,7 +30,7 @@ const isLoading = (state) => !state || state.status === 'loading' || state.statu
 export const WEBINAR_LIST_CAP = 100;
 
 /** The clock, a tick at a time, so a page left open moves from upcoming to live to past. */
-function useNow(every) {
+export function useNow(every) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), every);
