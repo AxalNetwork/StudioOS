@@ -226,7 +226,7 @@ import partnerOfficeHoursRoutes from './routes/partner_office_hours';
 // Task #6 (W-1) — investor paywall surfaces.
 import introductionsRoutes from './routes/introductions';
 import investorSeatsRoutes, { downgradeExpiredInvestorTrials } from './routes/investor_seats';
-import { requireInvestorTier } from './middleware/requireInvestorTier';
+import { requireInvestorTier, requireInvestorTierExcept } from './middleware/requireInvestorTier';
 import watchlistRoutes from './routes/watchlist';
 import followsRoutes from './routes/follows';
 import journalRoutes from './routes/journal';
@@ -719,9 +719,13 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/calendar',
   '/api/ic',
 ];
+// D614: `INVESTOR_PRO_EXEMPT` names the one route under these prefixes that
+// stays open on every plan — leaving a deal room, so an investor who drops to
+// Free can still leave the rooms they joined.
+const investorPro = requireInvestorTierExcept('professional');
 for (const p of INVESTOR_PRO_PREFIXES) {
-  app.use(p, requireInvestorTier('professional'));
-  app.use(`${p}/*`, requireInvestorTier('professional'));
+  app.use(p, investorPro);
+  app.use(`${p}/*`, investorPro);
 }
 // Market Intel: only the export endpoint is paywalled for free investors;
 // browsing pulses/benchmarks remains free. Inline gate lives in

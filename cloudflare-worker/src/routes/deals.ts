@@ -441,6 +441,12 @@ deals.post('/', async (c) => {
   // D463 — where the deal came from. Free text: the source taxonomy is the
   // owner's call, and a CHECK written before it would enshrine a guess.
   const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
+  // D614: a status the column's CHECK refuses surfaced as a 500. Refuse it
+  // here, naming the statuses the table allows.
+  if (data.status != null && data.status !== '' && !DEAL_STATUSES.includes(String(data.status))) {
+    await sql.end();
+    return c.json({ error: 'unknown_status', detail: `Unknown deal status '${data.status}'`, allowed: DEAL_STATUSES }, 400);
+  }
   const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at, source) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now'), ${source}) RETURNING *`;
   // Task #127 — the deal's arrival is its first stage entry. Without this the
   // funnel can measure conversion OUT of the first stage but never has a
@@ -1491,6 +1497,10 @@ deals.post('/:id/dealroom/join', async (c) => {
   }
   const dealId = Number(c.req.param('id'));
   if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
+  // D614: a room belongs to a deal. Joining one that does not exist wrote a
+  // membership row, which then counted against the investor's room quota.
+  const deal = await c.env.DB.prepare(`SELECT id FROM deals WHERE id = ?`).bind(dealId).first<{ id: number }>();
+  if (!deal) return c.json({ error: 'deal_not_found' }, 404);
 
   // Idempotent join — if already a member, just return ok.
   const existing = await c.env.DB.prepare(
