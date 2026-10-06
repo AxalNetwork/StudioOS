@@ -41683,6 +41683,7 @@ rest on, and none waits on an open decision.
 - `research_zone_states.test.mjs` now checks the lookup by behaviour, where it
   used to read its source text.
 - 7 mutations were made and each was caught.
+
 ## D496
 
 **Investor Portfolio, built to the owner's line: Parse review says its decision
