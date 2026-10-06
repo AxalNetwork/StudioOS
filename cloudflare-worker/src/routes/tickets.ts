@@ -16,9 +16,9 @@ import {
   ensureTicketSyncSchema, recordSyncEvent, sha256Hex,
   validateTicketCreate, validateTicketUpdate, validateComment,
   labelsForTicket, mapGithubStatusToLocal, mapLocalStatusToGithub,
-  parseLabelsFromGithub, syncMarker, assigneeLoginFor, githubConfigured,
+  parseLabelsFromGithub, assigneeLoginFor, githubConfigured,
   createIssue, updateIssue, addComment, setLabels, setAssignees,
-  fetchIssue, fetchComments,
+  fetchIssue, fetchComments, mirrorIssueBody, mirrorReplyBody,
 } from '../services/githubSync';
 import { refusalBody } from '../util/refusal';
 import { bountySummaries } from '../services/bugBounties';
@@ -126,7 +126,8 @@ tickets.post('/sync', async (c) => {
               OR datetime(github_sync_attempted_at) < datetime('now', '-5 minutes'))
           RETURNING id`;
         if (!claimed.length) continue;
-        const body = `${ticket.description || ''}\n\n---\n**Submitted by:** ${ticket.submitted_by || 'User'}\n**Priority:** ${ticket.priority}\n**Type:** ${ticket.type || 'task'}\n**Source:** StudioOS (backfilled)\n\n${syncMarker(ticket.id)}`;
+        // D600 — no `submitted_by` here: it holds the name or the email.
+        const body = mirrorIssueBody(ticket, 'StudioOS (backfilled)');
         const gh = await createIssue(c.env, {
           title: ticket.title,
           body,
@@ -195,7 +196,7 @@ tickets.post('/', async (c) => {
   let githubIssue: any = null;
   let githubSyncError: string | null = null;
   if (githubConfigured(c.env)) {
-    const body = `${data.description || ''}\n\n---\n**Submitted by:** ${user.name || 'User'}\n**Priority:** ${data.priority}\n**Type:** ${data.type}\n**Source:** StudioOS\n\n${syncMarker(ticket.id)}`;
+    const body = mirrorIssueBody({ id: ticket.id, description: data.description, priority: data.priority, type: data.type }, 'StudioOS');
     const gh = await createIssue(c.env, {
       title: data.title,
       body,
@@ -363,7 +364,9 @@ tickets.post('/:id{[0-9]+}/comments', async (c) => {
   const ticket = rows[0];
   if (!ticket.github_issue_number) { await sql.end(); return c.json({ error: 'no_linked_issue', message: 'This ticket has no linked GitHub issue to comment on.' }, 409); }
 
-  const body = `${parsed.value.body}\n\n---\n_Comment by **${user.name || user.email}** via StudioOS_\n\n${syncMarker(ticket.id)}`;
+  // D600 — signed by side, never by name: only the ticket's own member or an
+  // admin reaches this line (the 403 above), so anyone else replying is the team.
+  const body = mirrorReplyBody(parsed.value.body, ticket.user_id === user.id ? 'member' : 'team', ticket.id);
   const gh = await addComment(c.env, ticket.github_issue_number, body);
   if (!gh.ok) {
     await sql.end();

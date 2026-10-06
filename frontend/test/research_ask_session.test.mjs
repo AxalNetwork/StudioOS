@@ -179,7 +179,7 @@ test('every read is owner-scoped, and the API takes nobody else’s id', () => {
   ]) {
     assert.ok(WORKER.includes(q), `an ask read lost its owner scope: ${q}`);
   }
-  assert.match(WORKER, /UPDATE research_ask_answers SET saved = \? WHERE uid = \? AND owner_user_id = \?/,
+  assert.match(WORKER, /UPDATE research_ask_answers SET saved = \?, discarded = \?, use_note = \? WHERE uid = \? AND owner_user_id = \?/,
     'the save toggle can be aimed at another account’s answer');
   // And the client cannot even express one.
   const block = API.slice(API.indexOf('research: {'), API.indexOf('\n  },', API.indexOf('research: {')));

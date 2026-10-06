@@ -89,6 +89,7 @@ import githubWebhook from './routes/github';
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
 import admin83bReview from './routes/admin_83b_review';
+import companyEin from './routes/company_ein';
 import privateData from './routes/private-data';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
@@ -800,6 +801,8 @@ app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 app.route('/api/admin/cohort', adminCohort);
 // D580 (#1207) — 83(b) operator review: assign an operator, record a review.
 app.route('/api/admin/83b-review', admin83bReview);
+// D579 (#1206) — a startup's EIN, encrypted at rest; founders, company editors and admins.
+app.route('/api/company-ein', companyEin);
 // Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
 // the generic /api/admin router so the more-specific prefix wins.
 app.route('/api/admin/team', adminTeam);

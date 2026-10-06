@@ -69,7 +69,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Founder Grow | `/grow` · `/grow/focus` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | UPGRADE | Low |
 | Pages · Founder Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | RESKIN | High |
 | Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
-| Pages · Founder Research | `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | RESKIN | High |
+| Pages · Founder Research | `/research/ask` · `/research/library` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Founder Validate | `/validate` · `/validate/{interviews` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | CURRENT | Low |
 | Pages · Fund dossier | `/research/funds/:uid` · `/research/funds` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |

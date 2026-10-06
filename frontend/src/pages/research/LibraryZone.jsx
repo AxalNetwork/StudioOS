@@ -67,6 +67,9 @@ const STATE_TONE = {
 
 const KINDS = [
   { value: 'document', label: 'Document' },
+  { value: 'report', label: 'Report' },
+  { value: 'primary', label: 'Primary' },
+  { value: 'legal', label: 'Legal' },
   { value: 'playbook', label: 'My playbook' },
   { value: 'client', label: 'About a client' },
 ];
@@ -102,11 +105,7 @@ function fmtBytes(n) {
  * that the product cannot do something it now does. Founder and investor get
  * the real figures from the same place Ask's strip does.
  *
- * `Primary sources` IS THE ONE TILE STILL NOT DRAWN, and it is the D56 case
- * unchanged: nothing on a document records whether it is the reader's own
- * research or a bought report, `kind` is document/playbook/client, and no
- * upload can classify one any other way. Its `value` returns null and the tile
- * is absent. The reason lives here, where whoever adds the field reads it.
+ * D549 counts Primary from the recorded kind, never from the filename.
  */
 const LIBRARY_STRIP = {
   advisor: [
@@ -117,7 +116,7 @@ const LIBRARY_STRIP = {
   ],
   founder: [
     { label: 'Documents', value: (x) => x.total, note: (x) => `${x.indexed} answerable by Ask` },
-    { label: 'Primary sources', value: () => null, note: () => '' },
+    { label: 'Primary sources', value: (x) => x.primary, note: () => 'classified as primary by their owner' },
     { label: 'Questions asked', value: (x) => x.asked, note: (x) => `${x.noSource} came back with no source` },
     {
       label: 'Cost per question',
@@ -149,6 +148,20 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   const [kind, setKind] = useState('document');
   const [title, setTitle] = useState('');
   const fileRef = useRef(null);
+  const collectionRef = useRef(null);
+  const [collectionState, setCollectionState] = useState({ loading: true, error: '', items: [] });
+  const [collectionUid, setCollectionUid] = useState('');
+  const [newCollectionOpen, setNewCollectionOpen] = useState(false);
+  const loadCollections = useCallback(async () => {
+    setCollectionState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const response = await api.research.collections();
+      setCollectionState({ loading: false, error: '', items: response.items || [] });
+    } catch (cause) {
+      setCollectionState({ loading: false, error: cause?.message || 'Collections are unreadable.', items: [] });
+    }
+  }, []);
+  useEffect(() => { loadCollections(); }, [loadCollections]);
 
   const load = useCallback(async () => {
     setState((c) => ({ ...c, loading: true, error: '' }));
@@ -159,6 +172,11 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!state.loading && window.location.hash.startsWith('#document-')) {
+      window.document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'center' });
+    }
+  }, [state.loading, state.payload]);
 
   // THE ASK HISTORY, READ HERE TOO, AND ONLY ON THE LICENCES WHOSE ARTBOARD
   // ASKS FOR IT. Founder's and investor's Library artboards open with
@@ -231,7 +249,8 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // re-index still carries its old count while being unreadable to Ask. Reading
   // the number here would hide exactly the documents this view is for.
   const visible = items.filter((d) => {
-    if (filter === 'client' || filter === 'playbook') return d.kind === filter;
+    if (collectionUid && !collectionState.items.find((item) => item.uid === collectionUid)?.document_uids?.includes(d.uid)) return false;
+    if (['client', 'playbook', 'report', 'primary', 'legal'].includes(filter)) return d.kind === filter;
     if (filter === 'unindexed') return d.index_state !== 'indexed';
     return true;
   });
@@ -245,6 +264,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // because you clicked a chip is not reporting what it claims to — the same
   // rule `SignalsPage`'s age bands follow, and for the same reason.
   const ctx = {
+    primary: items.filter((d) => d.kind === 'primary').length,
     total: items.length,
     indexed: payload?.indexed ?? 0,
     notIndexed: payload?.not_indexed ?? 0,
@@ -273,6 +293,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // a control that vanishes leaves a reader wondering whether it ever existed.
   const stale = items.filter((d) => d.source !== 'client' && d.index_state !== 'indexed');
   const handlers = {
+    newCollection: () => { setNewCollectionOpen(true); collectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
     addDocument: () => fileRef.current?.click(),
     reindex: {
       onClick: () => stale.forEach((d) => reindex(d.uid)),
@@ -360,6 +381,12 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         />
       )}
 
+      <div ref={collectionRef}>
+        <CollectionManager state={collectionState} documents={items.filter((document) => document.source !== 'client')}
+          selected={collectionUid} onSelect={setCollectionUid} showCreate={newCollectionOpen} onShowCreate={setNewCollectionOpen}
+          onSaved={loadCollections} />
+      </div>
+
       <ZoneBody
         loading={state.loading}
         error={state.error}
@@ -377,7 +404,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           title="Library"
           meta="Index state is Ask’s reach, stated as a column"
           cols="2.2fr 1fr 1fr .9fr 1.4fr"
-          head={['Document', 'Kind', 'Added', 'Index state', 'In Ask']}
+          head={['Document', 'Kind', 'Source year', 'Index state', 'In Ask']}
           rows={visible.map((d) => ({
             key: d.uid,
             // The row a reader has to act on, tinted so the eye finds it before
@@ -386,6 +413,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             cells: [
               {
                 text: d.title,
+                node: <span id={`document-${encodeURIComponent(d.uid)}`} />,
                 // Cyan is theirs, amber is ours — the legend above says which,
                 // and the marks are the artboard's `seam` and `ours`.
                 seam: d.source === 'client' ? (d.source_label || 'From client') : null,
@@ -393,11 +421,8 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 sub: fmtBytes(d.size_bytes) || 'Size not recorded',
               },
               { pill: KINDS.find((k) => k.value === d.kind)?.label || d.kind, pillTone: KIND_TONE[d.kind] || 'neutral' },
-              // `Added`, not the artboard's own word for this slot. It means
-              // the source's own date — the thing that makes a 2023 report
-              // stale — and nothing records it; `created_at` is when the file
-              // arrived here, which is a different fact.
-              { text: String(d.created_at || '').slice(0, 10), nr: !d.created_at },
+              // Source year is recorded separately from the upload date (D549).
+              { text: d.source_year == null ? 'Not recorded' : String(d.source_year), sub: d.created_at ? `Added ${String(d.created_at).slice(0, 10)}` : 'Added: Not recorded' },
               {
                 pill: STATE_LABEL[d.index_state] || d.index_state,
                 pillTone: STATE_TONE[d.index_state] || 'neutral',
@@ -429,6 +454,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         would be a control that cannot act. */}
                     {d.source !== 'client' && (
                       <>
+                        <DocumentMetadata document={d} onSaved={load} />
                         <button
                           type="button" disabled={busy} onClick={() => reindex(d.uid)}
                           className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -501,4 +527,76 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
       </StatedLimit>
     </div>
   );
+}
+
+/** D549: editing metadata never changes a shared client's row. */
+export function DocumentMetadata({ document, onSaved }) {
+  const [title, setTitle] = useState(document.title || '');
+  const [kind, setKind] = useState(document.kind || 'document');
+  const [year, setYear] = useState(document.source_year ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (document.read_only || document.source === 'client') return null;
+  const save = async (event) => {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      await api.research.updateDocument(document.uid, { title: title.trim(), kind, source_year: year === '' ? null : Number(year) });
+      await onSaved?.();
+    } catch (cause) { setError(cause?.message || 'Metadata could not be saved.'); }
+    finally { setBusy(false); }
+  };
+  return <details className="w-full text-[12px]" data-testid="document-metadata">
+    <summary className="cursor-pointer">Edit title, kind or source year</summary>
+    <form className="mt-2 space-y-2" onSubmit={save}>
+      <label className="block">Title<input className={inputClass} value={title} maxLength={300} required disabled={busy} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label className="block">Kind<select aria-label="Kind" className={inputClass} value={kind} disabled={busy} onChange={(event) => setKind(event.target.value)}>{KINDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <label className="block">Source year<input className={inputClass} type="number" min={1000} max={new Date().getUTCFullYear() + 1} value={year} disabled={busy} onChange={(event) => setYear(event.target.value)} /></label>
+      <span>{document.source_year == null ? 'Not recorded' : document.source_year}</span>
+      <button className={buttonClass} type="submit" disabled={busy}>Save metadata</button>
+      {error && <p role="alert">{error}</p>}
+    </form>
+  </details>;
+}
+
+/** D549: collections group owned files; removing a group never removes files. */
+export function CollectionManager({ state, documents, selected, onSelect, showCreate, onShowCreate, onSaved }) {
+  const [name, setName] = useState('');
+  const [documentUid, setDocumentUid] = useState('');
+  const [rename, setRename] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const current = state.items.find((collection) => collection.uid === selected);
+  const write = async (operation) => {
+    setBusy(true); setError('');
+    try { await operation(); await onSaved?.(); }
+    catch (cause) { setError(cause?.message || 'The collection could not be updated.'); }
+    finally { setBusy(false); }
+  };
+  return <Card className="p-4 space-y-3" data-testid="library-collections">
+    <h3 className="font-bold">Collections</h3>
+    {state.loading ? <p>Reading collections…</p> : state.error ? <p role="alert">Unreadable — {state.error} <button type="button" onClick={onSaved}>Retry</button></p> : <>
+      <label className="block text-[12px]">Collection<select aria-label="Collection" className={inputClass} value={selected} onChange={(event) => { onSelect(event.target.value); setRename(''); }}><option value="">All documents</option>{state.items.map((collection) => <option key={collection.uid} value={collection.uid}>{collection.name}</option>)}</select></label>
+      {!state.items.length && <p className="text-[12px]">No collections yet. Create one to group your own documents.</p>}
+      <button type="button" className={ghostButtonClass} onClick={() => onShowCreate(!showCreate)}>New collection</button>
+      {showCreate && <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); write(async () => { await api.research.createCollection(name.trim()); setName(''); onShowCreate(false); }); }}>
+        <label className="min-w-0 flex-1 text-[12px]">Collection name<input className={inputClass} required maxLength={120} value={name} disabled={busy} onChange={(event) => setName(event.target.value)} /></label>
+        <button type="submit" className={buttonClass} disabled={busy || !name.trim()}>Create collection</button>
+      </form>}
+      {current && <div className="space-y-2">
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); write(() => api.research.renameCollection(current.uid, rename.trim())); }}>
+          <label className="min-w-0 flex-1 text-[12px]">Rename collection<input className={inputClass} placeholder={current.name} required maxLength={120} value={rename} disabled={busy} onChange={(event) => setRename(event.target.value)} /></label>
+          <button type="submit" className={buttonClass} disabled={busy || !rename.trim()}>Rename</button>
+          <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => write(async () => { await api.research.deleteCollection(current.uid); onSelect(''); })}>Delete collection</button>
+        </form>
+        <p className="text-[11px]">Deleting a collection leaves its documents in your Library.</p>
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); write(async () => { await api.research.addCollectionDocument(current.uid, documentUid); setDocumentUid(''); }); }}>
+          <label className="min-w-0 flex-1 text-[12px]">Add document<select aria-label="Add document" className={inputClass} required value={documentUid} disabled={busy} onChange={(event) => setDocumentUid(event.target.value)}><option value="">Choose an owned document</option>{documents.filter((document) => !current.document_uids.includes(document.uid)).map((document) => <option key={document.uid} value={document.uid}>{document.title}</option>)}</select></label>
+          <button type="submit" className={buttonClass} disabled={busy || !documentUid}>Add to collection</button>
+        </form>
+        {!current.document_uids.length && <p className="text-[12px]">This collection is empty.</p>}
+        {current.document_uids.map((uid) => <div key={uid} className="flex flex-wrap items-center gap-2 text-[12px]"><span>{documents.find((document) => document.uid === uid)?.title || 'Document unavailable'}</span><button type="button" className={ghostButtonClass} disabled={busy} onClick={() => write(() => api.research.removeCollectionDocument(current.uid, uid))}>Remove from collection</button></div>)}
+      </div>}
+    </>}
+    {error && <p role="alert">{error}</p>}
+  </Card>;
 }

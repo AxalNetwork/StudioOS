@@ -10,6 +10,7 @@ import { storeReason } from './impersonationBar';
 // api-modules:begin
 export * from './api/adminLearning.js';
 export * from './api/communityTasks.js';
+export * from './api/companyEin.js';
 export * from './api/learning.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
@@ -5052,6 +5053,14 @@ export const api = {
     // a client-sourced one is indexed in their library, not yours, and its uid
     // is not in your own set.
     reindex: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/reindex`, { method: 'POST' }),
+    updateDocument: (uid, body) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    collections: () => request('/research/collections'),
+    createCollection: (name) => request('/research/collections', { method: 'POST', body: JSON.stringify({ name }) }),
+    renameCollection: (uid, name) => request(`/research/collections/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+    deleteCollection: (uid) => request(`/research/collections/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    addCollectionDocument: (uid, documentUid) => request(`/research/collections/${encodeURIComponent(uid)}/documents`, { method: 'POST', body: JSON.stringify({ document_uid: documentUid }) }),
+    removeCollectionDocument: (uid, documentUid) => request(`/research/collections/${encodeURIComponent(uid)}/documents/${encodeURIComponent(documentUid)}`, { method: 'DELETE' }),
+    askUpdateAnswer: (uid, body) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
     // `session_uid` is optional and the worker falls back to the caller's most
     // recent thread, so a reader who has just landed can ask without one.
     ask: (question, sessionUid) => request('/research/ask', {

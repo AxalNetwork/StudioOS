@@ -339,12 +339,10 @@ export const FOUNDER_ZONE_ACTIONS = {
   // `unbuilt: 'the add-document form below takes a file or a link'` — true of
   // the form, never true of the op.
   //
-  // `New collection` KEEPS ITS NOTE. Collections are still not stored, and
-  // nothing in migration 221 or the library's own store changed that: a
-  // collection is a grouping of documents and there is no table for one.
+  // D549: New collection opens the owned Library collection form.
   'research/library': [
     { label: 'Upload', kind: 'handler', handler: 'addDocument' },
-    { label: 'New collection', unbuilt: 'collections are not stored' },
+    { label: 'New collection', kind: 'handler', handler: 'newCollection' },
     { label: 'Export', kind: 'export' },
   ],
 };
