@@ -254,8 +254,45 @@ test('the section list draws the canvas sections first, the kept ones under More
   assert.match(markup, /aria-current="page"[^>]*data-testid="account-nav-billing"/);
   assert.equal((markup.match(/aria-current="page"/g) || []).length, 1);
   assert.match(text(h(AccountSectionNav, { sections: SECTIONS, active: 'account', onSelect: noop })), /Following More Onboarding/);
-  // One element, two shapes: a sideways row on a phone, a column from lg.
-  assert.match(markup, /flex gap-0\.5 overflow-x-auto lg:flex-col/);
+  // The column is the lg shape; below lg the Section menu stands in for it.
+  assert.match(markup, /<nav [^>]*data-testid="account-section-nav"[^>]*>\s*<div class="[^"]*\bhidden\b[^"]*\blg:block\b/);
+});
+
+// D607 (#1165) — the 2026-10-06 export's phone rule: `.op-secnav` is hidden and
+// `.op-secdrop` draws one row, "Section", the open section's name and ▾. It is a
+// native select under that drawing, so the phone opens its own picker.
+const findEl = (el, pred) => {
+  if (!el || typeof el !== 'object') return null;
+  if (Array.isArray(el)) { for (const c of el) { const f = findEl(c, pred); if (f) return f; } return null; }
+  return pred(el) ? el : findEl(el.props?.children, pred);
+};
+
+test('below lg the section list is one Section menu that names the open section', () => {
+  const markup = html(h(AccountSectionNav, { sections: SECTIONS, active: 'billing', onSelect: noop }));
+  const menu = markup.match(/<div data-testid="account-section-menu" class="([^"]*)">([\s\S]*?)<\/select><\/div>/);
+  assert.ok(menu, 'no Section menu');
+  assert.match(menu[1], /\blg:hidden\b/, 'the menu shows from lg too');
+  assert.match(menu[1], /min-h-\[44px\]/, 'the canvas draws the row 44px tall, a touch target');
+  const face = menu[2].replace(/<select[\s\S]*$/, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  assert.equal(face, 'Section Billing and orders ▾');
+  // The same sections in the same order, the kept ones under More, the open one picked.
+  const opts = [...menu[2].matchAll(/<option value="([a-z-]+)"( selected="")?>/g)].map((m) => m[1] + (m[2] ? '*' : ''));
+  assert.deepEqual(opts, ['account', 'notifications', 'security-privacy', 'billing*', 'following', 'onboarding']);
+  assert.match(menu[2], /<optgroup label="More"><option value="onboarding">Onboarding<\/option><\/optgroup>/);
+  assert.match(menu[2], /<select aria-label="Account section"/);
+  // D568's sideways row of chips is gone.
+  assert.doesNotMatch(markup, /overflow-x-auto/);
+
+  // A pick opens that section, the way a click on the column does.
+  const picked = [];
+  const tree = AccountSectionNav({ sections: SECTIONS, active: 'billing', onSelect: (id) => picked.push(id) });
+  findEl(tree, (el) => el.type === 'select').props.onChange({ target: { value: 'onboarding' } });
+  assert.deepEqual(picked, ['onboarding']);
+
+  // A section id the list does not hold names the first section, never a blank row.
+  const stray = html(h(AccountSectionNav, { sections: SECTIONS, active: 'nope', onSelect: noop }));
+  assert.match(stray, /Section<\/span><span class="[^"]*">Profile and identity<\/span>/);
+  assert.match(stray, /<option value="account" selected="">/);
 });
 
 test('the rail is given counts and states, never the email address', () => {
