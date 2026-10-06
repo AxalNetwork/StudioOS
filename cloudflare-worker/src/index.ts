@@ -89,6 +89,7 @@ import githubWebhook from './routes/github';
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
 import adminIncorporations from './routes/admin_incorporations';
+import safeIssuances from './routes/safe_issuances';
 import admin83bReview from './routes/admin_83b_review';
 import companyEin from './routes/company_ein';
 import privateData from './routes/private-data';
@@ -802,6 +803,8 @@ app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 app.route('/api/admin/cohort', adminCohort);
 // D601 (#998) — HQ records a formation order's packet and its state filing.
 app.route('/api/admin/incorporations', adminIncorporations);
+// D578 (#1205) — a startup's SAFEs: recorded terms, status from the envelope.
+app.route('/api/safe-issuances', safeIssuances);
 // D580 (#1207) — 83(b) operator review: assign an operator, record a review.
 app.route('/api/admin/83b-review', admin83bReview);
 // D579 (#1206) — a startup's EIN, encrypted at rest; founders, company editors and admins.
@@ -1640,6 +1643,16 @@ export default {
           } catch (e) {
             console.error('[cron] learning video sweep failed', e);
           }
+        }
+        // D484 — publish approved articles whose scheduled time has passed.
+        // Every minute, on every tier: a branch's articles are its own, and an
+        // article with no `publish_at` is never touched.
+        try {
+          const { publishDueArticles } = await import('./routes/admin_articles');
+          const p = await publishDueArticles(env, now);
+          if (p.published) console.info(`[cron] scheduled articles published=${p.published} of due=${p.due}`);
+        } catch (e) {
+          console.error('[cron] scheduled article publish failed', e);
         }
         // Cohort Timing & Gating — every-minute tick: materializes monthly
         // cycles, unlocks weeks at their Delaware-midnight boundaries,

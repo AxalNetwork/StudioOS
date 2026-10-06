@@ -261,7 +261,10 @@ export async function gateToolCall(
   if (!allowed) {
     return { ok: false, reason: 'unknown_tool', detail: tool };
   }
-  if (!allowed.includes(ctx.persona)) {
+  // D577: paid coaching changes the conversation, not the advisor's permissions.
+  const toolPersona = ctx.persona === 'coach' && String(ctx.user.role).toLowerCase() === 'advisor'
+    ? 'advisor' : ctx.persona;
+  if (!allowed.includes(toolPersona)) {
     return { ok: false, reason: 'persona_mismatch', detail: `${tool} not available for ${ctx.persona}` };
   }
   const reqTier = TOOL_TIER_REQUIRED[tool];

@@ -34,6 +34,14 @@ agreement, FAST advisory (`venture_share_agreement_fast_v1`), SAFE /
 term sheet / SPA / bylaws / 83(b) (in `routes/legal.ts` doc sets),
 IP background schedule, member consent, founding resolutions — **all
 existing**.
+**Needed (D578):** a **SAFE**, post-money with a valuation cap and no
+discount (#1205, S1's Q1 A for the owner). The Capital page records each
+investor's terms (`safe_issuances`, migration 410), but nothing can be sent:
+`services/esignOriginators.ts` keeps SAFE as `NO_BODY`, and the send route
+refuses until an approved text is registered in `services/legalTemplates.ts`.
+The widely used public SAFE forms carry their own licence terms; counsel
+should confirm the text may be used and adapted, or supply our own.
+
 **Needed (D586):** Wyoming **Articles of Incorporation** for a C-Corp
 (template key `articles_of_incorporation_wy`). Nothing generates it until
 counsel supplies an approved body and it is published to the D1 template
