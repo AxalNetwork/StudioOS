@@ -7,7 +7,7 @@ import { applyMergeFields } from '../services/mergeFields';
 import {
   ensureSection83bSchema,
   tracker83bDto,
-  addDaysISO,
+  electionDeadline,
   validateFilingPatch,
   type FilingPatchBody,
   type Section83bRow,
@@ -99,7 +99,8 @@ app.post('/83b/trackers', async (c) => {
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
   }
 
-  const deadline = addDaysISO(grantDate, 30);
+  // D584: the 30th calendar day, unrolled until counsel answers (#1211).
+  const deadline = electionDeadline(grantDate);
 
   // Idempotency: same project + user + grant_date → reuse. The unique index
   // (uq_83b_project_user_grant) also guards against a concurrent race below.
