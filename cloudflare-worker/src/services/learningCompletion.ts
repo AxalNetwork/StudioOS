@@ -17,7 +17,7 @@
  *     when the course has no required lesson. It is what the page's own
  *     "Mark complete" writes (`learningReads.js` `markLessonComplete`).
  *
- * NEVER DOWNGRADED. Both writes use the progress route's upsert: a completed
+ * NEVER DOWNGRADED. Both writes follow the progress route's upsert rules: a completed
  * row stays completed, keeps its first completion time, and a percent never
  * goes backwards. A second pass, or an acceptance after an earlier one,
  * changes nothing. "Needs work", a failed attempt and a timed-out attempt
@@ -27,7 +27,11 @@ import type { Env } from '../types';
 
 export type AssessmentKind = 'exercise' | 'exam';
 
-/** The progress route's upsert (routes/learning.ts `POST /progress`), shared so the rules cannot drift. */
+/**
+ * The same rules as the progress route's upsert (routes/learning.ts `POST /progress`):
+ * completed stays completed, the first completion time is kept, the percent never
+ * goes backwards. It leaves `position_seconds` alone, which only a video sets.
+ */
 export const PROGRESS_UPSERT =
   'INSERT INTO learning_progress (user_id, subject_kind, subject_uid, status, percent, position_seconds, started_at, completed_at, updated_at) '
   + 'VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?) '
