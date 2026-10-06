@@ -4928,12 +4928,29 @@ const RENDERERS: Record<TemplateKey, (bk: BrandKit, aud: Record<string, { h: str
   'customer-audience': renderCustomerAudience,
 };
 
+/**
+ * D583 — the templates drawn on a dark ground (`color-scheme: dark`). On these
+ * a page's dark logo, when it has one, replaces the light logo everywhere the
+ * template places it. A test renders every template and checks this set
+ * against the CSS each one emits, so a new dark template cannot be missed.
+ */
+export const DARK_TEMPLATES: ReadonlySet<string> = new Set([
+  'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'builders-launchpad',
+]);
+
+/** The row a renderer sees: the dark logo swapped in on a dark template. */
+export function withLogoForTemplate(row: any, templateKey: string): any {
+  if (!DARK_TEMPLATES.has(templateKey) || !(row?.logo_dark_url || row?.logo_dark_svg)) return row;
+  return { ...row, logo_url: row.logo_dark_url || null, logo_svg: row.logo_dark_svg || null };
+}
+
 export function renderLandingTemplate(
   row: any,
   opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string } = {},
 ): string {
   const templateKey = (row.template || 'minimal') as TemplateKey;
   const renderer = RENDERERS[templateKey] || RENDERERS.minimal;
+  row = withLogoForTemplate(row, RENDERERS[templateKey] ? templateKey : 'minimal');
   const bk = buildBrandKit(row, opts);
   const aud = buildAudienceData(row);
   return renderer(bk, aud, row);

@@ -41400,6 +41400,72 @@ so the render, revision, edge-cache purge and notifications are identical.
 - `content_studio_d214.test.ts`: the Scheduled lane's note, and the reason
   given when 346 is absent.
 
+## D485
+
+**HQ · Support (H22): the tickets a branch's administrators file on its own
+host reach HQ, over RPC (issue #1025).** Slot S09. No migration.
+
+**What was true.** Once a licence had a branch, its administrators filed on
+that branch's host, into its own database, and "no branch call returns
+tickets" (`HqSupportPage.jsx`). H22's matrix marked the deployed licence's
+About-Admin cell "On the branch", without a count.
+
+**The branch's answer.** `openTickets()` on `HqEntrypoint`
+(`branchOpenTickets`, `services/supportQueues.ts` `readBranchAdminTickets`).
+- **Whose tickets.** Open tickets (`OPEN_TICKET_STATUSES`) filed by an active
+  `role = 'admin'` account on the branch's database. On a branch nobody is a
+  Super Admin (D106), so its admins are exactly the About-Admin persona. A
+  branch member's own ticket is the branch's to answer and does not travel.
+- **What travels.** The count, the oldest filing time, and the oldest 25
+  items, each with title, priority, status, filing time and the requester's
+  display name (the email when the name is empty).
+- **Ceiling.** Past `OPEN_TICKET_CEILING` the read is marked cut and HQ shows
+  no count for it.
+- **Secret.** None: it is a read, on `rpc/index.ts`'s rule.
+- **Topology.** It is listed on the topology page (`services/topology.ts`).
+
+**HQ.** `GET /api/admin/hq-support` fans out to every bound branch and merges
+the answers with `licence_deployments`. A deployed branch with no binding is
+named `not_deployed` rather than left out.
+- **Each branch is a line** (`branch_tickets.lines`), labelled with its
+  licence's brand. Its items are aged and banded with HQ's own tier hours
+  (D482), so a branch ticket bands exactly as an HQ one does. Bands are given
+  only when every open ticket travelled. Without HQ's tier hours nothing is
+  banded.
+- **The matrix's About-Admin cell** for a deployed licence is the whole load:
+  what was filed on its host, plus what its administrators filed on axal.vc.
+  The cell carries the split (`on_branch`, `on_hq`) and the oldest of either.
+  - A branch that did not answer is Unreadable with its reason.
+  - An unbound branch is still "On the branch", now saying HQ has no binding to
+    ask it.
+  - A cut read is Not counted.
+- **The band's total** counts every branch's queue, and its oldest can name a
+  branch (`branch:<code>`). While any branch cannot be asked, did not answer,
+  or was cut, the total is withheld with that reason, because the About-Admin
+  queue would be a part.
+
+**The page.** A "Tickets filed on branch hosts" section has one `QueueCard`
+per branch (`branchTicketCardProps`). `QueueCard` takes a `title`. The matrix
+cell shows its split, the rail reads back how many branch tickets were read,
+and the rail's "no branch call returns tickets" absence is gone.
+
+**Tests.**
+- `cloudflare-worker/test/branch_tickets_d485.test.ts` (7 tests), on real
+  SQLite at both tiers, with HQ's binding calling `branchOpenTickets` over
+  the branch's database. It covers:
+  - whose tickets travel, and the exact item fields;
+  - HQ's tier refused, and an unreadable queue;
+  - the ceiling;
+  - each branch's line, with banding, an unreadable branch and coverage;
+  - the matrix's whole-load cell, an unreadable branch and an undeployed
+    licence;
+  - the total, including an unbound branch withholding it;
+  - no tier hours.
+- `frontend/test/branch_tickets_d485.test.mjs` (5 tests) covers the cards in
+  each state, a cut and an empty branch, the matrix split, the band naming a
+  branch, the rail's read-back, and the rail's retired absence.
+- `support_queues_d204.test.ts`: the total test binds its deployed branch.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor

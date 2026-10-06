@@ -43,6 +43,7 @@ import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import profileHistoryRoutes from './routes/profile_history';
 import adminProfilingRoutes from './routes/admin_profiling';
+import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
@@ -1073,6 +1074,9 @@ app.route('/api/profiling', profiling);
 app.route('/api/profile', profileHistoryRoutes);
 // D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
 app.route('/api/admin/profiling', adminProfilingRoutes);
+// D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
+app.route('/api/help', helpCenterRoutes);
+app.route('/api/admin/help', adminHelpCenter);
 app.route('/api/dashboard', dashboard);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);
