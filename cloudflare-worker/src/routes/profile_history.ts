@@ -2,6 +2,7 @@
  * D357 — Profiling v2 "me" routes, mounted at /api/profile
  * (documentation/architecture/PROFILING_V2.md §10).
  *
+ *   GET/PUT /evidence-blend    D592 — global setting, elevated HQ Super Admin only
  *   GET /history?persona=      the caller's own snapshots, newest first
  *   GET /archetype-published   the caller's consent to show their archetype
  *   PUT /archetype-published   { published: boolean } — set it
@@ -9,12 +10,13 @@
  *                              asked again ("is this still true?"); a
  *                              read-only peek, nothing is marked asked
  *
- * Every read and write is keyed on the session user; no request field names
+ * The history/consent/reask reads and writes are keyed on the session user; no request field names
  * whose history is read, so there is no way to ask for anyone else's. Another
  * member only ever sees a PUBLISHED displayed archetype, through the matching
  * surfaces Session 15 builds on isArchetypePublished.
  */
 import { Hono } from 'hono';
+import evidenceBlendRoutes from './profile_evidence_blend';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
@@ -24,6 +26,8 @@ import { reaskList } from '../services/profileEvolution';
 import { archetypeAccess, ARCHETYPE_KEYS, withoutKeys } from '../services/archetypeEntitlement';
 
 const r = new Hono<{ Bindings: Env }>();
+// The global setting is a separate Super Admin-only boundary, not a me read.
+r.route('/evidence-blend', evidenceBlendRoutes);
 const PERSONAS: FitPersona[] = ['founder', 'investor', 'partner', 'advisor', 'coach'];
 
 r.get('/history', async (c) => {

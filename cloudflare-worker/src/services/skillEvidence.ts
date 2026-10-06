@@ -31,7 +31,7 @@
  * `EVIDENCE_FADE_DAYS`. Lifetime totals are kept for display; only the window
  * feeds the state.
  *
- * STATE, NOT LEVEL (§5.2, decision b "corroborate"): evidence never changes
+ * DEFAULT OFF (§5.2, decision b "corroborate"): evidence never changes
  * the displayed level in v2. The level is the self-rating, or none. Evidence
  * moves the axis's state:
  *   - no self-rating, no evidence weight      → `not_recorded` (never 0);
@@ -39,11 +39,12 @@
  *   - self-rating, 0 < weight < CORROBORATED_AT → `some_evidence`;
  *   - self-rating, weight ≥ CORROBORATED_AT   → `corroborated`;
  *   - no self-rating, weight > 0              → `evidence_only` (a count, no level).
- * A blend that moves the level is a later session's to propose, behind a
- * switch the owner turns on. (D318 first shipped a half-way blend; the spec
+ * D592 proposes a bounded blend behind an audited switch that defaults off.
+ * Only the owner turns it on. (D318 first shipped a half-way blend; the spec
  * that landed beside it rules that out, and this follows the spec.)
  */
 import type { Env } from '../types';
+import { blendedSkillLevel, evidenceBlendEnabled } from './profileEvidenceBlend';
 import { RADAR_AXES, type RadarAxisSlug } from './skillsTaxonomySchema';
 
 export const EVIDENCE_ENGINE_VERSION = 2;
@@ -429,11 +430,11 @@ export function evidenceWeight(rows: EvidenceRow[]): number {
 
 export type AxisState = 'not_recorded' | 'self_rated_only' | 'some_evidence' | 'corroborated' | 'evidence_only';
 
-/** §5.2. The level shown is the self-rating or none; evidence moves the state only. */
-export function axisState(self: number | null, weight: number): { state: AxisState; level: number | null } {
+/** §5.2 / D592. Off preserves self; on applies the bounded blend, with the same states. */
+export function axisState(self: number | null, weight: number, blendEnabled = false): { state: AxisState; level: number | null } {
   if (self == null) return { state: weight > 0 ? 'evidence_only' : 'not_recorded', level: null };
   if (weight <= 0) return { state: 'self_rated_only', level: self };
-  return { state: weight >= CORROBORATED_AT ? 'corroborated' : 'some_evidence', level: self };
+  return { state: weight >= CORROBORATED_AT ? 'corroborated' : 'some_evidence', level: blendedSkillLevel(self, weight, blendEnabled) };
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -465,7 +466,7 @@ export interface AxisEvidence {
   axis: RadarAxisSlug;
   label: string;
   state: AxisState;
-  /** The level shown: the self-rating, or null. Evidence never sets it. */
+  /** Self by default, the bounded D592 blend when enabled; never a rating without self. */
   level: number | null;
   self_level: number | null;
   evidence_weight: number;
@@ -476,12 +477,12 @@ export interface AxisEvidence {
 
 /** What GET /api/skills/me/evidence returns: every axis, absent drawn as absent. */
 export async function evidenceReport(env: Env, userId: number, now: Date = new Date()) {
-  const [{ rows, events, unmapped }, self] = await Promise.all([collectEvidence(env, userId, now), selfLevels(env, userId)]);
+  const [{ rows, events, unmapped }, self, blendEnabled] = await Promise.all([collectEvidence(env, userId, now), selfLevels(env, userId), evidenceBlendEnabled(env)]);
   const axes: AxisEvidence[] = RADAR_AXES.map((a) => {
     const mine = rows.filter((r) => r.axis === a.slug);
     const weight = evidenceWeight(mine);
     const s = self.has(a.slug) ? self.get(a.slug)! : null;
-    const { state, level } = axisState(s, weight);
+    const { state, level } = axisState(s, weight, blendEnabled);
     return {
       axis: a.slug, label: a.label, state, level, self_level: s,
       evidence_weight: weight,
@@ -492,7 +493,7 @@ export async function evidenceReport(env: Env, userId: number, now: Date = new D
     };
   });
   return {
-    engine_version: EVIDENCE_ENGINE_VERSION,
+    engine_version: blendEnabled ? 3 : EVIDENCE_ENGINE_VERSION,
     evidence_full_days: EVIDENCE_FULL_DAYS,
     evidence_fade_days: EVIDENCE_FADE_DAYS,
     corroborated_at: CORROBORATED_AT,
