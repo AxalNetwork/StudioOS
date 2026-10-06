@@ -6,8 +6,8 @@ The corpus the first integration pass worked from. Sorted by one question:
 | Folder | Count | Meaning |
 | --- | --- | --- |
 | `integrated/` | 74 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
-| `backlog/` | 29 | Graded `NEW` or `DEFERRED`. No route yet. |
-| `out-of-scope/` | 27 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
+| `backlog/` | 30 | Graded `NEW` or `DEFERRED`. No route yet. |
+| `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
 | `assets/`, `scraps/`, `uploads/` | — | Images and stale duplicates from the export. Not part of the 107. |
 
@@ -51,9 +51,15 @@ yet: `Pages · Benchmark`, `Pages · Diligence file`, `Pages · Diligence room`
 and `Pages · Company analysis`. `Refer & Earn` was replaced in place, which
 moves no number (below).
 
+**2026-10-05 (D565), one canvas moved between folders.** The owner brought
+the Advisor Program into scope on #975, so `Advisor Studio` moved from
+`out-of-scope/` to `backlog/`: `backlog/` went **29 → 30** and `out-of-scope/`
+went **27 → 26**. `integrated/` did not move, because no route exists for it
+yet. `ROUTE_MAP.md` row 46 now grades it `NEW`.
+
 **The `107` in the title is the first audit's corpus, not today's total.** It
 is `54 + 26 + 27` — the sum as it stood when `integrated/` read 54. The three
-folders hold `74 + 29 + 27 = 130` as of 2026-09-26, counted by listing them,
+folders hold `74 + 30 + 26 = 130` as of 2026-10-05, counted by listing them,
 and the title keeps 107 because the paragraph below uses it for the audit it
 names.
 

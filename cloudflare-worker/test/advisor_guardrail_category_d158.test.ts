@@ -150,7 +150,13 @@ test('the refusal that said this could not be counted is gone, and the others st
   // being true, and the first the codebase had filed against itself.
   assert.doesNotMatch(SECURITY, /what: 'Which guardrail rule fired'/,
     'the panel still refuses a breakdown it now serves');
-  for (const what of ['Token anomalies', 'Guardrail counters by branch']) {
+  // D481 closed 'Token anomalies' the same way — built, then the row removed —
+  // so it is pinned as served rather than as refused.
+  assert.ok(!SECURITY.includes(`what: 'Token anomalies'`),
+    'the panel refuses a token-anomaly figure it now serves');
+  assert.ok(SECURITY.includes('token_anomalies: await loadTokenAnomalies(env)'),
+    'Token anomalies lost its row without the absence being closed');
+  for (const what of ['Guardrail counters by branch']) {
     assert.ok(SECURITY.includes(`what: '${what}'`),
       `${what} lost its row without the absence being closed`);
   }

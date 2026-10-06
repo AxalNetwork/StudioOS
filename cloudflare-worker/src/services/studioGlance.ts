@@ -7,11 +7,25 @@
  * the database this Worker is attached to, and names the figures it will not
  * invent.
  *
- * A PER-SUBSIDIARY FIGURE IS NOT READ ON HQ. Seat use, the eleven approval
- * lanes, and the share rate are facts about one licence. No row on HQ names
- * the licence it belongs to (U1), so counting HQ's own user table or summing
- * its approval rows would be a different measurement wearing that name. Those
- * come back `recorded: false` with the reason, never as zero.
+ * HQ'S OWN FIGURES ARE SHOWN, LABELLED AS HQ'S (D555, reversing that part of
+ * D443/D447). The owner: "What is the point of having an overview if users
+ * need to click every time on a page to have the information". So HQ reads its
+ * own database and says whose figures they are ("HQ-held accounts · axal.vc"):
+ *   · `accounts` — this database's accounts by role, new in 7 and 30 days,
+ *     people still exploring (the Exploring lane's own count) and projects in
+ *     Trash. Aggregates only: no name, email or id reaches the payload.
+ *   · `approvals` — the lanes on `HeldApprovals.jsx`, each counted with its
+ *     console's own pending predicate (`laneCounts`, D130), worst first. A lane
+ *     with no pending notion (`NOT_LANED`) says so; Content to HQ is not
+ *     applicable; a lane whose read fails is unreadable and the rest answer.
+ *   · `insights` — sign-ups per week, AI spend this month, open tickets
+ *     (`ticketBacklog`, HQ Support's read). Active accounts are not recorded:
+ *     nothing on this database records a sign-in per account.
+ *
+ * WHAT STAYS UNREAD ON HQ. Seat use and the share rate are terms of one
+ * subsidiary's licence, and no row on HQ names a licence (U1). They stay
+ * `recorded: false` with the reason, never zero. So does the territory
+ * benchmark (D148): HQ pushes the median and keeps no copy.
  *
  * AGREEMENTS AND THE PENDING-ACCOUNT COUNT ARE THIS DATABASE'S (D447). They
  * are not a subsidiary figure. `programmeClock` and `agreementsExpiring` are
@@ -48,15 +62,16 @@ import { branchLicencePayload } from '../routes/licence';
 import { readBranchTemplateCopy } from '../routes/branch_templates';
 import { readBranchBenchmarks } from '../routes/branch_insights';
 import { listTemplates } from './legalTemplateStore';
+import { queuePressure } from './branchHome';
+import { NOT_LANED } from './approvalSources';
+import { ticketBacklog } from './supportQueues';
 
 export const HQ_SEATS_REASON =
   'Seat use is a subsidiary figure. No account on HQ names the licence it sits under (U1), '
   + 'so the user table on this database is not that count and is not shown as zero.';
 
-export const HQ_QUEUES_REASON =
-  'The approval queues this card draws are a subsidiary\'s lanes. HQ-held queues are decided '
-  + 'in their own consoles, and summing the rows in HQ\'s tables would be a different board. '
-  + 'No row names a licence (U1), so no per-subsidiary pressure is read here.';
+/** Whose figures the HQ glance shows (D555). */
+export const HQ_SCOPE_LABEL = 'HQ-held accounts · axal.vc';
 
 export const HQ_SHARE_REASON =
   'The share rate is a term on a subsidiary\'s licence. This studio is HQ, and no row names '
@@ -66,8 +81,18 @@ export const HQ_LICENCE_REASON =
   'This studio is HQ. No row here names the licence whose host and brand kit would be shown (U1), '
   + 'so neither is read from the ledger and neither is shown as absent.';
 
-export const HQ_INSIGHTS_REASON =
-  'HQ pushes the median and keeps no copy.';
+export const HQ_BENCHMARK_REASON =
+  'HQ pushes the territory median and keeps no copy (D148).';
+
+export const ACTIVE_ACCOUNTS_REASON =
+  'No store on this database records a sign-in per account, so active accounts are not counted here. '
+  + '`users.last_active` is written only on a path that fails before it reaches that column.';
+
+export const CONTENT_TO_HQ_REASON =
+  'Not applicable to HQ-held accounts: there is no branch to raise content from.';
+
+const LANE_UNREADABLE = 'This lane\'s store could not be read on this database. That is not the same as nothing pending.';
+const ACCOUNTS_UNREADABLE = 'The account table could not be read on this database. That is not the same as no accounts.';
 
 const TEMPLATES_UNREADABLE =
   'The template library could not be read on this database. That is not the same as it being empty.';
@@ -115,15 +140,129 @@ async function hqLibrary(env: Env): Promise<
 
 function hqPerSubsidiary(): {
   seats: RecordedFalse;
-  approvals: RecordedFalse;
   revenue: RecordedFalse;
   licence: RecordedFalse;
 } {
   return {
     seats: { recorded: false, reason: HQ_SEATS_REASON },
-    approvals: { recorded: false, reason: HQ_QUEUES_REASON },
     revenue: { recorded: false, reason: HQ_SHARE_REASON },
     licence: { recorded: false, reason: HQ_LICENCE_REASON },
+  };
+}
+
+/**
+ * HQ's accounts, as counts. `exploring` is the Exploring lane's own count
+ * (passed in from `queuePressure`), so the card and the lane cannot disagree.
+ */
+export async function hqAccounts(env: Env, exploring: number | null, now = Date.now()) {
+  const at = new Date(now).toISOString().slice(0, 19).replace('T', ' ');
+  try {
+    const [roles, fresh, inactive, trash] = await Promise.all([
+      env.DB.prepare(
+        `SELECT COALESCE(NULLIF(role, ''), 'no role') AS role, COUNT(*) AS n
+           FROM users WHERE is_active = 1 GROUP BY 1 ORDER BY n DESC, role`,
+      ).all<{ role: string; n: number }>(),
+      env.DB.prepare(
+        `SELECT
+           SUM(CASE WHEN datetime(created_at) >= datetime(?, '-7 days') THEN 1 ELSE 0 END) AS d7,
+           SUM(CASE WHEN datetime(created_at) >= datetime(?, '-30 days') THEN 1 ELSE 0 END) AS d30
+           FROM users WHERE is_active = 1`,
+      ).bind(at, at).first<{ d7: number | null; d30: number | null }>(),
+      env.DB.prepare(`SELECT COUNT(*) AS n FROM users WHERE is_active = 0`).first<{ n: number }>(),
+      env.DB.prepare(`SELECT COUNT(*) AS n FROM projects WHERE deleted_at IS NOT NULL`).first<{ n: number }>()
+        .then((r) => Number(r?.n) || 0).catch(() => null),
+    ]);
+    const by_role = (roles.results || []).map((r) => ({ role: String(r.role), count: Number(r.n) || 0 }));
+    return {
+      recorded: true as const,
+      label: HQ_SCOPE_LABEL,
+      total: by_role.reduce((t, r) => t + r.count, 0),
+      by_role,
+      new_7d: Number(fresh?.d7) || 0,
+      new_30d: Number(fresh?.d30) || 0,
+      deactivated: Number(inactive?.n) || 0,
+      exploring,
+      trash_projects: trash,
+    };
+  } catch (e) {
+    console.error('[studio-glance] hq accounts', (e as Error).message);
+    return { recorded: true as const, available: false as const, label: HQ_SCOPE_LABEL, reason: ACCOUNTS_UNREADABLE };
+  }
+}
+
+/**
+ * HQ's approval lanes. Every lane `HeldApprovals.jsx` draws is here: the ones
+ * with a pending queue (counted by `laneCounts`, the consoles' predicates),
+ * the ones with no pending notion (`NOT_LANED`, each with its reason) and
+ * Content to HQ, which does not apply. `pending_total` is null when any lane
+ * could not be read: a total over the lanes that answered would be smaller
+ * than the truth.
+ */
+export function hqApprovals(pressure: Awaited<ReturnType<typeof queuePressure>>['queue_pressure']) {
+  const lanes = pressure.map((l) => (l.count === null ? { ...l, reason: LANE_UNREADABLE } : l));
+  const unreadable = lanes.filter((l) => l.count === null).map((l) => l.label);
+  return {
+    recorded: true as const,
+    label: HQ_SCOPE_LABEL,
+    lanes,
+    pending_total: unreadable.length ? null : lanes.reduce((t, l) => t + (l.count ?? 0), 0),
+    unreadable,
+    no_queue: NOT_LANED.map((n) => ({ label: n.label, reason: n.reason })),
+    not_applicable: [{ label: 'Content to HQ', reason: CONTENT_TO_HQ_REASON }],
+  };
+}
+
+export const SIGNUP_WEEKS = 8;
+
+/** Monday 00:00 UTC of the week holding `ms`, as 'YYYY-MM-DD'. */
+function weekStart(ms: number): string {
+  const d = new Date(ms);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)).toISOString().slice(0, 10);
+}
+
+/** HQ's headline figures. Each one answers alone: a failed read is that figure's own `available: false`. */
+export async function hqInsights(env: Env, now: number) {
+  const thisWeek = weekStart(now);
+  const weeks: string[] = [];
+  for (let i = SIGNUP_WEEKS - 1; i >= 0; i -= 1) weeks.push(weekStart(Date.parse(`${thisWeek}T00:00:00Z`) - i * 7 * 86_400_000));
+  const monthKey = new Date(now).toISOString().slice(0, 7);
+
+  const [signups, spend, tickets] = await Promise.all([
+    env.DB.prepare(
+      `SELECT date(created_at, '-6 days', 'weekday 1') AS wk, COUNT(*) AS n
+         FROM users WHERE datetime(created_at) >= datetime(?) GROUP BY wk`,
+    ).bind(`${weeks[0]} 00:00:00`).all<{ wk: string; n: number }>()
+      .then((r) => {
+        const by = new Map((r.results || []).map((x) => [String(x.wk), Number(x.n) || 0]));
+        return {
+          available: true as const,
+          weeks: weeks.map((w) => ({ week_start: w, count: by.get(w) ?? 0, to_date: w === thisWeek })),
+        };
+      })
+      .catch((e) => {
+        console.error('[studio-glance] signups', (e as Error).message);
+        return { available: false as const, reason: ACCOUNTS_UNREADABLE };
+      }),
+    // The month predicate `aiSpend.ts` uses for the caller's own meter, org-wide.
+    env.DB.prepare(
+      `SELECT COUNT(*) AS calls, COALESCE(SUM(est_cost_usd), 0) AS usd
+         FROM ai_usage_logs WHERE substr(created_at, 1, 7) = ?`,
+    ).bind(monthKey).first<{ calls: number; usd: number }>()
+      .then((r) => ({ available: true as const, month: monthKey, usd: Number(r?.usd) || 0, calls: Number(r?.calls) || 0 }))
+      .catch(() => ({ available: false as const, month: monthKey, reason: 'The AI usage log could not be read on this database. That is not the same as no spend.' })),
+    ticketBacklog(env)
+      .then((b) => ({ available: true as const, open: b.open, by_status: b.by_status }))
+      .catch(() => ({ available: false as const, reason: 'The support ticket table could not be read on this database. That is not the same as no open tickets.' })),
+  ]);
+  return {
+    recorded: true as const,
+    label: HQ_SCOPE_LABEL,
+    signups_by_week: signups,
+    active_accounts: { recorded: false as const, reason: ACTIVE_ACCOUNTS_REASON },
+    ai_spend_month: spend,
+    open_tickets: tickets,
+    benchmark: { recorded: false as const, reason: HQ_BENCHMARK_REASON },
   };
 }
 
@@ -143,24 +282,31 @@ async function branchLicenceTableReadable(env: Env): Promise<boolean> {
 }
 
 /**
- * HQ. The clock, the pending-account count, the dated agreements and the
- * master library are read. Seats, the lanes, the share rate and the licence
- * summary are not. The benchmark copy is not: HQ pushes it and keeps none.
+ * HQ. The clock, the pending-account count, the dated agreements, the master
+ * library, and HQ's own accounts, lanes and headline figures (D555) are read.
+ * Seats, the share rate and the licence summary are not (U1), and neither is
+ * the benchmark copy: HQ pushes it and keeps none.
  */
 async function hqGlance(env: Env, now: number) {
-  const [programme, agreements, templates] = await Promise.all([
+  const [programme, agreements, templates, pressure, insights] = await Promise.all([
     programmeClock(env, now),
     agreementsExpiring(env, now),
     hqLibrary(env),
+    queuePressure(env, now),
+    hqInsights(env, now),
   ]);
+  const exploringLane = pressure.lanes.find((l) => l.key === 'exploring');
+  const accounts = await hqAccounts(env, exploringLane ? exploringLane.count : null, now);
   return {
     tier: 'hq' as const,
     branch: null,
     ...hqPerSubsidiary(),
+    accounts,
+    approvals: hqApprovals(pressure.queue_pressure),
     programme: { recorded: true as const, ...programme },
     agreements: { recorded: true as const, ...agreements },
     templates,
-    insights: { recorded: false as const, reason: HQ_INSIGHTS_REASON },
+    insights,
   };
 }
 

@@ -47,7 +47,7 @@ test('the Security row sits between Support and Settings, and /admin/security is
   assert.match(line, /hqOnly\(/, 'an admin without the elevation gets the notice');
 });
 
-test('the page reads two endpoints and writes through two, and nothing else', () => {
+test('the page reads three endpoints and writes through six, and nothing else', () => {
   // WAS one read. Canvas H7's feed is a second: it is filtered server-side
   // over a merged page of sixty rows from four stores, so it cannot ride on
   // the overview payload and cannot be filtered in the browser. The point of
@@ -60,8 +60,20 @@ test('the page reads two endpoints and writes through two, and nothing else', ()
   // job, which is the property the list exists to pin. So the name and the
   // list move together — loosening the `deepEqual` into a membership check
   // would have kept the test green and thrown away everything it was for.
-  const calls = [...new Set([...PAGE.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(calls, ['hqCloseDsrRequest', 'hqGovernance', 'hqSecurityForceReauth', 'hqSecurityOverview']);
+  //
+  // D481 ADDED A THIRD READ AND FOUR WRITES, on the same argument D168 made:
+  // the session list and its acts belong to the Sessions zone this page has
+  // always drawn, whose subtitle claimed a revoke it did not have. Per-account
+  // sign-out is `hqForceReauthUser`, the route D165 built, reached from a row
+  // here rather than duplicated.
+  // `client.` is `runSessionAct`'s parameter — the page passes `api` — so the
+  // acts it dispatches are counted here too rather than hidden behind a name.
+  const calls = [...new Set([...PAGE.matchAll(/\b(?:api|client)\.(\w+)\(/g)].map((m) => m[1]))].sort();
+  assert.match(PAGE, /runSessionAct\(api, kind, arg, reason\)/, 'the session acts are dispatched to something other than api');
+  assert.deepEqual(calls, [
+    'hqCloseDsrRequest', 'hqEndImpersonation', 'hqForceReauthUser', 'hqGovernance', 'hqRevokeSession',
+    'hqRevokeSessions', 'hqSecurityForceReauth', 'hqSecurityOverview', 'hqSecuritySessions',
+  ]);
 });
 
 test('D200/D263 — the ledger, sanctions, backup and the restore drill all read their stores', () => {

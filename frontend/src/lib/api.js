@@ -12,6 +12,7 @@ export * from './api/communityTasks.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
+export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
 // api-modules:end
 
@@ -3463,6 +3464,25 @@ export const api = {
   // person" by its presence is a call site nobody can read.
   hqForceReauthUser: (userId, reason) =>
     request(`/admin/security/force-reauth/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  // D481 — the Sessions zone's list and its three acts. Every write takes a
+  // typed reason (stored with the act) and the same bar as force re-auth; a
+  // bulk revoke is one request and one audit row per session.
+  hqSecuritySessions: () => request('/admin/security/sessions'),
+  hqRevokeSession: (sessionId, reason) =>
+    request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  hqRevokeSessions: (ids, reason) =>
+    request('/admin/security/sessions/revoke', {
+      method: 'POST',
+      body: JSON.stringify({ ids, reason }),
+    }),
+  hqEndImpersonation: (sessionId, reason) =>
+    request(`/admin/security/impersonations/${encodeURIComponent(sessionId)}/end`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
