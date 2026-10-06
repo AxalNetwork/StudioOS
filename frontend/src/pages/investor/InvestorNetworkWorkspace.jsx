@@ -11,6 +11,8 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
 import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue } from '../../lib/networkBook';
 import { useAuth } from '../../hooks/useAuthSync';
+import { introTarget, askKey, createIntroRequests } from '../../lib/investorIntroRequest';
+import InvestorIntroRequest from './InvestorIntroRequest';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -127,6 +129,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [relationships, setRelationships] = useState(null);
   const [introductions, setIntroductions] = useState(null);
   const [asks, setAsks] = useState(null);
+  const [introRequestStates, setIntroRequestStates] = useState({});
+  const requestIntro = useMemo(() => createIntroRequests(body => api.introductionsRequest(body), setIntroRequestStates), []);
+  const pendingAskTargets = new Set((asks || []).filter(ask => ask.status === 'pending').map(askKey));
+  const introAction = (targets) => role === 'investor' ? <InvestorIntroRequest targets={targets} states={introRequestStates} request={requestIntro} ready={asks !== null && !errors.asks} asked={pendingAskTargets} /> : null;
   // The reminders (migration 338) and which row a form is open on.
   const [reminders, setReminders] = useState(null);
   const [reminderFor, setReminderFor] = useState(null);
@@ -206,8 +212,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     relationships.forEach((item) => {
       const name = orgIdentity(item);
       if (!name || typeof name !== 'string') return;
-      const entry = grouped.get(name) || { name, people: new Set(), types: new Set() };
+      const entry = grouped.get(name) || { name, people: new Set(), types: new Set(), introTargets: new Map() };
       entry.people.add(personName(item));
+      const target = introTarget(item);
+      if (target) entry.introTargets.set(target.key, target);
       if (item.relationship_type) entry.types.add(typeLabel(item.relationship_type));
       grouped.set(name, entry);
     });
@@ -398,12 +406,12 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
                 {visibleRelationships.map((item) => <div key={item.id}>
-                  <div className="inw-table-row" data-testid={`row-relationship-${item.id}`}>
+                  <div className="inw-table-row max-sm:grid-cols-2!" data-testid={`row-relationship-${item.id}`}>
                     <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
                     <span data-label="Strength"><i className={`inw-strength ${coldIds.has(item.id) ? 'inw-cold' : Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{coldIds.has(item.id) ? 'Going cold' : Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
                     <span data-label="Context" className="inw-context">{relationshipContext(item)}</span>
                     <time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > COLD_AFTER_DAYS ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
-                    <span className="inw-row-actions">
+                    <span className="inw-row-actions max-sm:col-span-2">
                       <button type="button" onClick={() => openTouch(item)} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
                       <button type="button" onClick={() => { setActionError(''); setReminderFor(reminderFor === item.id ? null : item.id); setTouchFor(null); setPrivateNoteFor(null); }} data-testid={`button-remind-${item.id}`}>Remind me</button>
                       <button type="button" onClick={() => {
@@ -414,6 +422,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                         setTouchFor(null); setReminderFor(null);
                       }} data-testid={`button-private-note-${item.id}`}>Private note</button>
                     </span>
+                    {role === 'investor' && <div style={{ gridColumn: '1 / -1' }}>{introAction([introTarget(item)].filter(Boolean))}</div>}
                   </div>
                   {touchFor === item.id && (
                     <div className="inw-inline-form" data-testid={`form-touch-${item.id}`}>
@@ -481,7 +490,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
             {shows('organizations') && <section className="inw-card" aria-labelledby="organizations">
               <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} role={role} filters={zoneFilters ? zoneFilters({}) : []} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
-              {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{organizations.slice(0, 6).map((org) => <div className="inw-org" key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b></div>)}</div>}
+              {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{organizations.slice(0, 6).map((org) => <div className="inw-org" style={{ flexWrap: 'wrap' }} key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b>{introAction([...org.introTargets.values()])}</div>)}</div>}
               <p className="inw-footnote">Organizations appear only when explicitly attached to a relationship record. Names and email domains are never used to infer a firm.</p>
             </section>}
           </div>}
