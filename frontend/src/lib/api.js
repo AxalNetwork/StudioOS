@@ -1109,6 +1109,8 @@ export const api = {
   wellbeingExpertBookingPatch: (uid, data) =>
     request(`/wellbeing/experts/me/bookings/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   wellbeingMyBookings: () => request('/wellbeing/bookings/mine'),
+  // D574 — a member cancels their own open, unpaid, future booking.
+  wellbeingCancelBooking: (uid) => request(`/wellbeing/bookings/${encodeURIComponent(uid)}/cancel`, { method: 'POST' }),
   wellbeingAdminHide: (uid, hidden) =>
     request(`/wellbeing/admin/experts/${encodeURIComponent(uid)}/hide`, {
       method: 'POST', body: JSON.stringify({ hidden: !!hidden }),

@@ -328,6 +328,24 @@ export function canRate(row, now = Date.now()) {
     && ['scheduled', 'confirmed', 'completed'].includes(row?.status);
 }
 
+/**
+ * D574 — what `POST /bookings/:uid/cancel` accepts: the member's own booking,
+ * still open, not paid (a paid one is the expert's to cancel, with its
+ * refund), and not yet started.
+ */
+export const MEMBER_CANCELLABLE = ['requested', 'scheduled', 'pending_payment', 'confirmed'];
+export function canMemberCancel(row, now = Date.now()) {
+  if (!MEMBER_CANCELLABLE.includes(row?.status) || row?.payment_status === 'paid') return false;
+  const t = at(row);
+  return !Number.isFinite(t) || t > now;
+}
+
+/** D574 — the stars this member gave the booking's expert, as stored, or null. */
+export function storedStars(row) {
+  const n = Number(row?.my_stars);
+  return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
+}
+
 /** The expert can confirm a request, cancel anything still open, and close a held session. */
 export function expertActions(row, now = Date.now()) {
   const status = String(row?.status || '');
@@ -348,10 +366,27 @@ export const SESSION_MINUTES = 30;
 
 /**
  * What the booking route is sent. No note, ever: a booking carries none
- * (D331). No `service_uid`: no route lists an expert's services to a member.
+ * (D331). D574: the chosen service's uid, when one was chosen; the route
+ * takes the session's length from it.
  */
-export function bookingPayload({ slot = null, external = false } = {}) {
-  return external ? {} : { scheduled_at: slot, duration_minutes: SESSION_MINUTES };
+export function bookingPayload({ slot = null, external = false, serviceUid = null } = {}) {
+  const service = serviceUid ? { service_uid: serviceUid } : {};
+  return external ? service : { scheduled_at: slot, duration_minutes: SESSION_MINUTES, ...service };
+}
+
+/** D574 — a service's price as the member reads it, or "Free". */
+export function servicePrice(s) {
+  const cents = Number(s?.price_cents);
+  if (!Number.isFinite(cents)) return null;
+  if (cents === 0) return 'Free';
+  const cur = String(s?.currency || 'usd').toUpperCase();
+  return `${cur} ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+}
+
+/** D574 — the Confirm step's service line: the chosen service, or a plain session. */
+export function chosenServiceLabel(expert, serviceUid) {
+  const s = serviceUid && Array.isArray(expert?.services) ? expert.services.find((x) => x.uid === serviceUid) : null;
+  return s ? `${s.title} · ${s.duration_minutes} min` : `A ${SESSION_MINUTES}-minute session`;
 }
 
 /**
