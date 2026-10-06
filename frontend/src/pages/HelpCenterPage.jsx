@@ -12,6 +12,10 @@
 // `/help` mounts this page, `/docs` redirects into it, and the ticket flow
 // moved down to `/help/tickets`. The corpus, the search index, the anchors
 // and the role filtering are unchanged — only the address and the framing.
+//
+// D599 (#1280) — built to the canvas. `/help` is the home (H1) and every guide
+// has its own page at `/help/<area>/<guide>` (H2); this one component serves
+// both, reading which from the path. `#<area>/<guide>` still opens the guide.
 import DocsLayout from './docs/DocsLayout';
 
 export default function HelpCenterPage() {
