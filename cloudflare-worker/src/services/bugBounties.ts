@@ -207,3 +207,47 @@ export async function applyBountyTier(env: Env, args: {
   if (r.status === 'already_revoked') return { ...base, credits: 'already_revoked', ledger_id: r.ledger_id };
   return { ...base, credits: 'kept', reason: r.code, message: r.message };
 }
+
+/**
+ * D542 (#1105, the owner's C) — what each ticket's bounty stands at, for the
+ * ticket list and the chat's list: the state its labels describe, and for a
+ * fixed one the credits the ledger actually paid. `credits` is the grant's
+ * own amount (what the user got, not what the rule says today); a grant
+ * taken back reads `revoked`. A ticket the grant service refused or has not
+ * reached yet is fixed with `credits: null`, never a guessed amount. When the
+ * ledger cannot be read, every row carries `credits_unreadable` instead.
+ */
+export type BountySummary = (Exclude<BountyState, null> & {
+  credits?: number | null; revoked?: boolean; credits_unreadable?: boolean;
+}) | null;
+
+export async function bountySummaries(env: Env, tickets: Array<{ id: number; type?: string | null; github_labels?: string | null; user_id?: number | null }>): Promise<Map<number, BountySummary>> {
+  const out = new Map<number, BountySummary>();
+  const fixed: Array<{ id: number; user_id: number | null | undefined }> = [];
+  for (const t of tickets) {
+    let labels: string[] = [];
+    try { const parsed = JSON.parse(String(t.github_labels || '[]')); if (Array.isArray(parsed)) labels = parsed.map(String); } catch { /* an unreadable snapshot is no labels */ }
+    const state = bountyStateFromLabels(labels, t.type);
+    out.set(Number(t.id), state);
+    if (state?.state === 'fixed') fixed.push({ id: Number(t.id), user_id: t.user_id });
+  }
+  if (!fixed.length) return out;
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT g.user_id, g.source_ref, g.delta,
+              EXISTS (SELECT 1 FROM perk_credit_ledger r
+                       WHERE r.user_id = g.user_id AND r.kind = 'admin_adjust' AND r.source_ref = 'revoke:' || g.id) AS revoked
+         FROM perk_credit_ledger g
+        WHERE g.kind = 'grant' AND g.source_ref IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(fixed.map((f) => bountySourceRef(f.id)))).all<{ user_id: number; source_ref: string; delta: number; revoked: number }>();
+    const byRef = new Map((results || []).map((r) => [`${r.user_id}|${r.source_ref}`, r]));
+    for (const f of fixed) {
+      const g = byRef.get(`${f.user_id}|${bountySourceRef(f.id)}`);
+      out.set(f.id, { ...(out.get(f.id) as any), credits: g ? Number(g.delta) : null, revoked: !!(g && Number(g.revoked)) });
+    }
+  } catch (e) {
+    console.warn('[bounty] ledger unreadable for the ticket list', (e as Error).message);
+    for (const f of fixed) out.set(f.id, { ...(out.get(f.id) as any), credits: null, credits_unreadable: true });
+  }
+  return out;
+}

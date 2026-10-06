@@ -7,6 +7,7 @@ import { openPaywall } from '../PaywallModal';
 import { archetypeIllustration, archetypeLicenceTitle, archetypeMeta, humanize } from '../../lib/assessmentMeta';
 import { STUDIO_CHAT_ANCHOR } from '../advisor/interviewCompleteRow';
 import { Unreadable } from '../../ui';
+import { archetypeLock, lockedLine } from '../../lib/archetypeLock';
 
 /**
  * D509 — A BEST-FIT TYPE'S COUNT, OR NULL WHEN THE READ CARRIED NONE.
@@ -297,10 +298,39 @@ function ArchetypeArt({ slug, sex, compact = false, name }) {
   return <ArchetypePair slug={slug} compact={compact} name={name} />;
 }
 
+// D594 — the canvas's locked state (board S12): the title, a lock and one
+// line. Not a link, announced as disabled, and it carries no archetype text:
+// the server has already withheld the archetype from a locked reply, and this
+// branch reads nothing but the plan.
+export function LockedArchetype({ plan }) {
+  return (
+    <div
+      className="mt-[14px] rounded-[16px] border border-[#ece8f5] dark:border-[#d4cce8] bg-[#f8f7fb] dark:bg-[#ece8f5] aspect-square flex flex-col items-center justify-center gap-[10px] px-[22px] text-center"
+      data-testid="archetype-locked"
+    >
+      <Lock size={22} className="text-[#71717a]" aria-hidden="true" />
+      <span className="text-[12.5px] leading-[1.5] text-[#52525b]">{lockedLine(plan)}</span>
+    </div>
+  );
+}
+
 // ── Archetype ─────────────────────────────────────────────────────────────────
 export function ArchetypeCard({ state, fitState, className, audience = 'founder', compact = false, onRetry }) {
   const { data, error } = state;
   const fitData = fitState?.data;
+  const lock = archetypeLock(fitData, data);
+  if (lock) {
+    return (
+      <div
+        className={`pf-card p-[22px] bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 cursor-not-allowed ${className || ''}`}
+        aria-disabled="true"
+        data-testid="archetype-card-locked"
+      >
+        <h4 className="pf-lbl text-[#a1a1aa] dark:text-gray-400">{archetypeLicenceTitle(audience)}</h4>
+        <LockedArchetype plan={lock} />
+      </div>
+    );
+  }
   const conv = fitData?.archetype && fitData.archetype.slug
     ? { slug: fitData.archetype.slug, label: fitData.archetype.label, confidence: fitData.archetype.confidence }
     : null;
@@ -761,6 +791,10 @@ export function assessmentNotStarted({ radar, values, results, fit }) {
   const list = Array.isArray(results.data.results) ? results.data.results : [];
   if (list.some((r) => r.archetype_slug)) return false;
   if (fit.data.archetype && fit.data.archetype.slug) return false;
+  // D594 — a locked reply withholds every archetype slug, so a free account
+  // whose only answers are archetype questions has results with none. Those
+  // answers exist, and the band says so through the locked card.
+  if (archetypeLock(fit.data, results.data) && list.length > 0) return false;
   return true;
 }
 
