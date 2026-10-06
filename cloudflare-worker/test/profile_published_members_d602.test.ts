@@ -122,7 +122,8 @@ test('D602: only published, active members whose latest snapshot displays a name
 test('D602: a row is the published archetype and whose it is, nothing else', async () => {
   const { env } = seeded();
   const r = await call(profileHistory, env, 2, q('inv_thesis_backer'));
-  assert.deepEqual(r.body.items, [{ user_id: 20, name: 'Ivy Investor', role: 'investor', persona: 'investor', slug: 'inv_thesis_backer', label: 'Thesis-Driven Backer' }]);
+  // D605 adds `values_fit` (a band and a count, never a value); no values are seeded here.
+  assert.deepEqual(r.body.items, [{ user_id: 20, name: 'Ivy Investor', role: 'investor', persona: 'investor', slug: 'inv_thesis_backer', label: 'Thesis-Driven Backer', values_fit: { band: null, compared: 0 } }]);
   assert.doesNotMatch(r.text, /builder|risk_appetite|product|0\.9|confidence|traits|email|example\.test/,
     'a trait, skill, value, confidence or email left the route');
 });

@@ -133,9 +133,13 @@ test('the redemption code is generated, never taken from the request', () => {
 test('a spend can never take a balance below zero', () => {
   const s = read(ROUTE);
   // Two independent places: the claim checks affordability before batching,
-  // and an admin adjustment cannot push a balance negative either.
+  // and an admin adjustment cannot push a balance negative either. Since D608
+  // that adjustment is the grant service's, with the test inside its insert.
   assert.match(s, /insufficient_credits/, 'the claim must refuse an unaffordable perk');
-  assert.match(s, /that would take the balance below zero/, 'an admin adjustment must refuse too');
+  assert.match(s, /const out = await manualAdjust\(c\.env,/, 'an admin adjustment must go through the grant service');
+  const svc = read('cloudflare-worker/src/services/creditGrants.ts');
+  assert.match(svc, /WHERE b\.user_id = \?\) \+ \? >= 0`/, 'an admin adjustment must refuse too, inside its insert');
+  assert.match(svc, /refused\('would_overdraw'/);
 });
 
 /* ---------------------------------------------------------------- *

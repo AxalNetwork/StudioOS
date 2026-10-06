@@ -61,6 +61,9 @@ import { predictTarget } from '../../lib/advisor/router';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
 import MyBugReports from '../tickets/MyBugReports';
+import { PanelTabs, TasksPanel, TicketsPanel } from './EadwynPanels';
+import { startPrompt } from '../../lib/eadwynTickets';
+import { TICKET_TYPES } from '../../lib/ticketScreens';
 
 const STORAGE_KEY = 'advisor:state';
 
@@ -162,6 +165,11 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // D324 — a Studio home's collapsed interview row reopens the chat with
   // the ticket form already open when its "Open a ticket" is pressed.
   const [ticketOpen, setTicketOpen] = useState(initialTicketOpen);
+  // D606 (#1108) — the Eadwyn Tickets canvas's panel: Conversation, Tasks and
+  // My tickets. "Suggest a task" opens the ticket form with Type set to Task;
+  // every other way in opens it with no type chosen (D544).
+  const [panelTab, setPanelTab] = useState('conversation');
+  const [ticketPreset, setTicketPreset] = useState(null);
 
   // Task #2 (AR) — server-driven per-page / per-section progress
   // and Spin-Out week banner state. Refreshed after every answer
@@ -744,6 +752,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
    */
   const handleTicketFiled = useCallback((t) => {
     setTicketOpen(false);
+    setTicketPreset(null);
     const title = t?.title ? `"${t.title}"` : 'Your ticket';
     const status = t?.github_sync_status || null;
     const reason = String(t?.github_sync_error || '').trim();
@@ -769,6 +778,17 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       },
     }]);
   }, [user?.role]);
+
+  // D606 — the panel's two actions. "Start" puts the task to Eadwyn as a
+  // "help me with" line in the composer, which opens an explanation when
+  // sent; nothing is sent until the member sends it.
+  const toggleTicket = useCallback(() => { setTicketPreset(null); setTicketOpen((v) => !v); }, []);
+  const closeTicket = useCallback(() => { setTicketOpen(false); setTicketPreset(null); }, []);
+  const suggestTask = useCallback(() => { setTicketPreset('task'); setTicketOpen(true); }, []);
+  const startTask = useCallback((task) => {
+    setInput(startPrompt(task));
+    if (!isDesktop) setPanelTab('conversation');
+  }, [isDesktop]);
 
   // ---------- Render ------------------------------------------------------
   if (!user) return null; // anonymous: nothing to advise on yet
@@ -811,9 +831,14 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         progressBumpToken={progressBumpToken}
         onPickQuestion={handlePickQuestion}
         ticketOpen={ticketOpen}
-        onToggleTicket={() => setTicketOpen((v) => !v)}
+        ticketPreset={ticketPreset}
+        onToggleTicket={toggleTicket}
         onTicketFiled={handleTicketFiled}
-        onCloseTicket={() => setTicketOpen(false)}
+        onCloseTicket={closeTicket}
+        panelTab={panelTab}
+        onPanelTab={setPanelTab}
+        onSuggestTask={suggestTask}
+        onStartTask={startTask}
       />
     );
   }
@@ -831,13 +856,17 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         persona={persona}
         progress={progress}
         onMaximize={() => setViewMode('fullscreen')}
-        onOpenTicket={() => setTicketOpen((v) => !v)}
+        onOpenTicket={toggleTicket}
         ticketOpen={ticketOpen}
       />
       {weekBanner && <WeekBanner week={weekBanner.week} />}
       {ticketOpen && (
-        <AdvisorTicketPanel onFiled={handleTicketFiled} onClose={() => setTicketOpen(false)} />
+        <AdvisorTicketPanel key={ticketPreset || 'any'} initialType={ticketPreset} onFiled={handleTicketFiled} onClose={closeTicket} />
       )}
+      {/* D606 — on a phone the panel's tabs sit above the card's body, and
+          Conversation is the chat itself (the canvas hides the chat column
+          below 760px and shows the panel). */}
+      {!isDesktop && <PanelTabs tab={panelTab} onTab={setPanelTab} />}
 
       <div className={isDesktop ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex flex-col'}>
         {/* Chat column. On mobile we cap the height to ~60vh so the chat
@@ -848,7 +877,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
             min-h-[260px] lets it shrink) scrolls internally while the
             current-question line and composer stay pinned at the bottom,
             and no blank gap opens beneath the task panel as the chat grows. */}
-        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px] max-h-[640px]' : 'flex flex-col min-h-0 max-h-[60vh]'}>
+        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px] max-h-[640px]' : `flex flex-col min-h-0 max-h-[60vh] ${panelTab === 'conversation' ? '' : 'hidden'}`}>
           <Transcript
             ref={scrollerRef}
             messages={messages}
@@ -882,19 +911,32 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
 
         {/* Right rail — Task #2 (CC) progress widget. Sticky-on-scroll
             on desktop so the three buckets (Proposed / Pending /
-            Completed) stay visible as the chat transcript grows. */}
-        {isDesktop && (
-          <aside className="p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[640px] overflow-y-auto sticky top-4">
-            <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
-            <AdvisorProgressWidget
-              focusSection={focusSection}
-              pendingEvidence={pendingEvidence}
-              currentQuestion={question}
-              labState={labState}
-              progressBumpToken={progressBumpToken}
-              onPickQuestion={handlePickQuestion}
-            />
+            Completed) stay visible as the chat transcript grows.
+            D606 — it is the panel's Conversation tab now, beside Tasks and
+            My tickets. */}
+        {isDesktop ? (
+          <aside className="bg-gray-50 dark:bg-gray-950/40 max-h-[640px] overflow-y-auto sticky top-4" data-testid="eadwyn-panel">
+            <PanelTabs tab={panelTab} onTab={setPanelTab} />
+            {panelTab === 'conversation' ? (
+              <div className="p-4">
+                <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
+                <AdvisorProgressWidget
+                  focusSection={focusSection}
+                  pendingEvidence={pendingEvidence}
+                  currentQuestion={question}
+                  labState={labState}
+                  progressBumpToken={progressBumpToken}
+                  onPickQuestion={handlePickQuestion}
+                />
+              </div>
+            ) : panelTab === 'tasks'
+              ? <TasksPanel onSuggest={suggestTask} onStart={startTask} />
+              : <TicketsPanel />}
           </aside>
+        ) : panelTab !== 'conversation' && (
+          <div className="max-h-[60vh] overflow-y-auto" data-testid="eadwyn-panel">
+            {panelTab === 'tasks' ? <TasksPanel onSuggest={suggestTask} onStart={startTask} /> : <TicketsPanel />}
+          </div>
         )}
       </div>
     </div>
@@ -955,7 +997,8 @@ function FullscreenView({
   input, setInput, onSend, onSkip, busy, onPickOption,
   sectionStats, focusSection, pickFocus,
   pendingEvidence, labState, progressBumpToken, onPickQuestion,
-  ticketOpen, onToggleTicket, onTicketFiled, onCloseTicket,
+  ticketOpen, ticketPreset, onToggleTicket, onTicketFiled, onCloseTicket,
+  panelTab = 'conversation', onPanelTab, onSuggestTask, onStartTask,
 }) {
   useEscapeClose(onExit);
   const vvStyle = useVisualViewportStyle();
@@ -969,7 +1012,7 @@ function FullscreenView({
     >
       <FullscreenHeader persona={persona} progress={progress} onExit={onExit} onOpenTicket={onToggleTicket} ticketOpen={ticketOpen} />
       {ticketOpen && (
-        <AdvisorTicketPanel onFiled={onTicketFiled} onClose={onCloseTicket} />
+        <AdvisorTicketPanel key={ticketPreset || 'any'} initialType={ticketPreset} onFiled={onTicketFiled} onClose={onCloseTicket} />
       )}
       {/* Responsive: single column on small screens (chat over a capped,
           scrollable progress section), two panes on large screens. */}
@@ -1006,16 +1049,25 @@ function FullscreenView({
             fullscreen so the progress widget is present at every width:
             a capped, independently-scrollable section stacked BELOW the
             chat on small screens, and a full-height side rail on large. */}
-        <aside className="flex-shrink-0 min-h-0 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[38dvh] border-t border-gray-100 dark:border-gray-800 lg:max-h-none lg:border-t-0 lg:w-80 xl:w-96">
-          <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
-          <AdvisorProgressWidget
-            focusSection={focusSection}
-            pendingEvidence={pendingEvidence}
-            currentQuestion={question}
-            labState={labState}
-            progressBumpToken={progressBumpToken}
-            onPickQuestion={onPickQuestion}
-          />
+        <aside className="flex-shrink-0 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950/40 max-h-[38dvh] border-t border-gray-100 dark:border-gray-800 lg:max-h-none lg:border-t-0 lg:w-80 xl:w-96" data-testid="eadwyn-panel">
+          {/* D606 — the same three tabs as the card's rail. The chat stays in
+              view here at every width, so Conversation is its rail. */}
+          {onPanelTab && <PanelTabs tab={panelTab} onTab={onPanelTab} />}
+          {panelTab === 'conversation' || !onPanelTab ? (
+            <div className="p-4">
+              <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
+              <AdvisorProgressWidget
+                focusSection={focusSection}
+                pendingEvidence={pendingEvidence}
+                currentQuestion={question}
+                labState={labState}
+                progressBumpToken={progressBumpToken}
+                onPickQuestion={onPickQuestion}
+              />
+            </div>
+          ) : panelTab === 'tasks'
+            ? <TasksPanel onSuggest={onSuggestTask} onStart={onStartTask} />
+            : <TicketsPanel />}
         </aside>
       </div>
     </div>
@@ -1256,10 +1308,12 @@ function CtaButtons({ cta, onCtaClick }) {
 // POST /api/tickets endpoint via api.createTicket (no backend changes).
 // On success it calls onFiled(ticket) so the advisor can confirm in the
 // transcript with a link back to the Help Center.
-function AdvisorTicketPanel({ onFiled, onClose }) {
+function AdvisorTicketPanel({ onFiled, onClose, initialType = null }) {
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState('medium');
-  const [type, setType] = useState('task');
+  // D606 — the type is a required choice with no default (D544, the H4 form's
+  // rule), except from "Suggest a task", which opens the form on Task.
+  const [type, setType] = useState(initialType || '');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -1268,6 +1322,10 @@ function AdvisorTicketPanel({ onFiled, onClose }) {
     const trimmed = title.trim();
     if (!trimmed) {
       setError('Please enter a short summary for your ticket.');
+      return;
+    }
+    if (!TICKET_TYPES.some((t) => t.id === type)) {
+      setError('Choose a type: Task, Bug or Feature.');
       return;
     }
     setSubmitting(true);
@@ -1295,7 +1353,7 @@ function AdvisorTicketPanel({ onFiled, onClose }) {
     <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-violet-50/40 dark:bg-violet-950/20">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-800 dark:text-violet-200">
-          <Ticket size={14} /> Open a support ticket
+          <Ticket size={14} /> {initialType === 'task' ? 'Suggest a task' : 'Open a support ticket'}
         </div>
         <button
           type="button"
@@ -1337,6 +1395,7 @@ function AdvisorTicketPanel({ onFiled, onClose }) {
             disabled={submitting}
             className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-2 py-1.5 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
           >
+            <option value="" disabled>Choose a type</option>
             <option value="task">Task</option>
             <option value="bug">Bug</option>
             <option value="feature">Feature</option>

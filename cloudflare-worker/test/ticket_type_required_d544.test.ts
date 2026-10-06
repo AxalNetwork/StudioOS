@@ -72,7 +72,25 @@ test('POST /api/tickets refuses a missing type and stores nothing', async () => 
 test('both callers that create tickets send a type', () => {
   const tp = readFileSync('frontend/src/pages/TicketsPage.jsx', 'utf8');
   assert.match(tp, /api\.createTicket\(form\)/);
-  assert.match(tp, /type: '[a-z]+'/, 'the Tickets page form no longer carries a type');
+  // D604 (#1280 step 4) — the Tickets page form is the canvas's H4: Type is a
+  // required choice with no default, and the submit stops before the request
+  // while none is picked. So the page still never sends a ticket without one.
+  const lib = readFileSync('frontend/src/lib/ticketScreens.js', 'utf8');
+  assert.match(lib, /if \(!TYPES\[form\?\.type\]\) errors\.type = /, 'the form no longer requires a type');
+  assert.match(
+    tp,
+    /const found = formErrors\(form\);[\s\S]{0,200}if \(found\.type\) \{ typeRef\.current\?\.focus\(\); return; \}[\s\S]*const res = await api\.createTicket\(form\)/,
+    'the Tickets page form sends a ticket without a type',
+  );
+  // D606 (#1107, #1108) — the chat's form follows the same rule: no default
+  // type, except from the Tasks panel's "Suggest a task", which opens it on
+  // Task; the submit stops before the request while none is picked.
   const pa = readFileSync('frontend/src/components/advisor/PersonalAdvisor.jsx', 'utf8');
-  assert.match(pa, /const \[type, setType\] = useState\('task'\);/);
+  assert.match(pa, /const \[type, setType\] = useState\(initialType \|\| ''\);/, 'the chat form presets a type again');
+  assert.match(
+    pa,
+    /if \(!TICKET_TYPES\.some\(\(t\) => t\.id === type\)\) \{[\s\S]{0,120}return;\s*\}[\s\S]{0,400}api\.createTicket\(/,
+    'the chat form sends a ticket without a type',
+  );
+  assert.match(pa, /const suggestTask = useCallback\(\(\) => \{ setTicketPreset\('task'\); setTicketOpen\(true\); \}, \[\]\);/);
 });

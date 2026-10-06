@@ -110,6 +110,39 @@ function StatedAbsence({ label, reason, testid }) {
 }
 
 /**
+ * D484 — when the approved articles are set to go out (migration 346). Shown
+ * in UTC: this page is read across zones, and a bare "09:00" would be a
+ * different instant to each reader. A database without the column reads as a
+ * stated absence, never as "none scheduled".
+ */
+export function PublishTimes({ pt }) {
+  if (!pt || !pt.recorded) {
+    return <StatedAbsence label="Publish time" reason={pt?.reason} testid="hq-content-publish-time" />;
+  }
+  const utc = (iso) => {
+    const ms = Date.parse(String(iso ?? ''));
+    return Number.isFinite(ms) ? `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC` : 'time unreadable';
+  };
+  return (
+    <div className="mt-1.5 text-[11.5px] leading-relaxed text-axal-muted" data-testid="hq-content-publish-time" data-state="recorded">
+      <p>
+        <span className="font-semibold text-axal-ink dark:text-white">Publish time</span> ·{' '}
+        {plural(pt.scheduled, 'approved article', 'approved articles')} set to go out,{' '}
+        {num(pt.unscheduled)} waiting for a manual publish.
+      </p>
+      {pt.next.length > 0 && (
+        <ul className="mt-0.5 space-y-0.5" data-testid="hq-content-publish-next">
+          {pt.next.map((n) => (
+            <li key={n.id}><span className="font-mono tabular-nums">{utc(n.publish_at)}</span> · {n.title}</li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-0.5 text-axal-faint">{pt.note}</p>
+    </div>
+  );
+}
+
+/**
  * D208 — what one content submission names, in the words its branch sent.
  *
  * A LABEL, NOT A LINK. The item lives in the branch's database, which HQ cannot
@@ -380,7 +413,7 @@ export function ContentBoard({ loading, unreadable, board, pipeline, unifiedReas
           {' '}publications in a status no lane names, so not counted in the totals.
         </p>
       )}
-      <StatedAbsence label="Publish time" reason={board.publish_time?.reason} testid="hq-content-publish-time" />
+      <PublishTimes pt={board.publish_time} />
       <StatedAbsence label="Branch of origin" reason={board.origin?.reason} testid="hq-content-origin" />
       {unifiedReason && (
         <p className="mt-3 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-content-not-unified">
@@ -389,7 +422,7 @@ export function ContentBoard({ loading, unreadable, board, pipeline, unifiedReas
       )}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <Link to="/admin/articles" className={CONSOLE_TILE} data-testid="hq-content-link-articles">
-          <ConsoleLinkBody title="Articles" note="Review, approve and publish one piece at a time. Publishing is a manual step there." />
+          <ConsoleLinkBody title="Articles" note="Review, approve and publish one piece at a time, or set the time an approved piece goes out." />
         </Link>
         <Link to="/admin/publications" className={CONSOLE_TILE} data-testid="hq-content-link-publications">
           <ConsoleLinkBody title="Publications" note="Draft and issue publications to their audience there." />

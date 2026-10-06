@@ -7,7 +7,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import {
   COMMISSION_STATUS, PAYOUT_ACTIONS, PAYOUT_METHODS, PAYOUT_STATUS, PERIODS, RULE_LIMITS, TABLE_DEFAULT_CURRENCY,
   dayOf, filterCommissions, payoutActionsFor, payoutClaims, payoutDetails, personOf, ruleActive, ruleAmount,
-  ruleChanges, ruleDraftOf, ruleEditInput, rulePaysText, sourceLabel, sourcesIn, statusOf, takeRateInput,
+  ruleChanges, ruleDraftOf, ruleEditInput, rulePaysText, sourceLabel, sourcesIn, statusOf, takeRateInput, destinationLine,
 } from '../../lib/partnerEarnings';
 import {
   ConfirmPanel, Money, Panel, PayoutMoney, RowTable, StatusPill, WriteNote, ghostButton, primaryButton,
@@ -354,6 +354,9 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
                   <span className="font-semibold text-axal-ink dark:text-gray-100">{personOf(p) || <Unrecorded>Partner not recorded</Unrecorded>}</span>
                   <PayoutMoney payout={p} />
                   {method ? <span className="text-axal-muted">{method}</span> : <Unrecorded>Method not recorded</Unrecorded>}
+                  {destinationLine(p)
+                    ? <span className="text-axal-muted" data-testid={`text-queue-dest-${p.id}`}>to {destinationLine(p)}</span>
+                    : <Unrecorded reason="The partner named no destination, or requested before destinations were stored. Confirm where with them.">destination not named</Unrecorded>}
                   <StatusPill status={status} />
                   <span className="text-[11.5px] tabular-nums text-axal-faint">{requested ? `requested ${requested}` : 'request date not recorded'}</span>
                 </span>

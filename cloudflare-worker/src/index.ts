@@ -43,6 +43,7 @@ import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import profileHistoryRoutes from './routes/profile_history';
 import adminProfilingRoutes from './routes/admin_profiling';
+import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
@@ -88,6 +89,8 @@ import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
+import adminIncorporations from './routes/admin_incorporations';
+import safeIssuances from './routes/safe_issuances';
 import admin83bReview from './routes/admin_83b_review';
 import companyEin from './routes/company_ein';
 import privateData from './routes/private-data';
@@ -223,7 +226,7 @@ import partnerOfficeHoursRoutes from './routes/partner_office_hours';
 // Task #6 (W-1) — investor paywall surfaces.
 import introductionsRoutes from './routes/introductions';
 import investorSeatsRoutes, { downgradeExpiredInvestorTrials } from './routes/investor_seats';
-import { requireInvestorTier } from './middleware/requireInvestorTier';
+import { requireInvestorTier, requireInvestorTierExcept } from './middleware/requireInvestorTier';
 import watchlistRoutes from './routes/watchlist';
 import followsRoutes from './routes/follows';
 import journalRoutes from './routes/journal';
@@ -716,9 +719,13 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/calendar',
   '/api/ic',
 ];
+// D614: `INVESTOR_PRO_EXEMPT` names the one route under these prefixes that
+// stays open on every plan — leaving a deal room, so an investor who drops to
+// Free can still leave the rooms they joined.
+const investorPro = requireInvestorTierExcept('professional');
 for (const p of INVESTOR_PRO_PREFIXES) {
-  app.use(p, requireInvestorTier('professional'));
-  app.use(`${p}/*`, requireInvestorTier('professional'));
+  app.use(p, investorPro);
+  app.use(`${p}/*`, investorPro);
 }
 // Market Intel: only the export endpoint is paywalled for free investors;
 // browsing pulses/benchmarks remains free. Inline gate lives in
@@ -799,6 +806,10 @@ app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 // Cohort Timing & Gating — timeline, review queue, grace/override, impersonation audit.
 app.route('/api/admin/cohort', adminCohort);
+// D601 (#998) — HQ records a formation order's packet and its state filing.
+app.route('/api/admin/incorporations', adminIncorporations);
+// D578 (#1205) — a startup's SAFEs: recorded terms, status from the envelope.
+app.route('/api/safe-issuances', safeIssuances);
 // D580 (#1207) — 83(b) operator review: assign an operator, record a review.
 app.route('/api/admin/83b-review', admin83bReview);
 // D579 (#1206) — a startup's EIN, encrypted at rest; founders, company editors and admins.
@@ -1067,6 +1078,9 @@ app.route('/api/profiling', profiling);
 app.route('/api/profile', profileHistoryRoutes);
 // D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
 app.route('/api/admin/profiling', adminProfilingRoutes);
+// D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
+app.route('/api/help', helpCenterRoutes);
+app.route('/api/admin/help', adminHelpCenter);
 app.route('/api/dashboard', dashboard);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);
@@ -1637,6 +1651,28 @@ export default {
           } catch (e) {
             console.error('[cron] learning video sweep failed', e);
           }
+        }
+        // D572 part 3b — the partner leaderboard's daily standings, so the
+        // board's "change" has an earlier standing to compare with. Every
+        // tier: a branch's partners are its own. Idempotent per day.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
+          try {
+            const { writeLeaderboardSnapshots } = await import('./services/partnerLeaderboard');
+            const r = await writeLeaderboardSnapshots(env, now.getTime());
+            if (r.written || r.failed.length) console.info(`[cron] leaderboard snapshots written=${r.written} failed=${r.failed.length}`);
+          } catch (e) {
+            console.error('[cron] leaderboard snapshots failed', e);
+          }
+        }
+        // D484 — publish approved articles whose scheduled time has passed.
+        // Every minute, on every tier: a branch's articles are its own, and an
+        // article with no `publish_at` is never touched.
+        try {
+          const { publishDueArticles } = await import('./routes/admin_articles');
+          const p = await publishDueArticles(env, now);
+          if (p.published) console.info(`[cron] scheduled articles published=${p.published} of due=${p.due}`);
+        } catch (e) {
+          console.error('[cron] scheduled article publish failed', e);
         }
         // Cohort Timing & Gating — every-minute tick: materializes monthly
         // cycles, unlocks weeks at their Delaware-midnight boundaries,

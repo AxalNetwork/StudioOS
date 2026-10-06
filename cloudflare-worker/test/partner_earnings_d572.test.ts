@@ -52,6 +52,7 @@ function freshDb() {
   db.exec(MIG('343_partner_interaction_void.sql'));
   db.exec(MIG('368_relationship_requests.sql'));
   db.exec(MIG('393_partner_earnings.sql'));
+  db.exec(MIG('409_payout_destination_and_leaderboard.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'admin@example.test');
   u.run(PLAIN_ADMIN, 'admin', 'Pia Plain', 'plain@example.test');

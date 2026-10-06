@@ -74,6 +74,12 @@ function oldestLabel(data) {
     const code = data.escalations?.items?.[0]?.branch_code;
     return code ? `escalation from ${code}` : 'escalation';
   }
+  // D485 — a branch's queue is named by its branch.
+  if (String(o.queue).startsWith('branch:')) {
+    const code = String(o.queue).slice('branch:'.length);
+    const line = data.branch_tickets?.lines?.find((l) => l.code === code);
+    return `admin on ${line?.label || code}`;
+  }
   return o.queue === 'hq_held' ? 'HQ-held user' : 'admin about the Admin product';
 }
 
@@ -113,9 +119,9 @@ const SLA_WORD = { past: 'past SLA', due_soon: 'due soon', ok: 'on time' };
  * how many there are is not known, and the card says that rather than a number.
  */
 export function QueueCard({
-  queue, who, state, reason, count, items = [], bands = null, onRetry, testId,
+  queue, title: titleProp, who, state, reason, count, items = [], bands = null, onRetry, testId,
 }) {
-  const title = QUEUE_TITLES[queue];
+  const title = titleProp || QUEUE_TITLES[queue];
   return (
     <Card>
       <div data-testid={testId}>
@@ -545,6 +551,55 @@ export function ticketCardProps(data, failed, persona) {
 }
 
 /**
+ * D485 — one branch's About-Admin queue, as `QueueCard` props: the tickets its
+ * administrators filed on its own host, read from its database over RPC and
+ * banded with HQ's hours. A branch HQ could not ask, or that did not answer,
+ * is Unreadable with the reason — never an empty queue.
+ */
+export function branchTicketCardProps(line) {
+  const base = {
+    queue: 'branch',
+    title: `Admins on ${line.label}`,
+    who: `Filed on ${line.code}’s own host, into its database, and read from there.`,
+    testId: `hq-support-branch-${line.code}`,
+  };
+  if (line.state !== 'ok') return { ...base, state: 'unreadable', reason: line.reason };
+  return {
+    ...base,
+    state: 'ready',
+    count: line.count,
+    bands: line.bands ?? null,
+    items: (line.items || []).map((x) => ({
+      key: `${line.code}:${x.id}`,
+      title: x.title || `Ticket #${x.id}`,
+      meta: [x.requester, x.priority, x.status?.replace('_', ' ')].filter(Boolean).join(' · '),
+      age_hours: x.age_hours,
+      band: x.sla_band,
+    })),
+  };
+}
+
+/** The branch hosts' queues, one card each. Nothing is drawn when no branch is deployed. */
+export function BranchTicketsSection({ branchTickets, onRetry }) {
+  const lines = branchTickets?.lines || [];
+  if (!lines.length) return null;
+  return (
+    <section className="mt-4" data-testid="hq-support-branch-tickets">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[13.5px] font-extrabold tracking-tight">Tickets filed on branch hosts</h2>
+        <span className="text-[10.5px] text-axal-faint">
+          {branchTickets.coverage.answered} of {branchTickets.coverage.total} branches answered
+        </span>
+      </div>
+      <p className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">{branchTickets.whose}</p>
+      <div className="mt-2 grid gap-3 md:grid-cols-3">
+        {lines.map((l) => <QueueCard key={l.code} {...branchTicketCardProps(l)} onRetry={onRetry} />)}
+      </div>
+    </section>
+  );
+}
+
+/**
  * The proof that the two ticket queues and the tickets outside them are one
  * backlog — the same `open` HQ Home's Queue backlog tile reads.
  */
@@ -643,6 +698,11 @@ export function TenantMatrix({ matrix, failed, onRetry }) {
                     return (
                       <td key={k} className="py-1.5 pr-3 tabular-nums text-axal-ink dark:text-gray-100">
                         {cell.value}{age && <span className="text-axal-faint"> · {age}</span>}
+                        {cell.on_branch !== undefined && (
+                          <span className="block text-[10px] text-axal-faint" data-testid="hq-support-matrix-split">
+                            {cell.on_branch} on its host · {cell.on_hq} on axal.vc
+                          </span>
+                        )}
                       </td>
                     );
                   }
@@ -777,6 +837,14 @@ export function supportCoverage(data) {
   if (data.sync?.available) {
     out.push(`Mirror, last ${data.sync.window_hours}h: ${data.sync.synced} synced, ${data.sync.failed} failed`);
   }
+  const bt = data.branch_tickets;
+  if (bt && bt.lines?.length) {
+    const read = bt.lines.filter((l) => l.state === 'ok' && l.count !== null);
+    if (read.length) {
+      const n = read.reduce((sum, l) => sum + l.count, 0);
+      out.push(`${plural(n, 'open ticket', 'open tickets')} on ${read.length} of ${bt.lines.length} branch hosts`);
+    }
+  }
   if (data.taxonomy?.available) {
     const n = data.taxonomy.items.reduce((sum, t) => sum + Number(t.open), 0);
     out.push(`${plural(n, 'open ticket', 'open tickets')} counted by type`);
@@ -786,7 +854,6 @@ export function supportCoverage(data) {
 
 /** What this page cannot say, each with its reason. [title, detail] pairs. */
 export const SUPPORT_UNAVAILABLE = [
-  ['Tickets filed on a branch host', 'Once a licence has a branch, its administrators file on that branch’s host, into its own database, and no branch call returns tickets. The matrix marks those cells “On the branch”.'],
   ['A ticket’s queue as filed', 'A ticket is sorted by its requester’s standing now. Nothing stamps it when it is filed, so an administrator demoted since has moved queue.'],
   ['Branches carrying HQ’s SLA hours', 'HQ sets the P1/P2/P3 hours here, but a branch reads them only once its licence copy carries them, and that copy is held (slot S05, routes/licence.ts). A branch bands its tickets with the hours it shipped with.'],
   ['A push that has not been tried', 'A decision recorded before the push was stored has no outcome on its row. Send again is offered where this page still shows that decision.'],
@@ -1031,7 +1098,7 @@ export default function HqSupportPage() {
           workspace="Support"
           role="super_admin"
           stance="Read-only, except answering an escalation"
-          note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request. Recording an answer sends it to the branch. Send again resends the decision already stored."
+          note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request, and each branch's administrators' tickets from that branch. Recording an answer sends it to the branch. Send again resends the decision already stored."
           coverage={coverage}
           coverageNote={coverage.length ? undefined : (failed ? 'The Support read could not be completed.' : 'Loading…')}
           unavailable={SUPPORT_UNAVAILABLE}
@@ -1072,6 +1139,12 @@ export default function HqSupportPage() {
             stands now, so the two ticket queues and the tickets outside them add up to HQ Home&apos;s Queue backlog.
             Open an escalation to answer it.
           </p>
+          {/* D606 — the Super Admin's review queue sits under Support (the Eadwyn Tickets canvas lights this row). */}
+          <p className="mt-1.5 text-[12.5px]">
+            <Link to="/hq/review" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="hq-support-review-link">
+              Review queue: feature requests and suggested tasks →
+            </Link>
+          </p>
         </header>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -1080,6 +1153,7 @@ export default function HqSupportPage() {
           <QueueCard {...ticketCardProps(ready, failed, 'admin_product')} onRetry={load} />
         </div>
         <FootingLine tickets={ready?.tickets} />
+        <BranchTicketsSection branchTickets={ready?.branch_tickets} onRetry={load} />
         <RecordedList
           recorded={recorded}
           onResend={(uid) => {

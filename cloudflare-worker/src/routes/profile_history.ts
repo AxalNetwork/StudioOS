@@ -30,6 +30,7 @@ import { loadHistory, isArchetypePublished, setArchetypePublished } from '../ser
 import { reaskList } from '../services/profileEvolution';
 import { archetypeAccess, ARCHETYPE_KEYS, withoutKeys } from '../services/archetypeEntitlement';
 import { ARCHETYPES } from '../services/archetypeScoring';
+import { profilesFrom, sideOf, valuesFit } from '../services/valuesCompat';
 
 const r = new Hono<{ Bindings: Env }>();
 // The global setting is a separate Super Admin-only boundary, not a me read.
@@ -102,6 +103,15 @@ export const PUBLISHED_MEMBERS_LIMIT = 50;
  * role, persona, displayed slug and label. No trait, confidence, history,
  * skill or value leaves this route. A caller whose own archetype is locked
  * (D594) is answered `locked`, with no members: matches are part of the card.
+ *
+ * D605 — each row's `values_fit` is `{ band, compared }` from
+ * `services/valuesCompat.ts` (§6): aligned, mixed, far_apart, or null when
+ * fewer than three dimensions are recorded on both sides. Only a band and a
+ * count, never a dimension or a score. It is computed only when the CALLER
+ * has also published (publishing is the consent to be matched); otherwise
+ * every row's `values_fit` is null and `values_fit_reason` says why. The
+ * values of the caller and every listed member are read in two queries for
+ * the whole list, never one per row.
  */
 r.get('/published-members', async (c) => {
   const user = await requireAuth(c);
@@ -130,13 +140,39 @@ r.get('/published-members', async (c) => {
       user_id: number; name: string | null; role: string | null; persona: string; displayed_slug: string;
     }>();
     const all = rows.results || [];
+    const listed = all.slice(0, PUBLISHED_MEMBERS_LIMIT);
+    const callerPublished = await isArchetypePublished(c.env, user.id);
+    let fits: Map<number, { band: string | null; compared: number }> | null = null;
+    if (callerPublished && listed.length) {
+      const ids = [user.id, ...new Set(listed.map((m) => Number(m.user_id)))];
+      const idList = JSON.stringify(ids);
+      // Two reads for the whole list (the caller and every member), never one per row.
+      const [axal, values] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT user_id, value_key, score, confidence FROM axal_values
+            WHERE user_id IN (SELECT value FROM json_each(?))`,
+        ).bind(idList).all(),
+        c.env.DB.prepare(
+          `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+             FROM user_values uv JOIN value_dimensions vd ON vd.id = uv.dimension_id
+            WHERE uv.user_id IN (SELECT value FROM json_each(?))`,
+        ).bind(idList).all(),
+      ]);
+      const profiles = profilesFrom(ids,
+        (axal.results || []) as Array<{ user_id: number; value_key: string; score: number; confidence: number }>,
+        (values.results || []) as Array<{ user_id: number; slug: string; score: number; confidence: number }>);
+      const me = { side: sideOf(user.role), profile: profiles.get(user.id)! };
+      fits = new Map(listed.map((m, i) => [i, valuesFit(me, { side: sideOf(m.persona), profile: profiles.get(Number(m.user_id))! })]));
+    }
     return c.json({
       locked: false,
       archetypes: slugs,
-      items: all.slice(0, PUBLISHED_MEMBERS_LIMIT).map((m) => ({
+      items: listed.map((m, i) => ({
         user_id: m.user_id, name: m.name, role: m.role, persona: m.persona,
         slug: m.displayed_slug, label: ARCHETYPE_LABEL.get(m.displayed_slug) ?? null,
+        values_fit: fits?.get(i) ?? null,
       })),
+      values_fit_reason: callerPublished ? null : 'Publish your own archetype to see how your values compare.',
       more: all.length > PUBLISHED_MEMBERS_LIMIT,
     });
   } catch (e) {

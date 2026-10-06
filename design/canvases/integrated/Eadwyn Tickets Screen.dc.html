@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;family=Inter:wght@400;500;600&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    body{margin:0}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    .et{container-type:inline-size}
+    @container (max-width:760px){.et-side,.et-hide{display:none!important}.et-shell{grid-template-columns:1fr!important}.et-main{padding:14px 14px 40px!important}.et-split,.et-g2{grid-template-columns:minmax(0,1fr)!important}.et-h1{font-size:20px!important}.et-row{grid-template-columns:1fr!important}.et-actions{justify-content:flex-start!important}.et-chat{display:none!important}.et-panel{border-left:none!important}}
+  </style>
+</helmet>
+<div class="et" style="background:#f4f3f7;font-family:Inter,system-ui,sans-serif;color:#18181b;min-height:100%">
+<div class="et-shell" style="display:grid;grid-template-columns:186px minmax(0,1fr);min-height:100%">
+
+  <aside class="et-side" style="background:#fff;border-right:1px solid #ececf1;padding:18px 10px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:8px;padding:2px 10px 14px"><span style="width:22px;height:22px;border-radius:6px;background:#7c3aed"></span><span style="font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:16px;letter-spacing:-.02em">Axal VC</span></div>
+    <sc-if value="{{ hq }}" hint-placeholder-val="{{ false }}"><div style="margin:0 10px 12px;padding:6px 8px;border-radius:7px;background:#881337;color:#fff;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.04em">AXAL VC HQ</div></sc-if>
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="8"><div style="padding:8px 10px;border-radius:8px;font-weight:500;font-size:13px;color:{{ s.fg }};background:{{ s.bg }}">{{ s.t }}</div></sc-for>
+  </aside>
+
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <div style="height:52px;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:12px">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;min-width:0"><span style="font-weight:600;white-space:nowrap">{{ area }}</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ route }}</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6d28d9;background:#f4f0fe;border:1px solid #ddd0fb;border-radius:99px;padding:4px 10px">[n] credits · <a href="/perks" style="color:#6d28d9">Perks →</a></span><span style="width:30px;height:30px;border-radius:50%;background:#f4f0fe;border:1px solid #ddd0fb;display:grid;place-items:center;font:600 11px 'Roboto Mono',monospace;color:#6d28d9">[AB]</span></div>
+    </div>
+
+    <!-- ===== 1 · HQ REVIEW QUEUE ===== -->
+    <sc-if value="{{ isQueue }}" hint-placeholder-val="{{ true }}">
+    <main class="et-main" style="padding:22px 28px 56px;display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div><h1 class="et-h1" style="margin:0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:24px;line-height:1.15;font-weight:700;letter-spacing:-.02em">Review queue</h1><div style="margin-top:4px;font-size:13.5px;line-height:1.5;color:#6b6577;max-width:720px">Feature requests and suggested tasks filed from the Eadwyn chat. Approve sends a feature to the build queue; approving a task publishes it and rewards the suggester.</div></div>
+      <div style="display:flex;gap:4px;border-bottom:1px solid #ececf1"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="2"><span style="{{ t.style }}">{{ t.t }} <span style="font:500 11px 'Roboto Mono',monospace;opacity:.75">{{ t.n }}</span></span></sc-for></div>
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:10px 16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="display:flex;align-items:center;gap:8px;border:1px solid #ececf1;border-radius:9px;padding:7px 10px;font-size:13px;color:#a1a1aa;flex:1;min-width:200px">Search titles…</span><sc-for list="{{ filters }}" as="f" hint-placeholder-count="2"><span style="font-size:12px;font-weight:500;padding:5px 11px;border-radius:99px;border:1px solid #ececf1;white-space:nowrap">{{ f }} ▾</span></sc-for><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577;margin-left:auto">1–25 of [N]</span></div>
+      <sc-for list="{{ items }}" as="i" hint-placeholder-count="3">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px 18px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px 24px" class="et-row">
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:15px">{{ i.title }}</span><span style="{{ i.prioStyle }}">{{ i.prio }}</span><span style="{{ grey }}">{{ i.type }}</span></div>
+            <p style="margin:0;font-size:13.5px;line-height:1.55;color:#4a4553">{{ i.text }}</p>
+            <div style="display:flex;flex-wrap:wrap;gap:14px;font:400 11.5px 'Roboto Mono',monospace;color:#6b6577"><span>Asked by <a href="/admin/accounts/[id]">[User name]</a></span><span>{{ i.date }}</span><a href="{{ i.gh }}">GitHub #[n] ↗</a></div>
+          </div>
+          <div class="et-actions" style="display:flex;flex-direction:column;gap:8px;justify-content:flex-start">
+            <sc-if value="{{ isTasks }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;font-weight:600;color:#6b6577">Publish to</span><span style="border:1px solid #ececf1;border-radius:8px;padding:7px 10px;font-size:13px;display:flex;justify-content:space-between"><span>{{ i.audience }}</span><span style="color:#a1a1aa">▾</span></span></div></sc-if>
+            <div style="display:flex;gap:6px"><span style="flex:1;text-align:center;font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:9px 12px">{{ approveLabel }}</span><span style="flex:1;text-align:center;font-size:12.5px;font-weight:600;color:#b91c1c;border:1px solid #fecaca;border-radius:9px;padding:9px 12px">Decline…</span></div>
+          </div>
+        </div>
+      </sc-for>
+      <div class="et-g2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+        <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;background:#f4f0fe;font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:13.5px;color:#6d28d9">Approve · confirm</div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.5"><span>{{ approveCopy }}</span><sc-if value="{{ isTasks }}" hint-placeholder-val="{{ false }}"><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">Audience: {{ confirmAudience }} · suggester [User name] receives +10 credits</span></sc-if><div style="display:flex;justify-content:flex-end;gap:6px"><span style="font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:9px;border:1px solid #ececf1">Cancel</span><span style="font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 13px">{{ approveLabel }}</span></div></div></div>
+        <div style="background:#fff;border:1px solid #fecaca;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;background:#fef2f2;font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:13.5px;color:#b91c1c">Decline · reason required</div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><span style="font-size:13px;color:#4a4553">The user sees this reason on their ticket.</span><span style="border:1px solid #ececf1;border-radius:9px;padding:10px 12px;font-size:13px;color:#a1a1aa;min-height:60px">Type the reason…</span><div style="display:flex;justify-content:flex-end;gap:6px"><span style="font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:9px;border:1px solid #ececf1">Cancel</span><span style="font-size:12.5px;font-weight:600;color:#fff;background:#b91c1c;border-radius:9px;padding:8px 13px;opacity:.5">Decline</span></div><span style="font-size:11.5px;color:#6b6577">Decline stays disabled until a reason is typed.</span></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px" class="et-g2">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px"><span style="font-weight:600;font-size:12.5px">Loading</span><div style="height:10px;width:70%;border-radius:99px;background:#ececf1"></div><div style="height:10px;width:92%;border-radius:99px;background:#f4f3f7"></div></div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px">Empty</span><span style="font-size:12.5px;color:#6b6577;line-height:1.5">{{ emptyCopy }}</span></div>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px;color:#b91c1c">Unreadable</span><span style="font-size:12.5px;color:#b91c1c;line-height:1.5">The queue could not be read. The count on the tab is withheld, not zero.</span><span style="font-size:12px;font-weight:600;color:#b91c1c">Try again</span></div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ===== 2 & 3 · EADWYN CHAT WITH PANEL ===== -->
+    <sc-if value="{{ isChat }}" hint-placeholder-val="{{ false }}">
+    <main class="et-main et-split" style="padding:0;display:grid;grid-template-columns:minmax(0,1fr) 420px;min-height:calc(100% - 52px)">
+      <div class="et-chat" style="display:flex;flex-direction:column;padding:22px 28px;gap:14px;min-width:0">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:34px;height:34px;border-radius:10px;background:#7c3aed;display:grid;place-items:center;color:#fff;font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700">E</span><div><div style="font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:16px">Eadwyn</div><div style="font-size:12px;color:#6b6577">Drafts, explains and summarises. You decide.</div></div></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:10px;justify-content:flex-end">
+          <div style="align-self:flex-start;max-width:70%;background:#fff;border:1px solid #ececf1;border-radius:12px 12px 12px 4px;padding:10px 14px;font-size:13.5px;line-height:1.55">[Eadwyn message]</div>
+          <div style="align-self:flex-end;max-width:70%;background:#7c3aed;color:#fff;border-radius:12px 12px 4px 12px;padding:10px 14px;font-size:13.5px;line-height:1.55">[Your message]</div>
+          <div style="align-self:flex-start;max-width:70%;background:#fff;border:1px solid #ececf1;border-radius:12px 12px 12px 4px;padding:10px 14px;font-size:13.5px;line-height:1.55">[Eadwyn message]</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #ececf1;border-radius:12px;padding:10px 14px"><span style="flex:1;font-size:13.5px;color:#a1a1aa">Message Eadwyn, or type "open a ticket"…</span><span style="font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:8px;padding:7px 12px">Send</span></div>
+      </div>
+      <aside class="et-panel" style="background:#fff;border-left:1px solid #ececf1;display:flex;flex-direction:column;min-width:0">
+        <div style="display:flex;gap:2px;padding:10px 12px 0;border-bottom:1px solid #ececf1"><sc-for list="{{ panelTabs }}" as="t" hint-placeholder-count="3"><span style="{{ t.style }}">{{ t.t }}</span></sc-for></div>
+
+        <sc-if value="{{ isTasksPanel }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow:auto">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">Community tasks</span><span style="font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:7px 11px">Suggest a task</span></div>
+            <sc-for list="{{ community }}" as="c" hint-placeholder-count="3"><div style="border:1px solid #ececf1;border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:4px"><span style="font-weight:600;font-size:13.5px">{{ c.title }}</span><span style="font-size:12.5px;color:#6b6577;line-height:1.5">{{ c.line }}</span><a href="/tasks/[id]" style="font-size:12.5px;font-weight:600">Start →</a></div></sc-for>
+            <span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em;margin-top:4px">My suggestions</span>
+            <sc-for list="{{ mine }}" as="m" hint-placeholder-count="3"><div style="border:1px solid #ececf1;border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:5px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span style="font-weight:600;font-size:13.5px">{{ m.title }}</span><span style="{{ m.stStyle }}">{{ m.st }}</span></div><sc-if value="{{ m.reason }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#b91c1c;line-height:1.5">{{ m.reason }}</span></sc-if></div></sc-for>
+            <div style="font-size:11.5px;color:#6b6577;line-height:1.5">"Suggest a task" opens the ticket form with Type set to Task.</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isTicketsPanel }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;overflow:auto">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:#f4f0fe;border:1px solid #ddd0fb;border-radius:10px;padding:10px 13px"><div style="display:flex;flex-direction:column"><span style="font:500 18px 'Roboto Mono',monospace;color:#6d28d9">[n] credits</span><span style="font-size:11.5px;color:#6b6577">US$1 each · spent on Perks</span></div><a href="/perks" style="font-size:12.5px;font-weight:600">Perks →</a></div>
+            <sc-for list="{{ tickets }}" as="t" hint-placeholder-count="5"><div style="border:1px solid #ececf1;border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:5px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span style="font-weight:600;font-size:13.5px">{{ t.title }}</span><span style="{{ grey }}">{{ t.type }}</span></div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="{{ t.prioStyle }}">{{ t.prio }}</span><span style="{{ t.bountyStyle }}">{{ t.bounty }}</span></div><sc-if value="{{ t.note }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#6b6577;line-height:1.5">{{ t.note }}</span></sc-if><sc-if value="{{ t.dup }}" hint-placeholder-val="{{ false }}"><a href="/help/tickets/[id]" style="font-size:12.5px;font-weight:600">Original: [Ticket title] →</a></sc-if><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">#[n] · updated [date]</span></div></sc-for>
+            <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:10px;padding:10px 13px;font-size:12.5px;color:#b91c1c;line-height:1.5"><b>Unreadable.</b> Your tickets could not be read. The credit balance is withheld, not zero. <span style="font-weight:600">Try again</span></div>
+          </div>
+        </sc-if>
+      </aside>
+    </main>
+    </sc-if>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;queue-features&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;queue-features&quot;,&quot;queue-tasks&quot;,&quot;chat-tasks&quot;,&quot;chat-tickets&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.screen ?? 'queue-features';
+    const pill = (fg, bg, bd) => 'font-size:11px;font-weight:600;border-radius:99px;padding:2px 8px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px solid ' + bd;
+    const grey = pill('#6b6577', '#f4f3f7', '#ececf1'), violet = pill('#6d28d9', '#f4f0fe', '#ddd0fb'), ok = pill('#047857', '#ecfdf5', '#a7f3d0'), amber = pill('#92400e', '#fffdf5', '#fcd34d'), bad = pill('#b91c1c', '#fef2f2', '#fecaca');
+    const prioStyle = { Low: grey, Medium: violet, High: amber, Urgent: bad };
+    const isQueue = s.indexOf('queue') === 0, isTasks = s === 'queue-tasks';
+    const SIDE = isQueue ? ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings'] : ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', 'Trust', 'Company Settings'];
+    const active = isQueue ? 'Support' : 'Studio';
+    const tab = (on) => 'font-size:13px;font-weight:600;padding:9px 12px;border-bottom:2px solid ' + (on ? '#7c3aed' : 'transparent') + ';color:' + (on ? '#6d28d9' : '#6b6577') + ';white-space:nowrap';
+    const items = ['Urgent', 'High', 'Medium'].map((p, i) => ({ title: isTasks ? '[Suggested task title]' : '[Feature request title]', text: '[The text the user typed, as filed.]', prio: p, prioStyle: prioStyle[p], type: isTasks ? 'Task' : 'Feature', date: '[date]', gh: 'https://github.com/[org]/[repo]/issues/[n]', audience: i === 1 ? '[Persona]' : 'All users' }));
+    return {
+      isQueue, isTasks, isChat: !isQueue, hq: isQueue, grey,
+      area: isQueue ? 'Review queue' : 'Eadwyn', route: isQueue ? '/hq/review' : '/studio',
+      side: SIDE.map(t => ({ t, fg: t === active ? '#6d28d9' : '#6b6577', bg: t === active ? '#f4f0fe' : 'transparent' })),
+      tabs: [{ t: 'Feature requests', n: '[n]', style: tab(!isTasks) }, { t: 'Suggested tasks', n: '[n]', style: tab(isTasks) }],
+      filters: ['Priority', 'Date'], items,
+      approveLabel: isTasks ? 'Approve · +10 credits' : 'Approve',
+      approveCopy: isTasks ? 'Publishes [Suggested task title] to the Task list of the chosen audience and rewards the suggester 10 credits.' : 'Sends [Feature request title] to the build queue. The requester sees "Approved" on their ticket.',
+      confirmAudience: 'All users',
+      emptyCopy: isTasks ? 'No suggested tasks are waiting for review.' : 'No feature requests are waiting for review.',
+      panelTabs: [{ t: 'Conversation', on: false }, { t: 'Tasks', on: s === 'chat-tasks' }, { t: 'My tickets', on: s === 'chat-tickets' }].map(x => ({ t: x.t, style: tab(x.on) })),
+      isTasksPanel: s === 'chat-tasks', isTicketsPanel: s === 'chat-tickets',
+      community: [1, 2, 3].map(() => ({ title: '[Task title]', line: '[One line on what the task asks.]' })),
+      mine: [{ title: '[Suggestion title]', st: 'Pending review', stStyle: amber, reason: '' }, { title: '[Suggestion title]', st: 'Approved · +10 credits', stStyle: ok, reason: '' }, { title: '[Suggestion title]', st: 'Declined', stStyle: bad, reason: '[The reason the Super Admin typed.]' }],
+      tickets: [
+        { title: '[Ticket title]', type: 'Bug', prio: 'High', bounty: 'Under review', bountyStyle: grey, note: '', dup: false },
+        { title: '[Ticket title]', type: 'Bug', prio: 'Urgent', bounty: 'Confirmed: being fixed', bountyStyle: violet, note: '', dup: false },
+        { title: '[Ticket title]', type: 'Bug', prio: 'High', bounty: 'Fixed: +150 credits', bountyStyle: ok, note: 'Urgent and High bugs earn +150, Medium +60, Low +20 when the fix ships.', dup: false },
+        { title: '[Ticket title]', type: 'Bug', prio: 'Low', bounty: 'Not a bug', bountyStyle: grey, note: '[The reason, from the replies.]', dup: false },
+        { title: '[Ticket title]', type: 'Bug', prio: 'Medium', bounty: 'Duplicate', bountyStyle: grey, note: '', dup: true },
+      ].map(t => Object.assign(t, { prioStyle: prioStyle[t.prio] })),
+    };
+  }
+}
+</script>
+</body></html>

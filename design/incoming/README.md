@@ -14,7 +14,7 @@ exists for each — not by how far each has been built. Counts as of 2026-10-06:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 77 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 81 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
@@ -36,7 +36,9 @@ and 74 / 30 / 26 until 2026-10-06, when `Pages · Company analysis` moved from
 75 / 29 / 26 until `Founder Studio` moved the same way the same day, when the
 founder's `/studio` was built to it (D564), and 76 / 28 / 26 until
 `Help Ticket Screen` arrived beside `Help Center`, whose new export imports it
-(D599).
+(D599), 77 / 28 / 26 until `Ops · Boards` and `Ops Page` graduated with
+all five of their areas built (D607), and 79 / 28 / 26 until the Eadwyn
+Tickets canvas's two files arrived with their routes built (D606).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -632,6 +634,16 @@ canvas leaves this folder for `canvases/integrated/` once its route is live.
 
 ## Landed 2026-10-06 — the Ops canvas: five areas of screens for stored data (D566)
 
+**Graduated 2026-10-06 (D607).** Both files, and `ops-data.js` beside them,
+moved to `canvases/integrated/`: all five areas run on main (D567 to D571).
+The owner then sent a newer export of the same page
+(`https://claude.ai/artifact/M9fKUxwvHAipiYQcof8ApV`; the three other links
+sent with it carry the same `Ops Page`, and `XACu9r2t6YmMSXRcdLrJDr` is the
+earlier one). It replaced `Ops Page.dc.html` there. Its one change is the
+Account center's section list on a phone: one "Section ▾" row instead of a
+sideways row of chips, built on `/account` by D607. The board file did not
+change. This section is kept as the record of the landing.
+
 The owner approved `https://claude.ai/artifact/AZQC6nqkCj4ewoaJUvTH7F` on
 2026-10-06 and asked for the event organiser to be built first. It was drawn
 from the five prompts on #1165. It is one design with two files, both in this
@@ -645,7 +657,7 @@ folder's format:
 | Area | Screens | Governs | Grade | Issue |
 | --- | --- | --- | --- | --- |
 | Event organiser | E1 Eligibility, E2 Registrations queue, E3 My registration (phone), E4 Agenda editor | `/events/:id/manage`, `/events/:id/manage/registrations`, `/events/:id`, `/events/:id/manage/agenda` | UPGRADE | #1173 |
-| Account center, partner earnings, Wellbeing, advisor practice | the `ac-`, `pe-`/`pea-`, `wb-`/`wbx-`/`wba-` and `adv-`/`advpub-` screens | see #1165 | not yet triaged | #1165 |
+| Account center, partner earnings, Wellbeing, advisor practice | the `ac-`, `pe-`/`pea-`, `wb-`/`wbx-`/`wba-` and `adv-`/`advpub-` screens | `/account`; `/partner/earnings`, `/partner/referrals`, `/partner/leaderboard`, `/partner/relationships/:id` and `/admin/commissions`; `/wellbeing`, `/wellbeing/book`, `/wellbeing/practice` and `/admin/wellbeing/resources`; `/practice/*` and `/advisors/:uid` | UPGRADE — built (D568 to D571) | #1174, #1183 |
 
 **The sample text.** The first export had no copy of the script that holds
 `Ops Page`'s text. A newer export of the same page, published 2026-10-06 at

@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 135 canonical canvases at `design/canvases/`, listed
-177 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 137 canonical canvases at `design/canvases/`, listed
+179 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -181,12 +181,13 @@ it, where in their nav, and how do they get there.*
 | Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
-## Super Admin — 7 canvases
+## Super Admin — 8 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Admin · Super | `/hq` · `/admin/licences` · `/admin/accounts` · `/admin/contracts` · `/admin/funds` · `/admin` · `/admin/*` | HQ | Full page | Sidebar → HQ → Home | UPGRADE | High |
 | Contracts · Super | `/admin/contracts` · `/admin/contracts/registry` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
+| Eadwyn Tickets · Review queue (T1, T1b, D606) | `/hq/review` | HQ | Full page | Sidebar → HQ → Support | CURRENT | High |
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/spinout-lab/investor-workspace` · `/lp-reports` · `/portfolio/waterfall` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Funds · Fabric | `/admin/fabric` · `/funds` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
@@ -210,13 +211,14 @@ it, where in their nav, and how do they get there.*
 | PartnerRail | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
 | System Sheet | — | — (not routed) | Reference (no surface) | Not reachable yet | NEW | Low |
 
-## Shared (multi-workspace) — 18 canvases
+## Shared (multi-workspace) — 19 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Account | `/account` · `/account/:section` · `/settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\|investor\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Calendar | `/calendar` | — (no nav entry) | Full page | Deep link / in-page action | LIVE (built 2026-09-10) | Medium |
+| Eadwyn Tickets · Eadwyn chat panels (T2, T3, D606) | `/studio` | — (not routed) | Full page (proposed) | Not reachable yet | CURRENT | Low |
 | Emails | — | — (not routed) | Templates (no surface) | Not reachable yet | UPGRADE | Low |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Help Center | `/help` · `/help/:area/:guide` · `/help/tickets` · `/help/tickets/:id` · `/help/admin/*` · `/help/:id` · `/docs` · `/docs/admin/*` · `/support` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
@@ -258,9 +260,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 99 | Live route, reachable from that workspace’s sidebar. |
+| High | 100 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 43 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 35 | Not routed. Proposed route only. |
+| Low | 36 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

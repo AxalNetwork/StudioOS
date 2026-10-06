@@ -131,6 +131,27 @@ export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
   };
 }
 
+/**
+ * D614 — the routes under a gated prefix that stay open on every plan. Leaving
+ * a deal room is the one: an investor who drops to Free must still be able to
+ * leave the rooms they joined, while listing and joining stay Professional.
+ */
+export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }> = [
+  { method: 'DELETE', path: /^\/api\/deals\/[^/]+\/dealroom\/leave\/?$/ },
+];
+
+/** `requireInvestorTier`, except for the requests `exempt` names. */
+export function requireInvestorTierExcept(
+  required: Exclude<InvestorTier, 'free'>,
+  exempt: ReadonlyArray<{ method: string; path: RegExp }> = INVESTOR_PRO_EXEMPT,
+) {
+  const gate = requireInvestorTier(required);
+  return async (c: Context<{ Bindings: Env }>, next: () => Promise<void>) => {
+    if (exempt.some((e) => e.method === c.req.method && e.path.test(c.req.path))) return next();
+    return gate(c, next);
+  };
+}
+
 const MIGRATED = new WeakMap<object, boolean>();
 /** Idempotent column bootstrap — mirrors ensureTierSchema. */
 export async function ensureInvestorPaywallSchema(env: Env): Promise<void> {

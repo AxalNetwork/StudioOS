@@ -8,7 +8,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { Field, StatedLimit, inputClass } from '../kit';
 import {
   COMMISSION_STATUS, EARNINGS_AREA, PAYOUT_CURRENCY_GAP, PAYOUT_METHODS, PAYOUT_MIN_CENTS, PAYOUT_STATUS, PERIODS,
-  dayOf, filterCommissions, formatMoney, payoutDetails, payoutOptions, payoutRequestBody,
+  dayOf, destinationCheck, destinationLine, filterCommissions, formatMoney, payoutDetails, payoutOptions, payoutRequestBody,
   payoutClaims, payoutsInFlight, sourceLabel, sourcesIn, statusOf, totalsByStatus,
 } from '../../../lib/partnerEarnings';
 import {
@@ -220,6 +220,8 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
   const chosen = options[draft?.optionIndex ?? fallback] || null;
   const held = (plan?.currencies || []).filter((c) => c.options.length);
   const method = PAYOUT_METHODS.find((m) => m.value === draft?.method) || null;
+  const dest = destinationCheck({ label: draft?.destLabel, last4: draft?.destLast4 });
+  const destBad = dest.state !== 'none' && dest.state !== 'ok';
   let body;
   if (state === 'loading') body = <Skeleton.Text lines={3} />;
   else if (state === 'unreadable') {
@@ -245,6 +247,7 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
         rows={[
           ['Amount', money],
           ['Method', method.label],
+          ['Sent to', dest.state === 'ok' ? `${dest.label} ···· ${dest.last4}` : 'Not named: the admin confirms where with you'],
           ['Claims', `the ${chosen.count === 1 ? 'oldest accrued commission' : `${chosen.count} oldest accrued commissions`}${held.length > 1 && chosen.currency ? ` in ${chosen.currency}` : ''}`],
           ...(String(draft?.note ?? '').trim() ? [['Note', String(draft.note).trim()]] : []),
         ]}
@@ -284,7 +287,18 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
             {PAYOUT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </Field>
-        <Field label="Note for the admin" hint="Optional: where you want it sent, or a reference. Leave out full account numbers; the admin confirms the details with you.">
+        <Field label="Sent to" hint="Optional. Name the account or wallet as you would recognise it, and give only its last 4 characters. The full details stay with the admin, out of band, and are never stored here.">
+          <div className="flex flex-wrap gap-2">
+            <input className={`${inputClass} min-w-0 flex-1`} value={draft?.destLabel || ''} maxLength={60}
+              placeholder="Main business account" aria-label="Destination name"
+              onChange={(e) => onDraft?.({ destLabel: e.target.value })} data-testid="input-payout-dest-label" />
+            <input className={`${inputClass} w-24`} value={draft?.destLast4 || ''} maxLength={4}
+              placeholder="Last 4" aria-label="Last 4 characters"
+              onChange={(e) => onDraft?.({ destLast4: e.target.value })} data-testid="input-payout-dest-last4" />
+          </div>
+          {destBad ? <p className="mt-1 text-[11.5px] text-red-700 dark:text-red-300" data-testid="text-payout-dest-error">{dest.message}</p> : null}
+        </Field>
+        <Field label="Note for the admin" hint="Optional: a reference. Leave out full account numbers; the admin confirms the details with you.">
           <input className={inputClass} value={draft?.note || ''} maxLength={500}
             onChange={(e) => onDraft?.({ note: e.target.value })} data-testid="input-payout-note" />
         </Field>
@@ -294,7 +308,7 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
           </p>
         ) : null}
         <div className="flex justify-end">
-          <button type="button" className={primaryButton('partner')} disabled={!chosen || !method || busy}
+          <button type="button" className={primaryButton('partner')} disabled={!chosen || !method || destBad || busy}
             onClick={onReview} data-testid="button-review-payout">Review request</button>
         </div>
       </div>
@@ -337,6 +351,9 @@ export function PayoutHistory({ state, rows, onRetry }) {
                 <span className="flex flex-wrap items-center gap-2">
                   <PayoutMoney payout={p} />
                   {method ? <span className="text-axal-muted">{method}</span> : <Unrecorded>Method not recorded</Unrecorded>}
+                  {destinationLine(p)
+                    ? <span className="text-axal-muted" data-testid={`text-payout-dest-${p.id}`}>to {destinationLine(p)}</span>
+                    : <Unrecorded reason="No destination was named on this request, or it was made before destinations were stored.">destination not named</Unrecorded>}
                   <StatusPill status={status} />
                 </span>
                 <span className="text-[11.5px] tabular-nums text-axal-muted">
@@ -381,7 +398,7 @@ export default function PartnerEarnings() {
   const [period, setPeriod] = useState('all');
   const [query, setQuery] = useState('');
   const [shown, setShown] = useState(PAGE);
-  const [draft, setDraft] = useState({ optionIndex: null, method: '', note: '' });
+  const [draft, setDraft] = useState({ optionIndex: null, method: '', note: '', destLabel: '', destLast4: '' });
   const [stage, setStage] = useState('form');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -421,10 +438,10 @@ export default function PartnerEarnings() {
     if (!chosen || !draft.method) return;
     setBusy(true); setResult(null);
     try {
-      await api.payoutRequest(payoutRequestBody(chosen, draft.method, draft.note));
+      await api.payoutRequest(payoutRequestBody(chosen, draft.method, draft.note, { label: draft.destLabel, last4: draft.destLast4 }));
       const amount = [formatMoney(chosen.cents, chosen.currency), chosen.currency].filter(Boolean).join(' ');
       setResult({ ok: true, text: `Requested ${amount}. It reads Requested until an admin processes it.` });
-      setDraft({ optionIndex: null, method: '', note: '' });
+      setDraft({ optionIndex: null, method: '', note: '', destLabel: '', destLast4: '' });
       setStage('form');
       loadCommissions(); loadPayouts();
     } catch (e) {
@@ -459,7 +476,6 @@ export default function PartnerEarnings() {
           coverageNote={coverage.length ? undefined : 'Nothing has been read yet, so there is nothing to report.'}
           unavailable={[
             ['Statement drafting', 'Eadwyn drafts no statement of your commissions yet: no draft surface reads them.'],
-            ['Payout destination', 'No route stores where a payout is sent. A request carries a method and an optional note.'],
           ]}
         />
       )}

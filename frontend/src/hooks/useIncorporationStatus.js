@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { PAID_STATUSES } from '../lib/incorporationPricing';
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLLS = 60;
-export const TERMINAL_STATES = new Set(['packet_ready', 'documents_ready', 'failed']);
+// D601: once paid, the order waits on an admin's "Packet ready" and "Filed"
+// (days, not seconds), so polling stops at payment instead of timing out into
+// a false "something went wrong" after five minutes.
+export const TERMINAL_STATES = new Set([...PAID_STATUSES, 'documents_ready', 'failed']);
 
 /**
  * Polls GET /api/legal/incorporate/status?id=<incorporationId> every 5 s.

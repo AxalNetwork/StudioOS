@@ -129,7 +129,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/content', icon: FileStack, label: 'Content' },
       { to: '/admin/platform', icon: SlidersHorizontal, label: 'Platform' },
       // Y1 — three queues, not the shared Help Center. /help stays for every role.
-      { to: '/admin/hq-support', icon: Inbox, label: 'Support' },
+      // D606 — the review queue (/hq/review) is Support's: the canvas lights this row.
+      { to: '/admin/hq-support', icon: Inbox, label: 'Support', match: ['/admin/hq-support', '/hq/review'] },
       // "Security", not "Governance" (ASSUMPTIONS_LOG A4): the audit log is
       // what someone finds inside, not what they come for.
       { to: '/admin/security', icon: ShieldCheck, label: 'Security' },

@@ -14,6 +14,8 @@ import { overallStatus } from '../../lib/statusOverall';
 import { canUseCustomerChat } from '../../lib/customerChat';
 import CustomerChatWidget from '../../components/CustomerChatWidget';
 import BountyBadge from '../../components/tickets/BountyBadge';
+import ReviewBadge from '../../components/tickets/ReviewBadge';
+import { statusChip } from '../../lib/ticketScreens';
 import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity } from './helpCenter';
 
 // ---------------------------------------------------------------------------
@@ -298,12 +300,8 @@ function SearchResults({ results, query }) {
 // most three, latest activity first. The route answers a member with their own
 // tickets and an admin with every member's, so the card says which it is.
 // A failed read says so and offers a retry; it never reads as "no tickets".
-const TICKET_STATUS = {
-  open: { label: 'Open', className: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300' },
-  in_progress: { label: 'In progress', className: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300' },
-  resolved: { label: 'Resolved', className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300' },
-  closed: { label: 'Closed', className: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300' },
-};
+// The status chip is the ticket screens' own (`lib/ticketScreens.js`, D604),
+// and so is the review beside the bounty: one palette on every ticket surface.
 const CARD_ROWS = 3;
 
 function YourTicketsCard({ isAdmin }) {
@@ -357,15 +355,16 @@ function YourTicketsCard({ isAdmin }) {
       {state.status === 'ok' && state.open.length > 0 && (
         <ul className="mt-2.5">
           {state.open.slice(0, CARD_ROWS).map((t) => {
-            const st = TICKET_STATUS[t.status];
+            const st = statusChip(t.status);
             return (
               <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 py-2.5 last:border-b-0 dark:border-gray-800">
                 <Link to={`/help/tickets/${t.id}`} className="min-w-0 text-[13px] font-bold tracking-tight text-gray-900 hover:text-violet-700 dark:text-gray-100 dark:hover:text-violet-300">
                   {t.title}
                 </Link>
                 <span className="flex flex-wrap items-center gap-1.5">
-                  {st && <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${st.className}`}>{st.label}</span>}
+                  {st && <span className={st.className}>{st.text}</span>}
                   <BountyBadge bounty={t.bounty} />
+                  <ReviewBadge review={t.review} />
                 </span>
               </li>
             );

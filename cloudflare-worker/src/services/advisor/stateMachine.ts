@@ -358,6 +358,11 @@ const DYNAMIC_PROMPTS: Record<Persona, string[]> = {
     'What advice do you give that founders most often resist — and are usually wrong to?',
     'Where do you feel least confident giving guidance right now?',
   ],
+  coach: [
+    'What goal is someone you coach working toward right now?',
+    'Where does a coaching session most often get stuck?',
+    'What helps someone follow through between sessions?',
+  ],
   admin: [
     'Looking across the whole studio, what operational risk worries you most this quarter?',
     'If you could automate one recurring decision you make, which would it be?',

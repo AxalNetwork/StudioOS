@@ -30,6 +30,7 @@ import { bustArticleEdgeCache, renderMarkdown, snapshotRevision } from '../servi
 import { notifyArticle } from '../services/articleNotify';
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
+import { logAdminAction } from '../services/adminAudit';
 
 const adminArticles = new Hono<{ Bindings: Env }>();
 
@@ -209,6 +210,37 @@ adminArticles.post('/:id/approve', async (c) => {
   );
 });
 
+/**
+ * Publish one APPROVED article: render, flip the status, record the revision,
+ * clear the edge cache, tell the author and their followers. The one path both
+ * the manual publish and the scheduled publish (D484) take.
+ *
+ * The status flip is conditional (`AND status = 'approved'`), so two callers
+ * racing — an admin's click and the cron, or two cron ticks — publish once:
+ * the loser changes no row and sends no notification. Returns whether this
+ * call was the one that published.
+ */
+export async function publishApprovedArticle(env: Env, row: any, actorUserId: number): Promise<boolean> {
+  const html = renderMarkdown(row.body_markdown || '');
+  const now = new Date().toISOString();
+  const res = await env.DB.prepare(
+    `UPDATE articles
+        SET status='published', body_html=?, published_at = COALESCE(published_at, ?), updated_at=?
+      WHERE id = ? AND status = 'approved'`,
+  ).bind(html, now, now, row.id).run();
+  if (!res?.meta?.changes) return false;
+  await snapshotRevision(env, row.id, actorUserId, 'publish');
+  await bustArticleEdgeCache(env, row.slug, row.id, row.author_user_id);
+  await notifyArticle(env, 'author_published', {
+    articleId: row.id, slug: row.slug, title: row.title, authorUserId: row.author_user_id,
+  });
+  // Task #66 — fan out to followers of the author (best-effort, non-blocking).
+  await notifyAuthorFollowers(env, row.author_user_id, {
+    id: row.id, slug: row.slug, title: row.title,
+  });
+  return true;
+}
+
 adminArticles.post('/:id/publish', async (c) => {
   const admin = await requireAdmin(c);
   await ensureNewsSchema(c.env);
@@ -221,25 +253,109 @@ adminArticles.post('/:id/publish', async (c) => {
   if (row.status !== 'approved') {
     return c.json({ error: 'invalid_status', status: row.status, expected: 'approved' }, 409);
   }
-  const html = renderMarkdown(row.body_markdown || '');
-  const now = new Date().toISOString();
-  await c.env.DB.prepare(
-    `UPDATE articles
-        SET status='published', body_html=?, published_at = COALESCE(published_at, ?), updated_at=?
-      WHERE id = ?`,
-  ).bind(html, now, now, id).run();
-  await snapshotRevision(c.env, id, admin.id, 'publish');
-  await bustArticleEdgeCache(c.env, row.slug, id, row.author_user_id);
-  await notifyArticle(c.env, 'author_published', {
-    articleId: id, slug: row.slug, title: row.title, authorUserId: row.author_user_id,
-  });
-  // Task #66 — fan out to followers of the author (best-effort, non-blocking).
-  await notifyAuthorFollowers(c.env, row.author_user_id, {
-    id, slug: row.slug, title: row.title,
+  if (!(await publishApprovedArticle(c.env, row, admin.id))) {
+    // Published by someone else (or the schedule) between the read and the write.
+    const now = await loadArticle(c.env, id);
+    return c.json({ error: 'invalid_status', status: now?.status ?? null, expected: 'approved' }, 409);
+  }
+  const updated = await loadArticle(c.env, id);
+  return c.json({ article: updated });
+});
+
+/** The furthest ahead a publish time may be set: a year. */
+export const PUBLISH_AT_MAX_DAYS = 365;
+
+// POST /api/admin/articles/:id/schedule  { publish_at: ISO-8601 | null }
+//
+// D484 — set, move or clear the time an APPROVED article goes out. The
+// per-minute cron publishes it once the time has passed, through
+// `publishApprovedArticle`. `null` clears the time, and the article waits for
+// a manual publish as before. A time must name its zone (an ISO string with
+// `Z` or an offset), be in the future, and be at most a year ahead; it is
+// stored as UTC.
+adminArticles.post('/:id/schedule', async (c) => {
+  const admin = await requireAdmin(c);
+  await ensureNewsSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const body: any = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || !('publish_at' in body)) {
+    return c.json({ error: 'publish_at_required', message: 'Send publish_at: an ISO time with its zone, or null to clear it.' }, 400);
+  }
+  let publishAt: string | null = null;
+  if (body.publish_at !== null) {
+    const raw = typeof body.publish_at === 'string' ? body.publish_at.trim() : '';
+    // A zone is required: "2026-10-07T09:00" means a different instant in
+    // every reader's browser, and the cron would have to guess which.
+    const zoned = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.test(raw);
+    const ms = zoned ? Date.parse(raw) : Number.NaN;
+    if (!Number.isFinite(ms)) {
+      return c.json({ error: 'bad_publish_at', message: 'publish_at must be an ISO time with its zone, such as 2026-10-07T09:00:00Z.' }, 400);
+    }
+    const nowMs = Date.now();
+    if (ms <= nowMs) {
+      return c.json({ error: 'publish_at_past', message: 'That time has passed. Publish now instead, or choose a later time.' }, 400);
+    }
+    if (ms > nowMs + PUBLISH_AT_MAX_DAYS * 86_400_000) {
+      return c.json({ error: 'publish_at_too_far', message: `A publish time can be at most ${PUBLISH_AT_MAX_DAYS} days ahead.` }, 400);
+    }
+    publishAt = new Date(ms).toISOString();
+  }
+  const row = await loadArticle(c.env, id);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  if (row.status !== 'approved') {
+    return c.json({ error: 'invalid_status', status: row.status, expected: 'approved' }, 409);
+  }
+  const res = await c.env.DB.prepare(
+    `UPDATE articles SET publish_at = ?, publish_at_set_by = ?, updated_at = ? WHERE id = ? AND status = 'approved'`,
+  ).bind(publishAt, publishAt ? admin.id : null, new Date().toISOString(), id).run();
+  if (!res?.meta?.changes) {
+    const now = await loadArticle(c.env, id);
+    return c.json({ error: 'invalid_status', status: now?.status ?? null, expected: 'approved' }, 409);
+  }
+  await logAdminAction(c.env, admin.id, admin.email || '', publishAt ? 'article.schedule' : 'article.unschedule', {
+    article_id: id, publish_at: publishAt, previous: row.publish_at ?? null,
   });
   const updated = await loadArticle(c.env, id);
   return c.json({ article: updated });
 });
+
+/** How many due articles one cron tick publishes; the rest go on the next tick. */
+export const PUBLISH_DUE_BATCH = 20;
+
+/**
+ * D484 — the per-minute cron's half: publish every approved article whose
+ * time has passed, oldest time first, as the admin who set the time.
+ *
+ * A database without migration 346 has no `publish_at` to read; that is not
+ * an error worth a cron failure, so it answers `{ readable: false }` and
+ * publishes nothing.
+ */
+export async function publishDueArticles(env: Env, now: Date = new Date()): Promise<{ readable: boolean; due: number; published: number }> {
+  let due: any[];
+  try {
+    const q = await env.DB.prepare(
+      `SELECT a.* FROM articles a
+        WHERE a.status = 'approved' AND a.publish_at IS NOT NULL AND a.publish_at <= ?
+        ORDER BY a.publish_at ASC, a.id ASC LIMIT ?`,
+    ).bind(now.toISOString(), PUBLISH_DUE_BATCH).all<any>();
+    due = q.results || [];
+  } catch {
+    return { readable: false, due: 0, published: 0 };
+  }
+  let published = 0;
+  for (const row of due) {
+    // The revision's author is whoever set the time. A row with none (set
+    // before the column existed is impossible, but a hand edit is not) falls
+    // back to the article's author rather than inventing an admin.
+    const actor = Number(row.publish_at_set_by) || Number(row.author_user_id);
+    try {
+      if (await publishApprovedArticle(env, row, actor)) published += 1;
+    } catch (e) {
+      console.warn('[publishDueArticles] publish failed', row.id, (e as Error)?.message);
+    }
+  }
+  return { readable: true, due: due.length, published };
+}
 
 adminArticles.post('/:id/unpublish', async (c) => {
   const id = Number(c.req.param('id'));
@@ -251,6 +367,12 @@ adminArticles.post('/:id/unpublish', async (c) => {
   await c.env.DB.prepare(
     `UPDATE articles SET status='approved', updated_at = ? WHERE id = ?`,
   ).bind(new Date().toISOString(), id).run();
+  // D484 — back to approved, so a publish time that already passed must go,
+  // or the next cron tick would publish it again. Its own statement: a
+  // database without migration 346 still unpublishes.
+  await c.env.DB.prepare(
+    'UPDATE articles SET publish_at = NULL, publish_at_set_by = NULL WHERE id = ?',
+  ).bind(id).run().catch(() => {});
   await snapshotRevision(c.env, id, admin.id, 'manual');
   await bustArticleEdgeCache(c.env, row.slug, id, row.author_user_id);
   await notifyArticle(c.env, 'author_changes_requested', {

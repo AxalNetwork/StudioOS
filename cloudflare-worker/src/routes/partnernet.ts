@@ -7,6 +7,11 @@ import { requireAuth } from '../auth';
 import { newUid } from './_t13t14t15_helpers';
 import { notify } from '../services/notify';
 import { logAdminAction } from '../services/adminAudit';
+import {
+  BOARD_LIMIT, CHANGE_DAYS, LEADERBOARD_METRICS, LEADERBOARD_PERIODS, PERIODS_FOR,
+  changeOf, comparisonFor, liveRanking, periodKey,
+  type LeaderboardMetric, type LeaderboardPeriod,
+} from '../services/partnerLeaderboard';
 
 const partnernet = new Hono<{ Bindings: Env }>();
 
@@ -1276,6 +1281,86 @@ partnernet.get('/leaderboard/public', async (c) => {
     name: r.name ? r.name.split(' ').map((p: string) => p[0]).join('').toUpperCase().slice(0, 3) : `User #${r.id}`,
     verified_badges: safeJson(r.verified_badges, [] as string[]),
   })));
+});
+
+/**
+ * D572 part 3b (#1183) — the board by metric and period, with the change
+ * against a stored earlier standing (`services/partnerLeaderboard.ts` says
+ * what each metric counts and how the change is read).
+ *
+ *   GET /leaderboard/board?metric=score|referrals|commissions&period=all|quarter
+ *
+ * Any signed-in member. Other members appear by rank, role and value only:
+ * no id, name or email leaves this route. The viewer's own standing is given
+ * wherever it falls, not only inside the listed 25. A member hidden from the
+ * directory is not ranked, and is told so when they read it.
+ */
+partnernet.get('/leaderboard/board', async (c) => {
+  const user = await requireAuth(c);
+  const metric = String(c.req.query('metric') || 'score') as LeaderboardMetric;
+  const period = String(c.req.query('period') || 'all') as LeaderboardPeriod;
+  if (!(LEADERBOARD_METRICS as readonly string[]).includes(metric)) {
+    return refuse(c, 400, { code: 'bad_metric', message: `metric is one of ${LEADERBOARD_METRICS.join(', ')}.` });
+  }
+  if (!(LEADERBOARD_PERIODS as readonly string[]).includes(period)) {
+    return refuse(c, 400, { code: 'bad_period', message: `period is one of ${LEADERBOARD_PERIODS.join(', ')}.` });
+  }
+  if (!PERIODS_FOR[metric].includes(period)) {
+    return refuse(c, 400, {
+      code: 'period_not_for_metric',
+      message: 'The network score is a standing, not a tally, so it has no period: it is ranked as it stands now.',
+      extra: { periods: PERIODS_FOR[metric] },
+    });
+  }
+  const nowMs = Date.now();
+  let ranked;
+  try {
+    ranked = await liveRanking(c.env, metric, period, nowMs);
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'board_unreadable',
+      message: 'The leaderboard could not be read, so this is not a claim that nobody is ranked.',
+      raw: (e as Error)?.message,
+    });
+  }
+  const cmp = await comparisonFor(c.env, metric, period, nowMs);
+  const row = (r: (typeof ranked)[number]) => ({
+    rank: r.rank,
+    role: r.role,
+    value: r.value,
+    change: changeOf(r.user_id, r.rank, cmp),
+    is_viewer: r.user_id === user.id,
+  });
+  const mine = ranked.find((r) => r.user_id === user.id);
+  let viewer: Record<string, unknown>;
+  if (mine) {
+    viewer = { ranked: true, ...row(mine) };
+  } else {
+    let hidden = false;
+    try {
+      const s = await c.env.DB.prepare('SELECT show_in_directory FROM user_settings WHERE user_id = ?')
+        .bind(user.id).first<{ show_in_directory: number | null }>();
+      hidden = s?.show_in_directory === 0;
+    } catch { /* no settings table: visible, as everywhere else */ }
+    viewer = {
+      ranked: false,
+      reason: hidden
+        ? 'You chose not to appear in the directory, so you are not ranked.'
+        : 'You have nothing counted for this metric and period, so you are not ranked.',
+    };
+  }
+  return c.json({
+    metric,
+    period,
+    period_key: periodKey(period, nowMs),
+    as_of: new Date(nowMs).toISOString(),
+    total_ranked: ranked.length,
+    rows: ranked.slice(0, BOARD_LIMIT).map(row),
+    viewer,
+    compare: cmp.available
+      ? { available: true, date: cmp.date, days: CHANGE_DAYS }
+      : { available: false, reason: cmp.reason, ...(cmp.unreadable ? { unreadable: true } : {}) },
+  });
 });
 
 /**

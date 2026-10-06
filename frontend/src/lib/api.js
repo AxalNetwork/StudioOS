@@ -8,16 +8,20 @@ import { storeReason } from './impersonationBar';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
+export * from './api/helpCenter.js';
 export * from './api/learning.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
+export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
+export * from './api/ticketReviews.js';
 // api-modules:end
 
 const BASE = '/api';
@@ -1302,6 +1306,8 @@ export const api = {
   // Task #9 — GitHub-canonical ticket comments. (D232: the sync-mapping debug
   // method went — no screen called it; `GET /api/tickets/:id/mapping` stays.)
   commentTicket: (id, body) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+  // D604 — an admin retries one saved ticket's mirror from its page.
+  retryTicketMirror: (id) => request(`/tickets/${id}/mirror`, { method: 'POST' }),
 
   // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
   // relationship with (dealroom member / introduced / converted watchlist).
@@ -2621,12 +2627,15 @@ export const api = {
   // Task #2 — branded multi-page sites & saved templates.
   brandGetSite: (projectId) => request(`/brand/site/by-project/${projectId}`),
   brandSetSiteSlug: (projectId, slug) => request(`/brand/site/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify({ slug }) }),
-  brandListPages: (projectId) => request(`/brand/landing/by-project/${projectId}/pages`),
+  // D583: `archived: true` lists the archived pages too (they are hidden by default).
+  brandListPages: (projectId, { archived = false } = {}) => request(`/brand/landing/by-project/${projectId}/pages${archived ? '?archived=1' : ''}`),
   brandCreatePage: (projectId, payload) => request(`/brand/landing/by-project/${projectId}/pages`, { method: 'POST', body: JSON.stringify(payload) }),
   brandGetPage: (pageId) => request(`/brand/landing/pages/${pageId}`),
   brandUpdatePage: (pageId, payload) => request(`/brand/landing/pages/${pageId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
   brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  // D583: archive (unpublish and hide, kept) or restore one page.
+  brandArchivePage: (pageId, archived) => request(`/brand/landing/pages/${pageId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }),
   brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
   // The SHAREABLE public url (distinct from the noindex preview-token link
   // above). Returns { url, published, page_slug }.
@@ -2823,7 +2832,10 @@ export const api = {
   removeRelationship: (id) => request(`/partnernet/relationships/${id}/remove`, { method: 'POST' }),
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
-  partnerLeaderboard: () => request('/partnernet/leaderboard').catch(() => request('/partnernet/leaderboard/public')),
+  // D572 part 3b — the board by metric and period, with the change against a
+  // stored earlier standing. Other members come back by rank, role and value only.
+  partnerLeaderboardBoard: ({ metric = 'score', period = 'all' } = {}) =>
+    request(`/partnernet/leaderboard/board?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}`),
 
   legalGenerate: (data) => request('/legalcap/legal/generate', { method: 'POST', body: JSON.stringify(data) }),
   legalDocs: (dealId) => request(`/legalcap/legal/docs/${dealId}`),
@@ -5536,6 +5548,9 @@ export const adminArticles = {
     request(`/admin/articles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   approve: (id) => request(`/admin/articles/${id}/approve`, { method: 'POST', body: '{}' }),
   publish: (id) => request(`/admin/articles/${id}/publish`, { method: 'POST', body: '{}' }),
+  // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
+  schedule: (id, publishAt) =>
+    request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),
   unpublish: (id) => request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: '{}' }),
   addComment: (id, body, anchor) =>
     request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify({ body, anchor }) }),

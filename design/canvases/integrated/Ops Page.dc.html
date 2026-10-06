@@ -7,7 +7,7 @@
 <body>
 <x-dc>
 <helmet>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
   <script src="ops-data.js"></script>
   <style>
     body{margin:0}
@@ -18,7 +18,7 @@
       .op-main{padding:14px 14px 40px!important}.op-g2,.op-g3,.op-g4,.op-g5,.op-split{grid-template-columns:minmax(0,1fr)!important}
       .op-h1{font-size:20px!important}.op-chips{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:4px}
       .op-tr{grid-template-columns:1fr 1fr!important;gap:3px 10px!important}.op-tr>:first-child{grid-column:1/-1}.op-th{display:none!important}
-      .op-secnav{flex-direction:row!important;overflow-x:auto;padding-bottom:4px}
+      .op-secnav{display:none!important}.op-secdrop{display:flex!important}
     }
   </style>
 </helmet>
@@ -349,8 +349,11 @@
       <!-- AC · account center: section nav + one section -->
       <sc-if value="{{ isAccount }}" hint-placeholder-val="{{ false }}">
         <div class="op-split" style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px;align-items:start">
-          <div class="op-secnav" style="display:flex;flex-direction:column;gap:2px;background:#fff;border:1px solid #ececf1;border-radius:12px;padding:6px">
-            <sc-for list="{{ acNav }}" as="n" hint-placeholder-count="6"><span style="{{ n.style }}">{{ n.t }}<sc-if value="{{ n.dev }}" hint-placeholder-val="{{ false }}"> <span style="font:500 9.5px 'Roboto Mono',monospace;color:#a1a1aa">if enabled</span></sc-if></span></sc-for>
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <div class="op-secnav" style="display:flex;flex-direction:column;gap:2px;background:#fff;border:1px solid #ececf1;border-radius:12px;padding:6px">
+              <sc-for list="{{ acNav }}" as="n" hint-placeholder-count="6"><span style="{{ n.style }}">{{ n.t }}<sc-if value="{{ n.dev }}" hint-placeholder-val="{{ false }}"> <span style="font:500 9.5px 'Roboto Mono',monospace;color:#a1a1aa">if enabled</span></sc-if></span></sc-for>
+            </div>
+            <div class="op-secdrop" style="display:none;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:0 14px;background:#fff;border:1px solid #ececf1;border-radius:12px;font-size:14px;font-weight:600"><span style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">Section</span>{{ acCurrent }}</span><span style="color:#6b6577">▾</span></div>
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
 
@@ -479,7 +482,7 @@ class Component extends DCLogic {
       railOpen, railClosed: !railOpen, railCol: railOpen ? '280px' : '44px',
       railModels: [{ name: 'zai-org/glm-4.7-flash', def: true, border: '#ddd0fb', bg: '#f4f0fe' }, { name: 'google/gemma-4-26b-a4b-it', def: false, border: '#ececf1', bg: '#fff' }, { name: 'moonshotai/kimi-k2.6', def: false, border: '#ececf1', bg: '#fff' }],
       rail: Object.assign({ title: 'Summary', body: 'Summarise this page in three lines.', writes: 'Accept writes a note. It changes nothing else.' }, scr.rail || {}),
-      is: flags, isAccount: s.indexOf('ac-') === 0,
+      is: flags, isAccount: s.indexOf('ac-') === 0, acCurrent: (scr.head && scr.head.h1) || '',
     }, D.shared || {}, scr.vals || {});
   }
 }

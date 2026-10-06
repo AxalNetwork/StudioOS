@@ -7,6 +7,12 @@
  * Comments stay GitHub-canonical: POST /:id/comments posts straight to the
  * linked issue (with an axal-sync source marker for loop prevention) and
  * GET /:id hydrates comments live from GitHub — no local comment table.
+ *
+ * D604 (#1280 step 4) — the Help Center's ticket screens. Every row carries
+ * `review` (a feature request's review, from `feature_request_reviews`) and,
+ * for an admin, `sla` (tier, hours and band). GET /:id returns the comments
+ * as `thread`, by side (`ticketScreens.ts`), with `thread_unreadable` when
+ * GitHub could not be read. POST /:id/mirror retries one ticket's mirror.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -23,8 +29,32 @@ import {
 import { refusalBody } from '../util/refusal';
 import { bountySummaries } from '../services/bugBounties';
 import { parseTicketCategory } from '../services/ticketCategories';
+import { readSlaTiers } from '../services/supportSlaPolicy';
+import { reviewsForTickets, slaForTicket, threadEntry } from '../services/ticketScreens';
 
 const tickets = new Hono<{ Bindings: Env }>();
+
+/**
+ * D604 — what the ticket screens draw beside each row: the review of a
+ * feature request, for everyone, and the SLA, for an admin (the queue's
+ * column). `sla` is absent for a member: the canvas never shows them one.
+ */
+async function forScreens(env: Env, rows: any[], isAdmin: boolean): Promise<any[]> {
+  const [bounties, reviews, tiers] = await Promise.all([
+    // D542 (#1105) — each ticket's bounty state, and what a fixed one paid.
+    bountySummaries(env, rows),
+    reviewsForTickets(env, rows),
+    isAdmin ? readSlaTiers(env) : Promise.resolve(null),
+  ]);
+  const tierHours = tiers && tiers.available ? tiers.hours : null;
+  const nowMs = Date.now();
+  return rows.map((r) => ({
+    ...r,
+    bounty: bounties.get(Number(r.id)) ?? null,
+    review: reviews.get(Number(r.id)) ?? null,
+    ...(isAdmin ? { sla: slaForTicket(r, tierHours, nowMs) } : {}),
+  }));
+}
 
 type TicketUpdate = { status?: string; priority?: string; type?: string; assigned_to?: string };
 
@@ -33,6 +63,56 @@ function labelSnapshot(ghIssue: any): { labels: string; assignees: string } {
     labels: JSON.stringify((ghIssue?.labels || []).map((l: any) => (typeof l === 'string' ? l : l?.name)).filter(Boolean)),
     assignees: JSON.stringify((ghIssue?.assignees || []).map((a: any) => a?.login).filter(Boolean)),
   };
+}
+
+/**
+ * Mirror one saved ticket that has no issue yet. The admin backfill runs it
+ * for up to 25 tickets at a time, and D604's per-ticket retry for one.
+ *
+ * Two admins may retry together. The row is claimed before GitHub is
+ * contacted, and an interrupted request can be retried after five minutes.
+ * Fresh submissions take the same lease while their create runs. `claimed`
+ * means someone else holds it, and nothing was sent.
+ */
+async function mirrorSavedTicket(
+  env: Env, sql: ReturnType<typeof getSQL>, ticket: any, eventKey: string,
+): Promise<{ status: 'synced'; number: number; url: string } | { status: 'claimed' } | { status: 'failed'; error: string }> {
+  const claimed = await sql`UPDATE tickets
+    SET github_sync_status = 'syncing', github_sync_attempted_at = datetime('now')
+    WHERE id = ${ticket.id} AND github_issue_number IS NULL
+      AND (github_sync_status IS NULL OR github_sync_status != 'syncing'
+        OR github_sync_attempted_at IS NULL
+        OR datetime(github_sync_attempted_at) < datetime('now', '-5 minutes'))
+    RETURNING id`;
+  if (!claimed.length) return { status: 'claimed' };
+  // D600 — no `submitted_by` here: it holds the name or the email.
+  const body = mirrorIssueBody(ticket, 'StudioOS (backfilled)');
+  const gh = await createIssue(env, {
+    title: ticket.title,
+    body,
+    labels: labelsForTicket({ type: ticket.type, priority: ticket.priority }),
+  });
+  if (gh.ok && gh.data?.number) {
+    const snap = labelSnapshot(gh.data);
+    await sql`UPDATE tickets
+                 SET github_issue_number = ${gh.data.number}, github_issue_url = ${gh.data.html_url},
+                     github_labels = ${snap.labels}, github_assignees = ${snap.assignees},
+                     github_sync_status = 'synced', github_sync_error = NULL,
+                     github_sync_attempted_at = datetime('now')
+               WHERE id = ${ticket.id}`;
+    await recordSyncEvent(env, {
+      ticketId: ticket.id, issueNumber: gh.data.number, direction: 'outbound',
+      eventKey,
+      payloadHash: await sha256Hex(`${ticket.title}|${ticket.priority}|${ticket.type}`),
+    });
+    return { status: 'synced', number: gh.data.number, url: gh.data.html_url };
+  }
+  const err = gh.error || 'github_create_failed';
+  await sql`UPDATE tickets
+               SET github_sync_status = 'failed', github_sync_error = ${err},
+                   github_sync_attempted_at = datetime('now')
+             WHERE id = ${ticket.id}`;
+  return { status: 'failed', error: err };
 }
 
 tickets.get('/', async (c) => {
@@ -52,9 +132,7 @@ tickets.get('/', async (c) => {
       : await sql`SELECT * FROM tickets WHERE user_id = ${user.id} ORDER BY created_at DESC`;
   }
   await sql.end();
-  // D542 (#1105) — each ticket's bounty state, and what a fixed one paid.
-  const bounties = await bountySummaries(c.env, rows as any[]);
-  return c.json((rows as any[]).map((r) => ({ ...r, bounty: bounties.get(Number(r.id)) ?? null })));
+  return c.json(await forScreens(c.env, rows as any[], user.role === 'admin'));
 });
 
 tickets.post('/sync', async (c) => {
@@ -115,49 +193,12 @@ tickets.post('/sync', async (c) => {
       // issues; the count that comes back tells the caller whether to run
       // it again.
       for (const ticket of pending.slice(0, 25)) {
-        // Two admins may retry together. Claim the row before contacting
-        // GitHub; an interrupted request can be retried after five minutes.
-        // Fresh submissions take the same lease while their create runs.
-        const claimed = await sql`UPDATE tickets
-          SET github_sync_status = 'syncing', github_sync_attempted_at = datetime('now')
-          WHERE id = ${ticket.id} AND github_issue_number IS NULL
-            AND (github_sync_status IS NULL OR github_sync_status != 'syncing'
-              OR github_sync_attempted_at IS NULL
-              OR datetime(github_sync_attempted_at) < datetime('now', '-5 minutes'))
-          RETURNING id`;
-        if (!claimed.length) continue;
-        // D600 — no `submitted_by` here: it holds the name or the email.
-        const body = mirrorIssueBody(ticket, 'StudioOS (backfilled)');
-        const gh = await createIssue(c.env, {
-          title: ticket.title,
-          body,
-          labels: labelsForTicket({ type: ticket.type, priority: ticket.priority }),
-        });
-        if (gh.ok && gh.data?.number) {
-          const snap = labelSnapshot(gh.data);
-          await sql`UPDATE tickets
-                       SET github_issue_number = ${gh.data.number}, github_issue_url = ${gh.data.html_url},
-                           github_labels = ${snap.labels}, github_assignees = ${snap.assignees},
-                           github_sync_status = 'synced', github_sync_error = NULL,
-                           github_sync_attempted_at = datetime('now')
-                     WHERE id = ${ticket.id}`;
-          await recordSyncEvent(c.env, {
-            ticketId: ticket.id, issueNumber: gh.data.number, direction: 'outbound',
-            eventKey: `out:backfill:ticket-${ticket.id}`,
-            payloadHash: await sha256Hex(`${ticket.title}|${ticket.priority}|${ticket.type}`),
-          });
-          backfilled++;
-        } else {
-          const err = gh.error || 'github_create_failed';
-          backfillErrors.push({ id: ticket.id, error: err });
-          await sql`UPDATE tickets
-                       SET github_sync_status = 'failed', github_sync_error = ${err},
-                           github_sync_attempted_at = datetime('now')
-                     WHERE id = ${ticket.id}`;
-          // One bad ticket must not abandon the rest of the batch, and the
-          // first error is usually the same error for all of them — so stop
-          // after the batch rather than after the first, and report each.
-        }
+        const out = await mirrorSavedTicket(c.env, sql, ticket, `out:backfill:ticket-${ticket.id}`);
+        if (out.status === 'synced') backfilled++;
+        // One bad ticket must not abandon the rest of the batch, and the
+        // first error is usually the same error for all of them — so stop
+        // after the batch rather than after the first, and report each.
+        else if (out.status === 'failed') backfillErrors.push({ id: ticket.id, error: out.error });
       }
       unsyncedCount -= backfilled;
     }
@@ -168,7 +209,9 @@ tickets.post('/sync', async (c) => {
     : await sql`SELECT * FROM tickets WHERE user_id = ${user.id} ORDER BY created_at DESC`;
   await sql.end();
   return c.json({
-    tickets: updatedRows,
+    // D604 — the same rows `GET /` sends, so a page that takes its list from
+    // here keeps the bounty, the review and the SLA beside each one.
+    tickets: await forScreens(c.env, updatedRows as any[], user.role === 'admin'),
     synced: updates.length,
     // Present on every call, so "nothing ever mirrored" is visible without
     // having to ask for a backfill to find out.
@@ -290,14 +333,20 @@ tickets.get('/:id{[0-9]+}', async (c) => {
   if (user.role !== 'admin' && rows[0].user_id !== user.id) { await sql.end(); return c.json({ error: 'Access denied' }, 403); }
 
   const ticket = rows[0];
-  let comments: any[] = [];
+  // D604 — the thread by side (`ticketScreens.ts`), not by GitHub login: every
+  // reply posted through StudioOS carries the same account's login, so the
+  // login named the token's owner as the author of the member's own words.
+  let thread: any[] = [];
+  let threadUnreadable = false;
   let githubStatus = null;
 
   if (ticket.github_issue_number) {
     const gh = await fetchIssue(c.env, ticket.github_issue_number);
+    let mirrorLogin: string | null = null;
     if (gh.ok && gh.data) {
       const ghIssue = gh.data;
       githubStatus = ghIssue.state;
+      mirrorLogin = typeof ghIssue.user?.login === 'string' ? ghIssue.user.login : null;
       const newStatus = mapGithubStatusToLocal(ghIssue.state, ghIssue.state_reason);
       const snap = labelSnapshot(ghIssue);
       if (newStatus !== ticket.status || snap.labels !== ticket.github_labels || snap.assignees !== ticket.github_assignees) {
@@ -308,18 +357,58 @@ tickets.get('/:id{[0-9]+}', async (c) => {
       }
     }
     const ghComments = await fetchComments(c.env, ticket.github_issue_number);
-    comments = (ghComments.ok ? (ghComments.data as any[]) || [] : []).map((cm: any) => ({
-      id: cm.id,
-      body: cm.body,
-      author: cm.user?.login || 'unknown',
-      author_avatar: cm.user?.avatar_url || null,
-      created_at: cm.created_at,
-      updated_at: cm.updated_at,
-    }));
+    // A thread that could not be read says so; it is never an empty thread.
+    if (ghComments.ok) thread = ((ghComments.data as any[]) || []).map((cm: any) => threadEntry(cm, mirrorLogin));
+    else threadUnreadable = true;
   }
 
   await sql.end();
-  return c.json({ ...ticket, comments, github_status: githubStatus });
+  const [screen] = await forScreens(c.env, [ticket], user.role === 'admin');
+  return c.json({ ...screen, thread, thread_unreadable: threadUnreadable, github_status: githubStatus });
+});
+
+// D604 — an admin retries the mirror of ONE saved ticket from its page (H7),
+// rather than the backfill, which would also open issues for up to 24 others.
+tickets.post('/:id{[0-9]+}/mirror', async (c) => {
+  const user = await requireAuth(c);
+  if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403);
+  const id = parseInt(c.req.param('id'));
+  if (!githubConfigured(c.env)) {
+    return c.json(refusalBody({
+      code: 'github_not_configured',
+      message: 'GitHub Sync is not configured in this environment, so no issue can be opened. Set it up in Admin Console → GitHub Sync.',
+    }), 409);
+  }
+  const sql = getSQL(c.env);
+  await ensureTicketSyncSchema(c.env);
+  const rows = await sql`SELECT * FROM tickets WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Ticket not found' }, 404); }
+  const ticket = rows[0];
+  if (ticket.github_issue_number) {
+    await sql.end();
+    return c.json(refusalBody({
+      code: 'already_mirrored',
+      message: `This ticket is already on the tracker as #${ticket.github_issue_number}.`,
+      extra: { github_issue_number: ticket.github_issue_number, github_issue_url: ticket.github_issue_url ?? null },
+    }), 409);
+  }
+  const out = await mirrorSavedTicket(c.env, sql, ticket, `out:retry:ticket-${id}`);
+  await sql.end();
+  if (out.status === 'claimed') {
+    return c.json(refusalBody({
+      code: 'mirror_in_progress',
+      message: 'Another request is opening this ticket\'s issue right now. Reload in a minute.',
+    }), 409);
+  }
+  if (out.status === 'failed') {
+    return c.json(refusalBody({
+      code: 'github_create_failed',
+      message: `The issue could not be opened: ${out.error}`,
+      raw: out.error,
+      extra: { github_sync_status: 'failed', github_sync_error: out.error },
+    }), 502);
+  }
+  return c.json({ ok: true, github_sync_status: 'synced', github_issue_number: out.number, github_issue_url: out.url });
 });
 
 // Task #9 — admin mapping/debug endpoint: ticket ↔ issue linkage + recent
@@ -382,13 +471,14 @@ tickets.post('/:id{[0-9]+}/comments', async (c) => {
   return c.json({
     ok: true,
     github_sync_status: 'synced',
+    // D604 — the entry as the thread shows it: by side, with the reply as typed.
     comment: {
-      id: gh.data?.id,
-      body: gh.data?.body,
-      author: gh.data?.user?.login || 'unknown',
-      author_avatar: gh.data?.user?.avatar_url || null,
-      created_at: gh.data?.created_at,
-      updated_at: gh.data?.updated_at,
+      id: gh.data?.id ?? null,
+      from: ticket.user_id === user.id ? 'member' : 'team',
+      login: null,
+      body: parsed.value.body,
+      created_at: gh.data?.created_at ?? null,
+      updated_at: gh.data?.updated_at ?? null,
     },
   });
 });

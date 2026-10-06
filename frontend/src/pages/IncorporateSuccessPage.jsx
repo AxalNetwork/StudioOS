@@ -2,10 +2,24 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, FileText, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
-import { PACKET_NOT_BUILT } from '../lib/incorporationPricing';
+import { PACKET_NOT_BUILT, PAID_STATUSES } from '../lib/incorporationPricing';
 
 const POLL_MS = 3000;
 const MAX_POLLS = 60;
+
+/**
+ * D601 — what the order's own row says about the packet and the filing, set by
+ * an Axal admin in HQ. Nothing emails a packet, so nothing here says one was.
+ */
+export function packetLine(status) {
+  if (status?.status === 'filed') {
+    return status.filed_on
+      ? `Your formation packet was filed with the state on ${status.filed_on}. Open Legal to view the packet.`
+      : 'Your formation packet was filed with the state. Open Legal to view the packet.';
+  }
+  if (status?.status === 'packet_ready') return 'Your formation packet is ready. Open Legal to view it. It has not been filed with the state yet.';
+  return PACKET_NOT_BUILT;
+}
 
 export default function IncorporateSuccessPage() {
   const [search] = useSearchParams();
@@ -83,7 +97,7 @@ export default function IncorporateSuccessPage() {
   }
 
   const confirming = status.status === 'pending_payment';
-  const paid = status.status === 'paid' || status.status === 'packet_processing' || status.status === 'packet_ready';
+  const paid = PAID_STATUSES.includes(status.status);
   const failed = status.status === 'failed';
 
   return (
@@ -107,12 +121,10 @@ export default function IncorporateSuccessPage() {
               <CheckCircle2 className="text-emerald-600 mt-1" size={20} />
               <div>
                 <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  {status.company_name} — {status.status === 'packet_ready' ? 'Packet ready' : 'Payment confirmed'}
+                  {status.company_name} — {status.status === 'filed' ? 'Filed with the state' : status.status === 'packet_ready' ? 'Packet ready' : 'Payment confirmed'}
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  {status.status === 'packet_ready'
-                    ? 'Your signing packet is ready. A link has been emailed to you. Please check your inbox and spam folder.'
-                    : PACKET_NOT_BUILT}
+                  {packetLine(status)}
                 </p>
               </div>
             </div>

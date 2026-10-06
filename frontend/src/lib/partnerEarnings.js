@@ -390,15 +390,48 @@ export function payoutOptions(rows, minCents = PAYOUT_MIN_CENTS) {
  * (D572; a balance in two currencies is refused without one), `payout_method`
  * and `payout_details`.
  */
-export function payoutRequestBody(option, method, note) {
+export function payoutRequestBody(option, method, note, destination) {
   const text = String(note ?? '').trim();
   const currency = currencyOf(option?.currency);
+  const dest = destinationCheck(destination);
   return {
     amount_cents: option?.cents,
     ...(currency ? { currency } : {}),
     payout_method: method,
     ...(text ? { payout_details: { note: text.slice(0, 500) } } : {}),
+    ...(dest.state === 'ok' ? { destination_label: dest.label, destination_last4: dest.last4 } : {}),
   };
+}
+
+/**
+ * D572 part 3b (the owner's Q1 = A) — where a payout is sent, as the partner
+ * names it: a label and the last 4 characters of the account or wallet. The
+ * same rules `POST /network/payout/request` applies (`readPayoutDestination`),
+ * so the form refuses what the route would:
+ *
+ *   'none'        both left out, which is allowed
+ *   'ok'          both given and valid; `label` trimmed, `last4` upper-cased
+ *   'incomplete'  one without the other
+ *   'bad_label'   more than 60 characters
+ *   'bad_last4'   not exactly 4 letters or digits
+ */
+export const DESTINATION_LABEL_MAX = 60;
+export function destinationCheck(destination) {
+  const label = String(destination?.label ?? '').trim();
+  const last4 = String(destination?.last4 ?? '').trim();
+  if (!label && !last4) return { state: 'none' };
+  if (!label || !last4) return { state: 'incomplete', message: 'Name the destination and give its last 4 characters, or leave both empty.' };
+  if (label.length > DESTINATION_LABEL_MAX) return { state: 'bad_label', message: `A destination name is at most ${DESTINATION_LABEL_MAX} characters.` };
+  if (!/^[A-Za-z0-9]{4}$/.test(last4)) return { state: 'bad_last4', message: 'Give exactly the last 4 letters or digits, and nothing more.' };
+  return { state: 'ok', label, last4: last4.toUpperCase() };
+}
+
+/** A stored destination as one line, `Main account ···· 4821`, or null when the payout has none. */
+export function destinationLine(payout) {
+  const label = String(payout?.destination_label ?? '').trim();
+  const last4 = String(payout?.destination_last4 ?? '').trim();
+  if (!label || !last4) return null;
+  return `${label} ···· ${last4}`;
 }
 
 /**
@@ -604,29 +637,39 @@ export function interactionBody({ kind, date, time, note, outcome }) {
  * ------------------------------------------------------------------ */
 
 /**
- * The rows as the route returned them, each with a rank and whether it is the
- * viewer's.
- *
- * THE RANK IS READ, NOT MADE. The route orders by `network_score` and returns
- * at most 25; a rank here is one plus the number of returned rows with a
- * strictly higher score, so equal scores share a rank rather than being split
- * by an order the database chose. A row with no score has no rank.
+ * D572 part 3b — the board's metrics and periods, in the route's own keys
+ * (`services/partnerLeaderboard.ts`). The score is a standing, so it has no
+ * quarter; the page draws that chip disabled with the reason.
  */
-export function rankBoard(rows, viewerId) {
-  const list = Array.isArray(rows) ? rows : [];
-  const scores = list.map((r) => {
-    const n = Number(r?.network_score);
-    return r?.network_score != null && r?.network_score !== '' && Number.isFinite(n) ? n : null;
-  });
-  return list.map((row, i) => {
-    const score = scores[i];
-    return {
-      row,
-      score,
-      rank: score === null ? null : 1 + scores.filter((s) => s !== null && s > score).length,
-      isViewer: viewerId != null && row?.id != null && Number(row.id) === Number(viewerId),
-    };
-  });
+export const BOARD_METRICS = [
+  { key: 'score', label: 'Network score', periods: ['all'] },
+  { key: 'referrals', label: 'Referrals', periods: ['all', 'quarter'] },
+  { key: 'commissions', label: 'Commissions', periods: ['all', 'quarter'] },
+];
+export const BOARD_PERIODS = [
+  { key: 'all', label: 'All time' },
+  { key: 'quarter', label: 'This quarter' },
+];
+
+/** What a board's value means, for its column and the viewer's line. */
+export function boardValueLabel(metric) {
+  if (metric === 'referrals') return 'Referrals made';
+  if (metric === 'commissions') return 'Commissions earned';
+  return 'Network score';
+}
+
+/**
+ * A member's change, as the route sends it: a number of places (positive is
+ * up), 'new' for a member not ranked at the earlier standing, or null when
+ * there is nothing to compare with. Returns the text and its direction.
+ */
+export function changeText(change) {
+  if (change === 'new') return { text: 'New', dir: 'new' };
+  if (typeof change !== 'number' || !Number.isFinite(change)) return null;
+  if (change === 0) return { text: 'No change', dir: 'same' };
+  return change > 0
+    ? { text: `▲ ${change}`, dir: 'up' }
+    : { text: `▼ ${Math.abs(change)}`, dir: 'down' };
 }
 
 /* ------------------------------------------------------------------ *

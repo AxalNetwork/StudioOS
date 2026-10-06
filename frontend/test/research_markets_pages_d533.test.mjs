@@ -17,7 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import {
-  PrivatePanel, PublicPanel, GovernmentPanel, WhereBased, TopMovers, LatestSignals, Readings,
+  PrivatePanel, PublicPanel, GovernmentPanel, WhereBased, LatestSignals, Readings,
   groupMarkets, sectorSlug,
 } from '../src/pages/research/MarketDirectoryZone.jsx';
 import { GeographiesList } from '../src/pages/research/GeographiesZone.jsx';
@@ -129,15 +129,11 @@ test('D595: the public tab labels each row by source, prints the API\'s counts a
   assert.doesNotMatch(src, /10,?2\d\d|10213/, 'no count is written into the page');
 });
 
-test('the government tab and the top movers read Not recorded with the reason, never a figure', () => {
+test('the government tab reads Not recorded with the reason, never a figure', () => {
   const gov = text(h(GovernmentPanel));
   assert.match(gov, /Not recorded/);
   assert.match(gov, /No source lists government-owned companies/);
   assert.doesNotMatch(gov, /\d/);
-  const movers = html(h(TopMovers));
-  assert.match(movers, /Not recorded/);
-  assert.match(movers, /#1092/);
-  assert.doesNotMatch(text(h(TopMovers)).replace('#1092', ''), /\d/);
 });
 
 test('where companies are based: totals from the API, unmapped said, failed read not empty', () => {
