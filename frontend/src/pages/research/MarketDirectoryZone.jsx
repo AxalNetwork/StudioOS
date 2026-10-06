@@ -28,8 +28,13 @@ import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } 
  * (the read worked and holds nothing), and the rows.
  *
  * WHAT NO SOURCE HOLDS reads "Not recorded" with the reason: government-owned
- * companies (no source names an owner; #1083 Q3 settles only the wording) and
+ * companies (no source names an owner, EDGAR included; D537, #1083 answer 3A) and
  * the top movers, which come from the Research overview (#1092) once it lands.
+ *
+ * D595 — THE PUBLIC TAB READS TWO STORES, each row labelled: the signal
+ * companies with their bands, and SEC EDGAR's companies (migration 404) with
+ * what EDGAR records. The Worker pages the list; this page asks for one page
+ * at a time and prints the totals and the source lines the API sends.
  *
  * D593 — EVERY TRACKED SECTOR IS A GROUP, and each opens its own page. The
  * sector list is `GET /api/research/sectors` (D547), not a list written here:
@@ -250,42 +255,95 @@ export function PrivatePanel({ markets, sectors = null }) {
   );
 }
 
-export function PublicPanel({ listed }) {
+/** The page size the Public tab asks the Worker for (D595): the list is paged there, never here. */
+export const LISTED_PAGE = 50;
+
+const SOURCE_LABEL = { signal_companies: 'Signal companies', sec_edgar: 'SEC EDGAR' };
+
+/**
+ * The Public tab (D533, D595). Two stores, each row labelled by its source:
+ * the signal companies with the bands their source sets, and SEC EDGAR's
+ * companies with what EDGAR records — ticker, name, exchange, CIK — so their
+ * country and bands read Not recorded. Every count is the API's.
+ */
+export function PublicPanel({ listed, onPage = null }) {
   if (listed.status === 'loading' && !listed.data) return <Loading what="the listed companies" />;
   if (listed.status === 'unreadable') {
     return <Unreadable what="The listed companies" claim="This is not a sign there are none." onRetry={listed.reload} />;
   }
   const items = listed.data?.items || [];
   if (!listed.data?.total) return <p data-testid="listed-empty" className="text-[12.5px] text-axal-muted">No listed companies are recorded yet.</p>;
+  const { total, offset = 0, limit = items.length } = listed.data;
+  const sources = listed.data.sources || [];
+  const sig = sources.find((x) => x.key === 'signal_companies');
+  const edgar = sources.find((x) => x.key === 'sec_edgar');
+  const from = items.length ? offset + 1 : 0;
+  const to = offset + items.length;
   return (
     <div data-testid="markets-public">
       <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Listed companies</h3>
       <p className="mt-1 text-[12.5px] text-axal-muted">
-        Only these {fmt(listed.data.total)} are known to be listed. The company directory does not record listing status.
+        These {fmt(total)} are known to be listed
+        {sig && edgar ? `: ${fmt(sig.total)} signal companies, with bands, and ${fmt(edgar.total)} from SEC EDGAR` : ''}.
+        {' '}The company directory does not record listing status.
       </p>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-[12.5px]">
+        <table className="w-full min-w-[720px] text-left text-[12.5px]">
           <thead>
             <tr className="border-b border-axal-hairline text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-faint dark:border-gray-800">
               <th className="py-2 pr-3">Symbol</th><th className="py-2 pr-3">Company</th><th className="py-2 pr-3">Exchange</th>
-              <th className="py-2 pr-3">Country</th><th className="py-2 pr-3">Market cap</th><th className="py-2">Employees</th>
+              <th className="py-2 pr-3">Country</th><th className="py-2 pr-3">Market cap</th><th className="py-2 pr-3">Employees</th>
+              <th className="py-2">Source</th>
             </tr>
           </thead>
           <tbody>
             {items.map((x) => (
-              <tr key={x.symbol} className="border-b border-axal-hairline/60 dark:border-gray-800">
+              <tr key={`${x.source || 'signal_companies'}:${x.cik || x.symbol}`} className="border-b border-axal-hairline/60 dark:border-gray-800">
                 <td className="py-2 pr-3 font-mono font-semibold">{x.symbol}</td>
-                <td className="py-2 pr-3 text-axal-ink dark:text-gray-100">{x.name}</td>
+                <td className="py-2 pr-3 text-axal-ink dark:text-gray-100">
+                  {x.name}
+                  {x.cik ? <span className="block font-mono text-[10.5px] text-axal-faint">CIK {x.cik}</span> : null}
+                </td>
                 <td className="py-2 pr-3">{x.exchange || <Unrecorded />}</td>
                 <td className="py-2 pr-3">{x.country || <Unrecorded />}</td>
                 <td className="py-2 pr-3">{x.market_cap_band || <Unrecorded />}</td>
-                <td className="py-2">{x.employee_band || <Unrecorded />}</td>
+                <td className="py-2 pr-3">{x.employee_band || <Unrecorded />}</td>
+                <td className="py-2">
+                  {x.source_url
+                    ? <a href={x.source_url} target="_blank" rel="noreferrer" className="text-axal-violet hover:underline dark:text-violet-300">{SOURCE_LABEL[x.source] || x.source}</a>
+                    : (SOURCE_LABEL[x.source || 'signal_companies'] || x.source)}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <Caption>signal_companies · {fmt(listed.data.total)} listed companies · bands as the source sets them{listed.data.as_of ? ` · as of ${listed.data.as_of.slice(0, 10)}` : ''}</Caption>
+      {total > items.length ? (
+        <div data-testid="listed-pager" className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-axal-muted">
+          <span>{fmt(from)}–{fmt(to)} of {fmt(total)}</span>
+          <button type="button" disabled={!onPage || offset <= 0} onClick={() => onPage?.(Math.max(0, offset - limit))}
+            className="min-h-[36px] rounded-lg px-3 font-semibold text-axal-ink ring-1 ring-axal-hairline disabled:opacity-40 dark:text-gray-200 dark:ring-gray-700">
+            Previous
+          </button>
+          <button type="button" disabled={!onPage || to >= total} onClick={() => onPage?.(offset + limit)}
+            className="min-h-[36px] rounded-lg px-3 font-semibold text-axal-ink ring-1 ring-axal-hairline disabled:opacity-40 dark:text-gray-200 dark:ring-gray-700">
+            Next
+          </button>
+        </div>
+      ) : null}
+      <Caption>
+        {sig
+          ? `signal_companies · ${fmt(sig.total)} listed companies · bands as the source sets them${sig.as_of ? ` · as of ${sig.as_of.slice(0, 10)}` : ''}`
+          : `signal_companies · ${fmt(total)} listed companies · bands as the source sets them${listed.data.as_of ? ` · as of ${listed.data.as_of.slice(0, 10)}` : ''}`}
+      </Caption>
+      {edgar ? (
+        <p data-testid="listed-edgar-source" className="mt-1 text-[11px] leading-relaxed text-axal-faint">
+          {edgar.label} · {fmt(edgar.total)} companies{edgar.as_of ? ` · read ${edgar.as_of.slice(0, 10)}` : ''} · {edgar.licence} ·{' '}
+          <a href={edgar.url} target="_blank" rel="noreferrer" className="hover:underline">{edgar.url}</a>
+          {' '}· EDGAR records ticker, name, exchange and CIK only, so country, market cap and employees are Not recorded for its rows
+          {edgar.also_signal_companies ? ` · ${fmt(edgar.also_signal_companies)} of its tickers are also a signal company, listed once per source` : ''}.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -296,7 +354,7 @@ export function GovernmentPanel() {
       <Unrecorded />
       <h3 className="mt-2 text-[15px] font-bold text-axal-ink dark:text-gray-100">Government-owned companies</h3>
       <p className="mt-1 text-[12.5px] text-axal-muted">
-        No source lists government-owned companies yet, so StudioOS cannot count or name them. The directory and the listed companies do not record who owns a company.
+        No source lists government-owned companies yet, so StudioOS cannot count or name them. The directory, the listed companies and SEC EDGAR do not record who owns a company.
       </p>
     </div>
   );
@@ -619,7 +677,8 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
   const [tab, setTab] = useState('private');
   const [markets, reloadMarkets] = useRead(() => researchMarketsApi.list({ limit: 100 }));
   const [sectors, reloadSectors] = useRead(() => researchSectorsApi.list());
-  const [listed, reloadListed] = useRead(() => researchMarketsApi.listedCompanies({ limit: 100 }));
+  const [listedOffset, setListedOffset] = useState(0);
+  const [listed, reloadListed] = useRead(() => researchMarketsApi.listedCompanies({ limit: LISTED_PAGE, offset: listedOffset || undefined }), listedOffset);
   const [geos, reloadGeos] = useRead(() => researchMarketsApi.geographies({ sort: 'company_count', limit: 100 }));
   const [sigs, reloadSigs] = useRead(() => api.signals.list({ limit: 3, mode: role === 'advisor' ? 'advisor' : 'founder' }), role);
   const [readings, reloadReadings] = useRead(() => api.research.marketReadings());
@@ -694,7 +753,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
         </div>
         <div className="mt-4">
           {tab === 'private' ? <PrivatePanel markets={{ ...markets, reload: reloadMarkets }} sectors={{ ...sectors, reload: reloadSectors }} /> : null}
-          {tab === 'public' ? <PublicPanel listed={{ ...listed, reload: reloadListed }} /> : null}
+          {tab === 'public' ? <PublicPanel listed={{ ...listed, reload: reloadListed }} onPage={setListedOffset} /> : null}
           {tab === 'government' ? <GovernmentPanel /> : null}
         </div>
       </Card>
