@@ -23,16 +23,6 @@
       "why": "A HUMAN advisor. This is the milestone for booking office hours with a person on the advisor track, not the model describing itself."
     },
     {
-      "file": "frontend/src/pages/founder/FounderStudioHome.jsx",
-      "text": "No advisory bookings recorded.",
-      "why": "A booking with a human advisor: the Office hours card lists the founder's sessions from /mentee-bookings. Not the model (D322)."
-    },
-    {
-      "file": "frontend/src/pages/founder/FounderStudioHome.jsx",
-      "text": "Advisory booking",
-      "why": "A booking with a human advisor: the Office hours card lists the founder's sessions from /mentee-bookings. Not the model (D322)."
-    },
-    {
       "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
       "text": "Advisor data is withheld in role preview.",
       "why": "The advisor Studio home is a human advisor's own page; this names that persona's practice data, not the model (D322)."
