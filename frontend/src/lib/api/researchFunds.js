@@ -6,6 +6,9 @@
 // coverage, sources, facets, facets_unmapped, facets_basis }. A bad filter is
 // a 400 with `detail`; a failed read is a 503 "Unreadable", never an empty
 // list. `get` answers { item, reports, reports_status } and a 404 for no fund.
+// D597 (#1232): every item carries `source` (its list's name, publisher, link
+// and terms verdict), the list answer adds `removed_sources`, and `get` answers
+// 410 { detail, reason, removed } for a fund whose list was taken down.
 // Read by pages/research/FundDirectory.jsx and FundCatalogProfile.jsx.
 import { request } from '../api.js';
 

@@ -20,9 +20,9 @@ zones: one record each, reached from a zone's list.
 | `diligenceRead.js` | The size, date and file-state readings those two pages and their tests share. |
 | `ClientPrepZone.jsx` | Advisor and partner client prep. |
 | `FundsZone.jsx` | `/research/funds`. The fund directory (`FundDirectory.jsx`) above the founder shortlist. Stage, path and status stay three columns; a directory row enters the shortlist only through an explicit "Add to my list". |
-| `FundDirectory.jsx` | The fund directory, to `Research · Funds` (D535): server search, filters, sort and paging over `GET /api/research/fund-directory`; coverage, the drawer, and the four states. A size shows only in a known currency; stage reads Not recorded. |
-| `fundDirectoryRead.js` | That page's readings: "1–25 of N", the page list, a size only in a known currency, EIF/EIFO named, neither or unknown. |
-| `FundCatalogProfile.jsx` | `/research/funds/catalog/:id`. One directory fund, inside `WorkspaceShell`. A failed read is Unreadable, a missing id says so. |
+| `FundDirectory.jsx` | The fund directory, to `Research · Funds` (D535): server search, filters, sort and paging over `GET /api/research/fund-directory`; coverage, the drawer, and the four states. A size shows only in a known currency; stage reads Not recorded. Every row and the drawer cite the fund's list, publisher and terms verdict, and the footer names any list removed for its terms (D597). |
+| `fundDirectoryRead.js` | That page's readings: "1–25 of N", the page list, a size only in a known currency, EIF/EIFO named, neither or unknown, and `citationOf` (D597): a fund's list, publisher, link and terms verdict. |
+| `FundCatalogProfile.jsx` | `/research/funds/catalog/:id`. One directory fund, inside `WorkspaceShell`. A failed read is Unreadable, a missing id says so, and a fund whose list was removed for its terms (410, D597) says that and why. |
 | `../../data/fundDirectory.json` | Deduplicated catalog of the attached Euro tech VC and deep-tech investor mapping exports, from `python3 scripts/build-fund-directory.py`. No page reads it since D535 steps 4–5: the directory is the Worker's (`research_fund_directory`). |
 | `FundDossier.jsx` | `/research/funds/:uid`. One row. A blank cheque stays blank. The pre-meeting brief is drafted from this row on the press, and Accept appends it to the note; it does not email the fund. |
 | `fundDossierRead.js` | The dossier's checklist and Last-updated readings. A fact no store holds is Not recorded, never a gap. |
