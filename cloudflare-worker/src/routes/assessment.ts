@@ -20,6 +20,7 @@ import { requireAuth } from '../auth';
 import { ensureAssessmentSchema } from '../services/assessmentSchema';
 import { verifyResult, ASSESSMENT_INTEGRITY_VERSION, levelForXp } from '../services/assessmentScoring';
 import { refuse } from '../util/refusal';
+import { archetypeAccess, ARCHETYPE_KEYS, withoutKeys } from '../services/archetypeEntitlement';
 
 const assessment = new Hono<{ Bindings: Env }>();
 
@@ -98,7 +99,13 @@ assessment.get('/results/me', async (c) => {
       return shapeResult(row, ok);
     }),
   );
-  return c.json({ results });
+  // D594: the archetype half of each result is locked on a free plan; the
+  // value and skill vectors are not.
+  const access = await archetypeAccess(c.env, user);
+  return c.json({
+    results: access.locked ? results.map((r) => withoutKeys(r, ARCHETYPE_KEYS.assessmentResult)) : results,
+    archetype_access: access,
+  });
 });
 
 // ── GET /results/:userId ─────────────────────────────────────────────────--
