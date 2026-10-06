@@ -40679,6 +40679,65 @@ it becomes a no-op once either merges.
   binds intact), counting another firm's conditions, failing open on a
   failed read, and a NOT NULL column.
 
+## D468
+
+**A recusal is final.** Wave 9, item 7, the second of three; issue #1019,
+slot S08 (moved from S16). No migration. Session 1 decided this on the
+owner's behalf, from the questions D461–D464 name. If the owner strikes it,
+the vote endpoint goes back to upserting, and a member may un-recuse by
+voting.
+
+**The defect.** D461 made `recused` a vote value with its declaration
+required as the rationale, and the tally counts it beside the
+yes/no/abstain denominator. But `POST /api/ic/:uid/vote` upserted
+(`ON CONFLICT(ic_decision_id, user_id) DO UPDATE`). A member who recused
+could later vote yes, no or abstain on the same decision, or recuse again
+with a different declaration. The declared conflict then vanished from the
+record and the denominator.
+
+**What changed.**
+- The prior vote is read first. A standing recusal refuses any vote with
+  `409 recusal_is_final` and a sentence: the recusal and its declaration
+  stand. That includes an identical replay, which a row compared after the
+  write could not tell from a first recusal (Codex review on #1096). It
+  also needs no row count from the driver.
+- The upsert carries the guard itself:
+  `DO UPDATE … WHERE ic_votes.vote <> 'recused'`. This covers a recusal that
+  lands between that read and the write: the recused row is never updated,
+  and zero changed rows is the same refusal.
+- A refused vote writes no decision-journal draft, because the refusal
+  returns before the journal step.
+- Voting first and recusing later is still allowed: that is a member
+  declaring a conflict they learned of. An ordinary change of vote is
+  unchanged.
+
+**Guards.**
+- `cloudflare-worker/test/ic_recusal_final_d468.test.ts` has 6 tests. They
+  drive the real `ic` router against real SQLite. They cover:
+  - recuse then yes, with the stored vote, the declaration and the tally
+    unchanged;
+  - no, abstain, a fresh declaration and an identical replay, each refused;
+  - no journal draft from a refused vote;
+  - a driver with no row count, an identical replay included;
+  - a recusal landing between the read and the write;
+  - controls: changing a vote, and recusing after voting.
+- On the code as it was, 4 of the 5 fail. The control passes.
+- Mutation-checked both ways: 7 of 7 caught, each with a non-zero exit and
+  a `not ok` line, and the file was restored and checked by sha256. The
+  mutations:
+  - drop the guard;
+  - guard the wrong value;
+  - never refuse;
+  - refuse everything;
+  - skip the read-back, or make it refuse a first recusal;
+  - rename the code.
+
+  After the review fix, a second round on the new path caught 5 of 5:
+  - the prior read ignored or checking the wrong value;
+  - the upsert guard dropped;
+  - the row count ignored;
+  - the refusal never returned.
+
 ## D469
 
 **Only an admin changes a deal's amount through `PUT /deals/:id`.** Wave 9,
