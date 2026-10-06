@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Pill, Unrecorded } from '../../ui';
 import { titleCase } from '../../lib/absence';
 import { SectionCard, stateBlock } from './LearningStates';
@@ -70,7 +71,11 @@ export default function StudioContentTable({ status, rows, reason = NOT_LIVE.stu
               {visible.map((r, i) => (
                 <li key={r.uid || i} className={`grid grid-cols-2 gap-x-3 gap-y-1 py-2.5 text-[12.5px] ${GRID}`} data-testid={`studio-row-${r.uid}`}>
                   <span className="text-[10.5px] font-extrabold uppercase tracking-axal-label text-axal-faint dark:text-gray-500">{titleCase(r.kind) || 'Item'}</span>
-                  <span className="col-span-2 font-semibold text-axal-ink sm:col-span-1 dark:text-gray-100">{r.title || 'Untitled'}</span>
+                  <span className="col-span-2 font-semibold text-axal-ink sm:col-span-1 dark:text-gray-100">
+                    {r.href
+                      ? <Link to={r.href} className="hover:text-axal-violet-deep dark:hover:text-violet-300" data-testid={`link-studio-open-${r.uid}`}>{r.title || 'Untitled'}</Link>
+                      : (r.title || 'Untitled')}
+                  </span>
                   <span><Pill tone={CONTENT_STATUS_TONE[r.status] || 'neutral'}>{titleCase(r.status) || 'Status not recorded'}</Pill></span>
                   <span className="text-axal-muted dark:text-gray-400">{r.visibility ? titleCase(r.visibility) : <Unrecorded>Not recorded</Unrecorded>}</span>
                   <span className="text-axal-muted dark:text-gray-400">

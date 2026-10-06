@@ -1,6 +1,6 @@
-// D557 — authoring the Learning center: items, courses, modules and lessons.
-// Super Admin only. Worker: routes/admin_learning.ts, mounted at
-// /api/admin/learning.
+// D557 — authoring the Learning center: items, courses, modules and lessons;
+// D559's exercises and exams, D558's programs. Super Admin only. Worker:
+// routes/admin_learning*.ts, mounted at /api/admin/learning.
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -65,4 +65,29 @@ export const adminLearningApi = {
   addQuestion: (examUid, b) => request(`/admin/learning/exams/${enc(examUid)}/questions`, { method: 'POST', body: body(b) }),
   updateQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
   deleteQuestion: (uid) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'DELETE' }),
+
+  // D558 — programs: contents, assigned admins and enrolments.
+  listPrograms: () => request('/admin/learning/programs'),
+  createProgram: (b) => request('/admin/learning/programs', { method: 'POST', body: body(b) }),
+  getProgram: (uid) => request(`/admin/learning/programs/${enc(uid)}`),
+  // name, region, description, enrolment ('invite'|'open'), status ('draft'|'published'|'archived')
+  updateProgram: (uid, b) => request(`/admin/learning/programs/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  // The full ordered list: [{ subject_kind: 'course'|'item'|'exam'|'exercise', subject_uid }].
+  setProgramContents: (uid, contents) => request(`/admin/learning/programs/${enc(uid)}/contents`, { method: 'PUT', body: body({ contents }) }),
+  assignProgramAdmin: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/admins`, { method: 'POST', body: body({ user_uid: userUid }) }),
+  unassignProgramAdmin: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/admins/${enc(userUid)}`, { method: 'DELETE' }),
+  enrolInProgram: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/enrollments`, { method: 'POST', body: body({ user_uid: userUid }) }),
+  unenrolFromProgram: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/enrollments/${enc(userUid)}`, { method: 'DELETE' }),
+
+  // D560 — webinars.
+  listWebinars: () => request('/admin/learning/webinars'),
+  createWebinar: (b) => request('/admin/learning/webinars', { method: 'POST', body: body(b) }),
+  getWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}`),
+  updateWebinar: (uid, b) => request(`/admin/learning/webinars/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/unpublish`, { method: 'POST' }),
+  cancelWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/cancel`, { method: 'POST' }),
+  // itemUid: a video item's uid, or null to detach.
+  setWebinarRecording: (uid, itemUid) => request(`/admin/learning/webinars/${enc(uid)}/recording`, { method: 'PUT', body: body({ item_uid: itemUid }) }),
+  recordAttendance: (uid, userUid, attended) => request(`/admin/learning/webinars/${enc(uid)}/registrations/${enc(userUid)}`, { method: 'PATCH', body: body({ attended }) }),
 };

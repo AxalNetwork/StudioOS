@@ -234,9 +234,14 @@ export type RevokeResult =
   | { status: 'already_revoked'; ledger_id: number }
   | { status: 'refused'; code: 'not_found' | 'would_overdraw'; message: string; balance?: number };
 
-/** A Super Admin takes a grant back: an `admin_adjust` line with the reason. */
+/**
+ * A grant is taken back: an `admin_adjust` line with the reason. The actor is
+ * a Super Admin, or (D542) the system acting on a decision recorded
+ * elsewhere — a bounty tier label removed on GitHub — which is logged to
+ * `activity_logs` as `system:<source>`, as a system grant is.
+ */
 export async function revokeGrant(env: Env, args: {
-  ledgerId: number; actor: { id: number; email: string }; reason: string;
+  ledgerId: number; actor: { id: number; email: string } | GrantActor; reason: string;
 }): Promise<RevokeResult> {
   const grant = await env.DB.prepare(
     `SELECT id, user_id, delta, rule_key, source_ref FROM perk_credit_ledger WHERE id = ? AND kind = 'grant'`,
@@ -262,10 +267,11 @@ export async function revokeGrant(env: Env, args: {
     };
   }
   const ledgerId = Number(ins.meta.last_row_id);
-  await logAdminAction(env, args.actor.id, args.actor.email, 'credit_grant_revoke', {
+  const actor: GrantActor = 'kind' in args.actor ? args.actor : { kind: 'admin', ...args.actor };
+  await recordActor(env, actor, 'credit_grant_revoke', {
     target_user_id: grant.user_id, grant_ledger_id: grant.id, ledger_id: ledgerId,
     rule_key: grant.rule_key, credits, source_ref: grant.source_ref, reason: args.reason,
-  });
+  }, grant.user_id);
   const notified = await tell(env, grant.user_id, 'credit_grant_revoked', `${plural(credits)} were taken back`,
     `A grant of ${plural(credits)} was revoked. The reason recorded: "${args.reason}".`,
     { grant_ledger_id: grant.id, ledger_id: ledgerId, credits });

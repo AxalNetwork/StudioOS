@@ -548,9 +548,11 @@ export default function AdminCommissions({ user }) {
   const loadAll = useCallback(() => readInto(() => api.adminCommissions(), setAll, asList), []);
   const loadQueue = useCallback(() => readInto(() => api.adminPayouts(), setQueue, asList), []);
   const loadTake = useCallback(() => readInto(() => api.hqTakeRate(), setTake), []);
+  // D572 part 2: every read and write here is the Super Admin's on the
+  // Worker, so a plain admin is told so, and nothing is fetched to be refused.
   useEffect(() => {
-    loadRules(); loadAll(); loadQueue();
-    if (superAdmin) loadTake();
+    if (!superAdmin) return;
+    loadRules(); loadAll(); loadQueue(); loadTake();
   }, [loadRules, loadAll, loadQueue, loadTake, superAdmin]);
 
   const allRows = useMemo(() => asList(all.data), [all.data]);
@@ -614,6 +616,20 @@ export default function AdminCommissions({ user }) {
     all.status === 'ready' ? `${allRows.length} commission${allRows.length === 1 ? '' : 's'} read` : null,
     queue.status === 'ready' ? `${queueRows.length} payout${queueRows.length === 1 ? '' : 's'} in the queue read` : null,
   ].filter(Boolean);
+
+  if (!superAdmin) {
+    return (
+      <div className="max-w-2xl" data-testid="admin-commissions-super-only">
+        <h1 className="m-0 text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Commissions and payouts</h1>
+        <Card padding="md" className="mt-3">
+          <p className="text-[13px] leading-relaxed text-axal-muted dark:text-gray-400">
+            Commission rules, every account's commissions and the payout queue are the Super Admin's. They cover every
+            partner's earnings, an admin's own included, so a plain admin account cannot read or settle them.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <RailFrame

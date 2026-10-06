@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import { resolveReferralCode } from '../services/referrals/resolveCode';
@@ -510,6 +510,14 @@ network.get('/referral/list', async (c) => {
 
 // ---------- COMMISSIONS ----------
 
+// D572 part 2 (#1183, S1 from Codex's review of #1191): every `/admin/*`
+// route here is SUPER ADMIN ONLY. They read or change every user's
+// commissions, payouts and rules with no tenant or role filter, and an admin
+// can hold referral commissions too, so `requireAdmin` let any admin read a
+// colleague's earnings and settle their payouts. The same gate as
+// `/admin/platform/take-rate`. It is HQ only: on a branch deployment these
+// answer that the ledger is HQ's.
+
 /**
  * D572 — balances per currency. A sum across currencies is not a figure, so
  * `balance_cents` and `lifetime_cents` stay as they were only while the
@@ -556,7 +564,7 @@ network.get('/commissions/me', async (c) => {
 });
 
 network.get('/admin/commissions', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`
@@ -568,7 +576,7 @@ network.get('/admin/commissions', async (c) => {
 });
 
 network.get('/admin/commission-rules', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`
@@ -600,7 +608,7 @@ function ruleIntOrNull(v: unknown, max: number): number | null | 'bad' {
  * records who changed it and when.
  */
 network.patch('/admin/commission-rules/:key', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const key = c.req.param('key');
   const body = await c.req.json().catch(() => null);
@@ -793,7 +801,7 @@ network.post('/payout/request', async (c) => {
 });
 
 network.patch('/admin/payouts/:id/process', async (c) => {
-  const adminUser = await requireAdmin(c);
+  const adminUser = await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
   const { action, failure_reason } = await c.req.json().catch(() => ({ action: 'complete' }));
@@ -870,7 +878,7 @@ network.patch('/admin/payouts/:id/process', async (c) => {
 });
 
 network.get('/admin/payouts', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   try {
