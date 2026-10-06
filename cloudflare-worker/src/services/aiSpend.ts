@@ -152,6 +152,33 @@ function caps(env: Env): { day: number; month: number } {
   };
 }
 
+type LastRun = NonNullable<AiSpendReport['last_run']>;
+
+/** The receipt for one `ai_usage_logs` row — shared by the account and the per-page read. */
+function lastRunFromRow(r: any): LastRun {
+  // No model was called for a cached answer or a refusal, so neither
+  // direction has a count. On a live call a ZERO is not a count either:
+  // a streamed call records no completion side, and a transcription
+  // is billed by audio minute and records no prompt tokens. Only a
+  // positive figure is one the router actually wrote down.
+  const called = !r.cached && !r.refusal;
+  const tok = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  return {
+    task: String(r.task ?? ''),
+    model: String(r.model ?? ''),
+    cost_usd: Number(r.est_cost_usd) || 0,
+    prompt_tokens: called ? tok(r.prompt_tokens) : null,
+    completion_tokens: called ? tok(r.completion_tokens) : null,
+    cached: !!r.cached,
+    fallback_used: !!r.fallback_used,
+    refusal: r.refusal ?? null,
+    at: String(r.created_at ?? ''),
+  };
+}
+
 /**
  * @param now injected so the caller controls the clock — the period boundary
  *        is the whole question this answers, and a test that cannot move the
@@ -243,31 +270,7 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
           WHERE ${scope.sql} AND u.created_at <= ?
           ORDER BY u.created_at DESC, u.id DESC LIMIT 1`,
       ).bind(...scope.binds, asAt).first<any>();
-      if (r) {
-        // No model was called for a cached answer or a refusal, so neither
-        // direction has a count. On a live call a ZERO is not a count either:
-        // a streamed call records no completion side, and a transcription
-        // is billed by audio minute and records no prompt tokens. Only a
-        // positive figure is one the router actually wrote down.
-        const called = !r.cached && !r.refusal;
-        const tok = (v: unknown) => {
-          const n = Number(v);
-          return Number.isFinite(n) && n > 0 ? n : null;
-        };
-        const tokensIn = called ? tok(r.prompt_tokens) : null;
-        const tokensOut = called ? tok(r.completion_tokens) : null;
-        last_run = {
-          task: String(r.task ?? ''),
-          model: String(r.model ?? ''),
-          cost_usd: Number(r.est_cost_usd) || 0,
-          prompt_tokens: tokensIn,
-          completion_tokens: tokensOut,
-          cached: !!r.cached,
-          fallback_used: !!r.fallback_used,
-          refusal: r.refusal ?? null,
-          at: String(r.created_at ?? ''),
-        };
-      }
+      if (r) last_run = lastRunFromRow(r);
       last_run_recorded = true;
     } catch { /* leave null and unrecorded — an unreadable last run is not "no run" */ }
 
@@ -308,4 +311,116 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
   }
 
   return { recorded, month, today, last_run, last_run_recorded, by_task, by_task_recorded, by_surface, by_surface_recorded };
+}
+
+/**
+ * D552 — ONE PAGE'S MONTH AND ONE PAGE'S LAST RUN.
+ *
+ * What the AI rail's "This page this month" and its receipt read, for one of
+ * the fixed names in `services/aiSurfaces.ts` (the route refuses any other).
+ * The same self-scope as the account meter: a page filter narrows the caller's
+ * own rows and can never widen them to anyone else's.
+ *
+ * WHAT EACH NULL MEANS, because a page figure invites a zero it may not have:
+ *
+ *   month.spend_usd null   the read failed (no table, or migration 319 not
+ *                          applied). `recorded: false`, and `reason` says so.
+ *   month.calls 0 / $0     the read ran and this page has no run this month.
+ *                          A fact, but a narrow one: runs made before D552
+ *                          shipped carry no page, so they are counted in
+ *                          `unattributed` — never silently in or out of here.
+ *   last_run null          with `last_run_recorded: true` the page has never
+ *                          recorded a run; with `false` the read failed. Both
+ *                          carry a `last_run_reason` sentence.
+ */
+export interface AiSurfaceSpendReport {
+  surface: string;
+  /** False when the per-page read did not run. Every figure below is then null. */
+  recorded: boolean;
+  /** Why the figures are absent. Null when `recorded` is true. */
+  reason: string | null;
+  month: {
+    key: string;
+    spend_usd: number | null;
+    calls: number | null;
+  };
+  /**
+   * The caller's runs this month that carry NO page, beside the page figure so
+   * a reader can see how much of the month no page has claimed. Null when that
+   * read failed.
+   */
+  unattributed: { calls: number; spend_usd: number } | null;
+  last_run: AiSpendReport['last_run'];
+  last_run_recorded: boolean;
+  /** A sentence when `last_run` is null; null when there is a last run. */
+  last_run_reason: string | null;
+}
+
+export const SURFACE_REASONS = {
+  unreadable: 'This page\u2019s AI usage could not be read, so no figure is shown for it.',
+  noRun: 'No AI run has been recorded from this page.',
+  lastRunUnreadable: 'This page\u2019s last run could not be read.',
+} as const;
+
+export async function loadMyAiSpendForSurface(
+  env: Env, actor: Actor, surface: string, now: Date,
+): Promise<AiSurfaceSpendReport> {
+  const scope = aiUsageSelfScope(actor);
+  const mKey = monthKey(now);
+  const asAt = now.toISOString().slice(0, 19).replace('T', ' ');
+
+  const report: AiSurfaceSpendReport = {
+    surface,
+    recorded: false,
+    reason: SURFACE_REASONS.unreadable,
+    month: { key: mKey, spend_usd: null, calls: null },
+    unattributed: null,
+    last_run: null,
+    last_run_recorded: false,
+    last_run_reason: SURFACE_REASONS.lastRunUnreadable,
+  };
+
+  try {
+    // Bound on `surface = ?`, never interpolated. Selecting the column is
+    // also what makes a table without it (before migration 319) throw here
+    // and report "unreadable" rather than a page total of zero.
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS calls, COALESCE(SUM(u.est_cost_usd), 0) AS spend
+         FROM ai_usage_logs u
+        WHERE ${scope.sql} AND u.surface = ? AND substr(u.created_at, 1, 7) = ?`,
+    ).bind(...scope.binds, surface, mKey).first<{ calls: number; spend: number }>();
+    if (!row) return report;
+    report.recorded = true;
+    report.reason = null;
+    report.month.calls = Number(row.calls) || 0;
+    report.month.spend_usd = Number(row.spend) || 0;
+  } catch {
+    return report;
+  }
+
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS calls, COALESCE(SUM(u.est_cost_usd), 0) AS spend
+         FROM ai_usage_logs u
+        WHERE ${scope.sql} AND u.surface IS NULL AND substr(u.created_at, 1, 7) = ?`,
+    ).bind(...scope.binds, mKey).first<{ calls: number; spend: number }>();
+    if (row) report.unattributed = { calls: Number(row.calls) || 0, spend_usd: Number(row.spend) || 0 };
+  } catch { /* stays null: unread, not none */ }
+
+  try {
+    // Not bounded to the month: "this page's last run" is the most recent one
+    // there is, as the account receipt is. Bounded by `now`, as it is.
+    const r = await env.DB.prepare(
+      `SELECT u.task, u.model, u.est_cost_usd, u.prompt_tokens, u.completion_tokens,
+              u.cached, u.fallback_used, u.refusal, u.created_at
+         FROM ai_usage_logs u
+        WHERE ${scope.sql} AND u.surface = ? AND u.created_at <= ?
+        ORDER BY u.created_at DESC, u.id DESC LIMIT 1`,
+    ).bind(...scope.binds, surface, asAt).first<any>();
+    report.last_run = r ? lastRunFromRow(r) : null;
+    report.last_run_recorded = true;
+    report.last_run_reason = r ? null : SURFACE_REASONS.noRun;
+  } catch { /* unrecorded, with its reason — not "no run" */ }
+
+  return report;
 }

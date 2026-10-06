@@ -36,6 +36,7 @@
 import type { Env } from '../../types';
 import { searchSemantic, researchNamespace } from '../vectorize';
 import { run as runAI } from '../aiRouter';
+import { AI_SURFACE } from '../aiSurfaces';
 import type { Citation } from './types';
 
 /**
@@ -153,7 +154,9 @@ export async function citeFromResearch(
 
   let out;
   try {
-    out = await runAI(env, { task: 'research_ask', userId, text: prompt, maxTokens: 400 });
+    // Recorded against Validate (D552): the fill registry is this function's
+    // only caller, and Validate's proposals are the only fills it runs.
+    out = await runAI(env, { task: 'research_ask', userId, surface: AI_SURFACE.validate, text: prompt, maxTokens: 400 });
   } catch (e) {
     console.error('[fills] citeFromResearch:', (e as Error).message);
     return { citation: null, model: null };

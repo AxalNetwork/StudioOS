@@ -52,6 +52,7 @@ import {
 import { hashEmail } from '../util/hashEmail';
 import { openDsrRequest, withdrawDsrRequest, loadOwnDsrOutcome } from '../services/dsrRequests';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
+import { revokeUserSession } from '../services/userSessions';
 import {
   LinkedInImportError,
   decodePdfDataUri,
@@ -1004,10 +1005,11 @@ settings.post('/sessions/:id/revoke', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id') || '0', 10);
   if (!id) return c.json({ error: 'session id required' }, 400);
+  // D481 — the revoke is shared with HQ · Security; `user.id` keeps this door
+  // to the caller's own rows.
+  const out = await revokeUserSession(c.env, id, user.id);
+  if (out.outcome === 'not_found') return c.json({ error: 'Not found' }, 404);
   const sql = getSQL(c.env);
-  const owned = await sql`SELECT id FROM user_sessions WHERE id = ${id} AND user_id = ${user.id}`;
-  if (!owned.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
-  await sql`UPDATE user_sessions SET revoked_at = datetime('now') WHERE id = ${id} AND user_id = ${user.id}`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('session_revoked', ${`User revoked session ${id} from /settings`}, ${user.email}, ${user.id})`;
   await sql.end();

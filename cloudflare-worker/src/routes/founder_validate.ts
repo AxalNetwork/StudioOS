@@ -61,6 +61,7 @@ import {
 } from './_founder_validate_proposals';
 import { refuseReason } from '../services/fills/types';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -710,6 +711,7 @@ founderValidate.post('/propose/:projectId', async (c) => {
     task: spec.task as any,
     userId: s.user.id,
     model,
+    surface: AI_SURFACE.validate,
     systemPrompt: spec.prompt,
     messages: [{ role: 'user', content: gathered.facts }],
     maxTokens: 500,
@@ -1127,6 +1129,7 @@ founderValidate.post('/interviews/:id/transcribe', async (c) => {
   const r = await aiRun(c.env, {
     task: 'transcribe',
     userId: s.user.id,
+    surface: AI_SURFACE.validateInterviews,
     audio: bytes,
     // From the BYTES, not from the duration the client reported.
     audioMinutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),

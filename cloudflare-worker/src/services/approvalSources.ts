@@ -39,6 +39,7 @@
  * these four rather than pretending it is one of them.
  */
 import type { Env } from '../types';
+import { SLA_DUE_SOON_HOURS } from './slaWindow';
 import { MODERATION_AWAITING_SQL } from './moderationOpen';
 import { PRE_VERDICT_STATUSES } from './referralSubmissions';
 
@@ -299,7 +300,8 @@ export type ApprovalItem = {
  * band that is wrong the moment the clock moves past it, and this is the second
  * place in the programme to make that call the same way.
  */
-export const SLA_DUE_SOON_HOURS = 24;
+// The window is `slaWindow.ts`'s, the one HQ's tickets and escalations use (D459).
+export { SLA_DUE_SOON_HOURS };
 export const SLA_PAST_HOURS = 72;
 
 export function slaFor(ageHours: number | null): ApprovalItem['sla'] {

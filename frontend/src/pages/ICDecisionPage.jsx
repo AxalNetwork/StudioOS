@@ -98,11 +98,12 @@ export default function ICDecisionPage() {
         </h2>
         {canWrite && (
           <div className="mb-3">
-            <input value={rationale} onChange={(e) => setRationale(e.target.value)} placeholder="Rationale (optional)"
+            <input value={rationale} onChange={(e) => setRationale(e.target.value)} placeholder="Rationale (required)"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm mb-2" />
             <div className="flex gap-2">
               {VOTES.map((v) => (
-                <button key={v} onClick={() => castVote(v)} disabled={busy}
+                <button key={v} onClick={() => castVote(v)} disabled={busy || !rationale.trim()}
+                  title={rationale.trim() ? undefined : 'Every vote records its reason: write the rationale first.'}
                   className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
                   Vote {v}
                 </button>
