@@ -33,14 +33,17 @@
  * D37 and `research_search_isolation.test.ts` are untouched.
  */
 import { Hono } from 'hono';
+import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
@@ -689,6 +692,7 @@ research.post('/ask', async (c) => {
     const out = await runAI(c.env, {
       task: 'research_ask',
       userId: user.id,
+      surface: AI_SURFACE.researchAsk,
       // `text` rather than `messages`: the router hashes it for the cache key
       // and this task is uncached, but the shape is what every non-chat task
       // uses. The instructions live in the prompt itself so the retrieved
@@ -1229,6 +1233,9 @@ const draftDto = (r: ZoneDraftRow) => ({
  * than one gets null rather than an arbitrary pick: a draft written about the
  * wrong startup is worse than no draft.
  */
+/** "Going cold" (D551): more than this many days since the last recorded activity, as `lib/networkBook.js` says. */
+export const FOUNDER_COLD_AFTER_DAYS = 60;
+
 async function founderProject(
   c: { env: Env }, userId: number, scope: string,
 ): Promise<number | null> {
@@ -3418,6 +3425,81 @@ const DRAFT_SURFACES: Record<string, {
   // which passes through the same held-grant gate as the room read: a uid the
   // caller does not hold drafts nothing, and nothing behind an NDA the caller
   // has not signed is named to the model — only counted.
+  // ── FOUNDER NETWORK (D551, #1144) ──────────────────────────────────────
+  //
+  // The founder Network desk's two bands (A6). `network/relationships` and
+  // `network/introductions` above read a PARTNER's book; a founder's people
+  // live in `contacts`, keyed on a project, so these are their own surfaces
+  // scoped the way every founder surface is: through `founderProject`.
+
+  'network/re-engagement': {
+    // A6's band: "Marisol Vega has gone 71 days without contact. She asked
+    // about your retention data in June — you have it now." The note opens on
+    // what the person last wrote, never on a check-in — and when nothing they
+    // wrote is logged, the instruction says so rather than letting the model
+    // supply a June conversation.
+    instruction: [
+      'Write one short re-engagement note, two or three sentences, to the first contact below: the one who has gone longest without contact.',
+      'Open on what they last wrote when it is given; when no reply of theirs is logged, say nothing about a past conversation.',
+      'Never invent a meeting, a promise, a shared history or a figure the rows do not state, and do not write a generic check-in.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      // GOING COLD IS THE PAGES' DEFINITION, more than 60 days since the last
+      // recorded activity (`lib/networkBook.js` COLD_AFTER_DAYS), so the band
+      // drafts for the people the desk flags and nobody else.
+      const rows = await c.env.DB.prepare(
+        `SELECT ct.name, ct.organization, ct.strength, ct.audience,
+                CAST(julianday('now') - julianday(ct.last_activity_at) AS INTEGER) AS days,
+                (SELECT r.body FROM contact_replies r
+                  WHERE r.contact_id = ct.id AND r.direction = 'inbound' AND TRIM(COALESCE(r.body, '')) <> ''
+                  ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS last_inbound
+           FROM contacts ct
+          WHERE ct.project_id = ? AND ct.last_activity_at IS NOT NULL
+            AND julianday('now') - julianday(ct.last_activity_at) > ?
+          ORDER BY julianday(ct.last_activity_at) ASC, ct.id ASC LIMIT 20`
+      ).bind(pid, FOUNDER_COLD_AFTER_DAYS).all<{
+        name: string | null; organization: string | null; strength: string | null; audience: string;
+        days: number; last_inbound: string | null;
+      }>();
+      return (rows.results || []).map((r) =>
+        `${r.name || 'A contact with no name recorded'} (${r.audience}) at ${r.organization || 'no organisation recorded'}`
+        + ` — strength ${r.strength || 'not recorded'}, ${r.days} days since the last recorded activity; `
+        + (r.last_inbound ? `the last thing they wrote: "${r.last_inbound.slice(0, 400)}"` : 'no reply of theirs is logged'));
+    },
+  },
+
+  'network/intro-email': {
+    // A6's band: "Proposal · intro email — written from both sides' real
+    // context … Forwardable as-is." Both sides' context is what the match
+    // recorded about the pair; the draft asks for the introduction and never
+    // reads as though it had been made.
+    instruction: [
+      'Write one short, forwardable email asking for an introduction to the first person below, from the founder.',
+      'Use only the reasons the match recorded for both sides. Never write as though the introduction has already been made, and add no fact the rows do not state.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      // The founder's own ACCEPTED propositions: the ones in motion. `scope`,
+      // when sent, names one proposition, and it must be the caller's.
+      const rows = await c.env.DB.prepare(
+        `SELECT ip.uid, ip.breakdown_json, ip.responded_at, COALESCE(u.name, 'a member with no name recorded') AS target
+           FROM intro_propositions ip
+           JOIN users u ON u.id = ip.target_user_id
+          WHERE ip.user_id = ? AND ip.status = 'accepted' AND (? = '' OR ip.uid = ?)
+          ORDER BY ip.responded_at DESC, ip.id DESC LIMIT 10`
+      ).bind(userId, scope, scope).all<{ uid: string; breakdown_json: string | null; responded_at: string | null; target: string }>();
+      return (rows.results || []).map((r) => {
+        let reasons: string[] = [];
+        try {
+          const b = JSON.parse(r.breakdown_json || '{}');
+          reasons = (Array.isArray(b?.reasons) ? b.reasons : []).filter((x: unknown) => typeof x === 'string' && x.trim()).slice(0, 5);
+        } catch { reasons = []; }
+        return `Introduction to ${r.target} — ${reasons.length ? `recorded reasons: ${reasons.join('; ')}` : 'no reason recorded for the match'}`;
+      });
+    },
+  },
+
   'research/diligence': {
     instruction: [
       'Write a short private memo for the investor who holds access to the data room below.',
@@ -3443,6 +3525,17 @@ const DRAFT_SURFACES: Record<string, {
     ].join(' '),
     gather: (c, userId, scope) => fundMaterial(c.env, userId, scope),
     accept: (c, userId, scope, body) => writeBriefIntoNote(c.env, userId, scope, body),
+  },
+
+  // D553 (#1146) — I6's "Draft reminder" on a capital call line: one LP, one
+  // call. A DRAFT ONLY: there is no `accept` hook, so accepting it writes
+  // nothing and sends nothing. The GP sends it from wherever they send mail,
+  // then logs it on the fund's comms log ("Log as sent"). The gather is the
+  // licence and ownership gate: an investor who is the GP of record, or an
+  // admin; another fund's line gives nothing to draft.
+  'funds/calls': {
+    instruction: CALL_REMINDER_INSTRUCTION,
+    gather: (c, userId, scope) => callReminderMaterial(c.env, userId, scope),
   },
 };
 
@@ -3745,38 +3838,40 @@ research.get('/company-directory/:uid', async (c) => {
   return c.json({ item: row, source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
 });
 
-// Public EuroTech fund catalog. Spreadsheet observations are reported fund-size
+// Public fund catalog (D535). Spreadsheet observations are reported fund-size
 // snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
+// Search, filters, sort and paging run on the server (services/researchFundDirectory.ts).
+const FUND_DIRECTORY_SOURCE = 'Public fund spreadsheets (EuroTech VC Funds; Deep Tech Investors Mapping)';
+const FUND_DIRECTORY_BOUNDARY = 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.';
+
 research.get('/fund-directory', async (c) => {
   await requireAuth(c);
-  const q = String(c.req.query('q') || '').trim().slice(0, 120);
-  const hq = String(c.req.query('hq') || '').trim().slice(0, 120);
-  const rows = await c.env.DB.prepare(
-    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
-            fund_date, quarter, fund_year, sector_focus, notable_lps,
-            eif_flag, eifo_flag, source_name, source_url, as_of
-       FROM research_fund_directory
-      WHERE (? = '' OR name LIKE '%' || ? || '%' OR sector_focus LIKE '%' || ? || '%')
-        AND (? = '' OR hq = ?)
-      ORDER BY name COLLATE NOCASE LIMIT 2000`
-  ).bind(q, q, q, hq, hq).all();
-  return c.json({ items: rows.results || [], source: 'EuroTech VC Funds (public spreadsheet)', source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+  let query;
+  try {
+    query = parseDirectoryQuery((k) => c.req.query(k));
+  } catch (e) {
+    if (e instanceof DirectoryQueryError) return c.json({ detail: e.reason, field: e.field }, 400);
+    throw e;
+  }
+  try {
+    const page = await listDirectory(c.env, query);
+    return c.json({ ...page, source: FUND_DIRECTORY_SOURCE, source_boundary: FUND_DIRECTORY_BOUNDARY });
+  } catch {
+    // A failed read says so; it is never an empty directory.
+    return c.json({ detail: 'Unreadable', reason: 'The fund directory could not be read' }, 503);
+  }
 });
 
 research.get('/fund-directory/:uid', async (c) => {
   await requireAuth(c);
-  const item = await c.env.DB.prepare(
-    `SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
-            fund_date, quarter, fund_year, sector_focus, notable_lps,
-            eif_flag, eifo_flag, source_name, source_url, as_of
-       FROM research_fund_directory WHERE uid = ?`
-  ).bind(c.req.param('uid')).first();
-  if (!item) return c.json({ detail: 'Not found' }, 404);
-  const reports = await c.env.DB.prepare(
-    `SELECT period, report_date, fund_size_cents, source_url
-       FROM research_fund_directory_reports WHERE fund_uid = ? ORDER BY period ASC`
-  ).bind(c.req.param('uid')).all();
-  return c.json({ item, reports: reports.results || [], source_boundary: 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.' });
+  let fund;
+  try {
+    fund = await getFund(c.env, c.req.param('uid'));
+  } catch {
+    return c.json({ detail: 'Unreadable', reason: 'The fund could not be read' }, 503);
+  }
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ...fund, source_boundary: FUND_DIRECTORY_BOUNDARY });
 });
 
 research.get('/market-directory', async (c) => {

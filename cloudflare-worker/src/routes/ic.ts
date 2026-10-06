@@ -498,16 +498,16 @@ r.get('/commit-room', async (c) => {
         rows: summaries,
       },
       current,
-      // The artboard says "Rationale required". The store does not require it,
-      // and the vote endpoint accepts a vote without one. Both facts are
-      // reported so the page can say which it is rather than repeating the
-      // artboard's claim as though the column enforced it.
+      // The artboard says "Rationale required". Since D494 the vote endpoint
+      // refuses a vote without one; the column stays nullable, so a vote cast
+      // before then may carry none. Both facts are reported, so the count is
+      // what was written and `enforced` is the rule new votes meet.
       rationale: {
         recorded: rationalesRecorded,
         total: votesTotal,
-        enforced: false,
-        note: 'ic_votes.rationale is nullable and POST /api/ic/:uid/vote accepts a vote without one. '
-          + 'The count is what was actually written, not what a rule guarantees.',
+        enforced: true,
+        note: 'POST /api/ic/:uid/vote refuses a vote without a rationale (D494). '
+          + 'Votes cast before that may carry none, so the count is what was actually written.',
       },
       room,
       // RECUSAL IS A REAL VALUE NOW (D461). `ic_votes.vote` carries no CHECK,
@@ -662,6 +662,16 @@ r.post('/:uid/vote', async (c) => {
       return c.json({
         error: 'recusal_requires_declaration',
         message: 'A recusal records the conflict it declares. Write the declaration as the rationale.',
+      }, 400);
+    }
+    // D494 (#1023): EVERY vote records its reason. The ID3 artboard says
+    // "Rationale required" and D461 left it as the owner's call; #1023 settles
+    // it — refuse a blank one. The column stays nullable, because votes cast
+    // before this have none and are not rewritten.
+    if (!rationale?.trim()) {
+      return c.json({
+        error: 'rationale_required',
+        message: 'Every vote records its reason. Write the rationale before voting.',
       }, 400);
     }
     await c.env.DB.prepare(

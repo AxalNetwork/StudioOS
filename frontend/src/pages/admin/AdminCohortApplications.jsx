@@ -53,9 +53,41 @@ const APPLICANT_BADGE = {
   withdrawn: 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
 };
 
+/**
+ * D511 — the size settings as the Worker read them. `settings` is null when the
+ * read failed: the button says so, and never shows a number nobody set.
+ */
+export function SizeSettingsLabel({ settings }) {
+  if (!settings) return <span data-testid="app-settings-unreadable">Min · Max unreadable</span>;
+  return <>Min {settings.min} · Max {settings.max}</>;
+}
+
+/**
+ * D511 — a cycle's count against the minimum. With no minimum read, or no
+ * judgement from the Worker (`meets_minimum` null), the pill says the minimum
+ * is unreadable rather than passing or failing the cycle.
+ */
+export function MinimumPill({ cycle, settings }) {
+  const counts = cycle.applicant_counts || {};
+  const approvedish = (counts.approved || 0) + (counts.activated || 0);
+  if (!settings || cycle.meets_minimum == null) {
+    return (
+      <span data-testid={`cycle-minimum-unreadable-${cycle.id}`} className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+        <AlertTriangle size={10} /> {approvedish} approved · minimum unreadable
+      </span>
+    );
+  }
+  return (
+    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${cycle.meets_minimum ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>
+      {cycle.meets_minimum ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
+      {approvedish}/{settings.min} approved
+    </span>
+  );
+}
+
 export default function AdminCohortApplications() {
   const [cycles, setCycles] = useState([]);
-  const [settings, setSettings] = useState({ min: 1, max: 25 });
+  const [settings, setSettings] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [events, setEvents] = useState([]);
   const [subView, setSubView] = useState('cycles'); // cycles | notifications | history
@@ -73,7 +105,7 @@ export default function AdminCohortApplications() {
         api.adminCohortAppEvents(),
       ]);
       setCycles(apps?.cycles || []);
-      setSettings(apps?.settings || { min: 1, max: 25 });
+      setSettings(apps?.settings ?? null);
       setNotifications(notifs?.notifications || []);
       setEvents(evts?.events || []);
       setUnsupported(false);
@@ -118,9 +150,9 @@ export default function AdminCohortApplications() {
   };
 
   const editSettings = () => {
-    const min = parseInt(window.prompt('Minimum cohort size (cycles below this auto-postpone and roll forward):', String(settings.min)) || '', 10);
+    const min = parseInt(window.prompt('Minimum cohort size (cycles below this auto-postpone and roll forward):', settings ? String(settings.min) : '') || '', 10);
     if (!Number.isInteger(min) || min < 0) return;
-    const max = parseInt(window.prompt('Maximum cohort size:', String(settings.max)) || '', 10);
+    const max = parseInt(window.prompt('Maximum cohort size:', settings ? String(settings.max) : '') || '', 10);
     if (!Number.isInteger(max) || max < 0) return;
     act('settings', () => api.adminCohortAppSettings({ min_cohort_size: min, max_cohort_size: max }));
   };
@@ -158,7 +190,7 @@ export default function AdminCohortApplications() {
             data-testid="button-app-settings"
             className="px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-1"
           >
-            <Settings2 size={12} /> Min {settings.min} · Max {settings.max}
+            <Settings2 size={12} /> <SizeSettingsLabel settings={settings} />
           </button>
           <button onClick={load} className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800" data-testid="button-app-refresh" aria-label="Refresh">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -176,7 +208,6 @@ export default function AdminCohortApplications() {
           )}
           {cycles.map((cy) => {
             const counts = cy.applicant_counts || {};
-            const approvedish = (counts.approved || 0) + (counts.activated || 0);
             return (
               <div key={cy.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4" data-testid={`cycle-card-${cy.id}`}>
                 <div className="flex flex-wrap items-center gap-2">
@@ -185,10 +216,7 @@ export default function AdminCohortApplications() {
                   {cy.force_proceed === 1 && (
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center gap-1"><Zap size={10} /> force-proceed</span>
                   )}
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${cy.meets_minimum ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>
-                    {cy.meets_minimum ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
-                    {approvedish}/{settings.min} approved
-                  </span>
+                  <MinimumPill cycle={cy} settings={settings} />
                   {['open', 'reviewing'].includes(cy.app_status) && !cy.force_proceed && (
                     <button
                       onClick={() => forceProceed(cy)}

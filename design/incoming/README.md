@@ -10,13 +10,13 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-09-26:
+exists for each — not by how far each has been built. Counts as of 2026-10-05:
 
 | Folder | Meaning |
 | --- | --- |
 | `canvases/integrated/` | 74 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
-| `canvases/backlog/` | 29 — graded `NEW` or `DEFERRED`: no route yet. |
-| `canvases/out-of-scope/` | 27 — deliberately not being built. |
+| `canvases/backlog/` | 30 — graded `NEW` or `DEFERRED`: no route yet. |
+| `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
 is not counted here. The table read 53 / 27 / 27 until 2026-09-04: one canvas
@@ -28,7 +28,9 @@ It then read 61 / 26 / 27 until 2026-09-26, while the folders moved to
 66 / 25 / 27. Five arrivals and one graduation went uncounted here, which is
 exactly the drift this rule exists to prevent. 74 / 29 / 27 was counted on
 2026-09-26, after Calendar and the three Advisor canvases left this queue and
-eight new canvases arrived, four into each folder (D305).
+eight new canvases arrived, four into each folder (D305). It read 74 / 29 / 27
+until 2026-10-05, when `Advisor Studio` moved from `out-of-scope/` to
+`backlog/` after the owner brought the Advisor Program into scope (#975, D565).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -119,7 +121,7 @@ comparison they record is what the reports were about:
 
 | Canvas | Governs | Supersedes | Why it is here |
 | --- | --- | --- | --- |
-| `Pages · Founder Research.dc.html` | `/research/{ask,markets,companies,funds,library}` | — | Five zones, `PAGES` shape (ids fs1–fs5): `filters`, `ops`, four `adds` stat tiles, `head`/`rows` with status pills, and an AI-rail offer per zone. |
+| `Pages · Founder Research.dc.html` *(deleted 2026-10-05 — raw twin, D546)* | `/research/{ask,markets,companies,funds,library}` | — | Five zones, `PAGES` shape (ids fs1–fs5): `filters`, `ops`, four `adds` stat tiles, `head`/`rows` with status pills, and an AI-rail offer per zone. The processed copy in `canvases/integrated/` carries the same logic and markup; this one differed only by its runtime uuid, 35 inlined `@font-face` rules and the Claude Design badge, the #155 case. |
 | `Pages · Partner Offers.dc.html` *(deleted 2026-09-12 — duplicate)* | `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | **nothing — it was the same canvas** as the `integrated/` copy | Same shape. Its `ops` match what `partnerZoneActions.js` already carries; its `filters` do **not** exist in `partnerZoneFilters.js` at all — that table has no `offers/*` key, and that gap is still open. |
 | `Pages · Partner Pipeline.dc.html` *(deleted 2026-09-12 — duplicate)* | `/pipeline/{leads,proposals,negotiations,retainers,analytics}` | **nothing — it was the same canvas** as the `integrated/` copy | **The one that changes a standing decision**, and that decision is still open. See below; the canvas it describes is now only in `integrated/`. |
 | `Pages · Advisor Expertise.dc.html` | `/expertise/{profile,services,proof,thinking,visibility}` | the 2026-09-03 export in this folder | Newer export of the same surface, 54K against 39K. Its `h1` per zone is not the zone name — `Practice profile`, `Service ledger`, `Evidence`, `Published thinking`, `Surfaces & funnel` — and each zone has its own blurb, where the shipped pages print Visibility's on all five. |
@@ -561,3 +563,107 @@ about `expert_booking`, so if this file is ever re-exported saying something
 different, the note above stops being true out loud instead of quietly.
 
 See the `ROUTE_MAP.md` row for the rest.
+
+## Landed 2026-10-05 — the Research rebuild's seven canvases (D546)
+
+The owner asked on 2026-10-05 to "wire the wireframes". That approves the
+canvas #1079–#1082 cite, `https://claude.ai/artifact/NzuiaEyGymWqABC1kd8Nyj`,
+which Session 1 drew from what the platform records (AGENTS.md, "Missing UI").
+Its seven page files are committed here byte for byte. They were already in
+this folder's format: the shared runtime
+(`design/canvases/shared/support.js`) and no inlined fonts.
+
+| Canvas | Governs | Grade | Issue |
+| --- | --- | --- | --- |
+| `Research · Main.dc.html` | the overview panel on `/research` (founder desk, investor workspace, advisor and partner board) | UPGRADE | #1082 |
+| `Research · Companies.dc.html` | `/research/companies` | UPGRADE | #1079 |
+| `Research · Company.dc.html` | `/research/companies/company/:uid` | UPGRADE | #1079 |
+| `Research · Markets.dc.html` | `/research/markets` | UPGRADE | #1080 |
+| `Research · Sector.dc.html` | `/research/markets/sector/:slug`, one page per tracked sector | UPGRADE | #1080 |
+| `Research · Geography.dc.html` | `/research/geographies`, `/research/geographies/:code` | NEW | #1080 |
+| `Research · Funds.dc.html` | `/research/funds`, `/research/funds/catalog/:id` | UPGRADE | #1081 |
+
+**How to build from them.**
+- Put each body inside `WorkspaceShell`, with its zone pills, in the app's
+  type: the signed-in app sets Space Grotesk on `body` through `--font-app`
+  (`html.app-type` in `frontend/src/index.css`), and figures take Roboto
+  Mono. Don't copy the canvas's own font rules, and drop its public top bar.
+- The figures drawn are 4 October counts. A screen prints the API's `total`,
+  source and coverage, never a number copied from a canvas.
+- The 24px logo in each header is an artifact asset (`/_blob/…`) that no repo
+  file resolves. `scripts/read-canvas.mjs` would have reported it rather than
+  inline it; nothing depends on it.
+- Each canvas draws its loading, no-result, `Not recorded` and `Unreadable`
+  states. Build all four.
+
+**The four pages the owner shared on 2026-10-04 are not new canvases.** Each is
+byte-identical to one already committed, for a route that is already built:
+Companies is `canvases/backlog/Pages · Company analysis`
+(`/research/companies/:id`), Funds is `canvases/integrated/Pages · Fund dossier`
+(`/research/funds/:uid`), Markets is `canvases/integrated/Pages · Market reading`
+(`/research/markets/:uid`) and the Research overview is this folder's
+`Founder Workspaces Canvas` (its A7 is `/research` for founders). They stay the
+reference for those routes. Two later pages drawn from #1077's prompt are one
+design in two layouts with their own sidebar and type; they are not committed.
+
+**Calls Session 1 made for the build (D546).**
+- The `/research` panel follows `Research · Main`, since A7 draws none of
+  #1082's zones.
+- The sector page is one per tracked sector (the twelve market-intelligence
+  sectors), because the six index series exist only per sector. Its
+  sub-markets are the taxonomy markets under it. A market slug that is not a
+  sector slug redirects to its sector's page; a market that maps to no
+  tracked sector keeps today's page.
+- Geographies get their own zone pill.
+- Named comparables on a market reading ("Add an engagement") stay unbuilt:
+  `ROUTE_MAP.md` records that choice, and no canvas changes it.
+- #1083's three questions and #1081's currency question stay with the owner.
+  Until they are answered, those parts of the screens print `Not recorded`
+  with the reason.
+
+Each build PR adds or updates its `ROUTE_MAP.md` row (pipeline step 5). A
+canvas leaves this folder for `canvases/integrated/` once its route is live.
+
+## Landed 2026-10-06 — the Ops canvas: five areas of screens for stored data (D566)
+
+The owner approved `https://claude.ai/artifact/AZQC6nqkCj4ewoaJUvTH7F` on
+2026-10-06 and asked for the event organiser to be built first. It was drawn
+from the five prompts on #1165. It is one design with two files, both in this
+folder's format:
+
+| File | What it is |
+| --- | --- |
+| `Ops · Boards.dc.html` | The board: rows of artboards at 1440 and 390, chosen by its `set` property (`events`, `account`, `partner`, `wellbeing`, `advisor`). Each artboard imports `Ops Page` with one `screen`. |
+| `Ops Page.dc.html` | Every screen's markup, one `sc-if` block per screen id: `evo-eligibility`, `evo-queue`, `ev-mine` and `evo-agenda` for events; `ac-*` for the Account center; `pe-*` and `pea-*` for partner earnings; `wb-*`, `wbx-*` and `wba-*` for Wellbeing; `adv-*` and `advpub-*` for the advisor's practice. |
+
+| Area | Screens | Governs | Grade | Issue |
+| --- | --- | --- | --- | --- |
+| Event organiser | E1 Eligibility, E2 Registrations queue, E3 My registration (phone), E4 Agenda editor | `/events/:id/manage`, `/events/:id/manage/registrations`, `/events/:id`, `/events/:id/manage/agenda` | UPGRADE | #1173 |
+| Account center, partner earnings, Wellbeing, advisor practice | the `ac-`, `pe-`/`pea-`, `wb-`/`wbx-`/`wba-` and `adv-`/`advpub-` screens | see #1165 | not yet triaged | #1165 |
+
+**The sample text.** The first export had no copy of the script that holds
+`Ops Page`'s text. A newer export of the same page, published 2026-10-06 at
+`https://claude.ai/artifact/LH7tQqy7UZJ8vE52o63PRh`, carries it. That page
+replaced `Ops Page.dc.html` here, and its script is committed beside it as
+`ops-data.js` (the page loads it by that name). Every label, count and state
+each screen draws is now in the repository; the figures are bracketed
+placeholders, never data.
+
+## Landed 2026-10-06 — the Learning canvas (#1157)
+
+The owner approved the Learning design on 2026-10-06
+(`https://claude.ai/artifact/M7oxbLxb94CQhfjM8kHbNA`, the newest of three
+exports of it) and asked for it to be built: backend by S07, S08 and S09,
+frontend by Session 1. `Learning.dc.html` is that export, decoded with
+`scripts/read-canvas.mjs`.
+
+| Rows | Screens | Routes | Grade | Issues |
+| --- | --- | --- | --- | --- |
+| Learner | Learning home and tabs, course, lesson player, webinar, exercise, exam, Articles and Publications, My learning | `/learning`, `/learning/courses/:slug`, `/learning/courses/:slug/:lesson`, `/learning/webinars/:slug`, `/learning/exercises/:slug`, `/learning/exams/:slug`, `/learning/me` | NEW | #1158, #1160, #1161, #1162, #1163 |
+| Super Admin | Learning studio and its editors, regional programs | `/learning/studio`, `/learning/studio/programs`, `/learning/studio/programs/:program` | NEW | #1158, #1159, #1163 |
+| Admin | An assigned program's members against its content | `/learning/programs`, `/learning/programs/:program` | NEW | #1159, #1163 |
+
+The two earlier exports (`G8nEx8nxtggBJbPBei5rc4`, `BbW5Sze3zEzDC9nnRgpn3c`)
+draw the same screens as a component board split by role. They are not
+committed. Build to the app's own styling: the pages in the left sidebar are
+the reference, as with every canvas here.

@@ -395,6 +395,15 @@ export async function setLabels(env: Env, issueNumber: number, labels: string[])
   return ghFetch(env, `/issues/${issueNumber}/labels`, { method: 'PUT', body: JSON.stringify({ labels }) });
 }
 
+/**
+ * D544 — add labels and leave the issue's others alone. `setLabels` PUTs,
+ * which replaces every label; a review decision must not strip the type and
+ * priority labels the sync put there.
+ */
+export async function addLabels(env: Env, issueNumber: number, labels: string[]): Promise<GhResult> {
+  return ghFetch(env, `/issues/${issueNumber}/labels`, { method: 'POST', body: JSON.stringify({ labels }) });
+}
+
 /** Replace assignees wholesale (DELETE existing not needed — PATCH issue). */
 export async function setAssignees(env: Env, issueNumber: number, assignees: string[]): Promise<GhResult> {
   return ghFetch(env, `/issues/${issueNumber}`, { method: 'PATCH', body: JSON.stringify({ assignees }) });

@@ -63,6 +63,7 @@ import { requireAuth, requireAdmin, requireRole } from '../auth';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
+import { ruleReason } from '../services/creditGrants';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -248,6 +249,33 @@ export function claimDaysLeft(
   return Math.round(ms / 86_400_000);
 }
 
+/** D540 — 1 credit = US$1 of perk value. */
+export const CREDIT_USD_CENTS = 100;
+
+/** Why a ledger line exists, in words: its note, else the rule's reason. */
+export function ledgerReason(l: { note?: string | null; rule_key?: string | null; kind?: string }): string | null {
+  const note = String(l?.note ?? '').trim();
+  if (note) return note;
+  return l?.rule_key ? ruleReason(String(l.rule_key)) : null;
+}
+
+/**
+ * Where a ledger line came from, read off its source reference: a claim, a
+ * ticket, a Lab milestone, a revoked grant, or an admin's hand. Null when the
+ * reference names nothing this page can point at.
+ */
+export function ledgerSource(ref: unknown): string | null {
+  const s = String(ref ?? '');
+  let m: RegExpMatchArray | null;
+  if ((m = s.match(/^perk:(.+)$/))) return `Perk claim ${m[1]}`;
+  if ((m = s.match(/^ticket:(\d+)/))) return `Support ticket #${m[1]}`;
+  if ((m = s.match(/^task:(\d+)/))) return `Suggested task #${m[1]}`;
+  if ((m = s.match(/^lab:\d+:(.+)$/))) return `Spin-Out Lab: ${m[1].replace(/_/g, ' ')}`;
+  if ((m = s.match(/^revoke:(\d+)$/))) return `Revokes grant #${m[1]}`;
+  if (s.startsWith('admin:')) return 'Granted by an admin';
+  return null;
+}
+
 /** Balance is derived. There is no balance column, on purpose. */
 async function balanceOf(env: Env, userId: number): Promise<number> {
   const row = await env.DB.prepare(
@@ -404,10 +432,15 @@ r.get('/mine', async (c) => {
         LIMIT 200`,
     ).bind(user.id).all<any>();
     const today = todayIso();
+    // D540 — each line carries the rule it was paid under, and a grant says
+    // whether it was later revoked, so the page can show why and from what.
     const ledger = await c.env.DB.prepare(
-      `SELECT delta, kind, source_ref, note, created_at
-         FROM perk_credit_ledger WHERE user_id = ?
-        ORDER BY created_at DESC, id DESC LIMIT 200`,
+      `SELECT l.id, l.delta, l.kind, l.source_ref, l.note, l.created_at, l.rule_key,
+              EXISTS (SELECT 1 FROM perk_credit_ledger r
+                       WHERE r.user_id = l.user_id AND r.kind = 'admin_adjust'
+                         AND r.source_ref = 'revoke:' || l.id) AS revoked
+         FROM perk_credit_ledger l WHERE l.user_id = ?
+        ORDER BY l.created_at DESC, l.id DESC LIMIT 200`,
     ).bind(user.id).all<any>();
     const items = (claims.results || []).map((x: any) => {
       const daysLeft = claimDaysLeft(x, today);
@@ -424,7 +457,14 @@ r.get('/mine', async (c) => {
     });
     return c.json({
       items,
-      ledger: ledger.results || [],
+      ledger: (ledger.results || []).map((l: any) => ({
+        ...l,
+        revoked: l.kind === 'grant' && Number(l.revoked) === 1,
+        reason: ledgerReason(l),
+        source: ledgerSource(l.source_ref),
+      })),
+      // D540 — 1 credit = US$1 of perk value (#1101).
+      credit_usd_cents: CREDIT_USD_CENTS,
       balance: await balanceOf(c.env, user.id),
       allowance_configured: await allowanceConfigured(c.env),
       // The three My perks tiles (D413). Over every claim returned, never a

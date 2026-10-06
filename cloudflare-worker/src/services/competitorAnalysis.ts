@@ -14,6 +14,7 @@
  */
 import type { Env } from '../types';
 import { run as aiRun } from './aiRouter';
+import { AI_SURFACE } from './aiSurfaces';
 import { fetchPage, pagesForDomain, normalizeUrl, type FetchedPage } from './webFetch';
 
 export interface AnalysisInputs {
@@ -158,6 +159,7 @@ async function runJson<T>(
     const res = await aiRun(env, {
       task: 'dd_synthesis',
       userId,
+      surface: AI_SURFACE.researchCompanies,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens,

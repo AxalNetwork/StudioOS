@@ -160,7 +160,7 @@ test('the ledger tables this database and leaves value, renewal and version unre
   assert.match(PAGE, /reason=\{RENEWAL_UNRECORDED\}/);
   assert.match(PAGE, /reason=\{VERSION_UNRECORDED\}/);
   assert.match(PAGE, /None of the four sources behind GET \/api\/admin\/contracts records a value/);
-  assert.match(PAGE, /This list does not carry an end date/);
+  assert.match(PAGE, /E-sign envelopes and signed documents record no end date, so this row is not expiring/);
   assert.doesNotMatch(PAGE, /Not tabled here yet/);
   assert.doesNotMatch(PAGE, /live in HQ's `licence_contracts`|no branch-side read/i);
   assert.doesNotMatch(WORKER_ROUTE, /licence_contracts is HQ/);

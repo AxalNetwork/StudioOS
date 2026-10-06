@@ -32,6 +32,7 @@ import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PERIOD_RE } from '../services/statements';
 import { verifySecret } from './secret';
 import { assembleLicenceRecord } from '../services/licencePush';
+import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS } from '../services/slaWindow';
 import {
   CONCERN_KIND, parseRelation, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
 } from '../services/escalationConcerns';
@@ -353,13 +354,26 @@ export type EscalationRow = {
   relation: string | null;
 };
 
-/** The SLA band S3 and H1 both draw, derived on READ so it stays true. */
-export function slaBand(dueAt: string | null, now = Date.now()): 'ok' | 'due_soon' | 'past' {
+/**
+ * The SLA band S3 and H1 both draw, derived on READ so it stays true. The
+ * window and the boundary are `services/slaWindow.ts`'s, the ones a ticket's
+ * band uses (D459); `windowHours` defaults to the widest window.
+ */
+export function slaBand(dueAt: string | null, now = Date.now(), windowHours = SLA_DUE_SOON_HOURS): 'ok' | 'due_soon' | 'past' {
   if (!dueAt) return 'ok';
   const due = Date.parse(dueAt);
   if (!Number.isFinite(due)) return 'ok';
-  if (now > due) return 'past';
-  return due - now <= 24 * 3600_000 ? 'due_soon' : 'ok';
+  return bandForRemaining((due - now) / 3600_000, windowHours);
+}
+
+/**
+ * An escalation's band, with the window its kind's limit gives (D459): a
+ * 24-hour moderation escalation is due soon for its last 12 hours, not from the
+ * moment it is raised. An unknown kind takes the widest window.
+ */
+export function escalationSlaBand(row: { due_at: string | null; kind: string }, now = Date.now()): 'ok' | 'due_soon' | 'past' {
+  const limit = SLA_HOURS[row.kind as EscalationKind];
+  return slaBand(row.due_at, now, limit ? dueSoonWindowHours(limit) : SLA_DUE_SOON_HOURS);
 }
 
 export type OpenEscalation = EscalationRow & { sla: 'ok' | 'due_soon' | 'past' };
@@ -405,7 +419,7 @@ export async function openEscalationSummary(
   const all = rows.results || [];
   const complete = all.length <= OPEN_ESCALATION_CEILING;
   const kept = complete ? all : all.slice(0, OPEN_ESCALATION_CEILING);
-  return { items: kept.map((r) => ({ ...r, sla: slaBand(r.due_at, now) })), complete };
+  return { items: kept.map((r) => ({ ...r, sla: escalationSlaBand(r, now) })), complete };
 }
 
 /**
@@ -754,7 +768,7 @@ export async function listEscalations(
   }
 
   const now = Date.now();
-  const all = (rows.results || []).map((r) => ({ ...r, sla: slaBand(r.due_at, now) }));
+  const all = (rows.results || []).map((r) => ({ ...r, sla: escalationSlaBand(r, now) }));
   const complete = all.length <= cap;
   return { items: complete ? all : all.slice(0, cap), complete };
 }

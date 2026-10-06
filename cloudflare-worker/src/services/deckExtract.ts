@@ -12,6 +12,7 @@
  */
 import type { Env } from '../types';
 import { run as aiRun } from './aiRouter';
+import { AI_SURFACE } from './aiSurfaces';
 
 export const DECK_SECTIONS: Array<{ key: string; label: string; keywords: string[] }> = [
   { key: 'problem', label: 'Problem', keywords: ['problem', 'pain', 'challenge', 'broken', 'struggle', 'today founders', 'status quo'] },
@@ -175,6 +176,7 @@ export async function mapSections(env: Env, userId: number, markdown: string, ch
     const res = await aiRun(env, {
       task: 'dd_synthesis',
       userId,
+      surface: AI_SURFACE.raisePitchReview,
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 1800,
@@ -243,6 +245,7 @@ export async function generateReview(env: Env, userId: number, sections: DeckSec
     const res = await aiRun(env, {
       task: 'dd_synthesis',
       userId,
+      surface: AI_SURFACE.raisePitchReview,
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 1800,

@@ -11,6 +11,7 @@ import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
 import { newUid, nowIso } from './_t13t14t15_helpers';
+import { logAdminAction } from '../services/adminAudit';
 
 const deals = new Hono<{ Bindings: Env }>();
 
@@ -606,8 +607,22 @@ deals.put('/:id', async (c) => {
   const data = await c.req.json();
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, status, stage_changed_at FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+
+  // D469 — THE AMOUNT CHANGES ONLY FOR AN ADMIN. `requireRole('partner')`
+  // admits partners and admins, and both could rewrite a deal's amount here.
+  // A partner's `amount` is REFUSED, before anything else in the request is
+  // written, rather than silently dropped: a dropped field reads to the
+  // caller as a saved one. Status, partner and notes keep the partner gate.
+  const isAdminCaller = String((user as any)?.role) === 'admin';
+  if (data.amount !== undefined && !isAdminCaller) {
+    await sql.end();
+    return c.json({
+      error: 'deal_amount_admin_only',
+      message: 'Only an admin changes a deal’s amount. Nothing in this request was saved.',
+    }, 403);
+  }
 
   if (data.status !== undefined) {
     if (!DEAL_STATUSES.includes(String(data.status))) {
@@ -629,43 +644,76 @@ deals.put('/:id', async (c) => {
     }
   }
 
-  // Task #4 — maintain stage_changed_at whenever the pipeline stage moves.
-  if (data.status) {
-    const prev = rows[0] as any;
-    // Recorded BEFORE the update: the update overwrites stage_changed_at, so
-    // reading it afterwards measures zero days for every transition.
-    await recordStageEvent(sql, {
-      dealId: id,
-      fromStage: prev.status ?? null,
-      fromStageChangedAt: prev.stage_changed_at ?? null,
-      toStage: String(data.status),
-      kind: 'set',
-      actorUserId: (user as any)?.id ?? null,
-    });
-    await sql`UPDATE deals SET status = ${data.status}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  // D469 — every write below is collected in `written`, and a failure part
+  // way through is held, not thrown, until the admin audit has run. Each
+  // UPDATE commits on its own: an amount written before a later field fails
+  // (a lead_partner_id that is no user, say) stays written, so the audit has
+  // to record it rather than be skipped by the throw.
+  const written: string[] = [];
+  let writeError: unknown = null;
+  try {
+    // Task #4 — maintain stage_changed_at whenever the pipeline stage moves.
+    if (data.status) {
+      const prev = rows[0] as any;
+      // Recorded BEFORE the update: the update overwrites stage_changed_at, so
+      // reading it afterwards measures zero days for every transition.
+      await recordStageEvent(sql, {
+        dealId: id,
+        fromStage: prev.status ?? null,
+        fromStageChangedAt: prev.stage_changed_at ?? null,
+        toStage: String(data.status),
+        kind: 'set',
+        actorUserId: (user as any)?.id ?? null,
+      });
+      await sql`UPDATE deals SET status = ${data.status}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+      written.push('status');
+    }
+    if (data.partner_id !== undefined) { await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('partner_id'); }
+    if (data.notes !== undefined) { await sql`UPDATE deals SET notes = ${data.notes}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('notes'); }
+    if (data.amount !== undefined) { await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('amount'); }
+    // D463 — the terms are editable after the draft, by the same operator the
+    // draft admitted. A deal's terms change in negotiation; a store that only
+    // writes them at birth freezes the first answer as the permanent one. Each
+    // field is written only when the key is present, so a partial edit cannot
+    // blank a term it did not send.
+    if (data.lead_partner_id !== undefined) { await sql`UPDATE deals SET lead_partner_id = ${data.lead_partner_id || null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('lead_partner_id'); }
+    if (data.target_raise !== undefined) { await sql`UPDATE deals SET target_raise = ${data.target_raise ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('target_raise'); }
+    if (data.minimum_check !== undefined) { await sql`UPDATE deals SET minimum_check = ${data.minimum_check ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('minimum_check'); }
+    if (data.valuation_cap !== undefined) { await sql`UPDATE deals SET valuation_cap = ${data.valuation_cap ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('valuation_cap'); }
+    if (data.carry_pct !== undefined) { await sql`UPDATE deals SET carry_pct = ${data.carry_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('carry_pct'); }
+    if (data.management_fee_pct !== undefined) { await sql`UPDATE deals SET management_fee_pct = ${data.management_fee_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('management_fee_pct'); }
+    if (data.instrument !== undefined) { await sql`UPDATE deals SET instrument = ${data.instrument ? String(data.instrument).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('instrument'); }
+    if (data.spv_jurisdiction !== undefined) { await sql`UPDATE deals SET spv_jurisdiction = ${data.spv_jurisdiction ? String(data.spv_jurisdiction).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('spv_jurisdiction'); }
+    if (data.closing_deadline !== undefined) { await sql`UPDATE deals SET closing_deadline = ${data.closing_deadline ? String(data.closing_deadline).slice(0, 40) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('closing_deadline'); }
+    if (data.website !== undefined) { await sql`UPDATE deals SET website = ${data.website ? String(data.website).slice(0, 300) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('website'); }
+    if (data.description !== undefined) { await sql`UPDATE deals SET description = ${data.description ? String(data.description).slice(0, 20000) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('description'); }
+    // The source is free text for the same reason it is at draft: the taxonomy
+    // is the owner's call.
+    if (data.source !== undefined) { await sql`UPDATE deals SET source = ${data.source ? String(data.source).trim().slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('source'); }
+  } catch (err) {
+    writeError = err;
   }
-  if (data.partner_id !== undefined) await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.notes !== undefined) await sql`UPDATE deals SET notes = ${data.notes}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.amount !== undefined) await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  // D463 — the terms are editable after the draft, by the same operator the
-  // draft admitted. A deal's terms change in negotiation; a store that only
-  // writes them at birth freezes the first answer as the permanent one. Each
-  // field is written only when the key is present, so a partial edit cannot
-  // blank a term it did not send.
-  if (data.lead_partner_id !== undefined) await sql`UPDATE deals SET lead_partner_id = ${data.lead_partner_id || null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.target_raise !== undefined) await sql`UPDATE deals SET target_raise = ${data.target_raise ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.minimum_check !== undefined) await sql`UPDATE deals SET minimum_check = ${data.minimum_check ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.valuation_cap !== undefined) await sql`UPDATE deals SET valuation_cap = ${data.valuation_cap ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.carry_pct !== undefined) await sql`UPDATE deals SET carry_pct = ${data.carry_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.management_fee_pct !== undefined) await sql`UPDATE deals SET management_fee_pct = ${data.management_fee_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.instrument !== undefined) await sql`UPDATE deals SET instrument = ${data.instrument ? String(data.instrument).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.spv_jurisdiction !== undefined) await sql`UPDATE deals SET spv_jurisdiction = ${data.spv_jurisdiction ? String(data.spv_jurisdiction).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.closing_deadline !== undefined) await sql`UPDATE deals SET closing_deadline = ${data.closing_deadline ? String(data.closing_deadline).slice(0, 40) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.website !== undefined) await sql`UPDATE deals SET website = ${data.website ? String(data.website).slice(0, 300) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  if (data.description !== undefined) await sql`UPDATE deals SET description = ${data.description ? String(data.description).slice(0, 20000) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  // The source is free text for the same reason it is at draft: the taxonomy
-  // is the owner's call.
-  if (data.source !== undefined) await sql`UPDATE deals SET source = ${data.source ? String(data.source).trim().slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+
+  // D469 — an admin's edit to a deal that is not theirs (its lead partner is
+  // someone else, or nobody) is recorded through logAdminAction: which deal,
+  // which fields, the amount before and after when it moved, and whether the
+  // whole request landed. The error, if any, is rethrown after this.
+  if (isAdminCaller) {
+    const before = rows[0] as any;
+    if (Number(before.lead_partner_id) !== Number((user as any).id)) {
+      const fields = Object.keys(data || {}).filter((k) => data[k] !== undefined).sort();
+      await logAdminAction(c.env, Number((user as any).id), String((user as any).email || ''), 'deal_update_by_admin', {
+        deal_id: id,
+        lead_partner_id: before.lead_partner_id ?? null,
+        fields,
+        ...(written.includes('amount') ? { amount_from: before.amount ?? null, amount_to: data.amount } : {}),
+        complete: writeError === null,
+        // A request that stopped part way names what did commit.
+        ...(writeError !== null ? { written: [...written].sort() } : {}),
+      });
+    }
+  }
+  if (writeError !== null) { await sql.end(); throw writeError; }
 
   const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 

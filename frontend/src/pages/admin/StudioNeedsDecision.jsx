@@ -29,6 +29,8 @@ import {
 } from './adminStudioOverview';
 
 const TILES = {
+  // D555: on HQ the Seats tile is Accounts, with HQ's own counts.
+  accounts: { title: 'Accounts', sidebar: 'Accounts' },
   seats: { title: 'Seats', sidebar: 'Accounts' },
   approvals: { title: 'Approvals', sidebar: 'Approvals' },
   programme: { title: 'Programme', sidebar: 'Programs' },
@@ -117,7 +119,7 @@ export function StudioNeedsDecisionView({ user, home, licence, templates, insigh
     );
   }
   const tiles = orderNeedsDecision([
-    { key: 'seats', glance: g.seats },
+    g.hq ? { key: 'accounts', glance: g.hq.accounts } : { key: 'seats', glance: g.seats },
     { key: 'approvals', glance: g.approvals },
     { key: 'programme', glance: g.programme },
     { key: 'contracts', glance: g.contracts },

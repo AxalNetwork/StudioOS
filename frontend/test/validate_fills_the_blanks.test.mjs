@@ -119,7 +119,14 @@ const DESKS = {
       [/outreach sequence/i, 'grow/customers'],
     ],
   },
-  Network: { file: 'frontend/src/pages/founder/FounderNetworkDesk.jsx', bands: [] },
+  // D551 (#1144) — the two A6 bands, once a draft surface read a founder's contacts.
+  Network: {
+    file: 'frontend/src/pages/founder/FounderNetworkDesk.jsx',
+    bands: [
+      [/re-engagement note/i, 'network/re-engagement'],
+      [/intro email/i, 'network/intro-email'],
+    ],
+  },
   Research: { file: 'frontend/src/pages/founder/FounderResearchDesk.jsx', bands: [] },
 };
 
