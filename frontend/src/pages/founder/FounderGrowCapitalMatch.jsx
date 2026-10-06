@@ -9,6 +9,7 @@ import './founderGrowCapitalMatch.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { LensLink } from '../../workspaces/lens';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -78,7 +79,7 @@ export default function FounderGrowCapitalMatch() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-capital-match" data-testid="founder-grow-capital-match"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-capital-match-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Capital match</b></div><div><h1>Capital match</h1><p>Investor fit, warm paths and outreach state.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-capital-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Capital match' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-capital-match-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Capital match</b></div><div><h1>Capital match</h1><p>Investor fit, warm paths and outreach state.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-capital-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Capital match' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/capital-match', { value: view, onChange: setView, dynamic: { stages: stages.filter((stage) => stage !== 'passed').map((stage) => ({ key: stage, label: labelStage(stage) })) } })}
               actions={founderZoneActions('grow/capital-match', { query, view: { scope: project?.name, header: ['Fund or prospect', 'Firm', 'Email', 'Stage', 'Status', 'Updated'], rows: visible, cells: (r) => [r.name, r.firm, r.email, r.stage, r.status, r.updated_at] } })}

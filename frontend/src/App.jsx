@@ -52,6 +52,7 @@ import MobileTabBar from './components/MobileTabBar';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import WorkspacesLauncher from './components/WorkspacesLauncher';
+import { LensProvider, useLensLocation } from './workspaces/lens';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
@@ -1751,6 +1752,9 @@ function AppInner() {
   const isImpersonating = !!realUser;
   const navigate = useNavigate();
   const location = useLocation();
+  // D575 — on a phone a zone pill opens its lens in place: the routes below
+  // render the lens's location while the URL and history stay put.
+  const lensLocation = useLensLocation();
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
@@ -2224,7 +2228,7 @@ function AppInner() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
-<Routes>
+<Routes location={lensLocation || location}>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
       {/* /spinout-lab is THREE surfaces behind one path, because "Spin-Out Lab"
           means something different depending on who is asking:
@@ -3417,7 +3421,7 @@ export default function App() {
     <AuthProvider>
       <SettingsProvider>
         <AppErrorBoundary>
-        <AppInner />
+        <LensProvider><AppInner /></LensProvider>
         </AppErrorBoundary>
         {/* Task #28 — global "always-on" mounts live OUTSIDE <Routes>,
             so a render-time throw inside any of them blanks the entire

@@ -9,6 +9,7 @@ import './founderRaiseLiquidity.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { LensLink } from '../../workspaces/lens';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -80,7 +81,7 @@ export default function FounderRaiseLiquidity() {
   const query = project?.id ? `?project_id=${project.id}` : '';
 
   return <main className="fr-capital fr-liquidity" data-testid="founder-raise-liquidity"><div className="fr-capital-shell"><section className="fr-capital-main">
-    <header className="fr-capital-header"><div className="fr-capital-crumb"><Link to={`/raise/status${query}`}><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Liquidity</strong></div><div className="fr-capital-title-row"><div><h1>Liquidity &amp; exits</h1><p className="fr-capital-subtitle">Secondaries, ROFR, tender state and the exit waterfall.</p></div></div><nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><Link to={`/raise/liquidity${query}`} className="is-active">Liquidity</Link></nav>
+    <header className="fr-capital-header"><div className="fr-capital-crumb"><Link to={`/raise/status${query}`}><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Liquidity</strong></div><div className="fr-capital-title-row"><div><h1>Liquidity &amp; exits</h1><p className="fr-capital-subtitle">Secondaries, ROFR, tender state and the exit waterfall.</p></div></div><nav className="fr-capital-zone-nav" aria-label="Raise sections"><LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><LensLink to={`/raise/liquidity${query}`} className="is-active">Liquidity</LensLink></nav>
     <ZoneToolbar
               filters={founderZoneFilters('raise/liquidity', { value: view, onChange: setView })}
               actions={founderZoneActions('raise/liquidity', { query, view: { scope: project?.name, header: ['Holder', 'Type', 'Ownership %', 'Preference', 'Payout', 'Source'], rows: waterfall?.rows || [], cells: (r) => [r.holder, r.type, r.pct, r.preference, r.payout, r.source] } })}
