@@ -47,6 +47,7 @@ import {
   type ExpertRow, type MatchPrefs,
 } from '../services/wellbeing/match';
 import { ensureSeededExperts } from '../services/wellbeing/seedExperts';
+import { offeredSlots, type AvailabilityWindow } from '../services/wellbeing/slots';
 import { userMeetsTier, type TierUser } from '../middleware/requireTier';
 import {
   createBookingPaymentIntent, mirrorBookingToCalendar, fanoutBookingNotifications,
@@ -366,9 +367,13 @@ export async function submitCanonicalCheckin(
     return { status: 500, body: { error: "Couldn't save — try again. If this persists, contact support." } };
   }
   const serialized = await serializeDaily(env, row as any);
+  // D574 — whether THIS save was stored encrypted. When the cipher fails the
+  // form still saves (Task #33) into the plain backstop, and the page must not
+  // then say "Stored encrypted".
+  const storedEncrypted = ![m, s, sl, en, fo, so, ft, tg].some((x) => x.fellBack);
   return {
     status: 201,
-    body: { ok: true, captured_at: row.created_at, ...serialized, id: row.id },
+    body: { ok: true, captured_at: row.created_at, ...serialized, id: row.id, stored_encrypted: storedEncrypted },
   };
 }
 
@@ -781,6 +786,39 @@ function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_av
   };
 }
 
+/**
+ * D574 — each expert's ACTIVE services as a member sees them: what to book,
+ * how long, and its price. Ids stay server-side; a booking names the uid.
+ */
+async function activeServices(env: Env, expertIds: number[]) {
+  const out = new Map<number, Array<{ uid: string; title: string; description: string | null; duration_minutes: number; price_cents: number; currency: string }>>();
+  const ids = [...new Set(expertIds.filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return out;
+  const rs = await env.DB.prepare(
+    `SELECT expert_id, uid, title, description, duration_minutes, price_cents, currency
+       FROM expert_services
+      WHERE is_active = 1 AND expert_id IN (SELECT value FROM json_each(?))
+      ORDER BY expert_id, sort_order ASC, id ASC`,
+  ).bind(JSON.stringify(ids)).all<any>();
+  for (const r of rs.results || []) {
+    const list = out.get(Number(r.expert_id)) ?? [];
+    list.push({
+      uid: r.uid, title: r.title, description: r.description ?? null,
+      duration_minutes: Number(r.duration_minutes), price_cents: Number(r.price_cents), currency: r.currency,
+    });
+    out.set(Number(r.expert_id), list);
+  }
+  return out;
+}
+
+/** D574 — the reader's own rating of an expert, or null when they have given none. */
+async function myRating(env: Env, expertId: number, userId: number) {
+  const r = await env.DB.prepare(
+    'SELECT stars, review, created_at FROM expert_ratings WHERE expert_id = ? AND user_id = ?',
+  ).bind(expertId, userId).first<{ stars: number; review: string | null; created_at: string }>();
+  return r ? { stars: Number(r.stars), review: r.review ?? null, rated_at: r.created_at } : null;
+}
+
 // Task #4 — completion %. Weighted across the fields a published expert
 // needs to be useful in the directory. >=70 unlocks listing + bookings.
 function computeProfileCompletion(e: ExpertRow, serviceCount: number, availabilityCount: number): number {
@@ -901,11 +939,13 @@ wellbeing.get('/experts', async (c) => {
       };
     }
 
+    const services = await activeServices(c.env, ranked.map((s) => s.expert.id));
     return c.json({
       matches: ranked.map((s) => serializeExpert(s.expert, {
         include_score: Math.round(s.score * 100) / 100,
         rating_avg: s.rating_avg, rating_count: s.rating_count,
         breakdown: s.breakdown,
+        services: services.get(s.expert.id) ?? [],
       })),
       total_active: experts.length,
       filtered_count: filtered.length,
@@ -967,38 +1007,28 @@ wellbeing.get('/experts/:uid', async (c) => {
 
   const ratings = await loadRatingAggregates(c.env, [expert.id]);
   const agg = ratings.get(expert.id);
-  return c.json(serializeExpert(expert, {
-    rating_avg: agg?.avg_stars ?? 0,
-    rating_count: agg?.count ?? 0,
-  }));
+  // D574 — the expert's active services, which a member books against, and
+  // the reader's own rating, so a page can say what they gave after a reload.
+  const services = await activeServices(c.env, [expert.id]);
+  return c.json({
+    ...serializeExpert(expert, {
+      rating_avg: agg?.avg_stars ?? 0,
+      rating_count: agg?.count ?? 0,
+      services: services.get(expert.id) ?? [],
+    }),
+    my_rating: await myRating(c.env, expert.id, user.id),
+  });
 });
 
-// Internal scheduling fallback. Generates 30-min slots over the next 14
-// business days (09:00–17:00 in the expert's first declared timezone, or
-// UTC otherwise). Used by the FE when the expert has no external calendar.
-function generateInternalSlots(expert: ExpertRow, days = 14, slotMinutes = 30): string[] {
-  const tzs = (() => {
-    try { return JSON.parse(expert.timezones_json || '[]') as string[]; }
-    catch { return [] as string[]; }
-  })();
-  const tz = tzs[0] || 'UTC';
-  const now = new Date();
-  const slots: string[] = [];
-  for (let d = 1; d <= days && slots.length < 48; d++) {
-    const day = new Date(now.getTime() + d * 86_400_000);
-    const dow = day.getUTCDay();
-    if (dow === 0 || dow === 6) continue; // weekdays only
-    for (let h = 9; h < 17 && slots.length < 48; h++) {
-      for (let m = 0; m < 60 && slots.length < 48; m += slotMinutes) {
-        const slot = new Date(Date.UTC(
-          day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), h, m, 0,
-        ));
-        slots.push(slot.toISOString());
-      }
-    }
-    void tz; // tz is informational; UTC anchor is conservative — FE renders local
-  }
-  return slots;
+/** D574 — the expert's weekly grid, the windows the slots are cut from. */
+async function loadAvailability(env: Env, expertId: number): Promise<AvailabilityWindow[]> {
+  const rs = await env.DB.prepare(
+    'SELECT day_of_week, start_minute, end_minute, timezone FROM expert_availability WHERE expert_id = ?',
+  ).bind(expertId).all<AvailabilityWindow>();
+  return (rs.results || []).map((w) => ({
+    day_of_week: Number(w.day_of_week), start_minute: Number(w.start_minute),
+    end_minute: Number(w.end_minute), timezone: w.timezone,
+  }));
 }
 
 wellbeing.get('/experts/:uid/slots', async (c) => {
@@ -1025,8 +1055,11 @@ wellbeing.get('/experts/:uid/slots', async (c) => {
   ).bind(expert.id).all<{ scheduled_at: string }>();
   const takenSet = new Set((taken.results || []).map((r) => r.scheduled_at));
 
-  const slots = generateInternalSlots(expert).filter((s) => !takenSet.has(s));
-  return c.json({ external: false, launch_url: null, slots });
+  // D574 — cut from the expert's weekly grid, each window in its own zone;
+  // an expert with no grid keeps the default hours, and `source` says which.
+  const offered = offeredSlots(await loadAvailability(c.env, expert.id));
+  const slots = offered.slots.filter((s) => !takenSet.has(s));
+  return c.json({ external: false, launch_url: null, slots, source: offered.source });
 });
 
 wellbeing.post('/experts/:uid/book', async (c) => {
@@ -1082,6 +1115,21 @@ wellbeing.post('/experts/:uid/book', async (c) => {
       detail: 'scheduled_at is required when the expert has no external scheduler',
       slots_endpoint: `/api/wellbeing/experts/${uid}/slots`,
     }, 400);
+  }
+
+  // D574 — an internal booking must be a slot the grid offers (or, with no
+  // grid, the default hours): the time is checked against the whole set, not
+  // the listed page of it, so a member cannot book an hour the expert never
+  // opened.
+  if (usingInternal && scheduledAt) {
+    const offered = offeredSlots(await loadAvailability(c.env, expert.id), new Date(), Infinity);
+    if (!offered.slots.includes(scheduledAt)) {
+      return refuse(c, 409, {
+        code: 'slot_not_offered',
+        message: 'That time is not one of the expert\'s open slots. Pick one from the list.',
+        extra: { slots_endpoint: `/api/wellbeing/experts/${uid}/slots` },
+      });
+    }
   }
 
   // Concurrency guard: refuse if the slot was just taken.
@@ -1259,7 +1307,8 @@ wellbeing.post('/experts/:uid/rate', async (c) => {
        category_match_pct = excluded.category_match_pct,
        created_at = datetime('now')`,
   ).bind(uuidHex(), expert.id, user.id, stars, review, matchPctNum).run();
-  return c.json({ ok: true });
+  // D574 — the rating as stored, so the page shows what was kept.
+  return c.json({ ok: true, my_rating: await myRating(c.env, expert.id, user.id) });
 });
 
 // ===========================================================================
@@ -1599,9 +1648,11 @@ wellbeing.get('/experts/me/bookings', async (c) => {
     `SELECT b.uid, b.status, b.payment_status, b.scheduled_at, b.duration_minutes,
             b.amount_total_cents, b.currency, b.application_fee_cents,
             b.meet_link, b.booker_note, b.created_at,
-            u.name AS booker_name
+            u.name AS booker_name,
+            s.uid AS service_uid, s.title AS service_title
        FROM expert_bookings b
        LEFT JOIN users u ON u.id = b.user_id
+       LEFT JOIN expert_services s ON s.id = b.service_id
       WHERE b.expert_id = ? AND COALESCE(b.hidden_by_admin,0) = 0
       ORDER BY b.created_at DESC
       LIMIT 100`,
@@ -1638,14 +1689,55 @@ wellbeing.get('/bookings/mine', async (c) => {
   const rs = await c.env.DB.prepare(
     `SELECT b.uid, b.status, b.payment_status, b.scheduled_at, b.duration_minutes,
             b.amount_total_cents, b.currency, b.meet_link, b.created_at,
-            e.uid AS expert_uid, e.name AS expert_name, e.photo_url AS expert_photo
+            e.uid AS expert_uid, e.name AS expert_name, e.photo_url AS expert_photo,
+            s.uid AS service_uid, s.title AS service_title,
+            r.stars AS my_stars
        FROM expert_bookings b
        JOIN experts e ON e.id = b.expert_id
+       LEFT JOIN expert_services s ON s.id = b.service_id
+       LEFT JOIN expert_ratings r ON r.expert_id = b.expert_id AND r.user_id = b.user_id
       WHERE b.user_id = ?
       ORDER BY b.created_at DESC
       LIMIT 50`,
   ).bind(user.id).all<any>();
   return c.json({ bookings: rs.results || [] });
+});
+
+/**
+ * D574 — a member cancels their own booking.
+ *
+ * Only the booker, only a booking still open (requested, scheduled, awaiting
+ * payment or confirmed) and only before it starts. A PAID booking is refused
+ * with `paid_booking`: its refund is the expert's to make through Stripe, so
+ * cancelling here would leave the money taken and the session gone. The
+ * update is conditioned on the status it read, so a cancel racing the expert's
+ * own change cannot overwrite it. The expert is told, as when they cancel.
+ */
+const MEMBER_CANCELLABLE = ['requested', 'scheduled', 'pending_payment', 'confirmed'];
+wellbeing.post('/bookings/:uid/cancel', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const booking = await c.env.DB.prepare(
+    'SELECT id, status, payment_status, scheduled_at FROM expert_bookings WHERE uid = ? AND user_id = ?',
+  ).bind(c.req.param('uid'), user.id).first<{ id: number; status: string; payment_status: string | null; scheduled_at: string | null }>();
+  if (!booking) return refuse(c, 404, { code: 'booking_not_found', message: 'No booking of yours has that id.' });
+  if (!MEMBER_CANCELLABLE.includes(booking.status)) {
+    return refuse(c, 409, { code: 'booking_not_open', message: `This booking is ${booking.status}, so it cannot be cancelled.`, extra: { status: booking.status } });
+  }
+  if (booking.scheduled_at && Date.parse(booking.scheduled_at) <= Date.now()) {
+    return refuse(c, 409, { code: 'booking_started', message: 'This session has already started, so it cannot be cancelled here.' });
+  }
+  if (booking.payment_status === 'paid') {
+    return refuse(c, 409, { code: 'paid_booking', message: 'This session is paid for. Ask the expert to cancel it, so the payment is refunded with it.' });
+  }
+  const r = await c.env.DB.prepare(
+    `UPDATE expert_bookings SET status = 'cancelled' WHERE id = ? AND status = ?`,
+  ).bind(booking.id, booking.status).run();
+  if (Number(r?.meta?.changes ?? 0) !== 1) {
+    return refuse(c, 409, { code: 'booking_changed', message: 'This booking changed while you were cancelling it. Reload and try again.' });
+  }
+  await fanoutBookingNotifications(c.env, booking.id, 'cancelled');
+  return c.json({ ok: true, status: 'cancelled' });
 });
 
 // --- admin review-hide ---
