@@ -2621,12 +2621,15 @@ export const api = {
   // Task #2 — branded multi-page sites & saved templates.
   brandGetSite: (projectId) => request(`/brand/site/by-project/${projectId}`),
   brandSetSiteSlug: (projectId, slug) => request(`/brand/site/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify({ slug }) }),
-  brandListPages: (projectId) => request(`/brand/landing/by-project/${projectId}/pages`),
+  // D583: `archived: true` lists the archived pages too (they are hidden by default).
+  brandListPages: (projectId, { archived = false } = {}) => request(`/brand/landing/by-project/${projectId}/pages${archived ? '?archived=1' : ''}`),
   brandCreatePage: (projectId, payload) => request(`/brand/landing/by-project/${projectId}/pages`, { method: 'POST', body: JSON.stringify(payload) }),
   brandGetPage: (pageId) => request(`/brand/landing/pages/${pageId}`),
   brandUpdatePage: (pageId, payload) => request(`/brand/landing/pages/${pageId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
   brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  // D583: archive (unpublish and hide, kept) or restore one page.
+  brandArchivePage: (pageId, archived) => request(`/brand/landing/pages/${pageId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }),
   brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
   // The SHAREABLE public url (distinct from the noindex preview-token link
   // above). Returns { url, published, page_slug }.

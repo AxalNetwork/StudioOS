@@ -62,6 +62,12 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
     // UNIQUE), so multi-page INSERTs on an unmigrated DB fail loudly with a
     // UNIQUE error rather than silently misbehaving.
     `ALTER TABLE landing_pages ADD COLUMN page_slug TEXT NOT NULL DEFAULT 'home'`,
+    // Migration 399 (D583) — voice tags, the dark logo, and Archived.
+    `ALTER TABLE landing_pages ADD COLUMN voice_json TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN logo_dark_url TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN logo_dark_svg TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN logo_dark_asset_id TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN archived_at TEXT`,
   ];
   for (const s of alters) {
     try { await env.DB.prepare(s).run(); } catch { /* column exists / table absent */ }

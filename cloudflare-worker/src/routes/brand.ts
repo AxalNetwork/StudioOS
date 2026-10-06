@@ -377,6 +377,12 @@ function rowToLanding(row: any) {
     logo_url: row.logo_url,
     logo_svg: row.logo_svg,
     logo_asset_id: row.logo_asset_id || null,
+    // D583 — voice tags, the dark logo, and Archived (migration 399).
+    voice_tags: parseVoice(row.voice_json),
+    logo_dark_url: row.logo_dark_url || null,
+    logo_dark_svg: row.logo_dark_svg || null,
+    logo_dark_asset_id: row.logo_dark_asset_id || null,
+    archived_at: row.archived_at || null,
     theme_color: row.theme_color || '#7c3aed',
     palette_bg: row.palette_bg || null,
     palette_ink: row.palette_ink || null,
@@ -643,6 +649,67 @@ async function allocatePageSlug(env: Env, projectId: number, seedName: string): 
     if (!hit) return candidate;
   }
   throw new Error('could not allocate a page slug');
+}
+
+// D583 (#1210; S1's 1A and 3A) — voice tags and the dark logo. Each is changed
+// only when the body names it, so a write that does not carry them (Eadwyn's,
+// an older client) leaves them as they are. Validated BEFORE the page write,
+// so a refused value never leaves a half-saved page.
+export const VOICE_MAX = 3;
+export const VOICE_TAG_MAX_CHARS = 32;
+
+export function parseVoice(json: unknown): string[] | null {
+  if (typeof json !== 'string' || !json) return null;
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v.filter((t) => typeof t === 'string') : null;
+  } catch { return null; }
+}
+
+type BrandExtras = { voice?: string | null; darkLogo?: { url: string | null; svg: string | null; assetId: string | null } };
+
+/** Validate the body's voice tags and dark logo. `null` voice clears it; an empty list too. */
+export function parseBrandExtras(body: any): { ok: true; value: BrandExtras } | { ok: false; error: string } {
+  const out: BrandExtras = {};
+  if (body && 'voice_tags' in body) {
+    const raw = body.voice_tags;
+    if (raw === null) out.voice = null;
+    else if (!Array.isArray(raw)) return { ok: false, error: 'voice_tags must be a list' };
+    else {
+      const seen = new Set<string>();
+      const tags: string[] = [];
+      for (const t of raw) {
+        if (typeof t !== 'string') return { ok: false, error: 'voice_tags must be text' };
+        const tag = t.trim().replace(/\s+/g, ' ');
+        if (!tag) continue;
+        if (tag.length > VOICE_TAG_MAX_CHARS) return { ok: false, error: `a voice tag is at most ${VOICE_TAG_MAX_CHARS} characters` };
+        const key = tag.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        tags.push(tag);
+      }
+      if (tags.length > VOICE_MAX) return { ok: false, error: `at most ${VOICE_MAX} voice tags` };
+      out.voice = tags.length ? JSON.stringify(tags) : null;
+    }
+  }
+  if (body && ('logo_dark_url' in body || 'logo_dark_svg' in body || 'logo_dark_asset_id' in body)) {
+    out.darkLogo = {
+      url: sanitizeLogoUrl(String(body.logo_dark_url || '').trim()),
+      svg: sanitizeSvg(body.logo_dark_svg) || null,
+      assetId: String(body.logo_dark_asset_id || '').trim() || null,
+    };
+  }
+  return { ok: true, value: out };
+}
+
+async function writeBrandExtras(env: Env, id: number, x: BrandExtras): Promise<void> {
+  if ('voice' in x) {
+    await env.DB.prepare("UPDATE landing_pages SET voice_json=?, updated_at=datetime('now') WHERE id=?").bind(x.voice ?? null, id).run();
+  }
+  if (x.darkLogo) {
+    await env.DB.prepare("UPDATE landing_pages SET logo_dark_url=?, logo_dark_svg=?, logo_dark_asset_id=?, updated_at=datetime('now') WHERE id=?")
+      .bind(x.darkLogo.url, x.darkLogo.svg, x.darkLogo.assetId, id).run();
+  }
 }
 
 // Shared sanitised parse of a landing-page write body. The legacy single-page
@@ -1067,6 +1134,8 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const name = String(body?.name || '').trim();
   if (!name) return c.json({ error: 'name required' }, 400);
+  const extras = parseBrandExtras(body);
+  if (!extras.ok) return c.json({ error: extras.error }, 400);
   await ensureSchema(c.env);
   // Legacy single-page endpoint — operates on the project's PRIMARY page
   // (oldest by id). Additional pages are managed by the /pages endpoints.
@@ -1079,6 +1148,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
   } else {
     rowId = await insertLandingRow(c.env, pid, 'home', name, body);
   }
+  await writeBrandExtras(c.env, rowId, extras.value);
   // Make sure the project has a branded site slug once a page exists.
   try { await ensureSite(c.env, pid, name); }
   catch (e: any) { console.error('brand ensureSite:', e?.message); }
@@ -1094,6 +1164,10 @@ brand.post('/landing/by-project/:pid/publish', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const flag = body?.published === false ? 0 : 1;
   await ensureSchema(c.env);
+  if (flag) {
+    const primary = await c.env.DB.prepare('SELECT archived_at FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
+    if (primary?.archived_at) return c.json({ error: 'page_archived' }, 409);
+  }
   // Primary page only — per-page publish lives at /landing/pages/:id/publish.
   await c.env.DB.prepare(
     `UPDATE landing_pages SET published=?, updated_at=datetime('now')
@@ -1207,13 +1281,14 @@ brand.get('/landing/by-project/:pid/pages', async (c) => {
   await ensureSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT id, page_slug, slug, name, headline, template, template_kit, audience, goal,
-            published, views_count, updated_at
-     FROM landing_pages WHERE project_id = ? ORDER BY id`
-  ).bind(pid).all<any>();
+            published, views_count, updated_at, archived_at
+     FROM landing_pages WHERE project_id = ? AND (archived_at IS NULL OR ? = 1) ORDER BY id`
+  ).bind(pid, c.req.query('archived') === '1' ? 1 : 0).all<any>();
   const pages = ((rows.results ?? []) as any[]).map((r) => ({
     ...r,
     page_slug: r.page_slug || 'home',
     published: !!r.published,
+    archived_at: r.archived_at || null,
     views_count: r.views_count == null ? null : Number(r.views_count), // D366: never a made-up 0
   }));
   return c.json({ pages });
@@ -1324,6 +1399,8 @@ brand.put('/landing/pages/:id', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const name = String(body?.name || '').trim();
   if (!name) return c.json({ error: 'name required' }, 400);
+  const extras = parseBrandExtras(body);
+  if (!extras.ok) return c.json({ error: extras.error }, 400);
   let pageSlug: string | null = null;
   const rawPageSlug = body?.page_slug;
   if (rawPageSlug !== undefined && rawPageSlug !== null && String(rawPageSlug).trim() !== '') {
@@ -1344,6 +1421,7 @@ brand.put('/landing/pages/:id', async (c) => {
     }
     throw e;
   }
+  await writeBrandExtras(c.env, id, extras.value);
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
 
   // WHAT EADWYN WROTE, KEPT RATHER THAN THROWN AWAY (task #199). The autofill
@@ -1392,16 +1470,40 @@ brand.post('/landing/pages/:id/publish', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);
-  const row = await c.env.DB.prepare('SELECT id, project_id FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  const row = await c.env.DB.prepare('SELECT id, project_id, archived_at FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
   try { await projectOwned(c, user, row.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const flag = body?.published === false ? 0 : 1;
+  // D583: an archived page is restored before it can be published again.
+  if (flag && row.archived_at) return c.json({ error: 'page_archived' }, 409);
   await c.env.DB.prepare(
     `UPDATE landing_pages SET published=?, updated_at=datetime('now') WHERE id=?`
   ).bind(flag, id).run();
   return c.json({ ok: true, published: !!flag });
+});
+
+// D583 (#1210; S1's 2A) — archive or restore one page, scoped like publish.
+// Archiving unpublishes the page and hides it from the page list; the row is
+// kept. Restoring clears archived_at and leaves the page unpublished.
+brand.post('/landing/pages/:id/archive', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT id, project_id FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, row.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const body = await c.req.json().catch(() => ({} as any));
+  if (body?.archived === false) {
+    await c.env.DB.prepare("UPDATE landing_pages SET archived_at=NULL, updated_at=datetime('now') WHERE id=?").bind(id).run();
+    return c.json({ ok: true, archived: false, published: false });
+  }
+  await c.env.DB.prepare(
+    "UPDATE landing_pages SET archived_at=COALESCE(archived_at, datetime('now')), published=0, updated_at=datetime('now') WHERE id=?",
+  ).bind(id).run();
+  return c.json({ ok: true, archived: true, published: false });
 });
 
 // Per-page draft preview URL.
@@ -1566,7 +1668,7 @@ brand.get('/p/:site/:page', async (c) => {
   const site = await c.env.DB.prepare('SELECT project_id FROM brand_sites WHERE slug = ?').bind(c.req.param('site')).first<any>();
   if (!site) return c.json({ error: 'not found' }, 404);
   const row = await c.env.DB.prepare(
-    'SELECT * FROM landing_pages WHERE project_id = ? AND page_slug = ? AND published = 1'
+    'SELECT * FROM landing_pages WHERE project_id = ? AND page_slug = ? AND published = 1 AND archived_at IS NULL'
   ).bind(site.project_id, c.req.param('page')).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
   return c.json(publicLanding(row));
@@ -1575,7 +1677,7 @@ brand.get('/p/:site/:page', async (c) => {
 brand.get('/landing/:slug', async (c) => {
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare(
-    `SELECT * FROM landing_pages WHERE slug = ? AND published = 1`
+    `SELECT * FROM landing_pages WHERE slug = ? AND published = 1 AND archived_at IS NULL`
   ).bind(c.req.param('slug')).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
   // Public payload — the draft preview token stays private.
@@ -1608,7 +1710,7 @@ brand.post('/landing/:slug/waitlist', async (c) => {
   const email = String(body?.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return c.json({ error: 'invalid email' }, 400);
   const lp = await c.env.DB.prepare(
-    `SELECT id, project_id FROM landing_pages WHERE slug = ? AND published = 1`
+    `SELECT id, project_id FROM landing_pages WHERE slug = ? AND published = 1 AND archived_at IS NULL`
   ).bind(slug).first<any>();
   if (!lp) return c.json({ error: 'landing page not found' }, 404);
   const audience = VALID_AUDIENCE(body?.audience);
@@ -1665,7 +1767,7 @@ brand.post('/landing/:slug/waitlist', async (c) => {
 brand.post('/landing/:slug/view', async (c) => {
   await ensureSchema(c.env);
   await c.env.DB.prepare(
-    `UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE slug = ? AND published = 1`
+    `UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE slug = ? AND published = 1 AND archived_at IS NULL`
   ).bind(c.req.param('slug')).run();
   return c.json({ ok: true });
 });
@@ -1724,7 +1826,7 @@ function buildLandingPageHtml(
 export async function renderLandingHtml(env: Env, slug: string, nonce?: string, origin = ''): Promise<Response> {
   await ensureSchema(env);
   const row = await env.DB.prepare(
-    `SELECT * FROM landing_pages WHERE slug = ? AND published = 1`
+    `SELECT * FROM landing_pages WHERE slug = ? AND published = 1 AND archived_at IS NULL`
   ).bind(slug).first<any>();
   if (!row) {
     return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
@@ -1749,12 +1851,12 @@ export async function renderSitePage(env: Env, siteSlug: string, pageSlug: strin
   let row: any = null;
   if (pageSlug) {
     row = await env.DB.prepare(
-      'SELECT * FROM landing_pages WHERE project_id = ? AND page_slug = ? AND published = 1'
+      'SELECT * FROM landing_pages WHERE project_id = ? AND page_slug = ? AND published = 1 AND archived_at IS NULL'
     ).bind(site.project_id, pageSlug).first<any>();
   } else {
     // Site root: prefer the "home" page, else the oldest published page.
     row = await env.DB.prepare(
-      `SELECT * FROM landing_pages WHERE project_id = ? AND published = 1
+      `SELECT * FROM landing_pages WHERE project_id = ? AND published = 1 AND archived_at IS NULL
        ORDER BY CASE WHEN page_slug = 'home' THEN 0 ELSE 1 END, id LIMIT 1`
     ).bind(site.project_id).first<any>();
   }
