@@ -60,7 +60,7 @@ test('an unreadable tier store says so and offers no edit', () => {
 test('the taxonomy lists the eight categories and counts the uncategorised apart, never as Other', () => {
   const t = render({ slaPolicy: { tiers: TIERS, escalation_kinds: [] }, taxonomy: TAX(2), failed: false });
   assert.match(t, /Open tickets by category/);
-  for (const c of TICKET_CATEGORIES) assert.match(t, new RegExp(c.label.replace('&', '&')));
+  for (const c of TICKET_CATEGORIES) assert.ok(t.includes(c.label), `${c.label} is not drawn`);
   assert.match(t, /Billing3/);
   assert.match(t, /Other0/);
   assert.match(t, /2 open with no category recorded/);
