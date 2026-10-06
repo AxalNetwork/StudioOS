@@ -41684,6 +41684,38 @@ rest on, and none waits on an open decision.
   used to read its source text.
 - 7 mutations were made and each was caught.
 
+## D496
+
+**Investor Portfolio, built to the owner's line: Parse review says its decision
+is open.** The third of the four zone-family PRs for #1023 (the Portfolio
+family), slot S07. No migration and no new route.
+
+**IP2 Parse review waits on the owner** (question 6 on #1023). The choices are:
+- **A.** a model proposes figures from an update for the investor to accept;
+- **B.** a check that lists founder-entered KPI fields left blank or not
+  numeric;
+- **C.** nothing.
+
+No extraction layer exists either way, so nothing is reviewed or counted. Three
+places said "no store" and now also say the decision is open:
+- **The Parse review chip:** disabled, "Parsing updates is not decided yet: no
+  extraction runs, so there is nothing to review."
+- **The strip tile:** "Not decided", "Whether updates are parsed is the owner's
+  decision, asked on #1023". It used to read "Unavailable", which the page
+  also uses for a read that failed.
+- **The stated-limit card and the rail line:** both name the three choices and
+  say the page does not guess.
+
+**IP1 Add follow-on stays admin-only,** as #1023 says. A follow-on is a round on
+the position, and recording one is an admin write.
+
+**Tests.**
+- `frontend/test/investor_portfolio_d496.test.mjs` (3 tests) pins the chip and
+  the rendered rail, both of which fail on the code before this change, and
+  IP1's admin-only reason.
+- `investor_portfolio_ip2.test.mjs` follows the new tile and the chip's hover.
+- 4 mutations were made and each was caught.
+
 ## D500
 
 **A support ticket's persona stays its requester's standing now.** The owner's
