@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarPlus, ChevronLeft, ChevronRight, Search, SquarePen } from 'lucide-react';
-import { Card, Pill, Unrecorded, WorkerRail } from '../../ui';
+import { Card, Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
 import { reportError } from '../../lib/log';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
@@ -10,7 +10,7 @@ import {
 } from './learningModel';
 import { readArticles, readEvents, readPublications } from './learningReads';
 import {
-  ComingSoonCard, LearningEmpty, LearningFrame, LearningHeader, LearningLoading, LearningUnreadable, NotLiveYet, SectionCard,
+  ComingSoonCard, LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, NotLiveYet, SectionCard,
 } from './LearningStates';
 
 /** The canvas's one header action, kept for every profile: Articles stay open. */
@@ -423,8 +423,7 @@ export default function LearningHome({ gated, links = [] }) {
   const retry = (kind) => () => setReload((r) => ({ ...r, [kind]: r[kind] + 1 }));
 
   return (
-    <LearningFrame
-      testid="learning-home"
+    <RailFrame
       rail={(
         <WorkerRail
           workspace="Learning"
@@ -439,21 +438,24 @@ export default function LearningHome({ gated, links = [] }) {
             : [['Courses, videos, webinars, exercises and exams', NOT_LIVE_LINE]]}
         />
       )}
+      data-testid="learning-home"
     >
-      <LearningHomeView
-        gated={gated}
-        tab={tab}
-        onTab={onTab}
-        query={query}
-        onQuery={setQuery}
-        q={q}
-        articles={articles}
-        publications={publications}
-        events={events}
-        onArticlesPage={(step) => setPage((p) => Math.max(0, p + step))}
-        onRetry={{ article: retry('article'), publication: retry('publication'), event: retry('event') }}
-        links={links}
-      />
-    </LearningFrame>
+      <div className="space-y-4">
+        <LearningHomeView
+          gated={gated}
+          tab={tab}
+          onTab={onTab}
+          query={query}
+          onQuery={setQuery}
+          q={q}
+          articles={articles}
+          publications={publications}
+          events={events}
+          onArticlesPage={(step) => setPage((p) => Math.max(0, p + step))}
+          onRetry={{ article: retry('article'), publication: retry('publication'), event: retry('event') }}
+          links={links}
+        />
+      </div>
+    </RailFrame>
   );
 }

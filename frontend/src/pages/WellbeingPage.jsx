@@ -4,7 +4,7 @@ import { BarChart3, Heart, Lock, AlertTriangle, ExternalLink, Star } from 'lucid
 import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
-import { Card, Pill, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
+import { Card, Pill, RailFrame, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
 import {
   CANVAS_SCORES, MORE_SCORES, TOPICS, MAX_TAGS, NOT_STORED_REASON, HISTORY_ROW_CAP,
   ROUTE_SCORE_KEYS, isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
@@ -615,7 +615,22 @@ export default function WellbeingPage() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]" data-testid="wellbeing-home">
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace="Wellbeing"
+          role="founder"
+          stance="Private by design"
+          note="Eadwyn never reads your check-ins, your notes or your bookings. All it can read back on this page is a count of the resource library."
+          coverage={homeCoverage(resources.status === 'ready' ? resources.rows : null)}
+          coverageNote="Counts from the resource library only. Nothing you write on this page is sent to a model."
+          unavailable={[
+            ['How your scores moved', 'Describing your weeks would mean sending your check-ins to a model. They stay private to you, so this is not offered.'],
+          ]}
+        />
+      )}
+      data-testid="wellbeing-home"
+    >
       <section className="min-w-0 space-y-4" aria-label="Wellbeing">
         <PageHeader
           title="Wellbeing"
@@ -657,18 +672,6 @@ export default function WellbeingPage() {
           </div>
         </div>
       </section>
-      <WorkerRail
-        workspace="Wellbeing"
-        role="founder"
-        className="self-start lg:sticky lg:top-4"
-        stance="Private by design"
-        note="Eadwyn never reads your check-ins, your notes or your bookings. All it can read back on this page is a count of the resource library."
-        coverage={homeCoverage(resources.status === 'ready' ? resources.rows : null)}
-        coverageNote="Counts from the resource library only. Nothing you write on this page is sent to a model."
-        unavailable={[
-          ['How your scores moved', 'Describing your weeks would mean sending your check-ins to a model. They stay private to you, so this is not offered.'],
-        ]}
-      />
-    </div>
+    </RailFrame>
   );
 }

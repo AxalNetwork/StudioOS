@@ -1,3 +1,4 @@
+import React, { createContext, useContext, useLayoutEffect } from 'react';
 import './workerRail.css';
 
 /**
@@ -37,13 +38,34 @@ import './workerRail.css';
  *     cancelling padding it is not adjacent to would pull it over its
  *     siblings — so a host should make the frame its outermost element.
  *
+ *   · A section strip, when the shell has one. HQ's Platform and Content
+ *     links are drawn by the shell above the page container, so they ran
+ *     across the rail's column and the panel started under them. The shell
+ *     offers its strip through `RailStripSlot`. A frame with a rail takes it:
+ *     it says so (`dock`), the shell leaves its own copy out (`inFrame`), and
+ *     the frame draws the strip at the top of the body, where a founder desk
+ *     has its tabs. The panel then runs from the header. One copy at a time,
+ *     settled in a layout effect, so nothing is painted twice.
+ *
  * `rail` is the `<WorkerRail>` element. With no rail the frame draws the body
  * alone, so a host can pass a rail conditionally.
  */
+export const RailStripSlot = createContext(null);
+
 export default function RailFrame({ rail = null, children, className = '', 'data-testid': testId }) {
+  const slot = useContext(RailStripSlot);
+  const dock = rail && slot?.strip ? slot.dock : null;
+  useLayoutEffect(() => {
+    if (!dock) return undefined;
+    dock(true);
+    return () => dock(false);
+  }, [dock]);
   return (
     <div className={`fwr-frame ${className}`.trim()} data-rail={rail ? 'true' : 'false'} data-testid={testId}>
-      <div className="fwr-frame-main">{children}</div>
+      <div className="fwr-frame-main">
+        {dock && slot.inFrame ? <div className="fwr-frame-strip">{slot.strip}</div> : null}
+        {children}
+      </div>
       {rail && (
         <div className="fwr-frame-rail" data-testid="worker-rail-frame">
           <div className="fwr-frame-dock">{rail}</div>
