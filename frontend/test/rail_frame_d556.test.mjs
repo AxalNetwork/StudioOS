@@ -129,7 +129,14 @@ test('the frame is defined in one place', () => {
 test('the frame is the founder panel: docked, stretched, seamed, grounded, collapsible', () => {
   const desk = CSS_CODE.slice(CSS_CODE.indexOf('@media (min-width: 1024px) {\n  .fwr-frame {'));
   assert.ok(desk.length > 0, 'the desktop frame rules are gone');
-  const rule = (sel) => desk.match(new RegExp(`(?:^|\\n)\\s*${sel.replace(/[.[\]"=]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] || '';
+  // The body of the rule whose line starts with exactly `sel {`. A string
+  // search, not a RegExp built from `sel` (Semgrep's non-literal-regexp).
+  const rule = (sel) => {
+    const at = desk.indexOf(`\n  ${sel} {`);
+    if (at < 0) return '';
+    const open = desk.indexOf('{', at);
+    return desk.slice(open + 1, desk.indexOf('}', open));
+  };
   const row = rule('.fwr-frame');
   assert.match(row, /display:\s*flex/);
   assert.match(row, /align-items:\s*stretch/);
