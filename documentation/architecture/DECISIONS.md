@@ -35884,6 +35884,23 @@ of the Landing canvas):
   - `spinout_brief_d141.test.ts`: gains the `end_date` test.
 - **Mutations.** 12 run, 12 caught on the first run.
 
+## D386
+
+**The investor question bank v2.** Session 10 of Profiling v2. No migration. Ids already in the bank are unchanged.
+
+**What was added, in the formats the other banks use.**
+- Six situational pick-ones. At least three put Thesis-Driven Backer against Disciplined Allocator. Each option is one of the four investor archetypes, and the first option rotates.
+- Two reverse-keyed probes per trait. A 5 on those pulls the trait down.
+- A behavioural question for engineering, design and marketing_brand, the three radar axes this bank had never asked.
+- A situation for risk appetite, growth versus sustain, and the three Schwartz dimensions this role asks, plus a situation for each of the six Axal values.
+- A re-ask wording on every question, including the shared rows, worded for an investor.
+
+The new archetype items come first, so the six answers that reach the archetype floor are four reverse-keyed probes and two close-pair situations.
+
+**The fixture.** Each of the four investor archetype personas answers every new archetype question: the reverse-keyed value is `5` minus that persona's centroid on the trait, and the pick-one is the option written for their own archetype.
+
+**Tests.** `investor_bank_v2_d386.test.ts`. The persona fixture test already requires every archetype persona to answer every trait question of its role.
+
 ## D390
 
 **Retiring `/partner/operations/*`, part 1a: the two jobs that existed
@@ -38884,6 +38901,42 @@ the test and not in the component. The helper now takes the role as given.
 New test: `mobile_tab_bar_d425.test.mjs` (10 tests), which renders the bar and
 the sheet with `react-dom/server` under a `MemoryRouter`.
 
+## D426
+
+**The 16 displayed archetypes keep a complete profile, both banners, and copy
+that never calls Eadwyn's output advice.** The copy half of Profiling v2
+Session 14. The profiles and the 32 banners were already on main (D320, D325).
+This entry adds the guard that keeps them there. No migration, no route, no
+`api.js` method, and no new copy.
+
+**What the test holds** (`frontend/test/archetype_copy_d426.test.mjs`).
+- The engine's displayed set (`ARCHETYPES` in `archetypeScoring.ts`) is four
+  slugs each for founder, investor, partner and advisor, and coach shares the
+  advisor set. Those 16 keys are exactly the keys of `assessmentMeta.js`.
+- Each profile has a label, tagline, lean, summary, description, icon and
+  accent, five strengths, five blind spots and five matches. The label and
+  the tagline are the engine's own, and the complement chips are the match
+  labels.
+- Each slug has both cinematic banners, `{slug}.webp` and `{slug}_f.webp`.
+  The banner directory is those 32 files, and `archetypeBanner` resolves
+  each of them.
+- Scout and Steward stay on `ARCHETYPES_V2` only. They have no profile and
+  no banner. Adding copy for them waits on the owner's question (#982).
+- A string in a profile, on the archetype card, or in the profile band that
+  names Eadwyn does not contain the word advice. "Advice" about a human
+  operator stays, as D320 allowed: the Embedded Operator's line does not
+  name Eadwyn.
+
+**Left for later.** The values-compatibility half of Session 14 waits for
+the investor bank. It is not part of this entry.
+
+**Verification.** Five mutations, five caught, each with a non-zero exit and
+a `not ok` line, restored from a sha256-checked snapshot: a dropped strength,
+a missing banner, the card calling Eadwyn's output advice, the human-operator
+line losing that word, and coach no longer sharing the advisor array.
+`npm run build`, then `npm run test:drift`: EXIT=0. Frontend 4819 pass,
+worker 5686 pass, retention 121.
+
 ## D430
 
 **Recovery codes get a single writer: regenerating them and then re-pairing
@@ -40939,6 +40992,20 @@ test throws if that element is gone. No migration.
 **Left as they were.** The answer stays one decision (D112, D470). `BranchCommunity.jsx` still says "four consoles" and "three of the four" beside five cards; that file is slot S04's. `HqSupportSessionBar.jsx` still links "Raise a concern" to `/branch/approvals` with no query; that file is slot S05's. Neither is edited here.
 
 **Tests.** `frontend/test/branch_approvals_to_hq_d475.test.mjs`.
+
+## D476
+
+**Code scanning: a dead store, two dev-only FastAPI files, and a parser-blocking canvas loader.** Issue #1030. No migration. FastAPI stays Replit-dev-only and is not deployed.
+
+**deck-stage.js.** `var kb = true` was always overwritten, in the `try` or the `catch`. The initial value is gone. A mouse click that focuses a control still does not pin the overlay; keyboard focus and an engine that throws on `:focus-visible` still do. The file header says a starter re-copy overwrites the whole file, which would put the dead store back.
+
+**settings.py.** The two run-once flags are entries on `_schema_once`. User-settings still skips after the first attempt, success or failure. Profile extras still retries after a failure and skips only after a commit. The CodeQL comments that did not clear the finding are gone.
+
+**wellbeing.py.** The notes length check and the resource category check are `@field_validator` stacked on `@classmethod`. The same limits stand: notes over 4,000 characters are refused, and a category outside the five names is refused.
+
+**Canvases.** Eighteen files under `design/canvases/backlog/` and `design/canvases/integrated/` load `./support.js` with a static script tag. A classic script is parser-blocking, so the canvas's own scripts still run after it. The `?t=` cache key is gone. `support.js` is not edited. Ten copies under `attached_assets/` still call `document.write` and are not part of this change.
+
+**Tests.** `frontend/test/code_scanning_d476.test.mjs`, `backend/tests/test_codeql_d476.py`.
 
 ## D480
 

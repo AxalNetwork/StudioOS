@@ -6,7 +6,8 @@ import CourseOutline, { CourseResources } from './CourseOutline';
 import LessonPlayer from './LessonPlayer';
 import MyLearning from './MyLearning';
 import { LearningEmpty, LearningHeader, NotLiveYet, SectionCard } from './LearningStates';
-import { NOT_LIVE, findLesson, lessonHref, lessonKindLabel, videoPlayback } from './learningModel';
+import { AssessmentLesson } from './LearningAssessments';
+import { findLesson, lessonHref, videoPlayback } from './learningModel';
 import { markItemComplete, markLessonComplete, readCourse, readItem, readMe } from './learningReads';
 import useLearningRead from './useLearningRead';
 
@@ -84,20 +85,19 @@ export function CoursePage({ slug }) {
 
 // ── /learning/courses/:slug/:lesson ───────────────────────────────────────
 
-/** A lesson that opens somewhere else: an event (a webinar lesson) or an exercise or exam. */
+/**
+ * A lesson that opens somewhere else: an exercise or an exam (stage 3, D559),
+ * with the course carried along, or an event. A webinar lesson still names an
+ * EVENT by its slug (D557's `checkRef`), so it opens the event's page
+ * (D562 departure 12).
+ */
 function LessonElsewhere({ lesson, slug }) {
+  if (lesson.kind === 'exercise' || lesson.kind === 'exam') return <AssessmentLesson lesson={lesson} slug={slug} />;
   const href = lessonHref(slug, lesson);
-  if (lesson.kind === 'webinar') {
-    return (
-      <SectionCard title={lesson.title || 'Webinar'} testid="lesson-elsewhere">
-        <p className="text-[12.5px] text-axal-muted dark:text-gray-400">This lesson is a live event.</p>
-        {href && <Link to={href} className="mt-2 inline-flex text-[12.5px] font-semibold text-axal-violet-deep underline dark:text-violet-300">Open the event</Link>}
-      </SectionCard>
-    );
-  }
   return (
-    <SectionCard title={lesson.title || lessonKindLabel(lesson.kind)} testid="lesson-elsewhere">
-      <NotLiveYet line={lesson.kind === 'exam' ? NOT_LIVE.exams : NOT_LIVE.exercises} />
+    <SectionCard title={lesson.title || 'Webinar'} testid="lesson-elsewhere">
+      <p className="text-[12.5px] text-axal-muted dark:text-gray-400">This lesson is a live event.</p>
+      {href && <Link to={href} className="mt-2 inline-flex text-[12.5px] font-semibold text-axal-violet-deep underline dark:text-violet-300">Open the event</Link>}
     </SectionCard>
   );
 }
@@ -261,7 +261,7 @@ export function ItemPage({ uid }) {
 
 // ── /learning/me ──────────────────────────────────────────────────────────
 
-/** My learning from `GET /api/learning/me`; exercises and exams wait on #1160. */
+/** My learning from `GET /api/learning/me`; no route lists exercises or exams across them (`UNLISTED`). */
 export function MeView({ state, onRetry }) {
   return (
     <MyLearning

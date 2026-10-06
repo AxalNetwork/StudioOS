@@ -192,7 +192,7 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   // A webinar lesson names an event by its slug.
   assert.ok(admin.includes("A webinar lesson names an event by its slug."));
   // A file is attached only through D561's upload routes, never by setting
-  // video_source on the item: the studio still offers a link until it calls them.
+  // video_source on the item: the studio's upload calls them (learning_video_d561_ui).
   assert.ok(admin.includes("bad('video_source_by_upload'"));
 });
 
@@ -496,7 +496,7 @@ function readItemShape(reply) {
   return { item: reply.item, transcriptRecorded: reply.transcript_recorded === true, progress: reply.progress || null };
 }
 
-test('how a video plays: each allow-listed host embedded its own way, an upload not recorded until #1162', () => {
+test('how a video plays: each allow-listed host embedded its own way, an upload sent without its stream address not recorded', () => {
   const play = (video_url, extra = {}) => videoPlayback({ kind: 'video', video_source: 'url', video_url, ...extra });
   assert.deepEqual(play('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), { src: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', embed: true });
   assert.deepEqual(play('https://youtu.be/dQw4w9WgXcQ?t=4'), { src: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', embed: true });
@@ -510,21 +510,21 @@ test('how a video plays: each allow-listed host embedded its own way, an upload 
   assert.deepEqual(play('https://www.youtube.com/@axal'), { reason: 'This link cannot be played on this page.', href: 'https://www.youtube.com/@axal' });
   assert.match(play('http://youtu.be/dQw4w9WgXcQ').reason, /not https/);
   assert.match(play('').reason, /No video link is recorded/);
-  // An upload has no stream route yet.
+  // An upload whose read sent no `video_stream_url` (D561) has nothing to play from.
   const r2 = videoPlayback(ITEM_R2.item);
   assert.equal(r2.src, undefined);
-  assert.match(r2.reason, /streaming is not live yet/);
+  assert.match(r2.reason, /was not sent an address to stream it from/);
   assert.equal(videoPlayback(ITEM_READING.item), null, 'a reading is not a video');
   const view = html(h(ItemView, { state: { status: 'ready', ...readItemShape(ITEM_R2) } }));
   assert.match(view, /data-testid="lesson-video-absent"/);
-  assert.match(flat(view), /Not recorded · This video was uploaded to be streamed here, and streaming is not live yet\./);
+  assert.match(flat(view), /Not recorded · This video was uploaded, but the page was not sent an address to stream it from\./);
   assert.match(flat(view), /No transcript is recorded for this video\./);
   assert.match(view, /data-testid="text-lesson-completed"/, 'the stored progress is shown');
   const elsewhere = html(h(ItemView, { state: { status: 'ready', item: { ...VIDEO, video_url: 'https://www.youtube.com/@axal' }, progress: null } }));
   assert.match(tagOf(elsewhere, 'link-video-elsewhere'), /href="https:\/\/www\.youtube\.com\/@axal"/);
 });
 
-test('a lesson that opens elsewhere: a webinar opens its event, an exercise waits on #1160', () => {
+test('a lesson that opens elsewhere: a webinar opens its event, an exercise or exam its own page with the course along', () => {
   const courseState = { status: 'ready', ...COURSE_REPLY };
   const webinar = html(h(LessonView, { courseState, itemState: { status: 'idle' }, lessonUid: 'l3' }));
   assert.match(webinar, /data-testid="lesson-elsewhere"/);
@@ -533,7 +533,15 @@ test('a lesson that opens elsewhere: a webinar opens its event, an exercise wait
     ...courseState,
     modules: [{ uid: 'm9', title: 'Practice', position: 0, lessons: [{ uid: 'l9', title: 'Write it', position: 0, kind: 'exercise', ref_uid: 'e1', required: true, progress: null }] }],
   };
-  assert.match(text(h(LessonView, { courseState: withExercise, itemState: { status: 'idle' }, lessonUid: 'l9' })), /Not recorded Exercises are not live yet\./);
+  // Stage 3 (D559): the exercise's own page, with the course carried along so that page leads back here.
+  const exercise = html(h(LessonView, { courseState: withExercise, itemState: { status: 'idle' }, lessonUid: 'l9' }));
+  assert.match(tagOf(exercise, 'link-lesson-assessment'), /href="\/learning\/exercises\/e1\?course=seed-basics"/);
+  assert.match(text(h(LessonView, { courseState: withExercise, itemState: { status: 'idle' }, lessonUid: 'l9' })), /This lesson is an exercise\. You submit an answer, and it is reviewed\. Open the exercise/);
+  assert.doesNotMatch(exercise, /learning-not-live/);
+  const withExam = { ...withExercise, modules: [{ ...withExercise.modules[0], lessons: [{ ...withExercise.modules[0].lessons[0], kind: 'exam', ref_uid: 'x1' }] }] };
+  const exam = html(h(LessonView, { courseState: withExam, itemState: { status: 'idle' }, lessonUid: 'l9' }));
+  assert.match(tagOf(exam, 'link-lesson-assessment'), /href="\/learning\/exams\/x1\?course=seed-basics"/);
+  assert.match(flat(exam), /Open the exam/);
   assert.deepEqual(findLesson(COURSE_REPLY.modules, 'l2').prev.uid, 'l1');
   assert.equal(findLesson(COURSE_REPLY.modules, 'l3').next, null);
   // The stored positions decide the order, not the order the rows arrive in.
@@ -608,10 +616,15 @@ test('the studio: the table from both lists, a failed list named, each row openi
   assert.doesNotMatch(open, /studio-content/);
 });
 
-test('the item editor: a link not an upload, the fields the route takes, the status actions by status', () => {
+test('the item editor: a link or an upload, the fields the route takes, the status actions by status', () => {
+  // D561: a new video has no uid for the upload routes yet, so its file waits for the draft;
+  // a stored video takes a file (learning_video_d561_ui.test.mjs covers the upload itself).
   const fresh = html(h(StudioItemEditor, { item: null, kind: 'video', onSave: () => {}, onStatus: () => {} }));
   assert.match(tagOf(fresh, 'input-item-upload'), /disabled=""/);
-  assert.match(flat(fresh), /Uploading a video file is not live yet\. Paste a link instead\./);
+  assert.match(flat(fresh), /Create the draft first, then upload its file\./);
+  const stored = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {} }));
+  assert.doesNotMatch(tagOf(stored, 'input-item-upload'), /disabled=""/);
+  assert.match(flat(stored), /MP4 or WebM, at most 2 GB\./);
   assert.match(fresh, /data-testid="input-item-video-url"/);
   assert.doesNotMatch(fresh, /input-item-body|studio-status-actions/);
   assert.match(flat(fresh), /Create draft/);
@@ -637,7 +650,7 @@ test('the item editor: a link not an upload, the fields the route takes, the sta
   assert.throws(() => itemBody({ length: '1:2' }, 'video'), /Length is minutes/);
 });
 
-test('the course builder: fields and resources, modules and lessons in order, up and down disabled at the ends, exercise and exam held', () => {
+test('the course builder: fields and resources, modules and lessons in order, up and down disabled at the ends, every lesson kind offered', () => {
   const markup = html(h(StudioCourseBuilder, { course: TREE, items: STUDIO_ITEMS, handlers: {} }));
   const out = flat(markup);
   assert.match(tagOf(markup, 'input-course-slug'), /value="seed-basics"/);
@@ -658,10 +671,11 @@ test('the course builder: fields and resources, modules and lessons in order, up
   const fresh = html(h(StudioCourseBuilder, { course: null, items: [], handlers: {} }));
   assert.doesNotMatch(fresh, /studio-modules|studio-status-actions/);
   assert.match(flat(fresh), /Create draft/);
-  // The lesson form: exercise and exam drawn disabled, a video lesson choosing among videos, archived ones left out.
+  // The lesson form: exercise and exam offered (D559 accepts them; learning_assessments_d559
+  // tests their choices), a video lesson choosing among videos, archived ones left out.
   const form = html(h(LessonForm, { items: STUDIO_ITEMS, onSubmit: () => {}, onCancel: () => {}, submitLabel: 'Add lesson' }));
-  assert.match(form, /<option value="exercise" disabled="">Exercise \(not built yet\)<\/option>/);
-  assert.match(form, /<option value="exam" disabled="">Exam \(not built yet\)<\/option>/);
+  assert.match(form, /<option value="exercise">Exercise<\/option>/);
+  assert.match(form, /<option value="exam">Exam<\/option>/);
   assert.match(form, /<option value="v-yt">What a seed round is<\/option>/);
   assert.doesNotMatch(form, /value="v-old"|value="r-terms"/);
   assert.equal(refLabel({ kind: 'reading', ref_uid: 'gone' }, STUDIO_ITEMS), 'item gone');
@@ -737,7 +751,8 @@ test('the gate still holds: a gated profile reads nothing from Learning and keep
   assert.match(homeSrc, /const live = tabMode\(tab, gated\) === 'live';/);
   assert.match(homeSrc, /\{ enabled: live && \(tab === 'all' \|\| Boolean\(kind\)\), scope: 'catalog' \}/);
   assert.match(homeSrc, /useLearningRead\(readMe, \[\], \{ enabled: !gated, scope: 'me' \}\)/);
-  assert.match(codeOnly(read('frontend/src/pages/learning/LearningPage.jsx')), /if \(!gated && Wired\) return <Wired/);
+  // Every view is wired since stage 3, so the gate is the one test before a view mounts.
+  assert.match(codeOnly(read('frontend/src/pages/learning/LearningPage.jsx')), /if \(!gated\) return <Wired params=\{params\} config=\{config\} \/>;/);
   // The studio stays the Super Admin's: an admin is admitted by the route's guard and the page is the studio.
   const route = readRoutesSource();
   assert.ok(route.includes(`<Route path="/learning/studio" element={guard(['admin'], hqOnly(<LearningPage view="studio"`));

@@ -7,7 +7,7 @@ import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/mar
 import { getSource } from '../services/market_intel/registry';
 import '../services/market_intel/sources/index';
 import { listCountries, listMarketSectors, loadOverrides, mapCompanyCountry, mapCompanySector, mapFundFocus, mapSignalTags } from '../services/researchTaxonomy';
-import { presentFund, type DirectoryRow } from '../services/researchFundDirectory';
+import { presentFund, SERVED_FUNDS, type DirectoryRow } from '../services/researchFundDirectory';
 
 const researchSectors = new Hono<{ Bindings: Env }>();
 export const SECTOR_DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'] as const;
@@ -64,7 +64,7 @@ async function directory(env: Env) {
     env.DB.prepare('SELECT uid, name, country, sector, founded_year, employee_count, as_of, source_url FROM research_company_directory').all<Company>(),
     env.DB.prepare(`SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
       fund_date, quarter, fund_year, sector_focus, notable_lps, eif_flag, eifo_flag,
-      source_name, source_url, as_of FROM research_fund_directory`).all<DirectoryRow>(),
+      source_name, source_url, as_of FROM ${SERVED_FUNDS} AS f`).all<DirectoryRow>(),
     listCountries(env),
   ]);
   const marketSector = new Map(mappings.map((m) => [m.market_slug, m.mi_sector]));

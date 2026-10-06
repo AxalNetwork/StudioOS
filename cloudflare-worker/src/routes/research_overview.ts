@@ -41,7 +41,7 @@ import { SECTORS, recomputeIndexes } from '../services/market_intel/aggregator';
 import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
 import { periodKey, WINDOW_DAYS } from '../services/market_intel/scoring';
 import { listCountries, loadOverrides, mapFundFocus, mapFundHq, type Mapping } from '../services/researchTaxonomy';
-import { EUR_SOURCE } from '../services/researchFundDirectory';
+import { EUR_SOURCE, SERVED_FUNDS } from '../services/researchFundDirectory';
 
 const researchOverview = new Hono<{ Bindings: Env }>();
 
@@ -148,10 +148,10 @@ async function readTotals(env: Env) {
       readTotal(() => env.DB.prepare(
         `SELECT COUNT(*) AS n, MAX(as_of) AS as_of, SUM(company_count) AS supplied FROM research_market_directory`
       ).first<{ n: number; as_of: string | null; supplied: number | null }>()),
-      readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(as_of) AS as_of FROM research_fund_directory`)
+      readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(as_of) AS as_of FROM ${SERVED_FUNDS} AS f`)
         .first<{ n: number; as_of: string | null }>()),
       readTotal(async () => (await env.DB.prepare(
-        `SELECT source_name AS name, COUNT(*) AS funds, MAX(as_of) AS as_of FROM research_fund_directory
+        `SELECT source_name AS name, COUNT(*) AS funds, MAX(as_of) AS as_of FROM ${SERVED_FUNDS} AS f
           GROUP BY source_name ORDER BY funds DESC, source_name`
       ).all<{ name: string; funds: number; as_of: string | null }>()).results || []),
       readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(updated_at) AS as_of FROM signal_companies`)
@@ -400,11 +400,11 @@ async function readMoney(env: Env, top: number) {
     const thisYear = new Date().getUTCFullYear();
     const [hqRows, focusRows, overrides, countries, markets, bands, vintages, stats] = await Promise.all([
       env.DB.prepare(
-        `SELECT hq AS v, COUNT(*) AS n FROM research_fund_directory
+        `SELECT hq AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f
           WHERE TRIM(COALESCE(hq, '')) <> '' GROUP BY hq`
       ).all<RawCount>(),
       env.DB.prepare(
-        `SELECT sector_focus AS v, COUNT(*) AS n FROM research_fund_directory
+        `SELECT sector_focus AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f
           WHERE TRIM(COALESCE(sector_focus, '')) <> '' GROUP BY sector_focus`
       ).all<RawCount>(),
       loadOverrides(env),
@@ -412,10 +412,10 @@ async function readMoney(env: Env, top: number) {
       env.DB.prepare(`SELECT slug, name FROM research_market_directory`).all<{ slug: string; name: string }>(),
       // The band edges are constants of this file, never request values. Only
       // sizes whose currency is known are banded: the euro list (EUR_SOURCE).
-      env.DB.prepare(`SELECT ${bandSql} FROM research_fund_directory WHERE source_name = ? AND fund_size_cents > 0`)
+      env.DB.prepare(`SELECT ${bandSql} FROM ${SERVED_FUNDS} AS f WHERE source_name = ? AND fund_size_cents > 0`)
         .bind(EUR_SOURCE).first<Record<string, number | null>>(),
       env.DB.prepare(
-        `SELECT fund_year AS year, COUNT(*) AS funds FROM research_fund_directory
+        `SELECT fund_year AS year, COUNT(*) AS funds FROM ${SERVED_FUNDS} AS f
           WHERE fund_year IS NOT NULL GROUP BY fund_year ORDER BY fund_year`
       ).all<{ year: number; funds: number }>(),
       env.DB.prepare(
@@ -424,7 +424,7 @@ async function readMoney(env: Env, top: number) {
                 SUM(CASE WHEN TRIM(COALESCE(sector_focus, '')) = '' THEN 1 ELSE 0 END) AS no_focus,
                 SUM(CASE WHEN source_name = ? AND fund_size_cents > 0 THEN 1 ELSE 0 END) AS sized,
                 SUM(CASE WHEN fund_year IS NULL THEN 1 ELSE 0 END) AS no_vintage
-           FROM research_fund_directory`
+           FROM ${SERVED_FUNDS} AS f`
       ).bind(EUR_SOURCE).first<{ total: number; as_of: string | null; no_hq: number | null; no_focus: number | null; sized: number | null; no_vintage: number | null }>(),
     ]);
     const all = Number(stats?.total ?? 0);

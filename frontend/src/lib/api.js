@@ -1047,6 +1047,14 @@ export const api = {
   },
   wellbeingResourceCreate: (data) =>
     request('/wellbeing/resources', { method: 'POST', body: JSON.stringify(data) }),
+  // D574 — an admin edits a resource: any field, its kind, topic and state.
+  wellbeingResourceUpdate: (id, data) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D574 part 4 — a file attached to a resource: one PUT of the raw bytes.
+  wellbeingResourceFileUpload: (id, file) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}/file`, { method: 'PUT', body: file, headers: { 'Content-Type': file?.type || 'application/octet-stream' } }),
+  wellbeingResourceFileRemove: (id) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}/file`, { method: 'DELETE' }),
   wellbeingResourceDelete: (id) =>
     request(`/wellbeing/resources/${id}`, { method: 'DELETE' }),
   // Task #8 (DI) — daily pulse + expert directory
@@ -1109,6 +1117,8 @@ export const api = {
   wellbeingExpertBookingPatch: (uid, data) =>
     request(`/wellbeing/experts/me/bookings/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
   wellbeingMyBookings: () => request('/wellbeing/bookings/mine'),
+  // D574 — a member cancels their own open, unpaid, future booking.
+  wellbeingCancelBooking: (uid) => request(`/wellbeing/bookings/${encodeURIComponent(uid)}/cancel`, { method: 'POST' }),
   wellbeingAdminHide: (uid, hidden) =>
     request(`/wellbeing/admin/experts/${encodeURIComponent(uid)}/hide`, {
       method: 'POST', body: JSON.stringify({ hidden: !!hidden }),
@@ -1680,6 +1690,9 @@ export const api = {
     request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`, { method: 'POST', body: JSON.stringify(entry) }),
   revenueEntriesImport: (projectId, rows) =>
     request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import`, { method: 'POST', body: JSON.stringify({ rows }) }),
+  // D587 — the founder's own Stripe charges, one verified entry each.
+  revenueEntriesImportStripe: (projectId) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import-stripe`, { method: 'POST' }),
   revenueEntryUpdate: (projectId, uid, patch) =>
     request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   revenueEntryDelete: (projectId, uid) =>

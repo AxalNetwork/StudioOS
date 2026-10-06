@@ -18,16 +18,17 @@ const GRID = 'sm:grid sm:grid-cols-[6rem_minmax(0,1fr)_6.5rem_6rem_minmax(0,0.8f
 
 /**
  * Every piece of Learning content, for the Super Admin who authors it (D562;
- * items and courses #1158, exercises and exams #1160, webinars #1161, the
- * programs column #1159).
+ * items and courses #1158, exercises and exams #1160, the programs column
+ * #1159; webinars have their own list beside it, `WebinarStudioList`).
  *
  * Props, in the shape the studio routes plan:
  *   status  'loading' | 'unreadable' | 'unrecorded' | 'ready'
  *   rows    [{ kind, uid, title, status, visibility: 'open' | 'program',
  *              programs: [{ uid, name }] | null, updated_at }]
  *
- * `programs: null` is a row read before #1159's table exists: "Not recorded",
- * not "None", because nobody has asked the store yet.
+ * `programs: null` is a row whose list route does not say which programs
+ * hold it (none of D557's or D559's lists does): "Not recorded", not "None",
+ * because nobody has asked. Each program's own page lists what it holds.
  */
 export default function StudioContentTable({ status, rows, reason = NOT_LIVE.studio, onRetry }) {
   const [filter, setFilter] = useState('all');
@@ -80,7 +81,7 @@ export default function StudioContentTable({ status, rows, reason = NOT_LIVE.stu
                   <span className="text-axal-muted dark:text-gray-400">{r.visibility ? titleCase(r.visibility) : <Unrecorded>Not recorded</Unrecorded>}</span>
                   <span className="text-axal-muted dark:text-gray-400">
                     {r.programs === null || r.programs === undefined
-                      ? <Unrecorded reason="Programs are not live yet.">Not recorded</Unrecorded>
+                      ? <Unrecorded reason="The content list does not say which programs hold this. Each program's page lists what it holds.">Not recorded</Unrecorded>
                       : r.programs.length ? r.programs.map((p) => p.name).join(', ') : 'None'}
                   </span>
                   <span className="tabular-nums text-axal-muted dark:text-gray-400">{formatDay(r.updated_at) || 'not recorded'}</span>

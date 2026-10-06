@@ -4,7 +4,7 @@ import { Check, ExternalLink, Search, Star } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Card, Pill, Skeleton, Unrecorded, Unreadable } from '../../ui';
 import {
-  SESSION_MINUTES, arrivedExpert, bookingPayload, browserTimeZone, countLabel, expertRate, formatWhen, groupSlots,
+  SESSION_MINUTES, arrivedExpert, bookingPayload, servicePrice, chosenServiceLabel, browserTimeZone, countLabel, expertRate, formatWhen, groupSlots,
   nextOpening, safeHref, specialties, wantedCategories, withArrived,
 } from './wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, NotRecorded, StepChips, Outcome } from './WellbeingParts';
@@ -24,11 +24,13 @@ import { BTN, FIELD, PageHeader, CardHead, NotRecorded, StepChips, Outcome } fro
  *      An expert's profile sends its card along (`?expert=` and navigation
  *      state), and that expert is listed first even when the directory's
  *      twelve leave them out.
- *   2. Service — nothing. Neither directory route returns an expert's
- *      services (`services: null`), so the step says so and the booking is a
- *      30-minute session with no service attached.
- *   3. Time — `GET /experts/:uid/slots`, or the expert's own scheduler.
- *   4. Confirm — `POST /experts/:uid/book` with the slot and nothing else.
+ *   2. Service — the expert's active services, which the directory returns
+ *      on each card since D574. A member picks one, or a plain 30-minute
+ *      session; the route takes the length and price from the service.
+ *   3. Time — `GET /experts/:uid/slots`, cut from the expert's weekly grid
+ *      (D574), or the default hours when they have set none, which the step
+ *      says; or the expert's own scheduler.
+ *   4. Confirm — `POST /experts/:uid/book` with the slot and the service.
  *      No note is ever sent: a booking carries none (D331).
  */
 
@@ -40,7 +42,8 @@ const LANGUAGES = [
 ];
 const MODALITIES = [['video', 'Video'], ['phone', 'Phone'], ['in_person', 'In person'], ['async_chat', 'Async chat']];
 const PRICE_CAPS = [100, 200, 350, 500];
-export const SERVICE_GAP = 'No route lists an expert’s services to members yet, so a booking is a 30-minute session with no service attached.';
+/** An older Worker returns `services: null`: the list was not read, which is not "none". */
+export const SERVICE_GAP = 'This expert’s services could not be read, so a booking is a 30-minute session with no service attached.';
 const RATE_GAP = 'This expert has not published a rate.';
 const EMPTY_FILTERS = { q: '', category: '', language: '', modality: '', price_max: '' };
 
@@ -158,21 +161,50 @@ export function ExpertColumn({ status, experts = [], labels = new Map(), slots =
   );
 }
 
-export function ServiceColumn({ expert }) {
+function ServiceOption({ on, onPick, testId, title, sub }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onPick}
+      data-testid={testId}
+      className={`block w-full rounded-axal-md border p-3 text-left ${on ? 'border-axal-violet bg-axal-lavender/50 dark:bg-violet-900/20' : 'border-axal-hairline dark:border-gray-700'}`}
+    >
+      <div className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{title}</div>
+      <div className="text-xs text-axal-muted dark:text-gray-400">{sub}</div>
+    </button>
+  );
+}
+
+export function ServiceColumn({ expert, serviceUid = null, onService }) {
+  const services = Array.isArray(expert?.services) ? expert.services : null;
+  const plainSub = expertRate(expert) ? `${expert.name}’s published rate: ${expertRate(expert)}` : <Unrecorded reason={RATE_GAP}>Rate not recorded</Unrecorded>;
   return (
     <Card data-testid="step-service">
       <CardHead title="2 · Service" as="h2" />
       {!expert ? (
         <p className={FIELD.note}>Choose an expert first.</p>
       ) : (
-        <div className="space-y-2.5">
-          <NotRecorded label="Services not recorded" reason={SERVICE_GAP} testId="text-services-gap" />
-          <div className="rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700">
-            <div className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">A {SESSION_MINUTES}-minute session</div>
-            <div className="text-xs text-axal-muted dark:text-gray-400">
-              {expertRate(expert) ? `${expert.name}’s published rate: ${expertRate(expert)}` : <Unrecorded reason={RATE_GAP}>Rate not recorded</Unrecorded>}
-            </div>
-          </div>
+        <div className="space-y-2" data-testid="list-services">
+          {services === null && <NotRecorded label="Services not read" reason={SERVICE_GAP} testId="text-services-gap" />}
+          {services && !services.length && <p className={FIELD.note} data-testid="text-no-services">{expert.name} lists no services.</p>}
+          {(services || []).map((s) => (
+            <ServiceOption
+              key={s.uid}
+              on={serviceUid === s.uid}
+              onPick={() => onService?.(s.uid)}
+              testId={`service-${s.uid}`}
+              title={s.title}
+              sub={[`${s.duration_minutes} min`, servicePrice(s)].filter(Boolean).join(' · ')}
+            />
+          ))}
+          <ServiceOption
+            on={!serviceUid}
+            onPick={() => onService?.(null)}
+            testId="service-plain"
+            title={`A ${SESSION_MINUTES}-minute session`}
+            sub={plainSub}
+          />
         </div>
       )}
     </Card>
@@ -199,6 +231,11 @@ export function TimeColumn({ expert, slotState, chosen, onChoose, onRetry, timeZ
         </p>
       ) : (
         <div className="space-y-3 xl:max-h-[34rem] xl:overflow-y-auto xl:pr-1" data-testid="list-slot-days">
+          {slotState.source === 'default_hours' && (
+            <p className={FIELD.note} data-testid="text-default-hours">
+              {expert.name} has not set weekly hours, so these are the default ones: weekdays, 09:00 to 17:00 UTC.
+            </p>
+          )}
           {groups.map((g) => (
             <div key={g.key}>
               <div className="mb-1.5 text-xs font-semibold text-axal-ink dark:text-gray-100">{g.label}</div>
@@ -231,14 +268,14 @@ export function TimeColumn({ expert, slotState, chosen, onChoose, onRetry, timeZ
   );
 }
 
-export function ConfirmColumn({ expert, slotState, chosen, booking = {}, onConfirm, onReset, timeZone }) {
+export function ConfirmColumn({ expert, slotState, chosen, serviceUid = null, booking = {}, onConfirm, onReset, timeZone }) {
   const external = !!slotState?.external;
   const ready = !!expert && (external || !!chosen);
   const result = booking.result;
   const launch = safeHref(result?.launch_url);
   const rows = expert ? [
     ['Expert', expert.name],
-    ['Service', <Unrecorded key="svc" reason={SERVICE_GAP}>Not recorded · {SESSION_MINUTES} min</Unrecorded>],
+    ['Service', chosenServiceLabel(expert, serviceUid)],
     ['When', external ? 'Chosen in their scheduler' : (formatWhen(chosen, { timeZone }) || 'Choose a time')],
     ['Rate', expertRate(expert) || <Unrecorded key="rate" reason={RATE_GAP}>Not recorded</Unrecorded>],
   ] : [];
@@ -300,6 +337,7 @@ export default function WellbeingBookPage() {
   const [slots, setSlots] = useState({});
   const [selected, setSelected] = useState(() => wanted || null);
   const [chosen, setChosen] = useState(null);
+  const [serviceUid, setServiceUid] = useState(null);
   const [booking, setBooking] = useState({ busy: false, result: null, error: null });
 
   const labels = useMemo(() => new Map(categories.map((c) => [c.key, c.label])), [categories]);
@@ -348,7 +386,10 @@ export default function WellbeingBookPage() {
     return api.wellbeingExpertSlots(uid)
       .then((r) => setSlots((s) => ({
         ...s,
-        [uid]: { status: 'ready', external: !!r?.external, launch_url: r?.launch_url || null, slots: Array.isArray(r?.slots) ? r.slots : [] },
+        [uid]: {
+          status: 'ready', external: !!r?.external, launch_url: r?.launch_url || null,
+          slots: Array.isArray(r?.slots) ? r.slots : [], source: r?.source || null,
+        },
       })))
       .catch(() => setSlots((s) => ({ ...s, [uid]: { status: 'unreadable' } })));
   }, []);
@@ -372,6 +413,7 @@ export default function WellbeingBookPage() {
   const select = (uid) => {
     setSelected(uid);
     setChosen(null);
+    setServiceUid(null);
     setBooking({ busy: false, result: null, error: null });
   };
 
@@ -381,7 +423,7 @@ export default function WellbeingBookPage() {
     if (!external && !chosen) return;
     setBooking({ busy: true, result: null, error: null });
     try {
-      const r = await api.wellbeingExpertBook(expert.uid, bookingPayload({ slot: chosen, external }));
+      const r = await api.wellbeingExpertBook(expert.uid, bookingPayload({ slot: chosen, external, serviceUid }));
       setBooking({ busy: false, result: r || {}, error: null });
       const open = external ? safeHref(r?.launch_url) : null;
       if (open && typeof window !== 'undefined') window.open(open, '_blank', 'noopener,noreferrer');
@@ -416,7 +458,7 @@ export default function WellbeingBookPage() {
           onRetry={loadExperts}
           timeZone={timeZone}
         />
-        <ServiceColumn expert={expert} />
+        <ServiceColumn expert={expert} serviceUid={serviceUid} onService={(uid) => { setServiceUid(uid); setBooking({ busy: false, result: null, error: null }); }} />
         <TimeColumn
           expert={expert}
           slotState={slotState}
@@ -429,6 +471,7 @@ export default function WellbeingBookPage() {
           expert={expert}
           slotState={slotState}
           chosen={chosen}
+          serviceUid={serviceUid}
           booking={booking}
           onConfirm={confirm}
           onReset={() => { setChosen(null); setBooking({ busy: false, result: null, error: null }); if (expert) loadSlots(expert.uid); }}

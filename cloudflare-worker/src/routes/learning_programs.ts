@@ -3,7 +3,7 @@
  * /api/learning beside `learning.ts`.
  *
  *   GET  /programs                       published programs open to self-enrolment, and whether the caller is in each
- *   GET  /programs/enrolled              the caller's own programs
+ *   GET  /programs/enrolled              the caller's own programs, each with its contents and the caller's completion
  *   GET  /programs/mine                  the programs the caller is assigned to follow (the Super Admin: every program)
  *   POST /programs/:uid/enrol            self-enrol, into a published open program only
  *   GET  /programs/:uid                  a program and its contents, with the caller's own completion when enrolled
@@ -25,7 +25,7 @@ import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { isAssignedAdmin } from '../services/learningAccess';
 import {
-  PROGRAM_COLS, P_COLS, programView, programContents, describeContents, programLearners, completionFor, type ProgramRow,
+  PROGRAM_COLS, P_COLS, programView, programContents, describeContents, programLearners, completionFor, enrolledContents, type ProgramRow,
 } from '../services/learningPrograms';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -53,6 +53,15 @@ r.get('/programs', async (c) => {
   return c.json({ programs: (res.results || []).map((p) => ({ ...programView(p), enrolled: p.my_status === 'active' })) });
 });
 
+/**
+ * #1251 — each program carries the `contents` and `my_completion` that
+ * `GET /programs/:uid` gives an enrolled member, so "My programs" reads once.
+ * Every program is described in the same round: the programs, their contents,
+ * one query per kind of content and four for completion, however many
+ * programs the caller is in. If that round fails, each program is still
+ * listed, with `contents: null` and `contents_error`, so the failure says so
+ * on each row and blanks nothing else.
+ */
 r.get('/programs/enrolled', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const res = await c.env.DB.prepare(
@@ -61,7 +70,35 @@ r.get('/programs/enrolled', async (c) => {
       WHERE e.user_id = ? AND e.status = 'active' AND p.status = 'published'
       ORDER BY p.name COLLATE NOCASE, p.id`,
   ).bind(user.id).all<any>();
-  return c.json({ programs: (res.results || []).map((p) => ({ ...programView(p), enrolled_at: p.enrolled_at })) });
+  const rows = res.results || [];
+  const byProgram = new Map<number, { contents: any[]; my_completion: any[] }>();
+  let failed = false;
+  try {
+    const contents = await enrolledContents(c.env, user.id);
+    const self = { user_id: user.id, uid: String(user.uid ?? ''), name: null, enrolled_at: '' };
+    const [described, mine] = await Promise.all([
+      describeContents(c.env, contents),
+      completionFor(c.env, contents, [self]).then((x) => x[0].completion),
+    ]);
+    for (const p of rows) byProgram.set(Number(p.id), { contents: [], my_completion: [] });
+    contents.forEach((x, i) => {
+      const slot = byProgram.get(Number(x.program_id));
+      if (!slot) return;
+      slot.contents.push(described[i]);
+      slot.my_completion.push(mine[i]);
+    });
+  } catch (e) {
+    console.error('[learning] enrolled programs contents', e);
+    failed = true;
+  }
+  return c.json({
+    programs: rows.map((p) => ({
+      ...programView(p), enrolled_at: p.enrolled_at,
+      ...(failed
+        ? { contents: null, my_completion: null, contents_error: 'unavailable' }
+        : byProgram.get(Number(p.id))),
+    })),
+  });
 });
 
 r.get('/programs/mine', async (c) => {
@@ -124,7 +161,7 @@ r.get('/programs/:uid', async (c) => {
   let mine = null;
   if (s.enrolled) {
     const self = { user_id: user.id, uid: String(user.uid ?? ''), name: null, enrolled_at: '' };
-    mine = (await completionFor(c.env, p.id, contents, [self]))[0].completion;
+    mine = (await completionFor(c.env, contents, [self]))[0].completion;
   }
   return c.json({ program: programView(p), contents: described, enrolled: s.enrolled, my_completion: mine });
 });
@@ -146,7 +183,7 @@ r.get('/programs/:uid/learners', async (c) => {
   return c.json({
     program: programView(p),
     contents: await describeContents(c.env, contents),
-    learners: await completionFor(c.env, p.id, contents, learners),
+    learners: await completionFor(c.env, contents, learners),
   });
 });
 
@@ -159,7 +196,7 @@ r.get('/programs/:uid/learners/:userUid', async (c) => {
   return c.json({
     program: programView(p),
     contents: await describeContents(c.env, contents),
-    learner: (await completionFor(c.env, p.id, contents, learners))[0],
+    learner: (await completionFor(c.env, contents, learners))[0],
   });
 });
 

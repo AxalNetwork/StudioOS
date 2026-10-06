@@ -1432,11 +1432,13 @@ def data_export(user: User = Depends(get_current_user), session: Session = Depen
 # table with one row per user, lazily upserted on first read.
 # ---------------------------------------------------------------------------
 
-_user_settings_migrated = False
+# One dict, not two module globals. CodeQL's unused-global check does not
+# follow a flag written on one call and read on the next; a dict entry is a
+# value the same function both reads and writes. Same run-once behaviour.
+_schema_once = {"user_settings": False, "profile_extras": False}
 
 def _ensure_user_settings_schema(session: Session) -> None:
-    global _user_settings_migrated
-    if _user_settings_migrated:
+    if _schema_once["user_settings"]:
         return
     try:
         session.exec(text(
@@ -1467,13 +1469,7 @@ def _ensure_user_settings_schema(session: Session) -> None:
         session.commit()
     except Exception:
         session.rollback()
-    # codeql[py/unused-global-variable] -- _user_settings_migrated is read via the `global _user_settings_migrated` guard at the top of
-    # this same function (`if _user_settings_migrated: return`); the write here is what a LATER,
-    # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
-    # persisting across separate invocations of the function that sets it, so it sees this write as
-    # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
-    # but-skippable after the first successful request in this process.
-    _user_settings_migrated = True
+    _schema_once["user_settings"] = True
 
 
 _DEFAULT_USER_SETTINGS = {
@@ -1819,12 +1815,8 @@ def resync_developer_indices(user: User = Depends(get_current_user)):
 # (the worker is the production source of truth).
 # ===========================================================================
 
-_profile_extras_migrated = False
-
-
 def _ensure_profile_extras_schema(session: Session) -> None:
-    global _profile_extras_migrated
-    if _profile_extras_migrated:
+    if _schema_once["profile_extras"]:
         return
     try:
         session.exec(text("""
@@ -1837,13 +1829,7 @@ def _ensure_profile_extras_schema(session: Session) -> None:
             )
         """))
         session.commit()
-        # codeql[py/unused-global-variable] -- _profile_extras_migrated is read via the `global _profile_extras_migrated` guard at the top
-        # of this same function (`if _profile_extras_migrated: return`); the write here is what a LATER,
-        # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
-        # persisting across separate invocations of the function that sets it, so it sees this write as
-        # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
-        # but-skippable after the first successful request in this process.
-        _profile_extras_migrated = True
+        _schema_once["profile_extras"] = True
     except Exception:
         session.rollback()
 

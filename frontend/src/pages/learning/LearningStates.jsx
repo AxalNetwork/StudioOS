@@ -10,9 +10,9 @@ import { NOT_LIVE_LINE } from './learningModel';
  * the four states each surface draws — loading, empty, "Not recorded" and
  * "Unreadable" — plus the coming-soon card a gated profile sees.
  *
- * "NOT RECORDED" AND "UNREADABLE" STAY TWO THINGS (`ui/Honesty.jsx`). A store
- * that does not exist yet is not recorded: the course catalogue, until #1158
- * merges. A read that failed is unreadable, and is never drawn as empty.
+ * "NOT RECORDED" AND "UNREADABLE" STAY TWO THINGS (`ui/Honesty.jsx`). What no
+ * route serves is not recorded: a member's exercises and exams across them,
+ * for one. A read that failed is unreadable, and is never drawn as empty.
  */
 
 /** The canvas's header: an optional way back, the title, one line under it, one action. */

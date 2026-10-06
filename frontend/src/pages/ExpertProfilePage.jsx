@@ -16,8 +16,8 @@ import { SERVICE_GAP } from './wellbeing/WellbeingBookPage';
  *   - it asked for a note, which a booking never carries (D331);
  *   - it sent no time, so `POST /experts/:uid/book` refused every expert who
  *     has no scheduler of their own ("scheduled_at is required");
- *   - it offered services, and a payment for one, that `GET /experts/:uid`
- *     never returns (`services: null`).
+ *   - it offered services, and a payment for one, before `GET /experts/:uid`
+ *     returned any (D574 added them; the flow now picks one).
  * It now hands this expert's card to the flow, which lists them first
  * (`withArrived`) and books them the way it books anyone.
  */
@@ -49,13 +49,13 @@ function StarRow({ value }) {
 }
 
 /**
- * The Services tab. The route sends `services: null` to members today, so
- * the tab says so rather than "none listed"; a list, when one is sent, is
- * shown to read. It is not picked from: the booking flow attaches no service.
+ * The Services tab. Since D574 the route sends the expert's active services;
+ * `null` (an older Worker) says they were not read, never "none listed". The
+ * list is shown to read here and picked from in the booking flow's step 2.
  */
 export function ServicesPanel({ services }) {
   if (!Array.isArray(services)) {
-    return <NotRecorded label="Services not recorded" reason={SERVICE_GAP} testId="text-services-gap" />;
+    return <NotRecorded label="Services not read" reason={SERVICE_GAP} testId="text-services-gap" />;
   }
   if (!services.length) {
     return <div className="text-sm text-slate-500 dark:text-slate-400">This expert lists no services.</div>;

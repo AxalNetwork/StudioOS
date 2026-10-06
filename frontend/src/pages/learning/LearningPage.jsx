@@ -3,17 +3,14 @@ import { useParams } from 'react-router-dom';
 import { RailFrame, WorkerRail } from '../../ui';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { COMING_SOON_LINE, learningComingSoon } from './learningAccess';
-import { NOT_LIVE } from './learningModel';
 import { ComingSoonCard, LearningHeader } from './LearningStates';
 import LearningHome from './LearningHome';
 import { CoursePage, ItemPage, LessonPage, MePage } from './LearningWired';
 import LearningStudio from './LearningStudio';
-import WebinarPanel from './WebinarPanel';
-import ExercisePanel from './ExercisePanel';
-import ExamFlow from './ExamFlow';
-import ProgramLearnersTable, { LearnerRecord, ReadOnlyStrip } from './ProgramLearnersTable';
-import ProgramsTable from './ProgramsTable';
-import ProgramDetail from './ProgramDetail';
+import { ExamPage, ExercisePage } from './LearningAssessments';
+import { ProgramPage, ProgramsPage } from './LearningPrograms';
+import { StudioProgramPage, StudioProgramsPage } from './ProgramStudio';
+import { WebinarPage } from './LearningWebinars';
 
 /**
  * Every Learning route renders this page (D562), one `view` per route in
@@ -21,17 +18,20 @@ import ProgramDetail from './ProgramDetail';
  *
  *   home            /learning                                  every signed-in profile but exploring
  *   course          /learning/courses/:slug                    "            reads D557
- *   lesson          /learning/courses/:slug/:lesson            "            reads D557
- *   item            /learning/videos/:uid, /learning/items/:uid "           reads D557
- *   webinar         /learning/webinars/:slug                   "            waits on #1161
- *   exercise        /learning/exercises/:slug                  "            waits on #1160
- *   exam            /learning/exams/:slug                      "            waits on #1160
+ *   lesson          /learning/courses/:slug/:lesson            "            reads D557 (and D559's links)
+ *   item            /learning/videos/:uid, /learning/items/:uid "           reads D557, plays D561's uploads
+ *   webinar         /learning/webinars/:slug                   "            reads and registers, D560
+ *   exercise        /learning/exercises/:slug                  "            reads and submits, D559
+ *   exam            /learning/exams/:slug                      "            reads and sits, D559
  *   me              /learning/me                               "            reads D557
- *   programs        /learning/programs                         admin        waits on #1159
- *   program         /learning/programs/:program                admin        waits on #1159
- *   studio          /learning/studio                           Super Admin  reads and writes D557
- *   studioPrograms  /learning/studio/programs                  Super Admin  waits on #1159
- *   studioProgram   /learning/studio/programs/:program         Super Admin  waits on #1159
+ *   programs        /learning/programs                         admin        reads D558
+ *   program         /learning/programs/:program                admin        reads D558
+ *   studio          /learning/studio                           Super Admin  reads and writes D557, D559, D560, D561
+ *   studioPrograms  /learning/studio/programs                  Super Admin  reads and writes D558
+ *   studioProgram   /learning/studio/programs/:program         Super Admin  reads and writes D558
+ *
+ * The `:slug` of a webinar, an exercise and an exam carries its uid: D559 and
+ * D560 name them by uid (D562 departure 8).
  *
  * THE COMING-SOON GATE (`learningAccess.js`, temporary, owner's request of
  * 2026-10-06) is applied here, before any view mounts, so a gated profile
@@ -78,18 +78,27 @@ export const LEARNING_VIEWS = {
 };
 
 /**
- * The views that read the Learning store (stage 2). Each renders its own
- * frame, because its header and its rail come from what it read. A page is
- * keyed by what it reads, so moving to another course or item starts from
- * "loading" rather than drawing the last one's reply for a frame; a lesson
- * keeps its course's read and swaps only the item.
+ * Every view, wired to its store: D557's in stage 2, and in stage 3 D558's
+ * programs, D559's exercises and exams and D560's webinars. Each renders its
+ * own frame, because its header and its rail come from what it read. A page
+ * is keyed by what it reads, so moving to another course, item, webinar,
+ * exercise, exam or program starts from "loading" rather than drawing the
+ * last one's reply for a frame; a lesson keeps its course's read and swaps
+ * only the item.
  */
 const WIRED = {
   course: ({ params }) => <CoursePage key={params.slug} slug={params.slug} />,
   lesson: ({ params }) => <LessonPage key={params.slug} slug={params.slug} lessonUid={params.lesson} />,
   item: ({ params }) => <ItemPage key={params.uid} uid={params.uid} />,
+  webinar: ({ params }) => <WebinarPage key={params.slug} uid={params.slug} />,
+  exercise: ({ params }) => <ExercisePage key={params.slug} uid={params.slug} />,
+  exam: ({ params }) => <ExamPage key={params.slug} uid={params.slug} />,
   me: ({ config }) => <MePage sub={config.sub} />,
+  programs: ({ config }) => <ProgramsPage sub={config.sub} />,
+  program: ({ params, config }) => <ProgramPage key={params.program} uid={params.program} sub={config.sub} />,
   studio: ({ config }) => <LearningStudio sub={config.sub} />,
+  studioPrograms: ({ config }) => <StudioProgramsPage sub={config.sub} />,
+  studioProgram: ({ params, config }) => <StudioProgramPage key={params.program} uid={params.program} sub={config.sub} />,
 };
 
 /** The links an admin gets on the home, since the sidebar entries are #1164's. */
@@ -102,52 +111,13 @@ export function adminLinks(user, activeRole, gated) {
   ];
 }
 
-const DISABLED_ACTION = 'cursor-not-allowed rounded-axal-sm bg-axal-violet px-3.5 py-2 text-[13px] font-semibold text-white opacity-50';
-
-/** A write the canvas draws in the header, held until its route exists. */
-function WaitingAction({ label, reason, testid }) {
-  return <button type="button" disabled title={reason} className={DISABLED_ACTION} data-testid={testid}>{label}</button>;
-}
-
-/** What each view that waits on a store draws for a profile the gate admits. */
-export function ViewBody({ view }) {
-  switch (view) {
-    case 'webinar':
-      return <WebinarPanel status="unrecorded" reason={NOT_LIVE.webinars} />;
-    case 'exercise':
-      return <ExercisePanel status="unrecorded" reason={NOT_LIVE.exercises} />;
-    case 'exam':
-      return <ExamFlow status="unrecorded" reason={NOT_LIVE.exams} />;
-    case 'programs':
-      return <ProgramsTable scope="assigned" status="unrecorded" reason={NOT_LIVE.programs} />;
-    case 'program':
-      return (
-        <>
-          <ReadOnlyStrip />
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-            <ProgramLearnersTable status="unrecorded" reason={NOT_LIVE.programs} />
-            <LearnerRecord status="unrecorded" reason={NOT_LIVE.programs} />
-          </div>
-        </>
-      );
-    case 'studioPrograms':
-      return <ProgramsTable scope="studio" status="unrecorded" reason={NOT_LIVE.programs} />;
-    case 'studioProgram':
-      return <ProgramDetail status="unrecorded" reason={NOT_LIVE.programs} />;
-    default:
-      return null;
-  }
-}
-
-const HEADER_ACTION = {
-  studioPrograms: <WaitingAction label="New program" reason={NOT_LIVE.programs} testid="button-program-new" />,
-};
-
-/** The rail, with a literal accent per tier: violet for learners, steel for an admin, oxblood for HQ. */
-function SubPageRail({ tier, gated }) {
-  const unavailable = gated
-    ? [['Courses, videos, webinars and more', COMING_SOON_LINE]]
-    : [['This page’s records', 'The store this page reads is not live yet, so this page has nothing loaded to read back.']];
+/**
+ * The rail beside the coming-soon card, with a literal accent per tier:
+ * violet for learners, steel for an admin, oxblood for HQ. An admin browsing
+ * as a held profile ("View as") can stand on an admin route and see the card.
+ */
+function SubPageRail({ tier }) {
+  const unavailable = [['Courses, videos, webinars and more', COMING_SOON_LINE]];
   if (tier === 'super') {
     return (
       <WorkerRail
@@ -181,18 +151,18 @@ function SubPageRail({ tier, gated }) {
   );
 }
 
-/** Any Learning route but the home: the coming-soon card, a wired view, or a view waiting on its store. */
+/** Any Learning route but the home: its wired view, or, for a profile the gate holds, the coming-soon card in place. */
 export function LearningSubPage({ view, gated }) {
   const params = useParams();
   const config = LEARNING_VIEWS[view];
-  if (!config) return null;
   const Wired = WIRED[view];
-  if (!gated && Wired) return <Wired params={params} config={config} />;
+  if (!config || !Wired) return null;
+  if (!gated) return <Wired params={params} config={config} />;
   return (
-    <RailFrame rail={<SubPageRail tier={config.tier} gated={gated} />} data-testid={`learning-${view}`}>
+    <RailFrame rail={<SubPageRail tier={config.tier} />} data-testid={`learning-${view}`}>
       <div className="space-y-4">
-        <LearningHeader title={config.title} sub={config.sub} back={config.back(params)} action={gated ? null : HEADER_ACTION[view]} />
-        {gated ? <ComingSoonCard /> : <ViewBody view={view} />}
+        <LearningHeader title={config.title} sub={config.sub} back={config.back(params)} />
+        <ComingSoonCard />
       </div>
     </RailFrame>
   );

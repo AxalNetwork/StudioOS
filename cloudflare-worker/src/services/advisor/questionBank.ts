@@ -171,7 +171,9 @@ export const BANK_SIZE_TARGETS = {
   // to reach per-module confidence.
   // Adaptive selection means a user answers only the minimum, not all of these.
   fitFounder: 45,
-  fitInvestor: 41,
+  // D386 raised the investor bank: pick-ones, two reverse keys per trait,
+  // and a self-rating on every radar axis.
+  fitInvestor: 82,
   // D491 raised the partner bank. Session 12 raised the advisor and coach banks
   // (pick-ones, reverse keys, every radar axis). Coach still rides in the
   // advisor conversation after the advisor bank. fit_advisor_coach_bank_v2.test.ts

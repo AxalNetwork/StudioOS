@@ -56,10 +56,11 @@ function matchesLane(task, lane, meId) {
   return true;
 }
 
-const TASK_STATUS = [
+export const TASK_STATUS = [
   ['all', 'All tasks'],
   ['todo', 'Backlog'],
   ['in_progress', 'In progress'],
+  ['review', 'Review'],
   ['done', 'Done'],
 ];
 
@@ -175,6 +176,7 @@ export default function FounderBuildBoard() {
   const counts = useMemo(() => ({
     total: tasks.length,
     todo: tasks.filter((task) => task.status === 'todo').length,
+    review: tasks.filter((task) => task.status === 'review').length,
     inProgress: tasks.filter((task) => task.status === 'in_progress').length,
     done: tasks.filter((task) => task.status === 'done').length,
   }), [tasks]);
@@ -248,7 +250,7 @@ export default function FounderBuildBoard() {
             <>
               <div className="fb-project-context"><div><span className="fb-label">Selected startup</span><strong data-testid="text-board-project">{text(selectedProject.name)}</strong><span>{text(selectedProject.sector, 'Sector not recorded')}</span></div><div className="fb-context-stage"><span className="fb-label">Current pipeline stage</span><strong>{stageLabel}</strong><span>Started {date(selectedProject.pipeline_stage_started)}</span></div></div>
               <div className="fb-stat-strip">
-                <Stat label="Open cards" value={detailUnavailable ? 'Unavailable' : counts.todo + counts.inProgress} note={detailUnavailable ? 'Task detail is not exposed by this backend' : `${counts.total} stored tasks`} muted={detailUnavailable} />
+                <Stat label="Open cards" value={detailUnavailable ? 'Unavailable' : counts.todo + counts.inProgress + counts.review} note={detailUnavailable ? 'Task detail is not exposed by this backend' : `${counts.total} stored tasks`} muted={detailUnavailable} />
                 <Stat label="In progress" value={detailUnavailable ? 'Unavailable' : counts.inProgress} note={detailUnavailable ? 'No task-level source record' : 'Status from task record'} muted={detailUnavailable} />
                 <Stat label="Done" value={detailUnavailable ? 'Unavailable' : counts.done} note={detailUnavailable ? 'No task-level source record' : counts.total ? `${Math.round((counts.done / counts.total) * 100)}% of stored tasks` : 'No completion rate'} muted={detailUnavailable} />
                 <Stat label="WIP limits" value="Unavailable" note="No source record" muted />
@@ -323,7 +325,7 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-stat $
  * only one that can be answered honestly here. Resolving ids to names needs the
  * team read, which is its own change.
  */
-function TaskRow({ task, mine, selected, onToggle }) {
+export function TaskRow({ task, mine, selected, onToggle }) {
   return (
     <tr data-testid={`row-board-task-${task.id}`} className={selected ? 'is-selected' : ''}>
       <td className="fb-select-col"><input

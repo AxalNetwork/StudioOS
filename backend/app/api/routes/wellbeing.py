@@ -23,7 +23,7 @@ from statistics import fmean
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field as PField, validator
+from pydantic import BaseModel, Field as PField, field_validator
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -86,13 +86,8 @@ class CheckinIn(BaseModel):
     energy: int = PField(..., ge=1, le=5)
     notes: Optional[str] = None
 
-    @validator("notes")
-    # codeql[py/not-named-self] -- this is a Pydantic v1-style `@validator`, which Pydantic
-    # binds as an implicit classmethod (see https://docs.pydantic.dev/latest/concepts/validators/
-    # -- "validators are class methods"). `cls`, not `self`, is the textbook-correct first
-    # parameter name here; CodeQL's self-vs-cls heuristic only recognizes the stdlib
-    # `@classmethod`/`@staticmethod` decorators and doesn't special-case Pydantic's own
-    # decorator, which rebinds the method the same way under the hood.
+    @field_validator("notes")
+    @classmethod
     def _notes_len(cls, v):
         if v is not None and len(v) > 4000:
             raise ValueError("notes too long")
@@ -295,13 +290,8 @@ class ResourceIn(BaseModel):
     is_free: bool = False
     sort_order: int = 100
 
-    @validator("category")
-    # codeql[py/not-named-self] -- this is a Pydantic v1-style `@validator`, which Pydantic
-    # binds as an implicit classmethod (see https://docs.pydantic.dev/latest/concepts/validators/
-    # -- "validators are class methods"). `cls`, not `self`, is the textbook-correct first
-    # parameter name here; CodeQL's self-vs-cls heuristic only recognizes the stdlib
-    # `@classmethod`/`@staticmethod` decorators and doesn't special-case Pydantic's own
-    # decorator, which rebinds the method the same way under the hood.
+    @field_validator("category")
+    @classmethod
     def _cat(cls, v):
         allowed = {"therapy", "peer_group", "hotline", "reading", "coaching"}
         if v not in allowed:
