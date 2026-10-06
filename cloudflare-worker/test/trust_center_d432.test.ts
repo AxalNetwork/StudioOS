@@ -53,16 +53,35 @@ const GONE = 77;     // a party_b whose users row no longer exists
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
+/**
+ * D517 — numbered binds, as D1 reads them. D1 treats `?1` as one parameter
+ * however often it appears; `routes/trust.ts` lists a member's rows with
+ * `party_a_user_id = ?1 OR party_b_user_id = ?1` and binds one value. Up to
+ * Node 22.19, node:sqlite rejected that ("column index out of range"), so two
+ * of this file's tests failed there and passed on 22.20+. Each `?N` becomes
+ * its own `?` carrying the N-th value — the rewrite the D318 shim already
+ * makes — so the result no longer depends on the Node release.
+ */
+function sqliteCall(sql: string, binds: any[]) {
+  const values: any[] = [];
+  const rewritten = sql.replace(/\?(\d+)/g, (_m, n) => {
+    values.push(binds[Number(n) - 1]);
+    return '?';
+  });
+  return values.length ? { sql: rewritten, values } : { sql, values: binds };
+}
 function makeD1(db: InstanceType<typeof DatabaseSync>) {
   return {
     prepare(sql: string) {
       let b: any[] = [];
+      const q = () => sqliteCall(sql, b);
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
-        async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async first() { const { sql: s, values } = q(); return db.prepare(s).get(...values) ?? null; },
+        async all() { const { sql: s, values } = q(); return { results: db.prepare(s).all(...values) }; },
         async run() {
-          const r = db.prepare(sql).run(...b);
+          const { sql: s, values } = q();
+          const r = db.prepare(s).run(...values);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
         },
       };

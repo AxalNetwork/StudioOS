@@ -41985,6 +41985,74 @@ Page:
 - the floor caveat;
 - the old rail copy.
 
+## D517
+
+**The "pre-existing failures" were the test fixtures depending on the Node
+release (issue #996).** No migration. No route or service changed.
+
+**The question.** Two slots reported three tests as failing on main, and
+`npm run test:drift` exiting 1 because of them:
+
+- `capital_call_ledger` "a retry after a partial write";
+- `trust_center_d432` "a member sees both parties named";
+- `trust_center_d432` "a party whose account is gone".
+
+Another report said they pass on Node 22.
+
+**Measured** on a clean origin/main (`5201db16`), Node 22.22.0, with `npm ci`
+in all three packages, twice:
+
+- both files passed both times;
+- `npm run test:drift` printed EXIT=0 both times.
+
+Running the two files under older releases (`npx -p node@<v>`) reproduced the
+reports:
+
+- the capital test fails on 22.6 through 22.15 and passes from 22.16;
+- the two trust tests fail through 22.19 and pass from 22.20.
+
+Each boundary falls between two releases bundling the same SQLite (3.49.1 and
+3.50.4), so both causes were in `node:sqlite`.
+
+**Cause 1, the capital test.**
+
+- A fund-call line is `INSERT OR IGNORE … RETURNING *`, and the ledger notices
+  only the lines whose `meta.changes` is above zero.
+- Up to 22.15, `StatementSync.run()` stopped a RETURNING statement at its first
+  row. SQLite updates the change counter only when a statement completes, so
+  `changes` was the previous statement's count.
+- On the retry, LP 200's line wrote its row (`last_row_id` 2 → 4) but reported
+  the ignored LP 100 line's 0, and its notice was dropped.
+- D1 counts this correctly.
+- **The fix is in the shared fixture** (`test/_d1_sqlite.mjs`):
+  - a statement with `RETURNING` always runs through `all()`, which completes
+    on every release;
+  - its `changes` is the number of rows returned, because RETURNING emits one
+    row per row written;
+  - the same path replaces the old catch, which reported 0 changes for every
+    RETURNING write on releases where `run()` refused one.
+
+**Cause 2, the trust tests.**
+
+- `routes/trust.ts` binds one value to `party_a_user_id = ?1 OR
+  party_b_user_id = ?1`.
+- Up to 22.19, `node:sqlite` rejected the repeated `?1`
+  (`column index out of range`). D1 accepts it.
+- The admin-branch test has no `?1`, which is why it never failed.
+- **The fix:** the file's local shim now rewrites each `?N` into its own `?`
+  carrying the N-th value, as the D318 shim already does.
+
+**Verified.**
+
+- Both files pass on Node 22.6, 22.12, 22.15, 22.16, 22.19 and 22.20, and on
+  22.22.
+- The full suite passes on 22.22.
+- Two mutations were each caught on the current Node:
+  - a RETURNING write reported as 0 changes fails the capital file (4 tests);
+  - a rewrite that binds the wrong value fails the trust file (2 tests).
+- Removing either fix brings back the measured failures on the old releases.
+- Node 23.11 and 24.4 printed no test output under `npx` and are not claimed.
+
 ## D519
 
 **Profiling: the archetype module is confident only when every trait is
