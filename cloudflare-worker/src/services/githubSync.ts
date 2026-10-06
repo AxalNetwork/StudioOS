@@ -72,9 +72,14 @@ export function mirrorIssueBody(
   return `${t.description || ''}\n\n---\n**Priority:** ${t.priority}\n**Type:** ${t.type || 'task'}\n**Source:** ${source}\n\n${syncMarker(t.id)}`;
 }
 
+/** The line a reply is signed with, by side. D604's ticket thread reads it back. */
+export const REPLY_SIGNATURE = {
+  member: '_Reply from the member who filed this ticket, via StudioOS_',
+  team: '_Reply from the Axal team, via StudioOS_',
+} as const;
+
 export function mirrorReplyBody(body: string, from: 'member' | 'team', ticketId: number | string): string {
-  const who = from === 'member' ? 'the member who filed this ticket' : 'the Axal team';
-  return `${body}\n\n---\n_Reply from ${who}, via StudioOS_\n\n${syncMarker(ticketId)}`;
+  return `${body}\n\n---\n${REPLY_SIGNATURE[from]}\n\n${syncMarker(ticketId)}`;
 }
 
 export function priorityLabel(priority: string): string {
