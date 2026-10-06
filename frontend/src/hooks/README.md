@@ -14,4 +14,5 @@ page belongs in that page instead.
 | `useWebSocket.js` | The realtime connection. |
 | `useInactivityTimeout.js` | Session idle handling. |
 | `useEscapeClose.js` | Escape-to-close for drawers and modals. |
+| `useScrollToHash.js` | Scrolls to the section a URL hash names once it has rendered (D571: the Practice zones' redirected sections). |
 | `useForcedLightTheme.js` | Opts a surface out of dark mode (print and PDF views). |

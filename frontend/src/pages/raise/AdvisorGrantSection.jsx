@@ -5,6 +5,10 @@ import { api } from '../../lib/api';
 // worker's `nowIso()`, and that module's header argues why they go through the
 // browser's own formatter while a stored calendar day must not.
 import { shortMoment } from '../advisor/practice/deliveryTrail';
+// D571 — the client company's side of the access log: who opened this record,
+// and when. The route that reads it answers the founder who owns the project,
+// which is why it is read here and not on the advisor's page.
+import { ClientCompanyAccessLog } from '../advisor/practice/ClientAccessLog';
 
 /**
  * Who among your advisors can read this startup's record, and how much of it.
@@ -442,6 +446,7 @@ export default function AdvisorGrantSection({ projectUid }) {
         ))}
       </div>
 
+      <ClientCompanyAccessLog projectUid={projectUid} />
       <DocumentShares projectUid={projectUid} grants={state.items} busyOuter={busy} />
       <ReceivedWorkProducts />
     </section>

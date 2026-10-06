@@ -250,6 +250,7 @@ const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
+const AdvisorProfilePage = lazy(() => import('./pages/advisor/AdvisorProfilePage'));
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
 const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsentPage'));
 const AdvisorCohortAssignments = lazy(() => import('./pages/admin/AdvisorCohortAssignments'));
@@ -2891,6 +2892,11 @@ function AppInner() {
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=advisor" replace /> : <AdvisorsPage />)} />
+      {/* D571 — one advisor's profile as a client sees it (the Ops canvas's
+          A5). Same roles as the directory, because `GET /api/advisors/:uid`
+          answers any signed-in caller. A founder is NOT sent to the team tab
+          here: the founder is the client this page is drawn for. */}
+      <Route path="/advisors/:uid" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <AdvisorProfilePage />)} />
       {/* /office-hours is RETIRED (task #124's freeze lifted; UNRESOLVED_ITEMS
           U4 resolved). It coupled the storefront to booking and was broken at
           both jobs: it read five keys the DTOs never emitted, so every slot
@@ -3000,6 +3006,17 @@ function AppInner() {
       <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      {/* D571 — the Ops canvas's four practice addresses. Each is a SECTION of
+          the zone that already reads its store, so each lands there rather than
+          on a second page answering the same question: deliverables are the
+          Delivery zone grouped by client, session types and booking links are
+          two cards on Sessions, and the access log sits under the Engagements
+          board. The guard is the zones' own: every `/me/*` store answers only a
+          caller with an advisor row. */}
+      <Route path="/practice/deliverables" element={guard(['admin', 'advisor'], <Navigate to="/practice/delivery?view=by_client" replace />)} />
+      <Route path="/practice/session-types" element={guard(['admin', 'advisor'], <Navigate to="/practice/sessions#session-types" replace />)} />
+      <Route path="/practice/booking-links" element={guard(['admin', 'advisor'], <Navigate to="/practice/sessions#booking-links" replace />)} />
+      <Route path="/practice/access-log" element={guard(['admin', 'advisor'], <Navigate to="/practice/engagements#access-log" replace />)} />
       {/* Admin: which advisor may read which Lab cohort's founders. Its own
           page rather than a tab on the Spin-Out Lab console — that console is
           Lab-owned and under a do-not-touch instruction, and the split matches
