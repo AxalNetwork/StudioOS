@@ -38167,6 +38167,92 @@ Eight mutations were each caught:
 
 The existing D410, D411, de-admin and D451 e-sign tests pass unchanged.
 
+## D417
+
+**A fund-fabric entity has a filings calendar. Migration 374 stores one row
+per obligation occurrence; admins enter or seed them, and file or waive them.
+HQ · Funds raises a fund's next open deadline from its linked GP and vehicle
+entities.** Funds · Fabric canvas, F2 "Entity dossier" ("the filings calendar
+is the working half"). Issue #1002. Worker first. Migration 374. Four new
+routes in D376's `legal_entities.ts`; no new `api.js` method (the dossier UI
+that calls them is F2's page, still to come).
+
+**What was there.** Filing deadlines were stored only for founder companies
+(`compliance_events`, each row against a project). A GP entity or fund vehicle
+had nowhere to hold "Delaware LLC tax, due 1 June", so D375 printed "Filing
+deadlines: Not recorded" on HQ · Funds with the reason "no obligation store
+for a fund's entities".
+
+**Migration 374, `entity_obligations`.** One new table and one index, no
+ALTER, no transaction, no tenant column (the database is the branch, D245).
+- `kind` is one of franchise_tax, registered_agent, annual_report,
+  board_meeting, regulatory_filing, other; `cadence` is annual, quarterly,
+  monthly, one_time or event; `due_date` is a `YYYY-MM-DD` date, NULL only
+  for an event-driven obligation.
+- `status` is open, filed or waived, and `CHECK ((status = 'open') =
+  (resolved_on IS NULL))`. A row is never deleted.
+- `UNIQUE (entity_id, kind, title, due_date)`: the same obligation is not
+  entered twice for one date, which also makes seeding idempotent. SQLite
+  counts each NULL as distinct, so a partial unique index
+  (`idx_entity_obligations_undated_open`, on entity, kind and title where
+  `due_date IS NULL AND status = 'open'`) keeps an undated obligation open at
+  most once; once filed, the same event can be entered again.
+- `next_uid` links a filed row to the occurrence its filing opened.
+
+**The rules (`services/entityObligations.ts`).**
+- `nextDue` steps by the cadence and clamps to the month's end (31 January
+  monthly → 28 or 29 February).
+- **US packs only.** `us_de_llc` and `us_de_ccorp` are read from
+  `compliance.ts`'s `STANDARD_EVENTS`, the ruleset the founder calendar runs
+  on, not retyped. The canvas says every other jurisdiction inherits a pack
+  HQ defines once, which is F9; until F9 exists any other pack is refused
+  (`pack_unknown`).
+- A fixed-date rule takes its next occurrence on or after today. A rule
+  stated as days after formation needs the entity's `incorporation_date`;
+  without one it is **skipped with its reason**, never dated from the day
+  someone pressed the button.
+
+**Worker (`routes/legal_entities.ts`).** Read by staff, written by an admin
+(`admin_only` for anyone else), every write recorded in `activity_logs`
+through `logAdminAction` with the entity id and obligation uid.
+- `GET /api/legal/entities/:id/obligations` → `{ as_of, obligations }`, open
+  ones soonest first (undated last), then the resolved history; an open,
+  dated row carries `days_left`.
+- `POST …/obligations` `{ kind, title, cadence, due_date?, note? }`. Refuses
+  `kind_invalid`, `title_required`, `cadence_invalid`, `date_invalid`,
+  `due_date_required`; a duplicate is `409 already_recorded`.
+- `POST …/obligations/pack` `{ pack }` → `{ pack, added,
+  already_on_calendar, skipped }`.
+- `POST …/obligations/:uid/file` `{ on?, note? }` and `…/waive` `{ note, on? }`.
+  Waiving needs a reason of at least 8 characters (`reason_required`).
+  Resolving twice, or losing a race to another admin, is `409
+  already_resolved`: the update is guarded on `status = 'open'`, and the
+  next-occurrence insert runs only where that update wrote this request's
+  `next_uid`. Filing a recurring obligation opens the next one in the same
+  batch; if that occurrence is already on the calendar the filed row links to
+  the existing one, and the audit entry names that existing uid. Waiving opens
+  nothing.
+
+**The line it feeds.** `readFundsRegistry` gains `obligations_available`
+(and `obligations_reason`), and each fund `next_obligation`: the earliest
+open, dated obligation across `gp_entity_id` and `vehicle_entity_id`, as
+`{ kind, due_date, days_left }` — no title, note or entity name crosses the
+unauthenticated RPC (D375). Null when nothing is linked or entered; absent
+when the store could not be read, which is reported as unknown, never none.
+HQ · Funds flags an overdue deadline as bad ("Franchise tax overdue") and one
+due within 30 days as a warning ("… due in N days"). The feed's line counts
+funds with a deadline on record apart from funds with none recorded (with the
+Worker's reason, now "…which is not the same as having none due") and funds
+from a branch on an earlier build (Not reported), and names a source whose
+store was unreadable.
+
+**Tests.** `cloudflare-worker/test/entity_obligations_d417.test.ts` (the
+migration, the rules, the gates, each write and refusal, the race, the
+registry's leak check and unreadable state);
+`frontend/test/hq_funds_obligations_d417.test.mjs` (the flag thresholds,
+order, and the line's counts). D375's key-set tests now include the two new
+fields.
+
 ## D420
 
 **The founder desks A2–A5 read the stores that already exist.** Wave 8,

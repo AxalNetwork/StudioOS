@@ -144,7 +144,9 @@ test('D375: every F6 element with no store prints the Worker\'s reason, never a 
   assert.match(stats, /HQ accrued Not recorded brand-licence share/);
   // The canvas's jurisdiction count is not invented.
   assert.match(stats, /GP entities 2 jurisdictions: Not recorded/);
-  assert.match(text(render(FlagFeed)), /Filing deadlines: Not recorded \. NR-OBL/);
+  // D417: a fund on a build that predates the obligation store does not
+  // report its deadline; the line says so, and still prints the reason.
+  assert.match(text(render(FlagFeed)), /Filing deadlines: 0 funds with an open deadline on record; \d+ Not reported \. NR-OBL/);
 });
 
 test('D375: the flags are the database\'s, worst first, and each canvas flag the store can raise is raised', () => {
