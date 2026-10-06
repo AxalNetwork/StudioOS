@@ -41,3 +41,33 @@ test('D567: host and member initial screens expose loading rather than invented 
   assert.match(member, /Loading/);
   assert.equal(member.includes('not registered'), false);
 });
+test('D567: signed-in numeric member detail returns its WorkspaceShell content', async () => {
+  const { AuthProvider } = await import('../src/hooks/useAuthSync.jsx');
+  const { Routes, Route } = await import('react-router-dom');
+  // Execute the real page with Vite's JSX transform and the browser's empty
+  // build-time env. Checkout is outside this layout probe (paid routes are tested).
+  const { readFileSync, existsSync, statSync } = await import('node:fs');
+  const { transformWithOxc } = await import('vite');
+  const pageUrl = new URL('../src/pages/events/PublicEventDetailPage.jsx', import.meta.url);
+  let source = readFileSync(pageUrl, 'utf8').replace(/import\.meta\.env/g, '({})').replace(/import AxalCheckout[^;]+;/, 'const AxalCheckout = () => null;');
+  source = source.replace(/from ['"]([^'"]+)['"]/g, (text, specifier) => {
+    if (!specifier.startsWith('.')) return `from '${import.meta.resolve(specifier)}'`;
+    let url = new URL(specifier, pageUrl);
+    if (!existsSync(url) || !statSync(url).isFile()) for (const ext of ['.jsx', '.js']) { const candidate = new URL(url.href + ext); if (existsSync(candidate)) { url = candidate; break; } }
+    return `from '${url.href}'`;
+  });
+  const transformed = await transformWithOxc(source, pageUrl.pathname, { jsx: { runtime: 'automatic' } });
+  const code = transformed.code.replace(/from ['"]react\/jsx-runtime['"]/g, `from '${import.meta.resolve('react/jsx-runtime')}'`);
+  const { default: PublicEventDetailPage, renderAgenda } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  assert.match(renderToStaticMarkup(renderAgenda([])), /No agenda items yet/);
+  assert.match(renderToStaticMarkup(renderAgenda([{ id: 1, title: 'Fixture agenda' }])), /Not recorded — start time is absent/);
+  assert.match(renderToStaticMarkup(renderAgenda([{ id: 1, title: 'Fixture agenda' }])), /Not recorded — speaker is absent/);
+  const storage = globalThis.localStorage;
+  globalThis.localStorage = { getItem: key => key === 'user' ? JSON.stringify({ id: 2, role: 'founder' }) : null };
+  try {
+    const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/events/1'] }, React.createElement(AuthProvider, null, React.createElement(Routes, null, React.createElement(Route, { path: '/events/:slug', element: React.createElement(PublicEventDetailPage) })))));
+    assert.match(html, /My event/);
+    assert.match(html, /Your registration and attendee agenda/);
+    assert.match(html, /Loading event/);
+  } finally { if (storage === undefined) delete globalThis.localStorage; else globalThis.localStorage = storage; }
+});

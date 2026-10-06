@@ -11,7 +11,7 @@ export function validateRegistrationRules(value: unknown): Record<string, unknow
   const keys = [...COMP_KEYS, 'mode', 'roles', 'personas'];
   if (Object.keys(r).some(k => !keys.includes(k))) throw new Error('invalid_audience_rules');
   for (const key of COMP_KEYS) if (key in r && typeof r[key] !== 'boolean') throw new Error('invalid_audience_rules');
-  const mode = r.mode ?? 'everyone';
+  const mode = 'mode' in r ? r.mode : 'everyone';
   if (typeof mode !== 'string' || !['everyone', 'selected', 'invite_only'].includes(mode)) throw new Error('invalid_audience_rules');
   for (const [key, allowed] of [['roles', EVENT_ROLES], ['personas', PERSONAS.map(p => p.id)]] as const) {
     if (key in r && (!Array.isArray(r[key]) || (r[key] as unknown[]).some(v => typeof v !== 'string' || !(allowed as readonly string[]).includes(v)) || new Set(r[key] as unknown[]).size !== (r[key] as unknown[]).length)) throw new Error('invalid_audience_rules');

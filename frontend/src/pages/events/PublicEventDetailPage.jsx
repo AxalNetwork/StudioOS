@@ -29,8 +29,9 @@ function formatTime(iso) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
 }
 
-function renderAgenda(items) {
-  if (!items || items.length === 0) return null;
+export function renderAgenda(items) {
+  if (!Array.isArray(items)) return <p>Unreadable — agenda response is incomplete.</p>;
+  if (items.length === 0) return <p>No agenda items yet.</p>;
   return (
     <div className="mt-6">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-3">
@@ -40,7 +41,7 @@ function renderAgenda(items) {
         {items.map((it) => (
           <div key={it.id} className="flex gap-3 items-start">
             <div className="text-xs text-slate-500 dark:text-slate-400 w-20 shrink-0 pt-0.5">
-              {it.starts_at ? formatTime(it.starts_at) : ''}
+              {it.starts_at ? formatTime(it.starts_at) : 'Not recorded — start time is absent'}
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{it.title}</p>
@@ -52,7 +53,7 @@ function renderAgenda(items) {
                   Speaker: {it.speaker_name}
                   {it.speaker_title ? ` — ${it.speaker_title}` : ''}
                 </p>
-              ) : null}
+              ) : <p className="text-xs text-slate-500 dark:text-slate-400">Not recorded — speaker is absent.</p>}
               {it.location_text ? <p className="text-xs text-slate-500 dark:text-slate-400">{it.location_text}</p> : <p className="text-xs text-slate-500 dark:text-slate-400">Not recorded — no room supplied.</p>}
               {it.location_url && <a href={it.location_url} target="_blank" rel="noreferrer">Join</a>}
             </div>
@@ -61,7 +62,6 @@ function renderAgenda(items) {
       </div>
     </div>
   );
-  return memberView ? <WorkspaceShell role={user.role} title={event?.title || 'My event'} intro="Your registration and attendee agenda.">{content}</WorkspaceShell> : content;
 }
 
 export default function PublicEventDetailPage() {
@@ -418,4 +418,5 @@ export default function PublicEventDetailPage() {
       {!memberView && <PublicFooter />}
     </div>
   );
+  return memberView ? <WorkspaceShell role={user.role} title={event?.title || 'My event'} intro="Your registration and attendee agenda.">{content}</WorkspaceShell> : content;
 }

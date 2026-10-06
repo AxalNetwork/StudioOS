@@ -64,7 +64,7 @@ test('D567: approve and promote record decisions without giving unpaid tickets a
 });
 test('D567: invalid audience writes fail; saved selected rules gate central registration and preview', async () => {
   const { db, env, request } = fixture();
-  for (const value of ['{', [], { mode: 'other' }, { mode: 'selected' }, { mode: 'selected', roles: ['super_admin'] }, { mode: 'selected', personas: ['invented'] }, { mode: 'everyone', bogus: true }]) assert.equal((await request('/1', 1, 'PATCH', { audience_rules_json: value })).status, 400);
+  for (const value of ['{', [], { mode: 'other' }, { mode: null }, { mode: 'selected' }, { mode: 'selected', roles: ['super_admin'] }, { mode: 'selected', personas: ['invented'] }, { mode: 'everyone', bogus: true }]) assert.equal((await request('/1', 1, 'PATCH', { audience_rules_json: value })).status, 400);
   assert.equal((await request('/1', 1, 'PATCH', { audience_rules_json: JSON.stringify({ mode: 'selected', roles: ['founder'], comp_investors: true }) })).status, 200);
   const event: any = db.prepare('SELECT * FROM events WHERE id = 1').get();
   assert.equal((await registrationEligibility(env, event, 2, 'member@example.test')).eligible, false);
