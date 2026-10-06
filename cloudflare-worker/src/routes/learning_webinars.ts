@@ -104,6 +104,10 @@ r.get('/webinars/:uid', async (c) => {
 r.post('/webinars/:uid/registration', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const w = await visible(c, user); if (w instanceof Response) return w;
+  // A draft is refused as a draft (#1252); only the Super Admin can reach one.
+  if (w.status === 'draft') {
+    return refuse(c, 409, { code: 'draft', message: 'This webinar is a draft. Publish it before members can register.' });
+  }
   if (w.status !== 'published') return refuse(c, 409, { code: 'cancelled', message: 'This webinar was cancelled.' });
   if (webinarPhase(w, Date.now()) === 'past') return refuse(c, 409, { code: 'ended', message: 'This webinar has ended.' });
   const existing = await registrationOf(c.env, w.id, user.id);

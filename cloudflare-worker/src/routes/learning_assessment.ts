@@ -28,6 +28,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError, newUid } from './_t13t14t15_helpers';
 import { canSeeLearning, canReadLearnerWork, canReviewLearning, enrolledSql } from '../services/learningAccess';
+import { completeAssessmentLessons } from '../services/learningCompletion';
 import {
   deadlineMs, grade, memberQuestion, normaliseAnswers, revealed, shuffled, SUBMIT_GRACE_SECONDS, type StoredQuestion,
 } from '../services/learningAssessment';
@@ -226,7 +227,19 @@ r.post('/exams/:uid/attempts/:attempt/submit', async (c) => {
   ).bind(submitted, JSON.stringify(answers), g.score_percent, passed, a.id).run();
   if (!Number(upd?.meta?.changes ?? 0)) return refuse(c, 409, { code: 'already_submitted', message: 'This attempt was already submitted.' });
   const after = { ...a, submitted_at: submitted, answers_json: JSON.stringify(answers), score_percent: g.score_percent, passed, timed_out: 0 };
-  return c.json({ attempt: attemptView(after, exam, all), correct_count: g.correct, question_count: g.total });
+  // #1249: a passing attempt completes the exam's lessons for this member. A
+  // failed or timed-out attempt records nothing. A failure to record is said;
+  // the graded attempt stands.
+  let lesson_progress: unknown = null;
+  if (passed === 1) {
+    try {
+      lesson_progress = await completeAssessmentLessons(c.env, Number(user.id), 'exam', exam.uid);
+    } catch (e) {
+      console.warn('[learning] lesson completion not recorded', (e as Error).message);
+      lesson_progress = { unrecorded: true };
+    }
+  }
+  return c.json({ attempt: attemptView(after, exam, all), correct_count: g.correct, question_count: g.total, lesson_progress });
 });
 
 const ATTEMPTS_COLS = 'uid, user_id, started_at, submitted_at, question_order_json, answers_json, score_percent, passed, timed_out';

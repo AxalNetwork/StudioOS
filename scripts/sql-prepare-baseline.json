@@ -40,7 +40,6 @@
     "ddl @ services/fundGpSchema.ts": 1,
     "ddl @ services/partnerGuidanceSchema.ts": 1,
     "decl @ routes/contacts.ts": 3,
-    "enrolled @ services/learningPrograms.ts": 3,
     "enrolledSql('course', 'c.uid') @ routes/learning.ts": 1,
     "eph @ routes/insights.ts": 1,
     "eph @ services/introductions.ts": 4,

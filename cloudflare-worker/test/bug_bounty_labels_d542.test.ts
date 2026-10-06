@@ -22,7 +22,7 @@ import {
   bountyLabelEvent, bountyStateFromLabels, bountySourceRef, parseGranters, BOUNTY_TIER_RULES,
 } from '../src/services/bugBounties.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { freshDb as perksDb, FOUNDER } from './_perks_harness.ts';
+import { freshDb as perksDb, FOUNDER, FOUNDER_B } from './_perks_harness.ts';
 
 // Generated per run: a webhook secret written into source is one Semgrep
 // rightly flags, even in a test.
@@ -545,4 +545,71 @@ test('a ticket with no owner grants nothing; a failed grant releases the claim s
   const retried = await quietly(() => deliver(db, add('high'), { id: 'retry-me' }));
   assert.equal(retried.body.bounty?.credits, 'granted', 'the failed delivery was swallowed as a duplicate');
   assert.equal(credited(db), 150);
+});
+
+// ──────────────────────────────── the state the ticket list shows (owner's C) ──
+
+import { bountySummaries } from '../src/services/bugBounties.ts';
+
+test('the ticket list\'s bounty state: from the labels, and a fixed one\'s credits from the ledger', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare(`INSERT INTO tickets (id, title, status, priority, user_id, type) VALUES (42, 'Feature', 'open', 'low', ?, 'feature')`).run(FOUNDER);
+  const base = { user_id: FOUNDER };
+  const rows = [
+    { ...base, id: 41, type: 'bug', github_labels: JSON.stringify(['bug']) },
+    { ...base, id: 42, type: 'feature', github_labels: '[]' },
+    { ...base, id: 43, type: 'bug', github_labels: JSON.stringify(['bounty:confirmed']) },
+    { ...base, id: 44, type: 'bug', github_labels: JSON.stringify(['bounty:not-a-bug']) },
+    { ...base, id: 45, type: 'bug', github_labels: JSON.stringify(['bounty:verified-medium']) },
+    { ...base, id: 46, type: 'bug', github_labels: JSON.stringify(['bounty:verified-low']) },
+    { ...base, id: 47, type: 'bug', github_labels: 'not json' },
+  ];
+  // 45 was paid 60; 46 was paid 20 and taken back.
+  db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 60, 'grant', 'bounty:ticket:45', 'bug_medium')`).run(FOUNDER);
+  const g46 = (db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 20, 'grant', 'bounty:ticket:46', 'bug_low') RETURNING id`).get(FOUNDER) as any).id;
+  db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, -20, 'admin_adjust', ?, 'bug_low')`).run(FOUNDER, `revoke:${g46}`);
+  // Another user's grant under the same source ref is not this ticket's.
+  db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 150, 'grant', 'bounty:ticket:46', 'bug_high')`).run(FOUNDER_B);
+
+  const m = await bountySummaries(e, rows);
+  assert.deepEqual(m.get(41), { state: 'under_review' });
+  assert.equal(m.get(42), null, 'a feature request has no bounty state');
+  assert.deepEqual(m.get(43), { state: 'confirmed' });
+  assert.deepEqual(m.get(44), { state: 'not_a_bug' });
+  assert.deepEqual(m.get(45), { state: 'fixed', tier: 'medium', ruleKey: 'bug_medium', credits: 60, revoked: false });
+  assert.deepEqual(m.get(46), { state: 'fixed', tier: 'low', ruleKey: 'bug_low', credits: 20, revoked: true });
+  assert.deepEqual(m.get(47), { state: 'under_review' }, 'an unreadable snapshot is no labels');
+
+  const unpaid = await bountySummaries(e, [{ id: 48, type: 'bug', user_id: FOUNDER, github_labels: JSON.stringify(['bounty:verified-high']) }]);
+  assert.equal(unpaid.get(48)?.credits, null, 'no grant: no amount is named');
+  // A grant under this ticket's source ref but to another user is not this ticket's.
+  db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 150, 'grant', 'bounty:ticket:49', 'bug_high')`).run(FOUNDER_B);
+  const elsewhere = await bountySummaries(e, [{ id: 49, type: 'bug', user_id: FOUNDER, github_labels: JSON.stringify(['bounty:verified-high']) }]);
+  assert.equal(elsewhere.get(49)?.credits, null, 'another user\'s grant was read as this ticket\'s');
+
+  db.exec('ALTER TABLE perk_credit_ledger RENAME TO away');
+  const w = console.warn; console.warn = () => {};
+  try {
+    const broken = await bountySummaries(e, [rows[4]]);
+    assert.equal((broken.get(45) as any).credits_unreadable, true);
+  } finally { console.warn = w; }
+});
+
+import ticketsRouter from '../src/routes/tickets.ts';
+import { SignJWT } from 'jose';
+
+test('GET /api/tickets carries each ticket\'s bounty, and a member sees only their own tickets', async () => {
+  const db = freshDb();
+  const JWT = 'unit-test-jwt-secret-0123456789-abcdef';
+  db.prepare(`UPDATE tickets SET github_labels = ? WHERE id = 41`).run(JSON.stringify(['bounty:verified-high']));
+  db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 150, 'grant', 'bounty:ticket:41', 'bug_high')`).run(FOUNDER);
+  db.prepare(`INSERT INTO tickets (id, title, status, priority, user_id, type) VALUES (50, 'Someone else', 'open', 'low', ?, 'bug')`).run(FOUNDER_B);
+  const tok = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT));
+  const res = await ticketsRouter.request('/', { headers: { Authorization: `Bearer ${tok}` } }, { ...env(db), JWT_SECRET: JWT, ENVIRONMENT: 'development' });
+  assert.equal(res.status, 200);
+  const rows = await res.json() as any[];
+  assert.deepEqual(rows.map((r) => r.id), [41]);
+  assert.deepEqual(rows[0].bounty, { state: 'fixed', tier: 'high', ruleKey: 'bug_high', credits: 150, revoked: false });
 });
