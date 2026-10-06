@@ -7,7 +7,8 @@
  *   GET /api/research/geographies/:code      one country: companies by market, its largest
  *                                            companies by headcount, its funds with their
  *                                            aggregates, and its signals (country, then region)
- *   GET /api/research/listed-companies       the listed companies `signal_companies` holds
+ *   GET /api/research/listed-companies       the listed companies: `signal_companies` and SEC EDGAR's
+ *                                            (migration 404, D595), each labelled by source, paged
  *
  * Every read is signed-in only (`requireAuth`), and every count goes through
  * the crosswalk in `services/researchTaxonomy.ts`, so a company or fund is
@@ -541,6 +542,46 @@ interface ListedRow {
   sector: string | null; market_cap: number | null; market_cap_band: string | null; employee_band: string | null;
   updated_at: string;
 }
+interface EdgarRow {
+  cik: string; name: string; ticker: string; exchange: string | null; other_listings: string | null;
+  source_name: string; source_url: string; licence: string; as_of: string;
+}
+
+/**
+ * The two stores the Public tab reads (D595, #1230), each labelled. The
+ * signal companies carry the bands their source sets; the SEC EDGAR rows
+ * (migration 404, `research_public_companies`) carry what EDGAR records and
+ * nothing more — CIK, name, ticker, exchange — so a filter on sector or
+ * country, which EDGAR does not record, matches none of them.
+ */
+export const LISTED_SOURCES = ['signal_companies', 'sec_edgar'] as const;
+export const SIGNAL_SOURCE_LABEL = 'StudioOS signal companies';
+export const EDGAR_SOURCE_LABEL = 'SEC EDGAR';
+const LISTED_MAX_OFFSET = 200_000;
+
+/**
+ * EDGAR's page, in SQL: the store is thousands of rows. Market cap is not
+ * recorded, so a cap sort reads by name. Two literal statements, so no order
+ * clause is ever built from the request.
+ */
+const EDGAR_PAGE_SQL = {
+  asc: `SELECT cik, name, ticker, exchange, other_listings, source_name, source_url, licence, as_of
+          FROM research_public_companies
+         WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')
+         ORDER BY name COLLATE NOCASE ASC, ticker LIMIT ? OFFSET ?`,
+  desc: `SELECT cik, name, ticker, exchange, other_listings, source_name, source_url, licence, as_of
+           FROM research_public_companies
+          WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')
+          ORDER BY name COLLATE NOCASE DESC, ticker LIMIT ? OFFSET ?`,
+} as const;
+
+function otherListings(text: string | null): Array<{ symbol: string; exchange: string | null }> {
+  const parsed = json<unknown>(text, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((p): p is [string, string | null] => Array.isArray(p) && typeof p[0] === 'string')
+    .map(([symbol, exchange]) => ({ symbol, exchange: typeof exchange === 'string' ? exchange : null }));
+}
 
 researchMarkets.get('/listed-companies', async (c) => {
   await requireAuth(c);
@@ -548,13 +589,26 @@ researchMarkets.get('/listed-companies', async (c) => {
   const sector = String(c.req.query('sector') || '').trim().slice(0, 120);
   const countryParam = String(c.req.query('country') || '').trim().toUpperCase().slice(0, 2);
   const sortKey = Object.hasOwn(LISTED_SORTS, String(c.req.query('sort'))) ? String(c.req.query('sort')) : '-market_cap';
+  const sourceParam = String(c.req.query('source') || '');
+  const source = (LISTED_SOURCES as readonly string[]).includes(sourceParam) ? sourceParam : '';
   const limit = intParam(c.req.query('limit'), LIST_CAP, 1, MAX_LIMIT);
-  const offset = intParam(c.req.query('offset'), 0, 0, 10_000);
+  const offset = intParam(c.req.query('offset'), 0, 0, LISTED_MAX_OFFSET);
+  // EDGAR records no sector and no country, so either filter leaves it out.
+  const edgarIn = source !== 'signal_companies' && !sector && !countryParam;
+  const signalIn = source !== 'sec_edgar';
+  const unreadable = (e: unknown) => refuse(c, 503, {
+    code: 'listed_companies_unreadable',
+    message: 'The listed companies could not be read. This is not a sign there are none; try again.',
+    raw: e,
+  });
 
   let rows: ListedRow[];
   let ov: Overrides;
+  let edgarTotal = 0;
+  let edgarStore: { n: number; as_of: string | null; overlap: number };
+  let place: (skip: number, take: number) => Promise<EdgarRow[]>;
   try {
-    const [r, o] = await Promise.all([
+    const [r, o, store, count] = await Promise.all([
       c.env.DB.prepare(
         `SELECT symbol, name, exchange, country, region, sector, market_cap, market_cap_band, employee_band, updated_at
            FROM signal_companies
@@ -562,28 +616,75 @@ researchMarkets.get('/listed-companies', async (c) => {
             AND (? = '' OR sector = ?)`,
       ).bind(q, q, q, sector, sector).all<ListedRow>(),
       loadOverrides(c.env),
+      // The whole store, unfiltered: its size, its date, and how many of its
+      // tickers are also a signal company's symbol (shown twice, once per source).
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS n, MAX(as_of) AS as_of,
+                SUM(CASE WHEN ticker IN (SELECT symbol FROM signal_companies) THEN 1 ELSE 0 END) AS overlap
+           FROM research_public_companies`,
+      ).first<{ n: number; as_of: string | null; overlap: number | null }>(),
+      edgarIn
+        ? c.env.DB.prepare(
+          `SELECT COUNT(*) AS n FROM research_public_companies
+            WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')`,
+        ).bind(q, q, q).first<{ n: number }>()
+        : Promise.resolve({ n: 0 }),
     ]);
-    rows = r.results || [];
+    rows = signalIn ? (r.results || []) : [];
     ov = o;
+    edgarStore = { n: Number(store?.n ?? 0), as_of: store?.as_of ?? null, overlap: Number(store?.overlap ?? 0) };
+    edgarTotal = Number(count?.n ?? 0);
+    place = async (skip, take) => {
+      if (!edgarIn || take <= 0) return [];
+      const page = await c.env.DB.prepare(EDGAR_PAGE_SQL[sortKey === '-name' ? 'desc' : 'asc'])
+        .bind(q, q, q, take, skip).all<EdgarRow>();
+      return page.results || [];
+    };
   } catch (e) {
-    return refuse(c, 503, {
-      code: 'listed_companies_unreadable',
-      message: 'The listed companies could not be read. This is not a sign there are none; try again.',
-      raw: e,
-    });
+    return unreadable(e);
   }
   const placed = rows.map((r) => ({ ...r, country_code: mapCompanyCountry(r.country, ov).targets[0] ?? null }));
   const matched = (countryParam ? placed.filter((r) => r.country_code === countryParam) : placed)
     .sort(LISTED_SORTS[sortKey]);
+
+  // One list, paged on the Worker: the signal companies first (they carry
+  // bands), then EDGAR's rows, each in the chosen order.
+  const signalPage = matched.slice(offset, offset + limit);
+  let edgarPage: EdgarRow[];
+  try {
+    edgarPage = await place(Math.max(0, offset - matched.length), limit - signalPage.length);
+  } catch (e) {
+    return unreadable(e);
+  }
   return c.json({
-    items: matched.slice(offset, offset + limit).map((r) => ({
-      symbol: r.symbol, name: r.name, exchange: r.exchange, country: r.country, country_code: r.country_code,
-      region: r.region, sector: r.sector, market_cap_band: r.market_cap_band, employee_band: r.employee_band,
-      updated_at: r.updated_at,
-    })),
-    total: matched.length,
-    limit, offset, sort: sortKey,
+    items: [
+      ...signalPage.map((r) => ({
+        source: 'signal_companies' as const,
+        symbol: r.symbol, name: r.name, exchange: r.exchange, country: r.country, country_code: r.country_code,
+        region: r.region, sector: r.sector, market_cap_band: r.market_cap_band, employee_band: r.employee_band,
+        updated_at: r.updated_at,
+      })),
+      ...edgarPage.map((r) => ({
+        source: 'sec_edgar' as const,
+        symbol: r.ticker, name: r.name, exchange: r.exchange, cik: r.cik,
+        other_listings: otherListings(r.other_listings),
+        source_url: r.source_url, licence: r.licence, as_of: r.as_of,
+      })),
+    ],
+    total: matched.length + edgarTotal,
+    limit, offset, sort: sortKey, source: source || null,
     as_of: maxOf(rows.map((r) => r.updated_at)),
+    sources: [
+      { key: 'signal_companies', label: SIGNAL_SOURCE_LABEL, total: matched.length, as_of: maxOf(rows.map((r) => r.updated_at)) },
+      {
+        key: 'sec_edgar', label: EDGAR_SOURCE_LABEL, total: edgarTotal,
+        store_total: edgarStore.n, as_of: edgarStore.as_of,
+        url: 'https://www.sec.gov/files/company_tickers_exchange.json',
+        licence: 'US government work, not subject to copyright in the United States (17 U.S.C. § 105)',
+        also_signal_companies: edgarStore.overlap,
+        not_recorded: ['country', 'sector', 'market_cap_band', 'employee_band'],
+      },
+    ],
   });
 });
 

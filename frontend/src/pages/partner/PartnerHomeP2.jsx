@@ -6,13 +6,12 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { NO_PARTNER_PROFILE, NoFirmAttached } from './PartnerFirmProfileCard';
 
 /**
- * Partner Home P2 — "Where does the firm stand today?" (D394).
+ * Partner Studio's body — "Where does the firm stand today?" (D394).
  *
- * BUILT, TESTED, AND NOT MOUNTED. `/studio` renders `PartnerStudioHome` and
- * stays exactly as it is until the owner signs P2 off (the gap map's
- * do-not-touch; ROUTE_MAP's `/studio` row). THE MISSING DECISION IS THAT
- * SIGN-OFF. If it comes, Session 3 mounts this default export in place of the
- * partner branch of `/studio`; nothing in this file needs to change for it.
+ * MOUNTED (D564, #1168). The owner signed P2 off on #981 (A): `/studio`'s
+ * partner branch renders `PartnerStudioHome`, whose frame (masthead, Eadwyn,
+ * the profile band) now carries this as its body. There is no separate home,
+ * so nothing on this page is called Home.
  *
  * EVERY TILE READS A STORE THAT ALREADY EXISTS, over routes the Delivery and
  * Pipeline zones already call — no new route, no new `api.js` method:
@@ -184,7 +183,7 @@ export function PartnerHomeP2View({ state, onRetry }) {
   if (state.status === 'preview') {
     return (
       <p className="text-sm text-axal-muted" data-testid="partner-home-preview">
-        The firm&apos;s record is withheld in role preview: nothing on this Home is read while you preview it.
+        The firm&apos;s record is withheld in role preview: nothing on Partner Studio is read while you preview it.
       </p>
     );
   }
@@ -202,7 +201,7 @@ export function PartnerHomeP2View({ state, onRetry }) {
     <RailFrame
       rail={(
         <WorkerRail
-          workspace="Home"
+          workspace="Partner Studio"
           role="partner"
           stance="Read across the firm's record"
           note="Every tile and line reads the Delivery and Pipeline records. The brief is composed only on your click, states what the record shows, and moves nothing."

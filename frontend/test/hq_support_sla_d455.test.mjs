@@ -14,22 +14,22 @@ const text = renderedText;
 test('SlaPolicyPanel draws the three inherited bands', () => {
   const html = render(SlaPolicyPanel, {
     slaPolicy: {
-      tiers: [
+      tiers: { available: true, items: [
         { id: 'P1', hours: 24, description: 'Money, access, or data at risk' },
         { id: 'P2', hours: 48, description: 'A workflow is blocked, a workaround exists' },
         { id: 'P3', hours: 96, description: 'Wrong, but nobody is stopped' },
-      ],
+      ] },
       note: 'Bands are set here and inherited whole',
       ticket_mapping: 'urgent → P1',
     },
-    taxonomy: { available: true, items: [{ type: 'bug', open: 2 }] },
+    taxonomy: { available: true, items: [{ category: 'billing', label: 'Billing', open: 2 }], uncategorised: 0 },
     failed: false,
   });
   const t = text(html);
   assert.match(t, /SLA policy and taxonomy/);
   assert.match(t, /P1/);
   assert.match(t, /24h/);
-  assert.match(t, /bug/);
+  assert.match(t, /Billing2/);
 });
 
 test('ticket queue cards pass SLA bands from the payload', () => {
@@ -69,11 +69,11 @@ test('ticket queue cards pass SLA bands from the payload', () => {
 // ── D459 (#1017) ──────────────────────────────────────────────────────────
 
 const POLICY = {
-  tiers: [
+  tiers: { available: true, items: [
     { id: 'P1', hours: 24, due_soon_hours: 12, description: 'Money, access, or data at risk' },
     { id: 'P2', hours: 48, due_soon_hours: 24, description: 'A workflow is blocked, a workaround exists' },
     { id: 'P3', hours: 96, due_soon_hours: 24, description: 'Wrong, but nobody is stopped' },
-  ],
+  ] },
   escalation_kinds: [
     { kind: 'moderation', hours: 24, due_soon_hours: 12 },
     { kind: 'seat_increase', hours: 72, due_soon_hours: 24 },
@@ -94,7 +94,7 @@ test('D459: the panel names both SLA tables, each limit with its due-soon window
 
 test('D459: while the read is loading, the taxonomy says so and never Unreadable', () => {
   const loading = text(render(SlaPolicyPanel, { slaPolicy: undefined, taxonomy: undefined, failed: false }));
-  assert.match(loading, /Reading the ticket types/);
+  assert.match(loading, /Reading the ticket categories/);
   assert.doesNotMatch(loading, /Unreadable/);
   const failed = text(render(SlaPolicyPanel, { slaPolicy: POLICY, taxonomy: { available: false, reason: 'no table' }, failed: false }));
   assert.match(failed, /Unreadable/);

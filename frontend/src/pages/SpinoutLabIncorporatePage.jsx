@@ -37,9 +37,9 @@
 //     so. The entity and charter read the state: "Wyoming C-Corp", "Articles
 //     of Incorporation".
 //   - `incorporation_completed` (which issues the graduation certificate) is
-//     still recorded at payment, now only once the server confirms the order.
-//     Whether it should wait for state approval is an owner decision, named on
-//     screen; the timing is not changed here.
+//     recorded at payment (the owner's answer A, D585), by the Worker: the
+//     payment webhook records it the moment the order is paid. This page
+//     never records it; after payment it re-reads the Lab state to show it.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -48,11 +48,12 @@ import {
   Download, Link2, Eye, Check, X, Shield, Info, PieChart, Handshake, Circle,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
-import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import CompanyEinCard, { EinPreviewValue } from '../components/spinout/CompanyEinCard';
+import { companyEinApi } from '../lib/api/companyEin.js';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
 import { PACKET_NOT_BUILT, PACKET_NOT_BUILT_STATUSES, PAID_STATUSES, charterName, entityLabel, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
@@ -175,6 +176,8 @@ export default function SpinoutLabIncorporatePage() {
   const [saveError, setSaveError] = useState('');
   const [copied, setCopied] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // D579 — the company's EIN read: { status, data }. A failed read is 'unreadable'.
+  const [ein, setEin] = useState({ status: 'loading', data: null });
   const [docModal, setDocModal] = useState(null); // doc key being previewed
   const [payBusy, setPayBusy] = useState(false);
   const [payError, setPayError] = useState('');
@@ -205,16 +208,22 @@ export default function SpinoutLabIncorporatePage() {
         setProjectsUnread(projects === null);
         const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null); projectRef.current = proj || null;
+        if (!proj) setEin({ status: projects === null ? 'unreadable' : 'no-project', data: null });
         if (proj) {
           let initial = {};
           try { initial = proj.incorporation_meta ? JSON.parse(proj.incorporation_meta) : {}; } catch { initial = {}; }
           metaRef.current = initial;
           setMeta(initial);
-          const [members, orders] = await Promise.all([
+          const [members, orders, einRead] = await Promise.all([
             api.listProjectMembers(proj.id).catch((e) => { reportError('spinout-inc:members', e); return null; }),
             api.legalIncorporationOrders().catch((e) => { reportError('spinout-inc:orders', e); return null; }),
+            companyEinApi.read(proj.id).then(
+              (data) => ({ status: 'ready', data }),
+              (e) => { reportError('spinout-inc:ein', e); return { status: 'unreadable', data: null }; },
+            ),
           ]);
           if (dead) return;
+          setEin(einRead);
           // A failed read stays null — never an empty team, never "no order".
           if (members !== null) {
             const list = Array.isArray(members?.members) ? members.members : (Array.isArray(members) ? members : []);
@@ -354,7 +363,9 @@ export default function SpinoutLabIncorporatePage() {
       const mine = await refreshOrder();
       if (mine) {
         setOrder(mine); setAwaitingServer(false);
-        markMilestone(userRef.current, 'incorporation_completed');
+        // D585: the Worker recorded the milestone when the order was paid;
+        // read the Lab state again so the page shows it.
+        try { setState(await spinoutLab.state()); } catch (e) { reportError('spinout-inc:state-after-pay', e); }
       } else {
         setAwaitingServer(true);
       }
@@ -663,9 +674,9 @@ export default function SpinoutLabIncorporatePage() {
               <div className="text-[10.5px] text-gray-400 text-center mt-2">Payment unlocks document generation and filing. Not legal advice.</div>
             </>
           )}
-          {/* The open owner decision (D362): named, not decided here. */}
+          {/* D585: the moment that graduates the founder, as the owner set it. */}
           <p className="text-[10.5px] text-gray-400 mt-3 leading-relaxed" data-testid="milestone-decision">
-            Graduation's formation milestone is recorded when the server confirms payment. Whether it should wait for state approval instead is an owner decision not yet made.
+            Paying for incorporation completes the Lab's formation milestone and graduates you: the certificate is issued when the payment is confirmed, not when the state approves the filing.
           </p>
         </div>
       </div>
@@ -782,6 +793,7 @@ export default function SpinoutLabIncorporatePage() {
             <div className="flex items-center gap-2 mb-1.5"><FileText size={15} className="text-violet-600" /><span className="text-[12.5px] font-bold text-gray-900 dark:text-gray-100">EIN application</span></div>
             <div className="text-[12px] text-gray-600 dark:text-gray-300 leading-relaxed">SS-4 prefilled from formation data. Files after state approval. {paid ? 'SS-4 prefilled' : 'Prepares after payment'}.</div>
           </div>
+          <CompanyEinCard projectId={project?.id} ein={ein} onSaved={(data) => setEin({ status: 'ready', data })} />
         </div>
       </div>
 
@@ -908,7 +920,7 @@ export default function SpinoutLabIncorporatePage() {
                 <div className="text-[13px] text-violet-100/70 mt-0.5" data-testid="investor-entity-type">{entityLabel(selected, juris.state)} · State of {juris.state}</div>
                 <div className="flex flex-wrap gap-6 mt-4">
                   <div><div className="text-[11px] text-gray-400">Status</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? (filingDone >= 2 ? 'Filed' : 'Paid · not filed') : 'Pre-formation'}</div></div>
-                  <div><div className="text-[11px] text-gray-400">EIN</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? 'Pending' : '—'}</div></div>
+                  <div><div className="text-[11px] text-gray-400">EIN</div><div className="text-[14px] font-mono font-semibold mt-0.5" data-testid="investor-ein"><EinPreviewValue ein={ein} /></div></div>
                   <div><div className="text-[11px] text-gray-400">Registered agent</div><div className="text-[14px] font-mono font-semibold mt-0.5">Not recorded</div></div>
                 </div>
               </div>

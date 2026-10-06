@@ -56,6 +56,28 @@ export function keyBelongsTo(itemUid: string, key: unknown): key is string {
   return /^[a-f0-9]{32}\.(mp4|webm)$/.test(rest);
 }
 
+/**
+ * D561 (#1250) — THE STREAM ADDRESS, VERSIONED BY ITS UPLOAD.
+ *
+ * The stream route answers `Cache-Control: private, max-age=3600`, so a
+ * replacement upload under the same address could be served from a member's
+ * browser cache for up to an hour. The address therefore carries `?v=`, the
+ * first 16 hex digits of the SHA-256 of the item's `r2_key`. Every upload
+ * gets a fresh random key (`newVideoKey`), so the version changes exactly when
+ * a new upload completes, and not when the title or text is edited, as
+ * `updated_at` would. It is a hash, so the bucket key itself is still never
+ * sent. The stream route reads only `:uid` and `Range`; the query is ignored.
+ */
+export async function streamVersion(r2Key: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(r2Key));
+  return [...new Uint8Array(buf)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** The gated stream path for an item, with its upload's version. */
+export async function streamUrl(itemUid: string, r2Key: string): Promise<string> {
+  return `/api/learning/items/${encodeURIComponent(itemUid)}/video?v=${await streamVersion(r2Key)}`;
+}
+
 export type ByteRange = { start: number; end: number };
 
 /**

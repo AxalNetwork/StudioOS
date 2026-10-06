@@ -103,10 +103,10 @@ test('D395: no link in the product still points at a retired address, except the
   for (const { from, to } of pairs) {
     assert.equal(to, SUCCESSOR[from], `shellConfig says ${from} → ${to}; App.jsx says ${SUCCESSOR[from]}`);
   }
-  const home = codeOnly(raw('frontend/src/pages/partner/PartnerStudioHome.jsx'));
-  assert.match(home, /to="\/delivery\/board" testid="module-assigned-tasks"/);
-  assert.match(home, /to="\/delivery\/health" testid="module-relationship-health"/);
-  assert.match(home, /to="\/delivery\/board" testid="module-delivery-book"/);
+  // Partner Studio's body is P2 (D564); its links name the successors.
+  const home = codeOnly(raw('frontend/src/pages/partner/PartnerHomeP2.jsx'));
+  assert.match(home, /to: '\/delivery\/board'/);
+  assert.match(home, /to: '\/delivery\/health'/);
   const tabs = codeOnly(raw('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx'));
   assert.match(tabs, /\{ to: '\/pipeline\/retainers', label: 'Retainers'/);
   assert.match(tabs, /\{ to: '\/offers\/proof', label: 'Proof'/);

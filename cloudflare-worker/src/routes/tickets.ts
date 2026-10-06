@@ -22,8 +22,11 @@ import {
 } from '../services/githubSync';
 import { refusalBody } from '../util/refusal';
 import { bountySummaries } from '../services/bugBounties';
+import { parseTicketCategory } from '../services/ticketCategories';
 
 const tickets = new Hono<{ Bindings: Env }>();
+
+type TicketUpdate = { status?: string; priority?: string; type?: string; assigned_to?: string };
 
 function labelSnapshot(ghIssue: any): { labels: string; assignees: string } {
   return {
@@ -177,13 +180,17 @@ tickets.post('/sync', async (c) => {
 
 tickets.post('/', async (c) => {
   const user = await requireAuth(c);
-  const parsed = validateTicketCreate(await c.req.json().catch(() => null));
+  const raw = await c.req.json().catch(() => null);
+  const parsed = validateTicketCreate(raw);
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);
   const data = parsed.value;
+  // D482: one of the eight canvas categories, or none recorded (NULL).
+  const category = parseTicketCategory(raw?.category);
+  if (!category.ok) return c.json({ error: category.error }, 400);
   const sql = getSQL(c.env);
   await ensureTicketSyncSchema(c.env);
 
-  const [ticket] = await sql`INSERT INTO tickets (title, description, priority, type, submitted_by, user_id, project_id, github_sync_status, github_sync_attempted_at) VALUES (${data.title}, ${data.description}, ${data.priority}, ${data.type}, ${user.name || user.email}, ${user.id}, ${data.project_id}, 'syncing', datetime('now')) RETURNING *`;
+  const [ticket] = await sql`INSERT INTO tickets (title, description, priority, type, category, submitted_by, user_id, project_id, github_sync_status, github_sync_attempted_at) VALUES (${data.title}, ${data.description}, ${data.priority}, ${data.type}, ${category.value}, ${user.name || user.email}, ${user.id}, ${data.project_id}, 'syncing', datetime('now')) RETURNING *`;
 
   let githubIssue: any = null;
   let githubSyncError: string | null = null;
@@ -386,9 +393,16 @@ tickets.post('/:id{[0-9]+}/comments', async (c) => {
 tickets.put('/:id{[0-9]+}', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
-  const parsed = validateTicketUpdate(await c.req.json().catch(() => null));
+  const raw = await c.req.json().catch(() => null);
+  // D482: a category is changed only when the body names the key; null clears it.
+  // A body naming the category alone is a valid update on its own.
+  const hasCategory = !!raw && typeof raw === 'object' && 'category' in raw;
+  const onlyCategory = hasCategory && Object.keys(raw).length === 1;
+  const parsed = onlyCategory ? { ok: true as const, value: {} as TicketUpdate } : validateTicketUpdate(raw);
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);
   const data = parsed.value;
+  const category = parseTicketCategory(hasCategory ? raw.category : undefined);
+  if (!category.ok) return c.json({ error: category.error }, 400);
   const sql = getSQL(c.env);
   await ensureTicketSyncSchema(c.env);
   const rows = await sql`SELECT * FROM tickets WHERE id = ${id}`;
@@ -399,6 +413,7 @@ tickets.put('/:id{[0-9]+}', async (c) => {
   if (data.status) await sql`UPDATE tickets SET status = ${data.status}, updated_at = datetime('now') WHERE id = ${id}`;
   if (data.priority) await sql`UPDATE tickets SET priority = ${data.priority}, updated_at = datetime('now') WHERE id = ${id}`;
   if (data.type) await sql`UPDATE tickets SET type = ${data.type}, updated_at = datetime('now') WHERE id = ${id}`;
+  if (hasCategory) await sql`UPDATE tickets SET category = ${category.value}, updated_at = datetime('now') WHERE id = ${id}`;
   if (data.assigned_to) {
     if (user.role !== 'admin') { await sql.end(); return c.json({ error: 'Only admins can assign tickets' }, 403); }
     await sql`UPDATE tickets SET assigned_to = ${data.assigned_to}, updated_at = datetime('now') WHERE id = ${id}`;

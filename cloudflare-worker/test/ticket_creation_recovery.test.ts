@@ -20,6 +20,7 @@ async function fixture(t: any) {
     db.exec(tableFromBaseline(baseline, name));
   }
   db.exec(readFileSync('cloudflare-worker/sql/migrations/277_user_recovery_state.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/333_ticket_category_sla_tiers.sql', 'utf8'));
   db.exec("INSERT INTO users (id, name, email, role) VALUES (1, 'Tester', 'tester@example.test', 'admin'), (2, 'Founder', 'founder@example.test', 'founder')");
   const env: any = { DB: d1Over(db), JWT_SECRET: secret, ENVIRONMENT: 'development',
     GITHUB_ACCESS_TOKEN: 'synthetic-github-token', GITHUB_REPO_OWNER: 'AxalNetwork', GITHUB_REPO_NAME: 'StudioOS' };

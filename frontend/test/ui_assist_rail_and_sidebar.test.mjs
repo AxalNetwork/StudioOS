@@ -309,7 +309,7 @@ test('the rail no longer ASSERTS that the AI gateway does not exist', () => {
 
 test('the spend meter has a live source, and api.js names it', () => {
   const api = scan(read('frontend/src/lib/api.js'));
-  assert.match(api, /myAiSpend:\s*\(\)\s*=>\s*request\('\/ai\/me\/spend'\)/,
+  assert.match(api, /myAiSpend:\s*\(surface\)\s*=>\s*request\(surface == null\s*\?\s*'\/ai\/me\/spend'/,
     'the self-view endpoint the meter reads');
   assert.match(api, /monitoringAiUsage:/, 'the admin rollup stays separate');
 });

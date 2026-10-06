@@ -20,7 +20,7 @@ import { SignJWT } from 'jose';
 import learning from '../src/routes/learning.ts';
 import adminLearning from '../src/routes/admin_learning.ts';
 import { adminLearningVideo, learningVideo } from '../src/routes/learning_video.ts';
-import { parseRange, sweepLearningVideos, keyBelongsTo, VIDEO_MAX_BYTES } from '../src/services/learningVideo.ts';
+import { parseRange, sweepLearningVideos, keyBelongsTo, VIDEO_MAX_BYTES, streamVersion } from '../src/services/learningVideo.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
@@ -321,8 +321,59 @@ test('the item read points at the stream route, never at the bucket', async () =
   const r2 = new FakeR2();
   const uid = await publishedVideo(db, r2);
   const item = await json(await call(learning, db, r2, MEMBER, `/items/${uid}`));
-  assert.equal(item.body.item.video_stream_url, `/api/learning/items/${uid}/video`);
+  assert.match(item.body.item.video_stream_url, new RegExp(`^/api/learning/items/${uid}/video\\?v=[0-9a-f]{16}$`));
   assert.doesNotMatch(JSON.stringify(item.body), /learning\/videos\//, 'the bucket key is never sent');
+});
+
+// --- #1250: the stream address is versioned by its upload ----------------------------
+
+test('a replacement upload changes the stream address; an edit does not', async () => {
+  const db = seeded();
+  const r2 = new FakeR2();
+  const uid = await publishedVideo(db, r2);
+  const address = async () => (await json(await call(learning, db, r2, MEMBER, `/items/${uid}`))).body.item.video_stream_url;
+  const first = await address();
+  const key1 = (db.prepare('SELECT r2_key FROM learning_items WHERE uid = ?').get(uid) as any).r2_key;
+  assert.equal(first, `/api/learning/items/${uid}/video?v=${await streamVersion(key1)}`);
+  assert.equal(await address(), first, 'the same upload reads as the same address');
+
+  // A title edit moves updated_at but is not a new file: the cached file is still right.
+  const edit = await authoring(db, SUPER, `/items/${uid}`, { method: 'PATCH', body: { title: 'Pitching, revised' } });
+  assert.equal(edit.status, 200, 'the edit did not land, so this proves nothing');
+  assert.equal((db.prepare('SELECT title FROM learning_items WHERE uid = ?').get(uid) as any).title, 'Pitching, revised');
+  assert.equal(await address(), first, 'an edit that changes no file broke the cache');
+
+  const other = new Uint8Array(Array.from({ length: 10 }, (_, i) => 97 + i)); // "abcdefghij"
+  const { done } = await uploadVideo(db, r2, uid, other);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const second = await address();
+  assert.notEqual(second, first, 'a replacement kept the address, so the old file can be served from cache');
+  assert.match(second, new RegExp(`^/api/learning/items/${uid}/video\\?v=[0-9a-f]{16}$`));
+  assert.doesNotMatch(second, /learning%2Fvideos|learning\/videos/, 'the version gives the key away');
+
+  // The route ignores the version: the new address plays the new file, ranged
+  // and whole, with the same headers.
+  const path = second.replace('/api/learning', '');
+  const ranged = await call(learningVideo, db, r2, MEMBER, path, { headers: { Range: 'bytes=0-2' } });
+  assert.equal(ranged.status, 206);
+  assert.equal(ranged.headers.get('content-range'), 'bytes 0-2/10');
+  assert.equal(await ranged.text(), 'abc');
+  const whole = await call(learningVideo, db, r2, MEMBER, path);
+  assert.equal(whole.status, 200);
+  assert.equal(await whole.text(), 'abcdefghij');
+  assert.match(whole.headers.get('cache-control') || '', /^private, max-age=3600$/, 'the hour-long private cache is kept');
+});
+
+test('the version is a hash of the key, and an upload with no object recorded sends no address', async () => {
+  assert.match(await streamVersion('learning/videos/a/1.mp4'), /^[0-9a-f]{16}$/);
+  assert.notEqual(await streamVersion('learning/videos/a/1.mp4'), await streamVersion('learning/videos/a/2.mp4'));
+  assert.equal(await streamVersion('learning/videos/a/1.mp4'), await streamVersion('learning/videos/a/1.mp4'));
+  const db = seeded();
+  const r2 = new FakeR2();
+  const uid = await publishedVideo(db, r2);
+  db.prepare('UPDATE learning_items SET r2_key = NULL WHERE uid = ?').run(uid);
+  const item = await json(await call(learning, db, r2, SUPER, `/items/${uid}`));
+  assert.equal(item.body.item.video_stream_url, null, 'an address that can only 404 was sent');
 });
 
 test('a link replaces an uploaded video; clearing the link leaves an upload alone', async () => {

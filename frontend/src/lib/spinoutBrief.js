@@ -47,55 +47,14 @@ export const WEEKS = [
   { n: '4', days: 'Days 22–28' },
 ];
 
-/**
- * The four gates, per track, keyed by the id `LAB_TRACKS` uses.
- *
- * Every track passes the same four gates and each gate opens on evidence rather
- * than attendance; what FILLS a week is the track's. A Form founder's formation
- * week is a Find-fit founder's interview week, which is the whole reason this is
- * keyed by track rather than being one shared list.
+/*
+ * THE GATES ARE NOT HERE (D385, owner's answer A on #979, 2026-10-06). The
+ * Lab checks one set of gates for every track — `PIPELINE_PHASES` in
+ * lib/spinoutLab.js, reconciled against the Worker's `MILESTONES` — and the
+ * Brief prints that set, read from there. This file used to hold a per-track
+ * copy (`TRACK_GATES`) the Lab never enforced, and a notice that the choice
+ * was open (`GATES_DECISION`); both are gone with the decision.
  */
-export const TRACK_GATES = {
-  form: [
-    { name: 'Validate', items: ['Problem and buyer defined', '≥5 interviews logged', 'Founder profile complete'], gate: 'discovery evidence reviewed' },
-    { name: 'Structure', items: ['Co-founder decision or solo declaration', 'Equity split and vesting drafted', 'Jurisdiction chosen'], gate: 'a cap table that holds' },
-    { name: 'Form', items: ['Entity filed', '83(b) window opened and counted', 'Co-founder agreement signed'], gate: 'entity, equity, filing complete' },
-    { name: 'Fund', items: ['Deck from recorded data', 'Use of funds locked', 'Three warm introductions'], gate: 'a raise the record supports' },
-  ],
-  fit: [
-    { name: 'Interview', items: ['ICP hypothesis written down', '≥5 interviews logged with severity', 'Pain map ranked'], gate: 'a pain someone will pay to remove' },
-    { name: 'Size', items: ['TAM/SAM with citations', 'Competitive map', 'Venture score, nine dimensions'], gate: 'a market the score can defend' },
-    { name: 'Prove', items: ['Pricing tested', 'Revenue proof by source', 'Two advisors matched to the weak dimensions'], gate: 'paid evidence, however small' },
-    { name: 'Fund', items: ['Deck rebuilt on the evidence', 'Use of funds locked', 'Three warm introductions'], gate: 'a raise the record supports' },
-  ],
-  line: [
-    { name: 'Discover', items: ['Segment for the new line named', '≥5 interviews logged', 'Pain map for this line only'], gate: 'a distinct pain, not the old one' },
-    { name: 'Scope', items: ['MVP scope, value-rated', '90-day OKRs locked', 'Landing page live'], gate: 'a page collecting real leads' },
-    { name: 'Prove', items: ['First paid pilot recorded', 'Revenue proof by source', 'Advisor read on the line'], gate: 'paid evidence for the line' },
-    { name: 'Fund', items: ['Deck for the line', 'Use of funds locked', 'Three warm introductions'], gate: 'a raise the record supports' },
-  ],
-};
-
-/**
- * THE OPEN PRODUCT CALL — per-track gates (D385; the gap map's product call
- * 240). Two surfaces disagree, and neither is wrong on its own terms:
- *
- *   · The Programme Brief prints `TRACK_GATES` above: each track its own four
- *     gates, as the Brief and Landing canvases draw them.
- *   · The Lab page's intro, the workspace and the worker enforce ONE gate set
- *     for everyone — `PIPELINE_PHASES` in lib/spinoutLab.js, reconciled against
- *     the worker's `MILESTONES`.
- *
- * Choosing between them is the owner's call: build per-track milestones in the
- * worker so the brief is true, or have the brief print the one enforced set.
- * Until it is made, neither surface changes what it draws, and both SAY the
- * decision is open, in these words, so a founder reading either is not told a
- * week asks something the Lab will not check.
- */
-export const GATES_DECISION = {
-  brief: 'Today the Lab checks one set of gates for every track. Whether it will check these per-track gates is still to be decided.',
-  intro: 'Whether each track gets its own four gates, as the programme brief draws them, is still to be decided.',
-};
 
 /**
  * The terms card.

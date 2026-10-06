@@ -788,13 +788,24 @@ export function supportCoverage(data) {
 export const SUPPORT_UNAVAILABLE = [
   ['Tickets filed on a branch host', 'Once a licence has a branch, its administrators file on that branch’s host, into its own database, and no branch call returns tickets. The matrix marks those cells “On the branch”.'],
   ['A ticket’s queue as filed', 'A ticket is sorted by its requester’s standing now. Nothing stamps it when it is filed, so an administrator demoted since has moved queue.'],
-  ['Eight canvas support categories', 'Open tickets are counted by type (bug, feature, task) only. The artboard’s eight business categories are not stored on tickets yet.'],
+  ['Branches carrying HQ’s SLA hours', 'HQ sets the P1/P2/P3 hours here, but a branch reads them only once its licence copy carries them, and that copy is held (slot S05, routes/licence.ts). A branch bands its tickets with the hours it shipped with.'],
   ['A push that has not been tried', 'A decision recorded before the push was stored has no outcome on its row. Send again is offered where this page still shows that decision.'],
   ['Support under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this page reads HQ’s escalation board and HQ’s own tickets, not one branch’s database.'],
 ];
 
-/** Canvas Y1 — inherited response bands and ticket-type counts (D455). */
-export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry }) {
+/** The edit form's starting values: the tiers as stored. */
+function tierDraft(items) {
+  return Object.fromEntries((items || []).map((t) => [t.id, { hours: String(t.hours), description: t.description }]));
+}
+
+/**
+ * Canvas Y1 — the response bands HQ sets (D482, a store since migration 333)
+ * and open tickets by the canvas's eight categories (D455, D482).
+ */
+export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry, onSaved }) {
+  const [draft, setDraft] = useState(null); // null = not editing
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
   if (failed) {
     return (
       <Card>
@@ -802,37 +813,112 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry }) {
       </Card>
     );
   }
-  const tiers = slaPolicy?.tiers || [];
+  const tiersRead = slaPolicy?.tiers;
+  const tiers = tiersRead?.available ? tiersRead.items : [];
   const kinds = slaPolicy?.escalation_kinds || [];
   // `taxonomy` is undefined until the read answers: that is loading, not unreadable.
   const loading = taxonomy === undefined || taxonomy === null;
   const tax = taxonomy?.available ? taxonomy.items : null;
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const body = Object.fromEntries(Object.entries(draft).map(([id, t]) => [id, { hours: Number(t.hours), description: t.description }]));
+      const res = await api.hqSupportSetSlaTiers(body);
+      setDraft(null);
+      onSaved?.(res);
+    } catch (e) {
+      reportError('hq-support:sla-tiers', e);
+      setError(e?.message || 'The tiers were not saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[13.5px] font-extrabold tracking-tight">SLA policy and taxonomy</h2>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-axal-faint">Fixed in code · the same on every subsidiary</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-axal-faint">Set here · ticket tiers</span>
       </div>
       <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_1.15fr]">
         <div>
-          <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Tickets · response bands</p>
-          <ul className="mt-2 grid gap-2">
-            {tiers.map((b) => (
-              <li
-                key={b.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40"
-                data-testid={`hq-support-sla-${b.id}`}
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Tickets · response bands</p>
+            {tiersRead?.available && !draft && (
+              <button
+                type="button"
+                className="text-[10.5px] font-semibold text-axal-ink underline-offset-2 hover:underline dark:text-white"
+                onClick={() => { setError(null); setDraft(tierDraft(tiers)); }}
+                data-testid="hq-support-sla-edit"
               >
-                <div className="min-w-0">
+                Edit hours
+              </button>
+            )}
+          </div>
+          {tiersRead && !tiersRead.available && (
+            <p className="mt-2 text-[11px] text-axal-muted" data-testid="hq-support-sla-unreadable">
+              <Unrecorded reason={tiersRead.reason}>Unreadable</Unrecorded>
+              <span className="ml-1">No ticket is banded until the tiers can be read.</span>
+            </p>
+          )}
+          {draft ? (
+            <form
+              className="mt-2 grid gap-2"
+              onSubmit={(e) => { e.preventDefault(); save(); }}
+              data-testid="hq-support-sla-form"
+            >
+              {tiers.map((b) => (
+                <div key={b.id} className="grid grid-cols-[2.5rem_5rem_1fr] items-center gap-2">
                   <span className="text-[10px] font-extrabold tracking-wide text-[#881337] dark:text-rose-300">{b.id}</span>
-                  <span className="ml-2 text-[11px] text-axal-muted">{b.description}</span>
+                  <label className="flex items-center gap-1 text-[11px] text-axal-muted">
+                    <input
+                      type="number" min="1" max="720" step="1" required
+                      aria-label={`${b.id} hours`}
+                      className="w-14 rounded border border-axal-hairline bg-transparent px-1.5 py-1 text-[12px] tabular-nums dark:border-gray-700"
+                      value={draft[b.id]?.hours ?? ''}
+                      onChange={(e) => setDraft((d) => ({ ...d, [b.id]: { ...d[b.id], hours: e.target.value } }))}
+                    />
+                    h
+                  </label>
+                  <input
+                    type="text" maxLength={200} required
+                    aria-label={`${b.id} description`}
+                    className="min-w-0 rounded border border-axal-hairline bg-transparent px-1.5 py-1 text-[11px] dark:border-gray-700"
+                    value={draft[b.id]?.description ?? ''}
+                    onChange={(e) => setDraft((d) => ({ ...d, [b.id]: { ...d[b.id], description: e.target.value } }))}
+                  />
                 </div>
-                <span className="shrink-0 text-[12px] font-extrabold tabular-nums text-axal-ink dark:text-white">
-                  {b.hours}h{b.due_soon_hours != null && <span className="ml-1 text-[10px] font-semibold text-axal-faint">· due soon last {b.due_soon_hours}h</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
+              ))}
+              <p className="text-[10.5px] text-axal-faint">Whole hours from 1 to 720, and P1 no longer than P2, nor P2 than P3. Every change is recorded in the audit log.</p>
+              {error && <p className="text-[11px] text-rose-700 dark:text-rose-300" role="alert">{error}</p>}
+              <div className="flex gap-2">
+                <button type="submit" disabled={saving} className="rounded-md bg-axal-ink px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                  {saving ? 'Saving…' : 'Save tiers'}
+                </button>
+                <button type="button" disabled={saving} className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-axal-muted" onClick={() => setDraft(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <ul className="mt-2 grid gap-2">
+              {tiers.map((b) => (
+                <li
+                  key={b.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40"
+                  data-testid={`hq-support-sla-${b.id}`}
+                >
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-extrabold tracking-wide text-[#881337] dark:text-rose-300">{b.id}</span>
+                    <span className="ml-2 text-[11px] text-axal-muted">{b.description}</span>
+                  </div>
+                  <span className="shrink-0 text-[12px] font-extrabold tabular-nums text-axal-ink dark:text-white">
+                    {b.hours}h{b.due_soon_hours != null && <span className="ml-1 text-[10px] font-semibold text-axal-faint">· due soon last {b.due_soon_hours}h</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           {kinds.length > 0 && (
             <>
               <p className="mt-3 text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Escalations from branches · a second table</p>
@@ -852,36 +938,45 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry }) {
           {slaPolicy?.note && (
             <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">{slaPolicy.note}</p>
           )}
+          {slaPolicy?.branch_copy?.held && (
+            <p className="mt-1 text-[10.5px] text-axal-faint" data-testid="hq-support-sla-branch-copy">
+              <Unrecorded reason={slaPolicy.branch_copy.reason}>Branch copy held</Unrecorded>
+            </p>
+          )}
           {slaPolicy?.ticket_mapping && (
             <p className="mt-1 text-[10.5px] text-axal-faint">Tickets: {slaPolicy.ticket_mapping}</p>
           )}
         </div>
         <div>
-          <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Open tickets by type</p>
-          {loading && <p className="mt-2 text-[11px] text-axal-muted">Reading the ticket types…</p>}
+          <p className="text-[9px] font-extrabold uppercase tracking-wide text-axal-faint">Open tickets by category</p>
+          {loading && <p className="mt-2 text-[11px] text-axal-muted">Reading the ticket categories…</p>}
           {!loading && !taxonomy.available && (
             <p className="mt-2 text-[11px] text-axal-muted">
               <Unrecorded reason={taxonomy.reason}>Unreadable</Unrecorded>
             </p>
           )}
-          {tax && tax.length === 0 && (
-            <p className="mt-2 text-[12px] text-axal-faint">No open ticket carries a type count.</p>
-          )}
-          {tax && tax.length > 0 && (
+          {tax && (
             <ul className="mt-2 grid grid-cols-2 gap-2" data-testid="hq-support-taxonomy">
               {tax.map((t) => (
                 <li
-                  key={t.type}
+                  key={t.category}
                   className="flex items-center justify-between gap-2 rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-2 text-[11px] dark:border-gray-700 dark:bg-gray-900/40"
                 >
-                  <span className="font-semibold capitalize">{t.type}</span>
+                  <span className="font-semibold">{t.label}</span>
                   <span className="font-mono text-[10.5px] tabular-nums text-axal-muted">{t.open}</span>
                 </li>
               ))}
             </ul>
           )}
+          {tax && taxonomy.uncategorised > 0 && (
+            <p className="mt-2 text-[11px] text-axal-muted" data-testid="hq-support-uncategorised">
+              <Unrecorded reason="Filed before categories were stored, or filed without one. Counted apart, never as Other.">
+                {taxonomy.uncategorised} open with no category recorded
+              </Unrecorded>
+            </p>
+          )}
           <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">
-            Types are fixed at filing (bug, feature, task). Free-text categories would not stay comparable across tenants.
+            Eight categories, fixed. Free-text categories are how a support taxonomy becomes unreadable within a quarter, and the per-tenant read depends on these being comparable.
           </p>
         </div>
       </div>
@@ -1007,6 +1102,7 @@ export default function HqSupportPage() {
             taxonomy={ready?.taxonomy}
             failed={failed}
             onRetry={load}
+            onSaved={() => fetchSupport(false)}
           />
         </div>
       </div>

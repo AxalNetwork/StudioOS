@@ -7,7 +7,8 @@
  *     the click, recorded as the postmark of an IRS filing.
  *   - The page's filing methods are exactly the Worker's (read from its source,
  *     so a method added on one side and not the other fails here).
- *   - The canvas features with no store say so: operator assist, reminders.
+ *   - Reminders have no store and say so; operator assist is D580's row
+ *     (spinout_83b_operator_review_d580.test.mjs).
  *   - Section83bPage is gone, the Legal Engine card embeds the Lab page, the
  *     hub no longer claims "Not set up" for stores it never reads, and
  *     /incorporate/83b lands every viewer somewhere they can open.
@@ -81,9 +82,9 @@ test('delivery confirmation is offered only once a mailing date is on record', (
   assert.match(PAGE, /\{tracker\.mailed_at && String\(tracker\.status\) !== 'confirmed' && \(\n\s*<button\n\s*type="button" onClick=\{confirmDelivery\}/);
 });
 
-test('operator assist and reminders render Not recorded with their reasons', () => {
+test('reminders render Not recorded with their reason, and operator assist is D580\'s row', () => {
   const card = between(PAGE, 'data-testid="card-83b-unrecorded"', '{trackers.length > 1');
-  assert.match(card, /Operator assist<\/span>\s*<Unrecorded reason="[^"]+"/);
+  assert.match(card, /<OperatorAssistRow review=\{opReview\} \/>/);
   assert.match(card, /Deadline reminders<\/span>\s*<Unrecorded reason="[^"]+"/);
 });
 

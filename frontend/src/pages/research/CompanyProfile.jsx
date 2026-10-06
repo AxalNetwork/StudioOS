@@ -265,6 +265,25 @@ export function Signals({ market, geography, tracked }) {
   );
 }
 
+/**
+ * D596 — which register a directory record comes from, read off the row:
+ * Companies House (the OGL v3.0 attribution line, which the licence requires
+ * to be shown) or Wikidata (CC0). A row names its own source; none is assumed.
+ */
+export function recordSource(item) {
+  if (item?.source_name === 'Companies House') {
+    return {
+      label: 'Companies House · OGL v3.0', short: 'Companies House (OGL v3.0)', link: 'View the Companies House record ↗',
+      attribution: item.source_license || 'Contains public sector information licensed under the Open Government Licence v3.0.',
+      fields: 'Name, country, founded year (from the incorporation date) and sector label (from the SIC code)',
+    };
+  }
+  return {
+    label: 'Wikidata · CC0', short: 'Wikidata (CC0)', link: 'View the Wikidata record ↗', attribution: null,
+    fields: 'Name, website, country, founded year and sector label',
+  };
+}
+
 /** Where each fact comes from. A failed evidence table says so on its own row. */
 export function SourcesTable({ item, metrics, financials, employment, sources, fundingRounds }) {
   const m = metrics || {};
@@ -272,9 +291,10 @@ export function SourcesTable({ item, metrics, financials, employment, sources, f
   const metricRow = (label, x) => rec(x)
     ? [label, x.source_name || NOT_RECORDED, x.as_of || NOT_RECORDED, m.confidence || 'Not rated', x.source_url]
     : [label, NOT_RECORDED, '', '', null];
+  const src = recordSource(item);
   const rows = [
-    ['Name, website, country, founded', 'Wikidata (CC0)', item.as_of, 'Not rated', item.source_url],
-    ['Sector label', item.sector ? 'Wikidata (CC0)' : NOT_RECORDED, item.sector ? item.as_of : '', item.sector ? 'Not rated' : '', item.sector ? item.source_url : null],
+    ['Name, website, country, founded', src.short, item.as_of, 'Not rated', item.source_url],
+    ['Sector label', item.sector ? src.short : NOT_RECORDED, item.sector ? item.as_of : '', item.sector ? 'Not rated' : '', item.sector ? item.source_url : null],
     metricRow('Funding total', m.funding_total),
     metricRow('Last round', m.last_funding),
     metricRow('Employees and growth', m.headcount),
@@ -305,7 +325,7 @@ export function SourcesTable({ item, metrics, financials, employment, sources, f
           </tbody>
         </table>
       </div></Card>
-      <p className={faint}>Discovery metadata from Wikidata, plus figures only where a named source records them. Nothing on this page is estimated.</p>
+      <p className={faint}>Discovery metadata from {src.short}, plus figures only where a named source records them. Nothing on this page is estimated.</p>
     </section>
   );
 }
@@ -340,9 +360,10 @@ export function CompanyHeader({ item, tracked }) {
         <Link to={analysisHref(item)} className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800">Run competitor analysis →</Link>
         <Card padding="sm" className="space-y-1">
           <div className="text-[11px] font-bold text-axal-muted">Directory record</div>
-          <div className="text-[12px] text-axal-ink dark:text-gray-100">Wikidata · CC0</div>
-          <p className={faint}>Name, website, country, founded year and sector label{item.as_of ? ` · as of ${item.as_of}` : ''}</p>
-          {item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer" className="text-[12px] text-axal-violet underline">View the Wikidata record ↗</a> : null}
+          <div className="text-[12px] text-axal-ink dark:text-gray-100">{recordSource(item).label}</div>
+          <p className={faint}>{recordSource(item).fields}{item.as_of ? ` · as of ${item.as_of}` : ''}</p>
+          {recordSource(item).attribution ? <p className={faint}>{recordSource(item).attribution}</p> : null}
+          {item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer" className="text-[12px] text-axal-violet underline">{recordSource(item).link}</a> : null}
         </Card>
       </div>
     </div>
@@ -381,7 +402,7 @@ export default function CompanyProfile() {
       <Funds tracked={tracked} focusRead={focusRead} hqRead={hqRead} country={d.item.country} />
       <Signals tracked={tracked} market={slug ? market : null} geography={code ? geography : null} />
       <SourcesTable item={d.item} metrics={d.metrics} financials={d.financials} employment={d.employment} sources={d.sources} fundingRounds={d.funding_rounds} />
-      <p className={faint}>Company records come from Wikidata (CC0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>
+      <p className={faint}>Company records come from Wikidata (CC0) or, for UK companies, Companies House (Open Government Licence v3.0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>
     </div>
   );
 }

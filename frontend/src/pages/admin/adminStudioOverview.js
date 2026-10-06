@@ -119,9 +119,16 @@ export function programmeGlance(prog, formattedClose) {
       reason: 'The week has a deadline but it could not be shown in the zone it is enforced in, so it is not shown at all.',
     };
   }
+  // D473 — the digest printed how many accounts have not finished the week.
+  // A recorded count (including zero) is part of this sentence. A missing
+  // count is left off, never printed as zero.
+  const pending = finiteHours(prog.pending_accounts);
+  const pendingText = pending === null
+    ? ''
+    : ` · ${pending} ${pending === 1 ? 'account has' : 'accounts have'} not finished this week`;
   return {
     kind: 'ready',
-    text: `Week ${prog.open_week} gate closes ${formattedClose} ${prog.zone}`,
+    text: `Week ${prog.open_week} gate closes ${formattedClose} ${prog.zone}${pendingText}`,
   };
 }
 

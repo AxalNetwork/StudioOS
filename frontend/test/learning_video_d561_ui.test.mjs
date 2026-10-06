@@ -445,7 +445,10 @@ test('the editor with an uploaded file: a saved link replaces it, an empty link 
 test('playback: an uploaded file plays in the browser\'s own player from its stream route, a link embeds, an upload with no address is not recorded', () => {
   // The route's own address for the stream, which the item read sends.
   const member = read('cloudflare-worker/src/routes/learning.ts');
-  assert.ok(member.includes("video_stream_url: item.video_source === 'r2' ? `/api/learning/items/${encodeURIComponent(item.uid)}/video` : null"));
+  // Since #1250 the read sends that path with `?v=<the upload's version>`.
+  assert.ok(member.includes('video_stream_url: videoStreamUrl,'));
+  assert.ok(read('cloudflare-worker/src/services/learningVideo.ts')
+    .includes('return `/api/learning/items/${encodeURIComponent(itemUid)}/video?v=${await streamVersion(r2Key)}`;'));
   assert.equal(itemStreamPath('v-r2'), MEMBER_R2.video_stream_url);
   assert.ok(read('cloudflare-worker/src/routes/learning_video.ts').includes("learningVideo.get('/items/:uid/video'"));
   assert.deepEqual(videoPlayback(MEMBER_R2), { src: '/api/learning/items/v-r2/video', embed: false });
@@ -487,6 +490,14 @@ test('playback: an uploaded file plays in the browser\'s own player from its str
     assert.match(play.reason, /not this item’s own, so it is not played here/);
   }
   assert.deepEqual(videoPlayback({ ...MEMBER_R2, video_stream_url: '/api/learning/items/v-r2/video?v=2' }), { src: '/api/learning/items/v-r2/video?v=2', embed: false });
+  // #1250 — the address the Worker sends now: the version is kept on the
+  // player's src, so a replacement upload is a new address and never a cached file.
+  const versioned = { ...MEMBER_R2, video_stream_url: '/api/learning/items/v-r2/video?v=0123456789abcdef' };
+  assert.deepEqual(videoPlayback(versioned), { src: '/api/learning/items/v-r2/video?v=0123456789abcdef', embed: false });
+  const versionedView = html(h(ItemView, { state: { status: 'ready', item: versioned, progress: null }, onMark: () => {} }));
+  assert.match(tagOf(versionedView, 'lesson-video'), /src="\/api\/learning\/items\/v-r2\/video\?v=0123456789abcdef"/);
+  // A version does not let another item's path through.
+  assert.equal(videoPlayback({ ...MEMBER_R2, video_stream_url: '/api/learning/items/v-other/video?v=0123456789abcdef' }).src, undefined);
 });
 
 test('playback that fails to load is Unreadable, with a retry, never a black box', () => {

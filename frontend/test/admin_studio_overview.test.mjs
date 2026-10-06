@@ -49,17 +49,11 @@ test('an admin render returns Admin Studio before the founder fit block', () => 
   assert.equal((HOME.match(/<StudioInterview\b/g) || []).length, 1, 'Admin Studio mounts Eadwyn once');
   assert.match(read('frontend/src/components/advisor/StudioInterview.jsx'), /<PersonalAdvisor\b/);
   assert.ok(!HOME.includes('ProfileFitSection'), 'Admin Studio mounts the founder fit block');
-  // RE-AIMED BY D556. The owner asked for the Worker AI rail on this page, so
-  // it is no longer "a second assistant": it is the read-back every other
-  // Admin page carries, mounted once, through StudioRail, in the shared frame.
-  // What stays forbidden is a second Eadwyn and a rail inside the cards.
-  assert.match(HOME, /<RailFrame rail=\{<StudioRail user=\{user\} glance=\{glance\} \/>\}/,
-    'Admin Studio must mount its rail through StudioRail, in the shared frame');
-  assert.ok(!HOME.includes('<WorkerRail') && !OVERVIEW.includes('WorkerRail'),
-    'the Studio rail is StudioRail’s one mount; the home page and the cards draw none of their own');
-  const studioRail = read('frontend/src/pages/admin/StudioRail.jsx');
-  assert.equal((studioRail.match(/<WorkerRail\b/g) || []).length, 1, 'StudioRail mounts exactly one rail');
-  assert.match(studioRail, /workspace="Studio"/);
+  // D598: NO RAIL. D556 had mounted the Worker AI "Studio" rail here; the
+  // owner removed it (2026-10-06): this page never shows a Worker AI sidebar.
+  // Eadwyn above is its one assistant, and the cards draw no rail either.
+  assert.ok(!/<RailFrame\b|<WorkerRail\b|StudioRail/.test(HOME) && !OVERVIEW.includes('WorkerRail'),
+    'Admin Studio, or one of its cards, mounts a Worker AI rail again');
   assert.ok(!HOME.includes('VentureNextStep') && !OVERVIEW.includes('VentureNextStep'));
 });
 

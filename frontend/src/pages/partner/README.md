@@ -11,8 +11,8 @@ imports. The bucket roots and the zone routing live in
 | `offers/` | Offers zones: Catalog, Visibility, Proof, Audience fit. |
 | `earnings/` | The four earnings screens at the canvas's own routes (D569): `/partner/earnings`, `/partner/referrals`, `/partner/relationships/:id` and `/partner/leaderboard`. Not a bucket of the shell, so they draw their own pill row (`EARNINGS_AREA`). `parts.jsx` is what they share with the admin console `/admin/commissions`; the rules about what a figure means are in `frontend/src/lib/partnerEarnings.js`. |
 | `kit.jsx` | The one import surface for partner zones; its header lists the three traps it exists to defuse. |
-| `PartnerStudioHome.jsx` | What `/studio` renders for a partner today. |
-| `PartnerHomeP2.jsx` | The canvas's P2 Home, built and tested but not mounted until the owner signs it off (D394). |
+| `PartnerStudioHome.jsx` | Partner Studio, what `/studio` renders for a partner: the masthead, Eadwyn (`StudioInterview`) and the profile band, around `PartnerHomeP2` (D564). |
+| `PartnerHomeP2.jsx` | Partner Studio's body, the canvas's P2 (D394), mounted by `PartnerStudioHome` since the owner signed it off on #981 (D564). |
 | `PartnerFirmProfileCard.jsx` | The firm's partner profile, introductions switch and agreement summary (D390), mounted on Firm Settings (`/company-settings`) for partner sign-ins (D395). |
 | `PartnerWorkspaceShell.jsx`, `PartnerWorkspaceTabs.jsx` | The legacy tabbed shell a few older pages (`/needs`, `/services`, `/partner/insights` and others) still wrap themselves in. |
 | `OrganizationsZone.jsx` | Network · Organizations for this licence. |

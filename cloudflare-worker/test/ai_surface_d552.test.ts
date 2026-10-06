@@ -35,7 +35,7 @@ import { classifyInput } from '../src/services/advisor/guardrails.ts';
 import { mapSections, generateReview } from '../src/services/deckExtract.ts';
 import { citeFromResearch } from '../src/services/fills/citations.ts';
 import { draftSummary } from '../src/services/publications.ts';
-import ai from '../src/routes/ai.ts';
+import ai, { isSpendSurface } from '../src/routes/ai.ts';
 import { createJWT } from '../src/auth.ts';
 
 const SRC = resolve(process.cwd(), 'cloudflare-worker/src');
@@ -326,7 +326,9 @@ INSERT INTO ai_usage_logs (user_id, task, model, prompt_tokens, completion_token
   (${ME},    'dd_synthesis', 'm-val', 300, 80, 0.0300, '${ago(10)}', '/validate'),
   (${ME},    'advisor_turn', 'm-nul', 300, 80, 0.0040, '${ago(15)}', NULL),
   (${OTHER}, 'research_ask', 'm-theirs', 999, 999, 9.0000, '${ago(1)}', '/research/ask'),
-  (${OTHER}, 'transcribe',   'm-theirs', 0, 0, 7.0000, '${ago(2)}', '/validate/interviews');
+  (${OTHER}, 'transcribe',   'm-theirs', 0, 0, 7.0000, '${ago(2)}', '/validate/interviews'),
+  (${ME},    'workspace_explain', 'm-rail', 120, 40, 0.0005, '${ago(5)}', '/research/funds/catalog/fund-42'),
+  (${OTHER}, 'workspace_explain', 'm-theirs', 999, 999, 3.0000, '${ago(3)}', '/research/funds/catalog/fund-42');
 `;
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -415,9 +417,18 @@ test('another account\'s runs on the same page are never visible', async () => {
   assert.equal(theirs.body.last_run.task, 'transcribe');
 });
 
-test('an unknown surface is refused before anything is read', async () => {
-  for (const q of ['?surface=', '?surface=%2Fnope', '?surface=%2Fresearch%2Fask%2F', '?surface=%2FRESEARCH%2FASK',
-    '?surface=research%2Fask', '?surface=%2Fbuild%2Fboard', '?surface=1%20OR%201%3D1']) {
+test('isSpendSurface: every fixed name and any recorded page path, and nothing that is not a string', () => {
+  for (const s of AI_SURFACES) assert.equal(isSpendSurface(s), true, s);
+  assert.equal(isSpendSurface('/research/funds/catalog/fund-42'), true);
+  assert.equal(isSpendSurface('/'), true);
+  for (const v of [null, undefined, 42, ['/validate'], '', '/validate/', ' /validate', 'validate']) {
+    assert.equal(isSpendSurface(v), false, JSON.stringify(v));
+  }
+});
+
+test('a value that is not a page path as the router records one is refused before anything is read', async () => {
+  for (const q of ['?surface=', '?surface=%2Fresearch%2Fask%2F', '?surface=research%2Fask', '?surface=1%20OR%201%3D1',
+    '?surface=%20%2Fresearch%2Fask', '?surface=%2Fa%3Fb%3Dc', `?surface=%2F${'x'.repeat(160)}`]) {
     const { status, body, usageReads } = await getSpend(ME, q);
     assert.equal(status, 400, `${q} was not refused`);
     assert.equal(body.error, 'unknown_surface', `${q}`);
@@ -427,12 +438,27 @@ test('an unknown surface is refused before anything is read', async () => {
   }
 });
 
+test('a rail page\'s own path is read too (D552 step 3, B): its month and last run, the caller\'s rows only', async () => {
+  // The rail records the path of the page it sits on (D404), parameterised pages included.
+  const { status, body } = await getSpend(ME, '?surface=%2Fresearch%2Ffunds%2Fcatalog%2Ffund-42');
+  assert.equal(status, 200);
+  assert.equal(body.surface, '/research/funds/catalog/fund-42');
+  assert.equal(body.month.calls, 1, 'another account\'s run on the same page was counted');
+  assert.equal(body.last_run.model, 'm-rail');
+  // A page path with no runs is an empty page, a read that ran — not a refusal.
+  const none = await getSpend(ME, '?surface=%2Fresearch%2Ffunds');
+  assert.equal(none.status, 200);
+  assert.equal(none.body.month.calls, 0);
+  assert.equal(none.body.last_run, null);
+  assert.equal(none.body.last_run_reason, SURFACE_REASONS.noRun);
+});
+
 test('no surface still returns the whole account, as before', async () => {
   const { status, body } = await getSpend(ME, '');
   assert.equal(status, 200);
   assert.equal(body.recorded, true);
   assert.ok(Array.isArray(body.by_surface));
-  assert.equal(body.month.calls, 4, 'the account month covers every page');
+  assert.equal(body.month.calls, 5, 'the account month covers every page');
   assert.equal(body.surface, undefined);
 });
 

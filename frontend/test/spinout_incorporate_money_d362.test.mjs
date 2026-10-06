@@ -80,16 +80,17 @@ test('paid is the server order; the page writes no paid flag', () => {
   assert.doesNotMatch(c, /paid_at: new Date\(/);
   const onPaid = between(c, 'const onPaid = async () => {', 'const pay = async');
   assert.match(onPaid, /const mine = await refreshOrder\(\);/);
-  // The milestone follows the server's confirmation, inside the found branch.
+  // D585: the Worker records the milestone at payment; the page only re-reads
+  // the Lab state once the server shows the order paid, and records nothing.
   const found = between(onPaid, 'if (mine) {', '} else {');
-  assert.match(found, /markMilestone\(userRef\.current, 'incorporation_completed'\)/);
-  assert.equal((onPaid.match(/markMilestone\(/g) || []).length, 1);
+  assert.match(found, /setState\(await spinoutLab\.state\(\)\)/);
+  assert.doesNotMatch(onPaid, /markMilestone\(/);
   // No order row yet (a lagging webhook): wait, and claim nothing. Bounded to
   // the else branch itself — the catch below also waits, and an assertion
   // over the whole handler let a paid claim here pass (D362 mutation tally).
   const notFound = between(onPaid, '} else {', '}\n    } catch');
   assert.match(notFound, /setAwaitingServer\(true\)/);
-  assert.doesNotMatch(notFound, /setOrder\(|markMilestone\(/);
+  assert.doesNotMatch(notFound, /setOrder\(|markMilestone\(|setState\(/);
   assert.deepEqual(PAID_STATUSES, ['paid', 'packet_processing', 'packet_ready']);
 });
 
@@ -111,9 +112,11 @@ test('the jurisdiction is the application\'s; one that cannot be formed stops at
   assert.doesNotMatch(code(PAGE), /State of Delaware|Submitted to Delaware|state: 'Delaware'|Axal \(DE\)/);
 });
 
-test('unpriced parts and the open milestone decision are said, not invented', () => {
+test('unpriced parts are said, not invented, and the note says which moment graduates', () => {
   assert.match(PAGE, /Service and state filing split<\/span><Unrecorded reason="[^"]+"/);
   assert.match(PAGE, /Expedited processing<\/span><Unrecorded reason="[^"]+"/);
+  // D585 (#1212, owner's answer A): payment graduates the founder.
   const note = between(PAGE, 'data-testid="milestone-decision"', '</p>');
-  assert.match(note, /owner decision not yet made/);
+  assert.match(note, /Paying for incorporation completes the Lab's formation milestone and graduates you/);
+  assert.doesNotMatch(note, /owner decision not yet made/);
 });
