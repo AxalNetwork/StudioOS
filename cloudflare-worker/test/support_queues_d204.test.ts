@@ -348,7 +348,14 @@ test('tickets: each queue lists its oldest with who filed it, and a bound admini
 });
 
 test('the total is the three queues, and its oldest names the queue it came from', async () => {
-  const { body } = await getSupport(envFor(seed(freshDb())));
+  // D485: the fixture's deployed branch `fr` is answered here with an empty
+  // queue; a branch that cannot be asked leaves the total a part
+  // (branch_tickets_d485.test.ts), so this one is bound.
+  const env = envFor(seed(freshDb()));
+  const { body } = await getSupport({
+    ...env,
+    BRANCH_FR: { openTickets: async () => ({ branch: 'fr', as_of: new Date().toISOString(), tickets: { available: true, complete: true, count: 0, oldest_created_at: null, items: [] } }) },
+  });
   assert.equal(body.total.value, 4 + 2 + 4);
   assert.equal(body.total.oldest.queue, 'escalations');
   assert.equal(Math.floor(body.total.oldest.age_hours), 96);
@@ -376,6 +383,7 @@ test('the matrix: HQ first, a row per licence, and every blank cell says why', a
   assert.equal(fr.about_admin.why, 'branch_database');
   assert.match(fr.about_admin.reason, /fr\.axal\.vc/);
   assert.match(fr.about_admin.reason, /1 filed on axal\.vc is in the queue above\./);
+  assert.match(fr.about_admin.reason, /no binding to ask it yet/, 'D485: unbound, so the branch was not asked');
   assert.equal(fr.hq_held.why, 'does_not_apply');
 
   // Undeployed: nothing can be raised from it, and its administrators file here.
