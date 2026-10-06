@@ -36,7 +36,7 @@ holds the fixture to this file, and a baseline report script.
 | # | Question | Decision |
 | --- | --- | --- |
 | a | Which archetype system is canonical? | **Eadwyn's conversational profiling** (`services/archetypeScoring.ts`, what `/studio` reads) is canonical. The gamified assessment (`assessment_archetypes`, `assessment_results`) stays **read-only as a fallback** for a user with no conversational signal, and is retired in Session 15 when the card page stops reading it. |
-| b | Can platform evidence raise a skill score? | **Corroborate first, blend later.** Evidence never moves the displayed skill level in v2; it changes the axis's *state* (§5.2) and its confidence. A blend that can move the level is Session 13's to propose and the owner's to switch on. |
+| b | Can platform evidence raise a skill score? | **Corroborate first, blend later.** With the D592 owner switch off (the default), evidence never moves the displayed skill level; it changes the axis's *state* (§5.2) and its confidence. D592 proposes the bounded blend in §5.2; only the owner switches it on. |
 | c | Who appears as a "match" on the card page? | **Archetype types always, plus real members only if they published their archetype.** Today the only publish flag is `assessment_results.published`; the conversational archetype has none, so Session 7 adds one (§8.3) and Session 15 reads it. |
 | d | Evolution speed | **As proposed:** answer half-life 12 months, re-ask after 6 months, evidence at full weight for 12 months then fading, hysteresis 14 days with a lead margin. Exact values in §7.0. |
 | e | Tell the user when their displayed archetype changes? | **Yes, in-app only** (`notifications_inbox`), once per change, after hysteresis. No email. |
@@ -313,10 +313,37 @@ gap anyway, and the axis then reads "Evidence only".
 | `corroborated` | self-rating, evidence weight ≥ `corroborated_at` | self |
 | `evidence_only` | no self-rating, evidence weight > 0 | none. The axis shows the evidence count, not a level. |
 
-Evidence never changes the level in v2. It changes the state, and confidence
-rises with it. Session 13 may propose a blend, for example
-`self + clamp(evidence_level − self, −1, +1) × w`, behind a switch that is
-off by default. The owner turns it on.
+The table describes the default, **off** behavior. D592 proposes
+`evidence_level = min(5, 5 × evidence_weight / 3)` and `w = 0.25`:
+`self + clamp(evidence_level − self, −1, +1) × w`, clamped to 0–5.
+The index reaches 5 at the existing corroboration weight of three. It measures
+activity coverage, **not independently assessed proficiency**; this calibration
+is a proposal the owner must assess, not a claim about competence. A rated axis
+with positive usable evidence can move at most 0.25 from self in either direction.
+No usable evidence leaves self unchanged. No self-rating always leaves the level
+null, including `evidence_only`. The same five states remain on and off.
+
+The missing `platform_settings` row `profile_evidence_blend_enabled` means off.
+Only the Super Admin reads or writes `GET/PUT /api/profile/evidence-blend`;
+PUT takes `{ enabled: boolean }`, binds the setting, records `updated_by` and
+calls `logAdminAction`. No migration seeds or enables it. **The owner turns it
+on**, on #1219 after the synthetic before/after and trends split. An unreadable
+setting aborts the read/recompute rather than assuming off. Pre-241 databases
+with no settings table remain off.
+
+Off preserves existing output bytes and `profiling-v2.1`. On snapshots stamp
+`profiling-v2.1+evidence-blend-v1:w=0.25`; turning it off restores the base version.
+The nightly bounded pass detects either flip as `engine_bump`, reevaluates each
+person with saved fit answers, and carries over unfinished batches. A flip during
+or after a pass reaches earlier users on the next pass. The evaluated stamp uses
+the version actually computed, so a concurrent flip stays due. Material blended
+level changes also append snapshots while on. Archetypes remain trait-based;
+the skill-level blend does not feed their classification.
+
+Run the synthetic comparison with Node's existing TS loader:
+`node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs cloudflare-worker/scripts/profile-evidence-blend-comparison.mjs`.
+It covers all 23 personas and 48 checkpoint profiles, with a dated primary-role
+trends split. It does not read production or switch anything on.
 
 ### 5.3 The evidence interface (D357)
 
@@ -339,8 +366,8 @@ recomputeProfile(env, userId, {
 - With no store, no row, or an axis missing from the map, the axis reads
   from the self-rating alone (`self_rated_only`), or `not_recorded` when it
   has none. It is never 0 evidence-as-a-level.
-- Snapshots keep §5.2's rule: the level shown is the self-rating. Session 8's
-  `blend()` (`partly_corroborated`) is not applied.
+- Snapshots follow §5.2: self while off, the D592 bounded formula while on.
+  Session 8's retired halfway `blend()` (`partly_corroborated`) is not applied.
 
 ### 5.4 Evidence rules (Session 8 details the tool map)
 
@@ -357,7 +384,7 @@ recomputeProfile(env, userId, {
 - Lifetime totals are kept for display ("42 sessions hosted"), but only the
   window (§7.4) feeds the state.
 - Session 8 published the map below (D318, migration 362). It is the same list as `EVIDENCE_SOURCES` in `skillEvidence.ts`. A test fails if a source key there is missing here. The axis keys stay final.
-- **The displayed level follows §5.2.** Evidence changes the state, not the number. D318 first shipped a halfway blend. The follow-up in D318 removed it: `axisState` returns the §5.2 state with the self-rating as the level, and ageing follows §7.4. Session 13 is where a blend can be switched on.
+- **The displayed level follows §5.2.** Off, evidence changes the state, not the number. D318 first shipped a halfway blend. The follow-up in D318 removed it: `axisState` returns the §5.2 state with the self-rating as the level, and ageing follows §7.4. D592 now implements the separate owner-only switch and bounded formula above, off by default.
 
 | Role | Source key | What is counted | Axes | Weight |
 | --- | --- | --- | --- | --- |

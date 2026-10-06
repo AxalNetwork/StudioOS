@@ -14,7 +14,7 @@ exists for each — not by how far each has been built. Counts as of 2026-10-06:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 76 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 77 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
@@ -34,7 +34,9 @@ until 2026-10-05, when `Advisor Studio` moved from `out-of-scope/` to
 and 74 / 30 / 26 until 2026-10-06, when `Pages · Company analysis` moved from
 `backlog/` to `integrated/`: its route had been live since D313 (D593). It read
 75 / 29 / 26 until `Founder Studio` moved the same way the same day, when the
-founder's `/studio` was built to it (D564).
+founder's `/studio` was built to it (D564), and 76 / 28 / 26 until
+`Help Ticket Screen` arrived beside `Help Center`, whose new export imports it
+(D599).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to

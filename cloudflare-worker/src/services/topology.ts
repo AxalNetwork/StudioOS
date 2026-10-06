@@ -139,6 +139,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('searchAccounts', true),
       // D245 — HQ's Funds registry fans out to it (admin_hq.ts). A read, no secret.
       m('fundsRegistry', true),
+      // D483 — H15's approval age fans out to it (admin_hq.ts). A read of durations, no secret.
+      m('approvalAges', true),
       m('applyLicence', true),
       m('applyPromoCeiling', true),
       m('applyEscalationAnswer', true),

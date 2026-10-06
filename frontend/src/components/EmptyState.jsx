@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom';
  *     title="No projects yet"
  *     body="Create your first venture project to get started."
  *     cta={{ label: 'New project', to: '/build?new=1' }}
- *     secondary={{ label: 'Learn more', to: '/help#core/projects' }}
+ *     secondary={{ label: 'Learn more', to: '/help/build/projects' }}
  *   />
  *
  * CTAs accept either `to` (in-app react-router link) or `onClick`

@@ -148,7 +148,13 @@ export function validateTicketCreate(data: any): Valid<{
     ? data.description.trim().slice(0, 10000) : null;
   const priority = String(data.priority || 'medium').toLowerCase();
   if (!(TICKET_PRIORITIES as readonly string[]).includes(priority)) return { ok: false, error: 'priority must be one of low|medium|high|urgent' };
-  const type = String(data.type || 'task').toLowerCase();
+  // D544 (#1107, S1's decision Q1 B): the type is a required choice with no
+  // default. A ticket sent without one used to be filed as `task`, which put
+  // ordinary support requests in the Super Admin's suggested-task queue.
+  if (data.type === undefined || data.type === null || String(data.type).trim() === '') {
+    return { ok: false, error: 'type is required: one of bug|feature|task' };
+  }
+  const type = String(data.type).trim().toLowerCase();
   if (!(TICKET_TYPES as readonly string[]).includes(type)) return { ok: false, error: 'type must be one of bug|feature|task' };
   const project_id = Number.isInteger(data.project_id) ? data.project_id : null;
   return { ok: true, value: { title, description, priority, type, project_id } };

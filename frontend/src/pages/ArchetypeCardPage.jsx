@@ -6,6 +6,11 @@
  * the left, and the locked ARCHETYPES strengths / blind spots / matching.
  * Copy is static per-slug metadata, not user data. Missing banner files hide
  * that slot rather than leaving a hole.
+ *
+ * D602 — the assessment fallback is retired (PROFILING_V2.md decision a): the
+ * card reads Eadwyn's conversational archetype (`GET /best-fit/me`) and
+ * nothing else. A person with no conversational signal sees the empty state,
+ * never a gamified-assessment result standing in for it.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -16,6 +21,7 @@ import { Unreadable } from '../ui';
 import { XpBar } from '../components/profile/xpBar';
 import { openPaywall } from '../components/PaywallModal';
 import { archetypeLock, lockedLine, lockedPlanName } from '../lib/archetypeLock';
+import { cardArchetype } from '../lib/archetypeCardV2';
 import {
   archetypeAudienceFromRole,
   archetypeBanner,
@@ -53,14 +59,12 @@ function BannerImg({ src, className }) {
 export default function ArchetypeCardPage({ activeRole }) {
   const audience = archetypeAudienceFromRole(activeRole);
   const [fit, setFit] = useState({ data: null, error: '' });
-  const [results, setResults] = useState({ data: null, error: '' });
   const [xp, setXp] = useState({ state: 'loading', data: null });
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let alive = true;
     setFit({ data: null, error: '' });
-    setResults({ data: null, error: '' });
     const wire = (p, set, onErr) => p
       .then((d) => { if (alive) set({ data: d, error: '' }); })
       .catch((e) => {
@@ -68,7 +72,6 @@ export default function ArchetypeCardPage({ activeRole }) {
         if (alive) set({ data: null, error: e?.message || 'Failed to load' });
       });
     wire(api.bestFit.me(), setFit, (e) => reportError('ArchetypeCard:bestFit', e));
-    wire(assessment.myResults(), setResults, (e) => reportError('ArchetypeCard:results', e));
     return () => { alive = false; };
   }, [retry]);
 
@@ -84,22 +87,14 @@ export default function ArchetypeCardPage({ activeRole }) {
   const fitData = fit.data;
   // D594 — a locked reply carries no archetype; draw the canvas's locked state
   // (board S12) and nothing else. No banner, no copy, nothing blurred behind.
-  const lock = archetypeLock(fitData, results.data);
-  const conv = !lock && fitData?.archetype && fitData.archetype.slug
-    ? { slug: fitData.archetype.slug, label: fitData.archetype.label, confidence: fitData.archetype.confidence }
-    : null;
-  let latest = conv;
-  if (!latest && !lock) {
-    const list = (Array.isArray(results.data?.results) ? results.data.results : []).filter((r) => r.archetype_slug);
-    const g = list.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0] || null;
-    if (g) latest = { slug: g.archetype_slug, label: g.archetype_label, confidence: g.confidence };
-  }
+  const lock = archetypeLock(fitData);
+  const latest = lock ? null : cardArchetype(fitData);
   const meta = latest ? archetypeMeta(latest.slug) : null;
   const sex = fitData?.archetype_sex === 'm' || fitData?.archetype_sex === 'f' || fitData?.archetype_sex === 'both'
     ? fitData.archetype_sex
     : 'both';
-  const loading = !fit.data && !fit.error && !results.data && !results.error;
-  const failed = !lock && !latest && (fit.error || results.error) && !loading;
+  const loading = !fit.data && !fit.error;
+  const failed = !lock && !latest && !!fit.error && !loading;
   const pct = latest ? confidencePct(latest.confidence) : null;
   const title = latest?.label || meta?.label || latest?.slug;
   const accent = meta?.accent || '#7c3aed';
