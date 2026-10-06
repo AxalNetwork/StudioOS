@@ -205,6 +205,17 @@ test('create: founder creates a tracker with the computed DTO', async () => {
   assert.equal(t.receipt_doc_id, null);
 });
 
+test('D584 create: a 30th day on a Saturday is stored as that Saturday, not rolled', async () => {
+  const { env } = makeEnv();
+  const token = await mintToken(FOUNDER_A.id, 'founder');
+  const res = await legal.request('/83b/trackers', authJson(token, 'POST', {
+    project_id: 1, taxpayer_name: 'Jane Q. Doe', grant_date: '2026-09-03',
+  }), env);
+  assert.equal(res.status, 200);
+  const t = ((await res.json()) as any).tracker;
+  assert.equal(t.deadline_date, '2026-10-03', 'the deadline rolled before counsel answered (#1211)');
+});
+
 test('create: invalid grant_date is rejected (400)', async () => {
   const { env } = makeEnv();
   const token = await mintToken(FOUNDER_A.id, 'founder');
