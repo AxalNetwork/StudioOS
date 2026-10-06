@@ -298,8 +298,11 @@ export function LessonForm({ lesson, items, exercises = [], exams = [], onSubmit
         Required: it counts toward the course’s progress
       </label>
       {assessment && (
+        // D559 (#1249): the Worker completes the lesson itself, so the author is told when.
         <p className="text-[11.5px] text-axal-faint sm:col-span-2 dark:text-gray-500" data-testid="text-lesson-assessment-progress">
-          Nothing marks an exercise or exam lesson complete yet, so a required one keeps the course below 100%.
+          {form.kind === 'exam'
+            ? 'It completes for a member when they pass the exam.'
+            : 'It completes for a member when a reviewer accepts their answer.'}
         </p>
       )}
       <div className="flex gap-2 sm:col-span-2">
