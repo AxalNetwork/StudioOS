@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { bpsPercent } from '../../lib/bps';
 import { isSuperAdminUser } from '../../lib/shellRole';
-import { Card, Pill, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../../ui';
+import { Card, Pill, RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import {
   COMMISSION_STATUS, PAYOUT_ACTIONS, PAYOUT_METHODS, PAYOUT_STATUS, PERIODS, TABLE_DEFAULT_CURRENCY,
@@ -471,7 +471,23 @@ export default function AdminCommissions({ user }) {
   ].filter(Boolean);
 
   return (
-    <div className="lg:grid lg:items-start lg:gap-6" style={{ gridTemplateColumns: 'minmax(0,1fr) var(--fwr-track, 280px)' }} data-testid="admin-commissions">
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace="Commissions"
+          role="admin"
+          stance="Stored records only"
+          note="This rail reports what the console read. It processes no payout and changes no rate: each write happens on your confirmed click."
+          coverage={coverage}
+          coverageNote={coverage.length ? undefined : 'Nothing has been read yet, so there is nothing to report.'}
+          unavailable={[
+            ['Queue note', 'Eadwyn drafts no note on the queue yet: no draft surface reads payouts.'],
+            ['Rule editing', 'No route creates or edits a commission rule.'],
+          ]}
+        />
+      )}
+      data-testid="admin-commissions"
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="m-0 text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Commissions and payouts</h1>
@@ -562,22 +578,6 @@ export default function AdminCommissions({ user }) {
           </Card>
         </div>
       </div>
-      <div className="mt-4 lg:mt-0">
-        <div className="lg:sticky lg:top-20">
-          <WorkerRail
-            workspace="Commissions"
-            role="admin"
-            stance="Stored records only"
-            note="This rail reports what the console read. It processes no payout and changes no rate: each write happens on your confirmed click."
-            coverage={coverage}
-            coverageNote={coverage.length ? undefined : 'Nothing has been read yet, so there is nothing to report.'}
-            unavailable={[
-              ['Queue note', 'Eadwyn drafts no note on the queue yet: no draft surface reads payouts.'],
-              ['Rule editing', 'No route creates or edits a commission rule.'],
-            ]}
-          />
-        </div>
-      </div>
-    </div>
+    </RailFrame>
   );
 }
