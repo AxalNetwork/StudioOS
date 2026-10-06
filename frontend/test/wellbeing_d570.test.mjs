@@ -23,9 +23,10 @@ import { DAILY_KEYS, CHECKIN_KEYS, validateDailyBody } from '../../cloudflare-wo
 import { VALID_MODALITIES, VALID_PRICING_MODELS } from '../../cloudflare-worker/src/data/expertCategories.ts';
 import * as M from '../src/pages/wellbeing/wellbeingModel.js';
 import { CheckinCard, PastWeeksCard, MyBookingsCard, ResourcesCard } from '../src/pages/WellbeingPage.jsx';
-import {
+import WellbeingBookPage, {
   DirectoryToolbar, ExpertColumn, ServiceColumn, TimeColumn, ConfirmColumn, SERVICE_GAP,
 } from '../src/pages/wellbeing/WellbeingBookPage.jsx';
+import { BOOKING_ROLES, BookingCard, ServicesPanel, viewerOf } from '../src/pages/ExpertProfilePage.jsx';
 import {
   ServiceRow, ServiceForm, ServicesCard, AvailabilityGrid, AvailabilityCard, PracticeBookingRow, PracticeBookingsCard,
 } from '../src/pages/wellbeing/PracticeZones.jsx';
@@ -393,6 +394,111 @@ test('steps 2 to 4: no service to pick, a slot in the viewer’s time, and a con
 
   const all = [ServiceColumn, TimeColumn, ConfirmColumn].map((C) => html(h(C, { expert: EXPERTS[0], slotState: SLOTS.e1, chosen, timeZone: 'UTC' }))).join('');
   assert.doesNotMatch(all, /<textarea/, 'there is nowhere to write a note to the expert');
+});
+
+// ── The expert's public profile ──────────────────────────────────────────────
+
+/** The first element in a rendered tree that `pred` accepts. */
+const findEl = (el, pred) => {
+  if (!el || typeof el !== 'object') return null;
+  if (Array.isArray(el)) {
+    for (const c of el) { const f = findEl(c, pred); if (f) return f; }
+    return null;
+  }
+  return pred(el) ? el : findEl(el.props?.children, pred);
+};
+const PROFILE = { ...EXPERTS[0], user_id: 41, profile_completion_pct: 85, hidden: false, calendly_url: null, booking_url: null };
+const FOUNDER = { id: 7, role: 'founder' };
+const bookLink = (expert, viewer) => findEl(BookingCard({ expert, viewer }), (el) => el.props?.['data-testid'] === 'link-book-expert');
+
+test('the expert profile books nothing itself: no note, no booking request, no payment', () => {
+  const src = codeOnly(read('frontend/src/pages/ExpertProfilePage.jsx'));
+  assert.doesNotMatch(src, /<textarea|booker_note|notes:/, 'nowhere to write a note, and none sent (D331)');
+  assert.doesNotMatch(src, /wellbeingExpertBook|client_secret|AxalCheckout/, 'no booking request and no payment of its own');
+  assert.match(src, /<BookingCard expert=\{expert\} viewer=\{readViewer\(\)\} \/>/);
+});
+
+test('the profile’s card hands the expert to the booking flow, which opens with them chosen', () => {
+  const link = bookLink(PROFILE, FOUNDER);
+  assert.equal(link.props.to, '/wellbeing/book?expert=e1');
+  assert.equal(link.props.state.expert, PROFILE, 'the card the profile read travels with the link');
+  assert.match(text(h(BookingCard, { expert: PROFILE, viewer: FOUNDER })),
+    /Book a session Choose one of Dr Ada’s open times in the booking flow\. A booking is visible to you and the expert alone, and carries no note\. Choose a time/);
+
+  // Where the link lands. The directory is still loading, so the expert can
+  // only have come from the link's state.
+  const land = (entry) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, h(WellbeingBookPage)))
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const at = new URL(link.props.to, 'https://axal.vc');
+  const landed = land({ pathname: at.pathname, search: at.search, state: link.props.state });
+  assert.match(landed, /4 · Confirm Expert Dr Ada Service Not recorded · 30 min When Choose a time Rate \$150 \/ hr/);
+  assert.match(land({ pathname: at.pathname, search: at.search }), /4 · Confirm Choose an expert and a time\./, 'no state: nothing to show before the directory loads');
+  assert.match(land({ pathname: at.pathname, search: '?expert=e2', state: link.props.state }), /4 · Confirm Choose an expert and a time\./,
+    'state naming someone the address does not: ignored');
+});
+
+test('the profile’s card offers the flow only to the roles its route admits, and says why to the rest', () => {
+  const app = read('frontend/src/App.jsx');
+  const guarded = /<Route path="\/wellbeing\/book" element=\{guard\((\[[^\]]*\])/.exec(app)?.[1];
+  assert.deepEqual(JSON.parse(String(guarded).replace(/'/g, '"')), BOOKING_ROLES, 'the card and the route guard agree');
+  assert.ok(bookLink(PROFILE, { id: 1, role: 'admin' }), 'an admin');
+  for (const role of ['partner', 'advisor', 'investor', '']) {
+    assert.equal(bookLink(PROFILE, { id: 7, role }), null, `${role || 'no role'}: the flow’s guard would turn them away`);
+    assert.match(text(h(BookingCard, { expert: PROFILE, viewer: { id: 7, role } })), /Booking a wellbeing expert is open to founders\./);
+  }
+  assert.deepEqual(viewerOf({ id: 3, role: 'Admin' }, 'founder'), { id: 3, role: 'founder' }, 'an admin viewing as a founder sees what a founder sees');
+  assert.deepEqual(viewerOf({ id: 3, role: 'admin' }, null), { id: 3, role: 'admin' });
+  assert.deepEqual(viewerOf({ id: 9, role: 'partner' }, 'founder'), { id: 9, role: 'partner' }, 'only an admin views as another role');
+  assert.deepEqual(viewerOf(null, null), { id: null, role: '' });
+});
+
+test('the profile’s card is closed where the route would refuse, and the expert is shown their own', () => {
+  const incomplete = text(h(BookingCard, { expert: { ...PROFILE, profile_completion_pct: 60 }, viewer: FOUNDER }));
+  assert.match(incomplete, /This expert hasn’t completed their profile yet, so bookings are not open\./);
+  assert.equal(bookLink({ ...PROFILE, profile_completion_pct: 60 }, FOUNDER), null);
+  assert.match(text(h(BookingCard, { expert: { ...PROFILE, hidden: true }, viewer: FOUNDER })), /This expert is not taking bookings at the moment\./);
+  assert.equal(bookLink({ ...PROFILE, hidden: true }, FOUNDER), null);
+
+  const own = { id: '41', role: 'founder' };
+  assert.match(text(h(BookingCard, { expert: PROFILE, viewer: own })),
+    /This is the profile members see\. They book you from the booking flow, and the bookings arrive in your practice ?\./);
+  assert.match(html(h(BookingCard, { expert: PROFILE, viewer: own })), /href="\/wellbeing\/practice"/);
+  assert.equal(bookLink(PROFILE, own), null, 'no booking yourself');
+  assert.ok(bookLink({ ...PROFILE, user_id: null }, FOUNDER), 'an expert with no account is booked like any other');
+});
+
+test('the profile’s services tab: not recorded and why, never "none listed", and nothing to pick', () => {
+  const gap = text(h(ServicesPanel, { services: null }));
+  assert.match(gap, /Services not recorded No route lists an expert’s services to members yet/);
+  assert.doesNotMatch(gap, /No specific services|lists no services/);
+  assert.match(text(h(ServicesPanel, { services: [] })), /This expert lists no services\./);
+  const services = [
+    { uid: 's1', title: 'Intro call', duration_minutes: 25, price_cents: 0, currency: 'usd' },
+    { uid: 's2', title: 'Deep session', description: 'Fifty minutes', duration_minutes: 50, price_cents: 9000, currency: 'eur' },
+  ];
+  assert.match(text(h(ServicesPanel, { services })), /Intro call 25 min Free Deep session Fifty minutes 50 min .*90/);
+  assert.doesNotMatch(html(h(ServicesPanel, { services })), /<input/, 'the booking flow attaches no service, so none is picked here');
+});
+
+test('the booking flow lists the expert a profile sent first, even outside the directory’s twelve', () => {
+  const far = { ...EXPERTS[0], uid: 'e9', name: 'Dr Far' };
+  assert.equal(M.arrivedExpert({ expert: far }, 'e9'), far);
+  assert.equal(M.arrivedExpert({ expert: far }, 'e1'), null, 'the address names someone else: a stale entry chooses no one');
+  assert.equal(M.arrivedExpert(null, 'e9'), null);
+  assert.equal(M.arrivedExpert({ expert: far }, null), null);
+  assert.deepEqual(M.withArrived(EXPERTS, far).map((e) => e.uid), ['e9', 'e1', 'e2', 'e3']);
+  assert.deepEqual(M.withArrived(EXPERTS, EXPERTS[1]).map((e) => e.uid), ['e1', 'e2', 'e3'], 'listed already: kept in its ranked place, once');
+  assert.equal(M.withArrived(EXPERTS, null), EXPERTS);
+
+  // The column and the slot reads take the joined list; the arrived expert's
+  // times do not wait for the directory.
+  const page = codeOnly(read('frontend/src/pages/wellbeing/WellbeingBookPage.jsx'));
+  assert.match(page, /<ExpertColumn\s+status=\{list\.status\}\s+experts=\{experts\}/);
+  assert.match(page, /useEffect\(\(\) => \{ if \(arrived\) loadSlots\(arrived\.uid\); \}, \[arrived, loadSlots\]\);/);
+
+  const missing = html(h(ExpertColumn, { status: 'ready', experts: EXPERTS, labels: LABELS, slots: SLOTS, selected: 'e9', missingSelected: true, timeZone: 'UTC' }));
+  assert.match(missing, /The expert you came for is not in this list\. Clear the filters, choose another, or/);
+  assert.match(missing, /href="\/wellbeing\/expert\/e9"[^>]*>book them from their profile</, 'a way back that carries them');
 });
 
 // ── The expert's practice ─────────────────────────────────────────────────────

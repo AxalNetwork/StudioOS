@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Check, ExternalLink, Search, Star } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Card, Pill, Skeleton, Unrecorded, Unreadable } from '../../ui';
 import {
-  SESSION_MINUTES, bookingPayload, browserTimeZone, countLabel, expertRate, formatWhen, groupSlots,
-  nextOpening, safeHref, specialties, wantedCategories,
+  SESSION_MINUTES, arrivedExpert, bookingPayload, browserTimeZone, countLabel, expertRate, formatWhen, groupSlots,
+  nextOpening, safeHref, specialties, wantedCategories, withArrived,
 } from './wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, NotRecorded, StepChips, Outcome } from './WellbeingParts';
 
@@ -21,6 +21,9 @@ import { BTN, FIELD, PageHeader, CardHead, NotRecorded, StepChips, Outcome } fro
  *   1. Expert — `GET /api/wellbeing/experts` (the ranked directory) and, for
  *      the line under each card, `GET /experts/:uid/slots`. Opening a profile
  *      (`GET /experts/:uid`) is never needed, so no free-tier view is spent.
+ *      An expert's profile sends its card along (`?expert=` and navigation
+ *      state), and that expert is listed first even when the directory's
+ *      twelve leave them out.
  *   2. Service — nothing. Neither directory route returns an expert's
  *      services (`services: null`), so the step says so and the booking is a
  *      30-minute session with no service attached.
@@ -131,7 +134,10 @@ export function ExpertColumn({ status, experts = [], labels = new Map(), slots =
       ) : (
         <div className="space-y-2 xl:max-h-[34rem] xl:overflow-y-auto xl:pr-1">
           {missingSelected && (
-            <p className={FIELD.note} data-testid="text-expert-not-listed">The expert you came for is not in this list. Clear the filters, or choose another.</p>
+            <p className={FIELD.note} data-testid="text-expert-not-listed">
+              The expert you came for is not in this list. Clear the filters, choose another, or{' '}
+              <Link to={`/wellbeing/expert/${encodeURIComponent(selected)}`} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">book them from their profile</Link>.
+            </p>
           )}
           {allClosed && (
             <p className={FIELD.note} data-testid="text-no-openings">No expert has an open slot in the next few days.</p>
@@ -283,6 +289,8 @@ export function ConfirmColumn({ expert, slotState, chosen, booking = {}, onConfi
 
 export default function WellbeingBookPage() {
   const [params] = useSearchParams();
+  const { state: navState } = useLocation();
+  const wanted = params.get('expert');
   const timeZone = useMemo(() => browserTimeZone(), []);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [query, setQuery] = useState(EMPTY_FILTERS);
@@ -290,11 +298,13 @@ export default function WellbeingBookPage() {
   const [categories, setCategories] = useState([]);
   const [list, setList] = useState({ status: 'loading', experts: [], filtered: null });
   const [slots, setSlots] = useState({});
-  const [selected, setSelected] = useState(() => params.get('expert') || null);
+  const [selected, setSelected] = useState(() => wanted || null);
   const [chosen, setChosen] = useState(null);
   const [booking, setBooking] = useState({ busy: false, result: null, error: null });
 
   const labels = useMemo(() => new Map(categories.map((c) => [c.key, c.label])), [categories]);
+  const arrived = useMemo(() => arrivedExpert(navState, wanted), [navState, wanted]);
+  const experts = useMemo(() => withArrived(list.experts, arrived), [list.experts, arrived]);
 
   // The catalogue names the specialties; the member's own past topics rank
   // the directory, as the home page's directory always did. Neither failing
@@ -346,10 +356,12 @@ export default function WellbeingBookPage() {
   // Each listed expert's openings, for the line under its card and for step 3.
   useEffect(() => {
     if (list.status !== 'ready') return;
-    list.experts.forEach((e) => { loadSlots(e.uid); });
-  }, [list, loadSlots]);
+    list.experts.forEach((e) => { if (e.uid !== arrived?.uid) loadSlots(e.uid); });
+  }, [list, arrived, loadSlots]);
+  // The arrived expert's openings do not wait for the directory, or need it.
+  useEffect(() => { if (arrived) loadSlots(arrived.uid); }, [arrived, loadSlots]);
 
-  const expert = list.experts.find((e) => e.uid === selected) || null;
+  const expert = experts.find((e) => e.uid === selected) || null;
   const slotState = expert ? slots[expert.uid] : null;
   const step = booking.result ? STEPS.length : !expert ? 0 : (slotState?.external || chosen) ? 3 : 2;
   const shown = list.experts.length;
@@ -395,7 +407,7 @@ export default function WellbeingBookPage() {
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
         <ExpertColumn
           status={list.status}
-          experts={list.experts}
+          experts={experts}
           labels={labels}
           slots={slots}
           selected={selected}

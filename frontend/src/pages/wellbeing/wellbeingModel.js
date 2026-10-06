@@ -354,6 +354,28 @@ export function bookingPayload({ slot = null, external = false } = {}) {
   return external ? {} : { scheduled_at: slot, duration_minutes: SESSION_MINUTES };
 }
 
+/**
+ * The expert a profile page sent to `/wellbeing/book`. The profile passes the
+ * card it already read as navigation state and names the expert in
+ * `?expert=`; the state counts only when the two agree, so a stale history
+ * entry cannot preselect someone the address does not name.
+ */
+export function arrivedExpert(state, wanted) {
+  const e = state?.expert;
+  return e && typeof e === 'object' && wanted && e.uid === wanted ? e : null;
+}
+
+/**
+ * The directory with the arrived expert first. The directory lists twelve,
+ * ranked for this member, so the expert someone came for is often not among
+ * them. The profile's card is used rather than read again: reading it again
+ * would spend one of a free founder's monthly profile views.
+ */
+export function withArrived(experts = [], arrived = null) {
+  if (!arrived || experts.some((e) => e.uid === arrived.uid)) return experts;
+  return [arrived, ...experts];
+}
+
 /** The directory rate on an expert's card, or null when none is published. */
 export function expertRate(expert) {
   if (expert?.pricing_model === 'free') return 'Free';
