@@ -58,6 +58,9 @@ const SPRINT_DAYS = 28;
 // Feature keys mirror the backend catalog (backend/app/api/routes/
 // spinout_lab.py MILESTONES / Worker spinoutLabCatalog.ts). Routes reuse the
 // same in-app destinations the old lab sidebar linked to.
+/** What a graduate reads where the Lab tools used to open (D511 item 3). */
+export const GRADUATE_TOOLS_CLOSED = 'The Lab tools closed at graduation. Your work carries into the tools in the sidebar; your certificate stays here.';
+
 export const TOOL_INFO = {
   // The lab-facing company record page (design: workspace tool pages); the
   // raw /projects list stays reachable from it via "Edit record".
@@ -108,7 +111,8 @@ export const TOOL_INFO = {
   // The credential itself, not a deliverable: it is CONFERRED by finishing
   // incorporation rather than being another box to tick, so `uncounted`
   // keeps it off the week's scorecard denominator (same rule as misignals).
-  certificate: { label: 'Graduation Certificate', to: '/spinout-lab/certificate', desc: 'Your cohort credential', icon: Award, uncounted: true, unlockWeek: 4 },
+  // `keptAfterGraduation`: the one tool a graduate keeps (D511 item 3).
+  certificate: { label: 'Graduation Certificate', to: '/spinout-lab/certificate', desc: 'Your cohort credential', icon: Award, uncounted: true, unlockWeek: 4, keptAfterGraduation: true },
   // No founder-facing capital surface exists yet (/capital is the investor
   // console) — card shows as coming soon until the lab version ships.
   // Lab-facing raise workspace (round + investor pipeline + data-room
@@ -655,11 +659,19 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
     return previewAllUnlocked ? 'unlocked' : 'locked';
   };
   const weekBrowsable = (num) => weekStatus(num) !== 'locked';
-  const featureUnlocked = (key) =>
-    previewAllUnlocked || graduated || unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated) ||
-    // Tools with no standalone backend flag (e.g. MI — Investor Signals) unlock
-    // by program week instead of an `unlocked_features` entry.
-    (TOOL_INFO[key]?.unlockWeek != null && currentWeek >= TOOL_INFO[key].unlockWeek);
+  // D511 item 3 (#992, the owner's C): graduation closes the Lab tools. The
+  // routes behind them already refuse a graduate (`spinout_lab_active` is
+  // cleared), so this used to promise every tool and open none. Only the
+  // certificate stays; the records stay too, read by admins, and the work
+  // carries into the sidebar tools.
+  const featureUnlocked = (key) => {
+    if (previewAllUnlocked) return true;
+    if (graduated) return Boolean(TOOL_INFO[key]?.keptAfterGraduation);
+    return unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated) ||
+      // Tools with no standalone backend flag (e.g. MI — Investor Signals) unlock
+      // by program week instead of an `unlocked_features` entry.
+      (TOOL_INFO[key]?.unlockWeek != null && currentWeek >= TOOL_INFO[key].unlockWeek);
+  };
   const chipDone = (weekNum, keys) =>
     keys.length > 0 ? keys.every((k) => done.has(k)) : weekStatus(weekNum) === 'done';
 
@@ -783,7 +795,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
               ) : (
                 <div className="text-xs text-gray-500 dark:text-gray-400" data-testid="workspace-days-remaining">
                   {graduated
-                    ? 'Graduated · incorporated'
+                    ? <>Graduated · incorporated<span className="block" data-testid="workspace-graduate-tools-closed">{GRADUATE_TOOLS_CLOSED}</span></>
                     : exited
                       ? `Left the programme in Week ${currentWeek}`
                       : `Week ${currentWeek} of 4 · ${daysRemaining} days remaining`}
@@ -1192,7 +1204,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
                             }`}
                           >
-                            {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : `Unlocks Wk ${w.num}`}
+                            {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : graduated ? 'Closed at graduation' : `Unlocks Wk ${w.num}`}
                           </span>
                           {clickable && (
                             <button
