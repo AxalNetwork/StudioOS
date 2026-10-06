@@ -122,15 +122,17 @@ test('step 2 asks for a transfer office only when there could be one', () => {
 });
 
 test('the answer panel never promises a Week 1 the Lab does not build', () => {
-  // THE PRODUCT CALL (D384): the canvas says a TTO answer re-sequences Week 1.
-  // The Lab has one milestone list for every founder; nothing reads this.
+  // THE PRODUCT CALL: D384 dropped the canvas's promise that a TTO answer
+  // re-sequences Week 1; D576 (#1189) builds it, so the panel says so again,
+  // and still names no step order the Worker's rules do not produce.
   for (const origin of [null, 'university', 'corporate', 'independent']) {
     for (const tto of [null, ...TTO_OPTIONS.map((t) => t.key)]) {
       const c = consequenceFor({ origin, tto_status: tto });
       assert.doesNotMatch(`${c.text} ${c.foot}`, /your Week 1 gets|TTO checklist|filing waits|Roughly half/i);
     }
   }
-  assert.match(consequenceFor({ origin: 'university' }).foot, /does not change them/);
+  assert.match(consequenceFor({ origin: 'university' }).foot, /this answer orders your Week 1 steps/);
+  assert.doesNotMatch(consequenceFor({ origin: 'university' }).foot, /does not change them/);
   assert.match(PAGE, /What your answer is used for/);
 });
 

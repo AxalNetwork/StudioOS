@@ -10,6 +10,7 @@
 // The form labels both so an admin cannot type one believing it is the other.
 import React, { useState } from 'react';
 import { ORIGIN_OPTIONS, TTO_OPTIONS, IP_OPTIONS, whenOf, dayOf } from '../../lib/applicationLifecycle';
+import { actorLabel, stepLabel } from '../../lib/week1Plan';
 
 const nameOf = (list, key) => list.find((o) => o.key === key)?.name || null;
 const inputCls = 'w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-gray-100';
@@ -33,6 +34,37 @@ export function answerRows(a) {
     ['Why Axal VC', x.why_axal],
   ];
   return { note: null, rows: rows.map(([k, v]) => [k, v == null || v === '' ? 'Not answered' : v]) };
+}
+
+/**
+ * D576 — the applicant's Week 1 plan: the status it is ordered for, the steps
+ * in order, and who wrote it when. Read-only: the plan is computed from the
+ * applicant's own answer, never edited here.
+ */
+export function Week1Plan({ plan, unreadable }) {
+  let body;
+  if (unreadable) body = <div className="mt-1 text-red-700 dark:text-red-300" role="alert">Unreadable: the Week 1 plans could not be read.</div>;
+  else if (!plan) body = <div className="mt-1 text-gray-600 dark:text-gray-300">Not recorded: no Week 1 plan has been computed for this applicant.</div>;
+  else {
+    body = (
+      <>
+        <div className="mt-1 text-gray-800 dark:text-gray-100">Ordered for: {plan.label}</div>
+        <ol className="mt-1 ml-5 list-decimal text-gray-800 dark:text-gray-100">
+          {plan.steps.map((k) => <li key={k}>{stepLabel(k)}</li>)}
+        </ol>
+        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Written by {actorLabel(plan.computed_by)} · {dayOf(plan.updated_at) || plan.updated_at}
+          {plan.computed_with_week1_started ? ' · after Week 1 started, so the steps already done kept their places' : ''}
+        </div>
+      </>
+    );
+  }
+  return (
+    <div data-testid="applicant-week1-plan">
+      <div className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Week 1 plan</div>
+      {body}
+    </div>
+  );
 }
 
 export default function ApplicantDetail({ applicant, canDecide, busy, onSchedule, onCancelInterview, onDeclineWithNote }) {
@@ -79,6 +111,8 @@ export default function ApplicantDetail({ applicant, canDecide, busy, onSchedule
           </dl>
         )}
       </div>
+
+      <Week1Plan plan={a.week1_plan} unreadable={a.week1_plan_unreadable} />
 
       <div>
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Partner interview</div>
