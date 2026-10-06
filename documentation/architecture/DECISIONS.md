@@ -41694,13 +41694,33 @@ on the owner's A/B/C on #992 and is not built here. No migration.
   (`lib/branchFreeze.js`) now says certificates cannot be issued or revoked,
   as `branch_shell_s7_s13` requires of every new gate.
 
-**Not built: item 3.** A graduate is bounced from the Lab tool routes, because
+**Item 3, as it stood before the owner answered.** A graduate is bounced from the Lab tool routes, because
 graduation clears `spinout_lab_active` and the routes require it, while
 `featureUnlocked` tells them they have every tool (D381, "Filed, not fixed").
 No decision records intended graduate access. S1's question on #992 offers:
 - A. full access (S1's pick);
 - B. read-only;
 - C. no access.
+
+**Item 3, built (2026-10-06): the owner chose C.** "Graduates lose the Lab
+tools. Their records stay, and only admins can read them." The owner added that
+the data carries into the tools in the left sidebar, which present it
+differently and with more features, and that a paywall comes later.
+- **The routes already said C.** Graduation clears `spinout_lab_active`, and 17
+  of the 20 Lab tool pages are `labRoles(['admin'])`, which admits a Lab member
+  only while that flag is 1. No route changes.
+- **The three founder-admitting pages stay as they are.** Brand, cofounder
+  match and the certificate admit any `founder`, Lab or not, so they are not
+  Lab-only. The certificate is the graduate's own credential.
+- **The workspace stopped promising otherwise.** `featureUnlocked` no longer
+  opens every tool for a graduate. It opens only `TOOL_INFO` entries marked
+  `keptAfterGraduation`, which today is the certificate.
+  - A closed tool reads "Closed at graduation", not "Unlocks Wk 4".
+  - The header says the tools closed and where the work went.
+  - The admin preview (`previewAllUnlocked`) still opens everything.
+- **Records.** Nothing is deleted. Admin reads are unchanged.
+- **Verified.** `frontend/test/spinout_graduate_tools_d511.test.mjs` (2 tests)
+  fails on main and catches 7 of 7 mutations.
 
 **Verified.**
 - `cloudflare-worker/test/lab_gates_d511.test.ts` (6 tests) runs the real
