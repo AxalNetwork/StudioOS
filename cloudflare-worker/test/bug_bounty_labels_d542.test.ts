@@ -13,7 +13,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHmac, randomBytes } from 'node:crypto';
