@@ -35,8 +35,11 @@ const ROLE: Record<number, string> = { [SUPER]: 'admin', [PLAIN_ADMIN]: 'admin',
 const BUILT = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
+  // Through 390: since D558 (migration 389) an item read checks program
+  // enrolment, and 390 is the rest of the Learning store, as
+  // learning_programs_d558 builds it.
   for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF && migrationNumber(x) <= 388)) {
+    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF && migrationNumber(x) <= 390)) {
     for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
       try { db.exec(stmt); } catch { /* already present on the baseline */ }
     }
