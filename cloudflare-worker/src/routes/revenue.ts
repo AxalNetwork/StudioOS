@@ -4,6 +4,8 @@
  *   GET    /projects/:projectId/entries          the project's entries, newest first
  *   POST   /projects/:projectId/entries          one manual entry
  *   POST   /projects/:projectId/entries/import   CSV rows, already mapped by the page
+ *   POST   /projects/:projectId/entries/import-stripe   the founder's own Stripe
+ *          charges, one verified entry each (D587, migration 400)
  *   PATCH  /projects/:projectId/entries/:uid     edit an entry or attach its proof
  *   DELETE /projects/:projectId/entries/:uid     remove an entry
  *
@@ -33,8 +35,11 @@ import {
   entryDto,
   LEDGER_CURRENCY,
   MAX_IMPORT_ROWS,
+  chargeToEntry,
+  STRIPE_LOCKED_FIELDS,
   type LedgerRow,
 } from '../services/revenueLedger';
+import { listLedgerChargesForUser } from '../integrations/providers/stripe';
 
 type Project = { id: number; name: string | null; founder_id: number | null; company_id: number | null };
 type Ctx = Context<{ Bindings: Env }>;
@@ -176,6 +181,76 @@ revenue.post('/projects/:projectId/entries/import', async (c) => {
   return c.json({ ok: true, inserted: accepted.length, rejected, import_batch: batch });
 });
 
+// D587 — the Stripe charge sync. The insert skips a charge already on this
+// project's ledger (migration 400's partial unique index), so a second import,
+// or two at once, writes each charge once.
+const STRIPE_INSERT =
+  'INSERT INTO revenue_entries (uid, project_id, customer, amount_cents, currency, revenue_type, received_on, '
+  + 'source, source_ref, verification, import_batch, created_by) '
+  + "VALUES (?, ?, ?, ?, ?, ?, ?, 'stripe', ?, ?, ?, ?) "
+  + "ON CONFLICT (project_id, source_ref) WHERE source = 'stripe' DO NOTHING";
+
+revenue.post('/projects/:projectId/entries/import-stripe', async (c) => {
+  const g = await gate(c, true);
+  if (g instanceof Response) return g;
+  // The charges are read from the CALLER's own connected Stripe account, so
+  // only the startup's own founder may import them: an admin's or a partner's
+  // account is not this startup's revenue.
+  if (g.project.founder_id == null || g.user.founder_id !== g.project.founder_id) {
+    return c.json({ error: 'stripe_owner_only', message: 'Only the startup\'s founder can import its Stripe charges, from their own connected account.' }, 403);
+  }
+  const listed = await listLedgerChargesForUser(c.env, g.user.id);
+  if (!listed.ok) {
+    if (listed.reason === 'not_connected') {
+      return c.json({ error: 'stripe_not_connected', message: 'Connect your Stripe account first. Nothing was imported.' }, 400);
+    }
+    return refuse(c, 502, {
+      code: 'stripe_read_failed',
+      message: 'Your Stripe charges could not be read. Nothing was imported; check the connection and try again.',
+      raw: listed.detail, audience: 'owner',
+    });
+  }
+  const verification = verificationFor({ source: 'stripe', proof_document_id: null });
+  const batch = crypto.randomUUID();
+  const toInsert: { charge_id: string; stmt: D1PreparedStatement }[] = [];
+  const rejected: { charge_id: string; code: string; message: string }[] = [];
+  let refunded = 0;
+  for (const ch of listed.charges) {
+    const out = chargeToEntry(ch);
+    if (out.kind === 'skip') { refunded += 1; continue; }
+    if (out.kind === 'refuse') { rejected.push({ charge_id: ch.id, code: out.code, message: out.message }); continue; }
+    const e = out.entry;
+    toInsert.push({
+      charge_id: ch.id,
+      stmt: c.env.DB.prepare(STRIPE_INSERT).bind(crypto.randomUUID(), g.project.id, e.customer, e.amount_cents,
+        LEDGER_CURRENCY, e.revenue_type, e.received_on, e.source_ref, verification, batch, g.user.id),
+    });
+  }
+  let inserted = 0;
+  try {
+    for (let i = 0; i < toInsert.length; i += 100) {
+      const results = await c.env.DB.batch(toInsert.slice(i, i + 100).map((x) => x.stmt));
+      for (const r of results as Array<{ meta?: { changes?: number } }>) inserted += Number(r?.meta?.changes ?? 0) > 0 ? 1 : 0;
+    }
+  } catch (err) {
+    return refuse(c, 500, {
+      code: 'ledger_import_failed',
+      message: 'The Stripe charges were read but could not all be saved. Run the import again; nothing is recorded twice.',
+      raw: err, audience: 'member',
+    });
+  }
+  return c.json({
+    ok: true,
+    charges: listed.charges.length,
+    inserted,
+    already_imported: toInsert.length - inserted,
+    refunded,
+    rejected,
+    capped: listed.capped,
+    import_batch: inserted ? batch : null,
+  });
+});
+
 revenue.patch('/projects/:projectId/entries/:uid', async (c) => {
   const g = await gate(c, true);
   if (g instanceof Response) return g;
@@ -184,6 +259,20 @@ revenue.patch('/projects/:projectId/entries/:uid', async (c) => {
     .bind(uid, g.project.id).first<LedgerRow>();
   if (!row) return c.json({ error: 'entry_not_found', message: 'That entry is not on this startup\'s ledger.' }, 404);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  // D587: a synced entry's amount, date and customer are what Stripe reported,
+  // which is what `verified` means; only its type, notes and proof may change.
+  if (row.source === 'stripe') {
+    const stored: Record<string, unknown> = { customer: row.customer, amount_cents: Number(row.amount_cents), received_on: String(row.received_on).slice(0, 10) };
+    // `amount` (a CSV-style cell) is never stored, so sending one always counts as a change.
+    const changed = STRIPE_LOCKED_FIELDS.filter((k) => k in body && body[k] !== stored[k]);
+    if (changed.length) {
+      return c.json({
+        error: 'synced_entry_locked',
+        message: 'This entry came from a Stripe charge, so its amount, date and customer stay as Stripe reported them.',
+        fields: changed,
+      }, 409);
+    }
+  }
   // The stored row, overlaid with what the request sent, validated as a whole.
   const merged = {
     customer: body.customer ?? row.customer,
