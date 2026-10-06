@@ -111,6 +111,13 @@ component. They stay an internal signal of the fit decision. The card page
 shows only the four per role that the owner named, and the persona fixture's
 expectations are over those four.
 
+**Owner's decision (#982, answer A, 2026-10-06).** Scout and Steward stay
+internal until the card shows `fit_v2`. Until then they get no copy, no
+sprites and no banner. They are not keys of `ARCHETYPES` in
+`frontend/src/lib/assessmentMeta.js`, so the sprite-coverage test
+(`frontend/test/studio_archetype_sprite.test.mjs`) does not ask for their
+files.
+
 ### 2.4 Coach
 
 Coach shares the advisor archetype set (`ARCHETYPES.coach =

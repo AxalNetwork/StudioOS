@@ -256,7 +256,8 @@ function ArchetypeSprite({ slug, variant = 'm', compact = false, name, onMissing
 
 // D325 — "a slot with no file on disk is dropped rather than drawn empty, so
 // 'both' with one sprite supplied degrades to a single centred tile" (canvas
-// ec6c3ada). pt_embedded_operator has no male file, so this is a real case.
+// ec6c3ada). Every slug ships both files (#1235); the rule still covers a
+// file that fails to load.
 export function spriteAlt(name, variant) {
   return name ? `${name}, ${variant === 'f' ? 'woman' : 'man'}` : '';
 }
