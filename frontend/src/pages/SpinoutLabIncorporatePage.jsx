@@ -51,6 +51,8 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import CompanyEinCard, { EinPreviewValue } from '../components/spinout/CompanyEinCard';
+import { companyEinApi } from '../lib/api/companyEin.js';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
 import { PACKET_NOT_BUILT, PACKET_NOT_BUILT_STATUSES, PAID_STATUSES, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
@@ -173,6 +175,8 @@ export default function SpinoutLabIncorporatePage() {
   const [saveError, setSaveError] = useState('');
   const [copied, setCopied] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // D579 — the company's EIN read: { status, data }. A failed read is 'unreadable'.
+  const [ein, setEin] = useState({ status: 'loading', data: null });
   const [docModal, setDocModal] = useState(null); // doc key being previewed
   const [payBusy, setPayBusy] = useState(false);
   const [payError, setPayError] = useState('');
@@ -203,16 +207,22 @@ export default function SpinoutLabIncorporatePage() {
         setProjectsUnread(projects === null);
         const proj = projects === null ? null : pickLabProject(projects, me);
         setProject(proj || null); projectRef.current = proj || null;
+        if (!proj) setEin({ status: projects === null ? 'unreadable' : 'no-project', data: null });
         if (proj) {
           let initial = {};
           try { initial = proj.incorporation_meta ? JSON.parse(proj.incorporation_meta) : {}; } catch { initial = {}; }
           metaRef.current = initial;
           setMeta(initial);
-          const [members, orders] = await Promise.all([
+          const [members, orders, einRead] = await Promise.all([
             api.listProjectMembers(proj.id).catch((e) => { reportError('spinout-inc:members', e); return null; }),
             api.legalIncorporationOrders().catch((e) => { reportError('spinout-inc:orders', e); return null; }),
+            companyEinApi.read(proj.id).then(
+              (data) => ({ status: 'ready', data }),
+              (e) => { reportError('spinout-inc:ein', e); return { status: 'unreadable', data: null }; },
+            ),
           ]);
           if (dead) return;
+          setEin(einRead);
           // A failed read stays null — never an empty team, never "no order".
           if (members !== null) {
             const list = Array.isArray(members?.members) ? members.members : (Array.isArray(members) ? members : []);
@@ -779,6 +789,7 @@ export default function SpinoutLabIncorporatePage() {
             <div className="flex items-center gap-2 mb-1.5"><FileText size={15} className="text-violet-600" /><span className="text-[12.5px] font-bold text-gray-900 dark:text-gray-100">EIN application</span></div>
             <div className="text-[12px] text-gray-600 dark:text-gray-300 leading-relaxed">SS-4 prefilled from formation data. Files after state approval. {paid ? 'SS-4 prefilled' : 'Prepares after payment'}.</div>
           </div>
+          <CompanyEinCard projectId={project?.id} ein={ein} onSaved={(data) => setEin({ status: 'ready', data })} />
         </div>
       </div>
 
@@ -905,7 +916,7 @@ export default function SpinoutLabIncorporatePage() {
                 <div className="text-[13px] text-violet-100/70 mt-0.5">{ENTITIES[selected].name} · State of {juris.state}</div>
                 <div className="flex flex-wrap gap-6 mt-4">
                   <div><div className="text-[11px] text-gray-400">Status</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? (filingDone >= 2 ? 'Filed' : 'Paid · not filed') : 'Pre-formation'}</div></div>
-                  <div><div className="text-[11px] text-gray-400">EIN</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? 'Pending' : '—'}</div></div>
+                  <div><div className="text-[11px] text-gray-400">EIN</div><div className="text-[14px] font-mono font-semibold mt-0.5" data-testid="investor-ein"><EinPreviewValue ein={ein} /></div></div>
                   <div><div className="text-[11px] text-gray-400">Registered agent</div><div className="text-[14px] font-mono font-semibold mt-0.5">Not recorded</div></div>
                 </div>
               </div>
