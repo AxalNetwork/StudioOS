@@ -2028,7 +2028,6 @@ export const api = {
       body: JSON.stringify({ publishable_key: publishableKey }),
     }),
 
-  adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
     request(`/admin/contracts/${uid}/download-url?ttl_seconds=${ttl_seconds}`, { method: 'POST' }),
@@ -3043,11 +3042,9 @@ export const api = {
   infraReembedMetrics: (hours = 24) => request(`/infra/reembed-metrics?hours=${hours}`),
 
   // ---------- Funds & LPs ----------
-  fundsListByStatus: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
   fundGet: (id) => request(`/funds/${id}`),
   fundCreate: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
   fundUpdate: (id, data) => request(`/funds/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  fundLPs: (id) => request(`/funds/${id}/lps`),
   fundAddLP: (id, data) => request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
   fundCapitalCall: (id, amount, note) =>
     request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount, note }) }),
@@ -3156,7 +3153,6 @@ export const api = {
     request(`/funds/distributions/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({}) }),
 
   // ---------- Branded email (Gmail) ----------
-  emailSendDeal: (data) => request('/email/send-deal', { method: 'POST', body: JSON.stringify(data) }),
   emailSendReferralInvites: (contacts, custom_message) =>
     request('/email/send-referral-invites', {
       method: 'POST',
@@ -3940,7 +3936,6 @@ export const api = {
     request(`/trust/intro/status?founder=${encodeURIComponent(founder_user_id)}`),
   trustObligationStart: (key) =>
     request(`/trust/obligation/${encodeURIComponent(key)}/start`, { method: 'POST' }),
-  trustSanctions: () => request('/trust/sanctions'),
   trustMySigningUrl: (envelope_uuid) =>
     request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/my_signing_url`),
   // Trust Center v2's per-agreement timeline, fetched when a row is expanded.
