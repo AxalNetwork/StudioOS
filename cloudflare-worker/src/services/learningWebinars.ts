@@ -79,11 +79,13 @@ export async function recordingOf(env: Env, w: WebinarRow) {
 /**
  * A webinar for a member. `join_url` is included only for a registered member
  * of a published webinar inside the join window; otherwise it is null, and
- * `join` says why.
+ * `join` says why. A draft says `draft`, never `cancelled` (#1252): only the
+ * Super Admin opens one, and it was never cancelled.
  */
 export function memberWebinar(w: WebinarRow, opts: { registeredCount: number; registered: boolean; now: number }) {
   const open = w.status === 'published' && opts.registered && joinWindowOpen(w, opts.now);
-  const join = w.status !== 'published' ? 'cancelled'
+  const join = w.status === 'draft' ? 'draft'
+    : w.status !== 'published' ? 'cancelled'
     : !opts.registered ? 'not_registered'
     : open ? 'open'
     : webinarPhase(w, opts.now) === 'past' ? 'ended' : 'not_yet';
