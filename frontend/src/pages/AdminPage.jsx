@@ -5310,6 +5310,10 @@ function WellbeingExpertsPanel() {
         <span className="text-xs text-gray-500">
           {verifiedCount} verified · {hiddenCount} hidden · {rows.length} total
         </span>
+        {/* D570 — the resource library members read under Wellbeing. */}
+        <Link to="/admin/wellbeing/resources" className="text-xs font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid="link-admin-wellbeing-library">
+          Resource library →
+        </Link>
         <div className="ml-auto flex items-center gap-2">
           <select
             value={filter}

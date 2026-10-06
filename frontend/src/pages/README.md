@@ -29,6 +29,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
+| `wellbeing/` | Wellbeing's booking flow, the expert's practice zones and the admin resource library, with the pure model they share (D570). The member home is `WellbeingPage.jsx` and the practice page is `ExpertEditorPage.jsx`, both here. |
 | `subsidiary/` | A territory licence holder's read of their own licence. |
 | `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
 | `branch/` | The subsidiary shell's own pages, S1–S11, all eight rows built (D107 for why every row shipped with a route rather than only the built ones; D155 for the last of them). Start at `branch/README.md`. |

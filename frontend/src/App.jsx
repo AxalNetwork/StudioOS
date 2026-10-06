@@ -105,6 +105,8 @@ const SpinoutLab83bPage = lazy(() => import('./pages/SpinoutLab83bPage'));
 const SpinoutLabCompliancePage = lazy(() => import('./pages/SpinoutLabCompliancePage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
+const WellbeingBookPage = lazy(() => import('./pages/wellbeing/WellbeingBookPage'));
+const WellbeingResourceLibrary = lazy(() => import('./pages/wellbeing/WellbeingResourceLibrary'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
 const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
 const CapitalPage = lazy(() => import('./pages/CapitalPage'));
@@ -2765,9 +2767,18 @@ function AppInner() {
           refusal, so the old path now lands each on the one they can open. */}
       <Route path="/incorporate/83b" element={<Navigate to={user?.spinout_lab_active === 1 || user?.role === 'admin' ? '/spinout-lab/83b' : '/raise/legal-engine/equity'} replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
+      {/* D570 — Wellbeing, built to the Ops canvas. Home and booking keep the
+          home page's guard (the Worker refuses investors on the check-in and
+          expert routes).
+          The expert's practice is the old expert dashboard, extended: the old
+          path redirects, so notification links and the Stripe return URL land
+          on it. The library is admin-only, as its two writes are. */}
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
-      <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
+      <Route path="/wellbeing/book" element={guard(['admin', 'founder'], <WellbeingBookPage />)} />
+      <Route path="/wellbeing/practice" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
+      <Route path="/wellbeing/expert-dashboard" element={<Navigate to="/wellbeing/practice" replace />} />
       <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ExpertProfilePage />)} />
+      <Route path="/admin/wellbeing/resources" element={guard(['admin'], <WellbeingResourceLibrary />)} />
       {/* /partners is RETIRED (task #101). It was "Partner Ecosystem": a list of
           partner accounts, a create form, and two match buttons.
 
