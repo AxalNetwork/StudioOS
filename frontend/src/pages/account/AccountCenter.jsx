@@ -173,25 +173,22 @@ export function Chips({ items, label }) {
 /**
  * The section list on the left of the content — the canvas's `acNav`.
  *
- * ONE ELEMENT, TWO SHAPES, which is the canvas's own phone rule
- * (`.op-secnav{flex-direction:row;overflow-x:auto}`): a column beside the
- * content from `lg`, a row of chips that scrolls sideways below it. The six
- * canvas sections come first in the canvas's order; the four the old page had
- * and the canvas does not draw follow under "More", kept rather than dropped.
+ * TWO SHAPES, which is the canvas's own phone rule (D607, the 2026-10-06
+ * export: `.op-secnav{display:none}.op-secdrop{display:flex}`). From `lg` it
+ * is a column beside the content. Below `lg` it is one row, "Section", the
+ * open section's name and ▾, and the list opens from it. The six canvas
+ * sections come first in the canvas's order; the four the old page had and
+ * the canvas does not draw follow under "More", kept rather than dropped.
+ *
+ * The phone row is a native select under the canvas's drawing, so the phone
+ * opens its own picker, and the keyboard and a screen reader get a real
+ * control. D568 drew a row of chips that scrolled sideways here, after the
+ * export it was built from; the newer export replaced that row.
  */
 export function AccountSectionNav({ sections, active, onSelect }) {
-  const rowRef = useRef(null);
   const main = sections.filter((s) => s.group !== 'more');
   const more = sections.filter((s) => s.group === 'more');
-
-  // On a phone the active chip can sit off the edge of the row. Scroll the
-  // row itself, never the page.
-  useEffect(() => {
-    const row = rowRef.current;
-    if (!row || row.scrollWidth <= row.clientWidth) return;
-    const btn = row.querySelector('[aria-current="page"]');
-    if (btn) row.scrollLeft = btn.offsetLeft - (row.clientWidth - btn.clientWidth) / 2;
-  }, [active]);
+  const current = sections.find((s) => s.id === active) || main[0] || sections[0];
 
   const item = (s) => {
     const on = s.id === active;
@@ -202,7 +199,7 @@ export function AccountSectionNav({ sections, active, onSelect }) {
         onClick={() => onSelect(s.id)}
         aria-current={on ? 'page' : undefined}
         data-testid={`account-nav-${s.id}`}
-        className={`shrink-0 whitespace-nowrap rounded-axal-sm px-3 py-2 text-left text-[13px] transition-colors lg:whitespace-normal ${
+        className={`rounded-axal-sm px-3 py-2 text-left text-[13px] transition-colors ${
           on
             ? 'bg-axal-lavender font-semibold text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300'
             : 'font-medium text-axal-muted hover:bg-axal-ground hover:text-axal-ink dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100'
@@ -213,20 +210,41 @@ export function AccountSectionNav({ sections, active, onSelect }) {
     );
   };
 
+  const option = (s) => <option key={s.id} value={s.id}>{s.label}</option>;
+
   return (
     <nav aria-label="Account sections" data-testid="account-section-nav" className="min-w-0 lg:sticky lg:top-4 lg:self-start">
-      <Card padding="none" className="p-1.5">
-        <div ref={rowRef} className="flex gap-0.5 overflow-x-auto lg:flex-col lg:overflow-visible">
+      <Card padding="none" className="hidden p-1.5 lg:block">
+        <div className="flex flex-col gap-0.5">
           {main.map(item)}
           {more.length > 0 && (
             <>
-              <span aria-hidden="true" className="mx-1 w-px shrink-0 self-stretch bg-axal-hairline dark:bg-gray-700 lg:hidden" />
-              <SectionLabel className="hidden px-3 pb-1 pt-3 lg:block">More</SectionLabel>
+              <SectionLabel className="px-3 pb-1 pt-3">More</SectionLabel>
               {more.map(item)}
             </>
           )}
         </div>
       </Card>
+      <div
+        data-testid="account-section-menu"
+        className="relative flex min-h-[44px] items-center justify-between gap-2.5 rounded-axal-lg border border-axal-hairline bg-white px-3.5 focus-within:ring-2 focus-within:ring-axal-violet/40 dark:border-gray-800 dark:bg-gray-900 lg:hidden"
+      >
+        <span aria-hidden="true" className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-axal-muted dark:text-gray-400">Section</span>
+          <span className="truncate text-sm font-semibold text-axal-ink dark:text-gray-100">{current?.label}</span>
+        </span>
+        <span aria-hidden="true" className="shrink-0 text-axal-muted dark:text-gray-400">▾</span>
+        <select
+          aria-label="Account section"
+          value={current?.id ?? ''}
+          onChange={(e) => onSelect(e.target.value)}
+          data-testid="account-section-select"
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+        >
+          {main.map(option)}
+          {more.length > 0 && <optgroup label="More">{more.map(option)}</optgroup>}
+        </select>
+      </div>
     </nav>
   );
 }
