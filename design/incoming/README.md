@@ -639,9 +639,29 @@ folder's format:
 | Event organiser | E1 Eligibility, E2 Registrations queue, E3 My registration (phone), E4 Agenda editor | `/events/:id/manage`, `/events/:id/manage/registrations`, `/events/:id`, `/events/:id/manage/agenda` | UPGRADE | #1173 |
 | Account center, partner earnings, Wellbeing, advisor practice | the `ac-`, `pe-`/`pea-`, `wb-`/`wbx-`/`wba-` and `adv-`/`advpub-` screens | see #1165 | not yet triaged | #1165 |
 
-**What the export lacks.** `Ops Page` reads its sample text from a script named
-ops-data.js, which sets `window.OPS_DATA`. The published artifact did not
-include it. So the files carry every screen's structure but not its sample
-copy: each zone, field, column and state is in the markup, and the words
-come from the prompt on #1165. A builder takes the zone list from the markup
-and the copy from the prompt, and never invents a figure.
+**The sample text.** The first export had no copy of the script that holds
+`Ops Page`'s text. A newer export of the same page, published 2026-10-06 at
+`https://claude.ai/artifact/LH7tQqy7UZJ8vE52o63PRh`, carries it. That page
+replaced `Ops Page.dc.html` here, and its script is committed beside it as
+`ops-data.js` (the page loads it by that name). Every label, count and state
+each screen draws is now in the repository; the figures are bracketed
+placeholders, never data.
+
+## Landed 2026-10-06 — the Learning canvas (#1157)
+
+The owner approved the Learning design on 2026-10-06
+(`https://claude.ai/artifact/M7oxbLxb94CQhfjM8kHbNA`, the newest of three
+exports of it) and asked for it to be built: backend by S07, S08 and S09,
+frontend by Session 1. `Learning.dc.html` is that export, decoded with
+`scripts/read-canvas.mjs`.
+
+| Rows | Screens | Routes | Grade | Issues |
+| --- | --- | --- | --- | --- |
+| Learner | Learning home and tabs, course, lesson player, webinar, exercise, exam, Articles and Publications, My learning | `/learning`, `/learning/courses/:slug`, `/learning/courses/:slug/:lesson`, `/learning/webinars/:slug`, `/learning/exercises/:slug`, `/learning/exams/:slug`, `/learning/me` | NEW | #1158, #1160, #1161, #1162, #1163 |
+| Super Admin | Learning studio and its editors, regional programs | `/learning/studio`, `/learning/studio/programs`, `/learning/studio/programs/:program` | NEW | #1158, #1159, #1163 |
+| Admin | An assigned program's members against its content | `/learning/programs`, `/learning/programs/:program` | NEW | #1159, #1163 |
+
+The two earlier exports (`G8nEx8nxtggBJbPBei5rc4`, `BbW5Sze3zEzDC9nnRgpn3c`)
+draw the same screens as a component board split by role. They are not
+committed. Build to the app's own styling: the pages in the left sidebar are
+the reference, as with every canvas here.
