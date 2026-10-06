@@ -38,7 +38,6 @@ import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scrip
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
-const sqlOf = (n: string) => readFileSync(resolve(MIGRATIONS, readdirSync(MIGRATIONS).find((f) => f.startsWith(n + '_')) as string), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const SUPER = 1, PLAIN_ADMIN = 2, MEMBER = 10, PEER = 11, THIRD = 12;
