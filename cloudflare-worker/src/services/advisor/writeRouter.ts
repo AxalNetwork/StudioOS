@@ -1111,15 +1111,14 @@ export async function routeAnswer(
     // The new-founder bank's legal/incorporation question is
     // `founder.captable.entity` (page_target /legal/incorporation).
     if (questionId === 'founder.captable.entity') {
-      try { await recordSpinoutMilestoneAndAdvance(env, user.id, 'incorporation_completed', 4); } catch { /* legacy dev */ }
-      // Same graduation event as POST /spinout-lab/milestone, so the same
-      // credential gets issued — a founder who graduates through the advisor
-      // path must not end up without the certificate the other path grants.
-      // Idempotent and non-throwing; see services/certificateIssuance.
+      // D585 (#1212): answering the entity question no longer graduates the
+      // founder. The formation milestone, its certificate and its credits are
+      // recorded only behind a paid incorporation order; this asks the server
+      // to sync, which records nothing without one.
       try {
-        const { issueOnGraduation } = await import('../certificateIssuance');
-        await issueOnGraduation(env, user.id);
-      } catch { /* issuance is best-effort */ }
+        const { syncIncorporationMilestone } = await import('../labIncorporationMilestone');
+        await syncIncorporationMilestone(env, user.id);
+      } catch { /* never blocks the answer */ }
     }
     // Roadmap OKR slot completion → 'okrs_created' milestone (Week 2).
     if (/^founder\.okrs\.q1_objective[1-3]$/.test(questionId)) {
