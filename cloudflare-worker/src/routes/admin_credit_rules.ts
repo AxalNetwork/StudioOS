@@ -4,7 +4,8 @@
  *
  *   GET  /                    every reward rule and the monthly bounty cap
  *   PUT  /:key                change one rule's credits, value or on/off
- *   GET  /grants              rule-based grants, newest first (?user_id=)
+ *   GET  /grants              rule-based grants and manual adjustments (D608,
+ *                             `manual: true`), newest first (?user_id=)
  *   POST /grants/:id/revoke   take one back
  *   POST /lab-backfill        pay the current Lab cohort once for milestones
  *                             completed before credits launched (D541,
@@ -20,7 +21,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
-import { CAP_RULE_KEY, isBountyRule, revokeGrant } from '../services/creditGrants';
+import { CAP_RULE_KEY, MANUAL_RULE_KEY, isBountyRule, revokeGrant } from '../services/creditGrants';
 import { backfillLabCredits } from '../services/labMilestoneCredits';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
@@ -84,7 +85,7 @@ r.get('/grants', async (c) => {
              LEFT JOIN users u ON u.id = g.user_id
              LEFT JOIN perk_credit_ledger r
                ON r.user_id = g.user_id AND r.kind = 'admin_adjust' AND r.source_ref = 'revoke:' || g.id
-            WHERE g.kind = 'grant' AND g.rule_key IS NOT NULL AND g.user_id = ?
+            WHERE ((g.kind = 'grant' AND g.rule_key IS NOT NULL) OR (g.kind = 'admin_adjust' AND g.rule_key = 'manual' AND substr(g.source_ref, 1, 7) <> 'revoke:')) AND g.user_id = ?
             ORDER BY g.created_at DESC, g.id DESC LIMIT 200`,
         ).bind(userId)
       : c.env.DB.prepare(
@@ -94,13 +95,14 @@ r.get('/grants', async (c) => {
              LEFT JOIN users u ON u.id = g.user_id
              LEFT JOIN perk_credit_ledger r
                ON r.user_id = g.user_id AND r.kind = 'admin_adjust' AND r.source_ref = 'revoke:' || g.id
-            WHERE g.kind = 'grant' AND g.rule_key IS NOT NULL
+            WHERE ((g.kind = 'grant' AND g.rule_key IS NOT NULL) OR (g.kind = 'admin_adjust' AND g.rule_key = 'manual' AND substr(g.source_ref, 1, 7) <> 'revoke:'))
             ORDER BY g.created_at DESC, g.id DESC LIMIT 200`,
         )
     ).all<any>();
     return c.json({
       grants: (rows.results || []).map((g: any) => ({
         id: g.id, user_id: g.user_id, email: g.email ?? null, credits: Number(g.credits), rule_key: g.rule_key,
+        manual: g.rule_key === MANUAL_RULE_KEY,
         source_ref: g.source_ref, note: g.note, created_at: g.created_at,
         revoked: g.revoke_id !== null && g.revoke_id !== undefined,
         revoke_reason: g.revoke_reason ?? null, revoked_at: g.revoked_at ?? null,
