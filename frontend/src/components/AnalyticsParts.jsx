@@ -105,3 +105,72 @@ export function signed(n) {
   if (n === 0) return '±0';
   return n > 0 ? `+${n}` : `−${Math.abs(n)}`;
 }
+
+/** A median decision age's band: amber above a day, red above two. */
+export function ageTone(hours) {
+  if (typeof hours !== 'number' || !Number.isFinite(hours)) return null;
+  if (hours > 48) return 'late';
+  if (hours > 24) return 'slow';
+  return null;
+}
+export const AGE_TONE_CLASS = {
+  late: 'text-rose-700 dark:text-rose-300',
+  slow: 'text-amber-700 dark:text-amber-300',
+};
+
+/**
+ * Approval age by queue — medians where a decision is an event, reasons where
+ * it is not. Drawn by a branch's S15 and, since D483, by HQ's H15, which
+ * passes its own title and test-id prefix.
+ */
+export function ApprovalAgeList({
+  rows, title = 'Approval age by queue', sub = 'median hours from submission to decision', prefix = 's15', children,
+}) {
+  return (
+    <Card data-testid={`${prefix}-approval-age`}>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[14px] font-extrabold tracking-tight text-axal-ink">{title}</h2>
+        {sub && <span className="text-[11px] text-axal-faint">{sub}</span>}
+      </div>
+      {children}
+      <ul className="divide-y divide-axal-hairline">
+        {rows.map((q) => {
+          const tone = q.available ? ageTone(q.median_hours) : null;
+          return (
+            <li key={q.key} className="py-2" data-testid={`${prefix}-age-row`} data-queue={q.key}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-[12.5px] font-semibold text-axal-ink">{q.label}</span>
+                {!q.available && (
+                  <span className="text-[12px]" data-state={q.unreadable ? 'unreadable' : 'not_recorded'}>
+                    {q.unreadable ? <Unrecorded reason={q.reason}>Unreadable</Unrecorded> : <Unrecorded reason={q.reason} />}
+                  </span>
+                )}
+                {q.available && q.median_hours === null && (
+                  <span className="text-[12px] text-axal-muted">none decided</span>
+                )}
+                {q.available && q.median_hours !== null && (
+                  <span
+                    className={`font-mono text-[12.5px] font-bold tabular-nums ${tone ? AGE_TONE_CLASS[tone] : 'text-axal-ink'}`}
+                    data-tone={tone || 'on_time'}
+                  >
+                    {q.median_hours}h
+                  </span>
+                )}
+              </div>
+              {q.available && q.median_hours !== null && (
+                <p className="mt-0.5 text-[11px] text-axal-faint">
+                  over {q.n} decision{q.n === 1 ? '' : 's'} in the last {q.window_days} days
+                </p>
+              )}
+              {q.reason && <p className="mt-0.5 text-[11px] leading-relaxed text-axal-muted">{q.reason}</p>}
+              {q.clock && (
+                <p className="mt-0.5 text-[11px] text-axal-faint" data-testid={`${prefix}-age-clock`}>The clock is {q.clock}</p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-[11px] text-axal-faint">Amber above a day, red above two.</p>
+    </Card>
+  );
+}

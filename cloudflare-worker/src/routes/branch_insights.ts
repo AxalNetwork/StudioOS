@@ -46,8 +46,10 @@ import {
   ACTIVE_ACCOUNT_BASIS, parseAnalyticsRange, ANALYTICS_RANGES, weekAxis,
   loadBranchWeeklyActives, weeklyKpi, GAP_SENTENCES, gapNotes, partialWeekReason,
 } from '../services/activeAccounts';
-import { verdictSpans, type VerdictEventRow } from '../services/referralSubmissions';
-import { median, currentPeriod } from '../services/branchBenchmarks';
+import { currentPeriod } from '../services/branchBenchmarks';
+import {
+  APPROVAL_AGE_NOT_RECORDED, DECISION_WINDOW_DAYS, medianHours, referralDecisionSpans, utcMs,
+} from '../services/approvalAge';
 import { branchLicencePayload } from './licence';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -110,25 +112,6 @@ const THROUGHPUT_REASON =
   + 'Analytics page, drawn from the cohort timeline week by week. Assessment runs are listed '
   + 'on Programs for one cycle: a run is kept when its start falls inside that cycle. A week '
   + 'gate and an assessment completion count different things, so one figure would not say which.';
-
-/** The window a decision age is measured over, in days. */
-const DECISION_WINDOW_DAYS = 30;
-
-/** `YYYY-MM-DD HH:MM:SS`, UTC — the form `CURRENT_TIMESTAMP` columns hold (D162). */
-function sqlStamp(ms: number): string {
-  return new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
-}
-
-/**
- * A stamp in either form this table set holds: ISO with its zone (what a route
- * writes with `nowIso()`) or SQLite's `YYYY-MM-DD HH:MM:SS` (a column default),
- * which carries no zone and is UTC.
- */
-function utcMs(raw: unknown): number {
-  const s = String(raw ?? '').trim();
-  if (!s) return NaN;
-  return s.includes('T') ? Date.parse(s) : Date.parse(`${s.replace(' ', 'T')}Z`);
-}
 
 // GET /api/branch/insights
 r.get('/insights', async (c) => {
@@ -216,39 +199,6 @@ r.get('/insights', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-/**
- * The canvas's two approval queues this branch cannot time, and why. Each is a
- * measurement of the store, not a gap in the page: the timestamp a decision age
- * would need is either rewritten on every move or overwritten by the next one.
- */
-const APPROVAL_AGE_NOT_RECORDED = [
-  {
-    key: 'lp_applications',
-    label: 'LP applications',
-    reason:
-      '`reviewed_at` is rewritten on every status change — in review, needs follow-up, and a note '
-      + 'saved without a change of status — and a decision can be reversed, so the column holds the '
-      + 'last move, not the decision.',
-  },
-  {
-    key: 'cohort_applications',
-    label: 'Cohort applications',
-    reason:
-      '`decided_at` is overwritten when an application is decided again or rolled to the next '
-      + 'cohort, and a rolled application starts a new row with a new `created_at`, so neither end '
-      + 'of the interval survives a roll.',
-  },
-] as const;
-
-/**
- * Median hours from a start to an end, over the spans given, or `null` for none.
- * A median and not a mean: one referral left for a month would move a mean by
- * days and move a median by nothing, and the canvas labels this a median.
- */
-function medianHours(spans: Array<{ from: number; to: number }>): number | null {
-  const hs = spans.map((s) => (s.to - s.from) / 3_600_000).filter((h) => Number.isFinite(h) && h >= 0);
-  return hs.length ? Math.round(median(hs) * 10) / 10 : null;
-}
 
 // GET /api/branch/analytics?range=8w|quarter|year
 //
@@ -306,19 +256,11 @@ r.get('/analytics', async (c) => {
     // MEDIAN DECISION AGE — referrals, the one queue whose decision is an
     // event that is written once and never rewritten.
     const windowStartMs = nowMs - DECISION_WINDOW_DAYS * 86_400_000;
+    // The read is shared with HQ's H15 (D483, `services/approvalAge.ts`), so
+    // the figure HQ prints for this branch is the one printed here.
     let referralAge: { available: boolean; unreadable?: true; median_hours: number | null; n: number; reason?: string };
     try {
-      const q = await c.env.DB.prepare(
-        `SELECT s.id AS submission_id, s.created_at AS submitted_at,
-                e.status AS event_status, e.created_at AS event_at
-           FROM referral_submissions s
-           JOIN referral_submission_events e ON e.submission_id = s.id
-          WHERE s.id IN (SELECT submission_id FROM referral_submission_events WHERE created_at >= ?)`,
-      ).bind(sqlStamp(windowStartMs)).all<VerdictEventRow>();
-      // The earliest verdict per referral, then only those decided inside the
-      // window: a referral decided last year and converted this week has an
-      // event in the window and no decision in it.
-      const spans = [...verdictSpans(q.results || []).values()].filter((s) => s.to >= windowStartMs);
+      const spans = await referralDecisionSpans(c.env, nowMs);
       referralAge = { available: true, median_hours: medianHours(spans), n: spans.length };
       if (!spans.length) {
         referralAge.reason = `No referral was decided in the last ${DECISION_WINDOW_DAYS} days.`;
