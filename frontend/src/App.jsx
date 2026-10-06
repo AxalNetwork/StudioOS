@@ -31,6 +31,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 // that tag is not written in prose here). See frontend/src/routes/README.md;
 // routes_modules_d528.test.mjs fails the build for a module that is not wired in.
 import learningRoutes from './routes/learning';
+import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -230,7 +231,6 @@ const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // branch page wraps ITSELF in it — see the notes on the branch routes below —
 // so a second binding in this file had no route to serve and was removed.
 const BranchAccounts = lazy(() => import('./pages/branch/BranchAccounts'));
-const BranchHome = lazy(() => import('./pages/branch/BranchHome'));
 const BranchPrograms = lazy(() => import('./pages/branch/BranchPrograms'));
 const BranchCommunity = lazy(() => import('./pages/branch/BranchCommunity'));
 const BranchContracts = lazy(() => import('./pages/branch/BranchContracts'));
@@ -2598,7 +2598,9 @@ function AppInner() {
           Worker serving them, and on HQ they carry no data at all. A second,
           weaker copy of the wall in the router would be the thing that looks
           like the guarantee without being it. */}
-      <Route path="/branch" element={guard(['admin'], <BranchHome user={user} />)} />
+      {/* D473 — the digest opens Studio. The path stays, so a bookmark lands,
+          and the query string and hash travel. `/branch/*` is unchanged. */}
+      <Route path="/branch" element={guard(['admin'], <BranchDigestRedirect />)} />
       {/* D129 — LIVE, and it wraps ITSELF in BranchZone because its rail
           coverage is what it loaded. The notice this replaces said seats used
           "is not a number that can be shown today", which D127 made false: a
