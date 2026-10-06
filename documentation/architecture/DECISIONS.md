@@ -40940,6 +40940,20 @@ test throws if that element is gone. No migration.
 
 **Tests.** `frontend/test/branch_approvals_to_hq_d475.test.mjs`.
 
+## D476
+
+**Code scanning: a dead store, two dev-only FastAPI files, and a parser-blocking canvas loader.** Issue #1030. No migration. FastAPI stays Replit-dev-only and is not deployed.
+
+**deck-stage.js.** `var kb = true` was always overwritten, in the `try` or the `catch`. The initial value is gone. A mouse click that focuses a control still does not pin the overlay; keyboard focus and an engine that throws on `:focus-visible` still do. The file header says a starter re-copy overwrites the whole file, which would put the dead store back.
+
+**settings.py.** The two run-once flags are entries on `_schema_once`. User-settings still skips after the first attempt, success or failure. Profile extras still retries after a failure and skips only after a commit. The CodeQL comments that did not clear the finding are gone.
+
+**wellbeing.py.** The notes length check and the resource category check are `@field_validator` stacked on `@classmethod`. The same limits stand: notes over 4,000 characters are refused, and a category outside the five names is refused.
+
+**Canvases.** Eighteen files under `design/canvases/backlog/` and `design/canvases/integrated/` load `./support.js` with a static script tag. A classic script is parser-blocking, so the canvas's own scripts still run after it. The `?t=` cache key is gone. `support.js` is not edited. Ten copies under `attached_assets/` still call `document.write` and are not part of this change.
+
+**Tests.** `frontend/test/code_scanning_d476.test.mjs`, `backend/tests/test_codeql_d476.py`.
+
 ## D480
 
 **HQ · Contracts doc-type registry store, correct usage, and hub (issue #1014).**
