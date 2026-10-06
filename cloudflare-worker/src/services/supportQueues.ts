@@ -271,6 +271,110 @@ export function summariseTickets(
   return { complete: read.complete, open: read.complete ? read.rows.length : null, buckets };
 }
 
+// ─── Tickets filed on a branch host (D485) ────────────────────────────────
+
+/**
+ * What a branch tells HQ about the tickets its administrators filed on its own
+ * host, into its own database — the cells H22's matrix used to mark "On the
+ * branch" because no branch call returned tickets.
+ *
+ * WHOSE TICKETS: an ACTIVE account with `role = 'admin'` on the branch's
+ * database. On a branch nobody is a Super Admin (D106), so its administrators
+ * are exactly its admins: the About-Admin queue's persona, read where they
+ * file. A branch member's own ticket is the branch's to answer, not HQ's, and
+ * does not travel.
+ *
+ * WHAT TRAVELS: the count, the oldest filing time, and the oldest
+ * `SUPPORT_LIST_LIMIT` items with their title, priority, status, filing time
+ * and requester's display name. HQ ages and bands them with its own tier
+ * hours, so a branch ticket bands exactly as an HQ one does. A read past the
+ * ceiling says so, and HQ then shows no count for it.
+ */
+export type BranchTicketItem = {
+  id: number; title: string; status: string; priority: string; created_at: string; requester: string | null;
+};
+export type BranchTicketsRead =
+  | { available: true; complete: boolean; count: number; oldest_created_at: string | null; items: BranchTicketItem[] }
+  | { available: false; reason: string };
+
+export const BRANCH_TICKETS_UNREADABLE =
+  'This branch\'s ticket queue could not be read on its database, so how many its administrators have waiting is unknown — not none.';
+
+export async function readBranchAdminTickets(env: Env): Promise<BranchTicketsRead> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at, u.name AS requester_name, u.email AS requester_email
+         FROM tickets t
+         JOIN users u ON u.id = t.user_id
+        WHERE t.status IN (?, ?) AND u.role = 'admin' AND u.is_active = 1
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<{
+      id: number; title: string; status: string; priority: string; created_at: string;
+      requester_name: string | null; requester_email: string | null;
+    }>();
+    const all = res.results || [];
+    const complete = all.length <= OPEN_TICKET_CEILING;
+    const rows = complete ? all : all.slice(0, OPEN_TICKET_CEILING);
+    return {
+      available: true,
+      complete,
+      count: rows.length,
+      oldest_created_at: rows.length ? String(rows[0].created_at) : null,
+      items: rows.slice(0, SUPPORT_LIST_LIMIT).map((r) => ({
+        id: Number(r.id),
+        title: String(r.title ?? ''),
+        status: String(r.status ?? ''),
+        priority: String(r.priority ?? ''),
+        created_at: String(r.created_at ?? ''),
+        requester: r.requester_name || r.requester_email || null,
+      })),
+    };
+  } catch {
+    return { available: false, reason: BRANCH_TICKETS_UNREADABLE };
+  }
+}
+
+/** One branch's line on HQ's page: its state, and when read, its queue aged and banded with HQ's hours. */
+export type BranchTicketLine =
+  | {
+      code: string; label: string; state: 'ok'; complete: boolean;
+      /** Null past the branch's ceiling: a cut count is not a total. */
+      count: number | null;
+      oldest_age_hours: number | null;
+      bands: { ok: number; due_soon: number; past: number; undated: number } | null;
+      items: Array<Omit<SupportTicketItem, 'licence'> & { created_at: string }>;
+    }
+  | { code: string; label: string; state: 'unreadable' | 'not_deployed'; reason: string };
+
+/**
+ * Age and band one branch's answer. Pure. `tierHours` null (HQ's tier store
+ * unreadable) bands nothing, as for HQ's own tickets. The bands cover only the
+ * items that travelled, so they are given only when every open ticket did.
+ */
+export function branchTicketLine(
+  code: string, label: string, read: BranchTicketsRead, nowMs: number, tierHours: TierHours | null,
+): BranchTicketLine {
+  if (!read.available) return { code, label, state: 'unreadable', reason: read.reason };
+  const items = read.items.map((x) => {
+    const age = ageHours(x.created_at, nowMs);
+    return {
+      id: x.id, title: x.title, status: x.status, priority: x.priority, created_at: x.created_at,
+      age_hours: age,
+      sla_band: tierHours ? ticketSlaBandForPriority(age, x.priority, tierHours) : null,
+      requester: x.requester,
+    };
+  });
+  const whole = read.complete && read.count === read.items.length;
+  return {
+    code, label, state: 'ok', complete: read.complete,
+    count: read.complete ? read.count : null,
+    oldest_age_hours: read.oldest_created_at ? ageHours(read.oldest_created_at, nowMs) : null,
+    bands: whole && tierHours ? tallySlaBands(items.map((i) => i.sla_band)) : null,
+    items,
+  };
+}
+
 // ─── The GitHub sync strip ────────────────────────────────────────────────
 
 /** The window the strip counts over. The SQL below writes it as a literal, and a test holds the two equal. */
@@ -494,7 +598,11 @@ export async function readSupportDeployments(env: Env): Promise<DeploymentsRead>
  * was not counted.
  */
 export type MatrixCell =
-  | { value: number; oldest_age_hours: number | null }
+  | {
+      value: number; oldest_age_hours: number | null;
+      /** About Admin on a branch (D485): how many were filed on its host, and how many on axal.vc. */
+      on_branch?: number; on_hq?: number;
+    }
   | {
       value: null;
       why: 'does_not_apply' | 'branch_database' | 'unreadable' | 'incomplete';
@@ -565,8 +673,10 @@ export function buildTenantMatrix(input: {
   escalations: { available: true; complete: boolean; items: EscalationLike[] } | { available: false; reason: string };
   tickets: OpenTicketsRead;
   nowMs: number;
+  /** D485 — each branch's own About-Admin queue, by branch code. Absent: no branch was asked. */
+  branchTickets?: Map<string, BranchTicketLine>;
 }): { rows: MatrixRow[]; omitted_terminated: number } {
-  const { licences, deployments, escalations, tickets, nowMs } = input;
+  const { licences, deployments, escalations, tickets, nowMs, branchTickets } = input;
 
   const deploymentByLicence = new Map<string, SupportDeployment>();
   const licenceByCode = new Map<string, string>();
@@ -617,6 +727,35 @@ export function buildTenantMatrix(input: {
     if (!tickets.available) return absent('unreadable', tickets.reason);
     if (!deployments.available) return absent('unreadable', MATRIX_REASONS.deploymentUnknown);
     const dep = deploymentByLicence.get(licenceUid);
+    const line = dep && branchTickets ? branchTickets.get(String(dep.code).toLowerCase()) : undefined;
+    if (dep && line) {
+      // D485 — the branch answered for its own host, so the cell is the whole
+      // load: what its administrators filed there, plus what they filed here.
+      const host = dep.hostname || `${dep.code}.axal.vc`;
+      if (line.state === 'not_deployed') {
+        const here = aboutByLicence.get(licenceUid)?.n || 0;
+        const filedHere = tickets.complete
+          ? ` ${here} filed on axal.vc ${here === 1 ? 'is' : 'are'} in the queue above.`
+          : '';
+        return absent(
+          'branch_database',
+          `Its administrators file on ${host}, into that branch’s own database, and HQ has no binding to ask it yet: ${line.reason}${filedHere}`,
+        );
+      }
+      if (line.state !== 'ok') return absent('unreadable', `The tickets filed on ${host} could not be read: ${line.reason}`);
+      if (!tickets.complete) return absent('incomplete', MATRIX_REASONS.ticketsIncomplete);
+      if (line.count === null) {
+        return absent('incomplete', `More open tickets on ${host} than one read counts, so this cell would be a cut count.`);
+      }
+      const here = aboutByLicence.get(licenceUid);
+      const ages = [here?.oldest ?? null, line.oldest_age_hours].filter((a): a is number => a !== null);
+      return {
+        value: line.count + (here?.n || 0),
+        oldest_age_hours: ages.length ? Math.max(...ages) : null,
+        on_branch: line.count,
+        on_hq: here?.n || 0,
+      };
+    }
     if (dep) {
       const here = aboutByLicence.get(licenceUid)?.n || 0;
       const filedHere = tickets.complete

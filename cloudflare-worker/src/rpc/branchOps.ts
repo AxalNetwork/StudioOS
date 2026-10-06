@@ -38,6 +38,7 @@ import { likeNeedle } from '../util/likeSearch';
 import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
 import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../services/approvalAge';
+import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supportQueues';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -1173,6 +1174,17 @@ export async function branchApprovalAges(
     window_days: DECISION_WINDOW_DAYS,
     referrals: await referralAges(env, nowMs),
   };
+}
+
+/**
+ * D485 — the tickets this branch's administrators filed on its own host, for
+ * HQ · Support (H22). `readBranchAdminTickets` says whose and what travels.
+ * A read, so no secret, on `rpc/index.ts`'s rule: HQ's Super Admin page is
+ * the reader, and the class's accepted exposure is a read of branch data.
+ */
+export async function branchOpenTickets(env: Env): Promise<BranchAnswer<{ tickets: BranchTicketsRead }>> {
+  const branch = requireBranch(env);
+  return { branch, as_of: nowIso(), tickets: await readBranchAdminTickets(env) };
 }
 
 /* ------------------------------------------------------------------ *

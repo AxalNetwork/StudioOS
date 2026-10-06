@@ -19,8 +19,10 @@
 //     (GET /brand/landing/by-project/:pid/waitlist) grouped by audience,
 //     with routing into Customer Discovery and a real "Invite to meet"
 //     product-invitation email for customer leads.
-//   - Omitted (no backend): brand-voice tags, the light/dark logo variants,
-//     an "Archived" page status, and the design's Log Interview capture
+//   - Brand voice, the dark logo and Archived (D583, migration 399): up to
+//     three voice tags and a dark-background logo save with the brand; a page
+//     can be archived (unpublished, hidden from the list, kept) and restored.
+//   - Omitted (no backend): the design's Log Interview capture
 //     lightbox (its capture/format/duration/ICP fields belong to the
 //     discovery-flow backend — leads deep-link there instead).
 
@@ -40,6 +42,8 @@ import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import { VoiceChips, DarkLogoField } from '../components/spinout/BrandKitExtras';
+import { pageStatus } from '../lib/brand/brandKitExtras';
 import {
   TEMPLATES, AUDIENCES, AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES, SHARED_CONTENT_FIELDS,
 } from '../lib/brand/templates';
@@ -259,7 +263,11 @@ export default function SpinoutLabBrandPage() {
   const [draft, setDraft] = useState({
     name: '', tagline: '', theme_color: '#7c3aed', palette_secondary: '#1e1b3a',
     palette_bg: '#f8f8fa', font_pairing: 'editorial', logo_url: null, logo_svg: null, logo_asset_id: null,
+    voice_tags: [], logo_dark_url: null, logo_dark_svg: null, logo_dark_asset_id: null,
   });
+  const [darkLogoBusy, setDarkLogoBusy] = useState(false);
+  // D583: archived pages are listed only on request, each with Restore.
+  const [archivedPages, setArchivedPages] = useState(null);
   const [brandLoaded, setBrandLoaded] = useState(false);
   const [savingBrand, setSavingBrand] = useState(false);
   const [brandSaved, setBrandSaved] = useState(false);
@@ -392,6 +400,10 @@ export default function SpinoutLabBrandPage() {
           logo_url: v.logo_url || null,
           logo_svg: v.logo_svg || null,
           logo_asset_id: v.logo_asset_id || null,
+          voice_tags: Array.isArray(v.voice_tags) ? v.voice_tags : [],
+          logo_dark_url: v.logo_dark_url || null,
+          logo_dark_svg: v.logo_dark_svg || null,
+          logo_dark_asset_id: v.logo_dark_asset_id || null,
         }));
       }
       if (pg.status === 'fulfilled') {
@@ -436,6 +448,43 @@ export default function SpinoutLabBrandPage() {
       setDraft((d) => ({ ...d, logo_asset_id: r?.asset_id || null, logo_url: r?.url || null, logo_svg: null }));
     } catch (e) { setError(e?.message || 'Logo upload failed'); }
     finally { setLogoBusy(false); }
+  };
+
+  // D583 — the dark logo goes through the same upload checks as the light one.
+  const onUploadDarkLogo = async (file) => {
+    if (!file || !projectId) return;
+    setDarkLogoBusy(true); setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await api.brandUploadLogo(fd);
+      setDraft((d) => ({ ...d, logo_dark_asset_id: r?.asset_id || null, logo_dark_url: r?.url || null, logo_dark_svg: null }));
+    } catch (e) { setError(e?.message || 'Dark logo upload failed'); }
+    finally { setDarkLogoBusy(false); }
+  };
+
+  // D583 (2A) — archive unpublishes and hides a page; restore brings it back as a draft.
+  const onArchivePage = async (page, archived) => {
+    if (!projectId) return;
+    setBusyPage(page.id); setError('');
+    try {
+      await api.brandArchivePage(page.id, archived);
+      const live = await api.brandListPages(projectId);
+      setPages(Array.isArray(live?.pages) ? live.pages : []);
+      if (archivedPages !== null || archived) await loadArchived();
+    } catch (e) {
+      setError(e?.message || (archived ? 'Archive failed' : 'Restore failed'));
+      reportError('SpinoutLabBrandPage:archive', e);
+    } finally { setBusyPage(null); }
+  };
+  const loadArchived = async () => {
+    try {
+      const all = await api.brandListPages(projectId, { archived: true });
+      setArchivedPages((Array.isArray(all?.pages) ? all.pages : []).filter((p) => p.archived_at));
+    } catch (e) {
+      reportError('SpinoutLabBrandPage:archived', e);
+      setArchivedPages('unreadable');
+    }
   };
 
   const onGenerateLogo = async () => {
@@ -1350,6 +1399,14 @@ export default function SpinoutLabBrandPage() {
               {logoBusy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate
             </button>
 
+            <DarkLogoField
+              url={draft.logo_dark_url}
+              svg={draft.logo_dark_svg}
+              busy={darkLogoBusy}
+              onPick={onUploadDarkLogo}
+              onClear={() => setDraft((d) => ({ ...d, logo_dark_url: null, logo_dark_svg: null, logo_dark_asset_id: null }))}
+            />
+
             <div className={`${LBL} mt-4 mb-1.5`}>Brand name</div>
             <input className={INPUT} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Your startup" data-testid="input-brand-name" />
 
@@ -1407,6 +1464,8 @@ export default function SpinoutLabBrandPage() {
               </div>
             )}
 
+            <VoiceChips tags={draft.voice_tags} onChange={(voice_tags) => setDraft((d) => ({ ...d, voice_tags }))} />
+
             <button
               type="button"
               onClick={saveBrand}
@@ -1449,10 +1508,8 @@ export default function SpinoutLabBrandPage() {
                       <div className="px-4 pt-2.5 pb-3.5">
                         <div className="flex items-center gap-1.5 mb-1">
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[aud]}</span>
-                          {/* B6 "Archived" status skipped — landing_pages has
-                              only the published boolean, no archived state. */}
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${p.published ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
-                            {p.published ? 'Published' : 'Draft'}
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${p.published ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`} data-testid={`page-status-${p.id}`}>
+                            {pageStatus(p)}
                           </span>
                         </div>
                         <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
@@ -1509,6 +1566,16 @@ export default function SpinoutLabBrandPage() {
                           <button
                             type="button"
                             disabled={busyPage === p.id}
+                            onClick={() => onArchivePage(p, true)}
+                            title="Unpublish and hide this page. It is kept and can be restored."
+                            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60"
+                            data-testid={`button-archive-page-${p.id}`}
+                          >
+                            Archive
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyPage === p.id}
                             onClick={() => onDeletePage(p)}
                             aria-label={`Delete ${p.name}`}
                             title={pages.length <= 1 ? 'A project keeps at least one page — unpublish it instead' : `Delete ${p.name}`}
@@ -1524,6 +1591,27 @@ export default function SpinoutLabBrandPage() {
                 })}
               </div>
             )}
+
+            {/* D583 — archived pages: hidden from the grid, listed on request, restorable. */}
+            <div className="mb-4 text-[11.5px]" data-testid="archived-pages">
+              {archivedPages === null ? (
+                <button type="button" onClick={loadArchived} className="text-violet-600 dark:text-violet-400 hover:underline" data-testid="button-show-archived">Show archived pages</button>
+              ) : archivedPages === 'unreadable' ? (
+                <span className="text-red-700 dark:text-red-300" role="alert">The archived pages could not be read. <button type="button" className="underline" onClick={loadArchived}>Retry</button></span>
+              ) : archivedPages.length === 0 ? (
+                <span className="text-gray-400">No archived pages.</span>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {archivedPages.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2" data-testid={`archived-page-${p.id}`}>
+                      <span className="font-semibold text-gray-700 dark:text-gray-200">{p.name}</span>
+                      <span className="text-gray-400">Archived</span>
+                      <button type="button" disabled={busyPage === p.id} onClick={() => onArchivePage(p, false)} className="ml-auto text-violet-600 dark:text-violet-400 hover:underline" data-testid={`button-restore-page-${p.id}`}>Restore</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             {/* ---- create new page (audience shortcuts) ---- */}
             {/* The cap is enforced server-side (the endpoint 409s regardless of
