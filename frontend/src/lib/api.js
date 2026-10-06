@@ -1305,6 +1305,8 @@ export const api = {
   // Task #9 — GitHub-canonical ticket comments. (D232: the sync-mapping debug
   // method went — no screen called it; `GET /api/tickets/:id/mapping` stays.)
   commentTicket: (id, body) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+  // D604 — an admin retries one saved ticket's mirror from its page.
+  retryTicketMirror: (id) => request(`/tickets/${id}/mirror`, { method: 'POST' }),
 
   // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
   // relationship with (dealroom member / introduced / converted watchlist).

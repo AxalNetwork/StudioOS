@@ -72,7 +72,16 @@ test('POST /api/tickets refuses a missing type and stores nothing', async () => 
 test('both callers that create tickets send a type', () => {
   const tp = readFileSync('frontend/src/pages/TicketsPage.jsx', 'utf8');
   assert.match(tp, /api\.createTicket\(form\)/);
-  assert.match(tp, /type: '[a-z]+'/, 'the Tickets page form no longer carries a type');
+  // D604 (#1280 step 4) — the Tickets page form is the canvas's H4: Type is a
+  // required choice with no default, and the submit stops before the request
+  // while none is picked. So the page still never sends a ticket without one.
+  const lib = readFileSync('frontend/src/lib/ticketScreens.js', 'utf8');
+  assert.match(lib, /if \(!TYPES\[form\?\.type\]\) errors\.type = /, 'the form no longer requires a type');
+  assert.match(
+    tp,
+    /const found = formErrors\(form\);[\s\S]{0,200}if \(found\.type\) \{ typeRef\.current\?\.focus\(\); return; \}[\s\S]*const res = await api\.createTicket\(form\)/,
+    'the Tickets page form sends a ticket without a type',
+  );
   const pa = readFileSync('frontend/src/components/advisor/PersonalAdvisor.jsx', 'utf8');
   assert.match(pa, /const \[type, setType\] = useState\('task'\);/);
 });
