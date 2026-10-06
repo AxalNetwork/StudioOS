@@ -40606,6 +40606,119 @@ null elsewhere. Admin › Contracts pairwise/partner tabs render a failed read a
 **Tests.** `contract_template_usage_d480.test.ts`, `admin_contract_doc_registry_d480.test.ts`,
 `hq_contracts_x1_d480.test.mjs`; D454 tests re-aimed.
 
+## D481
+
+**HQ · Security: the session list, revoke, per-account sign-out, and token
+anomalies (issue #1021).** No migration.
+
+**The defect.** The Sessions zone's subtitle said "Revoke is recorded", and the
+zone had no revoke. `admin_security.ts` could sign out every account or one
+account, and nothing smaller. The only per-session revoke was
+`POST /settings/sessions/:id/revoke`, and it reached only the caller's own rows.
+
+**One revoke, two doors.** The statement moved out of `settings.ts` into
+`services/userSessions.ts` (`revokeUserSession`), and both routes call it.
+
+- The account holder's door passes `ownerId`. A session that belongs to
+  someone else answers "not found".
+- HQ's door passes none, and its route carries the gate.
+- The UPDATE carries `revoked_at IS NULL`. If two revokes race, the first one's
+  time stays on the row and the second is not audited.
+- A revoke sets `user_sessions.revoked_at`, which `getCurrentUser` already reads
+  by `jti`. `auth.ts` is unchanged.
+- Only the lines that were lifted moved in `settings.ts`. The TOTP and recovery
+  routes stay with S15.
+
+**Routes.** `GET /sessions` uses `requireSuperAdmin`.
+`POST /sessions/:id/revoke`, `POST /sessions/revoke` (at most 100 ids) and
+`POST /impersonations/:id/end` each use `requireSuperAdminWriteBar` and take a
+typed reason of at least 8 characters.
+
+- Each revoke writes one `logAdminAction` row with `target_user_id`. A bulk
+  revoke writes one row per session it actually revoked, never one row for the
+  batch.
+- The caller's own current session is refused (409). The row reads "Current"
+  and offers no revoke.
+- The list does not send `jti` to the browser.
+- If `user_sessions` cannot be read, the route returns 503 "Unreadable" and no
+  rows. It never answers with an empty list.
+
+**Per-account sign-out.** Each row reaches D165's existing
+`POST /force-reauth/:userId`. It is not built a second time.
+
+**"Active" is a token that could still open a door.** The list, its total and
+the /overview "Active sessions" tile all use one predicate
+(`services/userSessions.ts`, `countActiveSessions` beside `listActiveSessions`),
+built from `getCurrentUser`'s own checks:
+
+- `revoked_at IS NULL`;
+- `created_at` within `JWT_EXPIRY_HOURS` (24, exported from `auth.ts`). No
+  expiry is stored on the row; the row is written just after the token is
+  signed, and nothing mints a longer session, so this keeps a row at most a
+  moment past its token and never drops a live one;
+- `created_at` (as epoch seconds) not below the account's `users.jwt_min_iat`.
+  "Sign out account" writes only that floor, so without this check a
+  signed-out account's sessions came back as active on the next reload.
+
+The first version of this decision bounded "active" by `revoked_at` and a
+30-day `last_seen_at` window. That kept tokens dead for weeks on the list, and
+the payloads' `window_days` is now `token_hours`.
+
+**Ending a support session sets `ended_at` and changes nothing else.** The row
+is never deleted, and `admin_user_id` and `context` are never rewritten, so
+`routes/branch_support_sessions.ts` still finds it. This matches
+`routes/admin.ts` and `util/supportSessionSweep.ts`.
+
+- The list offers only open rows started inside the D248 ceiling. Ending an
+  older row is refused (`past_ceiling`), because it would record an end time
+  that never happened.
+- The response says what ending does not do. An impersonation token carries no
+  `jti`, so it stays valid until it expires, up to 30 minutes. Ending the
+  session stops it being extended.
+
+**Token anomalies** come from `ai_usage_logs`, read directly in
+`services/tokenAnomalies.ts`. `services/aiSpend.ts` (S12's) is not touched.
+
+- An account is flagged when its last 24 hours used at least 4× its average day
+  over the 7 days before, and at least 20,000 tokens. The thresholds are a
+  judgement, and the card shows them.
+- An account with no usage in those 7 days is counted on its own as
+  `no_baseline`, not as an anomaly.
+- Cache hits are left out.
+- An unreadable table renders "Unreadable", with no count.
+- The "Token anomalies" row is removed from `AI_SAFETY_NOT_COUNTED`, as D158
+  removed the rule row. Guards in `hq_governance_h7` and
+  `advisor_guardrail_category_d158` are re-aimed to pin the figure as served.
+  `hq_security`'s list of page calls gains the session read and the acts.
+
+**Not recorded, each with its reason and never a count.**
+
+- Cross-tenant refusals: no store records one.
+- Flagged outputs held for review: a shadow flag does not hold an output. The
+  "Outputs flagged" tile above still counts shadow flags.
+- Accreditation lapsed: no attestation date is stored.
+- Failover test: there is no standby to fail over to.
+
+**DSR zone.** Each row carries `kind` from the store that holds it. The page
+renders that field instead of the hard-coded word "erasure".
+`dsr.kinds` names access and portability as not recorded, each with its reason.
+
+**Tests.** `hq_security_sessions_d481.test.ts` (19 tests) runs every route
+against baseline tables and reads the effects back. Seventeen mutations were each
+caught, including:
+
+- a revoke with no audit row;
+- a plain admin reaching the list;
+- an anomaly count read from another table;
+- a failed read returned as an empty list;
+- ending a session by delete, or by rewriting `admin_user_id`;
+- a racing re-stamp;
+- the active predicate without the sign-out floor (list, count, or both),
+  without the expiry, or with a lifetime shorter than the token's.
+
+`hq_security_sessions_d481.test.mjs` (12 tests) renders the panel and the
+cards. Eight mutations were each caught.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor
