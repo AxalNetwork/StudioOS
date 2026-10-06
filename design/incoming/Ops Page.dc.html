@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <script src="ops-data.js"></script>
+  <style>
+    body{margin:0}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    .op{container-type:inline-size}
+    @container (max-width:760px){
+      .op-side,.op-rail,.op-hide{display:none!important}.op-shell{grid-template-columns:1fr!important}
+      .op-main{padding:14px 14px 40px!important}.op-g2,.op-g3,.op-g4,.op-g5,.op-split{grid-template-columns:minmax(0,1fr)!important}
+      .op-h1{font-size:20px!important}.op-chips{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:4px}
+      .op-tr{grid-template-columns:1fr 1fr!important;gap:3px 10px!important}.op-tr>:first-child{grid-column:1/-1}.op-th{display:none!important}
+      .op-secnav{flex-direction:row!important;overflow-x:auto;padding-bottom:4px}
+    }
+  </style>
+</helmet>
+<div class="op" style="background:#f4f3f7;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;min-height:100%">
+<div class="op-shell" style="display:grid;grid-template-columns:186px minmax(0,1fr) {{ railCol }};min-height:100%">
+
+  <aside class="op-side" style="background:#fff;border-right:1px solid #ececf1;padding:18px 10px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:8px;padding:2px 10px 14px"><span style="width:22px;height:22px;border-radius:6px;background:#7c3aed"></span><span style="font-weight:700;font-size:16px;letter-spacing:-.02em">Axal VC</span></div>
+    <sc-if value="{{ badge.show }}" hint-placeholder-val="{{ false }}"><div style="margin:0 10px 12px;padding:6px 8px;border-radius:7px;background:{{ badge.bg }};color:{{ badge.fg }};font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.04em">{{ badge.t }}</div></sc-if>
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="8"><div style="padding:8px 10px;border-radius:8px;font-weight:500;font-size:13px;color:{{ s.fg }};background:{{ s.bg }}">{{ s.t }}</div></sc-for>
+  </aside>
+
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <div style="height:52px;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:12px">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#6b6577;min-width:0"><span style="font-weight:600;color:#18181b;white-space:nowrap">{{ area }}</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ route }}</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:30px;height:30px;border-radius:50%;background:#f4f0fe;border:1px solid #ddd0fb;display:grid;place-items:center;font:600 11px 'Roboto Mono',monospace;color:#6d28d9">[AB]</span><span style="font-size:12px;color:#6b6577">▾</span></div>
+    </div>
+
+    <main class="op-main" style="padding:22px 28px 56px;display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px 20px">
+        <div style="min-width:0">
+          <sc-if value="{{ head.back }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;font-weight:600;color:#6d28d9;margin-bottom:6px">‹ {{ head.back }}</div></sc-if>
+          <h1 class="op-h1" style="margin:0;font-size:24px;line-height:1.15;font-weight:800;letter-spacing:-.02em">{{ head.h1 }}</h1>
+          <div style="margin-top:4px;font-size:13.5px;line-height:1.5;color:#6b6577;max-width:720px">{{ head.sub }}</div>
+        </div>
+        <sc-if value="{{ head.cta }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:9px 14px;white-space:nowrap">{{ head.cta }}</span></sc-if>
+      </div>
+
+      <sc-if value="{{ hasList }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid #ececf1;border-radius:9px;padding:9px 12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg><span style="font-size:13px;color:#a1a1aa">{{ list.search }}</span></div>
+          <div class="op-chips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+            <sc-for list="{{ list.filters }}" as="f" hint-placeholder-count="3"><span style="font-size:12px;font-weight:500;white-space:nowrap;padding:5px 11px;border-radius:99px;border:1px solid #ececf1;background:#fff">{{ f }} ▾</span></sc-for>
+            <span style="margin-left:auto;font-size:12px;color:#6b6577;white-space:nowrap">Sort: {{ list.sort }} ▾</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ list.count }}</span>
+            <div style="display:flex;gap:4px"><sc-for list="{{ pages }}" as="g" hint-placeholder-count="6"><span style="{{ g.style }}">{{ g.t }}</span></sc-for></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ADV · deliverables -->
+      <sc-if value="{{ is.adv_deliverables }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:#6b6577"><span>Status flow:</span><sc-for list="{{ statusFlow }}" as="f" hint-placeholder-count="4"><span style="{{ f.style }}">{{ f.t }}</span></sc-for></div>
+        <sc-for list="{{ clients }}" as="c" hint-placeholder-count="2">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #ececf1"><span style="font-weight:700;font-size:14px">{{ c.name }}</span><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ c.count }}</span></div>
+            <div class="op-th op-tr" style="display:grid;grid-template-columns:minmax(0,2fr) 110px 130px minmax(0,1fr) 120px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>DELIVERABLE</span><span>DUE</span><span>STATUS</span><span>ATTACHMENT</span><span></span></div>
+            <sc-for list="{{ c.rows }}" as="r" hint-placeholder-count="4">
+              <div class="op-tr" style="display:grid;grid-template-columns:minmax(0,2fr) 110px 130px minmax(0,1fr) 120px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px">
+                <span style="font-weight:600">{{ r.t }}</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ r.due }}</span><span style="display:flex;align-items:center;gap:4px"><span style="{{ r.stStyle }}">{{ r.st }}</span><span style="font-size:10px;color:#a1a1aa">▾</span></span><span style="{{ r.attStyle }}">{{ r.att }}</span><span style="font-size:12px;font-weight:600;color:#6b6577;text-align:right">Edit</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </sc-if>
+
+      <!-- ADV · session types -->
+      <sc-if value="{{ is.adv_sessions }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1.4fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div class="op-th op-tr" style="display:grid;grid-template-columns:minmax(0,2fr) 90px 150px 130px 110px 60px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>NAME</span><span>LENGTH</span><span>PRICE</span><span>BOOKABLE</span><span>BOOKINGS</span><span></span></div>
+            <sc-for list="{{ types }}" as="t" hint-placeholder-count="4">
+              <div class="op-tr" style="display:grid;grid-template-columns:minmax(0,2fr) 90px 150px 130px 110px 60px;gap:12px;padding:11px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px">
+                <span style="font-weight:600">{{ t.name }}</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ t.len }}</span>
+                <span><sc-if value="{{ t.hasPrice }}" hint-placeholder-val="{{ true }}"><span style="font:500 12.5px 'Roboto Mono',monospace">{{ t.price }}</span> <span style="font-size:11.5px;color:#6b6577">{{ t.priceNote }}</span></sc-if><sc-if value="{{ t.hasPrice }}" hint-placeholder-val="{{ true }}"></sc-if></span>
+                <span style="display:flex;align-items:center;gap:8px"><span style="{{ t.wrap }}"><span style="{{ t.knob }}"></span></span><span style="font-size:12px;color:#6b6577">{{ t.bookableT }}</span></span>
+                <span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ t.bookings }}</span><span style="font-size:12px;font-weight:600;color:#6b6577;text-align:right">Edit</span>
+              </div>
+            </sc-for>
+            <div style="padding:10px 16px;font-size:12px;color:#6b6577">A type with no price reads <span style="{{ ST.nr }}">Not recorded</span> and cannot be bookable until a price or "included" is set.</div>
+          </div>
+          <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe;font-weight:700;font-size:13.5px">Edit session type</div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ editor }}" as="f" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;font-weight:600;color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:8px 10px;font-size:13px">{{ f.v }}</span></div></sc-for>
+              <div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px"><span style="{{ btn.ghost }}">Cancel</span><span style="{{ btn.primary }}">Save</span></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ADV · booking links -->
+      <sc-if value="{{ is.adv_links }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+          <sc-for list="{{ links }}" as="l" hint-placeholder-count="3">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-weight:700;font-size:13.5px">{{ l.type }}</span><span style="display:flex;align-items:center;gap:6px"><span style="{{ l.wrap }}"><span style="{{ l.knob }}"></span></span><span style="font-size:11.5px;color:#6b6577">{{ l.onT }}</span></span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid #ececf1;border-radius:8px;padding:8px 10px;background:#faf9fc"><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.url }}</span><span style="{{ btn.link }}">Copy</span></div>
+              <div style="display:flex;gap:14px;font:400 11.5px 'Roboto Mono',monospace;color:#6b6577"><span>{{ l.opens }}</span><span>{{ l.booked }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Bookings received</div>
+          <div class="op-th op-tr" style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.4fr) minmax(0,1.4fr) 150px 110px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>WHO</span><span>COMPANY</span><span>SESSION TYPE</span><span>WHEN</span><span>STATUS</span></div>
+          <sc-for list="{{ bookings }}" as="b" hint-placeholder-count="5"><div class="op-tr" style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.4fr) minmax(0,1.4fr) 150px 110px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span style="font-weight:600">{{ b.who }}</span><span style="color:#6b6577">{{ b.co }}</span><span>{{ b.type }}</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ b.when }}</span><span><span style="{{ b.stStyle }}">{{ b.st }}</span></span></div></sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ADV · access log -->
+      <sc-if value="{{ is.adv_access }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ viewers }}" as="v" hint-placeholder-count="2"><div style="flex:1;min-width:220px;border-radius:10px;padding:10px 14px;border:1px solid {{ v.on }};background:#fff;display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13px">{{ v.t }}</span><span style="font-size:12px;color:#6b6577">{{ v.d }}</span></div></sc-for></div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div class="op-th op-tr" style="display:grid;grid-template-columns:130px minmax(0,1.6fr) minmax(0,1.2fr) 110px 150px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>WHO</span><span>RECORD</span><span>CLIENT</span><span>ACTION</span><span>WHEN</span></div>
+          <sc-for list="{{ access }}" as="a" hint-placeholder-count="6"><div class="op-tr" style="display:grid;grid-template-columns:130px minmax(0,1.6fr) minmax(0,1.2fr) 110px 150px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span><span style="{{ a.whoStyle }}">{{ a.who }}</span></span><span style="font-weight:600">{{ a.rec }}</span><span style="color:#6b6577">{{ a.client }}</span><span style="color:#6b6577">{{ a.how }}</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ a.when }}</span></div></sc-for>
+          <div style="padding:10px 16px;font-size:12px;color:#6b6577">Read-only. Rows cannot be edited or removed by anyone.</div>
+        </div>
+      </sc-if>
+
+      <!-- ADVPUB · profile as a client sees it -->
+      <sc-if value="{{ is.advpub_profile }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px;display:flex;gap:14px;align-items:flex-start">
+              <span style="width:56px;height:56px;border-radius:50%;background:#f4f0fe;border:1px solid #ddd0fb;flex:none;display:grid;place-items:center;font:600 13px 'Roboto Mono',monospace;color:#6d28d9">[AB]</span>
+              <div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ expertise }}" as="e" hint-placeholder-count="5"><span style="{{ ST.violet }}">{{ e }}</span></sc-for></div><p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553">[Two or three lines in the advisor's own words about who they work with and how.]</p></div>
+            </div>
+            <div class="op-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><sc-for list="{{ proof }}" as="p" hint-placeholder-count="3"><div style="background:#fff;border:1px solid #ececf1;border-radius:10px;padding:10px 12px"><div style="font:500 15px 'Roboto Mono',monospace">{{ p.v }}</div><div style="font-size:11.5px;color:#6b6577;margin-top:2px">{{ p.k }}</div></div></sc-for></div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Sessions</div>
+            <sc-for list="{{ pubTypes }}" as="t" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f4f3f7"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13.5px">{{ t.name }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ t.len }} · {{ t.price }}</span></div><span style="{{ btn.primary }}">{{ t.cta }}</span></div></sc-for>
+            <div style="padding:10px 16px;font-size:12px;color:#6b6577">Booking opens the advisor's link for that session type.</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- WB · home -->
+      <sc-if value="{{ is.wb_home }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">This week's check-in</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">week of [6 Oct] · one per week</span></div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ scores }}" as="s" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span style="font-size:13px;font-weight:600;width:80px">{{ s.k }}</span><div style="display:flex;gap:6px"><sc-for list="{{ s.dots }}" as="d" hint-placeholder-count="5"><span style="{{ d.style }}">{{ d.n }}</span></sc-for></div></div></sc-for>
+              <div style="border:1px solid #ececf1;border-radius:9px;padding:10px 12px;font-size:13px;color:#a1a1aa;min-height:48px">Private note (optional)</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:11.5px;color:#6b6577">Stored encrypted. Only you can read it.</span><span style="{{ btn.primary }}">Save check-in</span></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">My past weeks</div>
+              <div style="padding:10px 16px;display:flex;flex-direction:column;gap:8px"><sc-for list="{{ weeks }}" as="w" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:12px"><span style="font-size:12px;color:#6b6577;width:72px">{{ w.k }}</span><svg viewBox="0 0 126 26" style="width:100%;height:26px" preserveAspectRatio="none"><path d="{{ w.path }}" fill="none" stroke="#7c3aed" stroke-width="1.5"></path></svg></div></sc-for><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">[8] weeks · 1 = low · 5 = high</span></div>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:10px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">My bookings</span><div style="display:flex;gap:4px"><sc-for list="{{ bookingTabs }}" as="t" hint-placeholder-count="2"><span style="{{ t.style }}">{{ t.t }}</span></sc-for></div></div>
+              <sc-for list="{{ bookings }}" as="b" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f4f3f7"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13px">{{ b.who }} · {{ b.svc }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ b.when }} · {{ b.len }}</span></div><span style="{{ btn.danger }}">Cancel</span></div></sc-for>
+              <div style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#6b6577">Bookings are yours alone and carry no notes.</span><span style="{{ btn.link }}">Book an expert →</span></div>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Resources for you</div>
+              <sc-for list="{{ resources }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f4f3f7"><span style="display:flex;gap:10px;align-items:center"><span style="{{ ST.grey }}">{{ r.kind }}</span><span style="font-weight:600;font-size:13px">{{ r.t }}</span></span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ r.meta }}</span></div></sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- WB · book -->
+      <sc-if value="{{ is.wb_book }}" hint-placeholder-val="{{ false }}">
+        <div class="op-chips" style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ steps }}" as="s" hint-placeholder-count="4"><span style="{{ s.style }}">{{ s.t }}</span></sc-for></div>
+        <div class="op-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">1 · Expert</div><sc-for list="{{ experts }}" as="e" hint-placeholder-count="3"><div style="background:#fff;border:1px solid {{ e.border }};border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:13.5px">{{ e.name }}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{ e.spec }}" as="p" hint-placeholder-count="2"><span style="{{ ST.grey }}">{{ p }}</span></sc-for></div><span style="font:500 12px 'Roboto Mono',monospace">{{ e.rate }}</span><span style="font-size:11.5px;color:#6b6577">{{ e.next }}</span></div></sc-for></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">2 · Service</div><sc-for list="{{ services }}" as="s" hint-placeholder-count="3"><div style="background:#fff;border:1px solid {{ s.border }};border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13.5px">{{ s.name }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ s.len }}</span></div><sc-if value="{{ s.hasRate }}" hint-placeholder-val="{{ true }}"><span style="font:500 12.5px 'Roboto Mono',monospace">{{ s.rate }}</span></sc-if><sc-if value="{{ s.hasRate }}" hint-placeholder-val="{{ true }}"></sc-if></div></sc-for></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">3 · Time</div><div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px"><sc-for list="{{ days }}" as="d" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:5px"><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ d.d }}</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:5px"><sc-for list="{{ d.slots }}" as="t" hint-placeholder-count="4"><span style="{{ t.style }}">{{ t.t }}</span></sc-for></div></div></sc-for></div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">4 · Confirm</div><div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden"><div style="padding:12px 14px;background:#f4f0fe;font-weight:700;font-size:13.5px;color:#6d28d9">Confirm booking</div><div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><sc-for list="{{ confirm }}" as="c" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span style="color:#6b6577">{{ c.k }}</span><span style="font-weight:600;text-align:right">{{ c.v }}</span></div></sc-for><span style="font-size:11.5px;color:#6b6577;line-height:1.5">Visible to you alone. No notes are stored with the booking.</span><span style="{{ btn.primary }};text-align:center">Confirm</span></div></div></div>
+        </div>
+      </sc-if>
+
+      <!-- WBX · practice -->
+      <sc-if value="{{ is.wbx_practice }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Services</div>
+              <sc-for list="{{ services }}" as="s" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:minmax(0,1.6fr) 80px 90px minmax(0,1fr) 50px;gap:10px;align-items:center;padding:11px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span style="font-weight:600">{{ s.name }}</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ s.len }}</span><span><sc-if value="{{ s.hasRate }}" hint-placeholder-val="{{ true }}"><span style="font:500 12.5px 'Roboto Mono',monospace">{{ s.rate }}</span></sc-if><sc-if value="{{ s.hasRate }}" hint-placeholder-val="{{ true }}"></sc-if></span><span style="display:flex;align-items:center;gap:8px"><span style="{{ s.wrap }}"><span style="{{ s.knob }}"></span></span><span style="font-size:12px;color:#6b6577">{{ s.activeT }}</span></span><span style="font-size:12px;font-weight:600;color:#6b6577;text-align:right">Edit</span></div></sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-weight:700;font-size:14px">Weekly availability</span><div style="display:flex;gap:12px"><sc-for list="{{ legend }}" as="l" hint-placeholder-count="3"><span style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:#6b6577"><span style="{{ l.style }}"></span>{{ l.t }}</span></sc-for></div></div>
+              <div style="padding:12px 16px;overflow-x:auto"><div style="min-width:520px;display:flex;flex-direction:column;gap:5px"><div style="display:grid;grid-template-columns:44px repeat(10,minmax(0,1fr));gap:5px"><span></span><sc-for list="{{ hours }}" as="h" hint-placeholder-count="10"><span style="font:400 10.5px 'Roboto Mono',monospace;color:#a1a1aa;text-align:center">{{ h }}</span></sc-for></div><sc-for list="{{ grid }}" as="g" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:44px repeat(10,minmax(0,1fr));gap:5px;align-items:center"><span style="font-size:12px;font-weight:600;color:#6b6577">{{ g.d }}</span><sc-for list="{{ g.cells }}" as="c" hint-placeholder-count="10"><span style="{{ c.style }}"></span></sc-for></div></sc-for></div><div style="margin-top:8px;font-size:12px;color:#6b6577">Click a cell to open or close it. Booked cells cannot be closed.</div></div>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Upcoming bookings</div>
+            <sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid #f4f3f7"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13px">{{ u.who }}</span><span style="font-size:12px;color:#6b6577">{{ u.svc }}</span></div><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577;text-align:right">{{ u.when }}<br>{{ u.len }}</span></div></sc-for>
+            <div style="padding:10px 16px;font-size:12px;color:#6b6577">Names and times only. No notes are stored with a booking.</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- WBA · library -->
+      <sc-if value="{{ is.wba_library }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1.3fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div class="op-th op-tr" style="display:grid;grid-template-columns:90px minmax(0,2fr) minmax(0,1fr) 110px 100px 70px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>KIND</span><span>TITLE</span><span>TOPIC</span><span>STATE</span><span>UPDATED</span><span></span></div>
+            <sc-for list="{{ resources }}" as="r" hint-placeholder-count="6"><div class="op-tr" style="display:grid;grid-template-columns:90px minmax(0,2fr) minmax(0,1fr) 110px 100px 70px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span><span style="{{ ST.grey }}">{{ r.kind }}</span></span><span style="font-weight:600">{{ r.t }}</span><span><sc-if value="{{ r.topicNR }}" hint-placeholder-val="{{ false }}"><span style="{{ ST.nr }}">Not recorded</span></sc-if><sc-if value="{{ r.topicNR }}" hint-placeholder-val="{{ false }}"></sc-if><sc-if value="{{ r.topic }}" hint-placeholder-val="{{ true }}"><span style="color:#6b6577">{{ r.topic }}</span></sc-if></span><span><span style="{{ r.pubStyle }}">{{ r.pubT }}</span></span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ r.updated }}</span><span style="font-size:12px;font-weight:600;color:#b91c1c;text-align:right">Delete</span></div></sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe;font-weight:700;font-size:13.5px">New resource</div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ editor }}" as="f" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;font-weight:600;color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:8px 10px;font-size:13px">{{ f.v }}</span></div></sc-for><div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px"><span style="{{ btn.ghost }}">Save draft</span><span style="{{ btn.primary }}">Publish</span></div></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- PE · earnings -->
+      <sc-if value="{{ is.pe_earnings }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px"><sc-for list="{{ totals }}" as="t" hint-placeholder-count="3"><div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="{{ t.style }};align-self:flex-start">{{ t.k }}</span><span style="font:500 24px 'Roboto Mono',monospace;letter-spacing:-.02em">{{ t.v }}</span></div></sc-for></div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Commissions</div>
+          <div class="op-th op-tr" style="display:grid;grid-template-columns:90px minmax(0,2fr) 110px 100px 100px 110px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>SOURCE</span><span>DESCRIPTION</span><span>AMOUNT</span><span>STATUS</span><span>ACCRUED</span><span>PAID</span></div>
+          <sc-for list="{{ commissions }}" as="c" hint-placeholder-count="5"><div class="op-tr" style="display:grid;grid-template-columns:90px minmax(0,2fr) 110px 100px 100px 110px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span><span style="{{ c.srcStyle }}">{{ c.src }}</span></span><span>{{ c.d }}</span><span style="font:500 12.5px 'Roboto Mono',monospace">{{ c.amt }} <span style="font-size:10.5px;color:#a1a1aa">{{ c.cur }}</span></span><span><span style="{{ c.stStyle }}">{{ c.st }}</span></span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ c.accrued }}</span><span><sc-if value="{{ c.paidNR }}" hint-placeholder-val="{{ false }}"><span style="{{ ST.nr }}">Not recorded</span></sc-if><sc-if value="{{ c.paidNR }}" hint-placeholder-val="{{ false }}"></sc-if><sc-if value="{{ c.paid }}" hint-placeholder-val="{{ true }}"><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ c.paid }}</span></sc-if></span></div></sc-for>
+        </div>
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe;font-weight:700;font-size:13.5px">Request payout</div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ payoutForm }}" as="f" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;font-weight:600;color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:8px 10px;font-size:13px">{{ f.v }}</span></div></sc-for><div style="border:1px solid #ececf1;border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.5;color:#6b6577"><b style="color:#18181b">Confirm:</b> request [€4,250] by bank transfer to [IBAN ending 1234]. Accrued commissions move to Requested.</div><span style="{{ btn.primary }};text-align:center">Confirm request</span></div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Payout history</div>
+            <sc-for list="{{ payouts }}" as="p" hint-placeholder-count="4"><div style="padding:10px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px"><span style="display:flex;gap:10px;align-items:center"><span style="font:500 13px 'Roboto Mono',monospace">{{ p.amt }}</span><span style="color:#6b6577">{{ p.method }}</span><span style="{{ p.stStyle }}">{{ p.st }}</span></span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">requested {{ p.req }}<sc-if value="{{ p.hasDone }}" hint-placeholder-val="{{ false }}"> · settled {{ p.done }}</sc-if></span></div><sc-if value="{{ p.hasReason }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#b91c1c">{{ p.reason }}</span></sc-if></div></sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- PE · referrals -->
+      <sc-if value="{{ is.pe_referrals }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px"><span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">Your referral code</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px"><span style="font:500 22px 'Roboto Mono',monospace;letter-spacing:.02em">{{ code }}</span><span style="{{ btn.ghost }}">Copy code</span><span style="{{ btn.ghost }}">Copy link</span><span style="{{ btn.primary }}">Share</span></div><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ codeUrl }}</span></div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:6px"><span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">Intro credits left</span><span style="font:500 28px 'Roboto Mono',monospace;letter-spacing:-.02em">{{ credits.left }} <span style="font-size:13px;color:#6b6577">{{ credits.of }}</span></span><span style="font-size:12px;color:#6b6577">{{ credits.renew }}</span></div>
+        </div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Signed up with your code</div>
+          <div class="op-th op-tr" style="display:grid;grid-template-columns:minmax(0,2fr) 110px 110px 130px minmax(0,1fr);gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>WHO</span><span>ROLE</span><span>SIGNED UP</span><span>STATUS</span><span>COMMISSION</span></div>
+          <sc-for list="{{ signups }}" as="s" hint-placeholder-count="6"><div class="op-tr" style="display:grid;grid-template-columns:minmax(0,2fr) 110px 110px 130px minmax(0,1fr);gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span style="font-weight:600">{{ s.who }}</span><span style="color:#6b6577">{{ s.role }}</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ s.when }}</span><span><span style="{{ s.stStyle }}">{{ s.st }}</span></span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ s.comm }}</span></div></sc-for>
+        </div>
+      </sc-if>
+
+      <!-- PE · relationship log -->
+      <sc-if value="{{ is.pe_log }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column">
+            <sc-for list="{{ timeline }}" as="t" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:20px minmax(0,1fr) 80px;gap:12px;padding:0 0 18px;position:relative"><span style="display:flex;flex-direction:column;align-items:center"><span style="width:10px;height:10px;border-radius:50%;background:#7c3aed;margin-top:5px;flex:none"></span><span style="width:1px;flex:1;background:#ececf1;margin-top:4px"></span></span><div style="display:flex;flex-direction:column;gap:3px"><div style="display:flex;gap:8px;align-items:center"><span style="{{ t.kindStyle }}">{{ t.kind }}</span><span style="font-weight:600;font-size:13.5px">{{ t.t }}</span></div><span style="font-size:13px;color:#6b6577;line-height:1.5">{{ t.d }}</span></div><span style="font:400 11.5px 'Roboto Mono',monospace;color:#a1a1aa;text-align:right">{{ t.when }}</span></div></sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe;font-weight:700;font-size:13.5px">Log an interaction</div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ logForm }}" as="f" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;font-weight:600;color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:8px 10px;font-size:13px">{{ f.v }}</span></div></sc-for><div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px"><span style="{{ btn.ghost }}">Cancel</span><span style="{{ btn.primary }}">Log</span></div></div></div>
+        </div>
+      </sc-if>
+
+      <!-- PE · leaderboard -->
+      <sc-if value="{{ is.pe_board }}" hint-placeholder-val="{{ false }}">
+        <div class="op-chips" style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ metricChips }}" as="m" hint-placeholder-count="4"><span style="{{ m.style }}">{{ m.t }}</span></sc-for><span style="margin-left:auto;font-size:12px;color:#6b6577">Period: [this quarter] ▾</span></div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden;max-width:760px">
+          <div style="display:grid;grid-template-columns:60px minmax(0,1fr) 110px 90px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>RANK</span><span>PARTNER</span><span>[METRIC]</span><span>CHANGE</span></div>
+          <sc-for list="{{ board }}" as="b" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:60px minmax(0,1fr) 110px 90px;gap:12px;padding:11px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px;background:{{ b.bg }}"><span style="font:500 13px 'Roboto Mono',monospace">{{ b.rank }}</span><span style="font-weight:{{ b.weight }}">{{ b.who }}</span><span style="font:500 13px 'Roboto Mono',monospace">{{ b.v }}</span><span style="font:500 12px 'Roboto Mono',monospace;color:{{ b.deltaColor }}">{{ b.delta }}</span></div></sc-for>
+          <div style="padding:10px 16px;font-size:12px;color:#6b6577">Other partners appear by rank only. Names are never shown.</div>
+        </div>
+      </sc-if>
+
+      <!-- PEA · admin commissions -->
+      <sc-if value="{{ is.pea_commissions }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Commission rules</div>
+            <div class="op-th op-tr" style="display:grid;grid-template-columns:minmax(0,1.4fr) 90px 100px minmax(0,1.4fr) 110px 50px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>KEY</span><span>SOURCE</span><span>AMOUNT</span><span>DESCRIPTION</span><span>ACTIVE</span><span></span></div>
+            <sc-for list="{{ rules }}" as="r" hint-placeholder-count="3"><div class="op-tr" style="display:grid;grid-template-columns:minmax(0,1.4fr) 90px 100px minmax(0,1.4fr) 110px 50px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span style="font:500 12px 'Roboto Mono',monospace">{{ r.key }}</span><span style="color:#6b6577">{{ r.src }}</span><span style="font:500 12.5px 'Roboto Mono',monospace">{{ r.amount }} <span style="font-size:10.5px;color:#a1a1aa">{{ r.kind }}</span></span><span style="color:#6b6577">{{ r.desc }}</span><span style="display:flex;align-items:center;gap:6px"><span style="{{ r.wrap }}"><span style="{{ r.knob }}"></span></span></span><span style="font-size:12px;font-weight:600;color:#6b6577;text-align:right">Edit</span></div></sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">HQ take rate</span><div style="display:flex;align-items:center;gap:10px"><span style="font:500 28px 'Roboto Mono',monospace;letter-spacing:-.02em">{{ takeRate.v }}</span><span style="{{ btn.ghost }}">Edit</span></div><span style="font-size:12px;line-height:1.5;color:#6b6577">{{ takeRate.note }}</span></div>
+        </div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Payout queue</div>
+          <sc-for list="{{ queue }}" as="q" hint-placeholder-count="4"><div style="padding:11px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:5px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px"><span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-weight:600">{{ q.partner }}</span><span style="font:500 13px 'Roboto Mono',monospace">{{ q.amt }}</span><span style="color:#6b6577">{{ q.method }}</span><span style="{{ q.stStyle }}">{{ q.st }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#a1a1aa">requested {{ q.req }}</span></span><sc-if value="{{ q.hasAction }}" hint-placeholder-val="{{ true }}"><span style="{{ btn.primary }}">{{ q.action }}</span></sc-if></div><sc-if value="{{ q.hasBy }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#6b6577">Processed by {{ q.by }}</span></sc-if><sc-if value="{{ q.hasReason }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#b91c1c">{{ q.reason }}</span></sc-if></div></sc-for>
+        </div>
+        <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden;max-width:520px"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe;font-weight:700;font-size:13.5px">Process payout · confirm</div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><sc-for list="{{ confirm }}" as="c" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span style="color:#6b6577">{{ c.k }}</span><span style="font-weight:600">{{ c.v }}</span></div></sc-for><span style="font-size:12px;color:#6b6577;line-height:1.5">Marks the payout Completed and records you as the processor. A bank return later marks it Failed with the reason.</span><div style="display:flex;justify-content:flex-end;gap:6px"><span style="{{ btn.ghost }}">Cancel</span><span style="{{ btn.primary }}">Confirm</span></div></div></div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">All commissions</div>
+          <div class="op-th op-tr" style="display:grid;grid-template-columns:minmax(0,1.6fr) 100px 110px 110px 110px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>PARTNER</span><span>SOURCE</span><span>AMOUNT</span><span>STATUS</span><span>ACCRUED</span></div>
+          <sc-for list="{{ all }}" as="c" hint-placeholder-count="5"><div class="op-tr" style="display:grid;grid-template-columns:minmax(0,1.6fr) 100px 110px 110px 110px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span style="font-weight:600">{{ c.partner }}</span><span><span style="{{ c.srcStyle }}">{{ c.src }}</span></span><span style="font:500 12.5px 'Roboto Mono',monospace">{{ c.amt }}</span><span><span style="{{ c.stStyle }}">{{ c.st }}</span></span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ c.when }}</span></div></sc-for>
+        </div>
+      </sc-if>
+
+      <!-- EVO · eligibility -->
+      <sc-if value="{{ is.evo_eligibility }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+            <span style="font-weight:700;font-size:14px">Who may register</span>
+            <div style="display:flex;flex-direction:column;gap:8px"><sc-for list="{{ who }}" as="w" hint-placeholder-count="3"><div style="display:flex;gap:10px;align-items:center;font-size:13.5px"><span style="{{ w.dot }}"><span style="{{ w.fill }}"></span></span>{{ w.t }}</div></sc-for></div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding-left:26px"><span style="font-size:11.5px;font-weight:600;color:#6b6577">Roles</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ roles }}" as="r" hint-placeholder-count="4"><span style="{{ r.style }}">{{ r.t }}</span></sc-for></div><span style="font-size:11.5px;font-weight:600;color:#6b6577;margin-top:4px">Personas</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ personas }}" as="p" hint-placeholder-count="3"><span style="{{ p.style }}">{{ p.t }}</span></sc-for></div></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid #ececf1;padding-top:12px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13.5px">Approval required</span><span style="font-size:12px;color:#6b6577">Registrations wait in Pending until you approve them.</span></div><span style="{{ approval.wrap }}"><span style="{{ approval.knob }}"></span></span></div>
+            <div style="display:flex;justify-content:flex-end"><span style="{{ btn.primary }}">Save rule</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px"><span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">As a member sees it</span><sc-for list="{{ preview }}" as="p" hint-placeholder-count="2"><div style="border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;{{ p.style }}"><span style="font-weight:700;font-size:13.5px">{{ p.t }}</span><span style="font-size:12.5px;line-height:1.5">{{ p.d }}</span></div></sc-for></div>
+        </div>
+      </sc-if>
+
+      <!-- EVO · queue -->
+      <sc-if value="{{ is.evo_queue }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px 20px">
+          <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:220px"><span style="font:500 20px 'Roboto Mono',monospace">{{ capacity.used }}</span><span style="font-size:13px;color:#6b6577">{{ capacity.of }}</span><div style="flex:1;height:6px;border-radius:99px;background:#f4f3f7"><div style="height:6px;border-radius:99px;background:#7c3aed;width:{{ capacity.pct }}"></div></div><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ capacity.waiting }}</span></div>
+          <div class="op-chips" style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{ qtabs }}" as="t" hint-placeholder-count="5"><span style="{{ t.style }}">{{ t.t }} <span style="font:500 11px 'Roboto Mono',monospace;opacity:.7">{{ t.n }}</span></span></sc-for></div>
+        </div>
+        <sc-if value="{{ promote.show }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:#f4f0fe;border:1px solid #ddd0fb;border-radius:12px;padding:12px 16px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13.5px;color:#6d28d9">{{ promote.t }}</span><span style="font-size:12.5px;color:#6b6577">{{ promote.who }}</span></div><span style="{{ btn.primary }}">Promote from waitlist</span></div></sc-if>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div class="op-th op-tr" style="display:grid;grid-template-columns:minmax(0,1.6fr) 100px 150px 120px 230px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>MEMBER</span><span>ROLE</span><span>REGISTERED</span><span>RULE</span><span></span></div>
+          <sc-for list="{{ regs }}" as="r" hint-placeholder-count="5"><div class="op-tr" style="display:grid;grid-template-columns:minmax(0,1.6fr) 100px 150px 120px 230px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span style="font-weight:600">{{ r.who }}</span><span style="color:#6b6577">{{ r.role }}</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ r.when }}</span><span><span style="{{ r.eligStyle }}">{{ r.eligT }}</span></span><span style="display:flex;gap:6px;justify-content:flex-end"><span style="{{ btn.ghost }}">Decline…</span><span style="{{ btn.primary }}">Approve</span></span></div></sc-for>
+          <div style="padding:10px 16px;font-size:12px;color:#6b6577">Decline opens an optional reason the member sees.</div>
+        </div>
+      </sc-if>
+
+      <!-- EV · my registration -->
+      <sc-if value="{{ is.ev_mine }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px"><sc-for list="{{ mine }}" as="m" hint-placeholder-count="3"><div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px"><span style="{{ m.stStyle }};align-self:flex-start">{{ m.st }}</span><span style="font-size:13px;line-height:1.55;color:#4a4553">{{ m.d }}</span><sc-if value="{{ m.hasPlace }}" hint-placeholder-val="{{ false }}"><span style="font:500 14px 'Roboto Mono',monospace">{{ m.place }}</span></sc-if><span style="{{ btn.danger }};align-self:flex-start">Cancel registration</span></div></sc-for></div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden;max-width:560px"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Agenda</div><sc-for list="{{ agendaPreview }}" as="a" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:70px minmax(0,1fr);gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ a.t }}</span><span><span style="font-weight:600">{{ a.title }}</span> <span style="color:#6b6577">· {{ a.who }}</span></span></div></sc-for></div>
+      </sc-if>
+
+      <!-- EVO · agenda editor -->
+      <sc-if value="{{ is.evo_agenda }}" hint-placeholder-val="{{ false }}">
+        <div class="op-g2" style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Items · drag to reorder</div>
+              <sc-for list="{{ items }}" as="i" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:18px 70px minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) 90px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span style="color:#a1a1aa;cursor:grab">⋮⋮</span><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ i.t }}</span><span style="font-weight:600">{{ i.title }}</span><span><sc-if value="{{ i.whoNR }}" hint-placeholder-val="{{ false }}"><span style="{{ ST.nr }}">Not recorded</span></sc-if><sc-if value="{{ i.who }}" hint-placeholder-val="{{ true }}"><span style="color:#6b6577">{{ i.who }}</span></sc-if></span><span><sc-if value="{{ i.roomNR }}" hint-placeholder-val="{{ false }}"><span style="{{ ST.nr }}">Not recorded</span></sc-if><sc-if value="{{ i.room }}" hint-placeholder-val="{{ true }}"><span style="color:#6b6577">{{ i.room }}</span></sc-if></span><span style="display:flex;gap:10px;justify-content:flex-end;font-size:12px;font-weight:600"><span style="color:#6b6577">Edit</span><span style="color:#b91c1c">Delete</span></span></div></sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden;max-width:520px"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe;font-weight:700;font-size:13.5px">Add item</div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ itemForm }}" as="f" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;font-weight:600;color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:8px 10px;font-size:13px">{{ f.v }}</span></div></sc-for><div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px"><span style="{{ btn.ghost }}">Cancel</span><span style="{{ btn.primary }}">Add</span></div></div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">As attendees see it</span><div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><sc-for list="{{ items }}" as="i" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:70px minmax(0,1fr);gap:12px;padding:12px 16px;border-bottom:1px solid #f4f3f7"><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ i.t }}</span><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13.5px">{{ i.title }}</span><span style="font-size:12px;color:#6b6577">{{ i.who }} {{ i.room }}</span></div></div></sc-for></div></div>
+        </div>
+      </sc-if>
+
+      <!-- AC · account center: section nav + one section -->
+      <sc-if value="{{ isAccount }}" hint-placeholder-val="{{ false }}">
+        <div class="op-split" style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px;align-items:start">
+          <div class="op-secnav" style="display:flex;flex-direction:column;gap:2px;background:#fff;border:1px solid #ececf1;border-radius:12px;padding:6px">
+            <sc-for list="{{ acNav }}" as="n" hint-placeholder-count="6"><span style="{{ n.style }}">{{ n.t }}<sc-if value="{{ n.dev }}" hint-placeholder-val="{{ false }}"> <span style="font:500 9.5px 'Roboto Mono',monospace;color:#a1a1aa">if enabled</span></sc-if></span></sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+
+            <sc-if value="{{ is.ac_profile }}" hint-placeholder-val="{{ false }}">
+              <div class="op-g2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+                <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Personal details</div><div style="padding:12px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ personal }}" as="f" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center;font-size:13px"><span style="color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:7px 10px">{{ f.v }}</span></div></sc-for></div></div>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between"><span style="font-weight:700;font-size:14px">Identity</span><span style="font-size:12px;color:#6b6577">Used by Trust Center</span></div><div style="padding:12px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ identity }}" as="f" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center;font-size:13px"><span style="color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:7px 10px">{{ f.v }}</span></div></sc-for></div></div>
+                  <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between"><span style="font-weight:700;font-size:14px">Company profile</span><span style="font-size:12px;color:#6b6577">If you represent a company</span></div><div style="padding:12px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ corp }}" as="f" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center;font-size:13px"><span style="color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:8px;padding:7px 10px">{{ f.v }}</span></div></sc-for></div></div>
+                </div>
+              </div>
+              <div class="op-g2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+                <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px"><span style="font-weight:700;font-size:14px">Public archetype</span><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600;font-size:13.5px">{{ archetype.name }} <span style="font:500 11.5px 'Roboto Mono',monospace;color:#6d28d9">{{ archetype.conf }}</span></span><span style="font-size:12px;color:#6b6577">Published on my profile</span></div><span style="{{ archetype.wrap }}"><span style="{{ archetype.knob }}"></span></span></div></div>
+                <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Change history</span><span style="{{ btn.ghost }}">Ask me again</span></div><sc-for list="{{ history }}" as="h" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:80px minmax(0,1fr);gap:10px;padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ h.when }}</span><span>{{ h.what }}</span></div></sc-for><div style="padding:10px 16px;font-size:12px;color:#6b6577">"Ask me again" redoes the profiling questions in Studio.</div></div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ is.ac_notifications }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) repeat(3,90px);gap:10px;padding:10px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>TYPE</span><sc-for list="{{ channels }}" as="c" hint-placeholder-count="3"><span style="text-align:center">{{ c }}</span></sc-for></div>
+                <sc-for list="{{ types }}" as="t" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:minmax(0,1fr) repeat(3,90px);gap:10px;padding:11px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span style="font-weight:600">{{ t.t }}</span><sc-for list="{{ t.cells }}" as="c" hint-placeholder-count="3"><span style="display:flex;justify-content:center"><span style="{{ c.wrap }}"><span style="{{ c.knob }}"></span></span></span></sc-for></div></sc-for>
+              </div>
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden;max-width:560px"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Devices registered for push</div><sc-for list="{{ devices }}" as="d" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">{{ d.name }} <span style="color:#6b6577;font-weight:400">· {{ d.os }}</span></span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577"><sc-if value="{{ d.seenNR }}" hint-placeholder-val="{{ false }}"><span style="{{ ST.nr }}">Not recorded</span> · never reported in</sc-if><sc-if value="{{ d.seen }}" hint-placeholder-val="{{ true }}">last seen {{ d.seen }}</sc-if></span></div><span style="{{ btn.danger }}">Remove</span></div></sc-for></div>
+            </sc-if>
+
+            <sc-if value="{{ is.ac_security }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Sign-in factors</div><sc-for list="{{ factors }}" as="f" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span style="display:flex;gap:10px;align-items:center"><span style="font-weight:600">{{ f.t }}</span><span style="{{ f.stStyle }}">{{ f.st }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ f.last }}</span></span><span style="{{ btn.ghost }}">{{ f.action }}</span></div></sc-for></div>
+              <div class="op-g2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+                <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe;font-weight:700;font-size:13.5px">Set up an authenticator app</div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;gap:14px;align-items:center"><span style="width:88px;height:88px;flex:none;border:1px solid #ececf1;border-radius:8px;background:repeating-linear-gradient(90deg,#18181b 0 6px,#fff 6px 12px),repeating-linear-gradient(0deg,#18181b 0 6px,#fff 6px 12px);background-blend-mode:difference;display:grid;place-items:center"><span style="background:#fff;padding:2px 4px;font:500 9px 'Roboto Mono',monospace">[QR]</span></span><div style="display:flex;flex-direction:column;gap:8px"><sc-for list="{{ totpSteps }}" as="s" hint-placeholder-count="3"><div style="display:flex;gap:8px;font-size:12.5px"><span style="font:500 11px 'Roboto Mono',monospace;color:#6d28d9">{{ s.n }}</span><span><b style="font-weight:600">{{ s.t }}</b> <span style="color:#6b6577">{{ s.d }}</span></span></div></sc-for></div></div><div style="display:flex;justify-content:flex-end"><span style="{{ btn.primary }}">Confirm</span></div></div></div>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:13.5px">Add an SMS number</div><div style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"><sc-for list="{{ smsSteps }}" as="s" hint-placeholder-count="2"><div style="display:flex;gap:8px;font-size:12.5px"><span style="font:500 11px 'Roboto Mono',monospace;color:#6d28d9">{{ s.n }}</span><span><b style="font-weight:600">{{ s.t }}</b> <span style="color:#6b6577">{{ s.d }}</span></span></div></sc-for></div></div>
+                  <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px"><sc-for list="{{ settings }}" as="s" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px"><span style="font-weight:600">{{ s.k }}</span><sc-if value="{{ s.isToggle }}" hint-placeholder-val="{{ false }}"><span style="{{ s.wrap }}"><span style="{{ s.knob }}"></span></span></sc-if><sc-if value="{{ s.v }}" hint-placeholder-val="{{ true }}"><span style="border:1px solid #ececf1;border-radius:8px;padding:6px 10px;font-size:12.5px">{{ s.v }}</span></sc-if></div></sc-for><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid #ececf1;padding-top:10px"><span style="font-size:12px;color:#6b6577">{{ sessions.note }}</span><span style="{{ btn.danger }}">{{ sessions.cta }}</span></div></div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ is.ac_billing }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:700;font-size:15px">{{ plan.name }} <span style="{{ ST.violet }}">{{ plan.tier }}</span></span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ plan.seats }} · renews {{ plan.renews }}</span></div><div style="display:flex;gap:6px"><span style="{{ btn.ghost }}">Plans &amp; Pricing</span><span style="{{ btn.primary }}">Manage billing ↗</span></div></div>
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Orders</div><div class="op-th op-tr" style="display:grid;grid-template-columns:110px minmax(0,1fr) 110px 110px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577"><span>DATE</span><span>ITEM</span><span>AMOUNT</span><span>STATUS</span></div><sc-for list="{{ orders }}" as="o" hint-placeholder-count="4"><div class="op-tr" style="display:grid;grid-template-columns:110px minmax(0,1fr) 110px 110px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px"><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ o.when }}</span><span style="font-weight:600">{{ o.item }}</span><span style="font:500 12.5px 'Roboto Mono',monospace">{{ o.amt }}</span><span><span style="{{ o.stStyle }}">{{ o.st }}</span></span></div></sc-for></div>
+            </sc-if>
+
+            <sc-if value="{{ is.ac_following }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><sc-for list="{{ follows }}" as="f" hint-placeholder-count="6"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span style="display:flex;gap:10px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:#f4f3f7;border:1px solid #ececf1"></span><span style="font-weight:600">{{ f.who }}</span><span style="{{ f.kindStyle }}">{{ f.kind }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">since {{ f.since }}</span></span><span style="{{ btn.ghost }}">Unfollow</span></div></sc-for></div>
+            </sc-if>
+
+            <sc-if value="{{ is.ac_developer }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:10px;align-items:center;background:#fff;border:1px solid #ececf1;border-radius:10px;padding:10px 14px;font-size:12.5px;color:#6b6577"><span style="{{ ST.violet }}">Developer mode</span>This section is shown only when developer mode is enabled on your account.</div>
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">API settings</div><sc-for list="{{ api }}" as="a" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span style="color:#6b6577">{{ a.k }}</span><span style="font:500 12.5px 'Roboto Mono',monospace">{{ a.v }}</span><sc-if value="{{ a.hasAction }}" hint-placeholder-val="{{ true }}"><span style="{{ btn.link }}">{{ a.action }}</span></sc-if></div></sc-for></div>
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:700;font-size:14px">Search indexes</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">last run {{ sync.last }}</span></div><span style="{{ btn.ghost }}">{{ sync.cta }}</span></div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showStates }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">States on this screen</div>
+          <div class="op-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px"><span style="font-weight:600;font-size:12.5px">Loading</span><div style="height:10px;width:70%;border-radius:99px;background:#ececf1"></div><div style="height:10px;width:92%;border-radius:99px;background:#f4f3f7"></div><div style="height:10px;width:56%;border-radius:99px;background:#f4f3f7"></div></div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px">Empty</span><span style="font-size:12.5px;line-height:1.5;color:#6b6577">{{ states.empty }}</span><span style="font-size:12px;font-weight:600;color:#6d28d9">{{ states.emptyCta }}</span></div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px">Not recorded</span><span style="align-self:flex-start;font-size:11px;font-weight:500;color:#6b6577;background:#f4f3f7;border:1px dashed #d4d1dc;border-radius:99px;padding:2px 8px">Not recorded</span><span style="font-size:12.5px;line-height:1.5;color:#6b6577">{{ states.nr }}</span></div>
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px;color:#b91c1c">Unreadable</span><span style="font-size:12.5px;line-height:1.5;color:#b91c1c">{{ states.unread }}</span><span style="font-size:12px;font-weight:600;color:#b91c1c">Try again</span></div>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+
+  <aside class="op-rail" style="background:#fff;border-left:1px solid #ececf1;min-width:0">
+    <sc-if value="{{ railOpen }}" hint-placeholder-val="{{ true }}">
+      <div style="padding:16px 14px;display:flex;flex-direction:column;gap:12px;position:sticky;top:0">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:13.5px">Eadwyn</span><span style="font-size:12px;color:#6b6577">Collapse ›</span></div>
+        <div style="display:flex;gap:6px"><span style="flex:1;text-align:center;font-size:12px;font-weight:600;padding:7px;border-radius:8px;border:1px solid #ececf1;color:#6b6577">Manual</span><span style="flex:1;text-align:center;font-size:12px;font-weight:600;padding:7px;border-radius:8px;background:#7c3aed;color:#fff">Eadwyn</span></div>
+        <div style="font:600 10.5px 'Roboto Mono',monospace;color:#6b6577;letter-spacing:.08em">MODEL</div>
+        <sc-for list="{{ railModels }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;border:1px solid {{ r.border }};background:{{ r.bg }};border-radius:9px;padding:8px 10px;font:500 11px 'Roboto Mono',monospace"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span><sc-if value="{{ r.def }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:#6d28d9;background:#fff;border:1px solid #ddd0fb;border-radius:99px;padding:1px 7px">Default</span></sc-if></div></sc-for>
+        <div style="border:1px solid #ddd0fb;background:#f4f0fe;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+          <span style="font:600 10.5px 'Roboto Mono',monospace;color:#6d28d9;letter-spacing:.06em">PROPOSAL · {{ rail.title }}</span>
+          <span style="font-size:12.5px;line-height:1.5">{{ rail.body }}</span>
+          <div style="display:flex;gap:6px"><span style="font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:7px;background:#fff;border:1px solid #ddd0fb">Draft</span><span style="font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:7px;background:#7c3aed;color:#fff">Accept</span><span style="font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:7px;color:#6b6577">Discard</span></div>
+          <span style="font-size:11.5px;line-height:1.45;color:#6b6577">{{ rail.writes }}</span>
+        </div>
+        <div style="border-top:1px solid #ececf1;padding-top:10px;font-size:12px;color:#6b6577;line-height:1.5">Spend on this page: <span style="font-family:'Roboto Mono',monospace">no runs yet</span><br>Top up when you want Eadwyn back.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ railClosed }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%;display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 0"><span style="width:26px;height:26px;border-radius:7px;background:#7c3aed;display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px">E</span><span style="writing-mode:vertical-rl;font:600 10.5px 'Roboto Mono',monospace;color:#a1a1aa;letter-spacing:.1em">EADWYN · COLLAPSED</span></div>
+    </sc-if>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;screen&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;adv-deliverables&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    if (typeof OPS_DATA === 'undefined') {
+      this._t = setInterval(() => { if (typeof OPS_DATA !== 'undefined') { clearInterval(this._t); this.forceUpdate(); } }, 50);
+    }
+  }
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+  renderVals() {
+    const s = this.props.screen ?? 'adv-deliverables';
+    const area = s.split('-')[0];
+    const D = (typeof OPS_DATA !== 'undefined' ? OPS_DATA : {});
+    const scr = (D.screens && D.screens[s]) || { head: { h1: s, sub: '' } };
+    const roleOf = { adv: 'advisor', advpub: 'member', wb: 'member', wbx: 'expert', wba: 'admin', pe: 'partner', pea: 'admin', ev: 'member', evo: 'member', ac: 'member' };
+    const role = scr.role || roleOf[area] || 'member';
+    const SIDES = {
+      member: ['Studio','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'],
+      advisor: ['Home','Practice','Cohorts','Expertise','Network','Research','Trust','Practice Settings'],
+      expert: ['Home','Practice','Cohorts','Expertise','Network','Research','Trust','Practice Settings'],
+      partner: ['Home','Pipeline','Delivery','Offers','Network','Research','Trust','Firm Settings'],
+      admin: ['Studio','Accounts','Approvals','Programs','Community','Contracts','Insights','Settings'],
+    };
+    const active = scr.sideActive || '';
+    const side = SIDES[role].map(t => ({ t, fg: t === active ? '#6d28d9' : '#6b6577', bg: t === active ? '#f4f0fe' : 'transparent' }));
+    const badge = role === 'admin' ? { show: true, t: '[Licence name] · BRANCH', bg: '#334155', fg: '#fff' } : { show: false, t: '', bg: '', fg: '' };
+    const railOpen = scr.rail !== false && !scr.phoneOnly;
+    const pages = ['‹','1','2','3','…','›'].map((t, i) => ({ t, style: 'min-width:28px;text-align:center;font:500 12px \'Roboto Mono\',monospace;padding:5px 8px;border-radius:7px;border:1px solid ' + (i === 1 ? '#ddd0fb' : '#ececf1') + ';background:' + (i === 1 ? '#f4f0fe' : '#fff') + ';color:' + (i === 1 ? '#6d28d9' : '#6b6577') }));
+    const flags = {};
+    Object.keys((D.screens) || {}).forEach(k => { flags[k.replace(/-/g, '_')] = k === s; });
+    return Object.assign({
+      area: scr.area || '', route: scr.route || '', side, badge,
+      head: Object.assign({ cta: '', back: '' }, scr.head),
+      hasList: !!scr.list, list: scr.list || { search: '', filters: [], sort: '', count: '' }, pages,
+      showStates: scr.states !== false, states: Object.assign({ empty: 'Nothing here yet.', emptyCta: 'Back', nr: 'A value the source does not hold, with its reason.', unread: 'This could not be read just now.' }, scr.states || {}),
+      railOpen, railClosed: !railOpen, railCol: railOpen ? '280px' : '44px',
+      railModels: [{ name: 'zai-org/glm-4.7-flash', def: true, border: '#ddd0fb', bg: '#f4f0fe' }, { name: 'google/gemma-4-26b-a4b-it', def: false, border: '#ececf1', bg: '#fff' }, { name: 'moonshotai/kimi-k2.6', def: false, border: '#ececf1', bg: '#fff' }],
+      rail: Object.assign({ title: 'Summary', body: 'Summarise this page in three lines.', writes: 'Accept writes a note. It changes nothing else.' }, scr.rail || {}),
+      is: flags, isAccount: s.indexOf('ac-') === 0,
+    }, D.shared || {}, scr.vals || {});
+  }
+}
+</script>
+</body>
+</html>

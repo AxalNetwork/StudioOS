@@ -621,3 +621,27 @@ design in two layouts with their own sidebar and type; they are not committed.
 
 Each build PR adds or updates its `ROUTE_MAP.md` row (pipeline step 5). A
 canvas leaves this folder for `canvases/integrated/` once its route is live.
+
+## Landed 2026-10-06 — the Ops canvas: five areas of screens for stored data (D566)
+
+The owner approved `https://claude.ai/artifact/AZQC6nqkCj4ewoaJUvTH7F` on
+2026-10-06 and asked for the event organiser to be built first. It was drawn
+from the five prompts on #1165. It is one design with two files, both in this
+folder's format:
+
+| File | What it is |
+| --- | --- |
+| `Ops · Boards.dc.html` | The board: rows of artboards at 1440 and 390, chosen by its `set` property (`events`, `account`, `partner`, `wellbeing`, `advisor`). Each artboard imports `Ops Page` with one `screen`. |
+| `Ops Page.dc.html` | Every screen's markup, one `sc-if` block per screen id: `evo-eligibility`, `evo-queue`, `ev-mine` and `evo-agenda` for events; `ac-*` for the Account center; `pe-*` and `pea-*` for partner earnings; `wb-*`, `wbx-*` and `wba-*` for Wellbeing; `adv-*` and `advpub-*` for the advisor's practice. |
+
+| Area | Screens | Governs | Grade | Issue |
+| --- | --- | --- | --- | --- |
+| Event organiser | E1 Eligibility, E2 Registrations queue, E3 My registration (phone), E4 Agenda editor | `/events/:id/manage`, `/events/:id/manage/registrations`, `/events/:id`, `/events/:id/manage/agenda` | UPGRADE | #1173 |
+| Account center, partner earnings, Wellbeing, advisor practice | the `ac-`, `pe-`/`pea-`, `wb-`/`wbx-`/`wba-` and `adv-`/`advpub-` screens | see #1165 | not yet triaged | #1165 |
+
+**What the export lacks.** `Ops Page` reads its sample text from a script named
+ops-data.js, which sets `window.OPS_DATA`. The published artifact did not
+include it. So the files carry every screen's structure but not its sample
+copy: each zone, field, column and state is in the markup, and the words
+come from the prompt on #1165. A builder takes the zone list from the markup
+and the copy from the prompt, and never invents a figure.
