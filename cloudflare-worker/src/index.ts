@@ -1641,6 +1641,16 @@ export default {
             console.error('[cron] learning video sweep failed', e);
           }
         }
+        // D484 — publish approved articles whose scheduled time has passed.
+        // Every minute, on every tier: a branch's articles are its own, and an
+        // article with no `publish_at` is never touched.
+        try {
+          const { publishDueArticles } = await import('./routes/admin_articles');
+          const p = await publishDueArticles(env, now);
+          if (p.published) console.info(`[cron] scheduled articles published=${p.published} of due=${p.due}`);
+        } catch (e) {
+          console.error('[cron] scheduled article publish failed', e);
+        }
         // Cohort Timing & Gating — every-minute tick: materializes monthly
         // cycles, unlocks weeks at their Delaware-midnight boundaries,
         // evaluates pass/fail at each week deadline, finalizes lapsed grace

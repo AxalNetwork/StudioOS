@@ -90,6 +90,20 @@ export function cofounderAgreementRoute(user) {
     : '/incorporate/cofounder-agreement';
 }
 
+/**
+ * Where "Incorporate" goes for this viewer (D582, D360's rule). A Lab member or
+ * an admin reaches the Lab's own Incorporate page; anyone else keeps the
+ * generic `/incorporate` wizard, which admits founders, partners and
+ * investors. The Lab route is guarded by `labRoles(['admin'])`, so sending a
+ * non-member there would lock them out. Both routes stay (S1's answer A on
+ * #1209).
+ */
+export function incorporateRoute(user) {
+  return user?.role === 'admin' || user?.spinout_lab_active === 1
+    ? '/spinout-lab/incorporate'
+    : '/incorporate';
+}
+
 export function pickLabProject(projects, user) {
   if (!Array.isArray(projects) || projects.length === 0) return null;
   const ranked = [...projects].sort((a, b) => {
@@ -174,7 +188,7 @@ export default function SpinoutLabStartupPage() {
     const scoringDone = doneKeys.has('scoring_run_completed');
     const readiness = [
       {
-        label: 'Legal entity', note: 'Incorporate in Week 4', to: '/incorporate', testid: 'readiness-legal',
+        label: 'Legal entity', note: 'Incorporate in Week 4', to: incorporateRoute(user), testid: 'readiness-legal',
         ...(graduated ? { chip: 'Complete', cls: CHIP.complete }
           : wk(4) ? { chip: wk(4), cls: CHIP.locked, locked: true }
           : { chip: 'Not started', cls: CHIP.notStarted }),

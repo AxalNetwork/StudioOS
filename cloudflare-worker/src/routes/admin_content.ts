@@ -576,6 +576,48 @@ r.get('/summary', async (c) => {
   });
 });
 
+/** How many upcoming publish times the board lists. */
+const PUBLISH_TIME_LIST = 5;
+
+/**
+ * D484 — when the approved articles are set to go out (migration 346). The
+ * Scheduled lane's articles split in two: those with a publish time, which
+ * the per-minute cron publishes when it passes, and those without, which wait
+ * for a manual publish. The soonest are listed with their times. A database
+ * without the column is not recorded, with that reason, rather than "none
+ * scheduled".
+ */
+async function readPublishTime(env: Env) {
+  try {
+    const counts = await env.DB.prepare(
+      `SELECT SUM(CASE WHEN publish_at IS NOT NULL THEN 1 ELSE 0 END) AS timed,
+              SUM(CASE WHEN publish_at IS NULL THEN 1 ELSE 0 END) AS untimed
+         FROM articles WHERE status = 'approved'`,
+    ).first<{ timed: number | null; untimed: number | null }>();
+    const next = await env.DB.prepare(
+      `SELECT id, title, publish_at FROM articles
+        WHERE status = 'approved' AND publish_at IS NOT NULL
+        ORDER BY publish_at ASC, id ASC LIMIT ?`,
+    ).bind(PUBLISH_TIME_LIST).all<{ id: number; title: string; publish_at: string }>();
+    return {
+      recorded: true as const,
+      scheduled: Number(counts?.timed) || 0,
+      unscheduled: Number(counts?.untimed) || 0,
+      next: (next.results || []).map((r) => ({ id: Number(r.id), title: String(r.title ?? ''), publish_at: String(r.publish_at) })),
+      note:
+        'An approved article with a publish time goes out when it passes, checked every minute. One '
+        + 'without waits for a manual publish. Publications carry no publish time: they are issued by hand.',
+    };
+  } catch (e) {
+    return {
+      recorded: false as const,
+      reason:
+        'The publish times could not be read on this database (migration 346), so this does not say '
+        + `whether any approved article is set to go out: ${(e as Error)?.message || 'unknown'}.`,
+    };
+  }
+}
+
 type BoardPart = {
   store: 'articles' | 'publications' | 'escalations';
   statuses: string[];
@@ -690,8 +732,8 @@ async function readBoard(
     {
       key: 'scheduled', label: 'Scheduled', parts: [await articlesPart(lane('scheduled'))],
       note:
-        'Approved and waiting for someone to publish it: approval queues a piece, and publishing is '
-        + 'a separate manual step. Nothing stores a publish time.',
+        'Approved and waiting to go out. An article with a publish time goes out at that time; one '
+        + 'without waits for someone to publish it by hand. Publications have no publish time.',
     },
     {
       key: 'published', label: 'Published', parts: [await articlesPart(lane('published')), await publicationsPart('published')],
@@ -733,12 +775,7 @@ async function readBoard(
         .filter(([s]) => !PUBLICATION_STATUSES.includes(s))
         .map(([status, n]) => ({ status, n }))
       : [],
-    publish_time: {
-      recorded: false,
-      reason:
-        'Scheduled means approved; publishing is a manual step, and nothing stores when a piece is '
-        + 'meant to go out.',
-    },
+    publish_time: await readPublishTime(env),
     origin: {
       recorded: false,
       reason:

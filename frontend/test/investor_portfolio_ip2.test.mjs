@@ -170,7 +170,7 @@ test('the Rules chip is live, and it is a view rather than a predicate that empt
   assert.match(row, /\{ canvas: 'Rules', key: 'rules' \}/, 'the Rules chip is unbuilt again');
   // Parse review stays dark. Lighting it would be the defect this zone is
   // careful about, one step further along.
-  assert.match(row, /\{ canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER \}/,
+  assert.match(row, /\{ canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER, hover: '/,
     'Parse review was lit over a store that does not exist');
 
   // The page implements it, and implements it as a swap.
@@ -342,7 +342,7 @@ test('the AI band mounts the half that has somewhere to land, and refuses the ha
   assert.match(card, /nothing records how “a team of ~12” becomes a headcount/,
     'the card no longer says what an extraction rule would be');
   // And the strip still labels parse review rather than counting it.
-  assert.match(P, /<Stat label="Parse review" value="Unavailable" note="No parse-review state is stored" muted \/>/,
+  assert.match(P, /<Stat label="Parse review" value="Not decided" note="Whether updates are parsed is the owner’s decision, asked on #1023" muted \/>/,
     'the parse-review tile reports a number over a store that does not exist');
 });
 

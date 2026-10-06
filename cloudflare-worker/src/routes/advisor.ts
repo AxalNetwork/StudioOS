@@ -133,7 +133,7 @@ const advisor = new Hono<{ Bindings: Env }>();
 // role so writeRouter's role_detect guard still routes the detector answer
 // into user_role_review.suggested_role instead of users.role.
 // ---------------------------------------------------------------------------
-type AdvisorUser = User & { actual_role?: string };
+type AdvisorUser = User & { actual_role?: string; eadwyn_coach?: boolean };
 const OVERLAYABLE_SUGGESTIONS = new Set(['founder', 'investor', 'advisor', 'partner']);
 
 async function applyExploringOverlay(env: Env, user: User): Promise<AdvisorUser> {
@@ -222,6 +222,7 @@ function newUid(): string {
 
 function personaFor(user: User): Persona {
   const role = (user.role || '').toLowerCase();
+  if (role === 'advisor' && (user as AdvisorUser).eadwyn_coach) return 'coach';
   if (role === 'founder' || role === 'investor' || role === 'advisor' || role === 'partner' || role === 'admin') {
     return role as Persona;
   }
@@ -261,6 +262,14 @@ interface AdvisorGate {
   tiers: Set<string>;
 }
 async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
+  // D577 — resolve after the rollout/kill gate, without changing auth role.
+  // A failed identity read must fail the request, not silently route an advisor.
+  if (String(user.role).toLowerCase() === 'advisor' && !isExploringUser(user)) {
+    const listing = await env.DB.prepare(
+      `SELECT id FROM advisors WHERE user_id = ? AND is_active = 1 AND hourly_rate_usd > 0 LIMIT 1`,
+    ).bind(user.id).first<{ id: number }>();
+    (user as AdvisorUser).eadwyn_coach = !!listing;
+  }
   const tiers = new Set<string>();
   const persona = personaFor(user);
 
@@ -447,8 +456,17 @@ async function answeredQuestionIds(env: Env, conversationId: number): Promise<Se
  * always sees the canonical conversation state.
  */
 async function effectiveAnsweredSet(
-  env: Env, _user: User, conversationId: number,
+  env: Env, user: User, conversationId: number,
 ): Promise<Set<string>> {
+  if (personaFor(user) === 'advisor' || personaFor(user) === 'coach') {
+    // Keep detector and dynamic IDs too: they drive onboarding and reflection
+    // sequencing, even though progress/Completed remain scoped to the bank.
+    const rows = await env.DB.prepare(
+      `SELECT DISTINCT question_id FROM advisor_answers
+        WHERE user_id = ? AND saved_status IN ('saved', 'noop', 'skipped')`,
+    ).bind(user.id).all<{ question_id: string }>();
+    return new Set((rows.results || []).map(r => r.question_id));
+  }
   return answeredQuestionIds(env, conversationId);
 }
 
@@ -562,7 +580,25 @@ async function syncBankTotal(env: Env, conv: ConversationRow, bankLen: number, p
  */
 const CAPTURED_SQL = "saved_status IN ('saved', 'noop')";
 
-async function refreshCounts(env: Env, conversationId: number, currentQid: string | null): Promise<void> {
+// D577 — latest committed reply per permanent ID, across conversation restarts.
+// Filtering is in memory against the registered bank: no request SQL interpolation.
+async function conversationBankAnswers(env: Env, userId: number, persona: Persona) {
+  const bankIds = new Set(bankFor(persona).map(q => q.id));
+  const rows = await env.DB.prepare(
+    `SELECT question_id, saved_to_table, saved_to_column, saved_to_id,
+            saved_status, created_at
+       FROM advisor_answers WHERE user_id = ? AND (saved_status IN ('saved', 'noop', 'skipped'))
+       ORDER BY created_at DESC, id DESC`,
+  ).bind(userId).all<{ question_id: string; saved_to_table: string | null; saved_to_column: string | null; saved_to_id: string | null; saved_status: string; created_at: string }>();
+  const seen = new Set<string>();
+  return (rows.results || []).filter(r => {
+    if (!bankIds.has(r.question_id) || seen.has(r.question_id)) return false;
+    seen.add(r.question_id);
+    return true;
+  });
+}
+
+async function refreshCounts(env: Env, conversationId: number, currentQid: string | null, user: User): Promise<void> {
   try {
     // Task #57 — "answered" means the user actually provided a reply that was
     // captured, regardless of whether it mapped to a structured DB column.
@@ -570,7 +606,13 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
     // structured mapping) are captured replies.  Statuses that are NOT
     // counted: 'skipped' (separate counter), 'paywalled' / 'failed' /
     // 'needs_evidence' / 'invalid' (no committed answer yet).
-    const counts = await env.DB.prepare(
+    const persona = personaFor(user);
+    const bankAnswers = ['advisor', 'coach'].includes(persona)
+      ? await conversationBankAnswers(env, user.id, persona) : null;
+    const counts = bankAnswers ? {
+      answered: bankAnswers.filter(r => r.saved_status !== 'skipped').length,
+      skipped: bankAnswers.filter(r => r.saved_status === 'skipped').length,
+    } : await env.DB.prepare(
       `SELECT
          SUM(CASE WHEN ${CAPTURED_SQL} THEN 1 ELSE 0 END) AS answered,
          SUM(CASE WHEN saved_status = 'skipped'          THEN 1 ELSE 0 END) AS skipped
@@ -669,10 +711,14 @@ advisor.post('/start', async (c) => {
 
   let conv = await getActiveConversation(c.env, user);
   if (!conv) {
-    // For a brand-new conversation there are no prior answers, so
-    // selectBank reduces to the workingBankFor result for sizing.
+    // D577: a restarted advisor/coach chat keeps its bank answers.
+    // Never record an already-captured first question into the new transcript.
     const initialBank = workingBankFor(user, gate);
-    const firstQ = initialBank[0] || null;
+    const previous = ['advisor', 'coach'].includes(personaFor(user))
+      ? await effectiveAnsweredSet(c.env, user, 0) : new Set<string>();
+    const firstQ = ['advisor', 'coach'].includes(personaFor(user))
+      ? applyAdaptiveProfiling(initialBank, previous).find(q => !previous.has(q.id)) || null
+      : initialBank[0] || null;
     conv = await createConversation(c.env, user, initialBank.length, firstQ?.id || null);
     if (firstQ) await recordMessage(c.env, conv.id, 'assistant', firstQ.prompt, firstQ.id);
   }
@@ -706,7 +752,7 @@ advisor.post('/start', async (c) => {
 
   // Refresh counts now that hydration may have inserted new rows.
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
-  await refreshCounts(c.env, conv.id, next?.id || null);
+  await refreshCounts(c.env, conv.id, next?.id || null, user);
   // If hydration left no remaining questions on the very first
   // open, mark the conversation complete so /progress reflects it.
   if (!next && conv.state !== 'complete') {
@@ -1235,7 +1281,7 @@ advisor.post('/answer', async (c) => {
   });
   const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
-  await refreshCounts(c.env, conv.id, next?.id || null);
+  await refreshCounts(c.env, conv.id, next?.id || null, liveUser);
 
   if (!next) {
     await c.env.DB.prepare(
@@ -1484,7 +1530,7 @@ advisor.post('/skip', async (c) => {
   });
   const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
-  await refreshCounts(c.env, conv.id, next?.id || null);
+  await refreshCounts(c.env, conv.id, next?.id || null, user);
   if (!next) {
     await c.env.DB.prepare(
       `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
@@ -1581,6 +1627,7 @@ advisor.get('/answered', async (c) => {
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
+  await loadAdvisorGate(c.env, user);
   try {
     const conv = await getLatestConversation(c.env, user);
     if (!conv) return c.json({ conversation_uid: null, answered: [] });
@@ -1600,7 +1647,11 @@ advisor.get('/answered', async (c) => {
       saved_to_table: string | null; saved_to_column: string | null;
       saved_to_id: string | null; saved_status: string; created_at: string;
     }>();
-    const answered = (rows.results || []).map((r) => {
+    const persona = personaFor(user);
+    const capturedRows = ['advisor', 'coach'].includes(persona)
+      ? (await conversationBankAnswers(c.env, user.id, persona)).filter(r => r.saved_status !== 'skipped')
+      : (rows.results || []);
+    const answered = capturedRows.map((r) => {
       const q = questionById(r.question_id);
       return {
         question_id: r.question_id,
@@ -1617,6 +1668,9 @@ advisor.get('/answered', async (c) => {
     return c.json({ conversation_uid: conv.uid, answered });
   } catch (e) {
     console.error('[advisor] /answered:', (e as Error).message);
+    if (['advisor', 'coach'].includes(personaFor(user))) {
+      return c.json({ error: 'answers_unreadable', message: 'Recorded answers are unreadable right now.' }, 503);
+    }
     return c.json({ conversation_uid: null, answered: [] });
   }
 });
@@ -1833,6 +1887,15 @@ advisor.get('/progress', async (c) => {
     for (const r of (rows.results || [])) capturedSet.add(r.question_id);
   }
 
+  const scopedReplies = persona === 'advisor' || persona === 'coach'
+    ? await conversationBankAnswers(c.env, user.id, persona) : null;
+  if (scopedReplies) {
+    capturedSet.clear();
+    for (const r of scopedReplies) {
+      if (r.saved_status !== 'skipped') capturedSet.add(r.question_id);
+    }
+  }
+
   // Per-page progress.
   const byPage = groupByPage(visibleBank).map((g) => ({
     page: g.page,
@@ -1899,8 +1962,8 @@ advisor.get('/progress', async (c) => {
   // the percentage down.
   const total = visibleBank.length;
   const deferredCount = filtered.deferred.length;
-  const ans = Number(conv?.answered_count || 0);
-  const skp = Number(conv?.skipped_count || 0);
+  const ans = scopedReplies ? scopedReplies.filter(r => r.saved_status !== 'skipped').length : Number(conv?.answered_count || 0);
+  const skp = scopedReplies ? scopedReplies.filter(r => r.saved_status === 'skipped').length : Number(conv?.skipped_count || 0);
   const overallPct = total > 0 ? Math.round(((ans + skp) / total) * 100) : 100;
 
   return c.json({
@@ -1913,15 +1976,16 @@ advisor.get('/progress', async (c) => {
     overall: {
       total, answered: ans, skipped: skp, percent: overallPct,
       deferred: deferredCount,
-      complete: conv?.state === 'complete' || (!!conv && total > 0 && ans + skp >= total),
+      complete: ((!scopedReplies || conv?.persona === persona) && conv?.state === 'complete') || (!!conv && total > 0 && ans + skp >= total),
     },
     spinout_lab: gate.spinoutLabActive
       ? { active: true, week: gate.week }
       : { active: false, week: null },
     // Legacy flat fields — kept for one rollout cycle.
     total, answered: ans, skipped: skp, percent: overallPct,
-    complete: conv?.state === 'complete',
-    current_question_id: conv?.current_question_id || null,
+    complete: (!scopedReplies || conv?.persona === persona) && conv?.state === 'complete',
+    current_question_id: !scopedReplies || visibleBank.some(q => q.id === conv?.current_question_id)
+      ? conv?.current_question_id || null : null,
     // Surface answered count even for users with no /start yet.
     _answered_in_conversation: capturedSet.size,
   });
@@ -2634,7 +2698,9 @@ async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | n
   // user who already answered some questions in a now-archived
   // conversation isn't re-asked them on a fresh /turn).
   const conv = await getActiveConversation(c.env, user);
-  const answered = conv
+  const answered = ['advisor', 'coach'].includes(personaFor(user))
+    ? await effectiveAnsweredSet(c.env, user, conv?.id || 0)
+    : conv
     ? await effectiveAnsweredSet(c.env, user, conv.id).catch(() => new Set<string>())
     : await smLoadAnsweredForUser(c.env, user.id);
   const { visible, deferred } = selectBank(user, answered, gate, focus || undefined);
