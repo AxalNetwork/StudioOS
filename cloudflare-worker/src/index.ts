@@ -195,6 +195,7 @@ import learningProgramsRoutes from './routes/learning_programs';
 import adminLearningProgramsRoutes from './routes/admin_learning_programs';
 import learningWebinarsRoutes from './routes/learning_webinars';
 import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
+import { adminLearningVideo, learningVideo } from './routes/learning_video';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
@@ -814,6 +815,8 @@ app.route('/api/admin/learning', adminLearningAssessmentRoutes);
 app.route('/api/admin/learning', adminLearningProgramsRoutes);
 // D560 (#1161) — authoring webinars: schedule, publish, cancel, recording, attendance.
 app.route('/api/admin/learning', adminLearningWebinarsRoutes);
+// D561 — the Super Admin's video upload to R2.
+app.route('/api/admin/learning', adminLearningVideo);
 // User-facing Telegram channel join request — pings the studio Slack
 // inbox so an admin can issue the invite link manually. Mounted under
 // /api/telegram (not /api/admin) since any authenticated user can ask.
@@ -1106,6 +1109,8 @@ app.route('/api/learning', learningAssessmentRoutes);
 app.route('/api/learning', learningProgramsRoutes);
 // D560 (#1161) — webinars: registration within capacity, a time-gated join link, recordings.
 app.route('/api/learning', learningWebinarsRoutes);
+// D561 — gated video playback from R2, with Range.
+app.route('/api/learning', learningVideo);
 app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.
@@ -1615,6 +1620,17 @@ export default {
         const hqCadences = branchOf(env) === null;
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
+        }
+        // D561 — Learning videos no item uses any more, and the videos of
+        // items archived for over 30 days, are removed from R2 once a day.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 40) {
+          try {
+            const { sweepLearningVideos } = await import('./services/learningVideo');
+            const r = await sweepLearningVideos(env, now);
+            if (r.deleted) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] learning video sweep failed', e);
+          }
         }
         // Cohort Timing & Gating — every-minute tick: materializes monthly
         // cycles, unlocks weeks at their Delaware-midnight boundaries,

@@ -191,8 +191,9 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   }
   // A webinar lesson names an event by its slug.
   assert.ok(admin.includes("A webinar lesson names an event by its slug."));
-  // And an upload is refused, which is why the studio offers a link only.
-  assert.ok(admin.includes("bad('video_upload_not_built'"));
+  // A file is attached only through D561's upload routes, never by setting
+  // video_source on the item: the studio still offers a link until it calls them.
+  assert.ok(admin.includes("bad('video_source_by_upload'"));
 });
 
 test('the member reads: the catalog, a course, an item and my record, each mapped from its reply', async () => {
