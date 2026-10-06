@@ -48,7 +48,7 @@ import { FileStack } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { relationLead, RELATION_NOT_RECORDED, RELATION_NOT_RECORDED_REASON } from '../../lib/escalationRelation';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
 
 const UNAVAILABLE = Symbol('unavailable');
@@ -796,7 +796,7 @@ export default function ContentPage() {
   );
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-content-page">
+    <RailFrame rail={rail} data-testid="hq-content-page">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#1e3a8a] px-4 py-2.5 text-white">
           <span className="text-[12.5px] font-bold">All subsidiaries</span>
@@ -1003,7 +1003,6 @@ export default function ContentPage() {
         </div>
       </div>
 
-      <div className="mt-4 lg:mt-0">{rail}</div>
-    </div>
+    </RailFrame>
   );
 }

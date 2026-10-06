@@ -39,7 +39,7 @@ import { Link } from 'react-router-dom';
 import { Inbox, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -930,7 +930,21 @@ export default function HqSupportPage() {
   const readAt = ready?.read_at ? String(ready.read_at).slice(11, 16) : null;
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-6" data-testid="hq-support-page">
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace="Support"
+          role="super_admin"
+          stance="Read-only, except answering an escalation"
+          note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request. Recording an answer sends it to the branch. Send again resends the decision already stored."
+          coverage={coverage}
+          coverageNote={coverage.length ? undefined : (failed ? 'The Support read could not be completed.' : 'Loading…')}
+          unavailable={SUPPORT_UNAVAILABLE}
+          data-testid="hq-support-rail"
+        />
+      )}
+      data-testid="hq-support-page"
+    >
       <div className="min-w-0">
         {/* H22's bar. No switcher caret: there is no switcher here, and a caret
             that opens nothing is a control that lies. */}
@@ -996,16 +1010,6 @@ export default function HqSupportPage() {
           />
         </div>
       </div>
-      <WorkerRail
-        workspace="Support"
-        role="super_admin"
-        stance="Read-only, except answering an escalation"
-        note="Escalations, both ticket queues, the tenant × queue matrix and the mirror strip are read from HQ's own stores in one request. Recording an answer sends it to the branch. Send again resends the decision already stored."
-        coverage={coverage}
-        coverageNote={coverage.length ? undefined : (failed ? 'The Support read could not be completed.' : 'Loading…')}
-        unavailable={SUPPORT_UNAVAILABLE}
-        data-testid="hq-support-rail"
-      />
-    </div>
+    </RailFrame>
   );
 }
