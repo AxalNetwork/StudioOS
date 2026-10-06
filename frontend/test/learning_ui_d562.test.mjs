@@ -482,8 +482,9 @@ test('the Worker AI rail sits on every Learning page, with a literal accent, in 
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
   const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
-  // The home, the three tiers of a page that waits on its store, the learner pages that read, and the studio.
-  assert.equal(mounts.length, 6);
+  // The home, the three tiers of a page that waits on its store, the learner pages that read, the studio,
+  // and (stage 3, D558) the assigned admin's program pages and the studio's program pages.
+  assert.equal(mounts.length, 8);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
@@ -701,30 +702,11 @@ const CONTENTS = [
   { subject_kind: 'exercise', subject_uid: 'e1', title: 'Write your one-liner', position: 2 },
   { subject_kind: 'course', subject_uid: 'c1', title: 'Seed basics', position: 4 },
 ];
-const LEARNERS = [
-  { user_uid: 'u1', name: 'Ada Founder', email: 'ada@example.com', role: 'founder', enrolled_at: '2026-10-01',
-    cells: { i1: { status: 'completed' }, x1: { score_percent: 82, passed: 1 }, e1: { submission_status: 'needs_work' }, c1: { status: 'started', percent: 40 } } },
-  { user_uid: 'u2', name: 'Ben Investor', cells: { x1: { unavailable: true } } },
-];
 
-test('ProgramLearnersTable: a tick, a score or a status per cell, a dash for never opened, never an email', () => {
-  const markup = html(h(ProgramLearnersTable, { status: 'ready', program: { uid: 'p1', name: 'Nordics' }, contents: CONTENTS, learners: LEARNERS }));
-  const out = flat(markup);
-  assert.ok(out.indexOf('What a seed round is') < out.indexOf('Write your one-liner') && out.indexOf('Write your one-liner') < out.indexOf('Seed basics check'),
-    'columns are not in position order');
-  const ada = flat(markup.slice(markup.indexOf('data-testid="learner-row-u1"'), markup.indexOf('data-testid="learner-row-u2"')));
-  assert.match(ada, /Ada Founder ✓ Completed Needs work Needs work 82% Best score 82%, passed 40% Started, 40%/);
-  const ben = flat(markup.slice(markup.indexOf('data-testid="learner-row-u2"')));
-  assert.match(ben, /Ben Investor — Not started — Not started Not recorded Not recorded — Not started/);
-  assert.doesNotMatch(markup, /ada@example\.com/, 'an email reached the table');
-  assert.doesNotMatch(out, /(^|\s)0(\s|$)/, 'a missing value was drawn as 0');
-  assert.match(out, /A member who never opened an item shows a dash, not 0\./);
-  assert.match(out, /2 members · 4 items/);
-  const record = flat(html(h(LearnerRecord, { status: 'ready', record: { user_uid: 'u1', name: 'Ada Founder', role: 'founder', enrolled_at: '2026-10-01', rows: [{ subject_kind: 'exam', subject_uid: 'x1', title: 'Seed basics check', cell: { score_percent: 82, passed: true } }] } })));
-  assert.match(record, /Ada Founder Founder · enrolled 1 Oct 2026 Exam Seed basics check Best score 82%, passed/);
-});
+// ProgramLearnersTable, LearnerRecord, ProgramsTable and ProgramDetail take D558's real shapes
+// since stage 3; their rows are pinned in learning_programs_d558_ui.test.mjs.
 
-test('StudioContentTable, ProgramsTable and ProgramDetail: their rows, filters and held writes', () => {
+test('StudioContentTable: its rows and filters', () => {
   const ROWS = [
     { kind: 'video', uid: 'v1', title: 'Cap tables', status: 'published', visibility: 'open', programs: [], updated_at: '2026-10-02' },
     { kind: 'course', uid: 'c1', title: 'Seed basics', status: 'draft', visibility: 'program', programs: [{ uid: 'p1', name: 'Nordics' }], updated_at: '2026-10-03' },
@@ -737,34 +719,6 @@ test('StudioContentTable, ProgramsTable and ProgramDetail: their rows, filters a
   assert.equal((studio.match(/data-testid="filter-studio-/g) || []).length, 5);
   const keep = (key) => ROWS.filter(STUDIO_FILTERS.find((f) => f.key === key).test).map((r) => r.uid);
   assert.deepEqual([keep('all'), keep('published'), keep('draft'), keep('archived'), keep('program')], [['v1', 'c1', 'x1'], ['v1'], ['c1'], ['x1'], ['c1']]);
-
-  const PROGRAMS = [
-    { uid: 'p1', name: 'Nordics', region: 'Nordics', members_count: 12, admins: [{ uid: 'u9', name: 'Ola Admin' }], content_count: 7, enrolment: 'open' },
-    { uid: 'p2', name: 'DACH', region: null, members_count: null, admins: [], content_count: 1, enrolment: null },
-  ];
-  const all = html(h(ProgramsTable, { status: 'ready', scope: 'studio', programs: PROGRAMS }));
-  assert.match(all, /href="\/learning\/studio\/programs\/p1"/);
-  assert.match(flat(all), /Nordics Nordics 12 members Ola Admin 7 items/);
-  assert.match(flat(all), /DACH Region not recorded Not recorded None assigned 1 item/);
-  const mine = html(h(ProgramsTable, { status: 'ready', scope: 'assigned', programs: PROGRAMS }));
-  assert.match(mine, /href="\/learning\/programs\/p1"/);
-  assert.match(flat(mine), /Nordics Nordics 12 members Open 7 items/);
-  assert.match(text(h(ProgramsTable, { status: 'ready', scope: 'assigned', programs: [] })), /No program assigned/);
-
-  const detail = html(h(ProgramDetail, {
-    status: 'ready', program: { uid: 'p1', name: 'Nordics', region: 'Nordics', enrolment: 'open' }, contents: CONTENTS,
-    admins: [{ user_uid: 'u9', name: 'Ola Admin', assigned_at: '2026-10-01' }],
-    members: [{ user_uid: 'u1', name: 'Ada Founder', role: 'founder', completed: 3, total: 7 }, { user_uid: 'u2', name: 'Ben Investor', role: 'investor' }],
-  }));
-  assert.match(flat(detail), /Ada Founder · Founder 3 of 7/);
-  assert.match(flat(detail), /Ben Investor · Investor Not recorded/);
-  assert.match(flat(detail), /Open to self-enrolment: yes/);
-  const enrol = tagOf(detail, 'button-program-enrol');
-  assert.match(enrol, /disabled=""/, 'a write is offered with no route behind it');
-  assert.match(enrol, /title="Programs are not live yet\."/);
-  const wired = html(h(ProgramDetail, { status: 'ready', program: { uid: 'p1', name: 'Nordics' }, handlers: { onEnrol: () => {} } }));
-  assert.ok(tagOf(wired, 'button-program-enrol'));
-  assert.doesNotMatch(tagOf(wired, 'button-program-enrol'), /disabled=""/);
 });
 
 test('every presentational component draws loading, empty, Not recorded and Unreadable', () => {
@@ -805,8 +759,8 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
     assert.doesNotMatch(src, /fontFamily|font-family|Space Grotesk|Roboto Mono|font-mono/, `${f} sets a font`);
     assert.doesNotMatch(src, /#[0-9a-fA-F]{6}\b/, `${f} carries a canvas colour`);
     for (const m of src.matchAll(/style=\{\{([^}]*)\}\}/g)) assert.match(m[1], /^\s*width:/, `${f} styles something inline other than a bar's width`);
-    // Two files call the client: the member reads, and the studio's reads and writes.
-    if (f !== 'learningReads.js' && f !== 'studioActions.js') assert.doesNotMatch(src, /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
+    // Three files call the client: the member reads, the studio's reads and writes, and (stage 3) the programs'.
+    if (!['learningReads.js', 'studioActions.js', 'programReads.js'].includes(f)) assert.doesNotMatch(src, /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
   }
   // Each Learning client from its own module (D527), as research's pages import theirs:
   // `lib/api` re-exports them, but a named import through it is not what the guards read.
@@ -815,14 +769,15 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
   assert.match(reads, /import \{ learningApi \} from '\.\.\/\.\.\/lib\/api\/learning\.js';/);
   const studio = codeOnly(read('frontend/src/pages/learning/studioActions.js'));
   assert.match(studio, /import \{ adminLearningApi \} from '\.\.\/\.\.\/lib\/api\/adminLearning\.js';/);
-  // No client method was added: every Learning method the folder calls is one D557's modules declare.
+  const programs = codeOnly(read('frontend/src/pages/learning/programReads.js'));
+  // No client method was added: every Learning method the folder calls is one the Learning modules declare.
   for (const [client, file, calls] of [
     ['learningApi', 'frontend/src/lib/api/learning.js', /\blearningApi\.(\w+)\(/g],
     ['adminLearningApi', 'frontend/src/lib/api/adminLearning.js', /\badminLearningApi\.(\w+)\(/g],
   ]) {
     assert.ok(existsSync(resolve(ROOT, file)), `${file} is gone`);
     const declared = read(file);
-    const called = new Set([...(reads + studio).matchAll(calls)].map((m) => m[1]));
+    const called = new Set([...(reads + studio + programs).matchAll(calls)].map((m) => m[1]));
     assert.ok(called.size > 0, `the folder calls no ${client} method`);
     for (const method of called) assert.ok(declared.includes(`  ${method}: (`), `${client}.${method} is not a method ${file} declares`);
   }
