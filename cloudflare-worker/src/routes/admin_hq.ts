@@ -50,6 +50,10 @@ import {
   weekAxis, weeklyKpi,
 } from '../services/activeAccounts';
 import { loadActiveAccountsByBranchWeek } from '../services/analyticsReports';
+import {
+  APPROVAL_AGE_NOT_RECORDED, DECISION_WINDOW_DAYS, hqEscalationSpans, medianHours, medianOfHours,
+  referralAges, type ReferralAges,
+} from '../services/approvalAge';
 import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -571,8 +575,9 @@ r.get('/admins', async (c) => {
 });
 
 /**
- * H15's four tiles that no store can fill, each with the measurement that
- * says so. Sent on the payload, not written into the page (D131).
+ * H15's tiles that no store can fill, each with the measurement that says so.
+ * Sent on the payload, not written into the page (D131). Median approval age
+ * left this list with D483: it is measured below (`approvalAgeAcrossBranches`).
  */
 const HQ_ANALYTICS_NOT_RECORDED = [
   {
@@ -582,13 +587,6 @@ const HQ_ANALYTICS_NOT_RECORDED = [
       'H15 draws a funnel — invited, signed in, agreement signed, active in week two. No step of it is '
       + 'recorded as an event HQ can count across branches, and each branch keeps its own accounts in '
       + 'its own database.',
-  },
-  {
-    key: 'approval_age',
-    label: 'Median approval age',
-    reason:
-      'A branch\'s approval queues live in that branch\'s database, and no branch pushes a decision '
-      + 'time to HQ. Each branch\'s Analytics page times the queues it can.',
   },
   {
     key: 'token_spend',
@@ -607,6 +605,110 @@ const HQ_ANALYTICS_NOT_RECORDED = [
       + 'programme fees and perks as streams; neither is income this platform records.',
   },
 ] as const;
+
+/**
+ * D483 — H15's median approval age, across HQ and every branch.
+ *
+ * TWO QUEUES CAN BE TIMED, AND THEY ARE NOT ADDED TOGETHER.
+ *   - REFERRALS: a decision written once and never rewritten (D210). HQ's own
+ *     queue is read here; each branch answers `approvalAges()` over RPC with
+ *     the read its own Analytics page uses, so the figure HQ prints for a
+ *     branch is the figure that branch prints. Only durations travel. The
+ *     figure across lines is ONE median over every decision's hours, not a
+ *     median of medians, so a branch with two decisions does not weigh the
+ *     same as one with two hundred.
+ *   - ESCALATIONS TO HQ: timed on HQ's own `hq_escalations`, from the raise
+ *     reaching HQ to HQ's answer. HQ's clock at both ends.
+ * LP and cohort applications cannot be timed on any database, for the
+ * reasons the branch page already gives (`APPROVAL_AGE_NOT_RECORDED`), and
+ * travel with those reasons.
+ *
+ * A line that did not answer is named with its reason and contributes no
+ * hours; the figure across lines then says how many lines it covers.
+ */
+type AgeRow = {
+  code: string; label: string; kind: 'hq' | 'branch';
+  available: boolean; unreadable?: true; median_hours: number | null; n: number; reason?: string;
+};
+
+export async function approvalAgeAcrossBranches(
+  env: Env,
+  registry: Array<{ code: string; brand_name: string | null }>,
+  nowMs: number = Date.now(),
+) {
+  const [own, answers] = await Promise.all([
+    referralAges(env, nowMs),
+    fanOut<{ window_days: number; referrals: ReferralAges }>(env, 'approvalAges'),
+  ]);
+  const labelOf = new Map(registry.map((r) => [r.code, r.brand_name || r.code]));
+  const results = withRegistry(answers, registry);
+  const pooled: number[] = [];
+  let cut = false;
+  const lineFrom = (code: string, label: string, kind: AgeRow['kind'], ref: ReferralAges | undefined, failed?: string): AgeRow => {
+    if (!ref || failed) {
+      return { code, label, kind, available: false, unreadable: true, median_hours: null, n: 0, reason: failed || 'The line answered without a referral figure.' };
+    }
+    if (!ref.available) return { code, label, kind, available: false, unreadable: true, median_hours: null, n: 0, reason: ref.reason };
+    pooled.push(...ref.hours);
+    if (ref.truncated) cut = true;
+    return {
+      code, label, kind, available: true, median_hours: ref.median_hours, n: ref.n,
+      ...(ref.n ? {} : { reason: `No referral was decided in the last ${DECISION_WINDOW_DAYS} days.` }),
+    };
+  };
+  const rows: AgeRow[] = [
+    lineFrom('hq', 'HQ-held', 'hq', own),
+    ...results.map((r) => lineFrom(
+      r.code, labelOf.get(r.code) || r.code, 'branch',
+      r.status === 'ok' ? r.data?.referrals : undefined,
+      r.status === 'ok' ? undefined : (r.reason || 'This branch did not answer.'),
+    )),
+  ];
+  const answered = rows.filter((x) => x.available).length;
+  const decided = rows.reduce((n, x) => n + (x.available ? x.n : 0), 0);
+  const all = cut
+    ? {
+      median_hours: null, n: decided, lines_counted: answered, lines_total: rows.length,
+      reason: 'A line sent more decisions than one read carries, so no median is taken across lines: '
+        + 'a median over a cut list is a median of whichever rows came first.',
+    }
+    : {
+      median_hours: medianOfHours(pooled), n: pooled.length, lines_counted: answered, lines_total: rows.length,
+      ...(pooled.length ? {} : {
+        reason: answered
+          ? `No referral was decided on any line that answered in the last ${DECISION_WINDOW_DAYS} days.`
+          : 'No line could be read, so there is no decision to time.',
+      }),
+    };
+
+  let escalations: Record<string, unknown>;
+  try {
+    const byBranch = await hqEscalationSpans(env, nowMs);
+    const spans = [...byBranch.values()].flat();
+    escalations = {
+      available: true,
+      median_hours: medianHours(spans),
+      n: spans.length,
+      by_branch: [...byBranch.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([code, list]) => ({
+        code, label: labelOf.get(code) || code, median_hours: medianHours(list), n: list.length,
+      })),
+      clock: 'HQ\'s at both ends: the raise is stamped when it reaches HQ, the answer when HQ decides.',
+      ...(spans.length ? {} : { reason: `HQ answered no escalation in the last ${DECISION_WINDOW_DAYS} days.` }),
+    };
+  } catch (e) {
+    escalations = {
+      available: false, unreadable: true, median_hours: null, n: 0, by_branch: [],
+      reason: `The escalation log could not be read (migration 259): ${(e as Error)?.message || 'unknown'}.`,
+    };
+  }
+
+  return {
+    window_days: DECISION_WINDOW_DAYS,
+    referrals: { rows, all, coverage: coverage(results) },
+    escalations,
+    not_recorded: APPROVAL_AGE_NOT_RECORDED.map((q) => ({ ...q })),
+  };
+}
 
 /**
  * Every deployment HQ provisioned, with the licence it trades under.
@@ -661,6 +763,7 @@ r.get('/analytics', async (c) => {
     registryForAnalytics(env),
     loadActiveAccountsByBranchWeek(env, axis),
   ]);
+  const approval_age = await approvalAgeAcrossBranches(env, registry.readable ? registry.rows : []);
 
   let active_accounts: Record<string, unknown>;
   if (!read.available) {
@@ -752,6 +855,7 @@ r.get('/analytics', async (c) => {
       ? { readable: true, count: registry.rows.length }
       : { readable: false, reason: registry.reason },
     active_accounts,
+    approval_age,
     not_recorded: HQ_ANALYTICS_NOT_RECORDED,
     foot: 'Aggregates, never records.',
   });

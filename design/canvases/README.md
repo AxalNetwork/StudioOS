@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 76 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 77 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -73,9 +73,15 @@ number moved for those two.
 `backlog/` to `integrated/` when the founder's `/studio` was built to it
 (#1168): `integrated/` went **75 → 76** and `backlog/` went **29 → 28**.
 
+**2026-10-06 (D599), one canvas arrived beside another.** The owner's new
+export of `Help Center` adds the ticket screens H3 to H7, drawn by an imported
+component, so `Help Ticket Screen.dc.html` now sits next to `Help Center.dc.html`
+(which was replaced in place, its route being live): `integrated/` went
+**76 → 77**.
+
 **The `107` in the title is the first audit's corpus, not today's total.** It
 is `54 + 26 + 27` — the sum as it stood when `integrated/` read 54. The three
-folders hold `76 + 28 + 26 = 130` as of 2026-10-06, counted by listing them,
+folders hold `77 + 28 + 26 = 131` as of 2026-10-06, counted by listing them,
 and the title keeps 107 because the paragraph below uses it for the audit it
 names.
 

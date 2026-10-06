@@ -126,6 +126,19 @@ export const RESEARCH_STORE_GAPS = {
     what: 'A deep-dive you ran and kept — its method, the date it was run, the documents it rests on, and whether it is current or retired.',
     why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page holds instead is the taxonomy’s markets by tracked sector and your comparable readings — ranges you record here, each with its run date and an age that decides whether it can still be used — different objects from the one the design narrows. The sector signals feed has its own page, Signals.',
   },
+  // D495 (#1023) — THE INVESTOR'S MARKETS ZONE DRAWS THESES, not saved
+  // analyses: its filters are Active · Parked · Retired · Builder, and each row
+  // is a thesis, what it has sourced, and a written read. No store holds a
+  // thesis, and whether one belongs to the investor or the firm is the owner's
+  // call (question 5 on #1023). This entry takes precedence over `markets` for
+  // the investor (`storeGapFor`).
+  'markets:investor': {
+    eyebrow: 'Blocked on a decision',
+    blocks: 'a thesis',
+    heading: 'Market readings are stored. Theses are not, yet.',
+    what: 'Each thesis with its state (active, parked or retired), the deals it has sourced, and a written read, so a thesis that sources nothing can be retired on the record.',
+    why: 'No thesis is stored, and no deal records the thesis that sourced it. Whether a thesis belongs to you or to your firm is the owner’s decision, asked on #1023, and nothing here invents one. What this page holds today is the taxonomy’s markets by tracked sector and your comparable readings.',
+  },
   companies: {
     eyebrow: 'Blocked on a store',
     blocks: 'a comparable, and a relation an analysis carries itself',
@@ -149,3 +162,15 @@ export const RESEARCH_STORE_GAPS = {
  * now does. Whoever closes `markets` or `companies` deletes their entry in the
  * same commit.
  */
+
+/**
+ * The store gap a Research zone shows for a licence (D392, D495): a
+ * licence-specific entry (`<slug>:<role>`) first, then the zone's own, which may
+ * name the licences it is true for.
+ */
+export function storeGapFor(slug, role) {
+  const own = RESEARCH_STORE_GAPS[`${slug}:${role}`];
+  if (own) return own;
+  const shared = RESEARCH_STORE_GAPS[slug];
+  return shared && (!shared.roles || shared.roles.includes(role)) ? shared : null;
+}

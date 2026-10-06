@@ -41253,6 +41253,81 @@ held"), and so does the page's rail.
 
 28 mutations were made and every one was caught.
 
+## D483
+
+**HQ · Analytics (H15): median approval age is measured, on every line, from
+the read each branch's own page uses (issue #1025, first of D483–D489).** Slot
+S09. No migration.
+
+**What was true.** H15 drew the tile as not recorded: "a branch's approval
+queues live in that branch's database, and no branch pushes a decision time to
+HQ" (`routes/admin_hq.ts`, `HQ_ANALYTICS_NOT_RECORDED`). Each branch's own
+S15 already timed its referral decisions (D210): from submission to the first
+verdict event, over 30 days, a median.
+
+**Referrals, per line and across lines.**
+- The S15 read moved to `services/approvalAge.ts` (`referralDecisionSpans`,
+  `medianHours`, `DECISION_WINDOW_DAYS`), and `branch_insights.ts` calls it.
+  Its output is unchanged.
+- A branch answers `approvalAges()` on `HqEntrypoint` (`branchApprovalAges`):
+  its median and count, computed exactly as its own page computes them, plus
+  each decision's hours, rounded to a tenth and sorted. No id, uid, name or
+  order of arrival travels. It is a read, so it takes no secret, on the rule
+  `rpc/index.ts` gives for `overview`.
+- HQ reads its own referral queue the same way, as the line "HQ-held", then
+  fans out, merged with the registry so an unbound branch reads
+  `not_deployed`. A line that did not answer is Unreadable with its reason and
+  contributes no hours.
+- The figure across lines is ONE median over every decision's hours, not a
+  median of medians, so a branch with two decisions does not weigh the same
+  as one with two hundred. It names how many lines it covers.
+- A branch sends at most 2,000 durations. Past that the list is cut and
+  marked, and HQ takes no median across lines, saying why: a median over a cut
+  list is a median of whichever rows came first. The branch's own median
+  still counts every decision.
+
+**Escalations to HQ** are timed on HQ's own `hq_escalations` (migration 259),
+from the raise reaching HQ to HQ's answer: HQ's clock at both ends. Answered
+in the window only, overall and per branch. An answer stamped before its raise
+is dropped as corrupt. An unreadable table is Unreadable, beside referral lines
+that were read.
+
+**Still not recorded**, with the reasons S15 already gave, now one list in
+`services/approvalAge.ts` (`APPROVAL_AGE_NOT_RECORDED`) read by both pages: LP
+applications (`reviewed_at` is rewritten on every move) and cohort
+applications (`decided_at` is overwritten, and a roll starts a new row).
+
+**The page.** `GET /api/admin/hq/analytics` gains `approval_age`, and
+`approval_age` leaves `not_recorded`. H15's tile shows the median across lines
+with what it covers; "None decided" when lines were read and decided nothing;
+Not recorded with its reason when no line was read or a list was cut. A card
+lists each line's referral median, escalations to HQ, and the two untimeable
+queues. `ApprovalAgeList` and `ageTone` moved to
+`components/AnalyticsParts.jsx`, so S15 and H15 draw one list.
+
+**Activation stays not recorded** until the owner defines the funnel (A, B or
+C on #1025).
+
+**Tests.**
+- `cloudflare-worker/test/hq_approval_age_d483.test.ts` (13 tests), on real
+  SQLite at both tiers, with HQ's binding calling `branchApprovalAges` itself.
+  It covers:
+  - durations only, with an exact key set and no record;
+  - the branch's RPC median equal to its own page's;
+  - HQ's tier refused;
+  - the cap;
+  - an unreadable log;
+  - every line named, with a failed branch's reason and coverage;
+  - the pooled median against a median of medians;
+  - a cut list;
+  - no decisions;
+  - escalations' window, corrupt rows and per-branch split, and the
+    unreadable escalation table;
+  - the not-recorded lists;
+  - the Super Admin gate.
+- `frontend/test/analytics_h15_s15.test.mjs` renders the card and the tile in
+  each state, and the rail's read-back line.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor
@@ -41572,6 +41647,42 @@ route and changes the commit room's `rationale` block.
 - Five mutations, each caught: a blank vote accepted, spaces accepted as a
   reason, the room saying unenforced, the shortfall left unexplained, and a
   missing rule read as the old one.
+
+## D495
+
+**Investor Research, built to the owner's line: each held op and zone names what
+it waits on.** The second of the four zone-family PRs for #1023 (the Research
+family), slot S07. No migration and no new route.
+
+**What waits, and on what:**
+
+| Canvas item | Waits on | What the screen says now |
+| --- | --- | --- |
+| IR1 Clear history (`/research/ask`) | the owner's decision, question 4 on #1023: delete, hide behind "Show cleared", or keep refusing | disabled; "Clearing history is not decided yet. Nothing has been deleted." |
+| IR2 New request, Attach to deal (`/research/diligence`) | `research.ts`'s `deals/*` routes, which are slot S02's | disabled; each names the deal routes and slot S02 |
+| IR4 theses (`/research/markets`) | the owner's decision, question 5 on #1023: theses per investor, per firm, or held | a "Blocked on a decision" card above the zone, for the investor only |
+
+**The old Clear history note presented a refusal as policy** ("the one
+irreversible act this page declines to offer"). No such decision was ever
+recorded, so the note now says the decision is open. It also says that nothing
+has been cleared.
+
+**One lookup for a zone's gap.** `storeGapFor(slug, role)` in `noStoreCopy.js`
+takes a licence-specific entry (`markets:investor`) first. Otherwise it takes
+the zone's own entry, narrowed by its `roles` (D392). The investor's Markets
+canvas draws theses (Active, Parked, Retired), not the saved analysis the
+founder's draws, so the investor needs an entry of its own.
+
+**IR3 (Benchmarking) is unchanged.** Its ops already describe the stores they
+rest on, and none waits on an open decision.
+
+**Tests.**
+- `frontend/test/investor_research_d495.test.mjs` (3 tests) pins each held op's
+  reason, and the investor's theses gap. It fails on the code before this
+  change.
+- `research_zone_states.test.mjs` now checks the lookup by behaviour, where it
+  used to read its source text.
+- 7 mutations were made and each was caught.
 
 ## D497
 
