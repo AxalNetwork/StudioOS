@@ -642,7 +642,7 @@ test('the item editor: a link or an upload, the fields the route takes, the stat
   assert.throws(() => itemBody({ length: '1:2' }, 'video'), /Length is minutes/);
 });
 
-test('the course builder: fields and resources, modules and lessons in order, up and down disabled at the ends, exercise and exam held', () => {
+test('the course builder: fields and resources, modules and lessons in order, up and down disabled at the ends, every lesson kind offered', () => {
   const markup = html(h(StudioCourseBuilder, { course: TREE, items: STUDIO_ITEMS, handlers: {} }));
   const out = flat(markup);
   assert.match(tagOf(markup, 'input-course-slug'), /value="seed-basics"/);
@@ -663,10 +663,11 @@ test('the course builder: fields and resources, modules and lessons in order, up
   const fresh = html(h(StudioCourseBuilder, { course: null, items: [], handlers: {} }));
   assert.doesNotMatch(fresh, /studio-modules|studio-status-actions/);
   assert.match(flat(fresh), /Create draft/);
-  // The lesson form: exercise and exam drawn disabled, a video lesson choosing among videos, archived ones left out.
+  // The lesson form: exercise and exam offered (D559 accepts them; learning_assessments_d559
+  // tests their choices), a video lesson choosing among videos, archived ones left out.
   const form = html(h(LessonForm, { items: STUDIO_ITEMS, onSubmit: () => {}, onCancel: () => {}, submitLabel: 'Add lesson' }));
-  assert.match(form, /<option value="exercise" disabled="">Exercise \(not built yet\)<\/option>/);
-  assert.match(form, /<option value="exam" disabled="">Exam \(not built yet\)<\/option>/);
+  assert.match(form, /<option value="exercise">Exercise<\/option>/);
+  assert.match(form, /<option value="exam">Exam<\/option>/);
   assert.match(form, /<option value="v-yt">What a seed round is<\/option>/);
   assert.doesNotMatch(form, /value="v-old"|value="r-terms"/);
   assert.equal(refLabel({ kind: 'reading', ref_uid: 'gone' }, STUDIO_ITEMS), 'item gone');

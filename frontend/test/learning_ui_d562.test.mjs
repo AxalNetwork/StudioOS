@@ -483,8 +483,9 @@ test('the Worker AI rail sits on every Learning page, with a literal accent, in 
   const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
   // The home, the three tiers of a page that waits on its store, the learner pages that read, the studio,
-  // and (stage 3, D558) the assigned admin's program pages and the studio's program pages.
-  assert.equal(mounts.length, 8);
+  // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558) and
+  // the exercise and exam pages (D559).
+  assert.equal(mounts.length, 9);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
@@ -639,10 +640,12 @@ const ATTEMPT = {
     { uid: 'q1', position: 1, prompt: 'What is a pre-money valuation?', kind: 'single', options: [{ key: 'a', label: 'The value before the round' }, { key: 'b', label: 'The value after it' }] },
   ],
 };
+/** `POST …/submit`'s attempt with its counts (D559), and the questions the page showed. */
 const RESULT = {
-  score_percent: 82, passed: 1, correct_count: 16, question_count: 20, submitted_at: '2026-10-05 12:00:00',
-  answers: [{ question_uid: 'q1', prompt: 'What is a pre-money valuation?', chosen_labels: ['The value after it'], correct_labels: ['The value before the round'] }],
+  uid: 'a3', started_at: '2026-10-05 11:40:00', score_percent: 82, passed: true, timed_out: false, correct_count: 16, question_count: 20,
+  submitted_at: '2026-10-05 12:00:00', answers_revealed: false, questions: [ATTEMPT.questions[1]],
 };
+const REVEALED = { ...RESULT, answers_revealed: true, answers: { q1: [1] }, correct: { q1: [0] } };
 
 test('ExamFlow: intro, one question at a time against the clock, the result, answers only when revealed', () => {
   const intro = html(h(ExamFlow, { status: 'ready', exam: EXAM, attempts: [{ uid: 'a1', score_percent: 50, passed: 0, submitted_at: '2026-10-03 09:20:00' }] }));
@@ -658,13 +661,13 @@ test('ExamFlow: intro, one question at a time against the clock, the result, ans
   assert.match(flat(taking), /Question 1 of 2 · 0 answered 23:48 What is a pre-money valuation\?/);
   assert.match(taking, /type="radio"/);
   assert.doesNotMatch(taking, /type="checkbox"|Which of these dilute/, 'more than one question on the screen');
-  assert.match(html(h(ExamFlow, { status: 'ready', exam: EXAM, attempt: ATTEMPT, now: Date.parse('2026-10-06T10:31:00Z') })), /Time is up\. Submit your answers\./);
-  const hidden = html(h(ExamFlow, { status: 'ready', exam: EXAM, result: RESULT, attempts: [] }));
+  assert.match(html(h(ExamFlow, { status: 'ready', exam: EXAM, attempt: ATTEMPT, now: Date.parse('2026-10-06T10:31:00Z') })), /Time is up\./);
+  const hidden = html(h(ExamFlow, { status: 'ready', exam: EXAM, result: REVEALED, attempts: [] }));
   assert.match(hidden, /data-step="result"/);
   assert.match(flat(hidden), /82% Pass Pass mark 70% · 16 of 20 correct · submitted 5 Oct 2026/);
   assert.match(hidden, /data-testid="exam-answers-hidden"/);
   assert.doesNotMatch(hidden, /The value before the round/, 'a correct answer is drawn on an exam that does not reveal them');
-  const shown = html(h(ExamFlow, { status: 'ready', exam: { ...EXAM, reveal: 'score_and_answers' }, result: RESULT, attempts: [] }));
+  const shown = html(h(ExamFlow, { status: 'ready', exam: { ...EXAM, reveal: 'score_and_answers' }, result: REVEALED, attempts: [] }));
   assert.match(flat(shown), /Your answer: The value after it Correct: The value before the round/);
   assert.match(text(h(ExamFlow, { status: 'ready', exam: EXAM, result: { ...RESULT, score_percent: 64, passed: 0 }, attempts: [] })), /64% Fail/);
 });
@@ -759,8 +762,9 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
     assert.doesNotMatch(src, /fontFamily|font-family|Space Grotesk|Roboto Mono|font-mono/, `${f} sets a font`);
     assert.doesNotMatch(src, /#[0-9a-fA-F]{6}\b/, `${f} carries a canvas colour`);
     for (const m of src.matchAll(/style=\{\{([^}]*)\}\}/g)) assert.match(m[1], /^\s*width:/, `${f} styles something inline other than a bar's width`);
-    // Three files call the client: the member reads, the studio's reads and writes, and (stage 3) the programs'.
-    if (!['learningReads.js', 'studioActions.js', 'programReads.js'].includes(f)) assert.doesNotMatch(src, /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
+    // Four files call the client: the member reads, the studio's reads and writes, and, in stage 3,
+    // the programs' (D558) and exercises and exams (D559).
+    if (!['learningReads.js', 'studioActions.js', 'programReads.js', 'assessmentReads.js'].includes(f)) assert.doesNotMatch(src, /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
   }
   // Each Learning client from its own module (D527), as research's pages import theirs:
   // `lib/api` re-exports them, but a named import through it is not what the guards read.
@@ -770,6 +774,7 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
   const studio = codeOnly(read('frontend/src/pages/learning/studioActions.js'));
   assert.match(studio, /import \{ adminLearningApi \} from '\.\.\/\.\.\/lib\/api\/adminLearning\.js';/);
   const programs = codeOnly(read('frontend/src/pages/learning/programReads.js'));
+  const assessments = codeOnly(read('frontend/src/pages/learning/assessmentReads.js'));
   // No client method was added: every Learning method the folder calls is one the Learning modules declare.
   for (const [client, file, calls] of [
     ['learningApi', 'frontend/src/lib/api/learning.js', /\blearningApi\.(\w+)\(/g],
@@ -777,7 +782,7 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
   ]) {
     assert.ok(existsSync(resolve(ROOT, file)), `${file} is gone`);
     const declared = read(file);
-    const called = new Set([...(reads + studio + programs).matchAll(calls)].map((m) => m[1]));
+    const called = new Set([...(reads + studio + programs + assessments).matchAll(calls)].map((m) => m[1]));
     assert.ok(called.size > 0, `the folder calls no ${client} method`);
     for (const method of called) assert.ok(declared.includes(`  ${method}: (`), `${client}.${method} is not a method ${file} declares`);
   }
