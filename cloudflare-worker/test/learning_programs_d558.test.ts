@@ -340,6 +340,104 @@ test('a program the caller is not in is not found; an enrolled member sees their
   assert.equal(mine.body.contents[0].href, `/learning/items/${video.uid}`);
 });
 
+// ---- #1251: My programs in one read --------------------------------------------------
+
+/** `prog`, over a D1 binding the caller supplies (to count or fail its queries). */
+async function progOver(DB: any, who: number, path: string) {
+  const res: Response = await programs.request(path, { headers: { Authorization: `Bearer ${await tokenFor(who)}` } },
+    { JWT_SECRET, ENVIRONMENT: 'development', DB } as any);
+  const text = await res.text();
+  SEEN.push(text);
+  return { status: res.status, body: JSON.parse(text) };
+}
+/** A D1 binding over `db` that counts statements, and throws on one whose SQL matches `fail`. */
+function watched(db: DatabaseSync, fail?: RegExp) {
+  const inner = d1Over(db);
+  const w = {
+    queries: 0,
+    prepare(sql: string) {
+      w.queries += 1;
+      if (fail && fail.test(sql)) throw new Error('injected failure');
+      return inner.prepare(sql);
+    },
+    batch: (xs: any[]) => inner.batch(xs),
+  };
+  return w;
+}
+
+test('#1251: GET /programs/enrolled answers each program\'s contents and the caller\'s completion, as the detail read does', async () => {
+  const db = seeded();
+  const { video, reading, course, lesson, exam, q1, exercise } = await content(db);
+  const nordics = await program(db, { name: 'Nordics', enrolment: 'invite' },
+    [['course', course.uid], ['item', video.uid], ['exam', exam.uid], ['exercise', exercise.uid]]);
+  const baltics = await program(db, { name: 'Baltics', enrolment: 'invite' }, [['item', reading.uid], ['item', video.uid]]);
+  const other = await program(db, { name: 'Iberia', enrolment: 'invite' }, [['exam', exam.uid]]);
+  for (const uid of [nordics, baltics]) await sa(db, SUPER, `/programs/${uid}/enrollments`, { method: 'POST', body: { user_uid: UID[MEMBER] } });
+  for (const uid of [nordics, baltics, other]) await sa(db, SUPER, `/programs/${uid}/enrollments`, { method: 'POST', body: { user_uid: UID[PEER] } });
+
+  // Mia: the video at 40%, the course's lesson done. Pia: everything done, which Mia must not see.
+  await learn(db, MEMBER, '/progress', { method: 'POST', body: { subject_kind: 'item', subject_uid: video.uid, status: 'started', percent: 40 } });
+  await learn(db, MEMBER, '/progress', { method: 'POST', body: { subject_kind: 'lesson', subject_uid: lesson.uid, status: 'completed' } });
+  await learn(db, PEER, '/progress', { method: 'POST', body: { subject_kind: 'item', subject_uid: video.uid, status: 'completed' } });
+  await learn(db, PEER, '/progress', { method: 'POST', body: { subject_kind: 'item', subject_uid: reading.uid, status: 'completed' } });
+  const att = (await assess(db, PEER, `/exams/${exam.uid}/attempts`, { method: 'POST' })).body;
+  await assess(db, PEER, `/exams/${exam.uid}/attempts/${att.attempt.uid}/submit`, { method: 'POST', body: { answers: { [q1.uid]: [0] } } });
+  await assess(db, PEER, `/exercises/${exercise.uid}/submissions`, { method: 'POST', body: { body: 'Pia plan' } });
+
+  const list = await prog(db, MEMBER, '/programs/enrolled');
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.body.programs.map((p: any) => p.name), ['Baltics', 'Nordics'], 'a program the member is not in was listed');
+  for (const p of list.body.programs) {
+    const detail = (await prog(db, MEMBER, `/programs/${p.uid}`)).body;
+    assert.deepEqual(p.contents, detail.contents, `${p.name}: the contents differ from the detail read`);
+    assert.deepEqual(p.my_completion, detail.my_completion, `${p.name}: the completion differs from the detail read`);
+  }
+  const n = list.body.programs.find((p: any) => p.name === 'Nordics');
+  assert.deepEqual(n.contents.map((x: any) => [x.subject_kind, x.title, x.status]),
+    [['course', 'Nordic 101', 'published'], ['item', 'Cohort welcome', 'published'], ['exam', 'Nordic check', 'published'], ['exercise', 'Plan', 'published']]);
+  assert.deepEqual(n.my_completion.map((x: any) => x.status), ['completed', 'in_progress', 'not_attempted', 'not_submitted'],
+    'the member read another learner\'s completion');
+  assert.equal(n.my_completion[1].percent, 40);
+  const b = list.body.programs.find((p: any) => p.name === 'Baltics');
+  assert.deepEqual(b.contents.map((x: any) => x.subject_uid), [reading.uid, video.uid], 'a program\'s contents were mixed with another\'s');
+  assert.deepEqual(b.my_completion.map((x: any) => x.status), ['not_started', 'in_progress']);
+  // Pia's own reply carries her own completion.
+  const pia = (await prog(db, PEER, '/programs/enrolled')).body.programs.find((p: any) => p.name === 'Nordics');
+  assert.deepEqual(pia.my_completion.map((x: any) => x.status), ['not_started', 'completed', 'passed', 'submitted']);
+  // A content row whose store row is gone says so on its own line, and the rest still draws.
+  db.prepare('DELETE FROM learning_items WHERE uid = ?').run(reading.uid);
+  const gone = (await prog(db, MEMBER, '/programs/enrolled')).body.programs.find((p: any) => p.name === 'Baltics');
+  assert.deepEqual(gone.contents.map((x: any) => x.status), ['missing', 'published']);
+});
+
+test('#1251: the enrolled read is a fixed number of queries, however many programs; a failed round blanks no program', async () => {
+  const db = seeded();
+  const { video, course, exam, exercise } = await content(db);
+  const all = [['course', course.uid], ['item', video.uid], ['exam', exam.uid], ['exercise', exercise.uid]] as Array<[string, string]>;
+  const count = async () => {
+    const w = watched(db);
+    const r = await progOver(w, MEMBER, '/programs/enrolled');
+    assert.equal(r.status, 200);
+    return [r.body.programs.length, w.queries];
+  };
+  const one = await program(db, { name: 'P1', enrolment: 'invite' }, all);
+  await sa(db, SUPER, `/programs/${one}/enrollments`, { method: 'POST', body: { user_uid: UID[MEMBER] } });
+  const [n1, q1] = await count();
+  for (const name of ['P2', 'P3', 'P4']) {
+    const uid = await program(db, { name, enrolment: 'invite' }, all);
+    await sa(db, SUPER, `/programs/${uid}/enrollments`, { method: 'POST', body: { user_uid: UID[MEMBER] } });
+  }
+  const [n4, q4] = await count();
+  assert.deepEqual([n1, n4], [1, 4]);
+  assert.equal(q4, q1, `four programs took ${q4} queries and one took ${q1}: a query ran per program`);
+
+  const w = watched(db, /FROM learning_program_contents pc/);
+  const r = await progOver(w, MEMBER, '/programs/enrolled');
+  assert.equal(r.status, 200, 'a failed contents read failed the whole list');
+  assert.deepEqual(r.body.programs.map((p: any) => [p.name, p.contents, p.my_completion, p.contents_error]),
+    ['P1', 'P2', 'P3', 'P4'].map((name) => [name, null, null, 'unavailable']));
+});
+
 test('no payload carries an email', () => {
   assert.ok(SEEN.length > 50, 'the payload check ran over too few responses');
   const leaked = SEEN.filter((t) => /@example\.test/.test(t));
