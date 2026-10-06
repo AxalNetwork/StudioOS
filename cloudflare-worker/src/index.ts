@@ -1648,6 +1648,18 @@ export default {
             console.error('[cron] learning video sweep failed', e);
           }
         }
+        // D572 part 3b — the partner leaderboard's daily standings, so the
+        // board's "change" has an earlier standing to compare with. Every
+        // tier: a branch's partners are its own. Idempotent per day.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
+          try {
+            const { writeLeaderboardSnapshots } = await import('./services/partnerLeaderboard');
+            const r = await writeLeaderboardSnapshots(env, now.getTime());
+            if (r.written || r.failed.length) console.info(`[cron] leaderboard snapshots written=${r.written} failed=${r.failed.length}`);
+          } catch (e) {
+            console.error('[cron] leaderboard snapshots failed', e);
+          }
+        }
         // D484 — publish approved articles whose scheduled time has passed.
         // Every minute, on every tier: a branch's articles are its own, and an
         // article with no `publish_at` is never touched.
