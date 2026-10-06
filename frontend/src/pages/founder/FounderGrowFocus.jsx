@@ -60,6 +60,7 @@ export default function FounderGrowFocus() {
   const [snapshots, setSnapshots] = useState([]);
   const [targets, setTargets] = useState([]);
   const [targetKeys, setTargetKeys] = useState({});
+  const [targetsReadable, setTargetsReadable] = useState(true);
   const [view, setView] = useState('latest');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -92,10 +93,11 @@ export default function FounderGrowFocus() {
       // touches `error` — the Targets view says it for itself.
       try {
         const response = await api.listMetricTargets(selected.id);
+        setTargetsReadable(true);
         setTargets(asList(response, 'items', 'targets'));
         setTargetKeys(response?.keys && typeof response.keys === 'object' ? response.keys : {});
       } catch {
-        setTargets([]); setTargetKeys({});
+        setTargetsReadable(false); setTargets([]); setTargetKeys({});
       }
     } catch (cause) {
       setProject(null); setSnapshots([]); setError(cause?.message || 'The project source is unavailable.');
@@ -127,11 +129,11 @@ export default function FounderGrowFocus() {
               actions={founderZoneActions('grow/focus', { query, view: { scope: project?.name, header: ['Snapshot', 'MRR', 'ARR', 'Active users', 'New users', 'Churn %', 'Source'], rows: selectedRows, cells: (r) => [r.snapshot_date, r.mrr, r.arr, r.active_users, r.new_users, r.monthly_churn_pct, r.source] } })}
             /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-focus-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
-    {loading ? <FocusSkeleton /> : !project ? <EmptyFocus /> : <FocusContent project={project} latest={latest} snapshots={snapshots} selectedRows={selectedRows} view={view} setView={setView} current={current} query={query} targets={readTargets} targetKeys={targetKeys} onSaved={load} />}
+    {loading ? <FocusSkeleton /> : !project ? <EmptyFocus /> : <FocusContent project={project} latest={latest} snapshots={snapshots} selectedRows={selectedRows} view={view} setView={setView} current={current} query={query} targetsReadable={targetsReadable} targets={readTargets} targetKeys={targetKeys} onSaved={load} />}
   </div><FocusRail project={project} snapshots={snapshots} latest={latest} targets={readTargets} /></div></main>;
 }
 
-function FocusContent({ project, latest, snapshots, selectedRows, view, setView, current, query, targets, targetKeys, onSaved }) {
+function FocusContent({ targetsReadable = true, project, latest, snapshots, selectedRows, view, setView, current, query, targets, targetKeys, onSaved }) {
   // COUNTED HERE, IN THE FUNCTION THAT READS THEM. Both were declared in
   // `FounderGrowFocus` and referenced only from this component — a different
   // function, so they were undefined identifiers and the Target tile threw a
@@ -145,7 +147,8 @@ function FocusContent({ project, latest, snapshots, selectedRows, view, setView,
   // Stat tile sits outside that test's reach.
   const metCount = targets.filter((t) => t.met === true).length;
   const measured = targets.filter((t) => t.met !== null).length;
-  return <div className="a5-sections"><div className="fg-focus-context"><div><span>Selected startup</span><strong data-testid="text-grow-focus-project">{safeText(project.name)}</strong></div><div><span>Metric source</span><strong>{snapshots.length ? 'Stored metric snapshots' : 'Unavailable'}</strong></div></div>
+  return <div className="a5-sections">
+    <FocusChoice project={project} targets={targetsReadable ? targets : null} onSaved={onSaved} onChooseTarget={() => setView('targets')} /><div className="fg-focus-context"><div><span>Selected startup</span><strong data-testid="text-grow-focus-project">{safeText(project.name)}</strong></div><div><span>Metric source</span><strong>{snapshots.length ? 'Stored metric snapshots' : 'Unavailable'}</strong></div></div>
         {/* Its four tabs are the zone header's now. Two of them — Experiments
         and Targets — had no store behind them and rendered an Unavailable
         panel once clicked; they state their reason in the row instead, so
@@ -287,3 +290,30 @@ function FocusRail({ project, snapshots, latest, targets }) {
 }
 function FocusSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-focus-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyFocus() { return <div className="a5-empty fg-focus-empty"><Target size={20} /><div><b>No startup is available.</b><p>Focus is scoped to an authenticated startup and its stored metrics.</p></div></div>; }
+/** D548: the explicit monthly focus uses the existing target and card. */
+export function FocusChoice({ project, targets, onSaved, onChooseTarget }) {
+  const [choice, setChoice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const selected = targets?.find((target) => target.is_focus === true);
+  async function write(key, isFocus) {
+    setBusy(true); setError('');
+    try {
+      await api.setMetricTarget(project.id, { metric_key: key, is_focus: isFocus });
+      setChoice(''); await onSaved?.();
+    } catch (cause) { setError(cause?.message || 'The focus could not be saved.'); }
+    finally { setBusy(false); }
+  }
+  return <section className="a5-focus" data-testid="grow-focus-choice">
+    <h2>This month's focus</h2>
+    {targets === null ? <p>Unreadable — focus metrics could not be read. <button type="button" onClick={onSaved}>Retry</button></p> : <>
+      <strong>{selected ? `${metricValue(selected.metric_key, selected.actual)} of ${metricValue(selected.metric_key, selected.target_value)} · ${metricLabel(selected.metric_key)}` : 'No focus metric chosen'}</strong>
+      {selected ? <p><button type="button" disabled={busy} onClick={() => write(selected.metric_key, false)}>Clear focus</button></p> : targets.length ? <form className="fg-focus-target-form" onSubmit={(event) => { event.preventDefault(); if (choice) write(choice, true); }}>
+        <label><span>Focus metric</span><select aria-label="Focus metric" value={choice} onChange={(event) => setChoice(event.target.value)} required disabled={busy}><option value="">Choose a target</option>{targets.map((target) => <option key={target.metric_key} value={target.metric_key}>{metricLabel(target.metric_key)}</option>)}</select></label>
+        <button type="submit" disabled={busy || !choice}>Set focus</button>
+      </form> : <p>Set a target first. <button type="button" onClick={onChooseTarget}>Choose a target</button></p>}
+      {selected && <p>The focus is recorded explicitly. Clear it before choosing another metric.</p>}
+    </>}
+    {error && <p role="alert">{error}</p>}
+  </section>;
+}

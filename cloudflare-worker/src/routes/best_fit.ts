@@ -19,6 +19,7 @@ import { loadAllLatestArchetype } from '../services/archetypeScoring';
 import { loadFitV2Report } from '../services/fitV2Decision';
 import { getUserSettings } from '../services/userSettings';
 import { resolveArchetypeSex } from '../services/archetypePresentation';
+import { archetypeAccess, ARCHETYPE_KEYS, withoutKeys } from '../services/archetypeEntitlement';
 
 const bestFitSelf = new Hono<{ Bindings: Env }>();
 
@@ -46,7 +47,12 @@ bestFitSelf.get('/me', async (c) => {
   // matches the scorecard; otherwise take the highest-confidence one.
   const archetype = archetypes.find((a) => a.persona === primary_persona) || archetypes[0] || null;
   const archetype_sex = resolveArchetypeSex(settings.archetype_sex, settings.pronouns);
-  return c.json({ primary_persona, fit, axal_values: axalValues, archetype, archetypes, archetype_sex, computed_at, fit_v2: fitV2 });
+  const body = { primary_persona, fit, axal_values: axalValues, archetype, archetypes, archetype_sex, computed_at, fit_v2: fitV2 };
+  // D594: a free account gets no archetype field at all, and the plan that unlocks it.
+  const access = await archetypeAccess(c.env, user);
+  return c.json(access.locked
+    ? { ...withoutKeys(body, ARCHETYPE_KEYS.bestFit), archetype_access: access }
+    : { ...body, archetype_access: access });
 });
 
 export default bestFitSelf;

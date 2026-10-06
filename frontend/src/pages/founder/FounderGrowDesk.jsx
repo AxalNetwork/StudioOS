@@ -252,7 +252,7 @@ function GrowSections({ data, project, loading, query, state, projectId, fillsOn
   return <div className="a5-sections">
     <section className="a5-focus" id="a5-focus"><Head icon={Target} title="This month's focus" meta={project?.name || 'Selected startup'} />{loading ? <Skeleton rows={2} /> : !project ? <Empty icon={Target} title="No startup is available." body="Select a startup to read its operating records." /> : <>
       <div className="a5-focus-head">
-        <div><strong data-testid="text-grow-focus-headline">{focusHeadline(targets, focus)}</strong><p>Everything else this month is subordinate to this number.</p></div>
+        <div><strong data-testid="text-grow-focus-headline">{focusHeadline(targets, focus)}</strong><p>{targets?.some((target) => target.is_focus === true) ? 'Everything else this month is subordinate to this number.' : 'Choose a target explicitly to set the focus for this month.'}</p></div>
         <div className="a5-focus-stats">
           <Stat label="Leads captured" value={`${data.customers.length + data.brandWaitlist.length}`} />
           <Stat label="Trial → paid" value="Not recorded" note="No paid state is recorded against a customer" />
@@ -262,7 +262,7 @@ function GrowSections({ data, project, loading, query, state, projectId, fillsOn
       <div className="a5-focus-numbers"><span>{focus?.snapshot_date ? `Snapshot date ${focus.snapshot_date}` : 'Snapshot date not recorded'}</span><span data-testid="text-grow-target-state">{targetState(targets)}</span></div>
       <p>{focus ? 'Open Focus to inspect the stored snapshot fields.' : 'No metric snapshot is recorded for this startup.'}{unavailable.length ? ` ${unavailable.length} derived metric${unavailable.length === 1 ? '' : 's'} cannot be computed yet: ${unavailable.map(metricName).join(', ')}.` : ''}</p>
       {unavailable.length ? <ul className="a5-unavailable" data-testid="list-grow-unavailable">{unavailable.map((item) => <li key={item.metric || String(item)}><b>{metricName(item)}</b> — {text(item?.reason) || 'No reason recorded.'}</li>)}</ul> : null}
-      <DeskLink testid="link-open-grow-focus" to={`${GROW_PAGES.focus}${query}`} state={state}>Open focus</DeskLink></>}</section>
+      <DeskLink testid="link-open-grow-focus" to={`${GROW_PAGES.focus}${query}`} state={state}>{targets?.some((target) => target.is_focus === true) ? 'Open focus' : 'Choose a focus metric'}</DeskLink></>}</section>
     <div className="a5-pair">
       <Card id="talent" icon={BriefcaseBusiness} title="Talent" meta={`${data.liveRoles.length} role${data.liveRoles.length === 1 ? '' : 's'} live · ${data.applicantTotal === null ? 'applicant count unavailable' : `${data.applicantTotal} applicant${data.applicantTotal === 1 ? '' : 's'}`}`} loading={loading}>
         {bandOn ? <ZoneDraft
@@ -314,18 +314,11 @@ const targetValue = (key, value) => {
   if (COUNT_KEYS.has(key)) return Number(value).toLocaleString();
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value));
 };
-/**
- * A5's headline — "14 of 25 paid trials" — read from a stored target.
- *
- * WHICH METRIC OWNS THE MONTH IS NOT RECORDED. A founder can set a target per
- * metric, and nothing marks one of them as the month's; so with one target
- * the headline is that target, and with several the first is shown and the
- * state line says the choice is not a stored fact.
- */
-function focusHeadline(targets, focus) {
-  if (targets === null) return focus ? 'Latest stored metric snapshot' : 'No monthly metric recorded';
-  const first = targets[0];
-  if (!first) return focus ? 'Latest stored metric snapshot · no target set' : 'No monthly metric recorded';
+/** D548: the headline uses only the explicitly selected focus target. */
+export function focusHeadline(targets, focus) {
+  if (targets === null) return 'Unreadable — focus metrics could not be read';
+  const first = targets.find((target) => target.is_focus === true);
+  if (!first) return 'No focus metric chosen';
   return `${targetValue(first.metric_key, first.actual)} of ${targetValue(first.metric_key, first.target_value)} · ${text(first.label) || metricLabel(first.metric_key)}`;
 }
 function targetState(targets) {
@@ -334,7 +327,7 @@ function targetState(targets) {
   const measured = targets.filter((target) => target.met !== null);
   const met = measured.filter((target) => target.met === true).length;
   const read = measured.length ? `${met} of ${measured.length} measured target${measured.length === 1 ? '' : 's'} met` : 'No target measured by the latest snapshot';
-  return targets.length > 1 ? `${read} · which of ${targets.length} owns the month is not recorded` : read;
+  return read;
 }
 const RANK = (fund) => (fund.stage_fit === 'right' ? 2 : 0) + (fund.path === 'warm' ? 1 : 0);
 function fundsLabel(funds) {
