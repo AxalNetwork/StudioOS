@@ -173,6 +173,7 @@ export function DirectoryTable({ items, coverage }) {
                   <td className="px-4 py-3">
                     <Link to={companyHref(x.uid)} onClick={(e) => e.stopPropagation()} className="font-semibold text-axal-violet underline dark:text-violet-300">{x.name}</Link>
                     {x.website ? <div className="mt-0.5 max-w-[320px] truncate text-[11px] text-axal-faint">{x.website}</div> : null}
+                    {x.source_name && x.source_name !== 'Wikidata' ? <div data-testid="directory-row-source" className="mt-0.5 text-[11px] text-axal-faint">{x.source_name}</div> : null}
                   </td>
                   <td className="px-4 py-3 text-axal-muted">{x.sector || muted}</td>
                   <td className="px-4 py-3 text-axal-muted">{x.country || muted}</td>
@@ -347,7 +348,7 @@ export default function CompanyDirectoryZone({ role = 'founder', zoneActions = n
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Companies</h1>
         <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-axal-muted">
-          A public discovery baseline of companies from Wikidata. Search by name or website, then narrow by sector, country and founding year.
+          A public discovery baseline of companies from Wikidata and Companies House. Search by name or website, then narrow by sector, country and founding year.
         </p>
       </div>
       <div role="tablist" aria-label="Companies" className="flex gap-1 border-b border-axal-hairline dark:border-gray-800">
@@ -363,7 +364,7 @@ export default function CompanyDirectoryZone({ role = 'founder', zoneActions = n
           <Directory role={role} zoneActions={zoneActions} onTotal={onTotal}
             initial={{ sector_label: params.get('sector_label') || '', country: params.get('country') || '' }} />
           <p className="text-[11px] leading-relaxed text-axal-faint">
-            <strong>Source boundary:</strong> company records come from Wikidata (CC0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.
+            <strong>Source boundary:</strong> each company record names its source: Wikidata (CC0) or, for UK companies, Companies House, which contains public sector information licensed under the Open Government Licence v3.0. Website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.
             {' '}<Link to="/research/gtm" className="inline-flex items-center gap-1 font-semibold text-axal-violet underline">Go-to-market intelligence <ExternalLink size={11} /></Link>
           </p>
         </>
