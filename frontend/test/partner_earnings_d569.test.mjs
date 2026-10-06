@@ -29,13 +29,12 @@ import {
   RELATIONSHIP_TYPES, BADGE_LABELS, SOURCE_LABELS, EARNINGS_AREA,
   centsOf, formatMoney, timeOf, dayOf, sourceLabel, totalsByStatus, payoutsInFlight, payoutOptions, payoutCurrency, payoutClaims,
   payoutRequestBody, payoutDetails, payoutActionsFor, filterCommissions, commissionsForReferral,
-  creditsResetDay, eventEntry, interactionEntry, timeline, interactionBody, rankBoard, ruleAmount, ruleActive, takeRateInput,
+  creditsResetDay, eventEntry, interactionEntry, timeline, interactionBody, ruleAmount, ruleActive, takeRateInput,
   relationshipLogPath, RULE_LIMITS, OUTCOME_MAX, ruleDraftOf, ruleEditInput, ruleChanges,
 } from '../src/lib/partnerEarnings.js';
 import { EarningsTotals, CommissionsList, PayoutRequestForm, PayoutHistory, optionLabel } from '../src/pages/partner/earnings/PartnerEarnings.jsx';
 import { ReferralCodeCard, IntroCreditsCard, SignupsTable, filterSignups, signupRoles } from '../src/pages/partner/earnings/PartnerReferrals.jsx';
 import { RelationshipHeader, RelationshipTimeline, LogInteractionForm } from '../src/pages/partner/earnings/PartnerRelationshipLog.jsx';
-import { LeaderboardTable, ViewerStanding } from '../src/pages/partner/earnings/PartnerLeaderboard.jsx';
 import AdminCommissions, { RulesTable, RuleEditor, TakeRateCard, PayoutQueue, AllCommissionsTable, reopenedText } from '../src/pages/admin/AdminCommissions.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -167,7 +166,7 @@ test('totals are per status and per currency, never a currency-blind sum', () =>
   // and the reads give a payout with no uid `commission_ids: null`.
   const insertAt = NETWORK.indexOf('INSERT INTO payouts');
   const insert = NETWORK.slice(insertAt, NETWORK.indexOf('RETURNING *', insertAt));
-  assert.match(insert, /INSERT INTO payouts \(uid, user_id, amount_cents, currency, status, payout_method, payout_details\)/);
+  assert.match(insert, /INSERT INTO payouts \(uid, user_id, amount_cents, currency, status, payout_method, payout_details,\s+destination_label, destination_last4\)/);
   assert.match(NETWORK, /commission_ids: byPayout\.get\(p\.id\) \?\? \(p\.uid \? \[\] : null\)/);
 });
 
@@ -250,7 +249,7 @@ test('the request body is the fields the route reads, with the currency it claim
   assert.deepEqual(payoutRequestBody(o, 'wire', '  IBAN ending 1234 '), { amount_cents: 75000, currency: 'USD', payout_method: 'wire', payout_details: { note: 'IBAN ending 1234' } });
   assert.deepEqual(payoutRequestBody(o, 'crypto', '   '), { amount_cents: 75000, currency: 'USD', payout_method: 'crypto' });
   assert.deepEqual(payoutRequestBody({ ...o, currency: null }, 'crypto', ''), { amount_cents: 75000, payout_method: 'crypto' }, 'no currency on the run: none is named, and the route takes the one held');
-  assert.match(NETWORK, /const \{ amount_cents, payout_method, payout_details, currency \} = await c\.req\.json\(\)/);
+  assert.match(NETWORK, /const \{\s+amount_cents, payout_method, payout_details, currency, destination_label, destination_last4,\s+\} = await c\.req\.json\(\)/);
   assert.deepEqual(payoutDetails('{"note":"x","empty":""}'), [['note', 'x']]);
   assert.equal(payoutDetails('plain words'), 'plain words');
   assert.equal(payoutDetails(null), null);
@@ -333,12 +332,12 @@ test('the request form: nothing accrued, below the minimum, two currencies, the 
   assert.doesNotMatch(chosen, /disabled=""[^>]*data-testid="button-review-payout"/);
 
   const confirm = text(h(PayoutRequestForm, { state: 'ready', plan, stage: 'confirm', draft: { optionIndex: 1, method: 'wire', note: 'IBAN ending 1234' } }));
-  assert.match(confirm, /Confirm the request Amount \$750\.00 USD Method Wire transfer Claims the 2 oldest accrued commissions Note IBAN ending 1234/);
+  assert.match(confirm, /Confirm the request Amount \$750\.00 USD Method Wire transfer Sent to Not named: the admin confirms where with you Claims the 2 oldest accrued commissions Note IBAN ending 1234/);
   assert.match(confirm, /marked Paid as soon as the request is recorded\. The payout stays Requested until an admin processes it, and nothing on this page sends money/);
   assert.match(confirm, /Cancel Confirm request/);
   // With no amount picked, what is confirmed is the default the select shows: everything accrued.
   const whole = text(h(PayoutRequestForm, { state: 'ready', plan, stage: 'confirm', draft: { optionIndex: null, method: 'crypto', note: '' } }));
-  assert.match(whole, /Amount \$1,100\.00 USD Method Crypto Claims the 3 oldest accrued commissions/);
+  assert.match(whole, /Amount \$1,100\.00 USD Method Crypto Sent to Not named[^C]*Claims the 3 oldest accrued commissions/);
   assert.doesNotMatch(whole, /Note/, 'no note row without a note');
 
   const ok = html(h(PayoutRequestForm, { state: 'ready', plan, draft: {}, result: { ok: true, text: 'Requested $750.00 USD. It reads Requested until an admin processes it.' } }));
@@ -356,9 +355,9 @@ test('the request form: nothing accrued, below the minimum, two currencies, the 
   assert.match(two, /<optgroup label="USD"><option value="0" selected="">All accrued · \$20\.00 USD \(1 commission\)<\/option><\/optgroup><optgroup label="EUR"><option value="1">All accrued · €90\.00 EUR \(1 commission\)<\/option><\/optgroup>/);
   assert.match(text(h(PayoutRequestForm, { state: 'ready', plan: mixed, draft: {} })), /A request claims one currency/);
   const eur = text(h(PayoutRequestForm, { state: 'ready', plan: mixed, stage: 'confirm', draft: { optionIndex: 1, method: 'wire', note: '' } }));
-  assert.match(eur, /Amount €90\.00 EUR Method Wire transfer Claims the oldest accrued commission in EUR/);
+  assert.match(eur, /Amount €90\.00 EUR Method Wire transfer Sent to Not named[^C]*Claims the oldest accrued commission in EUR/);
   const unpicked = text(h(PayoutRequestForm, { state: 'ready', plan: mixed, stage: 'confirm', draft: { optionIndex: null, method: 'wire', note: '' } }));
-  assert.match(unpicked, /Amount \$20\.00 USD Method Wire transfer Claims the oldest accrued commission in USD/, 'unpicked, what is confirmed is the default the select shows');
+  assert.match(unpicked, /Amount \$20\.00 USD Method Wire transfer Sent to Not named[^C]*Claims the oldest accrued commission in USD/, 'unpicked, what is confirmed is the default the select shows');
   const tiny = payoutOptions([
     { id: 1, status: 'accrued', amount_cents: 400, currency: 'USD', created_at: '2026-01-01 00:00:00' },
     { id: 2, status: 'accrued', amount_cents: 300, currency: 'EUR', created_at: '2026-01-02 00:00:00' },
@@ -371,11 +370,11 @@ test('the payout history: each state; the currency and the day it failed when re
   assert.match(text(h(PayoutHistory, { state: 'unreadable', rows: [], onRetry: () => {} })), /This is not a claim that nothing was requested or paid/);
   assert.match(text(h(PayoutHistory, { state: 'ready', rows: [] })), /No payout requested yet/);
   const list = text(h(PayoutHistory, { state: 'ready', rows: PAYOUTS }));
-  assert.match(list, /\$500\.00 USD Wire transfer Failed Requested Oct 4, 2026 · failed Oct 5, 2026 IBAN rejected · its 2 commissions went back to Accrued when it failed/);
-  assert.match(list, /€1,200\.00 EUR Wire transfer Requested Requested Oct 4, 2026 Note: IBAN ending 1234/);
-  assert.match(list, /300\.00 currency not recorded Stripe Processing Requested Oct 2, 2026/);
-  assert.match(list, /\$6,400\.00 USD Wire transfer Completed Requested Sep 28, 2026 · completed Sep 30, 2026/);
-  assert.match(list, /2,000\.00 currency not recorded Crypto Failed Requested Sep 14, 2026 · the day it failed is not recorded Bank returned the transfer: account closed · requested before payouts recorded their commissions, so none went back to Accrued/);
+  assert.match(list, /\$500\.00 USD Wire transfer destination not named Failed Requested Oct 4, 2026 · failed Oct 5, 2026 IBAN rejected · its 2 commissions went back to Accrued when it failed/);
+  assert.match(list, /€1,200\.00 EUR Wire transfer destination not named Requested Requested Oct 4, 2026 Note: IBAN ending 1234/);
+  assert.match(list, /300\.00 currency not recorded Stripe destination not named Processing Requested Oct 2, 2026/);
+  assert.match(list, /\$6,400\.00 USD Wire transfer destination not named Completed Requested Sep 28, 2026 · completed Sep 30, 2026/);
+  assert.match(list, /2,000\.00 currency not recorded Crypto destination not named Failed Requested Sep 14, 2026 · the day it failed is not recorded Bank returned the transfer: account closed · requested before payouts recorded their commissions, so none went back to Accrued/);
   // A payout with no uid shows no currency, whatever its row says: the
   // request that wrote it recorded none, and the column default is not one.
   assert.doesNotMatch(text(h(PayoutHistory, { state: 'ready', rows: [{ ...PAYOUTS[2], currency: 'EUR' }] })), /EUR|USD|€|\$/);
@@ -554,42 +553,9 @@ test('logging an interaction: the route\'s fields, an optional outcome, and the 
  * The leaderboard
  * ------------------------------------------------------------------ */
 
-// GET /partnernet/leaderboard/public — initials, never an email
-const PUBLIC_BOARD = [
-  { id: 30, name: 'JD', role: 'founder', network_score: 61.5, active_relationships: 6, network_reach: 12, verified_badges: ['top_referrer', 'connector'] },
-  { id: 3, name: 'PP', role: 'partner', network_score: 40, active_relationships: 3, network_reach: 2, verified_badges: [] },
-  { id: 31, name: 'AB', role: 'investor', network_score: 40, active_relationships: 2, network_reach: 0, verified_badges: [] },
-  { id: 32, name: 'User #32', role: 'partner', network_score: 12.4, active_relationships: 1, network_reach: 0, verified_badges: [] },
-];
-// GET /partnernet/leaderboard (admin) — names, emails, earnings
-const ADMIN_BOARD = [{ id: 30, name: 'Jo Doe', email: 'jo@example.com', role: 'founder', network_score: 61.5, total_earnings: 90000, active_relationships: 6, network_reach: 12, verified_badges: [] }];
-
-test('a rank is read off the returned scores, ties shared, and only the viewer is named', () => {
-  const ranked = rankBoard(PUBLIC_BOARD, 3);
-  assert.deepEqual(ranked.map((r) => r.rank), [1, 2, 2, 4]);
-  assert.deepEqual(ranked.map((r) => r.isViewer), [false, true, false, false]);
-  assert.equal(rankBoard([{ id: 1, network_score: null }])[0].rank, null, 'no score, no rank');
-  const board = html(h(LeaderboardTable, { state: 'ready', ranked }));
-  assert.match(board, /data-testid="row-board-viewer"[^>]*class="[^"]*bg-amber-50/);
-  const words = text(h(LeaderboardTable, { state: 'ready', ranked }));
-  assert.match(words, /1 Member Founder Top referrer Connector Network score 61\.5 Relationships 6 Reach 12 Change Not recorded/);
-  assert.match(words, /2 Member You Partner Network score 40/);
-  for (const hidden of ['JD', 'AB', 'User #32']) assert.doesNotMatch(words, new RegExp(`\\b${hidden}\\b`), `${hidden} is shown`);
-  const admin = text(h(LeaderboardTable, { state: 'ready', ranked: rankBoard(ADMIN_BOARD, 3) }));
-  assert.doesNotMatch(admin, /Jo Doe|jo@example\.com|90000|900\.00/, 'the admin arm\'s names, emails and earnings stay off the page');
-  assert.match(words, /Names are never shown/);
-});
-
-test('the viewer\'s standing is a returned rank or "Not ranked", never a made-up number', () => {
-  assert.match(text(h(ViewerStanding, { state: 'ready', ranked: rankBoard(PUBLIC_BOARD, 3) })), /Your rank 2 of the 4 the board shows, with a network score of 40\./);
-  const out = text(h(ViewerStanding, { state: 'ready', ranked: rankBoard(PUBLIC_BOARD, 999) }));
-  assert.match(out, /Not ranked You are not among the 4 members the board returns/);
-  assert.doesNotMatch(out, /\b5\b/, 'no rank below the last one is invented');
-  assert.match(text(h(ViewerStanding, { state: 'ready', ranked: [] })), /Not ranked The board has nobody on it yet/);
-  assert.equal(html(h(ViewerStanding, { state: 'loading', ranked: [] })), '');
-  assert.match(text(h(LeaderboardTable, { state: 'unreadable', ranked: [], onRetry: () => {} })), /This is not a claim that nobody is ranked/);
-  assert.match(text(h(LeaderboardTable, { state: 'ready', ranked: [] })), /Nobody is ranked yet/);
-});
+// D572 part 3b replaced the score-only board with metrics, periods and
+// change from `GET /partnernet/leaderboard/board`; its states are pinned in
+// `partner_leaderboard_d572.test.mjs`.
 
 /* ------------------------------------------------------------------ *
  * The admin console
@@ -737,10 +703,10 @@ test('the payout queue offers only what the route allows each status, and the co
   const all = html(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'all' }));
   assert.doesNotMatch(all, /button-(complete|process|fail)-(6|3|2)"/, 'completed and failed payouts are final');
   const words = text(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'all' }));
-  assert.match(words, /Pat Partner \$500\.00 USD Wire transfer Failed requested Oct 4, 2026 IBAN rejected · failed Oct 5, 2026 Recorded by Hana HQ on Oct 5, 2026/);
-  assert.match(words, /Pat Partner 300\.00 currency not recorded Stripe Processing requested Oct 2, 2026 Process payout Mark failed Recorded by account #7 Pat/);
+  assert.match(words, /Pat Partner \$500\.00 USD Wire transfer destination not named Failed requested Oct 4, 2026 IBAN rejected · failed Oct 5, 2026 Recorded by Hana HQ on Oct 5, 2026/);
+  assert.match(words, /Pat Partner 300\.00 currency not recorded Stripe destination not named Processing requested Oct 2, 2026 Process payout Mark failed Recorded by account #7 Pat/);
   assert.match(words, /Recorded by Hana HQ on Sep 30, 2026/);
-  assert.match(words, /pat@example\.com 2,000\.00 currency not recorded Crypto Failed requested Sep 14, 2026 Bank returned the transfer: account closed · the day it failed is not recorded/);
+  assert.match(words, /pat@example\.com 2,000\.00 currency not recorded Crypto destination not named Failed requested Sep 14, 2026 Bank returned the transfer: account closed · the day it failed is not recorded/);
   assert.match(NETWORK, /pu\.name AS processed_by_name/);
 
   const complete = text(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'open', pending: { id: 5, action: 'complete', reason: '' } }));
@@ -793,10 +759,6 @@ test('every method the screens call reaches its Worker route', async () => {
   const orig = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     calls.push([init.method || 'GET', String(url).replace(/^.*\/api/, ''), init.body]);
-    // The leaderboard asks the admin arm first and falls back on a refusal.
-    if (String(url).endsWith('/partnernet/leaderboard')) {
-      return new Response('{"error":"Admin only"}', { status: 403, headers: { 'Content-Type': 'application/json' } });
-    }
     return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   try {
@@ -811,7 +773,7 @@ test('every method the screens call reaches its Worker route', async () => {
     await api.relationshipEvents(5);
     await api.partnerInteractionLog(5);
     await api.partnerInteractionAdd(5, { kind: 'call', note: 'x' });
-    await api.partnerLeaderboard();
+    await api.partnerLeaderboardBoard({ metric: 'referrals', period: 'quarter' });
     await api.adminCommissionRules();
     await api.adminUpdateCommissionRule('referral_kyc_approved', { amount_cents: 7500, percentage_bps: null, description: null, active: true });
     await api.adminCommissions();
@@ -831,8 +793,7 @@ test('every method the screens call reaches its Worker route', async () => {
     'GET /partnernet/relationships/5/events',
     'GET /partnernet/relationships/5/interactions',
     'POST /partnernet/relationships/5/interactions',
-    'GET /partnernet/leaderboard',
-    'GET /partnernet/leaderboard/public',
+    'GET /partnernet/leaderboard/board?metric=referrals&period=quarter',
     'GET /network/admin/commission-rules',
     'PATCH /network/admin/commission-rules/referral_kyc_approved',
     'GET /network/admin/commissions',
@@ -842,9 +803,9 @@ test('every method the screens call reaches its Worker route', async () => {
     'PUT /admin/platform/take-rate',
   ]);
   assert.deepEqual(JSON.parse(calls[2][2]), { amount_cents: 75000, currency: 'USD', payout_method: 'wire' });
-  assert.deepEqual(JSON.parse(calls[13][2]), { amount_cents: 7500, percentage_bps: null, description: null, active: true });
-  assert.deepEqual(JSON.parse(calls[16][2]), { action: 'fail', failure_reason: 'returned' });
-  assert.deepEqual(JSON.parse(calls[18][2]), { bps: 1200 });
+  assert.deepEqual(JSON.parse(calls[12][2]), { amount_cents: 7500, percentage_bps: null, description: null, active: true });
+  assert.deepEqual(JSON.parse(calls[15][2]), { action: 'fail', failure_reason: 'returned' });
+  assert.deepEqual(JSON.parse(calls[17][2]), { bps: 1200 });
 
   // And each is a mounted route, behind the gate the page assumes.
   const index = read('cloudflare-worker/src/index.ts');

@@ -59,7 +59,11 @@ async function ensureSchema(env: Env) {
       failure_reason TEXT,
       processed_by INTEGER,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      completed_at TIMESTAMP
+      completed_at TIMESTAMP,
+      -- Migration 409 (D572 part 3b), named here so a table this creates
+      -- matches one the migrations built.
+      destination_label TEXT,
+      destination_last4 TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS idx_payouts_user ON payouts(user_id)`,
     `CREATE TABLE IF NOT EXISTS commission_rules (
@@ -701,6 +705,33 @@ async function withCommissionIds(env: Env, payouts: any[]): Promise<any[]> {
   return payouts.map((p) => ({ ...p, commission_ids: byPayout.get(p.id) ?? (p.uid ? [] : null) }));
 }
 
+/**
+ * D572 part 3b (the owner's Q1 = A) — where a payout is sent, as the partner
+ * would recognise it: a label and the last 4 characters of the account or
+ * wallet. The full details stay with the processor, out of band, so nothing
+ * that could move money is stored. Both are optional and go together: one
+ * without the other is refused, because "···· 4821" with no name, or a name
+ * with no account, cannot be told apart from another destination.
+ */
+export function readPayoutDestination(label: unknown, last4: unknown):
+  | { label: string | null; last4: string | null }
+  | { error: { code: string; message: string } } {
+  const l = label == null ? '' : String(label).trim();
+  const f = last4 == null ? '' : String(last4).trim();
+  if (!l && !f) return { label: null, last4: null };
+  if (!l || !f) {
+    return { error: { code: 'destination_incomplete', message: 'Name the destination and give its last 4 characters, or leave both out.' } };
+  }
+  // No control characters: the label is printed on the admin's queue.
+  if (l.length > 60 || /[\u0000-\u001f\u007f]/.test(l)) {
+    return { error: { code: 'invalid_destination_label', message: 'A destination label is at most 60 characters of plain text.' } };
+  }
+  if (!/^[A-Za-z0-9]{4}$/.test(f)) {
+    return { error: { code: 'invalid_destination_last4', message: 'Give exactly the last 4 letters or digits of the account or wallet, and nothing more.' } };
+  }
+  return { label: l, last4: f.toUpperCase() };
+}
+
 network.get('/payouts/me', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
@@ -714,11 +745,15 @@ network.get('/payouts/me', async (c) => {
 network.post('/payout/request', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
-  const { amount_cents, payout_method, payout_details, currency } = await c.req.json().catch(() => ({}));
+  const {
+    amount_cents, payout_method, payout_details, currency, destination_label, destination_last4,
+  } = await c.req.json().catch(() => ({}));
 
   const amt = parseInt(amount_cents);
   if (!amt || amt < 1000) return c.json({ error: 'Minimum payout is $10.00' }, 400);
   if (!['stripe', 'wire', 'crypto'].includes(payout_method)) return c.json({ error: 'Invalid payout_method (stripe|wire|crypto)' }, 400);
+  const destination = readPayoutDestination(destination_label, destination_last4);
+  if ('error' in destination) return refuse(c, 400, destination.error);
 
   const sql = getSQL(c.env);
   try {
@@ -772,8 +807,9 @@ network.post('/payout/request', async (c) => {
     // ran unconditionally, so a request that lost a race on one commission
     // still marked the rest paid with no payout behind them.
     const ph = usedIds.map(() => '?').join(',');
-    const insertSql = `INSERT INTO payouts (uid, user_id, amount_cents, currency, status, payout_method, payout_details)
-      SELECT ?, ?, ?, ?, 'requested', ?, ?
+    const insertSql = `INSERT INTO payouts (uid, user_id, amount_cents, currency, status, payout_method, payout_details,
+        destination_label, destination_last4)
+      SELECT ?, ?, ?, ?, 'requested', ?, ?, ?, ?
       WHERE (SELECT COUNT(*) FROM commissions WHERE id IN (${ph}) AND user_id = ? AND status = 'accrued' AND currency = ?) = ?
       RETURNING *`;
     const linkSql = `INSERT INTO payout_commissions (payout_id, commission_id)
@@ -784,7 +820,10 @@ network.post('/payout/request', async (c) => {
         AND EXISTS (SELECT 1 FROM payouts WHERE uid = ?)`;
 
     const batchResult = await c.env.DB.batch([
-      c.env.DB.prepare(insertSql).bind(uid, user.id, amt, cur, payout_method, detailsJson, ...usedIds, user.id, cur, usedIds.length),
+      c.env.DB.prepare(insertSql).bind(
+        uid, user.id, amt, cur, payout_method, detailsJson, destination.label, destination.last4,
+        ...usedIds, user.id, cur, usedIds.length,
+      ),
       c.env.DB.prepare(linkSql).bind(uid, ...usedIds),
       c.env.DB.prepare(claimSql).bind(...usedIds, user.id, uid),
     ]);

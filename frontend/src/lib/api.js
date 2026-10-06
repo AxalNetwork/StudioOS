@@ -2829,7 +2829,10 @@ export const api = {
   removeRelationship: (id) => request(`/partnernet/relationships/${id}/remove`, { method: 'POST' }),
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
-  partnerLeaderboard: () => request('/partnernet/leaderboard').catch(() => request('/partnernet/leaderboard/public')),
+  // D572 part 3b — the board by metric and period, with the change against a
+  // stored earlier standing. Other members come back by rank, role and value only.
+  partnerLeaderboardBoard: ({ metric = 'score', period = 'all' } = {}) =>
+    request(`/partnernet/leaderboard/board?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}`),
 
   legalGenerate: (data) => request('/legalcap/legal/generate', { method: 'POST', body: JSON.stringify(data) }),
   legalDocs: (dealId) => request(`/legalcap/legal/docs/${dealId}`),
