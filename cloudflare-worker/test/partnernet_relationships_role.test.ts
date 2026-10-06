@@ -78,6 +78,11 @@ function freshDb() {
       CHECK (partner_a_id < partner_b_id),
       CHECK (strength_score >= 0 AND strength_score <= 100)
     );
+    CREATE TABLE company_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, company_name TEXT NOT NULL);
+    CREATE TABLE user_company_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+      role_in_company TEXT NOT NULL DEFAULT 'Member', is_primary_admin INTEGER NOT NULL DEFAULT 0
+    );
   `);
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(INVESTOR, 'investor', 'Ingrid Investor', 'investor@example.test');
@@ -127,4 +132,46 @@ test('a counterpart whose user row is gone carries no role rather than a wrong o
   assert.equal(rows.length, 1);
   assert.equal(rows[0].other.id, 999);
   assert.equal(rows[0].other.role, null);
+});
+
+test('D572 part 3: each party\'s own company, read from their account at query time, both ways round', async () => {
+  const db = freshDb();
+  db.prepare(`INSERT INTO partner_relationships (partner_a_id, partner_b_id, relationship_type, strength_score, metadata)
+              VALUES (?, ?, 'co_investor', 60, '{}')`).run(FOUNDER, INVESTOR);
+  db.prepare(`INSERT INTO partner_relationships (partner_a_id, partner_b_id, relationship_type, strength_score, metadata)
+              VALUES (?, ?, 'advisor_mentee', 70, '{}')`).run(INVESTOR, ADVISOR);
+  const co = db.prepare('INSERT INTO company_profiles (company_name) VALUES (?)');
+  const link = db.prepare('INSERT INTO user_company_links (company_id, user_id, is_primary_admin) VALUES (?, ?, ?)');
+  co.run('Side Project'); co.run('Fred Robotics'); co.run('Ingrid Capital');
+  link.run(1, FOUNDER, 0);   // an older link the founder does not run
+  link.run(2, FOUNDER, 1);   // the one they are primary admin of wins
+  link.run(3, INVESTOR, 0);  // the only link: it is the investor's company
+
+  let rows = await relationships(db);
+  const founder = rows.find((r) => r.other.id === FOUNDER);
+  const advisor = rows.find((r) => r.other.id === ADVISOR);
+  assert.equal(founder?.other.company, 'Fred Robotics', 'the A-side counterpart carries their primary company');
+  assert.equal(advisor?.other.company, null, 'a counterpart with no company reads as not recorded, never as mine');
+  assert.equal(founder?.my_company, 'Ingrid Capital', 'my own company, from the A side');
+  assert.equal(advisor?.my_company, 'Ingrid Capital', 'my own company, from the B side');
+  assert.ok(!('a_company' in founder) && !('b_company' in founder), 'the raw per-side columns leaked');
+
+  // Read at query time: a rename shows on the next read, with nothing stored on the tie.
+  db.prepare(`UPDATE company_profiles SET company_name = 'Fred Robotics Inc.' WHERE id = 2`).run();
+  rows = await relationships(db);
+  assert.equal(rows.find((r) => r.other.id === FOUNDER)?.other.company, 'Fred Robotics Inc.');
+});
+
+test('D572 part 3: a company read that fails is said as unreadable, and the book still lists', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE company_profiles');
+  db.prepare(`INSERT INTO partner_relationships (partner_a_id, partner_b_id, relationship_type, strength_score, metadata)
+              VALUES (?, ?, 'co_investor', 60, '{}')`).run(FOUNDER, INVESTOR);
+  const w = console.warn; console.warn = () => {};
+  try {
+    const rows = await relationships(db);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].companies_unreadable, true);
+    assert.equal(rows[0].other.company, null);
+  } finally { console.warn = w; }
 });

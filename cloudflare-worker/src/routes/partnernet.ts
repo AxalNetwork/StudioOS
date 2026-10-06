@@ -383,6 +383,33 @@ async function checkRelRateLimit(env: Env, userId: number): Promise<boolean> {
   return (r?.n || 0) < REL_CREATE_RATE_LIMIT;
 }
 
+/**
+ * D572 part 3 — each user's own company, by user id: the company they are
+ * linked to on their account, the one they are primary admin of first, else
+ * the oldest link. Null when the read fails, so a caller can tell "not
+ * readable" from "no company".
+ */
+async function companiesOf(env: Env, ids: number[]): Promise<Map<number, string> | null> {
+  const unique = [...new Set(ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  const out = new Map<number, string>();
+  if (!unique.length) return out;
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT l.user_id, cp.company_name FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id
+        WHERE l.user_id IN (SELECT value FROM json_each(?))
+        ORDER BY l.user_id, l.is_primary_admin DESC, l.id ASC`,
+    ).bind(JSON.stringify(unique)).all<{ user_id: number; company_name: string }>();
+    for (const r of results || []) {
+      const name = String(r.company_name ?? '').trim();
+      if (name && !out.has(Number(r.user_id))) out.set(Number(r.user_id), name);
+    }
+    return out;
+  } catch (e) {
+    console.warn('partnernet company read failed', (e as Error).message);
+    return null;
+  }
+}
+
 partnernet.get('/relationships', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
@@ -400,14 +427,28 @@ partnernet.get('/relationships', async (c) => {
     ORDER BY pr.strength_score DESC, pr.updated_at DESC
   `;
   await sql.end();
+  const companies = await companiesOf(c.env, [user.id, ...(rows as any[]).flatMap((r) => [r.partner_a_id, r.partner_b_id])]);
+  const companyOf = (id: number) => (companies ? companies.get(Number(id)) ?? null : null);
   const enriched = (rows as any[]).map(r => {
     // The counterpart's role travels with the row: the investor Network desk's
     // Founders chip narrows on it, and a name and email alone cannot say who
     // on the other side of the tie is a founder.
+    //
+    // D572 part 3 (the owner's Q2 = A): the company shown is each party's
+    // OWN, read from their account at query time — the company they are
+    // linked to (`user_company_links`, the account's "Your companies"), the
+    // one they are primary admin of first, else the oldest link. Nothing is
+    // stored on the relationship, so a renamed or changed company is never
+    // stale here; with no link it is null, said as not recorded.
+    // A company read that fails says so (`companies_unreadable`) rather than
+    // reading as "no company", and never takes the book down with it.
     const other = r.partner_a_id === user.id
-      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role }
-      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role };
-    return { ...relationshipForParty(r, user.id), other };
+      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role, company: companyOf(r.partner_b_id) }
+      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role, company: companyOf(r.partner_a_id) };
+    return {
+      ...relationshipForParty(r, user.id), other, my_company: companyOf(user.id),
+      ...(companies ? {} : { companies_unreadable: true }),
+    };
   });
   return c.json(enriched);
   } catch (e) {
