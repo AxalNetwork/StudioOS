@@ -248,7 +248,7 @@ export function MarketReadingView({
               </div>
             </Card>
 
-            <div data-testid="market-reading-tiles" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div data-testid="market-reading-tiles" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               <Tile
                 k="Comparable range"
                 v={`${usd(item.range_low_cents)} – ${usd(item.range_high_cents)}`}
@@ -287,7 +287,7 @@ export function MarketReadingView({
                     phone, the button under them (D593). */}
                 <div
                   data-testid="market-reading-form-row"
-                  className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto] lg:items-end"
+                  className="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto] xl:items-end"
                 >
                   <label className="min-w-0 text-[11px] font-semibold text-axal-muted">
                     Low (USD)
@@ -331,7 +331,7 @@ export function MarketReadingView({
                   </label>
                   <button
                     type="submit"
-                    className={`${primaryBtn} col-span-2 justify-self-start lg:col-span-1`}
+                    className={`${primaryBtn} col-span-2 justify-self-start xl:col-span-1`}
                     disabled={busy || forward === false}
                   >
                     {busy ? 'Recording…' : 'Record this reading'}

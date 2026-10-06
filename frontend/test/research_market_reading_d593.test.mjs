@@ -223,7 +223,7 @@ test('the form records a scope, and a blank one is saved as none rather than car
 
 test('tiles run four across on a desktop, with Age and Proposal at 20px', () => {
   const tiles = part(page(), 'market-reading-tiles');
-  assert.match(tiles, /^<div[^>]*class="grid grid-cols-2 gap-3 lg:grid-cols-4"/);
+  assert.match(tiles, /^<div[^>]*class="grid grid-cols-2 gap-3 xl:grid-cols-4"/);
   const valueClass = (k) => new RegExp(`>${k}</div><div class="([^"]*)"`).exec(tiles)?.[1] || '';
   for (const k of ['Age', 'Proposal']) {
     assert.ok(has(valueClass(k), 'sm:text-[20px]'), `${k} is not 20px on a desktop`);
@@ -237,11 +237,11 @@ test('tiles run four across on a desktop, with Age and Proposal at 20px', () => 
 
 test('the record form is one row on a desktop and two by two on a phone, the button last', () => {
   const row = part(page(), 'market-reading-form-row');
-  assert.match(row, /^<div[^>]*class="[^"]*\bgrid-cols-2\b[^"]*\blg:grid-cols-\[repeat\(4,minmax\(0,1fr\)\)_auto\]/);
+  assert.match(row, /^<div[^>]*class="[^"]*\bgrid-cols-2\b[^"]*\bxl:grid-cols-\[repeat\(4,minmax\(0,1fr\)\)_auto\]/);
   const order = [...row.matchAll(/<input aria-label="([^"]+)"|<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1] || m[2]);
   assert.deepEqual(order, ['Low (USD)', 'High (USD)', 'Comparables', 'Run date', 'Record this reading']);
   const button = classOf(row, 'Record this reading');
-  assert.ok(has(button, 'col-span-2') && has(button, 'lg:col-span-1'), 'the button is not under the fields on a phone and beside them on a desktop');
+  assert.ok(has(button, 'col-span-2') && has(button, 'xl:col-span-1'), 'the button is not under the fields on a phone and beside them on a desktop');
 });
 
 test('high below low is a danger box with a mark, announced, and nothing else raises one', () => {
