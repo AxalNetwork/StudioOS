@@ -3,7 +3,7 @@
  *
  * One entry per row of the old 50-row admin sidebar, per tab of the Admin
  * Console at /admin, and for the parked X row. Each says which tier and row
- * it lives on and how it appears there. The launcher and the command palette
+ * it lives on and how it appears there. The command palette
  * (D284) and the HQ sub-navigation strips (D285) read this list; nothing else
  * decides where a console is reached from.
  *
@@ -21,12 +21,13 @@
  * Pure data: it imports nothing, so a Node test can import it directly.
  */
 
-export const TIERS = ['HQ', 'Admin', 'launcher', 'parked'];
+export const TIERS = ['HQ', 'Admin', 'palette', 'parked'];
 
 // H35's three forms plus the three the canvas also draws: a lane on Approvals,
-// a top-bar button, and the launcher. `row` is for the one entry that IS a
+// a top-bar button, and the palette (D563 retired the launcher that was the
+// sixth). `row` is for the one entry that IS a
 // shell row rather than something placed inside one.
-export const FORMS = ['row', 'sub-nav', 'card link', 'embedded', 'lane', 'top bar', 'launcher'];
+export const FORMS = ['row', 'sub-nav', 'card link', 'embedded', 'lane', 'top bar', 'palette'];
 
 // H35's note, verbatim: "Rows: exactly eleven, unchanged."
 export const HQ_ROWS = ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings'];
@@ -46,9 +47,9 @@ const row = (label, route, place, hqOnly, extra = {}) => ({ key: route, kind: 'r
 // An Admin Console tab. `key` is `tab:<value>`; the route is the deep link.
 // /admin is `guard(['admin'])` with no elevation, so no tab is hqOnly.
 const tab = (value, label, place, extra = {}) => ({ key: `tab:${value}`, kind: 'tab', tabValue: value, label, route: `/admin?tab=${value}`, hqOnly: false, ...place, ...extra });
-// One of the 29 working pages: S23/H37's launcher, with the canvas's own
+// One of the 28 working pages S23/H37 drew in a launcher, with the canvas's own
 // one-line description of what the page is.
-const page = (group, label, route, what) => ({ key: route, kind: 'page', group, label, route, what, hqOnly: false, tier: 'launcher', row: null, form: 'launcher' });
+const page = (group, label, route, what) => ({ key: route, kind: 'page', group, label, route, what, hqOnly: false, tier: 'palette', row: null, form: 'palette' });
 
 export const ADMIN_PLACEMENT = [
   // ── Home group ──────────────────────────────────────────────────────────
@@ -116,16 +117,20 @@ export const ADMIN_PLACEMENT = [
   tab('network-profiles', 'Advisors & Partners', hq('Content', 'sub-nav'),
     { how: 'Sub-navigation item on Content (the deck roster); card link on Community.', also: [admin('Community', 'card link')] }),
 
-  // ── The 29 working pages → the Workspaces launcher (S23 · H37) ──────────
-  // "AI Advisory Suite" keeps its shipped label. H37 flags it — the voice
-  // rule forbids calling the AI an advisor — and the rename is the owner's
-  // call (D284); the launcher draws the label and no flag.
+  // ── The 28 working pages (S23 · H37) → the profile sidebars (D563) ──────
+  // H37 drew them in a Workspaces launcher on the admin shells; D563 retired
+  // it. Each now lights the profile row in `PAGE_HOMES` below and is linked
+  // from that row's overview; on an admin shell the palette indexes them.
+  // "/advisory" is labelled by its page's own heading, "Advisory": the
+  // launcher's "AI Advisory Suite" called the AI an advisor, which the voice
+  // rule forbids (H37 flagged it, D284 left it to the owner, D563 drops it
+  // with the launcher).
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Scoring Engine', '/scoring', 'Venture-readiness scores and the evidence behind them.'),
   page('Studio', 'Risk Matrix', '/portfolio/risk-matrix', 'Portfolio companies by risk dimension.'),
   page('Studio', 'Market Intelligence', '/market-intel', 'Market readings with their sources.'),
   page('Studio', 'Signals', '/signals', 'External signals, grouped by theme.'),
-  page('Studio', 'AI Advisory Suite', '/advisory', 'AI-assisted analysis tools.'),
+  page('Studio', 'Advisory', '/advisory', 'Advisors, financial planning and diligence checks.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Capital & Investment', '/capital', 'Rounds, commitments and instruments.'),
   page('Capital & Legal', 'Liquidity & Exits', '/liquidity', 'Secondaries and recorded exits.'),
@@ -150,22 +155,74 @@ export const ADMIN_PLACEMENT = [
   page('More', 'Perks', '/perks', 'Partner perks and claims.'),
 ];
 
-// S23 / H37's launcher groups, in the canvas's order.
+// S23 / H37's groups, in the canvas's order. The palette's hint names them.
 export const WORKSPACE_GROUP_ORDER = ['Studio', 'Capital & Legal', 'Network & Growth', 'More'];
 
 /**
- * The 29 working pages, the one list the Workspaces launcher and the command
- * palette both read (D284). Derived from the map, never typed twice.
+ * The 28 working pages, the list the command palette reads for an admin shell
+ * (D284). Derived from the map, never typed twice.
  */
 export const WORKSPACES = ADMIN_PLACEMENT
-  .filter((e) => e.tier === 'launcher')
+  .filter((e) => e.tier === 'palette')
   .map(({ group, label, route, what }) => ({ group, label, route, description: what }));
 
-/** The same 29, grouped for rendering. `count` is computed, never typed. */
-export const WORKSPACE_GROUPS = WORKSPACE_GROUP_ORDER.map((group) => {
-  const items = WORKSPACES.filter((w) => w.group === group);
-  return { group, items, count: items.length };
-});
+/**
+ * Where each of the 28 lives in the profile shells (D563). One entry per page:
+ * `[role, row, door]`, where `row` is the profile sidebar row's label and
+ * `door` says how the page is reached from that row:
+ *
+ *   'row'   — the page IS the row's own destination (or its overview alias);
+ *   'also'  — the row's `match` lists it, and the row's overview draws it in
+ *             its "Also in" list (`workspaces/AlsoIn.jsx`);
+ *   'lab'   — a Spin-Out Lab page: the row's `match` lists it and the Lab's
+ *             own arsenal (`lib/spinoutLabArsenal.js`) links it.
+ *
+ * Only roles the page's route guard admits are named, and a page has at most
+ * one home per role, which is the sidebar's own rule ("items must not appear
+ * in more than one group within a role"). `frontend/test/
+ * workspaces_retired_d563.test.mjs` checks every line against App.jsx and
+ * `sidebarConfig.js`.
+ *
+ * `/liquidity` is the one page that redirects, and only a founder: its
+ * founder page is the Raise · Liquidity zone (`/raise/liquidity`, the same
+ * `LiquidityPage` in workspace mode). A partner or investor still lands on it.
+ */
+export const PAGE_HOMES = {
+  '/pipeline': [['partner', 'Pipeline', 'row']],
+  '/scoring': [['investor', 'Deals', 'also']],
+  '/portfolio/risk-matrix': [['investor', 'Portfolio', 'also']],
+  '/market-intel': [['partner', 'Research', 'also'], ['advisor', 'Research', 'also']],
+  '/signals': [['partner', 'Research', 'also'], ['advisor', 'Research', 'also']],
+  '/advisory': [['founder', 'Validate', 'also']],
+  '/deals': [['investor', 'Deals', 'row']],
+  '/capital': [['investor', 'Portfolio', 'also']],
+  '/liquidity': [['investor', 'Portfolio', 'also']],
+  '/portfolio/health': [['investor', 'Portfolio', 'row']],
+  '/portfolio/coverage': [['partner', 'Delivery', 'also']],
+  '/portfolio/reserves': [['investor', 'Portfolio', 'also']],
+  '/portfolio/waterfall': [['investor', 'Portfolio', 'also']],
+  '/watchlist': [['investor', 'Portfolio', 'also']],
+  '/legal-capital': [['founder', 'Raise', 'also']],
+  '/incorporate': [['founder', 'Raise', 'also']],
+  '/compliance': [['founder', 'Raise', 'also']],
+  '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],
+  '/network-effects': [['founder', 'Grow', 'also']],
+  '/my/jobs': [['partner', 'Network', 'also'], ['advisor', 'Network', 'also']],
+  '/services': [['partner', 'Offers', 'also']],
+  '/needs': [['partner', 'Pipeline', 'also']],
+  '/partner/insights': [['partner', 'Pipeline', 'also']],
+  '/partner/office-hours': [['partner', 'Offers', 'also']],
+  '/comarketing': [['partner', 'Offers', 'also'], ['founder', 'Grow', 'also']],
+  '/incorporate/cofounder-agreement': [['founder', 'Raise', 'also']],
+  '/spinout-lab/83b': [['founder', 'Spin-Out Lab', 'lab']],
+  '/perks': [['founder', 'Grow', 'also']],
+};
+
+/** The pages a profile row's overview lists under "Also in", in map order. */
+export function alsoInFor(role, row) {
+  return WORKSPACES.filter((w) => (PAGE_HOMES[w.route] || [])
+    .some(([r, label, door]) => r === role && label === row && door === 'also'));
+}
 
 // Legacy entries with no placement of their own, each with its reason. The
 // guard pins this list by value, so it cannot grow quietly.

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ACCENT, zonePath } from './shellConfig';
+import AlsoIn from './AlsoIn';
 import './bucketOverview.css';
 
 /**
@@ -58,7 +59,9 @@ export default function BucketOverview({
 }) {
   if (!bucket?.zones?.length) return null;
   const accent = ACCENT[role] || ACCENT.founder;
+  // D563: the row's working pages outside its zones sit under the grid.
   return (
+    <>
     <div
       className={`bo-grid ${className}`.trim()}
       style={{ '--bo-tint': accent.tint, '--bo-border': accent.border, '--bo-ink': accent.deep }}
@@ -91,5 +94,7 @@ export default function BucketOverview({
         );
       })}
     </div>
+    <AlsoIn role={role} row={bucket.label} />
+    </>
   );
 }

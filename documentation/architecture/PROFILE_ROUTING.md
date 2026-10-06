@@ -54,9 +54,9 @@ it, where in their nav, and how do they get there.*
 | Founder Workspaces Canvas | `/validate` · `/build` · `/raise` · `/grow` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Validate | UPGRADE | High |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Liquidity & Secondaries | `/liquidity` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Raise | OUT OF SCOPE | High |
+| Legal & Capital Engine | `/legal-capital` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Metrics | `/build/metrics` | Headerless | Full page | Sidebar → Headerless → Build | UPGRADE | High |
 | Office Hours | `/spinout-lab/office-hours` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | CURRENT | Low |
@@ -68,7 +68,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Founder Build | `/build` · `/build/board` · `/build/roadmap` · `/build/kpi` | Headerless | Full page (proposed) | Sidebar → Headerless → Build | UPGRADE | Low |
 | Pages · Founder Grow | `/grow` · `/grow/focus` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | UPGRADE | Low |
 | Pages · Founder Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | RESKIN | High |
-| Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
+| Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Pages · Founder Research | `/research/ask` · `/research/library` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Founder Validate | `/validate` · `/validate/{interviews` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | CURRENT | Low |
 | Pages · Fund dossier | `/research/funds/:uid` · `/research/funds` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -130,7 +130,7 @@ it, where in their nav, and how do they get there.*
 | Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | CURRENT | High |
 | Investor LP Canvas | `/studio` · `/deals` · `/portfolio` · `/funds` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
-| Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Liquidity & Secondaries | `/liquidity` | Headerless | Full page | Sidebar → Headerless → Portfolio | UPGRADE | High |
 | LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Headerless | Full page | Sidebar → Headerless → Axal VC Fund | UPGRADE | High |
 | Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Diligence room | `/research/diligence/:grantUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -146,7 +146,7 @@ it, where in their nav, and how do they get there.*
 | Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Scoring Engine v2 | `/scoring` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
 
 ## Partner / Operator — 12 canvases
 
@@ -258,8 +258,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 97 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 45 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 99 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 43 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 35 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

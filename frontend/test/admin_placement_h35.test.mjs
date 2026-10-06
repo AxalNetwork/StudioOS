@@ -184,11 +184,12 @@ test('every placement names a real tier, a real row of that tier, and a real for
     assert.ok(TIERS.includes(p.tier), `${key}: tier ${p.tier}`);
     if (p.tier === 'HQ' || p.tier === 'Admin') {
       assert.ok(rowsOf[p.tier].includes(p.row), `${key}: ${p.tier} has no row ${p.row}`);
-      assert.ok(FORMS.includes(p.form) && p.form !== 'launcher', `${key}: form ${p.form} on a shell row`);
+      assert.ok(FORMS.includes(p.form) && p.form !== 'palette', `${key}: form ${p.form} on a shell row`);
       if (p.form === 'top bar') assert.equal(p.row, TOP_BAR, `${key}: a top-bar placement sits on the top bar, not a row`);
       else assert.notEqual(p.row, TOP_BAR, `${key}: the top bar takes buttons, not a ${p.form}`);
     }
-    if (p.tier === 'launcher') assert.deepEqual([p.row, p.form], [null, 'launcher'], `${key}: a launcher entry has no row`);
+    // D563 retired the launcher; its pages are indexed by the palette only.
+    if (p.tier === 'palette') assert.deepEqual([p.row, p.form], [null, 'palette'], `${key}: a palette-only entry has no row`);
     if (p.tier === 'parked') assert.deepEqual([p.row, p.form], [null, null], `${key}: a parked entry is nowhere`);
   };
   for (const e of ADMIN_PLACEMENT) {
@@ -197,10 +198,10 @@ test('every placement names a real tier, a real row of that tier, and a real for
       check(`${e.key} (also)`, a);
       assert.ok(a.tier === 'HQ' || a.tier === 'Admin', `${e.key}: a second placement is on a shell`);
     }
-    if (e.tier === 'launcher') assert.ok(e.group, `${e.key}: a launcher entry names its group`);
+    if (e.tier === 'palette') assert.ok(e.group, `${e.key}: a palette-only entry names its group`);
   }
   // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'launcher').length, 28, 'S23 and H37 launch 28 pages once AI Matches is gone');
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 28, 'S23 and H37 drew 28 pages once AI Matches is gone');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {

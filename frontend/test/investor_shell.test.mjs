@@ -103,7 +103,7 @@ test('legacy investor deep links still highlight their owning workspace', () => 
   assert.ok(researchMatch, 'the Research row has no match array');
   assert.ok(researchMatch[1].includes("'/market-intel'"),
     '/market-intel no longer highlights the Research row');
-  assert.match(investor, /label: 'Portfolio', match: \['\/portfolio'\]/);
+  assert.match(investor, /label: 'Portfolio', match: \['\/portfolio', '\/watchlist', '\/capital', '\/liquidity'\]/);
   assert.match(investor, /label: 'Fund', match: \['\/funds', '\/lp-reports'\]/);
   assert.match(investor, /label: 'Network', match: \['\/network', '\/relationships', '\/contacts'\]/);
 });

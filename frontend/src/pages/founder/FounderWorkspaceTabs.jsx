@@ -82,7 +82,9 @@ const SETS = {
       roles: ['admin', 'founder', 'partner'] },
     { to: '/raise/data-room', label: 'Data room', icon: Shield,
       roles: ['admin', 'founder', 'investor'] },
-    { to: '/liquidity', label: 'Liquidity', icon: TrendingUp,
+    // A founder's /liquidity redirects to /raise/liquidity?mode=workspace
+    // (D563), so the tab lights on both addresses.
+    { to: '/liquidity', label: 'Liquidity', icon: TrendingUp, match: ['/liquidity', '/raise/liquidity'],
       roles: ['admin', 'founder', 'partner', 'investor'], requiredTier: 'studio' },
   ],
   // Canvas zones: Focus · Talent · Customers · Partnerships · Capital match ·
@@ -126,7 +128,7 @@ export default function FounderWorkspaceTabs({ set, user, children }) {
   // One visible tab is a bar that says nothing. Render the page alone.
   return (
     <>
-      {tabs.length > 1 && <WorkspaceTabs tabs={tabs.map(({ to, label, icon }) => ({ to, label, icon }))} />}
+      {tabs.length > 1 && <WorkspaceTabs tabs={tabs.map(({ to, label, icon, match }) => ({ to, label, icon, match }))} />}
       {children}
     </>
   );

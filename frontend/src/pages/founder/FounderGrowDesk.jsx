@@ -11,6 +11,7 @@ import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderGrowDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
+import AlsoIn from '../../workspaces/AlsoIn';
 
 // Seven labels, seven routes — A5's `anchG`, in its order. This was a
 // seven-deep ternary chain ending in an `<a href="#a5-…">` fallback that no
@@ -223,6 +224,7 @@ export default function FounderGrowDesk() {
     </header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-grow" type="button" onClick={() => setReload((count) => count + 1)}>Retry</button></div>}
     <GrowSections data={data} project={project} loading={loading} query={query} state={state} projectId={projectId} fillsOn={fillsOn} ai={ai} />
+    <AlsoIn role="founder" row="Grow" />
   </div><WorkerRail
     workspace="Grow"
     className="a5-rail"
