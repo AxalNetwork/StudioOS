@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 79 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 81 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -88,9 +88,17 @@ They came from the intake queue, not `backlog/`, so `backlog/` did not move.
 `Ops Page` is the owner's newer export of the same day, whose one change is
 the Account center's section list on a phone.
 
+**2026-10-06 (D606), two canvases arrived with their routes.** The owner's
+Eadwyn Tickets canvas (#1107, #1108) is a board, `Eadwyn Tickets`, and the
+component every artboard imports, `Eadwyn Tickets Screen`. Its four screens
+are built in the same change: the Super Admin's review queue at `/hq/review`
+(T1, T1b) and the Eadwyn chat's Tasks and My tickets panels (T2, T3). So both
+files went straight to `integrated/`, as `Help Ticket Screen` did:
+`integrated/` went **79 → 81**. Nothing left another folder.
+
 **The `107` in the title is the first audit's corpus, not today's total.** It
 is `54 + 26 + 27` — the sum as it stood when `integrated/` read 54. The three
-folders hold `79 + 28 + 26 = 133` as of 2026-10-06, counted by listing them,
+folders hold `81 + 28 + 26 = 135` as of 2026-10-06, counted by listing them,
 and the title keeps 107 because the paragraph below uses it for the audit it
 names.
 

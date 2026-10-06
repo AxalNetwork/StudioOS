@@ -17,6 +17,23 @@
  *                   null when this page is the last. Older suggestions are
  *                   one request away, never silently cut off.
  *
+ *   GET /rewards    { rewards }   (D606)
+ *
+ *   rewards         what an approved suggestion and a fixed bug earn today,
+ *                   from D540's `credit_reward_rules`, for the Eadwyn panels'
+ *                   notes: `task_approved`, `bug_high`, `bug_medium` and
+ *                   `bug_low`, each `{ credits, active }`, or null when the
+ *                   table has no such rule. A failed read is a refusal,
+ *                   never zeros.
+ *
+ * D606 — each approved suggestion also carries `reward`: the credits its
+ * grant actually paid (the ledger row D544's approval wrote, keyed
+ * `task:<id>`), what the suggester got rather than what the rule says now.
+ * `credits` is null when no grant was paid (refused, or the rule was off);
+ * `revoked` says a grant was taken back; a ledger that cannot be read says
+ * `credits_unreadable` and the list is still served. A pending or declined
+ * suggestion carries null.
+ *
  * The store is D544's `community_tasks` (migration 383). A read that fails is
  * a 500 refusal, never an empty list: "No tasks yet" and "could not read the
  * tasks" are different sentences, and the panel prints each.
@@ -34,6 +51,41 @@ import { mapError } from './_t13t14t15_helpers';
 const r = new Hono<{ Bindings: Env }>();
 
 const SUGGESTIONS_PAGE = 100;
+
+/** The rules the Eadwyn panels state, in the order the notes name them. */
+export const PANEL_REWARD_KEYS = ['task_approved', 'bug_high', 'bug_medium', 'bug_low'] as const;
+
+export type SuggestionReward = { credits: number | null; revoked: boolean } | { credits: null; credits_unreadable: true } | null;
+
+/**
+ * The grant each approved suggestion paid, from the ledger. Same reading as
+ * D542's `bountySummaries`: the grant's own delta, revoked when an
+ * `admin_adjust` row names it.
+ */
+async function suggestionRewards(env: Env, userId: number, rows: Array<{ id: number; status: string }>): Promise<Map<number, SuggestionReward>> {
+  const out = new Map<number, SuggestionReward>();
+  const approved = rows.filter((x) => x.status === 'approved');
+  for (const x of rows) out.set(Number(x.id), null);
+  if (!approved.length) return out;
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT g.source_ref, g.delta,
+              EXISTS (SELECT 1 FROM perk_credit_ledger r
+                       WHERE r.user_id = g.user_id AND r.kind = 'admin_adjust' AND r.source_ref = 'revoke:' || g.id) AS revoked
+         FROM perk_credit_ledger g
+        WHERE g.user_id = ? AND g.kind = 'grant' AND g.source_ref IN (SELECT value FROM json_each(?))`,
+    ).bind(userId, JSON.stringify(approved.map((x) => `task:${x.id}`))).all<{ source_ref: string; delta: number; revoked: number }>();
+    const byRef = new Map((results || []).map((g) => [g.source_ref, g]));
+    for (const x of approved) {
+      const g = byRef.get(`task:${x.id}`);
+      out.set(Number(x.id), { credits: g ? Number(g.delta) : null, revoked: !!(g && Number(g.revoked)) });
+    }
+  } catch (e) {
+    console.warn('[community-tasks] ledger unreadable for the suggestion rewards', (e as Error).message);
+    for (const x of approved) out.set(Number(x.id), { credits: null, credits_unreadable: true });
+  }
+  return out;
+}
 
 /** The audience a role reads, or null for "only the tasks for everyone". */
 export function audienceFor(role: unknown): string | null {
@@ -75,6 +127,7 @@ r.get('/', async (c) => {
     const mineRows = mine.results || [];
     const page = mineRows.slice(0, SUGGESTIONS_PAGE);
     const next = mineRows.length > SUGGESTIONS_PAGE ? page[page.length - 1].id : null;
+    const rewards = await suggestionRewards(c.env, Number(user.id), page);
     return c.json({
       audience: seesAll ? 'admin' : (audience ?? 'all'),
       tasks: (tasks.results || []).map((x: any) => ({
@@ -85,6 +138,7 @@ r.get('/', async (c) => {
         // The reason belongs to a decline only; a pending or approved row has none.
         decline_reason: x.status === 'declined' ? (x.decline_reason ?? null) : null,
         created_at: x.created_at, decided_at: x.decided_at ?? null,
+        reward: rewards.get(Number(x.id)) ?? null,
       })),
       my_suggestions_next: next,
     });
@@ -92,6 +146,27 @@ r.get('/', async (c) => {
     return refuse(c, 500, {
       code: 'community_tasks_unreadable',
       message: 'The task list could not be read. This is not a sign there are none; try again.',
+      raw: e,
+    });
+  }
+});
+
+r.get('/rewards', async (c) => {
+  try { await requireAuth(c); } catch (e) { return mapError(c, e); }
+  try {
+    const { results } = await c.env.DB.prepare(
+      `SELECT key, credits, active FROM credit_reward_rules WHERE key IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(PANEL_REWARD_KEYS)).all<{ key: string; credits: number; active: number }>();
+    const byKey = new Map((results || []).map((x) => [x.key, x]));
+    const rewards = Object.fromEntries(PANEL_REWARD_KEYS.map((k) => {
+      const x = byKey.get(k);
+      return [k, x ? { credits: Number(x.credits), active: Number(x.active) === 1 } : null];
+    }));
+    return c.json({ rewards });
+  } catch (e) {
+    return refuse(c, 500, {
+      code: 'rewards_unreadable',
+      message: 'What a task or a bug report earns could not be read. This is not a sign it earns nothing; try again.',
       raw: e,
     });
   }

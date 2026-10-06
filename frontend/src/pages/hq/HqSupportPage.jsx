@@ -1139,6 +1139,12 @@ export default function HqSupportPage() {
             stands now, so the two ticket queues and the tickets outside them add up to HQ Home&apos;s Queue backlog.
             Open an escalation to answer it.
           </p>
+          {/* D606 — the Super Admin's review queue sits under Support (the Eadwyn Tickets canvas lights this row). */}
+          <p className="mt-1.5 text-[12.5px]">
+            <Link to="/hq/review" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="hq-support-review-link">
+              Review queue: feature requests and suggested tasks →
+            </Link>
+          </p>
         </header>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
