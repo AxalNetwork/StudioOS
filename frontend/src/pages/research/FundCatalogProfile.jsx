@@ -35,8 +35,10 @@ const GHOST = 'inline-flex items-center gap-1 rounded-lg border border-axal-hair
  * shortlist read, { loading, error, existing }.
  */
 export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, notice = null, onRetry = () => {} }) {
+  // The directory is the Funds page's second tab (D593); `/research/funds`
+  // alone opens My funds.
   const back = (
-    <Link to="/research/funds" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
+    <Link to="/research/funds?view=directory" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
       <ArrowLeft size={13} /> Fund directory
     </Link>
   );
@@ -81,8 +83,8 @@ export function FundCatalogView({ fund, list = { loading: false, error: null, ex
             <span className="flex items-center gap-2 text-[12px] text-axal-muted"><UnreadableBadge /> Your list could not be read, so this page cannot tell whether the fund is on it.</span>
           )}
           {!list.loading && !list.error && (list.existing
-            ? <Link to={`/research/funds/${encodeURIComponent(list.existing.uid)}`} className="rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white">Open your dossier →</Link>
-            : <button type="button" onClick={onAdd || undefined} disabled={!onAdd} className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"><Plus size={14} /> Add to my list</button>)}
+            ? <Link to={`/research/funds/${encodeURIComponent(list.existing.uid)}`} className="rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white dark:bg-violet-600">Open your dossier →</Link>
+            : <button type="button" onClick={onAdd || undefined} disabled={!onAdd} className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-violet-600"><Plus size={14} /> Add to my funds</button>)}
         </div>
       </div>
       {notice && <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{notice.text}</p>}
@@ -135,7 +137,7 @@ export default function FundCatalogProfile({ role = 'founder' }) {
     try {
       const row = await api.research.fundCreate({ name: item.name, source_url: item.website || null });
       setList({ loading: false, error: null, existing: row });
-      setNotice({ ok: true, text: 'Added to your research list.' });
+      setNotice({ ok: true, text: 'Added to My funds.' });
     } catch (e) {
       setNotice({ ok: false, text: e?.message || 'That fund did not save.' });
     }

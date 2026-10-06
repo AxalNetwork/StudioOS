@@ -5,7 +5,7 @@ import { Card, Skeleton, Unrecorded } from '../../ui';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
   EMPTY_QUERY, PAGE_SIZES, SIZE_BANDS, SORT_OPTIONS, STAGE_REASON,
-  activeFilters, backingOf, coverageRows, directoryLine, formatCount, pageInfo, pageList,
+  activeFilters, backingOf, coverageRows, directoryLine, directoryTotalOf, formatCount, pageInfo, pageList,
   rangeLabel, recorded, sizeOf, toParams,
 } from './fundDirectoryRead';
 
@@ -32,6 +32,11 @@ import {
  *
  * SIGNED IN. The canvas draws a public top bar with "Sign in"; this page sits
  * inside the app's WorkspaceShell instead, whose zone row is the section tabs.
+ *
+ * THE FUNDS PAGE'S DIRECTORY TAB (D593, `?view=directory`). "Add to my funds"
+ * puts a fund on the founder's own list, and the drawer then holds "Open your
+ * dossier →" where the button was. FundsZone draws "Where the money is" in
+ * the `band` slot and hears `coverage.total` for the tab's count.
  */
 
 const SELECT = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
@@ -319,8 +324,47 @@ function Pager({ data, onQuery }) {
   );
 }
 
-function Drawer({ item, drawer, onClose, onAdd, busy, isAdded }) {
+/**
+ * D593 — "Add to my funds" puts a directory fund on the founder's own list,
+ * and the founder's row is the way into its dossier: once there is one, the
+ * button's place holds "Open your dossier →" to `/research/funds/:uid`, as
+ * the catalog profile already did. `dossier` is that row's uid, or null.
+ *
+ * `listState` is the founder's own list read, as the catalog profile reads
+ * it: while it has not answered, or after it failed, nothing here can tell
+ * whether the fund is already on it, so no add is offered that could
+ * duplicate a row.
+ */
+function AddOrOpen({ item, dossier, added, busy, onAdd, listState }) {
+  if (dossier) {
+    return (
+      <Link to={`/research/funds/${encodeURIComponent(dossier)}`} data-testid="fund-directory-open-dossier"
+        className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500">
+        Open your dossier →
+      </Link>
+    );
+  }
+  if (listState === 'unreadable') {
+    return (
+      <span className="flex basis-full flex-wrap items-center gap-2 text-[12px] text-axal-muted dark:text-gray-400">
+        <UnreadableBadge /> Your list could not be read, so this cannot tell whether the fund is on it.
+      </span>
+    );
+  }
+  if (listState === 'loading') {
+    return <button type="button" className={GHOST} disabled>Checking your list…</button>;
+  }
+  return (
+    <button type="button" className={GHOST} disabled={added || !!busy || !onAdd} onClick={() => onAdd && onAdd(item)}>
+      {added ? 'In My funds' : busy === item.uid ? 'Adding…' : 'Add to my funds'}
+    </button>
+  );
+}
+
+function Drawer({ item, drawer, onClose, onAdd, busy, isAdded, dossierOf, notice, listState }) {
   const added = isAdded(item);
+  const dossier = dossierOf(item);
+  const note = notice && notice.uid === item.uid ? notice : null;
   const reportsState = drawer.loading ? 'loading' : (drawer.error || drawer.data?.reports_status === 'unreadable') ? 'unreadable' : 'ok';
   return (
     <aside id="fd-drawer" aria-labelledby="fd-d-title"
@@ -333,11 +377,14 @@ function Drawer({ item, drawer, onClose, onAdd, busy, isAdded }) {
         <button type="button" className={GHOST} onClick={onClose} aria-label="Close fund details"><X size={16} aria-hidden="true" /></button>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" className={GHOST} disabled={added || !!busy || !onAdd} onClick={() => onAdd && onAdd(item)}>
-          {added ? 'On your list' : busy === item.uid ? 'Adding…' : 'Add to my list'}
-        </button>
+        <AddOrOpen item={item} dossier={dossier} added={added} busy={busy} onAdd={onAdd} listState={listState} />
         <Link to={`/research/funds/catalog/${encodeURIComponent(item.uid)}`} className={GHOST}>Open full profile</Link>
       </div>
+      {/* The add's outcome, beside the control that made it. Always in the
+          tree, so a screen reader hears the sentence when it arrives. */}
+      <p role="status" className={note ? `mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}` : 'sr-only'}>
+        {note ? note.text : ''}
+      </p>
       <div className="mt-4">
         <FundDetails item={item} reports={drawer.data?.reports || null} reportsState={reportsState} />
       </div>
@@ -348,10 +395,16 @@ function Drawer({ item, drawer, onClose, onAdd, busy, isAdded }) {
 /**
  * The page, from props alone (the tests render it with react-dom/server).
  * `result` is { loading, error, data }: data is the API's answer.
+ * `dossierOf(item)` is the uid of the founder's own row for that fund, or
+ * null; `listState` is that list's read, 'ok', 'loading' or 'unreadable';
+ * `notice` is the last add's outcome, `{ uid, ok, text }`, shown in that
+ * fund's drawer; `band` is drawn under the coverage card, above the search
+ * and the list (D593: "Where the money is").
  */
 export function FundDirectoryView({
   query, onQuery, search, onSearch, result, facets, selected, onSelect, onClose, drawer = { loading: false, error: null, data: null },
-  onAdd = null, busy = null, isAdded = () => false, filtersOpen = false, onToggleFilters = () => {},
+  onAdd = null, busy = null, isAdded = () => false, dossierOf = () => null, listState = 'ok', notice = null, band = null,
+  filtersOpen = false, onToggleFilters = () => {},
   onRetry = () => {}, onClear = () => {},
 }) {
   const { loading, error, data } = result;
@@ -368,6 +421,8 @@ export function FundDirectoryView({
       </div>
 
       {data?.coverage && <CoverageCard coverage={data.coverage} sources={data.sources} />}
+
+      {band}
 
       <Filters search={search} onSearch={onSearch} query={query} onQuery={onQuery} facets={facets}
         open={filtersOpen} onToggle={onToggleFilters} />
@@ -447,7 +502,7 @@ export function FundDirectoryView({
                             <button type="button" className="text-left text-[13px] font-semibold text-axal-ink hover:text-axal-violet hover:underline dark:text-gray-100"
                               onClick={() => onSelect(x)} aria-expanded={on ? 'true' : 'false'} aria-controls="fd-drawer">{x.name}</button>
                             {recorded(x.website) && <div className="max-w-[280px] truncate text-[11px] text-axal-faint">{String(x.website).replace(/^https?:\/\//i, '')}</div>}
-                            {isAdded(x) && <div className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">On your list</div>}
+                            {isAdded(x) && <div className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">In My funds</div>}
                           </td>
                           <td className="px-3 py-2.5 text-axal-muted">{recorded(x.hq) ? x.hq : <Unrecorded>Not recorded</Unrecorded>}</td>
                           <td className="px-3 py-2.5 text-right">{s.text ? <span className="font-mono text-axal-ink dark:text-gray-100">{s.text}</span> : <Unrecorded reason={s.reason}>Not recorded</Unrecorded>}</td>
@@ -468,7 +523,7 @@ export function FundDirectoryView({
             </Card>
             {selected && (
               <Drawer item={selected} drawer={drawer} onClose={onClose}
-                onAdd={onAdd} busy={busy} isAdded={isAdded} />
+                onAdd={onAdd} busy={busy} isAdded={isAdded} dossierOf={dossierOf} notice={notice} listState={listState} />
             )}
           </div>
           <Pager data={data} onQuery={onQuery} />
@@ -484,9 +539,15 @@ const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9
 
 /**
  * The live directory. `researchedNames` (normalized names on the founder's own
- * list) and `onAdd` come from FundsZone, which owns the shortlist.
+ * list), `onAdd`, `dossierOf`, `listState` and `notice` come from FundsZone,
+ * which owns the shortlist. `onTotal` hears the whole directory's size
+ * (`coverage.total`, or null) for the "Directory (N)" tab; `band` is drawn
+ * above the list.
  */
-export default function FundDirectory({ researchedNames = new Set(), onAdd = null, busy = null }) {
+export default function FundDirectory({
+  researchedNames = new Set(), onAdd = null, busy = null, dossierOf = null, listState = 'ok', notice = null,
+  onTotal = null, band = null,
+}) {
   const [query, setQuery] = useState(EMPTY_QUERY);
   const [search, setSearch] = useState('');
   const [result, setResult] = useState({ loading: true, error: null, data: null });
@@ -511,6 +572,11 @@ export default function FundDirectory({ researchedNames = new Set(), onAdd = nul
     }
   }, [query]);
   useEffect(() => { load(); }, [load]);
+
+  // The tab's N: the directory's own total from the read on screen, never a
+  // filtered page's count, and nothing at all until a read has answered.
+  const total = directoryTotalOf(result);
+  useEffect(() => { if (onTotal) onTotal(total); }, [onTotal, total]);
 
   // The search box answers as you type, a beat after you stop.
   useEffect(() => {
@@ -541,6 +607,7 @@ export default function FundDirectory({ researchedNames = new Set(), onAdd = nul
       onClose={() => { pickSeq.current += 1; setSelected(null); }} drawer={drawer}
       onAdd={onAdd} busy={busy}
       isAdded={(x) => researchedNames.has(normalize(x.name))}
+      dossierOf={dossierOf || (() => null)} listState={listState} notice={notice} band={band}
       filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((o) => !o)}
       onRetry={load} onClear={clear}
     />

@@ -216,8 +216,13 @@ function Competition({ c }) {
   </section>;
 }
 
-function Money({ m }) {
-  return <section className="mt-6" data-testid="research-overview-money">
+/**
+ * "Where the money is", exported for the Funds page's Directory tab (D593),
+ * which feeds it the same `money` section of the same read. `className`
+ * replaces the overview's top margin where the host spaces its own sections.
+ */
+export function Money({ m, className = 'mt-6' }) {
+  return <section className={className || undefined} data-testid="research-overview-money">
     <Head title="Where the money is" sub="HQ and stated focus are matched to countries and markets through the Research crosswalk; text it cannot place is counted apart, never dropped." />
     {!isOk(m) ? <SectionState section={m} what="The fund directory" /> : <div className="grid gap-3 md:grid-cols-2">
       <Bars testId="bars-overview-hq" title="Funds by HQ" sub="Countries by number of funds headquartered there"
