@@ -6,8 +6,8 @@ zones: one record each, reached from a zone's list.
 | File | What it is |
 | --- | --- |
 | `ResearchOverviewPanel.jsx` | The `/research` overview (Research · Main canvas, D536/D546), read from `GET /api/research/overview`. Not a zone: mounted inside the founder desk, the investor workspace and above the advisor and partner board. Each section is ok, Not recorded or Unreadable on its own; a missing count is never 0. |
-| `AskZone.jsx` | Ask, over documents the caller uploaded. |
-| `LibraryZone.jsx` | Those documents. |
+| `AskZone.jsx` | Ask over owned documents, with saved/discarded disposition, use notes and owned citation links (D549). |
+| `LibraryZone.jsx` | Owned and read-only client documents; kind/source-year editing and owned collections (D549). |
 | `MarketZone.jsx` | Markets. |
 | `MarketSectorProfile.jsx` | The sector route's entry point; an unmapped market keeps its existing profile. |
 | `SectorProfile.jsx` | D547: tracked sectors inside `WorkspaceShell`, monthly live indexes with gaps, source mix, countries, funds, sub-markets and recorded build opportunities. Old market links redirect through the D533 crosswalk. |

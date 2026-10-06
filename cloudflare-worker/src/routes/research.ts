@@ -33,6 +33,8 @@
  * D37 and `research_search_isolation.test.ts` are untouched.
  */
 import { Hono } from 'hono';
+import { logAdminAction } from '../services/adminAudit';
+import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
@@ -74,6 +76,7 @@ import { refuse } from '../util/refusal';
 import { activeGrant, ndaActive, logAccess } from './data_room';
 
 const research = new Hono<{ Bindings: Env }>();
+research.route('/collections', researchCollections);
 
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB, matching deck_reviewer.
 const ALLOWED_MIME = new Set([
@@ -96,7 +99,7 @@ const EXT_BY_MIME: Record<string, string> = {
   'text/markdown': 'md',
   'text/csv': 'csv',
 };
-const KINDS = new Set(['playbook', 'client', 'document']);
+const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal']);
 
 /**
  * THE FLOOR BELOW WHICH ASK REFUSES TO ANSWER.
@@ -117,7 +120,7 @@ const nowIso = () => new Date().toISOString();
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
 
 interface DocRow {
-  id: number; uid: string; owner_user_id: number; title: string; kind: string;
+  id: number; uid: string; owner_user_id: number; title: string; kind: string; source_year?: number | null;
   r2_key: string; content_type: string | null; size_bytes: number | null;
   index_state: string; index_note: string | null; chunk_count: number | null;
   indexed_at: string | null; created_at: string; updated_at: string;
@@ -150,6 +153,7 @@ const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | 
   uid: r.uid,
   title: r.title,
   kind: r.kind,
+  source_year: r.source_year ?? null,
   content_type: r.content_type,
   size_bytes: r.size_bytes,
   index_state: r.index_state,
@@ -342,6 +346,33 @@ research.post('/documents', async (c) => {
   return c.json(row ? dto(row) : { uid, title, index_state: 'pending' });
 });
 
+/** D549: metadata belongs to the document's owner, including a shared row. */
+research.patch('/documents/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownDoc(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ detail: 'not_found' }, 404);
+  const body = await c.req.json().catch(() => null);
+  if (!body || !['title', 'kind', 'source_year'].some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
+    return c.json({ detail: 'metadata_required' }, 400);
+  }
+  if (body.title !== undefined && (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 300)) {
+    return c.json({ detail: 'invalid_title' }, 400);
+  }
+  if (body.kind !== undefined && (typeof body.kind !== 'string' || !KINDS.has(body.kind))) {
+    return c.json({ detail: 'invalid_kind' }, 400);
+  }
+  if (body.source_year !== undefined && body.source_year !== null &&
+      (!Number.isInteger(body.source_year) || body.source_year < 1000 || body.source_year > new Date().getUTCFullYear() + 1)) {
+    return c.json({ detail: 'invalid_source_year' }, 400);
+  }
+  await c.env.DB.prepare(
+    "UPDATE research_documents SET title = ?, kind = ?, source_year = ?, updated_at = datetime('now') WHERE uid = ? AND owner_user_id = ?"
+  ).bind(body.title === undefined ? row.title : body.title.trim(), body.kind ?? row.kind,
+    body.source_year === undefined ? (row.source_year ?? null) : body.source_year, row.uid, user.id).run();
+  await logAdminAction(c.env, user.id, user.email, 'research_document_metadata_updated', { document_uid: row.uid });
+  return c.json({ item: dto((await ownDoc(c.env, user.id, row.uid))!) });
+});
+
 research.get('/documents/:uid/download', async (c) => {
   const user = await requireAuth(c);
   const row = await ownDoc(c.env, user.id, c.req.param('uid'));
@@ -422,7 +453,7 @@ interface AskAnswerRow {
   question: string; answer: string | null; reason: string;
   best_score: number | null; score_floor: number | null; citations: string;
   model: string | null; prompt_tokens: number; completion_tokens: number;
-  cached: number; cost_micro_usd: number; saved: number; created_at: string;
+  cached: number; cost_micro_usd: number; saved: number; discarded?: number; use_note?: string | null; created_at: string;
 }
 
 const answerDto = (r: AskAnswerRow) => ({
@@ -449,6 +480,9 @@ const answerDto = (r: AskAnswerRow) => ({
   // the storage unit. Six places is the unit's own resolution, not a rounding.
   cost_usd: r.cost_micro_usd / 1e6,
   saved: r.saved === 1,
+  discarded: r.discarded === 1,
+  disposition: r.discarded === 1 ? 'discarded' : r.saved === 1 ? 'saved' : null,
+  use_note: r.use_note ?? null,
   created_at: r.created_at,
 });
 
@@ -617,14 +651,28 @@ research.get('/ask/sessions', async (c) => {
 research.patch('/ask/answers/:uid', async (c) => {
   const user = await requireAuth(c);
   const uid = c.req.param('uid');
-  const body = await c.req.json().catch(() => ({} as any));
-  if (typeof body?.saved !== 'boolean') return c.json({ detail: 'saved_required' }, 400);
-  const res = await c.env.DB.prepare(
-    `UPDATE research_ask_answers SET saved = ? WHERE uid = ? AND owner_user_id = ?`
-  ).bind(body.saved ? 1 : 0, uid, user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  const body = await c.req.json().catch(() => null);
+  if (!body || !['saved', 'discarded', 'use_note'].some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
+    return c.json({ detail: 'disposition_or_note_required' }, 400);
+  }
+  if ((body.saved !== undefined && typeof body.saved !== 'boolean') ||
+      (body.discarded !== undefined && typeof body.discarded !== 'boolean') ||
+      (body.saved === true && body.discarded === true)) return c.json({ detail: 'invalid_disposition' }, 400);
+  if (body.use_note !== undefined && body.use_note !== null &&
+      (typeof body.use_note !== 'string' || body.use_note.length > 2000)) return c.json({ detail: 'invalid_use_note' }, 400);
+  const before = await c.env.DB.prepare(
+    'SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?'
+  ).bind(uid, user.id).first<AskAnswerRow>();
+  if (!before) return c.json({ detail: 'not_found' }, 404);
+  const saved = body.discarded === true ? false : (body.saved ?? before.saved === 1);
+  const discarded = body.saved === true ? false : (body.discarded ?? before.discarded === 1);
+  const note = body.use_note === undefined ? (before.use_note ?? null) : (body.use_note?.trim() || null);
+  await c.env.DB.prepare(
+    'UPDATE research_ask_answers SET saved = ?, discarded = ?, use_note = ? WHERE uid = ? AND owner_user_id = ?'
+  ).bind(saved ? 1 : 0, discarded ? 1 : 0, note, uid, user.id).run();
+  await logAdminAction(c.env, user.id, user.email, 'research_answer_disposition_updated', { answer_uid: uid, saved, discarded });
   const row = await c.env.DB.prepare(
-    `SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?`
+    'SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?'
   ).bind(uid, user.id).first<AskAnswerRow>();
   return c.json({ item: row ? answerDto(row) : null });
 });
@@ -643,6 +691,12 @@ research.post('/ask', async (c) => {
     ownerUserId: user.id,
   });
   const usable = hits.filter((h) => h.score >= SCORE_FLOOR);
+  const documentUids = await Promise.all(usable.map(async (hit) => {
+    const document = await c.env.DB.prepare(
+      'SELECT uid FROM research_documents WHERE id = ? AND owner_user_id = ?'
+    ).bind(hit.entity_id, user.id).first<{ uid: string }>();
+    return document?.uid ?? null;
+  }));
 
   if (!usable.length) {
     const indexed = await c.env.DB.prepare(
@@ -722,7 +776,7 @@ research.post('/ask', async (c) => {
   if (!answer) {
     // The retrieval worked and the model did not. Reporting that as
     // `no_source` would blame the library for a failure that is not its.
-    const citations = usable.map((h) => ({ title: h.title, chunk: h.chunk ?? null, score: Number(h.score.toFixed(3)) }));
+    const citations = usable.map((h, i) => ({ title: h.title, document_uid: documentUids[i], chunk: h.chunk ?? null, score: Number(h.score.toFixed(3)) }));
     const answer_uid = await recordAnswer(c, session, {
       question, answer: null, reason: 'model_unavailable',
       best_score: Number(usable[0].score.toFixed(3)), citations, ...receipt,
@@ -740,6 +794,7 @@ research.post('/ask', async (c) => {
   const citations = usable.map((h, i) => ({
     n: i + 1,
     title: h.title,
+    document_uid: documentUids[i],
     chunk: h.chunk ?? null,
     score: Number(h.score.toFixed(3)),
   }));

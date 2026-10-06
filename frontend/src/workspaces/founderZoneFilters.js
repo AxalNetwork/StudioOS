@@ -110,13 +110,7 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // constant showed that it had been covering two DIFFERENT absences under one
 // sentence: two of the four were never about the session store. Both survivors
 // now carry their own reason.
-// `/research/library`. The classification column is real and free text; what is
-// missing is a WRITER that could produce these values. `research.ts:64` accepts
-// exactly `playbook | client | document` and coerces anything else, and the
-// upload form offers exactly those three. Column, write path and client method
-// all pass; only the vocabulary check catches it.
-const NO_SUCH_KIND =
-  'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
+// D549 records Report/Primary/Legal kinds and source year in the Library.
 // `/research/markets`. All four labels are views of a SAVED DEEP-DIVE, which
 // the artboard makes plain: its instrument table is `Analysis · Method · Run ·
 // State`, and `Sources` in the stat strip counts the indexed documents one
@@ -584,26 +578,11 @@ export const FOUNDER_ZONE_FILTERS = {
   // off it while founder gets one — the difference is entirely which values a
   // writer can actually produce.
 
-  // Nothing survives a question. `research.post('/ask')` searches, answers and
-  // returns; it writes no row, and the only per-question record anywhere is
-  // `ai_usage_logs`, which holds token counts and no question text. So the page
-  // has exactly one answer in state at a time and there is nothing to narrow.
-  // TWO LIVE, TWO STILL PROSE, AND THE SPLIT IS NOT THE ONE THIS TABLE
-  // EXPECTED. Migration 221 gave Ask a session store, so `All sessions` and
-  // `Saved` both select something now — the same store that turned advisor's
-  // and partner's rows fully live. `Cited in deck` and `Discarded` do not
-  // follow it: a citation names the passage it quoted and carries no document
-  // id, and nothing discards an answer — the ops row offers save, not throw
-  // away. Two of these four were never about the session store at all, which
-  // is why `NO_SESSION_RECORD` covering all four was hiding a distinction.
+  // D549 adds Discarded. Cited in deck stays absent by explicit task scope.
   'research/ask': [
     { canvas: 'All sessions', key: 'all' },
     { canvas: 'Saved', key: 'saved' },
-    {
-      canvas: 'Cited in deck',
-      unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into the deck builder',
-    },
-    { canvas: 'Discarded', unbuilt: 'nothing discards an answer — the ops row offers keeping one, and an answer not kept is simply not kept' },
+    { canvas: 'Discarded', key: 'discarded' },
   ],
   // THREE OF THESE FOUR WERE ALREADY ON SCREEN AND MATCHED NOTHING. The page
   // has held `stage_fit === 'right'`, `path === 'warm'` and `status ===
@@ -658,16 +637,10 @@ export const FOUNDER_ZONE_FILTERS = {
   // page's own stat strip already states in words, so the wording is reused.
   'research/library': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Reports', unbuilt: NO_SUCH_KIND },
-    {
-      canvas: 'Primary',
-      unbuilt: 'no document records whether it is your own research or a bought report',
-    },
-    { canvas: 'Legal', unbuilt: NO_SUCH_KIND },
-    {
-      canvas: 'Stale',
-      unbuilt: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
-    },
+    { canvas: 'Reports', key: 'report' },
+    { canvas: 'Primary', key: 'primary' },
+    { canvas: 'Legal', key: 'legal' },
+    { canvas: 'Stale', unbuilt: 'a source year is recorded; age alone does not record whether a source is stale' },
   ],
 };
 
