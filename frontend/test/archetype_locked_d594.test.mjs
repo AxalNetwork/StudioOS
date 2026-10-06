@@ -89,9 +89,10 @@ test('a locked account whose only answers are archetype questions is not "not st
 });
 
 test('the full card page draws the same locked state, with the upgrade and no archetype behind it', () => {
-  assert.match(pageCode, /const lock = archetypeLock\(fitData, results\.data\);/);
-  assert.match(pageCode, /const conv = !lock && fitData\?\.archetype/, 'a locked reply must not feed the archetype');
-  assert.match(pageCode, /if \(!latest && !lock\) \{/);
+  // D602 retired the assessment fallback: the lock and the archetype both come
+  // from the one conversational reply, and a locked reply feeds no archetype.
+  assert.match(pageCode, /const lock = archetypeLock\(fitData\);/);
+  assert.match(pageCode, /const latest = lock \? null : cardArchetype\(fitData\);/, 'a locked reply must not feed the archetype');
   assert.match(pageCode, /const failed = !lock && !latest/);
   assert.match(pageCode, /\{lock && \(/);
   assert.match(pageCode, /aria-disabled="true"/);
