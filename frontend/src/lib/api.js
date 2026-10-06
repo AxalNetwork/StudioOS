@@ -1050,6 +1050,11 @@ export const api = {
   // D574 — an admin edits a resource: any field, its kind, topic and state.
   wellbeingResourceUpdate: (id, data) =>
     request(`/wellbeing/resources/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D574 part 4 — a file attached to a resource: one PUT of the raw bytes.
+  wellbeingResourceFileUpload: (id, file) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}/file`, { method: 'PUT', body: file, headers: { 'Content-Type': file?.type || 'application/octet-stream' } }),
+  wellbeingResourceFileRemove: (id) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}/file`, { method: 'DELETE' }),
   wellbeingResourceDelete: (id) =>
     request(`/wellbeing/resources/${id}`, { method: 'DELETE' }),
   // Task #8 (DI) — daily pulse + expert directory

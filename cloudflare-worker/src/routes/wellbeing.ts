@@ -48,6 +48,10 @@ import {
 } from '../services/wellbeing/match';
 import { ensureSeededExperts } from '../services/wellbeing/seedExperts';
 import { offeredSlots, type AvailabilityWindow } from '../services/wellbeing/slots';
+import {
+  RESOURCE_FILE_MAX_BYTES, RESOURCE_FILE_TYPES, mediaType, newResourceFileKey, resourceFilePath,
+} from '../services/wellbeing/resourceFiles';
+import { parseRange } from '../services/learningVideo';
 import { userMeetsTier, type TierUser } from '../middleware/requireTier';
 import {
   createBookingPaymentIntent, mirrorBookingToCalendar, fanoutBookingNotifications,
@@ -770,7 +774,9 @@ function serializeResource(r: ResourceRow) {
     kind: r.kind ?? null, topic: r.topic ?? null,
     status: r.status === 'draft' ? 'draft' : 'published',
     edited_at: r.edited_at ?? null,
-    file: r.file_key ? { type: r.file_type ?? null, size: r.file_size ?? null } : null,
+    // D574 part 4 — the file's type, size and the gated path that reads it;
+    // never its bucket key.
+    file: r.file_key ? { type: r.file_type ?? null, size: r.file_size ?? null, url: resourceFilePath(r.uid) } : null,
   };
 }
 
@@ -908,8 +914,120 @@ wellbeing.delete('/resources/:id', async (c) => {
     'SELECT id FROM wellbeing_resources WHERE id = ?',
   ).bind(id).first<{ id: number }>();
   if (!row) return c.json({ detail: 'Resource not found' }, 404);
+  const file = await c.env.DB.prepare('SELECT file_key FROM wellbeing_resources WHERE id = ?').bind(id).first<{ file_key: string | null }>();
   await c.env.DB.prepare('DELETE FROM wellbeing_resources WHERE id = ?').bind(id).run();
+  // D574 part 4 — the resource's file goes with it. A failed delete leaves an
+  // object nothing points at, which costs storage and exposes nothing: the
+  // read route finds the file through the row.
+  if (file?.file_key && c.env.FILES) {
+    try { await c.env.FILES.delete(file.file_key); } catch (e) { console.warn('[wellbeing] resource file delete failed', (e as Error).message); }
+  }
   return c.json({ deleted: true });
+});
+
+/**
+ * D574 part 4 — an admin attaches a file to a resource: one PUT, the raw
+ * bytes, a declared type from `RESOURCE_FILE_TYPES` and a Content-Length of
+ * at most 95 MB that the body must match. It goes to a fresh key, the row
+ * points at it, and the previous file, if any, is deleted after. Publishing
+ * new content under the brand waits for an unsuspended branch (D142).
+ */
+wellbeing.put('/resources/:id/file', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  await ensureWellbeingSchema(c.env);
+  await requireBranchNotSuspended(c);
+  if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: 'File storage is not configured, so nothing can be uploaded.' });
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return refuse(c, 400, { code: 'invalid_id', message: 'Invalid id' });
+  const type = mediaType(c.req.header('content-type'));
+  if (!Object.prototype.hasOwnProperty.call(RESOURCE_FILE_TYPES, type)) {
+    return refuse(c, 415, { code: 'unsupported_type', message: `A library file is a PDF, an audio file (MP3, M4A) or a video (MP4, WebM).`, extra: { allowed: Object.keys(RESOURCE_FILE_TYPES) } });
+  }
+  const declared = Number(c.req.header('content-length'));
+  if (!Number.isInteger(declared) || declared <= 0) {
+    return refuse(c, 411, { code: 'length_required', message: 'The upload must say its size (Content-Length).' });
+  }
+  if (declared > RESOURCE_FILE_MAX_BYTES) {
+    return refuse(c, 413, { code: 'file_too_large', message: `A library file is at most ${RESOURCE_FILE_MAX_BYTES / (1024 * 1024)} MB.`, extra: { max_bytes: RESOURCE_FILE_MAX_BYTES } });
+  }
+  const row = await c.env.DB.prepare('SELECT uid, file_key FROM wellbeing_resources WHERE id = ?').bind(id).first<{ uid: string; file_key: string | null }>();
+  if (!row) return refuse(c, 404, { code: 'resource_not_found', message: 'Resource not found' });
+  const bytes = await c.req.arrayBuffer();
+  if (bytes.byteLength !== declared) {
+    return refuse(c, 400, { code: 'length_mismatch', message: 'The upload was not the size it declared, so nothing was stored.' });
+  }
+  const key = newResourceFileKey(row.uid, type);
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: type } });
+  await c.env.DB.prepare(
+    'UPDATE wellbeing_resources SET file_key = ?, file_type = ?, file_size = ?, edited_at = ? WHERE id = ?',
+  ).bind(key, type, bytes.byteLength, new Date().toISOString(), id).run();
+  if (row.file_key && row.file_key !== key) {
+    try { await c.env.FILES.delete(row.file_key); } catch (e) { console.warn('[wellbeing] old resource file delete failed', (e as Error).message); }
+  }
+  const saved = await c.env.DB.prepare('SELECT * FROM wellbeing_resources WHERE id = ?').bind(id).first<ResourceRow>();
+  return c.json(serializeResource(saved as ResourceRow));
+});
+
+/** D574 part 4 — an admin removes a resource's file. A takedown: no suspension gate. */
+wellbeing.delete('/resources/:id/file', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  await ensureWellbeingSchema(c.env);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return refuse(c, 400, { code: 'invalid_id', message: 'Invalid id' });
+  const row = await c.env.DB.prepare('SELECT file_key FROM wellbeing_resources WHERE id = ?').bind(id).first<{ file_key: string | null }>();
+  if (!row) return refuse(c, 404, { code: 'resource_not_found', message: 'Resource not found' });
+  await c.env.DB.prepare(
+    'UPDATE wellbeing_resources SET file_key = NULL, file_type = NULL, file_size = NULL, edited_at = ? WHERE id = ?',
+  ).bind(new Date().toISOString(), id).run();
+  if (row.file_key && c.env.FILES) {
+    try { await c.env.FILES.delete(row.file_key); } catch (e) { console.warn('[wellbeing] resource file delete failed', (e as Error).message); }
+  }
+  const saved = await c.env.DB.prepare('SELECT * FROM wellbeing_resources WHERE id = ?').bind(id).first<ResourceRow>();
+  return c.json(serializeResource(saved as ResourceRow));
+});
+
+/**
+ * D574 part 4 — a resource's file, read by any signed-in user who may read
+ * the resource: a published one, or a draft for an admin. A draft, a missing
+ * resource and a resource with no file all answer 404, so the route never
+ * confirms that a draft exists. One byte range is answered with 206.
+ */
+wellbeing.get('/resources/:uid/file', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const row = await c.env.DB.prepare(
+    'SELECT status, file_key, file_type FROM wellbeing_resources WHERE uid = ?',
+  ).bind(c.req.param('uid')).first<{ status: string | null; file_key: string | null; file_type: string | null }>();
+  const missing = () => refuse(c, 404, { code: 'file_not_found', message: 'No such file.' });
+  if (!row || !row.file_key) return missing();
+  if (row.status === 'draft' && role(user) !== 'admin') return missing();
+  if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: 'File storage is not configured.' });
+  const head = await c.env.FILES.head(row.file_key);
+  if (!head) return missing();
+  const size = head.size;
+  const range = parseRange(c.req.header('range'), size);
+  const headers = new Headers({
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'private, max-age=3600',
+    'Content-Type': row.file_type || head.httpMetadata?.contentType || 'application/octet-stream',
+    'Content-Disposition': 'inline',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  if (range === 'unsatisfiable') {
+    headers.set('Content-Range', `bytes */${size}`);
+    return new Response(null, { status: 416, headers });
+  }
+  const obj = await c.env.FILES.get(row.file_key, range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : undefined);
+  if (!obj) return missing();
+  if (range) {
+    headers.set('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
+    headers.set('Content-Length', String(range.end - range.start + 1));
+    return new Response(obj.body, { status: 206, headers });
+  }
+  headers.set('Content-Length', String(size));
+  return new Response(obj.body, { status: 200, headers });
 });
 
 // ---------------------------------------------------------------------------

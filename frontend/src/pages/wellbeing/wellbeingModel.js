@@ -704,7 +704,7 @@ export function resourceFacts(resource) {
 
 export const EMPTY_RESOURCE = {
   name: '', category: '', url: '', description: '', region: '', is_24_7: false, is_free: false, sort_order: '100',
-  kind: '', topic: '', id: null,
+  kind: '', topic: '', id: null, file: null,
 };
 
 /** D574 — the canvas's formats (`RESOURCE_KINDS` on the route), and a topic's length. */
@@ -712,6 +712,39 @@ export const RESOURCE_FORMATS = ['article', 'audio', 'video', 'link'];
 export const RESOURCE_FORMAT_LABELS = { article: 'Article', audio: 'Audio', video: 'Video', link: 'Link' };
 export const RESOURCE_TOPIC_MAX = 60;
 export const resourceFormat = (kind) => RESOURCE_FORMAT_LABELS[kind] || null;
+
+/** D574 part 4 — the types and size `PUT /resources/:id/file` takes (`RESOURCE_FILE_TYPES`). */
+export const RESOURCE_FILE_TYPES = {
+  'application/pdf': 'PDF', 'audio/mpeg': 'MP3', 'audio/mp4': 'M4A', 'video/mp4': 'MP4', 'video/webm': 'WebM',
+};
+export const RESOURCE_FILE_MAX_MB = 95;
+
+/** The route's gated path for a resource's file, and only that: never another origin. */
+const FILE_PATH = /^\/api\/wellbeing\/resources\/[^/?#]+\/file$/;
+export function resourceHref(r) {
+  const link = safeHref(r?.url);
+  if (link) return link;
+  const path = String(r?.file?.url ?? '');
+  return FILE_PATH.test(path) ? path : null;
+}
+
+/** "PDF · 1.2 MB", or null without a file. */
+export function fileLabel(file) {
+  if (!file) return null;
+  const type = RESOURCE_FILE_TYPES[file.type] || 'File';
+  const bytes = Number(file.size);
+  if (!Number.isFinite(bytes) || bytes <= 0) return type;
+  const size = bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${type} · ${size}`;
+}
+
+/** Why a chosen file cannot be uploaded, or null when it can. */
+export function fileProblem(file) {
+  if (!file) return 'Choose a file.';
+  if (!RESOURCE_FILE_TYPES[file.type]) return 'A library file is a PDF, an MP3 or M4A, or an MP4 or WebM video.';
+  if (file.size > RESOURCE_FILE_MAX_MB * 1024 * 1024) return `A library file is at most ${RESOURCE_FILE_MAX_MB} MB.`;
+  return null;
+}
 
 /** D574 — a stored row as the editor holds it, to edit in place. */
 export function draftOf(row) {
@@ -721,6 +754,7 @@ export function draftOf(row) {
     description: String(row?.description ?? ''), region: String(row?.region ?? ''),
     is_24_7: !!row?.is_24_7, is_free: !!row?.is_free, sort_order: String(row?.sort_order ?? '100'),
     kind: String(row?.kind ?? ''), topic: String(row?.topic ?? ''),
+    file: row?.file ?? null,
   };
 }
 

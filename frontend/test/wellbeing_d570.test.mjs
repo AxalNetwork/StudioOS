@@ -707,7 +707,12 @@ test('the library mirrors the route: its five categories, four kinds, its fields
   const bad = M.resourceBody({ ...M.EMPTY_RESOURCE, url: 'javascript:alert(1)', sort_order: '1.5', kind: 'podcast', topic: 't'.repeat(61) });
   assert.deepEqual(Object.keys(bad.fields).sort(), ['category', 'kind', 'name', 'sort_order', 'topic', 'url']);
   assert.deepEqual(M.draftOf({ id: 4, name: 'A', category: 'reading', kind: 'video', topic: 'Sleep', sort_order: 3, is_free: true }),
-    { id: 4, name: 'A', category: 'reading', url: '', description: '', region: '', is_24_7: false, is_free: true, sort_order: '3', kind: 'video', topic: 'Sleep' });
+    { id: 4, name: 'A', category: 'reading', url: '', description: '', region: '', is_24_7: false, is_free: true, sort_order: '3', kind: 'video', topic: 'Sleep', file: null });
+  // D574 part 4: the file's types and limit are the route's own.
+  const SVC = read('cloudflare-worker/src/services/wellbeing/resourceFiles.ts');
+  const types = /RESOURCE_FILE_TYPES[^=]*= \{([^}]*)\}/.exec(SVC)?.[1];
+  assert.deepEqual(Object.keys(M.RESOURCE_FILE_TYPES).sort(), [...types.matchAll(/'([a-z]+\/[a-z0-9.+-]+)'/g)].map((m) => m[1]).sort());
+  assert.match(SVC, new RegExp(`RESOURCE_FILE_MAX_BYTES = ${M.RESOURCE_FILE_MAX_MB} \\* 1024 \\* 1024;`));
 });
 
 test('the library list: search, kind and sort over the route’s rows, counted "1–25 of N" and paged', () => {
@@ -747,7 +752,22 @@ test('the library table and editor: kind, topic, state and date as stored, edit 
 
   const editor = text(h(ResourceEditor, { draft: M.EMPTY_RESOURCE }));
   assert.match(editor, /Title Category Choose a category Crisis line Therapy Peer group Coaching Reading Kind Not set Article Audio Video Link Topic \(optional\)/);
-  assert.match(editor, /A link only: nothing can be uploaded\./);
+  assert.match(editor, /File \(optional\) Save the resource first, then attach a file to it\./, 'a file belongs to a saved row');
+  assert.doesNotMatch(editor, /nothing can be uploaded/);
+  const withFile = M.draftOf({ ...RESOURCES[0], file: { type: 'application/pdf', size: 1258291, url: '/api/wellbeing/resources/r1/file' } });
+  assert.match(text(h(ResourceEditor, { draft: withFile })), /Attached: PDF · 1\.2 MB Remove .*Replace file A PDF, MP3, M4A, MP4 or WebM, at most 95 MB\./);
+  assert.match(text(h(ResourceEditor, { draft: M.draftOf(RESOURCES[0]) })), /No file attached\. .*Upload file/);
+  assert.match(html(h(ResourceEditor, { draft: M.draftOf(RESOURCES[0]) })), /disabled=""[^>]*data-testid="button-upload-file"/, 'nothing chosen, nothing to upload');
+  assert.equal(M.fileProblem({ type: 'text/html', size: 10 }), 'A library file is a PDF, an MP3 or M4A, or an MP4 or WebM video.');
+  assert.equal(M.fileProblem({ type: 'video/mp4', size: 96 * 1024 * 1024 }), 'A library file is at most 95 MB.');
+  assert.equal(M.fileProblem({ type: 'audio/mpeg', size: 10 }), null);
+  // A file is opened through the gated path only; a stored link still wins.
+  assert.equal(M.resourceHref({ url: null, file: { url: '/api/wellbeing/resources/r1/file' } }), '/api/wellbeing/resources/r1/file');
+  assert.equal(M.resourceHref({ url: 'https://x.test/a', file: { url: '/api/wellbeing/resources/r1/file' } }), 'https://x.test/a');
+  assert.equal(M.resourceHref({ url: null, file: { url: 'https://evil.test/api/wellbeing/resources/r1/file' } }), null);
+  assert.equal(M.resourceHref({ url: 'javascript:alert(1)', file: null }), null);
+  assert.match(text(h(ResourceTable, { rows: [{ ...RESOURCES[3], file: { type: 'audio/mpeg', size: 2048, url: '/api/wellbeing/resources/r4/file' } }] })), /Coaching · GLOBAL · MP3 · 2 KB/);
+  assert.match(html(h(ResourceTable, { rows: [{ ...RESOURCES[3], file: { type: 'audio/mpeg', size: 2048, url: '/api/wellbeing/resources/r4/file' } }] })), /href="\/api\/wellbeing\/resources\/r4\/file"/);
   assert.match(editor, /Publishing lists it to every member at once\. A draft is kept for admins until it is published\. Publish Save draft/);
   assert.doesNotMatch(editor, /Stop editing/, 'a new resource has nothing to stop editing');
   assert.match(text(h(ResourceEditor, { draft: M.draftOf({ ...RESOURCES[0], kind: 'link' }) })), /Stop editing/);
