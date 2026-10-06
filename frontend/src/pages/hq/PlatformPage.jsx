@@ -45,12 +45,13 @@
  *          unreadable store reads as unreadable, never as none thrown.
  */
 import React, { useCallback, useEffect, useState } from 'react';
+import DeployVersion from '../../components/DeployVersion';
+import { utcMinute } from '../../lib/utcStamp';
 import { Link } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
-import { deployVersionDisplay, DEPLOY_VERSION_ABSENT_REASON } from '../../lib/deployVersion';
 import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
@@ -1117,12 +1118,8 @@ export default function PlatformPage() {
                       )}
                       <p className="mt-0.5 text-[11px] text-axal-faint" data-testid={`hq-deployment-version-${d.code}`}>
                         Deployed version{' '}
-                        {deployVersionDisplay(d) ? (
-                          <code className="font-mono">{deployVersionDisplay(d)}</code>
-                        ) : (
-                          <Unrecorded reason={DEPLOY_VERSION_ABSENT_REASON} />
-                        )}
-                        {d.last_health_at ? ` · last health ${day(d.last_health_at)}` : ''}
+                        <DeployVersion row={d} codeClassName="font-mono" />
+                        {utcMinute(d.last_health_at) ? ` · last health ${utcMinute(d.last_health_at)}` : ''}
                       </p>
                       <div className="mt-0.5 text-[11px] text-axal-faint">
                         {d.d1_name}

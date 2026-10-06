@@ -22,6 +22,18 @@ import { NOT_RECORDED } from './absence';
 // string. One definition now, in `lib/absence.js`; every importer is unchanged.
 export { NOT_RECORDED };
 
+/** Receipt amounts never fall back to called or legacy invested capital. */
+export function capitalMetric(fund, field, readError = null) {
+  if (readError || fund?.capital_state === 'unreadable') {
+    return { value: null, state: 'Unreadable', reason: fund?.capital_reason || 'Fund analytics could not be read.' };
+  }
+  const raw = fund?.[field];
+  if (raw == null || !Number.isFinite(Number(raw))) {
+    return { value: null, state: 'Not recorded', reason: fund?.capital_reason || 'No capital-call receipt record is available.' };
+  }
+  return { value: Number(raw), state: 'Recorded', reason: null };
+}
+
 /** Money arrives as integer cents and is only ever divided for display. */
 export function fmtCents(cents) {
   if (cents == null || !Number.isFinite(Number(cents))) return NOT_RECORDED;

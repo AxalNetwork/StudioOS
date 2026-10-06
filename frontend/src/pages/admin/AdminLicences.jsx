@@ -38,6 +38,9 @@
 // need account attribution that does not exist, and inventing the numbers
 // under them is the thing this file refuses.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import DeployVersion from '../../components/DeployVersion';
+import { filterByKind } from '../../lib/licenceKind';
+import { utcDay } from '../../lib/utcStamp';
 import {
   Loader2, AlertCircle, AlertTriangle, Check, X, Globe, Users, FileText, Ban, RotateCw,
   Send, ShieldOff, UserPlus,
@@ -47,7 +50,6 @@ import { bpsPercent as pct } from '../../lib/bps';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
-import { deployVersionDisplay, DEPLOY_VERSION_ABSENT_REASON } from '../../lib/deployVersion';
 import { Unreadable, Unrecorded } from '../../ui';
 
 const UNAVAILABLE = Symbol('unavailable');
@@ -196,7 +198,7 @@ function Field({ label, value, hint }) {
  * Step 2 — the territory picker that refuses                          *
  * ------------------------------------------------------------------ */
 
-function TerritoryEditor({ licence, held, onSaved, onOpenLicence }) {
+export function TerritoryEditor({ licence, held, onSaved, onOpenLicence }) {
   const [codes, setCodes] = useState((licence.territories || []).join(', '));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -694,12 +696,8 @@ function DeployStep({ licence }) {
         )}
         <p className="text-xs text-gray-600 dark:text-gray-400" data-testid="deploy-last-version">
           Last deployed version:{' '}
-          {deployVersionDisplay(mine) ? (
-            <code>{deployVersionDisplay(mine)}</code>
-          ) : (
-            <Unrecorded reason={DEPLOY_VERSION_ABSENT_REASON} />
-          )}
-          {mine.last_health_at ? ` · health read ${String(mine.last_health_at).slice(0, 10)}` : ''}
+          <DeployVersion row={mine} />
+          {utcDay(mine.last_health_at) ? ` · health read ${utcDay(mine.last_health_at)}` : ''}
         </p>
         <p data-testid="deploy-summary" className="text-sm text-gray-700 dark:text-gray-300">
           {summary}
@@ -2092,9 +2090,7 @@ export default function AdminLicences() {
     );
   }
   const items = data.items || [];
-  const filteredItems = kindFilter === 'all'
-    ? items
-    : items.filter((l) => l.kind === kindFilter);
+  const filteredItems = filterByKind(items, kindFilter);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">

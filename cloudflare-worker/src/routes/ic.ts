@@ -127,6 +127,40 @@ export async function scopedDecisions(
   return out;
 }
 
+/**
+ * D467 — THE WIRE GATE'S COUNT, SPLIT BY WHAT THIS CALLER MAY SEE.
+ *
+ * `POST /api/deals/:id/transfers` (D462) refuses while an IC condition on the
+ * deal is open. It used to count those conditions across every firm's
+ * decisions on the deal and put the number in its 409, so a partner learned
+ * how many open conditions ANOTHER firm's committee had on a deal they shared.
+ * D467 scopes IC work by firm, so the count the caller is told goes through
+ * `icDecisionScope` like every other IC read — which is why this lives in this
+ * file rather than in `deals.ts`.
+ *
+ * `hidden` is the open conditions on decisions this caller may not see. The
+ * gate still refuses on them (a wire is not the place to weaken a fraud
+ * control) but says nothing about how many there are or whose they are.
+ *
+ * A failed read THROWS. It used to be caught into 0, which let the wire
+ * through on a read that never happened.
+ */
+export async function openConditionsOnDeal(
+  env: Env, user: User, dealId: number,
+): Promise<{ visible: number; hidden: number }> {
+  const scope = icDecisionScope(user);
+  const where = `d.deal_id = ? AND cond.status = 'open' AND ${scope.sql}`;
+  const visible = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM ic_conditions cond JOIN ic_decisions d ON d.id = cond.ic_decision_id WHERE ${where}`
+  ).bind(dealId, ...scope.binds).first<{ n: number }>();
+  const total = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM ic_conditions cond JOIN ic_decisions d ON d.id = cond.ic_decision_id
+      WHERE d.deal_id = ? AND cond.status = 'open'`
+  ).bind(dealId).first<{ n: number }>();
+  const v = Number(visible?.n) || 0;
+  return { visible: v, hidden: Math.max(0, (Number(total?.n) || 0) - v) };
+}
+
 async function tally(env: Env, decisionId: number): Promise<{ yes: number; no: number; abstain: number; recused: number }> {
   const rows = await env.DB.prepare(
     'SELECT vote, COUNT(*) AS n FROM ic_votes WHERE ic_decision_id = ? GROUP BY vote'
@@ -630,21 +664,48 @@ r.post('/:uid/vote', async (c) => {
         message: 'A recusal records the conflict it declares. Write the declaration as the rationale.',
       }, 400);
     }
+    // D468 — A RECUSAL IS FINAL. The member declared a conflict and left the
+    // denominator; a later yes/no/abstain (or a fresh recusal rewriting the
+    // declaration, or the same one replayed) would erase or blur that record,
+    // and an upsert used to do exactly that. Voting first and recusing later
+    // is still allowed — that is a member declaring a conflict.
+    //
+    // Two checks, because each covers what the other cannot. The read BEFORE
+    // the write refuses any vote on a standing recusal, an identical replay
+    // included; a row compared AFTER the write cannot, because an identical
+    // replay leaves it equal to the request. The guard IN the upsert
+    // (`WHERE ic_votes.vote <> 'recused'`) covers a recusal that lands
+    // between that read and this write: the recused row is never updated, and
+    // zero changed rows is the refusal (D1 reports `meta.changes`).
+    const prior = await c.env.DB.prepare('SELECT vote FROM ic_votes WHERE ic_decision_id = ? AND user_id = ?')
+      .bind(d.id, user.id).first<{ vote: string }>();
+    let refused = prior?.vote === 'recused';
     // D494 (#1023): EVERY vote records its reason. The ID3 artboard says
     // "Rationale required" and D461 left it as the owner's call; #1023 settles
     // it — refuse a blank one. The column stays nullable, because votes cast
     // before this have none and are not rewritten.
-    if (!rationale?.trim()) {
+    // A standing recusal is refused first, below, whatever the rationale.
+    if (!refused && !rationale?.trim()) {
       return c.json({
         error: 'rationale_required',
         message: 'Every vote records its reason. Write the rationale before voting.',
       }, 400);
     }
-    await c.env.DB.prepare(
-      `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at`
-    ).bind(d.id, user.id, vote, rationale, nowIso()).run();
+    if (!refused) {
+      const write = await c.env.DB.prepare(
+        `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at
+          WHERE ic_votes.vote <> 'recused'`
+      ).bind(d.id, user.id, vote, rationale, nowIso()).run();
+      refused = (write as any)?.meta?.changes === 0;
+    }
+    if (refused) {
+      return c.json({
+        error: 'recusal_is_final',
+        message: 'You recused yourself from this decision. A recusal is final: it and its declaration stand, and no later vote is recorded.',
+      }, 409);
+    }
     // First vote moves a draft into the voting stage.
     if (d.status === 'draft') {
       await c.env.DB.prepare("UPDATE ic_decisions SET status='voting', updated_at=? WHERE id=?").bind(nowIso(), d.id).run();

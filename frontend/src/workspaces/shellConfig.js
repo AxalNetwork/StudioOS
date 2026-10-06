@@ -134,6 +134,10 @@ const NETWORK_ZONES = [
  * and are one system in every canvas: what is indexed in Library is exactly
  * what Ask can answer over.
  *
+ * `geographies` (D546, #1080) sits beside Markets in every list: the countries
+ * the directories place companies and funds in, read by every licence that
+ * reads Markets.
+ *
  * NOTE on `markets`: the Partner canvas named this zone `market` (singular)
  * while Founder, Investor and Advisor all use `markets`. One path, one
  * spelling — normalised to the plural the other three already share.
@@ -142,6 +146,7 @@ const RESEARCH_ZONES = {
   founder: [
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'companies', label: 'Companies', archetype: A.COLLECTION },
     { slug: 'funds', label: 'Funds', archetype: A.MATCH_ENGINE },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
@@ -151,12 +156,14 @@ const RESEARCH_ZONES = {
     { slug: 'diligence', label: 'Diligence', archetype: A.COLLECTION },
     { slug: 'benchmarking', label: 'Benchmarking', archetype: A.ANALYTICS },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
   ],
   advisor: [
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'client-prep', label: 'Client prep', archetype: A.WORK_BOARD },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'companies', label: 'Companies', archetype: A.COLLECTION },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
   ],
@@ -164,6 +171,7 @@ const RESEARCH_ZONES = {
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'client-prep', label: 'Client prep', archetype: A.WORK_BOARD },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
   ],
 };

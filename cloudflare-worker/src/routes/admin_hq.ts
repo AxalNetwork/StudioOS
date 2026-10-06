@@ -844,8 +844,11 @@ export const FABRIC_NOT_RECORDED = {
     + 'not recorded by the owner\'s brief: nothing records what a subsidiary owes HQ, accrued, invoiced '
     + 'or collected.',
   tvpi: `TVPI needs a fund-level valuation. ${FUND_METRIC_UNAVAILABLE.nav_cents}`,
-  obligations: 'Filing deadlines such as franchise tax are recorded only for founder companies, each '
-    + 'against a project; no fund or GP entity has an obligation store, so none can be flagged here.',
+  // D417 — the store exists now (F2, migration 374); what is still not
+  // recorded is a deadline for a fund nobody has linked or filled in.
+  obligations: 'Filing deadlines are read from each fund\'s linked GP and vehicle entities (F2). A fund with no '
+    + 'linked entity, or whose entities have no open dated obligation, has none to flag here, which is not the '
+    + 'same as having none due.',
   report_cadence: 'No reporting cadence is stored, so how late a drafted report is cannot be said — only '
     + 'that it is drafted and not issued.',
 } as const;

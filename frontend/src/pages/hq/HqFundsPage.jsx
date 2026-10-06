@@ -11,8 +11,10 @@
  * with the Worker's own reason (`not_recorded` on the payload), never as a
  * figure: platform AUM and the FX date (no fund records a currency), TVPI
  * (no fund-level valuation), HQ's economics ledger and "HQ accrued" (revenue
- * per subsidiary stays not recorded by the owner's brief), and a filing
- * deadline such as franchise tax (no obligation store for a fund's entities).
+ * per subsidiary stays not recorded by the owner's brief). A filing deadline
+ * such as franchise tax is read from the fund's linked entities (D417, F2's
+ * store): overdue or due within OBLIGATION_SOON_DAYS raises a flag, and a fund
+ * with nothing linked or entered says so rather than reading as clear.
  * A fund's jurisdiction is its linked vehicle entity's, and the GP entities'
  * count is of the linked GP entities' (D376, migration 314); an unlinked fund
  * reads Not recorded.
@@ -137,6 +139,37 @@ export function jurisdictionCell(fund, source, reason) {
   return { kind: 'value', text: fund.jurisdiction };
 }
 
+/** D417 — how close a filing deadline has to be before the feed raises it. */
+export const OBLIGATION_SOON_DAYS = 30;
+const OBLIGATION_KIND_LABELS = {
+  franchise_tax: 'Franchise tax',
+  registered_agent: 'Registered agent renewal',
+  annual_report: 'Annual report',
+  board_meeting: 'Board meeting',
+  regulatory_filing: 'Regulatory filing',
+  other: 'Filing',
+};
+
+/**
+ * D417 — the filing-deadline flag for one fund, from its `next_obligation`:
+ * overdue is bad, due within OBLIGATION_SOON_DAYS is a warning, and anything
+ * later, none, or a registry that did not report it raises nothing.
+ */
+export function obligationFlag(fund) {
+  const o = fund?.next_obligation;
+  if (!o || typeof o.days_left !== 'number') return null;
+  const what = OBLIGATION_KIND_LABELS[o.kind] || OBLIGATION_KIND_LABELS.other;
+  if (o.days_left < 0) {
+    const n = -o.days_left;
+    return { key: 'obligation', what: `${what} overdue`, detail: `due ${o.due_date}, ${n} day${n === 1 ? '' : 's'} ago`, tone: 'bad' };
+  }
+  if (o.days_left <= OBLIGATION_SOON_DAYS) {
+    const when = o.days_left === 0 ? 'today' : `in ${o.days_left} day${o.days_left === 1 ? '' : 's'}`;
+    return { key: 'obligation', what: `${what} due ${when}`, detail: `due ${o.due_date}`, tone: 'warn' };
+  }
+  return null;
+}
+
 /**
  * One fund's F10 flags, worst first, or null when the answer carries none
  * (a branch on an earlier build) — which is "not reported", never "clear".
@@ -146,6 +179,8 @@ export function fundFlags(fund) {
   if (!f) return null;
   const out = [];
   if (f.no_gp_of_record) out.push({ key: 'no_gp', what: 'No GP of record', detail: 'blocks LPA issue', tone: 'bad' });
+  const ob = obligationFlag(fund);
+  if (ob) out.push(ob);
   if (f.draft_not_issued) {
     out.push({ key: 'draft', what: `${f.draft_not_issued.period} report drafted, not issued`, detail: 'no reporting cadence is stored', tone: 'warn' });
   }
@@ -199,6 +234,25 @@ export function flagFeed(payload) {
     }
   }
   return items.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'bad' ? -1 : 1));
+}
+
+/**
+ * D417 — what the feed can say about filing deadlines: which answering
+ * sources could not read the obligations (Unreadable, never "none"), how many
+ * funds have an open deadline on record, how many have none recorded, and how
+ * many came from a branch on an earlier build that does not report it.
+ */
+export function obligationsSummary(payload) {
+  const unreadable = sources(payload)
+    .filter((s) => s.status === 'ok' && s.data?.obligations_available === false)
+    .map((s) => s.label);
+  const rows = fundRows(payload).filter((r) => r.kind === 'fund' && r.source?.obligations_available !== false);
+  return {
+    unreadable,
+    recorded: rows.filter((r) => r.fund.next_obligation).length,
+    none: rows.filter((r) => r.fund.next_obligation === null).length,
+    not_reported: rows.filter((r) => r.fund.next_obligation === undefined).length,
+  };
 }
 
 /**
@@ -376,8 +430,30 @@ export function FlagFeed({ payload }) {
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">
-        Filing deadlines: <Unrecorded reason={payload?.not_recorded?.obligations} />. {payload?.not_recorded?.obligations}
+      <ObligationsNote payload={payload} />
+    </div>
+  );
+}
+
+/**
+ * D417 — the feed's line about filing deadlines. An unreadable store is named
+ * as such; a fund with nothing linked or entered is counted apart from one
+ * with a deadline on record, because "none recorded" is not "none due".
+ */
+export function ObligationsNote({ payload }) {
+  const s = obligationsSummary(payload);
+  return (
+    <div className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-funds-obligations">
+      {s.unreadable.length > 0 && (
+        <p data-testid="hq-funds-obligations-unreadable">
+          Filing deadlines could not be read for {s.unreadable.join(', ')}. That is not a claim that none are due.
+        </p>
+      )}
+      <p>
+        Filing deadlines: {s.recorded} fund{s.recorded === 1 ? '' : 's'} with an open deadline on record
+        {s.none > 0 ? <>; {s.none} <Unrecorded reason={payload?.not_recorded?.obligations} /></> : null}
+        {s.not_reported > 0 ? <>; {s.not_reported} <Unrecorded reason={NOT_REPORTED}>Not reported</Unrecorded></> : null}.
+        {' '}{payload?.not_recorded?.obligations}
       </p>
     </div>
   );
