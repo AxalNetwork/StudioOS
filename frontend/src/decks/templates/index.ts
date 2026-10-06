@@ -19,6 +19,7 @@ import { Deck_investor_appendix } from './investor_appendix';
 import { Deck_narrative_brand } from './narrative_brand';
 // Task #15 — Axal 28-day Spin-Out Lab Demo Day deck (10 slides · editorial).
 import { Deck_axal_spinout_demoday } from './axal_spinout_demoday_app';
+import { SLIDE_META } from '../../lib/pitchDeckViewModel';
 
 /**
  * The three values a template's `category` may take — WHO the deck is for.
@@ -85,6 +86,10 @@ export interface TemplateMeta {
   brandTheme: BrandTheme;
 }
 
+// D581 — the Spin-Out deck's length is SLIDE_META's, never typed. Kept out of
+// the row because check-deck-templates reads each row up to its first brace.
+const SPINOUT_DECK_DESCRIPTION = `${SLIDE_META.length} slides · editorial · binds to Lab data`;
+
 export const TEMPLATES: Record<string, TemplateMeta> = {
   // accent_only — accent color only; backgrounds stay neutral
   yc_seed:            { key: 'yc_seed',            label: 'Y Combinator — Seed',           description: '10 slides · YC seed style',                        slide_count: 10, required_tier: 'free',   category: 'fundraising', Component: Deck_yc_seed,            brandTheme: 'accent_only' },
@@ -92,7 +97,7 @@ export const TEMPLATES: Record<string, TemplateMeta> = {
   minimal_seed:       { key: 'minimal_seed',       label: 'Minimal Seed — 6 slides',       description: '6 slides · stripped to essentials',                slide_count: 6,  required_tier: 'free',   category: 'fundraising', Component: Deck_minimal_seed,       brandTheme: 'accent_only' },
   investor_appendix:  { key: 'investor_appendix',  label: 'Investor + Appendix',           description: '12 core + 30 appendix (A–I) · editorial · with charts', slide_count: 42, required_tier: 'studio', category: 'fundraising', Component: Deck_investor_appendix,  brandTheme: 'accent_only' },
   demo_day:           { key: 'demo_day',           label: 'Demo Day — Product-first',      description: '12 slides · product-first · SVG mockups',          slide_count: 12, required_tier: 'growth', category: 'event',       Component: Deck_demo_day,           brandTheme: 'accent_only' },
-  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: '11 slides · editorial · binds to Lab data', slide_count: 11, required_tier: 'growth', category: 'event', Component: Deck_axal_spinout_demoday, brandTheme: 'accent_only' },
+  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: SPINOUT_DECK_DESCRIPTION, slide_count: SLIDE_META.length, required_tier: 'growth', category: 'event', Component: Deck_axal_spinout_demoday, brandTheme: 'accent_only' },
   // full — full palette override (bg, ink, accent, fonts)
   narrative_brand:    { key: 'narrative_brand',    label: 'Narrative — Brand-led',         description: '4 acts · 15 chapters + 4 dividers · cinematic · custom SVG artwork', slide_count: 19, required_tier: 'studio', category: 'commercial',  Component: Deck_narrative_brand,    brandTheme: 'full' },
   one_pager_teaser:   { key: 'one_pager_teaser',   label: 'One-Pager Teaser',              description: '1 page · cold outreach',                           slide_count: 1,  required_tier: 'free',   category: 'commercial',  Component: Deck_one_pager_teaser,   brandTheme: 'full' },

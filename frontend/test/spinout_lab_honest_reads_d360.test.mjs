@@ -205,7 +205,9 @@ test('Lab links land on Lab pages, and the arsenal copy matches what the tools d
   const { SLIDE_META } = await import('../src/lib/pitchDeckViewModel.js');
   const arsenal = read('frontend/src/lib/spinoutLabArsenal.js');
   const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen'];
-  const deck = /id: 'deck'[^\n]*blurb: '(\w+) slides/i.exec(arsenal);
+  // Since D581 the blurb is built from SLIDE_META, so read what it renders.
+  const { LAB_TOOLS } = await import('../src/lib/spinoutLabArsenal.js');
+  const deck = /^(\w+) slides/i.exec(LAB_TOOLS.find((t) => t.id === 'deck').blurb);
   assert.ok(deck, 'the deck blurb names a slide count');
   assert.equal(WORDS.indexOf(deck[1].toLowerCase()), SLIDE_META.length, 'the deck blurb must name the real slide count');
   assert.doesNotMatch(/id: 'cap'[^\n]*/.exec(arsenal)[0], /vesting|waterfall/i, 'the Lab cap table tracks neither');
