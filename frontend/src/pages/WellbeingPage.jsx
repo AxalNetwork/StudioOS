@@ -10,7 +10,7 @@ import {
   isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
   answeredCount, pastWeeks, formatDay, formatWhen, splitBookings, bookingStatus, canRate,
   resourceKind, resourceFacts, safeHref, homeCoverage, countRange,
-  canMemberCancel, storedStars, MEMBER_CANCELLABLE, AGGREGATE_SCORE_KEYS,
+  canMemberCancel, storedStars, MEMBER_CANCELLABLE, AGGREGATE_SCORE_KEYS, resourceHref,
 } from './wellbeing/wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
 
@@ -376,7 +376,7 @@ export function ResourcesCard({ status, resources = [], expanded = false, onTogg
         <>
           <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="list-resources">
             {shown.map((r) => {
-              const href = safeHref(r.url);
+              const href = resourceHref(r);
               const facts = resourceFacts(r);
               return (
                 <li key={r.id ?? r.uid} className="flex flex-wrap items-center justify-between gap-2 py-2.5">

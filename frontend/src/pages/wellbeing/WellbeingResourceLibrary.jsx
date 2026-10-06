@@ -4,8 +4,9 @@ import { api } from '../../lib/api';
 import { Card, Pill, RailFrame, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import {
   EMPTY_RESOURCE, LIBRARY_SORTS, RESOURCE_CATEGORIES, countLabel, filterResources, formatDate,
-  libraryCoverage, pageOf, resourceBody, resourceFacts, resourceKind, safeHref,
+  libraryCoverage, pageOf, resourceBody, resourceFacts, resourceKind,
   RESOURCE_FORMATS, RESOURCE_TOPIC_MAX, draftOf, resourceFormat,
+  RESOURCE_FILE_TYPES, RESOURCE_FILE_MAX_MB, fileLabel, fileProblem, resourceHref,
 } from './wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, Outcome } from './WellbeingParts';
 
@@ -25,7 +26,9 @@ import { BTN, FIELD, PageHeader, CardHead, Outcome } from './WellbeingParts';
  *   - Topic: free text, at most 60 characters.
  *   - State: a draft is listed to admins only; Publish lists it to members.
  *   - The date: when it was last edited, or added if it never was.
- *   - A source is a link; uploading a file comes in D574's next part.
+ *   - A source is a link, a file in the library's own storage (D574 part 4:
+ *     a PDF, audio or video of at most 95 MB, read by members through a
+ *     gated route), or both. A file is attached to a saved resource.
  */
 
 const KIND_GAP = 'Added before the library recorded a format.';
@@ -77,8 +80,8 @@ export function ResourceTable({ rows = [], confirmingId = null, busyId = null, o
       </div>
       <ul className="divide-y divide-axal-hairline dark:divide-gray-800">
         {rows.map((r) => {
-          const href = safeHref(r.url);
-          const facts = [resourceKind(r.category), ...resourceFacts(r)];
+          const href = resourceHref(r);
+          const facts = [resourceKind(r.category), ...resourceFacts(r), fileLabel(r.file)].filter(Boolean);
           const when = dateLine(r);
           const format = resourceFormat(r.kind);
           const topic = String(r.topic ?? '').trim();
@@ -133,7 +136,43 @@ export function ResourceTable({ rows = [], confirmingId = null, busyId = null, o
   );
 }
 
-export function ResourceEditor({ draft, fields = {}, busy = false, error, ok, onChange, onPublish, onSaveDraft, onCancelEdit, titleRef }) {
+/**
+ * D574 part 4 — the file on a saved resource: what is attached, a chooser, and
+ * remove. A new resource is saved first, so the file has a row to belong to.
+ */
+export function ResourceFileField({ draft, upload = {}, onPick, onUpload, onRemove }) {
+  if (draft?.id == null) {
+    return <p className={`${FIELD.note} mt-1`} data-testid="text-file-after-save">Save the resource first, then attach a file to it.</p>;
+  }
+  const current = fileLabel(draft.file);
+  return (
+    <div className="mt-1 space-y-1.5" data-testid="field-resource-file">
+      {current ? (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-axal-ink dark:text-gray-100">
+          <span>Attached: {current}</span>
+          <button type="button" className={BTN.dangerLink} disabled={upload.busy} onClick={() => onRemove?.()} data-testid="button-remove-file">Remove</button>
+        </p>
+      ) : <p className={FIELD.note}>No file attached.</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="file"
+          accept={Object.keys(RESOURCE_FILE_TYPES).join(',')}
+          aria-label="Choose a file"
+          onChange={(e) => onPick?.(e.target.files?.[0] || null)}
+          className="text-xs"
+          data-testid="input-resource-file"
+        />
+        <button type="button" className={BTN.ghost} disabled={upload.busy || !upload.file} onClick={() => onUpload?.()} data-testid="button-upload-file">
+          {upload.busy ? 'Uploading…' : current ? 'Replace file' : 'Upload file'}
+        </button>
+      </div>
+      <p className={FIELD.note}>A PDF, MP3, M4A, MP4 or WebM, at most {RESOURCE_FILE_MAX_MB} MB. Members open it from the library.</p>
+      <Outcome ok={upload.ok} error={upload.error} testId="file" />
+    </div>
+  );
+}
+
+export function ResourceEditor({ draft, fields = {}, busy = false, error, ok, onChange, onPublish, onSaveDraft, onCancelEdit, titleRef, upload, onPickFile, onUploadFile, onRemoveFile }) {
   const set = (key, value) => onChange?.({ ...draft, [key]: value });
   const editing = draft?.id != null;
   return (
@@ -173,7 +212,11 @@ export function ResourceEditor({ draft, fields = {}, busy = false, error, ok, on
       <div>
         <label className={FIELD.label} htmlFor="res-url">Source link</label>
         <input id="res-url" className={FIELD.input} inputMode="url" placeholder="https://…" value={draft.url} onChange={(e) => set('url', e.target.value)} />
-        {fields.url ? <p role="alert" className={FIELD.error}>{fields.url}</p> : <p className={`${FIELD.note} mt-1`}>A link only: nothing can be uploaded.</p>}
+        {fields.url && <p role="alert" className={FIELD.error}>{fields.url}</p>}
+      </div>
+      <div>
+        <span className={FIELD.label}>File (optional)</span>
+        <ResourceFileField draft={draft} upload={upload} onPick={onPickFile} onUpload={onUploadFile} onRemove={onRemoveFile} />
       </div>
       <div>
         <label className={FIELD.label} htmlFor="res-description">Description (optional)</label>
@@ -247,7 +290,37 @@ export default function WellbeingResourceLibrary() {
       setPublish({ busy: false, error: e?.message || 'The resource could not be saved.', ok: null, fields: {} });
     }
   };
+  // D574 part 4 — the file on the resource being edited.
+  const [upload, setUpload] = useState({ file: null, busy: false, ok: null, error: null });
+  const pickFile = (file) => setUpload({ file, busy: false, ok: null, error: file ? fileProblem(file) : null });
+  const uploadFile = async () => {
+    const problem = fileProblem(upload.file);
+    if (problem || draft.id == null) { setUpload((u) => ({ ...u, error: problem })); return; }
+    setUpload((u) => ({ ...u, busy: true, ok: null, error: null }));
+    try {
+      const row = await api.wellbeingResourceFileUpload(draft.id, upload.file);
+      setDraft((d) => ({ ...d, file: row?.file ?? null }));
+      setUpload({ file: null, busy: false, ok: `Attached ${fileLabel(row?.file) || 'the file'}.`, error: null });
+      await load();
+    } catch (e) {
+      setUpload((u) => ({ ...u, busy: false, error: e?.message || 'The file could not be uploaded.' }));
+    }
+  };
+  const removeFile = async () => {
+    if (draft.id == null) return;
+    setUpload((u) => ({ ...u, busy: true, ok: null, error: null }));
+    try {
+      await api.wellbeingResourceFileRemove(draft.id);
+      setDraft((d) => ({ ...d, file: null }));
+      setUpload({ file: null, busy: false, ok: 'Removed the file.', error: null });
+      await load();
+    } catch (e) {
+      setUpload((u) => ({ ...u, busy: false, error: e?.message || 'The file could not be removed.' }));
+    }
+  };
+
   const editRow = (row) => {
+    setUpload({ file: null, busy: false, ok: null, error: null });
     setDraft(draftOf(row));
     setPublish({ busy: false, error: null, ok: null, fields: {} });
     titleRef.current?.focus();
@@ -271,11 +344,11 @@ export default function WellbeingResourceLibrary() {
           workspace="Wellbeing library"
           role="admin"
           stance="The library, as stored"
-          note="Eadwyn reads back the counts on this page and changes nothing. It cannot draft a summary: the library keeps a link and a description, not the resource itself."
+          note="Eadwyn reads back the counts on this page and changes nothing. It does not open a resource's link or file, so it cannot draft a summary."
           coverage={libraryCoverage(library.status === 'ready' ? library.rows : null)}
           coverageNote="Counts of published resources by kind."
           unavailable={[
-            ['A one-line summary', 'The library stores no content to summarise.'],
+            ['A one-line summary', 'Eadwyn does not read a resource\'s link or file, so there is nothing to summarise from.'],
           ]}
         />
       )}
@@ -343,8 +416,12 @@ export default function WellbeingResourceLibrary() {
               onChange={(next) => { setDraft(next); setPublish((p) => ({ ...p, ok: null })); }}
               onPublish={() => save('published')}
               onSaveDraft={() => save('draft')}
-              onCancelEdit={() => { setDraft(EMPTY_RESOURCE); setPublish({ busy: false, error: null, ok: null, fields: {} }); }}
+              onCancelEdit={() => { setDraft(EMPTY_RESOURCE); setPublish({ busy: false, error: null, ok: null, fields: {} }); setUpload({ file: null, busy: false, ok: null, error: null }); }}
               titleRef={titleRef}
+              upload={upload}
+              onPickFile={pickFile}
+              onUploadFile={uploadFile}
+              onRemoveFile={removeFile}
             />
           </Card>
         </div>
