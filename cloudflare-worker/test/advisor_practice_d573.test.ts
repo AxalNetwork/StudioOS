@@ -212,7 +212,6 @@ async function call(
 const ada = { user: ADVISOR_USER, role: 'advisor' };
 const grace = { user: OTHER_ADVISOR_USER, role: 'advisor' };
 const fran = { user: FOUNDER_USER, role: 'founder' };
-const root = { user: ADMIN_USER, role: 'admin' };
 const otto = { user: OUTSIDER_USER, role: 'founder' };
 
 function seed(db: InstanceType<typeof DatabaseSync>) {
