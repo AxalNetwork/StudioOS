@@ -8,6 +8,7 @@ import { download, fetchMarkdown } from '../../components/CompetitorAnalysis';
 import {
   analysisTiles, featureGrid, inputsRow, landscapeRead, notesWithRead, signalColumns, sourceFetched,
 } from './companyAnalysisRead';
+import { companyHref } from '../../lib/companyDirectoryView.js';
 
 /**
  * `/research/companies/:id` — one saved competitor analysis (canvas 90eb4cf2).
@@ -349,6 +350,9 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                     <span className={eyebrow}>Competitors</span>
                     <span className="text-[11px] text-axal-muted">{`${candidates.length} ${candidates.length === 1 ? 'competitor' : 'competitors'}`}</span>
                   </div>
+                  {analysis?.directory_match === 'unreadable' && candidates.length ? (
+                    <p className="mt-1 text-[11px] text-axal-muted">Directory profiles: Unreadable. The company directory could not be read, so no competitor links to one.</p>
+                  ) : null}
                   {candidates.length ? (
                     <div className="mt-2.5 overflow-x-auto">
                       <table className="w-full min-w-[760px] text-left text-[12px]">
@@ -366,6 +370,15 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                   {c.name}
                                 </Link>
                                 <div className="text-[11px] text-axal-muted">{c.domain || <Unrecorded />}</div>
+                                {/* D593 (the C0 board): the directory profile, only when exactly
+                                    one directory company has this site or this name. A name
+                                    with no profile gets no link. */}
+                                {c.directory_uid ? (
+                                  <Link to={companyHref(c.directory_uid)} data-testid={`competitor-directory-${c.id}`}
+                                    className="mt-0.5 inline-block text-[11px] font-semibold text-violet-700 hover:underline dark:text-violet-300">
+                                    Directory profile →
+                                  </Link>
+                                ) : null}
                               </td>
                               <td className="py-2.5 pr-2">
                                 <select

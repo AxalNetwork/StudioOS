@@ -14,7 +14,7 @@ import {
 } from '../src/pages/research/companyAnalysisRead.js';
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
-const CANVAS = read('../../design/canvases/backlog/Pages · Company analysis.dc.html');
+const CANVAS = read('../../design/canvases/integrated/Pages · Company analysis.dc.html');
 const page = read('../src/pages/research/CompanyAnalysis.jsx');
 const app = read('../src/App.jsx');
 const component = read('../src/components/CompetitorAnalysis.jsx');

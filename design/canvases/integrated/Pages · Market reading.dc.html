@@ -35,6 +35,22 @@
 </helmet>
 <!-- Pages · Market reading. Route /research/markets/:uid. -->
 
+<section class="ab" id="m0">
+  <div class="ab-hd"><a class="ab-id" href="#m0">M0</a><span class="ab-nm">Markets for founders and investors · the partner firm's Market reading stays as drawn below</span></div>
+  <div style="font:400 12.5px/1.6 Inter,sans-serif;color:#6b6577;max-width:900px;margin:0 0 12px">Three pages under the founder nav and the Research tabs. Totals are the real ones: 82 markets, 300 companies, 49 countries, 2,032 funds. Names are placeholders; charts are neutral shapes captioned with their source.</div>
+</section>
+<section class="ab" id="m-markets">
+  <div class="ab-hd"><a class="ab-id" href="#m-markets">M1</a><span class="ab-nm">Markets index · Private · Public · Government · 82 markets under 12 sectors plus Not mapped yet · /research/markets</span></div>
+  <div style="width:1440px;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7"><dc-import name="Research Page" page="markets" hint-size="1440px,1500px"></dc-import></div>
+</section>
+<section class="ab" id="m-sector">
+  <div class="ab-hd"><a class="ab-id" href="#m-sector">M2</a><span class="ab-nm">Sector page · six monthly charts with month to date · companies, funds, sub-markets, Eadwyn proposal · /research/markets/[sector]</span></div>
+  <div style="width:1440px;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7"><dc-import name="Research Page" page="sector" hint-size="1440px,1500px"></dc-import></div>
+</section>
+<section class="ab" id="m-geo">
+  <div class="ab-hd"><a class="ab-id" href="#m-geo">M3</a><span class="ab-nm">Geography page · country strip, companies by sector, funds headquartered, signals · /research/geographies/[country]</span></div>
+  <div style="width:1440px;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7"><dc-import name="Research Page" page="geo" hint-size="1440px,1300px"></dc-import></div>
+</section>
 <sc-for list="{{ boards }}" as="b" hint-placeholder-count="5">
   <section class="ab" id="{{ b.id }}">
     <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/research/markets/{{ b.r.uid }}</span></div>

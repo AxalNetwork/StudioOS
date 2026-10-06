@@ -28,7 +28,7 @@ import {
   NOT_RECORDED, UNREADABLE, analysisHref, employees, indexRows, lastRound, latestOnly, money, relatedSignals,
   sectorLabelHref, signedPct,
 } from '../../lib/companyDirectoryView.js';
-import { companyHref } from './CompanyDirectoryZone.jsx';
+import { companyHref } from '../../lib/companyDirectoryView.js';
 
 const SECTIONS = [
   ['metrics', 'Key metrics'], ['market', 'Market context'], ['competitors', 'Competitors'],
