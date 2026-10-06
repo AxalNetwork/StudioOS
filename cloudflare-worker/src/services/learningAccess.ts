@@ -73,3 +73,30 @@ export function parseResources(raw: unknown): Array<{ title: string; url: string
 }
 
 export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
+
+/**
+ * D559 (#1160) — who may read a learner's exercise submissions and exam
+ * attempts, read-only (epic call 1A).
+ *
+ * TODAY: THE SUPER ADMIN ONLY. The epic gives this read to the admins of an
+ * assigned program, for that program's members and content. Program
+ * assignment is #1159's (S07), not built yet, so #1159 adds that one
+ * condition here; every route that serves a learner's work already asks this
+ * function, per row.
+ */
+export async function canReadLearnerWork(
+  _env: unknown, viewer: unknown, _learnerUserId: number, _subject: { kind: 'exercise' | 'exam'; uid: string },
+): Promise<boolean> {
+  return Boolean(viewer && isSuperAdmin(viewer as any));
+}
+
+/**
+ * Whether a viewer may open the review of one exercise or exam at all. Today
+ * the Super Admin only; #1159 adds an admin assigned to a program that holds
+ * the subject. The rows inside are then filtered by `canReadLearnerWork`.
+ */
+export async function canReviewLearning(
+  _env: unknown, viewer: unknown, _subject: { kind: 'exercise' | 'exam'; uid: string },
+): Promise<boolean> {
+  return Boolean(viewer && isSuperAdmin(viewer as any));
+}
