@@ -9,7 +9,7 @@
 // App.jsx already gate on it, so the wiring won't change in Phase C.
 //
 // Conventions:
-//   - First group of every role is the "Home" group (always default-open).
+//   - First group of every role (key `home`) is always default-open. It holds Studio; it is not labelled Home (D564).
 //   - Second content group is also default-open on first load.
 //   - The trailing "Account" group always carries Activity / Settings /
 //     Documentation so users can find them in a predictable place.
@@ -300,7 +300,9 @@ export const SIDEBAR_GROUPS = {
   // leaves old links pointing at a row that no longer lights up has moved the
   // problem rather than fixed it.
   founder: [
-    { key: 'home', label: 'Home', items: [
+    // D564 (#1168): no separate home, so no group says Home. The row is Studio
+    // (/studio), and the group carries no label, as partner's does.
+    { key: 'home', label: '', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       // Spin-Out Lab keeps its own tree, untouched by the shell migration.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
@@ -456,7 +458,9 @@ export const SIDEBAR_GROUPS = {
   // Investor LP Canvas. Each row is a complete investor workspace; legacy
   // deep links remain matched to their owning row.
   investor: [
-    { key: 'home', label: 'Home', items: [
+    // D564 (#1168): no separate home, so no group says Home. The row is Studio
+    // (/studio), and the group carries no label, as partner's does.
+    { key: 'home', label: '', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       // EVERY ROW POINTS AT ITS WORKSPACE ROOT, not at the first zone. Deals,
@@ -493,7 +497,9 @@ export const SIDEBAR_GROUPS = {
   // routes remain reachable through deep links and are grouped under the
   // owning workspace rather than promoted to separate sidebar destinations.
   advisor: [
-    { key: 'home', label: 'Home', items: [
+    // D564 (#1168): no separate home, so no group says Home. The row is Studio
+    // (/studio), and the group carries no label, as partner's does.
+    { key: 'home', label: '', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       // EVERY WORKSPACE ROW POINTS AT ITS BUCKET. These five used to point
