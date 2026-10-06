@@ -26,3 +26,7 @@ Research) passes that map's `none` sentence and no switch. Every band on a
 desk takes the desk's `useAiSpend()` result as `ai`, so it quotes the cost
 before a run. `validate_fills_the_blanks.test.mjs` holds each sentence to the
 bands its desk mounts.
+D548 wires the stored Review status into Build's counts/filter/card rows. Grow's
+monthly headline uses only a target explicitly marked as the focus; the existing
+Focus card sets/clears it through the scoped targets route. Unknown focus remains
+unselected, and an unreadable target source is reported as Unreadable.

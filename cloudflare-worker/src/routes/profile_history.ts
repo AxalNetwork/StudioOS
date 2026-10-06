@@ -21,6 +21,7 @@ import { refuse } from '../util/refusal';
 import type { FitPersona } from '../services/advisor/questionBank';
 import { loadHistory, isArchetypePublished, setArchetypePublished } from '../services/profileHistory';
 import { reaskList } from '../services/profileEvolution';
+import { archetypeAccess, ARCHETYPE_KEYS, withoutKeys } from '../services/archetypeEntitlement';
 
 const r = new Hono<{ Bindings: Env }>();
 const PERSONAS: FitPersona[] = ['founder', 'investor', 'partner', 'advisor', 'coach'];
@@ -33,7 +34,12 @@ r.get('/history', async (c) => {
   }
   try {
     const items = await loadHistory(c.env, user.id, (raw as FitPersona | undefined) ?? null);
-    return c.json({ items });
+    // D594: on a free plan each snapshot keeps its skills and values, and loses its archetype half.
+    const access = await archetypeAccess(c.env, user);
+    return c.json({
+      items: access.locked ? items.map((x) => withoutKeys(x as unknown as Record<string, unknown>, ARCHETYPE_KEYS.snapshot)) : items,
+      archetype_access: access,
+    });
   } catch (e) {
     return refuse(c, 503, { code: 'profile_history_unreadable', message: 'Your profile history could not be read. Try again in a moment.', raw: e });
   }

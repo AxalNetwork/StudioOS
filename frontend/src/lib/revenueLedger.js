@@ -39,7 +39,7 @@ export function fmtLedgerCents(cents) {
 /**
  * The ledger's totals, all in integer cents, from the rows the Worker returned.
  * `verifiedShare` is null while no entry could be verified (no Stripe charge
- * sync exists): 0% would claim entries were checked and failed.
+ * has been imported, D587): 0% would claim entries were checked and failed.
  */
 export function summarizeLedger(entries) {
   const rows = Array.isArray(entries) ? entries.filter((e) => Number.isInteger(e?.amount_cents)) : [];
@@ -136,4 +136,25 @@ export function mapImportRows(rows, mapping, defaultType) {
     received_on: normalizeCsvDate(cell(r, 'received_on')),
     revenue_type: mapping.revenue_type == null ? defaultType : cell(r, 'revenue_type'),
   }));
+}
+
+/**
+ * D587 — the Stripe charge import's answer as one sentence. Every count the
+ * Worker returned is named; a count it did not return is left out rather than
+ * printed as 0. A run that found nothing new says so.
+ */
+export function stripeImportLine(res) {
+  if (!res || typeof res !== 'object') return '';
+  const n = (k) => (Number.isInteger(res[k]) ? res[k] : null);
+  const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  const parts = [];
+  if (n('inserted') !== null) parts.push(`${plural(n('inserted'), 'charge', 'charges')} imported as verified`);
+  if (n('already_imported')) parts.push(`${n('already_imported')} already on the ledger`);
+  if (n('refunded')) parts.push(`${plural(n('refunded'), 'fully refunded charge', 'fully refunded charges')} not recorded`);
+  const refused = Array.isArray(res.rejected) ? res.rejected.length : 0;
+  if (refused) parts.push(`${refused} refused`);
+  let line = parts.join(' · ');
+  if (n('charges') === 0) line = 'Your Stripe account has no succeeded charges to import.';
+  if (res.capped) line += ' Only the newest 1,000 charges were read; older ones are not on the ledger.';
+  return line;
 }

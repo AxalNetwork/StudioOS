@@ -260,9 +260,9 @@ test('the focus card reads the plan number from metric_targets, and says when it
   assert.match(page, /if \(!targets\.length\) return 'No target set';/);
   // AN UNMEASURED TARGET IS NOT A MISSED ONE: only measured targets are counted.
   assert.match(page, /const measured = targets\.filter\(\(target\) => target\.met !== null\);/);
-  // AND WHICH TARGET OWNS THE MONTH IS SAID TO BE UNRECORDED rather than chosen
-  // silently, because nothing stores that choice.
-  assert.match(page, /owns the month is not recorded/);
+  // D548: only an explicit recorded marker chooses the monthly focus.
+  assert.match(page, /targets\.find\(\(target\) => target\.is_focus === true\)/);
+  assert.match(page, /if \(!first\) return 'No focus metric chosen';/);
   // The latest snapshot is chosen by its own date, not by wire order.
   assert.match(page, /latest: latestSnapshot\(snapshots\),/);
   assert.match(page, /const focus = data\.latest;/);

@@ -15,9 +15,9 @@ canvas behind it still shows up here.
 | Home | Studio | `/studio` | Founder Studio |
 | Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Workspace |
 | Home | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
-| Home | Build | `/build` | Founder Workspaces Canvas |
+| Home | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
 | Home | Raise | `/raise` | Founder Workspaces Canvas |
-| Home | Grow | `/grow` | Founder Workspaces Canvas |
+| Home | Grow | `/grow` | Founder Workspaces Canvas, Pages · Founder Grow |
 | Home | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
 | Home | Research | `/research` | Founder Workspaces Canvas, Research · Main |
 

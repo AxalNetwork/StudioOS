@@ -170,6 +170,29 @@ test('the join link never reaches an unregistered member, and never before its w
   assert.equal(joinWindowOpen(w, Date.parse(w.ends_at)), false);
 });
 
+test('#1252: a draft is refused as a draft, and a cancelled webinar as cancelled', async () => {
+  const db = seeded();
+  const made = await author(db, SUPER, '/webinars', { method: 'POST', body: {
+    title: 'Draft session', starts_at: at(60 * MIN), ends_at: at(120 * MIN), join_url: JOIN } });
+  const draft = made.body.webinar.uid as string;
+  const gone = await published(db, 60 * MIN);
+  await author(db, SUPER, `/webinars/${gone}/cancel`, { method: 'POST' });
+
+  const d = await member(db, SUPER, `/webinars/${draft}`);
+  assert.equal(d.status, 200, 'the Super Admin could not open a draft');
+  assert.deepEqual([d.body.webinar.status, d.body.webinar.join, d.body.webinar.join_url], ['draft', 'draft', null], 'a draft read as cancelled');
+  const dr = await member(db, SUPER, `/webinars/${draft}/registration`, { method: 'POST' });
+  assert.deepEqual([dr.status, dr.body.error, dr.body.message],
+    [409, 'draft', 'This webinar is a draft. Publish it before members can register.'], 'a draft\'s registration was refused as cancelled');
+  assert.equal((await member(db, MEMBER, `/webinars/${draft}`)).status, 404, 'a member opened a draft');
+
+  const x = await member(db, MEMBER, `/webinars/${gone}`);
+  assert.deepEqual([x.body.webinar.status, x.body.webinar.join], ['cancelled', 'cancelled']);
+  const xr = await member(db, MEMBER, `/webinars/${gone}/registration`, { method: 'POST' });
+  assert.deepEqual([xr.status, xr.body.error, xr.body.message], [409, 'cancelled', 'This webinar was cancelled.']);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM learning_webinar_registrations').get() as any).n, 0, 'a refused registration was stored');
+});
+
 // ---- capacity ---------------------------------------------------------------------
 
 test('a full webinar refuses a registration; unregistering frees the seat', async () => {

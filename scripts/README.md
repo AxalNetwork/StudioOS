@@ -136,11 +136,19 @@ step — and each has unit tests over its pure helpers that *are* in the suite.
 | --- | --- |
 | `read-canvas.mjs` | Turns a published Claude Design artifact back into the `.dc.html` canvas `design/canvases/` is already full of. An artifact looks like it needs a browser and does not: it is a bundler shell with gzip+base64 assets in `<script type="__bundler/manifest">` and the design itself in `<script type="__bundler/template">`, and decoded, that template is exactly the `<x-dc>` / `DCLogic` format 124 files under `design/` already use. So a design arriving as a URL can land in `design/incoming/` where the intake pipeline handles it — reviewable in a diff, greppable, diffable against the next revision. It points the runtime at the one shared copy in `design/canvases/shared/support.js` (which every canvas references as a relative `support.js`, rather than inlining 69KB of runtime into each file), replaces the ~35 inlined `@font-face` rules with the Google Fonts link every other canvas uses (families and weights read **out of the block**, never assumed — a hard-coded Inter link silently dropped Roboto Mono from a canvas that sets its code samples in it), strips the publisher's watermark, and un-mangles the camelCase attributes a DOM round-trip flattened (`dangerouslySetInnerHTML` comes back as `sc-camel-dangerously-set-inner-h-t-m-l`, and leaving it renders the canvas without its inline SVG icons). It never substitutes an unrecognised asset uuid with a `data:` URI — it names the uuid and exits 1, because a canvas that silently drops an asset is worse than one that says which asset it could not place. `node scripts/read-canvas.mjs <artifact.html> <out.dc.html>`, then follow `design/incoming/README.md`. |
 
-## Importing research data
+## Data importers
 
-| File | What it does |
+An importer is a committed script that **writes a migration** and never opens a
+database (D537). The rows reach D1 through `migrate-d1` after review, and every
+row carries its source, the record's own URL, the licence and the date of the
+pull.
+
+| File | What it writes |
 | --- | --- |
-| `import-sec-edgar.mjs` | Writes migration 404 from SEC EDGAR's public company list (company_tickers_exchange.json, on sec.gov): one row per CIK with its name, ticker and exchange, each citing EDGAR, its URL, its licence and the date read (D595, #1230). It never writes to a database. The SEC requires a descriptive User-Agent, and this one names `SECURITY.md`'s public contact. `node scripts/import-sec-edgar.mjs`, or `--from <saved copy> --as-of YYYY-MM-DD` to read a copy. The rules live in `lib/secEdgarCompanies.mjs`. |
+| `import-wikidata-companies.mjs` | Migration 403: Research directory companies from Wikidata's SPARQL endpoint, chosen by the crosswalk's industries (D533) and by country, round-robin across industries to a cap, figures left NULL (D537). Its functions are pure and exported, tested on fixtures in `cloudflare-worker/test/research_wikidata_companies_d537.test.mjs`. Run it with `node --experimental-strip-types`, because it imports the crosswalk's TypeScript. |
+| `import-sec-edgar.mjs` | Migration 404: SEC EDGAR's public company list (the company tickers exchange file on sec.gov), one row per CIK with its name, ticker and exchange, each citing EDGAR, its URL, its licence and the date read (D595). It never writes to a database. The SEC requires a descriptive User-Agent, and this one names `SECURITY.md`'s public contact. `node scripts/import-sec-edgar.mjs`, or `--from` a saved copy with `--as-of YYYY-MM-DD` to read a copy. The rules live in `lib/secEdgarCompanies.mjs`. |
+| `import-research-funds.py` | Migration 378: the fund directory and its reports, rebuilt from the two public spreadsheets in `attached_assets/` (D535). |
+| `import-eurotech-funds.py` | Migration 365, the earlier fund snapshot that 378 replaced. |
 
 ## Subfolders
 

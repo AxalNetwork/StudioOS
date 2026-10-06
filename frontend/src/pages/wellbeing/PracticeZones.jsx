@@ -15,15 +15,16 @@ import { BTN, FIELD, CardHead, Outcome } from './WellbeingParts';
  * NAMES AND TIMES ONLY. `GET /experts/me/bookings` also returns the booker's
  * note; no zone here renders it (D331, and the canvas's own footnote).
  *
- * TWO THINGS THE EXPERT IS TOLD, because the routes behind them say so:
- * members do not see these services (no member route returns them), and the
- * slots members book from do not read this grid (`GET /experts/:uid/slots`
- * offers weekday half-hours from 09:00 to 17:00 UTC). Both still count toward
- * the profile completion the directory listing needs.
+ * WHAT MEMBERS SEE (D574). The active services are listed to members on the
+ * directory and the profile, and a booking names the one chosen. The slots
+ * members book from are cut from this grid, each window in its own zone; an
+ * expert with no grid is offered on the default weekday hours, 09:00 to 17:00
+ * UTC, which the grid's strip says. Both count toward the profile completion
+ * the directory listing needs.
  */
 
-const SERVICES_GAP = `Members do not see these services yet: no route lists them to members, so a booking arrives as a ${SESSION_MINUTES}-minute session with no service attached. They count toward your profile’s completion.`;
-const SLOTS_GAP = 'Members are not offered these hours yet. The slots they book from are weekday half-hours, 09:00 to 17:00 UTC, whatever this grid says. Open hours count toward your profile’s completion.';
+const SERVICES_GAP = `Members see your active services when they book, or can book a plain ${SESSION_MINUTES}-minute session. Services count toward your profile’s completion.`;
+const SLOTS_GAP = 'Members are offered half-hours inside these windows, read in each window’s own timezone. With no window set, they are offered weekdays 09:00 to 17:00 UTC. Open hours count toward your profile’s completion.';
 const CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud'];
 
 // ---------------------------------------------------------------------------
@@ -315,7 +316,7 @@ export function AvailabilityCard({
             </div>
           )}
           <div className="mt-2"><Outcome ok={ok} error={error} testId="availability" /></div>
-          <div className="mt-3"><InfoStrip variant="warning" dismissible={false} body={SLOTS_GAP} /></div>
+          <div className="mt-3"><InfoStrip variant="info" dismissible={false} body={SLOTS_GAP} /></div>
         </>
       )}
     </Card>
@@ -338,7 +339,8 @@ export function PracticeBookingRow({ booking, now = Date.now(), timeZone, busy =
             {booking.booker_name || <Unrecorded reason="The member's account has no name on record.">Name not recorded</Unrecorded>}
           </div>
           <div className="text-xs text-axal-muted dark:text-gray-400">
-            <Unrecorded reason="A booking does not record which service it was for.">Service not recorded</Unrecorded>
+            {String(booking.service_title ?? '').trim()
+              || <Unrecorded reason="The member chose no service for this booking.">No service chosen</Unrecorded>}
           </div>
         </div>
         <div className="text-right text-xs tabular-nums text-axal-muted dark:text-gray-400">

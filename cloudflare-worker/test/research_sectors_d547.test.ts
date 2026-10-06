@@ -44,6 +44,7 @@ function freshDb() {
   db.exec(migration('375'));
   db.exec(tableFrom('229', 'research_market_directory'));
   db.exec(tableFrom('365', 'research_fund_directory'));
+  db.exec(migration('406')); // D597: fund rows are read only through the terms review
   db.exec(tableFrom('136', 'signals'));
   db.exec(migration('376'));
   db.exec(tableFrom('037', 'market_intel_rows'));
@@ -205,4 +206,19 @@ test('every failed sector read is 503 Unreadable rather than a successful empty 
       assert.equal(r.body.message, 'Unreadable');
     }
   }
+});
+test('D597: a fund from a list taken down for its terms is never in a sector, nor counted', async () => {
+  const db = freshDb();
+  const removed = 'A list whose terms forbid republishing';
+  db.prepare(`INSERT INTO research_fund_directory (uid, name, hq, sector_focus, source_name, source_url, as_of)
+              VALUES ('f9', 'Removed Fin Fund', 'UK', 'Fintech', ?, 'https://sheet.example', '2026-09-29')`).run(removed);
+  const served = await get(db, '/sectors/fintech-defi');
+  assert.equal(served.body.fund_count, 3, 'served while its list stands');
+  db.prepare(`INSERT INTO research_fund_sources (source_name, title, terms_status, evidence, verdict, verdict_reason, reviewed_on)
+              VALUES (?, ?, 'not found', 'e', 'not allowed', 'Its terms forbid republishing.', '2026-10-06')`).run(removed, removed);
+  const one = await get(db, '/sectors/fintech-defi');
+  assert.equal(one.body.fund_count, 2);
+  assert.ok(!JSON.stringify(one.body).includes('Removed Fin Fund'));
+  const list = await get(db, '/sectors');
+  assert.equal(list.body.items.find((s: any) => s.slug === 'fintech-defi').fund_count, 2);
 });

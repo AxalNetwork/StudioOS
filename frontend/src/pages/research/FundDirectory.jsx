@@ -4,8 +4,8 @@ import { ExternalLink, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Card, Skeleton, Unrecorded } from '../../ui';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
-  EMPTY_QUERY, PAGE_SIZES, SIZE_BANDS, SORT_OPTIONS, STAGE_REASON,
-  activeFilters, backingOf, coverageRows, directoryLine, directoryTotalOf, formatCount, pageInfo, pageList,
+  EMPTY_QUERY, PAGE_SIZES, SIZE_BANDS, SORT_OPTIONS, STAGE_REASON, VERDICT_LABELS,
+  activeFilters, backingOf, citationOf, coverageRows, directoryLine, directoryTotalOf, formatCount, pageInfo, pageList,
   rangeLabel, recorded, sizeOf, toParams,
 } from './fundDirectoryRead';
 
@@ -37,6 +37,11 @@ import {
  * puts a fund on the founder's own list, and the drawer then holds "Open your
  * dossier →" where the button was. FundsZone draws "Where the money is" in
  * the `band` slot and hears `coverage.total` for the tab's count.
+ *
+ * EVERY FUND CITES ITS LIST (D597, #1232). The row, the drawer and the profile
+ * name the list, its publisher and its terms verdict, linked to where the
+ * list is published. A list taken down for its terms is never served; the
+ * footer names it and says why (`removed_sources`).
  */
 
 const SELECT = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
@@ -92,7 +97,6 @@ export function FundDetails({ item, reports = null, reportsState = 'ok' }) {
   const size = sizeOf(item);
   const website = safeHref(item.website);
   const linkedin = safeHref(item.linkedin);
-  const source = safeHref(item.source_url);
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-[minmax(96px,auto)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 text-[12.5px]">
@@ -150,12 +154,38 @@ export function FundDetails({ item, reports = null, reportsState = 'ok' }) {
         <p className="mt-2 text-[11px] text-axal-faint"><span className="font-mono">research_fund_directory_reports</span> · one row per reported period</p>
       </div>
 
-      <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-800 dark:bg-gray-900">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Source</div>
-        <div className="mt-1 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{item.source_name}</div>
-        <div className="text-[11.5px] text-axal-faint">as of {item.as_of || 'an unrecorded date'}</div>
-        {source && <a href={source} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet dark:text-violet-300">View the source <ExternalLink size={12} /></a>}
-      </div>
+      <SourceCard item={item} />
+    </div>
+  );
+}
+
+/**
+ * D597 — the drawer's and the profile's source: the list, its publisher, its
+ * terms verdict with the reason, and a link to where it is published.
+ */
+export function SourceCard({ item }) {
+  const c = citationOf(item);
+  return (
+    <div data-testid="fund-source-card" className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-800 dark:bg-gray-900">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Source</div>
+      <div className="mt-1 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{c.name || <NotRecorded reason="The directory names no list for this fund." />}</div>
+      <div className="text-[11.5px] text-axal-muted">Published by {c.publisher || <Unrecorded>Not recorded</Unrecorded>}</div>
+      <div className="text-[11.5px] text-axal-muted">Terms: <span className="font-semibold">{c.terms}</span>{c.reason ? <span className="block text-axal-faint">{c.reason}</span> : null}</div>
+      <div className="text-[11.5px] text-axal-faint">as of {item.as_of || 'an unrecorded date'}</div>
+      {c.href && <a href={c.href} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet dark:text-violet-300">View the list <ExternalLink size={12} /></a>}
+    </div>
+  );
+}
+
+/** D597 — the row's source line: the list, linked, its publisher and terms verdict. */
+export function SourceLine({ item }) {
+  const c = citationOf(item);
+  return (
+    <div data-testid="fund-source-line" className="max-w-[320px] truncate text-[11px] text-axal-faint">
+      Source: {c.href
+        ? <a href={c.href} target="_blank" rel="noreferrer" className="font-semibold text-axal-violet dark:text-violet-300">{c.name || 'the list'}</a>
+        : (c.name || 'Not recorded')}
+      {` · ${c.publisher || 'publisher not recorded'} · ${c.terms === 'Not recorded' ? 'terms not recorded' : c.terms.toLowerCase()}`}
     </div>
   );
 }
@@ -290,16 +320,34 @@ function SourcesList({ data }) {
       <p className="font-semibold text-axal-muted">Sources ({formatCount(data.sources?.length || 0)})</p>
       <ul className="mt-1 space-y-0.5">
         {(data.sources || []).map((s) => {
-          const href = safeHref(s.url);
+          const href = safeHref(s.published_url) || safeHref(s.url);
           return (
             <li key={s.name}>
-              {href ? <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-axal-violet dark:text-violet-300">{s.name}</a> : s.name}
+              {href ? <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-axal-violet dark:text-violet-300">{s.title || s.name}</a> : (s.title || s.name)}
               {` · ${formatCount(s.rows)} funds · as of ${s.as_of || 'an unrecorded date'} · `}
               {s.size_currency ? `sizes in ${s.size_currency}` : 'size currency not recorded, so no size is shown'}
+              {` · ${s.publisher ? `published by ${s.publisher}` : 'publisher not recorded'} · terms: ${VERDICT_LABELS[s.verdict] || 'Not recorded'}`}
+              {s.reason ? <span className="block">{s.reason}</span> : null}
             </li>
           );
         })}
       </ul>
+      {(data.removed_sources || []).length > 0 && (
+        <div data-testid="fund-directory-removed" className="mt-2">
+          <p className="font-semibold text-axal-muted">Removed ({formatCount(data.removed_sources.length)})</p>
+          <ul className="mt-1 space-y-0.5">
+            {data.removed_sources.map((s) => {
+              const href = safeHref(s.published_url);
+              return (
+                <li key={s.name}>
+                  {href ? <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-axal-violet dark:text-violet-300">{s.title || s.name}</a> : (s.title || s.name)}
+                  {` was removed, with its ${formatCount(s.funds_withheld)} ${s.funds_withheld === 1 ? 'fund' : 'funds'}: ${s.reason}`}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {data.size_basis && <p className="mt-1">{data.size_basis}</p>}
       {data.source_boundary && <p>{data.source_boundary}</p>}
     </div>
@@ -503,6 +551,7 @@ export function FundDirectoryView({
                               onClick={() => onSelect(x)} aria-expanded={on ? 'true' : 'false'} aria-controls="fd-drawer">{x.name}</button>
                             {recorded(x.website) && <div className="max-w-[280px] truncate text-[11px] text-axal-faint">{String(x.website).replace(/^https?:\/\//i, '')}</div>}
                             {isAdded(x) && <div className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">In My funds</div>}
+                            <SourceLine item={x} />
                           </td>
                           <td className="px-3 py-2.5 text-axal-muted">{recorded(x.hq) ? x.hq : <Unrecorded>Not recorded</Unrecorded>}</td>
                           <td className="px-3 py-2.5 text-right">{s.text ? <span className="font-mono text-axal-ink dark:text-gray-100">{s.text}</span> : <Unrecorded reason={s.reason}>Not recorded</Unrecorded>}</td>

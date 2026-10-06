@@ -206,14 +206,23 @@ test('applyAdaptiveProfiling front-loads gap-filling fit questions', () => {
 const archetypeOf = (bank: Question[], answered: Set<string>) =>
   computeProfilingCompletion(bank, answered).modules.find((m) => m.key === 'archetype')!;
 
+/** Six investor archetype answers on builder and visionary only. */
+function investorTwoTraits(bank: Question[]): Set<string> {
+  const qs = bank.filter((q) => moduleForQuestion(q) === 'archetype' && q.measures?.archetype_trait);
+  const builder = qs.filter((q) => q.measures?.archetype_trait === 'builder');
+  const visionary = qs.filter((q) => q.measures?.archetype_trait === 'visionary');
+  const six = [...builder.slice(0, 5), ...visionary.slice(0, 1)];
+  return new Set(six.map((q) => q.id));
+}
+
 test('§4: six archetype answers that leave a trait unanswered are not confident', () => {
-  // The investor bank opens its archetype module with five builder items: the
-  // first six in bank order touch two traits, which the old floor-only rule
-  // called confident.
+  // Six answers on two traits used to be "the first six", when the investor
+  // bank opened with five builder items. D386 puts a reverse-keyed probe of
+  // every trait first, so the two-trait case is chosen by trait, not by order.
   const bank = profilingBankFor('investor' as Persona);
-  const qs = bank.filter((q) => moduleForQuestion(q) === 'archetype');
-  const firstSix = new Set(qs.slice(0, 6).map((q) => q.id));
-  assert.equal(new Set(qs.slice(0, 6).map((q) => q.measures?.archetype_trait)).size, 2, 'fixture: two traits');
+  const firstSix = investorTwoTraits(bank);
+  const traits = bank.filter((q) => firstSix.has(q.id)).map((q) => q.measures?.archetype_trait);
+  assert.equal(new Set(traits).size, 2, 'fixture: two traits');
   const m = archetypeOf(bank, firstSix);
   assert.equal(m.answered, 6);
   assert.equal(m.required, 6);
@@ -264,7 +273,7 @@ test('§4: the overall figure cannot read 100 while the archetype is short of a 
     const ids = bank.filter((q) => moduleForQuestion(q) === key).map((q) => q.id);
     for (const id of ids.slice(0, Math.min(PROFILING_MODULES[key].floor, ids.length))) answered.add(id);
   }
-  for (const q of bank.filter((x) => moduleForQuestion(x) === 'archetype').slice(0, 6)) answered.add(q.id);
+  for (const id of investorTwoTraits(bank)) answered.add(id);
   const c = computeProfilingCompletion(bank, answered);
   assert.equal(c.complete, false);
   assert.ok(c.percent < 100, `overall reads ${c.percent}`);
@@ -274,7 +283,7 @@ test('§4: the overall figure cannot read 100 while the archetype is short of a 
 test('§4: the adaptive queue keeps asking the archetype until every trait is answered, missing traits first', () => {
   const bank = profilingBankFor('investor' as Persona);
   const qs = bank.filter((q) => moduleForQuestion(q) === 'archetype');
-  const answered = new Set(qs.slice(0, 6).map((q) => q.id));
+  const answered = investorTwoTraits(bank);
   const next = selectAdaptiveProfiling(bank, answered).filter((q) => moduleForQuestion(q) === 'archetype');
   assert.ok(next.length > 0, 'a module short of a trait is not dropped from the queue');
   assert.ok(['connector', 'operator'].includes(String(next[0].measures?.archetype_trait)),

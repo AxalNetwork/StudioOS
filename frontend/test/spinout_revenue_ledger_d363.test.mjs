@@ -56,8 +56,9 @@ test('verified share is null until an entry could be verified — never 0%', () 
   assert.equal(withStripe.verifiedShare, 0.75);
   // The page renders the null as Not recorded with its reason.
   const kpi = between(LEDGER, "k: 'verified'", '},');
-  assert.match(kpi, /value: summary\.verifiedShare === null \? 'unrecorded'/);
-  assert.match(LEDGER, /kpi\.value === 'unrecorded'\s*\?\s*<Unrecorded reason="Verified means synced from a Stripe charge[^"]*"/);
+  // D587: a failed read is Unreadable first; then null is Not recorded.
+  assert.match(kpi, /value: read\.status === 'failed' \? null : summary\.verifiedShare === null \? 'unrecorded'/);
+  assert.match(LEDGER, /kpi\.value === 'unrecorded'\s*\?\s*<Unrecorded reason="Verified means imported from a Stripe charge[^"]*"/);
 });
 
 test('the five filters are the canvas\'s, and investor view hides only unevidenced rows', () => {

@@ -12,10 +12,11 @@ import { isCalendarDate, addDaysISO } from './section83b';
  *
  * VERIFICATION IS THE WORKER'S. A request never sets it: `verificationFor`
  * derives it from the row. An attached proof document makes an entry
- * `supported`; without one it is `manual`. `verified` is reserved for entries
- * written by a Stripe charge sync, and none exists yet — the Stripe import
- * (routes/progress.ts) records MRR and customer counts, not charges — so no
- * path writes `verified` today, and the page says so.
+ * `supported`; without one it is `manual`. `verified` is written only by the
+ * Stripe charge sync (D587, `POST …/entries/import-stripe`): one entry per
+ * succeeded charge on the founder's own connected account, `source = 'stripe'`,
+ * `source_ref` the charge id. A synced entry's amount, date and customer cannot
+ * be edited afterwards, so `verified` always means what Stripe reported.
  */
 
 export const REVENUE_TYPES = ['recurring', 'pilot', 'one_time', 'deposit'] as const;
@@ -64,6 +65,9 @@ export async function ensureRevenueEntriesSchema(env: Env): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_revenue_entries_project
       ON revenue_entries(project_id, received_on DESC)`,
+    // Migration 400 (D587): a Stripe charge is on a project's ledger once.
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_revenue_entries_stripe_charge
+      ON revenue_entries(project_id, source_ref) WHERE source = 'stripe'`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch (e) {
@@ -218,5 +222,68 @@ export function entryDto(r: LedgerRow) {
     import_batch: r.import_batch ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
+  };
+}
+
+/** The customer a synced entry records when the charge names no Stripe customer. */
+export const STRIPE_NO_CUSTOMER = 'Stripe charge';
+
+/** The fields of a synced entry its PATCH may not change (D587). */
+export const STRIPE_LOCKED_FIELDS = ['customer', 'amount_cents', 'amount', 'received_on'] as const;
+
+export interface ChargeIn {
+  id: string;
+  amount: number;
+  amount_refunded: number;
+  currency: string;
+  created: number;
+  customer: string | null;
+  invoice: boolean;
+}
+
+export type ChargeEntry =
+  | { kind: 'entry'; entry: { source_ref: string; customer: string; amount_cents: number; revenue_type: RevenueType; received_on: string } }
+  | { kind: 'skip'; reason: 'fully_refunded' }
+  | { kind: 'refuse'; code: string; message: string };
+
+/**
+ * D587 — one Stripe charge → one ledger entry, or why not. Pure.
+ *
+ * - The amount is net of refunds; a fully refunded charge writes nothing.
+ * - The date is the charge's own, as a UTC calendar date.
+ * - The customer is the Stripe customer id, or "Stripe charge" when there is
+ *   none: no name, email, address or card is ever stored (the owner's call).
+ * - The type is `recurring` when the charge paid an invoice, else `one_time`.
+ *   That is a reading of Stripe's record, not something Stripe states, so the
+ *   founder may still change the type.
+ * - A non-USD charge is refused with a code and our sentence, as the CSV
+ *   import refuses one.
+ */
+export function chargeToEntry(ch: ChargeIn): ChargeEntry {
+  if (String(ch.currency || '').toLowerCase() !== LEDGER_CURRENCY) {
+    return { kind: 'refuse', code: 'currency_unsupported', message: 'Only US dollar charges can be recorded for now.' };
+  }
+  const net = Number(ch.amount) - Number(ch.amount_refunded || 0);
+  if (!Number.isSafeInteger(net) || !Number.isSafeInteger(Number(ch.amount))) {
+    return { kind: 'refuse', code: 'invalid_amount', message: 'Stripe reported an amount the ledger cannot read exactly.' };
+  }
+  if (net <= 0) return { kind: 'skip', reason: 'fully_refunded' };
+  if (net > MAX_AMOUNT_CENTS) {
+    return { kind: 'refuse', code: 'invalid_amount', message: 'The charge is larger than one ledger entry can hold.' };
+  }
+  const created = Number(ch.created);
+  if (!Number.isFinite(created) || created <= 0) {
+    return { kind: 'refuse', code: 'invalid_received_on', message: 'Stripe reported no date for the charge.' };
+  }
+  const customer = typeof ch.customer === 'string' && /^cus_[A-Za-z0-9]+$/.test(ch.customer) ? ch.customer : STRIPE_NO_CUSTOMER;
+  return {
+    kind: 'entry',
+    entry: {
+      source_ref: String(ch.id),
+      customer,
+      amount_cents: net,
+      revenue_type: ch.invoice ? 'recurring' : 'one_time',
+      received_on: new Date(created * 1000).toISOString().slice(0, 10),
+    },
   };
 }

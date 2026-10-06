@@ -157,3 +157,32 @@ export function directoryTabLabel(total) {
 }
 
 export { num as formatCount };
+
+/** The three terms verdicts migration 406 allows (D597), as the page prints them. */
+export const VERDICT_LABELS = Object.freeze({
+  'republish allowed': 'Republishing allowed',
+  'cite only': 'Cite only',
+  'not allowed': 'Not allowed',
+});
+
+const httpHref = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : null);
+
+/**
+ * D597 (#1232) — how a fund cites its list, from the API's `source`: the
+ * list's title (else its name), its publisher, the link to where it is
+ * published (else to where the row was read from), and its terms verdict.
+ * A publisher or verdict the API does not give reads "Not recorded"; the
+ * API's `reason` says why (terms not found, or never reviewed).
+ */
+export function citationOf(item) {
+  const s = item?.source || null;
+  const verdict = s?.verdict && VERDICT_LABELS[s.verdict] ? s.verdict : null;
+  return {
+    name: (has(s?.title) && s.title) || (has(s?.name) && s.name) || (has(item?.source_name) && item.source_name) || null,
+    publisher: has(s?.publisher) ? s.publisher : null,
+    href: httpHref(s?.url) || httpHref(item?.source_url),
+    verdict,
+    terms: verdict ? VERDICT_LABELS[verdict] : 'Not recorded',
+    reason: has(s?.reason) ? s.reason : null,
+  };
+}

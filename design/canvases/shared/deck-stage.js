@@ -1157,9 +1157,12 @@
         // controls open indefinitely after a single click — the hover pin
         // already covers the mouse case. Engines without :focus-visible
         // fall back to pinning on any focus (the safe direction).
-        var kb = true;
+        // D476 — do not put an initial value back on kb. It was always
+        // overwritten, in the try or the catch. A starter re-copy (file
+        // header) restores that dead store.
+        let kb;
         try {
-          var t = e.target;
+          const t = e.target;
           kb = !(t && t.matches && !t.matches(':focus-visible'));
         } catch (err) { kb = true; }
         if (!kb) return;
