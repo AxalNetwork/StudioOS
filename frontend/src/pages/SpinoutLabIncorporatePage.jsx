@@ -317,11 +317,13 @@ export default function SpinoutLabIncorporatePage() {
   // D367: `packet_processing` is set at payment and builds nothing, so it
   // marks no step done. A ready packet is "Documents prepared" (step 1), not
   // a state submission; nothing in the Worker records a submission yet.
-  const filingDone = !paid ? 0 : orderStatus === 'packet_ready' || docsAllDone ? 1 : 0;
+  // D601: an admin records "Filed with the state" with its date, so a filed
+  // order has its documents prepared and its submission done (step 2).
+  const filingDone = !paid ? 0 : orderStatus === 'filed' ? 2 : orderStatus === 'packet_ready' || docsAllDone ? 1 : 0;
   const packetNotBuilt = paid && PACKET_NOT_BUILT_STATUSES.includes(orderStatus);
   const filingSteps = [
     ['Documents prepared', 'Formation package generated and reviewed', 'Ready'],
-    [`Submitted to ${juris.state}`, 'Filed with Secretary of State', 'Est. same day'],
+    [`Submitted to ${juris.state}`, 'Filed with Secretary of State', orderStatus === 'filed' && order?.filed_on ? `Filed ${order.filed_on}` : 'Est. same day'],
     ['Processing', `State review of the ${charterName(juris.state)}`, '1–3 business days'],
     ['Formation approved', `${charterName(juris.state)} stamped and returned`, 'Est. 1 week'],
     ['EIN issued', 'IRS SS-4 processed after approval', 'After approval'],

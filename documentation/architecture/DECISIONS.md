@@ -34181,6 +34181,9 @@ figure:
   a readable empty store refused.
 ## D367
 
+**Settled 2026-10-06 (D601):** the owner chose an Axal admin by hand (1A).
+HQ records "Packet ready" and "Filed with the state"; see `decisions/D601.md`.
+
 **The four unfinished Lab-tools pieces D360–D365 filed: three built, and
 the formation packet's build put to the owner.** Wave 8, Session 8, issue
 #998. Worker and frontend; no migration, no new route, no new `api.js`

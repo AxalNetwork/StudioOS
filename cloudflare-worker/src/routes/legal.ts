@@ -805,6 +805,9 @@ legal.get('/incorporate/status', async (c) => {
     stripe_session_id: row.stripe_session_id,
     paid_at: row.paid_at,
     created_at: row.created_at,
+    // D601 — what HQ recorded: the packet document and the state filing date.
+    packet_document_id: row.packet_document_id ?? null,
+    filed_on: row.filed_on ?? null,
   });
 });
 
@@ -816,7 +819,8 @@ legal.get('/incorporate/orders', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);
   const rows = await c.env.DB.prepare(
-    `SELECT id, project_id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at
+    `SELECT id, project_id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at,
+            packet_document_id, packet_ready_at, filed_on
      FROM incorporations
      WHERE user_id = ? AND status != 'pending_payment'
      ORDER BY created_at DESC

@@ -579,7 +579,7 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
   if (!order) return null;
 
   const isFailed = status === 'failed' || timedOut;
-  const isReady = status === 'packet_ready' || status === 'documents_ready';
+  const isReady = status === 'packet_ready' || status === 'filed' || status === 'documents_ready';
 
   return (
     <div className="space-y-5">

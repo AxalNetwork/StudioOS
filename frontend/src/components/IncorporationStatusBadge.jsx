@@ -32,6 +32,14 @@ const STATUS_MAP = {
     iconCls: 'text-emerald-500',
     spin: false,
   },
+  // D601 — recorded by an Axal admin with the filing date.
+  filed: {
+    label: 'Filed with the state',
+    icon: CheckCircle2,
+    cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
+    iconCls: 'text-emerald-500',
+    spin: false,
+  },
   documents_ready: {
     label: 'Documents ready',
     icon: CheckCircle2,

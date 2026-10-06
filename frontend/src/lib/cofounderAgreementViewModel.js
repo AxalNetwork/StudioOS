@@ -12,6 +12,9 @@
 //   state, and NO document version column — so this module never emits an
 //   "Accepted" status, a per-signer pill, or a version number.
 
+// D601 — the one list of paid order statuses (pure, no imports of its own).
+import { PAID_STATUSES } from './incorporationPricing.js';
+
 /* ------------------------------------------------------------------ *
  * Primitives
  * ------------------------------------------------------------------ */
@@ -409,7 +412,7 @@ export function buildCofounderAgreementViewModel(input) {
   const memberNames = new Set(members.map((m) => trimmed(m?.name || m?.full_name)).filter(Boolean).map((n) => n.toLowerCase()));
 
   const paidOrder = orders.find((o) => Number(o?.project_id) === Number(project?.id)
-    && ['paid', 'packet_processing', 'packet_ready'].includes(s(o?.status)));
+    && PAID_STATUSES.includes(s(o?.status)));
 
   const milestoneKeys = new Set(
     arr(labState?.milestones)
