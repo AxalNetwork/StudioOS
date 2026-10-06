@@ -146,7 +146,7 @@ requests==2.34.2
     #   requests-oauthlib
 requests-oauthlib==2.0.0
     # via google-auth-oauthlib
-sqlalchemy==2.1.1
+sqlalchemy==2.0.54
     # via
     #   alembic
     #   sqlmodel
