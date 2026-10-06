@@ -90,5 +90,7 @@ test('the page states the limits and does not stamp fixture data as SAMPLE', () 
   assert.doesNotMatch(page, /SAMPLE/);
   assert.doesNotMatch(page, /Add an engagement/);
   assert.doesNotMatch(page, /zoneDraftRun/);
-  assert.match(page, /hidden grid-cols-3/);
+  // Four columns, the canvas's, and still none below `sm` (D593).
+  assert.match(page, /hidden grid-cols-\[1fr_1\.4fr_1\.2fr_1\.4fr\]/);
+  assert.match(page, /<span>Date<\/span>\s*<span>Engagement went for<\/span>\s*<span>Source<\/span>\s*<span>URL or file<\/span>/);
 });
