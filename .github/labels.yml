@@ -1,4 +1,5 @@
 # The labels the agents' task protocol runs on (AGENTS.md; DECISIONS.md D503).
+# It also holds Dependabot's labels (.github/dependabot.yml).
 #
 # .github/workflows/labels-sync.yml creates each label below, or updates its
 # colour and description, on a push to main that changes this file. It never
@@ -86,3 +87,21 @@
 - name: "slot:S20"
   color: "5319E7"
   description: "Work queue of slot S20"
+- name: "deps"
+  color: "0366D6"
+  description: "A dependency bump from Dependabot"
+- name: "ci"
+  color: "0052CC"
+  description: "A GitHub Actions bump from Dependabot"
+- name: "frontend"
+  color: "BFDADC"
+  description: "A frontend dependency bump"
+- name: "worker"
+  color: "D4C5F9"
+  description: "A Worker dependency bump"
+- name: "production"
+  color: "006B75"
+  description: "A production Worker dependency bump"
+- name: "dev-backend"
+  color: "F9D0C4"
+  description: "A dev-only FastAPI dependency bump"
