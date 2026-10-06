@@ -170,6 +170,7 @@ const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage')
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
 const SharedCapTablePage = lazy(() => import('./pages/SharedCapTablePage'));
+const LabReportSharePage = lazy(() => import('./pages/LabReportSharePage'));
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
@@ -2556,6 +2557,8 @@ function AppInner() {
       {/* Build queue #120 — public, audience-scoped cap-table link. No auth:
           the payload is redacted server-side for the link's audience. */}
       <Route path="/share/captable/:token" element={<SharedCapTablePage />} />
+      {/* D588 — signed-in read. The Worker checks the named account. */}
+      <Route path="/share/lab-report/:token" element={<RequireAuth {...authProps}><LabReportSharePage /></RequireAuth>} />
       <Route path="/share/deck/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #2 — public, HMAC-token-gated print target consumed only by
           the Cloudflare Browser Rendering session that drives server-side
