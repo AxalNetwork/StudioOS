@@ -12,9 +12,16 @@ import {
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+import useScrollToHash from '../../../hooks/useScrollToHash';
+import AdvisorAccessLog from './ClientAccessLog';
 
 /**
  * Practice · Engagements — canvas PR2, `/practice/engagements`.
+ *
+ * D571 — THE CLIENT DATA ACCESS LOG SITS UNDER THE BOARD. The Ops canvas draws
+ * it as `/practice/access-log`; that address lands on `#access-log` here, the
+ * zone that holds every client, and the section is outside `<ZoneBody>` so an
+ * unreadable board does not take the log's own answer down with it.
  *
  * WHAT REPLACED WHAT. This route rendered the legacy five-tab Advisory
  * workspace `embedded`: a flat list of BOOKINGS with Upcoming/Past/All chips
@@ -95,6 +102,9 @@ export default function EngagementsZone() {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // The board above the log renders under a skeleton first, so the scroll to
+  // `#access-log` waits until it has its height.
+  useScrollToHash(state.loading);
 
   const { items } = state;
   // `by_client` REORDERS, it does not narrow. The chip is "By client", and a
@@ -189,6 +199,7 @@ export default function EngagementsZone() {
   };
 
   return (
+    <>
     <ZoneBody
       loading={state.loading}
       error={state.error}
@@ -479,6 +490,8 @@ export default function EngagementsZone() {
         </p>
       </StatedLimit>
     </ZoneBody>
+    <AdvisorAccessLog />
+    </>
   );
 }
 

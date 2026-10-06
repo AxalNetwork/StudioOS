@@ -16,6 +16,27 @@ its `ZONE` map.
 | `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205) |
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
 
+**THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
+ZONES OF THEIR OWN (D571).** `design/incoming/Ops Page.dc.html` draws
+`/practice/deliverables`, `/practice/session-types`, `/practice/booking-links`
+and `/practice/access-log`. Each is a question one of the five zones above
+already reads the store for, so each address redirects into that zone
+(`App.jsx`) and the zone gained the canvas's controls:
+
+| File | Ops screen | Lands on | Writes |
+| --- | --- | --- | --- |
+| `DeliverablesByClient.jsx` | A1 · Deliverables | `/practice/delivery?view=by_client` — the "By client" chip now groups | `updateMyAdvisorDeliverable`, and a link as the next version |
+| `SessionTypesPanel.jsx` | A2 · Session types | `/practice/sessions#session-types` | `createMyAdvisorSessionType`, `updateMyAdvisorSessionType` |
+| `BookingLinksPanel.jsx` | A3 · Booking links | `/practice/sessions#booking-links` | `createMyAdvisorBookingLink` |
+| `ClientAccessLog.jsx` | A4 · Client data access log | `/practice/engagements#access-log`, and the founder's grant panel | nothing: read-only |
+
+`practiceTools.js` holds their derivations, and those of the profile a client
+sees (A5, `../AdvisorProfilePage.jsx` at `/advisors/:uid`). Its header lists
+what the stores cannot say — no due date, no "included" column, no booking
+attributed to a type or a link, no route that switches a link off, and an
+access log only the client company can read — and each screen says it in
+place. `frontend/test/advisor_practice_d571.test.mjs` is the guard.
+
 **PR5 IS A POINTER, AND ITS ARTBOARD IS ELSEWHERE.** `Advisor Detail ·
 Practice.dc.html` draws Earnings as `/practice/earnings · drawn in full as D4`,
 and D4 lives in `design/canvases/backlog/Detail Layer Canvas II.dc.html`. That
@@ -71,6 +92,9 @@ A zone with real derivations keeps them in a sibling module that imports nothing
 - `earningsLedger.js` — D4's four windows, its cut note and its payout labels.
   It holds the third pairing: a period is a **calendar label** (`2026-Q3`, a
   key and a chip) whose **bounds are UTC instants**, because `created_at` is.
+- `practiceTools.js` — D571's: the deliverable flow, the four price modes and
+  the bookable rule, the booking-link slug rule, and the access log's stamps.
+  A SQLite `CURRENT_TIMESTAMP` has no zone marker and is read as UTC.
 
 Two reasons, and the second is the one that matters. A guard test can import a
 module and not a page — importing a page pulls React and a stylesheet through its
