@@ -24,9 +24,15 @@ const text = (el) => html(el).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").r
 
 test('the type sets mirror the Worker service and migration 387', () => {
   const svc = read('cloudflare-worker/src/services/fundLpComms.ts');
-  const list = (name) => [...(svc.match(new RegExp(`export const ${name} = \\[([^\\]]*)\\]`))?.[1] || '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(LP_TYPES, list('LP_TYPES'));
-  assert.deepEqual(Object.keys(COMM_KIND_LABELS), list('COMM_KINDS'));
+  // Two literal patterns. A RegExp built from the export's name is what
+  // Semgrep's detect-non-literal-regexp reports (alert 6208).
+  const quoted = (block) => [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  const lp = svc.match(/export const LP_TYPES = \[([^\]]*)\]/);
+  const kinds = svc.match(/export const COMM_KINDS = \[([^\]]*)\]/);
+  assert.ok(lp, 'LP_TYPES is exported as an array');
+  assert.ok(kinds, 'COMM_KINDS is exported as an array');
+  assert.deepEqual(LP_TYPES, quoted(lp[1]));
+  assert.deepEqual(Object.keys(COMM_KIND_LABELS), quoted(kinds[1]));
 });
 
 test('a missing type reads Not recorded, never a guessed type; chips list held types and the untyped', () => {
@@ -50,7 +56,9 @@ test('a missing type reads Not recorded, never a guessed type; chips list held t
 test('the type cell shows Not recorded and offers every type, with the stored one selected', () => {
   const none = html(h(LpTypeCell, { lp: { id: 7, name: 'Family Co', lp_type: null }, onChange: () => {} }));
   assert.match(none, /data-testid="text-lp-type-7"[^>]*>Not recorded</);
-  for (const t of LP_TYPES) assert.match(none, new RegExp(`<option value="${t}">${LP_TYPE_LABELS[t]}</option>`));
+  for (const t of LP_TYPES) {
+    assert.ok(none.includes(`<option value="${t}">${LP_TYPE_LABELS[t]}</option>`), t);
+  }
   const typed = html(h(LpTypeCell, { lp: { id: 8, name: 'Big Pension', lp_type: 'institution' }, onChange: () => {} }));
   assert.match(typed, /data-testid="text-lp-type-8"[^>]*>Institution</);
   assert.match(typed, /<option value="institution" selected="">Institution<\/option>/);
