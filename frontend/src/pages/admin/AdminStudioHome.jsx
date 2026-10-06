@@ -15,8 +15,6 @@ import StudioInterview from '../../components/advisor/StudioInterview';
 import { AdminStudioOverview } from './AdminStudioOverview';
 import StudioPosture from './StudioPosture';
 import { StudioNeedsDecisionView } from './StudioNeedsDecision';
-import StudioRail from './StudioRail';
-import { RailFrame } from '../../ui';
 
 /**
  * D512 — NO READS OF ITS OWN. The four branch reads this page used to make
@@ -28,15 +26,14 @@ import { RailFrame } from '../../ui';
  * the glance itself.
  */
 /**
- * D556 — THE RAIL. Every other Admin page had one and this, the front door,
- * did not. It is the Worker AI rail, workspace "Studio", in the one frame
- * every host shares, and its coverage is the same studio glance the strip and
- * the cards read. Eadwyn above is the conversation; the rail is the read-back
- * of what this page shows, the same pairing the founder desks have.
+ * D598 — NO WORKER AI RAIL HERE. D556 gave this page the "Studio" rail. The
+ * owner removed it on 2026-10-06: the admin's front door never shows a Worker
+ * AI sidebar. Eadwyn above (StudioInterview) is the one assistant on the
+ * page. Every other Admin page keeps its rail.
  */
 export default function AdminStudioHome({ user, glance }) {
   return (
-    <RailFrame rail={<StudioRail user={user} glance={glance} />} data-testid="admin-studio-home">
+    <div data-testid="admin-studio-home">
       <header className="mb-4">
         <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink">Studio</h1>
       </header>
@@ -47,6 +44,6 @@ export default function AdminStudioHome({ user, glance }) {
         The other Admin pages, in the order the sidebar lists them.
       </p>
       <AdminStudioOverview user={user} glance={glance} />
-    </RailFrame>
+    </div>
   );
 }
