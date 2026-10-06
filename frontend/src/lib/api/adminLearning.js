@@ -1,6 +1,6 @@
-// D557 — authoring the Learning center: items, courses, modules and lessons.
-// Super Admin only. Worker: routes/admin_learning.ts, mounted at
-// /api/admin/learning.
+// D557 — authoring the Learning center: items, courses, modules and lessons;
+// D559's exercises and exams, D558's programs. Super Admin only. Worker:
+// routes/admin_learning*.ts, mounted at /api/admin/learning.
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -54,4 +54,17 @@ export const adminLearningApi = {
   addQuestion: (examUid, b) => request(`/admin/learning/exams/${enc(examUid)}/questions`, { method: 'POST', body: body(b) }),
   updateQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
   deleteQuestion: (uid) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'DELETE' }),
+
+  // D558 — programs: contents, assigned admins and enrolments.
+  listPrograms: () => request('/admin/learning/programs'),
+  createProgram: (b) => request('/admin/learning/programs', { method: 'POST', body: body(b) }),
+  getProgram: (uid) => request(`/admin/learning/programs/${enc(uid)}`),
+  // name, region, description, enrolment ('invite'|'open'), status ('draft'|'published'|'archived')
+  updateProgram: (uid, b) => request(`/admin/learning/programs/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  // The full ordered list: [{ subject_kind: 'course'|'item'|'exam'|'exercise', subject_uid }].
+  setProgramContents: (uid, contents) => request(`/admin/learning/programs/${enc(uid)}/contents`, { method: 'PUT', body: body({ contents }) }),
+  assignProgramAdmin: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/admins`, { method: 'POST', body: body({ user_uid: userUid }) }),
+  unassignProgramAdmin: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/admins/${enc(userUid)}`, { method: 'DELETE' }),
+  enrolInProgram: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/enrollments`, { method: 'POST', body: body({ user_uid: userUid }) }),
+  unenrolFromProgram: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/enrollments/${enc(userUid)}`, { method: 'DELETE' }),
 };
