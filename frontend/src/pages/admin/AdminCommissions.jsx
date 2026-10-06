@@ -10,7 +10,7 @@ import {
   sourceLabel, sourcesIn, statusOf, takeRateInput,
 } from '../../lib/partnerEarnings';
 import {
-  ConfirmPanel, Money, Panel, RowTable, StatusPill, WriteNote, ghostButton, primaryButton,
+  ConfirmPanel, Money, Panel, PayoutMoney, RowTable, StatusPill, WriteNote, ghostButton, primaryButton,
 } from '../partner/earnings/parts';
 
 /**
@@ -240,7 +240,7 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-[13px]">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-axal-ink dark:text-gray-100">{personOf(p) || <Unrecorded>Partner not recorded</Unrecorded>}</span>
-                  <Money cents={p?.amount_cents} currency={p?.currency} />
+                  <PayoutMoney cents={p?.amount_cents} />
                   {method ? <span className="text-axal-muted">{method}</span> : <Unrecorded>Method not recorded</Unrecorded>}
                   <StatusPill status={status} />
                   <span className="text-[11.5px] tabular-nums text-axal-faint">{requested ? `requested ${requested}` : 'request date not recorded'}</span>
@@ -290,7 +290,7 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
                   title={`${PAYOUT_ACTIONS[pending.action]?.label || 'Change payout'} · confirm`}
                   rows={[
                     ['Partner', personOf(p) || 'Not recorded'],
-                    ['Amount', <Money cents={p?.amount_cents} currency={p?.currency} />],
+                    ['Amount', <PayoutMoney cents={p?.amount_cents} />],
                     ['Method', method || 'Not recorded'],
                   ]}
                   consequence={consequenceOf(pending.action, p)}

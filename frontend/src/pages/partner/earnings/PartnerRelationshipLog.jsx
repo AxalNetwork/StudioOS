@@ -95,6 +95,8 @@ export function RelationshipTimeline({ events, interactions, onRetry, onLog }) {
   const evRows = events.status === 'ready' && Array.isArray(events.data) ? events.data : [];
   const inRows = interactions.status === 'ready' && Array.isArray(interactions.data) ? interactions.data : [];
   const entries = timeline(evRows, inRows);
+  const live = entries.filter((e) => !e.voided).length;
+  const voided = entries.length - live;
   const failures = [
     ['events', 'The relationship’s history', events],
     ['interactions', 'The interaction log', interactions],
@@ -103,7 +105,7 @@ export function RelationshipTimeline({ events, interactions, onRetry, onLog }) {
   return (
     <Panel
       title="Timeline"
-      meta={entries.length ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}, newest first` : null}
+      meta={entries.length ? `${live} entr${live === 1 ? 'y' : 'ies'}${voided ? `, ${voided} voided` : ''}, newest first` : null}
       testid="panel-timeline"
     >
       <div className="space-y-2 px-4 py-3">
@@ -131,12 +133,20 @@ export function RelationshipTimeline({ events, interactions, onRetry, onLog }) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex flex-wrap items-center gap-2">
                     <Pill tone={e.kind === 'interaction' ? 'warn' : 'neutral'}>{e.kind === 'interaction' ? 'Interaction' : 'Event'}</Pill>
-                    <span className="text-[13.5px] font-semibold text-axal-ink dark:text-gray-100">{e.title}</span>
+                    <span className={`text-[13.5px] font-semibold text-axal-ink dark:text-gray-100 ${e.voided ? 'line-through decoration-axal-faint' : ''}`}>{e.title}</span>
+                    {e.voided ? (
+                      <span className="flex items-center gap-1.5" data-testid={`voided-${e.key}`}>
+                        <Pill tone="neutral">Voided</Pill>
+                        <span className="text-[11.5px] tabular-nums text-axal-faint">
+                          {dayOf(e.voidedAt) ? `on ${dayOf(e.voidedAt)}` : <Unrecorded>on a day not recorded</Unrecorded>} · retracted by whoever logged it
+                        </span>
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-[11.5px] tabular-nums text-axal-faint">{dayOf(e.at) || <Unrecorded>Date not recorded</Unrecorded>}</span>
                 </div>
                 {e.detail
-                  ? <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-axal-muted dark:text-gray-400">{e.detail}</p>
+                  ? <p className={`mt-1 whitespace-pre-line text-[13px] leading-relaxed text-axal-muted dark:text-gray-400 ${e.voided ? 'line-through' : ''}`}>{e.detail}</p>
                   : (e.kind === 'interaction' ? <p className="mt-1"><Unrecorded reason="Logged with a date and no note.">No note</Unrecorded></p> : null)}
                 {e.by ? <p className="mt-0.5 text-[11px] text-axal-faint">Logged by {e.by}</p> : null}
               </li>
@@ -254,7 +264,8 @@ export default function PartnerRelationshipLog() {
   };
 
   const evCount = events.status === 'ready' ? events.data.length : null;
-  const inCount = interactions.status === 'ready' ? interactions.data.length : null;
+  // A voided touch is not a logged interaction any more, so the rail does not count it.
+  const inCount = interactions.status === 'ready' ? interactions.data.filter((r) => !r?.voided_at).length : null;
   const coverage = [
     evCount === null ? null : `${evCount} recorded change${evCount === 1 ? '' : 's'} to the relationship`,
     inCount === null ? null : `${inCount} logged interaction${inCount === 1 ? '' : 's'}`,

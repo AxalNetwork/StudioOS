@@ -47,6 +47,14 @@ export const PAYOUT_MIN_CENTS = 1000;
  */
 export const TABLE_DEFAULT_CURRENCY = 'USD';
 
+/**
+ * Why a payout's amount is shown with no currency. `POST
+ * /network/payout/request` writes none, so every `payouts` row carries the
+ * column default, `TABLE_DEFAULT_CURRENCY`, whatever the commissions it
+ * claimed were in (D569, GAP 5). The default is not a fact about the payout.
+ */
+export const PAYOUT_CURRENCY_GAP = 'The payout request stores no currency, so the row holds the table default, not the currency of the commissions it claimed.';
+
 /** `commissions.status`: accrued, then paid once a payout request claims it. */
 export const COMMISSION_STATUS = {
   accrued: { label: 'Accrued', tone: 'info' },
@@ -273,18 +281,14 @@ export function totalsByStatus(rows, order = ['accrued', 'paid'], map = COMMISSI
   return { statuses, unreadable };
 }
 
-/** The payouts still in flight — requested or processing — summed per currency. */
+/**
+ * The payouts still in flight — requested or processing — counted. Their
+ * amounts are not added up: a payout's currency is not recorded
+ * (`PAYOUT_CURRENCY_GAP`), so two requests could be in different currencies.
+ */
 export function payoutsInFlight(payouts) {
   const open = (payouts || []).filter((p) => ['requested', 'processing'].includes(String(p?.status ?? '').toLowerCase()));
-  const byCurrency = new Map();
-  for (const p of open) {
-    const cents = centsOf(p?.amount_cents);
-    if (cents === null) continue;
-    const code = currencyOf(p?.currency) || '';
-    const prev = byCurrency.get(code) || { currency: code || null, cents: 0, count: 0 };
-    byCurrency.set(code, { currency: prev.currency, cents: prev.cents + cents, count: prev.count + 1 });
-  }
-  return { count: open.length, sums: [...byCurrency.values()] };
+  return { count: open.length };
 }
 
 /* ------------------------------------------------------------------ *
@@ -482,7 +486,11 @@ export function eventEntry(event) {
   };
 }
 
-/** One `partner_interactions` row as a timeline entry. */
+/**
+ * One `partner_interactions` row as a timeline entry. A touch its recorder
+ * voided is still returned by the route, with `voided_at`; it stays in the
+ * log, marked, and is counted apart from the live entries.
+ */
 export function interactionEntry(row) {
   const kind = String(row?.kind ?? '').trim().toLowerCase();
   const title = INTERACTION_KINDS.find((k) => k.value === kind)?.label || titleCase(kind) || 'Interaction';
@@ -495,6 +503,8 @@ export function interactionEntry(row) {
     by: String(row?.recorded_by_name ?? '').trim() || null,
     at: row?.interacted_at ?? null,
     t: timeOf(row?.interacted_at),
+    voided: Boolean(row?.voided_at),
+    voidedAt: row?.voided_at ?? null,
   };
 }
 

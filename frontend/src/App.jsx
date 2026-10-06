@@ -2552,7 +2552,7 @@ function AppInner() {
           so the guard is `['admin']` and never `hqOnly`. Its one HQ-only
           zone, the take rate, is `requireSuperAdmin`; the page asks only when
           `/me` carries the elevation and says so otherwise. */}
-      <Route path="/admin/commissions" element={guard(['admin'], <AdminCommissions user={user} />)} />
+      <Route path="/admin/commissions" element={guard(['admin'], hqOnly(<AdminCommissions user={user} />))} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}

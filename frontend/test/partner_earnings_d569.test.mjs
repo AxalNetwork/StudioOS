@@ -25,11 +25,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import {
-  PAYOUT_METHODS, PAYOUT_MIN_CENTS, PAYOUT_ACTIONS, TABLE_DEFAULT_CURRENCY, COMMISSION_STATUS, PAYOUT_STATUS,
+  PAYOUT_METHODS, PAYOUT_MIN_CENTS, PAYOUT_ACTIONS, TABLE_DEFAULT_CURRENCY, PAYOUT_CURRENCY_GAP, COMMISSION_STATUS, PAYOUT_STATUS,
   RELATIONSHIP_TYPES, BADGE_LABELS, SOURCE_LABELS, EARNINGS_AREA,
   centsOf, formatMoney, timeOf, dayOf, sourceLabel, totalsByStatus, payoutsInFlight, payoutOptions,
   payoutRequestBody, payoutDetails, payoutActionsFor, filterCommissions, commissionsForReferral,
-  creditsResetDay, eventEntry, timeline, interactionBody, rankBoard, ruleAmount, ruleActive, takeRateInput,
+  creditsResetDay, eventEntry, interactionEntry, timeline, interactionBody, rankBoard, ruleAmount, ruleActive, takeRateInput,
   relationshipLogPath,
 } from '../src/lib/partnerEarnings.js';
 import { EarningsTotals, CommissionsList, PayoutRequestForm, PayoutHistory, optionLabel } from '../src/pages/partner/earnings/PartnerEarnings.jsx';
@@ -37,6 +37,7 @@ import { ReferralCodeCard, IntroCreditsCard, SignupsTable, filterSignups } from 
 import { RelationshipHeader, RelationshipTimeline, LogInteractionForm } from '../src/pages/partner/earnings/PartnerRelationshipLog.jsx';
 import { LeaderboardTable, ViewerStanding } from '../src/pages/partner/earnings/PartnerLeaderboard.jsx';
 import { RulesTable, TakeRateCard, PayoutQueue, AllCommissionsTable } from '../src/pages/admin/AdminCommissions.jsx';
+import { codeOnly } from './_codeOnly.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -146,8 +147,7 @@ test('totals are per status and per currency, never a currency-blind sum', () =>
   const none = totalsByStatus([]);
   assert.deepEqual(none.statuses.map((s) => [s.key, s.sums.length]), [['accrued', 0], ['paid', 0]]);
   const flight = payoutsInFlight(PAYOUTS);
-  assert.equal(flight.count, 2, 'requested and processing only');
-  assert.deepEqual(flight.sums, [{ currency: 'USD', cents: 150000, count: 2 }]);
+  assert.deepEqual(flight, { count: 2 }, 'requested and processing, counted and never added up: a payout’s currency is not recorded');
 });
 
 /**
@@ -226,7 +226,8 @@ test('the totals strip: loading, unreadable, and per-currency figures with words
   const ok = text(h(EarningsTotals, { commissions: ready(COMMISSIONS_ME), payouts: ready(PAYOUTS) }));
   assert.match(ok, /Accrued \$1,100\.00 USD/);
   assert.match(ok, /Paid €200\.00 EUR \$5,025\.00 USD Claimed/, 'one line per currency');
-  assert.match(ok, /In payout requests \$1,500\.00 USD/);
+  assert.match(ok, /In payout requests 2 requests Not added up: a payout’s currency is not recorded/);
+  assert.doesNotMatch(ok, /1,500\.00/, 'the in-flight amounts are not added up');
   assert.doesNotMatch(ok, /6,325\.00|5,225\.00/, 'the route\'s lifetime_cents adds dollars to euros and is not shown, nor is any cross-currency sum');
   const empty = text(h(EarningsTotals, { commissions: ready({ commissions: [] }), payouts: ready([]) }));
   assert.match(empty, /Nothing accrued/);
@@ -311,9 +312,17 @@ test('the payout history: each state; a failure says its reason and that its day
   assert.match(text(h(PayoutHistory, { state: 'unreadable', rows: [], onRetry: () => {} })), /This is not a claim that nothing was requested or paid/);
   assert.match(text(h(PayoutHistory, { state: 'ready', rows: [] })), /No payout requested yet/);
   const list = text(h(PayoutHistory, { state: 'ready', rows: PAYOUTS }));
-  assert.match(list, /\$1,200\.00 USD Wire transfer Requested Requested Oct 4, 2026 Note: IBAN ending 1234/);
-  assert.match(list, /\$6,400\.00 USD Wire transfer Completed Requested Sep 28, 2026 · completed Sep 30, 2026/);
-  assert.match(list, /\$2,000\.00 USD Crypto Failed Requested Sep 14, 2026 Bank returned the transfer: account closed · the day it failed is not recorded/);
+  assert.match(list, /1,200\.00 currency not recorded Wire transfer Requested Requested Oct 4, 2026 Note: IBAN ending 1234/);
+  assert.match(list, /6,400\.00 currency not recorded Wire transfer Completed Requested Sep 28, 2026 · completed Sep 30, 2026/);
+  assert.match(list, /2,000\.00 currency not recorded Crypto Failed Requested Sep 14, 2026 Bank returned the transfer: account closed · the day it failed is not recorded/);
+  // A payout row's currency is the column default, whatever it says. Why: the
+  // route's INSERT names none. When it starts storing one, this fails: show it.
+  assert.doesNotMatch(text(h(PayoutHistory, { state: 'ready', rows: [{ ...PAYOUTS[0], currency: 'EUR' }] })), /EUR|USD|€|\$/);
+  assert.ok(html(h(PayoutHistory, { state: 'ready', rows: PAYOUTS })).includes(`title="${PAYOUT_CURRENCY_GAP}"`), 'the reason is on the mark');
+  const insertAt = NETWORK.indexOf('INSERT INTO payouts');
+  const insert = NETWORK.slice(insertAt, NETWORK.indexOf('RETURNING *', insertAt));
+  assert.match(insert, /INSERT INTO payouts \(user_id, amount_cents, status, payout_method, payout_details\)/);
+  assert.doesNotMatch(insert, /currency/);
   assert.match(list, /4 requests/);
 });
 
@@ -408,6 +417,25 @@ test('the timeline merges both logs newest first, in words', () => {
   assert.match(view, /Interaction Note Sep 25, 2026 No note/);
   assert.match(view, /Event Request sent Sep 1, 2026 Asked to record/);
   assert.match(view, /5 entries, newest first/);
+});
+
+test('a voided touch stays in the log, marked and struck through, and is not counted as a live entry', () => {
+  const VOIDED = { ...INTERACTIONS[0], id: 12, uid: 'i12', kind: 'meeting', note: 'Logged on the wrong relationship.', interacted_at: '2026-10-06T09:00:00.000Z', voided_at: '2026-10-06T10:00:00.000Z' };
+  assert.equal(interactionEntry(VOIDED).voided, true);
+  assert.equal(interactionEntry(INTERACTIONS[0]).voided, false);
+  const props = { events: ready(EVENTS), interactions: ready([VOIDED, ...INTERACTIONS]) };
+  const view = text(h(RelationshipTimeline, props));
+  assert.match(view, /5 entries, 1 voided, newest first/, 'the count is of live entries');
+  assert.match(view, /Interaction Meeting Voided on Oct 6, 2026 · retracted by whoever logged it Oct 6, 2026 Logged on the wrong relationship\./);
+  const markup = html(h(RelationshipTimeline, props));
+  assert.match(markup, /line-through[^"]*">Meeting</);
+  assert.doesNotMatch(markup, /line-through[^"]*">Call</, 'a live touch is not struck through');
+  assert.match(markup, /data-testid="voided-interaction-i12"/);
+  assert.doesNotMatch(markup, /data-testid="voided-interaction-i11"/);
+  // The route returns voided rows (only the recorder may void one), so the
+  // page has to mark them; and the rail counts live touches only.
+  assert.match(PARTNERNET, /Only the person who recorded a touch can void it/);
+  assert.match(codeOnly(read('frontend/src/pages/partner/earnings/PartnerRelationshipLog.jsx')), /interactions\.data\.filter\(\(r\) => !r\?\.voided_at\)\.length/);
 });
 
 test('the timeline: one log failing keeps the other; a refusal is said as one; both empty is the empty state', () => {
@@ -553,10 +581,10 @@ test('the payout queue offers only what each status allows, and the confirmation
   assert.doesNotMatch(all, /button-(complete|process|fail)-2"/, 'a failed payout is not reopened');
   const words = text(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'all' }));
   assert.match(words, /Recorded by account #7 \(name not returned\)/);
-  assert.match(words, /pat@example\.com \$2,000\.00 USD Crypto Failed requested Sep 14, 2026 Bank returned the transfer/);
+  assert.match(words, /pat@example\.com 2,000\.00 currency not recorded Crypto Failed requested Sep 14, 2026 Bank returned the transfer/);
 
   const complete = text(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'open', pending: { id: 5, action: 'complete', reason: '' } }));
-  assert.match(complete, /Process payout · confirm Partner Pat Partner Amount \$1,200\.00 USD Method Wire transfer/);
+  assert.match(complete, /Process payout · confirm Partner Pat Partner Amount 1,200\.00 currency not recorded Method Wire transfer/);
   assert.match(complete, /Nothing here sends money: pay it by wire transfer yourself before you confirm/);
   const fail = html(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'open', pending: { id: 4, action: 'fail', reason: '' } }));
   assert.match(fail, /data-testid="input-fail-reason"/);
@@ -676,9 +704,9 @@ test('the five routes are mounted with the guards their routes need, and each ha
   assert.match(line('/partner/referrals'), /guard\(\['admin', 'partner'\], <PartnerReferrals \/>\)/);
   assert.match(line('/partner/relationships/:id'), /guard\(\['admin', 'partner'\], <PartnerRelationshipLog \/>\)/);
   assert.match(line('/partner/leaderboard'), /guard\(\['admin', 'partner'\], <PartnerLeaderboard user=\{user\} \/>\)/);
-  const admin = line('/admin/commissions');
-  assert.match(admin, /guard\(\['admin'\], <AdminCommissions user=\{user\} \/>\)/);
-  assert.doesNotMatch(admin, /hqOnly/, 'the commission routes answer any admin, on either tier');
+  // Every partner's earnings and payouts, and the payout writes: the Super
+  // Admin's, though the routes still answer any admin (#1183 asks for that).
+  assert.match(line('/admin/commissions'), /guard\(\['admin'\], hqOnly\(<AdminCommissions user=\{user\} \/>\)\)/);
   assert.match(app, /const AdminCommissions = lazy\(\(\) => import\('\.\/pages\/admin\/AdminCommissions'\)\)/);
   // Doors: the admin console from the referral review queue, the log from the
   // partner's accepted relationships, and the three earnings screens from each other.

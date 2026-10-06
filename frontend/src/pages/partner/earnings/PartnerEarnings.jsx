@@ -7,12 +7,12 @@ import ZoneNav from '../../../workspaces/ZoneNav';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { Field, StatedLimit, inputClass } from '../kit';
 import {
-  COMMISSION_STATUS, EARNINGS_AREA, PAYOUT_METHODS, PAYOUT_MIN_CENTS, PAYOUT_STATUS, PERIODS,
+  COMMISSION_STATUS, EARNINGS_AREA, PAYOUT_CURRENCY_GAP, PAYOUT_METHODS, PAYOUT_MIN_CENTS, PAYOUT_STATUS, PERIODS,
   dayOf, filterCommissions, formatMoney, payoutDetails, payoutOptions, payoutRequestBody,
   payoutsInFlight, sourceLabel, sourcesIn, statusOf, totalsByStatus, currencyOf,
 } from '../../../lib/partnerEarnings';
 import {
-  ConfirmPanel, Money, MoneyLines, Panel, RowTable, StatusPill, UnreadableValue, WriteNote, ghostButton, primaryButton,
+  ConfirmPanel, Money, MoneyLines, Panel, PayoutMoney, RowTable, StatusPill, UnreadableValue, WriteNote, ghostButton, primaryButton,
 } from './parts';
 
 /**
@@ -72,7 +72,16 @@ export function EarningsTotals({ commissions, payouts }) {
       <Tile label="In payout requests" testid="tile-in-flight" note="Requested or processing, not yet completed">
         {payouts.status === 'loading' ? <Skeleton h={22} w="60%" />
           : payouts.status === 'unreadable' ? <UnreadableValue reason="The payout history could not be read." testid="total-in-flight-unreadable" />
-            : <MoneyLines sums={flight?.sums} none="No request open" testid="total-in-flight" />}
+            : flight?.count ? (
+              <span className="flex flex-col gap-0.5" data-testid="total-in-flight">
+                <span className="text-[17px] font-semibold tabular-nums text-axal-ink dark:text-gray-100">
+                  {flight.count} request{flight.count === 1 ? '' : 's'}
+                </span>
+                <span className="text-[11px] leading-snug text-axal-muted dark:text-gray-400">
+                  Not added up: <Unrecorded reason={PAYOUT_CURRENCY_GAP}>a payout’s currency is not recorded</Unrecorded>
+                </span>
+              </span>
+            ) : <span className="text-[12.5px] text-axal-muted" data-testid="total-in-flight">No request open</span>}
       </Tile>
     </div>
   );
@@ -305,7 +314,7 @@ export function PayoutHistory({ state, rows, onRetry }) {
             <li key={p.id} className="space-y-1 px-4 py-2.5" data-testid={`row-payout-${p.id}`}>
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px]">
                 <span className="flex flex-wrap items-center gap-2">
-                  <Money cents={p?.amount_cents} currency={p?.currency} />
+                  <PayoutMoney cents={p?.amount_cents} />
                   {method ? <span className="text-axal-muted">{method}</span> : <Unrecorded>Method not recorded</Unrecorded>}
                   <StatusPill status={status} />
                 </span>

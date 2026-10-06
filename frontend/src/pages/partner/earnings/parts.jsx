@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Pill, SectionLabel, Unrecorded } from '../../../ui';
-import { currencyOf, formatMoney } from '../../../lib/partnerEarnings';
+import { PAYOUT_CURRENCY_GAP, currencyOf, formatMoney } from '../../../lib/partnerEarnings';
 
 /**
  * The pieces the four earnings screens and the admin commissions console
@@ -18,7 +18,7 @@ import { currencyOf, formatMoney } from '../../../lib/partnerEarnings';
  * An amount whose currency the row does not carry still prints, with the
  * code marked as not recorded rather than guessed.
  */
-export function Money({ cents, currency, className = '' }) {
+export function Money({ cents, currency, className = '', noCurrencyReason = 'The row carries no currency.' }) {
   const text = formatMoney(cents, currency);
   if (text === null) return <Unrecorded reason="The row carries no readable amount.">Not recorded</Unrecorded>;
   const code = currencyOf(currency);
@@ -28,9 +28,14 @@ export function Money({ cents, currency, className = '' }) {
       {' '}
       {code
         ? <span className="text-[10.5px] font-semibold text-axal-faint">{code}</span>
-        : <Unrecorded reason="The row carries no currency.">currency not recorded</Unrecorded>}
+        : <Unrecorded reason={noCurrencyReason}>currency not recorded</Unrecorded>}
     </span>
   );
+}
+
+/** A payout's amount. Its row's currency is the table default, not a record (`PAYOUT_CURRENCY_GAP`). */
+export function PayoutMoney({ cents, className = '' }) {
+  return <Money cents={cents} currency={null} noCurrencyReason={PAYOUT_CURRENCY_GAP} className={className} />;
 }
 
 /**
