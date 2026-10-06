@@ -27,7 +27,8 @@ import { SignJWT } from 'jose';
 
 import spinoutLab from '../src/routes/spinout_lab.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
-import { creditLabMilestone, creditLabGraduation } from '../src/services/labMilestoneCredits.ts';
+import { creditLabMilestone, creditLabGraduation, backfillLabCredits } from '../src/services/labMilestoneCredits.ts';
+import creditRules from '../src/routes/admin_credit_rules.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const MEMBER = 101, OUTSIDER = 102, GRAD = 103, OLD_GRAD = 104, ADMIN = 900;
@@ -196,7 +197,8 @@ test('graduation: the certificate issued on the last milestone pays the bonus on
 
 test('graduation: an admin-issued certificate pays only a graduate whose graduation milestone was paid', async () => {
   const db = freshDb();
-  // GRAD's milestone was paid after launch; OLD_GRAD's predates it (#1102 Q4, pick A).
+  // GRAD's milestone was paid after launch; OLD_GRAD's predates it, so the
+  // certificate pays nothing now. The cohort backfill pays both later (Q4 B).
   db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 400, 'grant', ?, 'lab:incorporation_completed')`)
     .run(GRAD, `lab:${GRAD}:incorporation_completed`);
   const ok = await quiet(() => call(certificates, db, 'POST', '/certificates', ADMIN, { user_id: GRAD }));
@@ -278,4 +280,115 @@ test('/state: a revoked milestone grant is not earned, and an accepted admin sti
   db.prepare(`INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort) VALUES (?, 1, 'Cohort 4')`).run(ADMIN);
   const staff = await quiet(() => call(spinoutLab, db, 'GET', '/state', ADMIN));
   assert.equal(staff.body.milestone_credits.eligible, false);
+});
+
+// ───────────────────────────── the cohort backfill (#1102 Q4, A and B) ──
+
+const BACKFILL_REASON = 'Crediting the cohort for milestones done before launch';
+const SUPER = 950;
+
+/** OLD_GRAD finished the whole path before launch; MEMBER did part of it, one milestone already paid live. */
+function cohortDb() {
+  const db = freshDb();
+  db.exec(ddl('super_admins')); db.exec(ddl('admin_audit_log'));
+  db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, 'admin', 'Super One', 'super@example.test', 1)`).run(SUPER);
+  db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
+  const m = db.prepare(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, ?, ?, ?)`);
+  m.run(OLD_GRAD, 2, 'okrs_created', '2026-07-01 09:00:00');
+  m.run(OLD_GRAD, 3, 'cofounder_request_sent', '2026-07-10 09:00:00');
+  m.run(OLD_GRAD, 3, 'advisor_meeting_booked', '2026-07-12 09:00:00');
+  m.run(OLD_GRAD, 1, 'profile_completed', '2026-06-20 09:00:00');
+  m.run(MEMBER, 2, 'brand_basics_filled', '2026-07-02 09:00:00');
+  m.run(OUTSIDER, 2, 'okrs_created', '2026-07-03 09:00:00');
+  db.prepare(`INSERT INTO spinout_certificates (credential_id, user_id, public_name, public_issued_on) VALUES ('AX-OLD', ?, 'Di Before', '2026-08-02')`).run(OLD_GRAD);
+  // A revoked certificate is not a graduation.
+  db.prepare(`INSERT INTO spinout_certificates (credential_id, user_id, public_name, public_issued_on, status) VALUES ('AX-REV', ?, 'Ada Member', '2026-08-03', 'revoked')`).run(MEMBER);
+  return db;
+}
+const keysOf = (db: any, who: number) => grants(db, who).map((g: any) => g.rule_key);
+
+test('backfill: the cohort is paid once for what it completed before launch, a second run pays nothing', async () => {
+  const db = cohortDb();
+  await quiet(() => record(db, MEMBER, 'okrs_created')); // paid live, after launch
+  const first = await quiet(() => backfillLabCredits(envOf(db)));
+  // OLD_GRAD: okrs 50, co-founder 50 (the earlier half), incorporation 400, graduation 250.
+  assert.deepEqual(keysOf(db, OLD_GRAD).sort(),
+    ['lab:cofounder_request_sent', 'lab:graduation', 'lab:incorporation_completed', 'lab:okrs_created']);
+  assert.deepEqual(keysOf(db, MEMBER).sort(), ['lab:brand_basics_filled', 'lab:okrs_created']);
+  assert.deepEqual(keysOf(db, OUTSIDER), [], 'not an accepted member');
+  assert.equal(first.granted, 6);
+  assert.equal(first.credits, 50 + 50 + 400 + 250 + 50 + 400);
+  assert.equal(first.graduations, 1);
+  assert.equal(first.already_paid, 1, 'the milestone paid live is not paid again');
+  assert.deepEqual(first.skipped, { no_rule: 1, pair_already_paid: 1 });
+  assert.equal(first.failed, 0);
+  assert.equal(first.members, 3, 'GRAD, MEMBER and OLD_GRAD are accepted');
+  assert.equal(first.next_after, null);
+
+  const before = (db.prepare(`SELECT COUNT(*) AS n FROM perk_credit_ledger`).get() as any).n;
+  const second = await quiet(() => backfillLabCredits(envOf(db)));
+  assert.equal(second.granted, 0);
+  assert.equal(second.credits, 0);
+  assert.equal(second.graduations, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM perk_credit_ledger`).get() as any).n, before, 'a second run wrote a ledger row');
+});
+
+test('backfill: a revoked grant stays revoked, and a member walk is paged', async () => {
+  const db = cohortDb();
+  await quiet(() => creditLabMilestone(envOf(db), MEMBER, 'brand_basics_filled'));
+  const g = db.prepare(`SELECT id FROM perk_credit_ledger WHERE user_id = ? AND source_ref = ?`).get(MEMBER, `lab:${MEMBER}:brand_basics_filled`) as any;
+  db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, note) VALUES (?, -50, 'admin_adjust', ?, 'Recorded in error')`)
+    .run(MEMBER, `revoke:${g.id}`);
+  const one = await quiet(() => backfillLabCredits(envOf(db), { limit: 1 }));
+  assert.equal(one.members, 1);
+  assert.equal(one.next_after, MEMBER, 'members are walked in id order');
+  assert.equal(one.already_paid, 1, 'the revoked grant is not paid again');
+  assert.deepEqual(keysOf(db, MEMBER), ['lab:brand_basics_filled']);
+  const two = await quiet(() => backfillLabCredits(envOf(db), { after: one.next_after!, limit: 1 }));
+  assert.equal(two.next_after, GRAD);
+  const three = await quiet(() => backfillLabCredits(envOf(db), { after: two.next_after!, limit: 1 }));
+  assert.equal(three.next_after, null, 'OLD_GRAD is the last accepted member');
+  assert.ok(keysOf(db, OLD_GRAD).includes('lab:graduation'));
+});
+
+test('backfill: a member list that cannot be read is an error, never "nobody to pay"', async () => {
+  const db = cohortDb();
+  db.exec('DROP TABLE user_spinout_flags');
+  await assert.rejects(() => quiet(() => backfillLabCredits(envOf(db))));
+});
+
+test('backfill: a grant that fails is counted as failed, and the walk goes on', async () => {
+  const db = cohortDb();
+  db.exec('DROP TABLE credit_reward_rules');
+  const r = await quiet(() => backfillLabCredits(envOf(db)));
+  assert.equal(r.members, 3);
+  assert.equal(r.granted, 0);
+  assert.equal(r.milestones, 7);
+  assert.equal(r.failed, 7, 'every milestone grant failed and each was counted');
+  // OLD_GRAD's certificate then pays nothing: its incorporation grant failed.
+  assert.deepEqual(r.skipped, { graduation_not_paid: 1 }, 'a failure was reported as a skip');
+});
+
+test('POST /lab-backfill: the Super Admin\'s, with a reason, recorded in the audit log', async () => {
+  const db = cohortDb();
+  const asAdmin = await quiet(() => call(creditRules, db, 'POST', '/lab-backfill', ADMIN, { reason: BACKFILL_REASON }));
+  assert.equal(asAdmin.status, 403, 'a plain admin ran the backfill');
+  const asFounder = await quiet(() => call(creditRules, db, 'POST', '/lab-backfill', MEMBER, { reason: BACKFILL_REASON }));
+  assert.equal(asFounder.status, 403);
+  const short = await quiet(() => call(creditRules, db, 'POST', '/lab-backfill', SUPER, { reason: 'now' }));
+  assert.equal(short.status, 400);
+  assert.equal(short.body.error, 'reason_too_short');
+  assert.deepEqual(keysOf(db, OLD_GRAD), [], 'a refused call paid something');
+  const ok = await quiet(() => call(creditRules, db, 'POST', '/lab-backfill?limit=8', SUPER, { reason: BACKFILL_REASON }));
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.granted, 6);
+  assert.equal(ok.body.next_after, null);
+  const audit = db.prepare(`SELECT admin_user_id AS user_id, action, filters_json AS details FROM admin_audit_log WHERE action = 'credit_lab_backfill'`).all() as any[];
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].user_id, SUPER);
+  assert.match(String(audit[0].details), new RegExp(BACKFILL_REASON));
+  assert.match(String(audit[0].details), /"granted":6/);
+  const paged = await quiet(() => call(creditRules, db, 'POST', '/lab-backfill?limit=1&after=' + MEMBER, SUPER, { reason: BACKFILL_REASON }));
+  assert.equal(paged.body.members, 1);
+  assert.equal(paged.body.next_after, GRAD);
 });
