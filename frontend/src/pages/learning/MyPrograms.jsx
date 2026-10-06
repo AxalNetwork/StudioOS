@@ -49,9 +49,6 @@ function EnrolledProgram({ row, onRetry }) {
       {detail.status === 'unreadable' && (
         <RouteUnreadable reason="Your progress in this program could not be read, so this is not a claim that you have done nothing in it." onRetry={onRetry} testid="my-program-unreadable" />
       )}
-      {detail.status === 'missing' && (
-        <p className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="my-program-missing">This program is no longer open to you.</p>
-      )}
       {detail.status === 'ready' && progress && (
         <>
           {progress.total > 0 && (
@@ -109,8 +106,8 @@ function OpenProgram({ program, onEnrol, enrolling, error }) {
  * the reads.
  *
  *   enrolled   `readMyPrograms`'s state: `rows: [{ program, detail }]`, where
- *              `detail` is the program's own read, `{ status: 'ready',
- *              contents, completion }`, or `unreadable` or `missing`
+ *              `detail` is the program's part of the one read, `{ status:
+ *              'ready', contents, completion }`, or `unreadable`
  *   open       `readOpenPrograms`'s state: `programs`, the published programs
  *              open to self-enrolment, each with `enrolled`
  *   onEnrol(uid), enrolling (the uid being joined), said ({ uid, message }:
@@ -119,8 +116,8 @@ function OpenProgram({ program, onEnrol, enrolling, error }) {
  * PROGRESS IS COUNTED OVER WHAT A MEMBER CAN OPEN (`programProgress`): the
  * program's published content, each done when the route says so (a course or
  * item completed, an exercise accepted, an exam passed). Nothing started reads
- * "None of 5 complete yet", never 0%. A program whose own read failed says so
- * on its row; the rest still draw.
+ * "None of 5 complete yet", never 0%. A program whose contents could not be
+ * read says so on its row; the rest still draw.
  */
 export function MyProgramsSection({ enrolled, open, onEnrol, enrolling = null, said = null, onRetry = {} }) {
   const rows = enrolled?.status === 'ready' ? enrolled.rows || [] : [];
