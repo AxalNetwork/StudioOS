@@ -531,7 +531,7 @@ test('logging an interaction: the route\'s fields, an optional outcome, and the 
   // D572: an outcome of at most the route's length. The route refuses a longer
   // one rather than clip it, and the field stops at the same length.
   assert.equal(OUTCOME_MAX, Number(/const OUTCOME_MAX = (\d+)/.exec(PARTNERNET)?.[1]));
-  assert.match(form, new RegExp(`maxLength="${OUTCOME_MAX}" data-testid="input-interaction-outcome"`));
+  assert.ok(form.includes(`maxLength="${OUTCOME_MAX}" data-testid="input-interaction-outcome"`), 'the outcome field stops at the route\'s length');
   assert.match(PARTNERNET, /code: 'outcome_too_long'/);
   assert.deepEqual(interactionBody({ kind: 'call', date: '', time: '', note: 'Q4', outcome: '  Agreed to a pilot ' }), { kind: 'call', note: 'Q4', outcome: 'Agreed to a pilot' });
   assert.deepEqual(interactionBody({ kind: 'call', date: '', time: '', note: 'Q4', outcome: '   ' }), { kind: 'call', note: 'Q4' }, 'no outcome: none is sent, and the route stores null');
@@ -618,7 +618,13 @@ test('the rules read as the route stores them, each with its last edit, and no f
 
 test('a rule is edited through the route\'s own checks, and confirmed from what to what', () => {
   // The bounds are the route's (D572).
-  const bound = (name) => Number(new RegExp(`const ${name} = ([\\d_]+);`).exec(NETWORK)?.[1].replace(/_/g, ''));
+  // A string search, not a RegExp built from `name` (Semgrep's non-literal-regexp).
+  const bound = (name) => {
+    const head = `const ${name} = `;
+    const at = NETWORK.indexOf(head);
+    assert.ok(at >= 0, `${name} moved out of network.ts; re-read it`);
+    return Number(NETWORK.slice(at + head.length, NETWORK.indexOf(';', at)).replace(/_/g, ''));
+  };
   assert.deepEqual(RULE_LIMITS, { amountMaxCents: bound('RULE_AMOUNT_MAX_CENTS'), bpsMax: bound('RULE_BPS_MAX'), descriptionMax: bound('RULE_DESCRIPTION_MAX') });
   assert.match(NETWORK, /network\.patch\('\/admin\/commission-rules\/:key'/);
   // The draft starts from the rule.
