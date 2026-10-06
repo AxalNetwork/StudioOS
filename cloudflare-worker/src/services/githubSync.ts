@@ -49,6 +49,34 @@ export function hasSyncMarker(body: unknown): boolean {
   return typeof body === 'string' && body.includes('<!-- axal-sync:ticket-');
 }
 
+/*
+ * D600 (D540 Q1 B) — the mirror names nobody.
+ *
+ * The issues land in a public repository, and the owner's answer on #1102 was
+ * that the mirror strips the submitter's identity. So these two builders are
+ * the only text the ticket routes send GitHub besides the member's own title,
+ * description and reply, and neither takes a name or an email: the issue body
+ * used to end "Submitted by: <name>", and a reply was signed with the name or,
+ * failing that, the email address. The team finds the member from the ticket
+ * on the platform, where the account is visible to an admin anyway.
+ *
+ * A reply still says which side wrote it, because a thread that does not say
+ * who is answering whom cannot be followed.
+ */
+export type MirrorSource = 'StudioOS' | 'StudioOS (backfilled)';
+
+export function mirrorIssueBody(
+  t: { id: number | string; description?: string | null; priority?: string | null; type?: string | null },
+  source: MirrorSource,
+): string {
+  return `${t.description || ''}\n\n---\n**Priority:** ${t.priority}\n**Type:** ${t.type || 'task'}\n**Source:** ${source}\n\n${syncMarker(t.id)}`;
+}
+
+export function mirrorReplyBody(body: string, from: 'member' | 'team', ticketId: number | string): string {
+  const who = from === 'member' ? 'the member who filed this ticket' : 'the Axal team';
+  return `${body}\n\n---\n_Reply from ${who}, via StudioOS_\n\n${syncMarker(ticketId)}`;
+}
+
 export function priorityLabel(priority: string): string {
   return `priority:${priority}`;
 }
