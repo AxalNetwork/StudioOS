@@ -34,7 +34,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { decryptInt, decryptString } from '../services/cryptoBox';
 import {
-  validateDailyBody, encryptOrFallback,
+  weekSpan, validateDailyBody, encryptOrFallback,
 } from './wellbeing.helpers';
 import { notify } from '../services/notify';
 import { refuse } from '../util/refusal';
@@ -275,6 +275,18 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
     `ALTER TABLE expert_bookings ADD COLUMN meet_link TEXT`,
     `ALTER TABLE expert_bookings ADD COLUMN hidden_by_admin INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE expert_bookings ADD COLUMN booker_note TEXT`,
+    // D574 — migration 395.
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN support_enc TEXT`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN decisions_enc TEXT`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN support_plain INTEGER`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN decisions_plain INTEGER`,
+    `ALTER TABLE wellbeing_resources ADD COLUMN kind TEXT`,
+    `ALTER TABLE wellbeing_resources ADD COLUMN topic TEXT`,
+    `ALTER TABLE wellbeing_resources ADD COLUMN status TEXT NOT NULL DEFAULT 'published'`,
+    `ALTER TABLE wellbeing_resources ADD COLUMN edited_at TEXT`,
+    `ALTER TABLE wellbeing_resources ADD COLUMN file_key TEXT`,
+    `ALTER TABLE wellbeing_resources ADD COLUMN file_type TEXT`,
+    `ALTER TABLE wellbeing_resources ADD COLUMN file_size INTEGER`,
   ];
   for (const sql of ALTERS) {
     try { await env.DB.prepare(sql).run(); }
@@ -315,13 +327,27 @@ export async function submitCanonicalCheckin(
   const v = validateDailyBody(body);
   if (!v.ok) return { status: 400, body: { error: 'Invalid input', fields: v.fields } };
 
-  const [m, s, sl, en, fo, so] = await Promise.all([
+  // D574 — ONE CHECK-IN PER WEEK, kept by the route. The week is Monday to
+  // Sunday, UTC. A save in a week that already has a row replaces that row
+  // (the latest, if the daily era left several), on its own day; it is never
+  // refused, because "Update this week" is the canvas's own action. Not an
+  // index: rows saved before D574 were one per day, and a unique week index
+  // would refuse the migration wherever a member checked in twice in a week.
+  const week = weekSpan(v.day);
+  const existing = await env.DB.prepare(
+    `SELECT day FROM wellbeing_daily_pulses WHERE user_id = ? AND day >= ? AND day <= ? ORDER BY day DESC LIMIT 1`,
+  ).bind(userId, week.start, week.end).first<{ day: string }>();
+  const day = existing?.day ?? v.day;
+
+  const [m, s, sl, en, fo, so, su, de] = await Promise.all([
     encryptOrFallback(env, v.values.mood),
     encryptOrFallback(env, v.values.stress),
     encryptOrFallback(env, v.values.sleep),
     encryptOrFallback(env, v.values.energy),
     encryptOrFallback(env, v.values.focus),
     encryptOrFallback(env, v.values.social),
+    encryptOrFallback(env, v.values.support),
+    encryptOrFallback(env, v.values.decisions),
   ]);
   const ft = await encryptOrFallback<string>(env, v.free_text);
   const tagsStr = v.tags.length ? JSON.stringify(v.tags) : null;
@@ -336,8 +362,9 @@ export async function submitCanonicalCheckin(
           free_text_enc, tags_enc,
           mood_plain, stress_plain, sleep_plain, energy_plain, focus_plain, social_plain,
           free_text_plain, tags_plain,
+          support_enc, decisions_enc, support_plain, decisions_plain,
           created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(user_id, day) DO UPDATE SET
          mood_enc = excluded.mood_enc, stress_enc = excluded.stress_enc,
          sleep_enc = excluded.sleep_enc, energy_enc = excluded.energy_enc,
@@ -347,13 +374,16 @@ export async function submitCanonicalCheckin(
          sleep_plain = excluded.sleep_plain, energy_plain = excluded.energy_plain,
          focus_plain = excluded.focus_plain, social_plain = excluded.social_plain,
          free_text_plain = excluded.free_text_plain, tags_plain = excluded.tags_plain,
+         support_enc = excluded.support_enc, decisions_enc = excluded.decisions_enc,
+         support_plain = excluded.support_plain, decisions_plain = excluded.decisions_plain,
          created_at = excluded.created_at`,
     ).bind(
-      newUid, userId, v.day,
+      newUid, userId, day,
       m.enc, s.enc, sl.enc, en.enc, fo.enc, so.enc,
       ft.enc, tg.enc,
       m.plain, s.plain, sl.plain, en.plain, fo.plain, so.plain,
       ft.plain, tg.plain,
+      su.enc, de.enc, su.plain, de.plain,
     ).run();
   } catch (e: any) {
     console.warn('[wellbeing] /checkins insert failed:', String(e?.message || e));
@@ -362,7 +392,7 @@ export async function submitCanonicalCheckin(
 
   const row = await env.DB.prepare(
     'SELECT * FROM wellbeing_daily_pulses WHERE user_id = ? AND day = ?',
-  ).bind(userId, v.day).first<DailyRow>();
+  ).bind(userId, day).first<DailyRow>();
   if (!row) {
     return { status: 500, body: { error: "Couldn't save — try again. If this persists, contact support." } };
   }
@@ -370,10 +400,14 @@ export async function submitCanonicalCheckin(
   // D574 — whether THIS save was stored encrypted. When the cipher fails the
   // form still saves (Task #33) into the plain backstop, and the page must not
   // then say "Stored encrypted".
-  const storedEncrypted = ![m, s, sl, en, fo, so, ft, tg].some((x) => x.fellBack);
+  const storedEncrypted = ![m, s, sl, en, fo, so, su, de, ft, tg].some((x) => x.fellBack);
   return {
     status: 201,
-    body: { ok: true, captured_at: row.created_at, ...serialized, id: row.id, stored_encrypted: storedEncrypted },
+    body: {
+      ok: true, captured_at: row.created_at, ...serialized, id: row.id, stored_encrypted: storedEncrypted,
+      // D574 — the week this check-in covers, and whether it replaced one.
+      week_start: week.start, replaced: !!existing,
+    },
   };
 }
 
@@ -445,6 +479,8 @@ async function serializeDaily(env: Env, row: DailyRow & {
   sleep_plain?: number | null; energy_plain?: number | null;
   focus_plain?: number | null; social_plain?: number | null;
   free_text_plain?: string | null; tags_plain?: string | null;
+  support_enc?: string | null; decisions_enc?: string | null;
+  support_plain?: number | null; decisions_plain?: number | null;
 }) {
   // Task #33 — plaintext fallback columns win when ciphertext is missing
   // or fails to decrypt (e.g. JWT_SECRET was rotated mid-flight).
@@ -454,13 +490,15 @@ async function serializeDaily(env: Env, row: DailyRow & {
     }
     return plain ?? null;
   };
-  const [mood, stress, sleep, energy, focus, social] = await Promise.all([
+  const [mood, stress, sleep, energy, focus, social, support, decisions] = await Promise.all([
     pick(row.mood_enc, row.mood_plain),
     pick(row.stress_enc, row.stress_plain),
     pick(row.sleep_enc, row.sleep_plain),
     pick(row.energy_enc, row.energy_plain),
     pick(row.focus_enc, row.focus_plain),
     pick(row.social_enc, row.social_plain),
+    pick(row.support_enc ?? null, row.support_plain),
+    pick(row.decisions_enc ?? null, row.decisions_plain),
   ]);
   let free_text: string | null = null;
   if (row.free_text_enc) {
@@ -483,7 +521,7 @@ async function serializeDaily(env: Env, row: DailyRow & {
 
   return {
     id: row.id, uid: row.uid, day: row.day,
-    mood, stress, sleep, energy, focus, social,
+    mood, stress, sleep, energy, focus, social, support, decisions,
     free_text, tags, created_at: row.created_at,
   };
 }
@@ -622,7 +660,74 @@ type ResourceRow = {
   description: string | null; url: string | null; region: string | null;
   is_24_7: number; is_free: number; sort_order: number;
   created_at: string;
+  // D574 — migration 395.
+  kind?: string | null; topic?: string | null; status?: string | null; edited_at?: string | null;
+  file_key?: string | null; file_type?: string | null; file_size?: number | null;
 };
+
+/** D574 — the canvas's formats, the two states, and the topic's length. */
+export const RESOURCE_KINDS = ['article', 'audio', 'video', 'link'] as const;
+export const RESOURCE_STATUSES = ['draft', 'published'] as const;
+export const RESOURCE_TOPIC_MAX = 60;
+
+/**
+ * D574 — the resource fields a write may set, checked. `partial` is a PATCH:
+ * a field left out keeps its value. A link must be http(s), so a stored
+ * `javascript:` can never reach a member's href.
+ */
+export function resourceFields(body: any, partial: boolean):
+  | { ok: true; set: Record<string, unknown> }
+  | { ok: false; code: string; message: string } {
+  const set: Record<string, unknown> = {};
+  const has = (k: string) => body != null && Object.prototype.hasOwnProperty.call(body, k);
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  if (!partial || has('category')) {
+    const category = text(body?.category);
+    if (!ALLOWED_RESOURCE_CATEGORIES.has(category)) {
+      return { ok: false, code: 'invalid_category', message: `category must be one of ${[...ALLOWED_RESOURCE_CATEGORIES].sort().join(', ')}` };
+    }
+    set.category = category;
+  }
+  if (!partial || has('name')) {
+    const name = text(body?.name);
+    if (!name) return { ok: false, code: 'name_required', message: 'name is required' };
+    set.name = name.slice(0, 200);
+  }
+  if (has('description')) set.description = text(body.description) ? text(body.description).slice(0, 2000) : null;
+  if (has('url')) {
+    const url = text(body.url);
+    if (url && !/^https?:\/\/\S+$/i.test(url)) return { ok: false, code: 'invalid_url', message: 'url must be an http(s) link' };
+    set.url = url || null;
+  }
+  if (has('region')) set.region = text(body.region) || null;
+  if (has('is_24_7')) set.is_24_7 = body.is_24_7 ? 1 : 0;
+  if (has('is_free')) set.is_free = body.is_free ? 1 : 0;
+  if (has('sort_order')) {
+    const n = Number(body.sort_order);
+    if (!Number.isInteger(n)) return { ok: false, code: 'invalid_sort_order', message: 'sort_order must be a whole number' };
+    set.sort_order = n;
+  }
+  if (has('kind')) {
+    const kind = body.kind == null || body.kind === '' ? null : text(body.kind);
+    if (kind !== null && !(RESOURCE_KINDS as readonly string[]).includes(kind)) {
+      return { ok: false, code: 'invalid_kind', message: `kind must be one of ${RESOURCE_KINDS.join(', ')}` };
+    }
+    set.kind = kind;
+  }
+  if (has('topic')) {
+    const topic = text(body.topic);
+    if (topic.length > RESOURCE_TOPIC_MAX) return { ok: false, code: 'topic_too_long', message: `topic must be at most ${RESOURCE_TOPIC_MAX} characters` };
+    set.topic = topic || null;
+  }
+  if (has('status')) {
+    const status = text(body.status);
+    if (!(RESOURCE_STATUSES as readonly string[]).includes(status)) {
+      return { ok: false, code: 'invalid_status', message: 'status must be draft or published' };
+    }
+    set.status = status;
+  }
+  return { ok: true, set };
+}
 
 const DEFAULT_RESOURCES: Array<Omit<ResourceRow, 'id' | 'uid' | 'created_at'>> = [
   { category: 'hotline', name: '988 Suicide & Crisis Lifeline (US)',
@@ -661,6 +766,11 @@ function serializeResource(r: ResourceRow) {
     description: r.description, url: r.url, region: r.region,
     is_24_7: !!r.is_24_7, is_free: !!r.is_free,
     sort_order: r.sort_order, created_at: r.created_at,
+    // D574 — null on rows written before migration 395, read as not recorded.
+    kind: r.kind ?? null, topic: r.topic ?? null,
+    status: r.status === 'draft' ? 'draft' : 'published',
+    edited_at: r.edited_at ?? null,
+    file: r.file_key ? { type: r.file_type ?? null, size: r.file_size ?? null } : null,
   };
 }
 
@@ -682,7 +792,7 @@ async function ensureDefaultResources(env: Env): Promise<void> {
 }
 
 wellbeing.get('/resources', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   try {
     await ensureWellbeingSchema(c.env);
     await ensureDefaultResources(c.env);
@@ -690,6 +800,8 @@ wellbeing.get('/resources', async (c) => {
     const region = c.req.query('region');
     let sql = 'SELECT * FROM wellbeing_resources WHERE 1=1';
     const params: any[] = [];
+    // D574 — a draft is the admins' alone; members read published rows only.
+    if (role(user) !== 'admin') sql += " AND COALESCE(status, 'published') = 'published'";
     if (category) { sql += ' AND category = ?'; params.push(category); }
     if (region) { sql += ' AND (region = ? OR region = ?)'; params.push(region, 'global'); }
     sql += ' ORDER BY sort_order ASC';
@@ -710,29 +822,78 @@ wellbeing.post('/resources', async (c) => {
   // rather than learning the licence state.
   await requireBranchNotSuspended(c);
   const body = await c.req.json().catch(() => ({}));
-  const category = String((body as any)?.category || '');
-  if (!ALLOWED_RESOURCE_CATEGORIES.has(category)) {
-    return c.json({ detail: `category must be one of ${[...ALLOWED_RESOURCE_CATEGORIES].sort()}` }, 400);
-  }
-  const name = String((body as any)?.name || '').trim();
-  if (!name) return c.json({ detail: 'name is required' }, 400);
+  const f = resourceFields(body, false);
+  if (!f.ok) return refuse(c, 400, { code: f.code, message: f.message });
+  const v = f.set as any;
   const uid = uuidHex();
-  await c.env.DB.prepare(
-    `INSERT INTO wellbeing_resources
-       (uid, category, name, description, url, region, is_24_7, is_free, sort_order, created_by_user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
-    uid, category, name,
-    (body as any)?.description ?? null, (body as any)?.url ?? null,
-    (body as any)?.region ?? null,
-    (body as any)?.is_24_7 ? 1 : 0, (body as any)?.is_free ? 1 : 0,
-    Number((body as any)?.sort_order ?? 100), user.id,
-  ).run();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO wellbeing_resources
+         (uid, category, name, description, url, region, is_24_7, is_free, sort_order, created_by_user_id,
+          kind, topic, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      uid, v.category, v.name,
+      v.description ?? null, v.url ?? null, v.region ?? null,
+      v.is_24_7 ?? 0, v.is_free ?? 0, v.sort_order ?? 100, user.id,
+      v.kind ?? null, v.topic ?? null, v.status ?? 'published',
+    ).run();
+  } catch (e: any) {
+    if (/UNIQUE/i.test(String(e?.message || ''))) {
+      return refuse(c, 409, { code: 'resource_exists', message: 'A resource with this category and title already exists.' });
+    }
+    throw e;
+  }
   const row = await c.env.DB.prepare(
     'SELECT * FROM wellbeing_resources WHERE uid = ?',
   ).bind(uid).first<ResourceRow>();
   if (!row) return c.json({ detail: 'Insert failed' }, 500);
   return c.json(serializeResource(row));
+});
+
+/**
+ * D574 — an admin edits a resource. Any field left out keeps its value; the
+ * row records when it was last edited. Publishing, or changing anything a
+ * member reads, is a new thing under the brand, so it waits for an
+ * unsuspended branch (D142); moving a row back to draft is a takedown and
+ * does not.
+ */
+wellbeing.patch('/resources/:id', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  await ensureWellbeingSchema(c.env);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return refuse(c, 400, { code: 'invalid_id', message: 'Invalid id' });
+  const body = await c.req.json().catch(() => ({}));
+  const f = resourceFields(body, true);
+  if (!f.ok) return refuse(c, 400, { code: f.code, message: f.message });
+  const keys = Object.keys(f.set);
+  if (!keys.length) return refuse(c, 400, { code: 'nothing_to_change', message: 'Name at least one field to change.' });
+  const takedownOnly = keys.length === 1 && f.set.status === 'draft';
+  if (!takedownOnly) await requireBranchNotSuspended(c);
+  const row = await c.env.DB.prepare('SELECT * FROM wellbeing_resources WHERE id = ?').bind(id).first<ResourceRow>();
+  if (!row) return refuse(c, 404, { code: 'resource_not_found', message: 'Resource not found' });
+  const next = { ...row, ...f.set } as any;
+  try {
+    await c.env.DB.prepare(
+      `UPDATE wellbeing_resources
+          SET category = ?, name = ?, description = ?, url = ?, region = ?, is_24_7 = ?, is_free = ?,
+              sort_order = ?, kind = ?, topic = ?, status = ?, edited_at = ?
+        WHERE id = ?`,
+    ).bind(
+      next.category, next.name, next.description ?? null, next.url ?? null, next.region ?? null,
+      next.is_24_7 ? 1 : 0, next.is_free ? 1 : 0, Number(next.sort_order ?? 100),
+      next.kind ?? null, next.topic ?? null, next.status === 'draft' ? 'draft' : 'published',
+      new Date().toISOString(), id,
+    ).run();
+  } catch (e: any) {
+    if (/UNIQUE/i.test(String(e?.message || ''))) {
+      return refuse(c, 409, { code: 'resource_exists', message: 'A resource with this category and title already exists.' });
+    }
+    throw e;
+  }
+  const saved = await c.env.DB.prepare('SELECT * FROM wellbeing_resources WHERE id = ?').bind(id).first<ResourceRow>();
+  return c.json(serializeResource(saved as ResourceRow));
 });
 
 wellbeing.delete('/resources/:id', async (c) => {

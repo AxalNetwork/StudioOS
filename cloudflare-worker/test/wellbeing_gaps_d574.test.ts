@@ -164,7 +164,8 @@ test('a member cancels their own open, unpaid, future booking, and nothing else'
 test('a check-in says whether it was stored encrypted', async () => {
   const db = new DatabaseSync(':memory:');
   db.exec(ddl('wellbeing_daily_pulses'));
-  for (const col of ['mood_plain INTEGER', 'stress_plain INTEGER', 'sleep_plain INTEGER', 'energy_plain INTEGER', 'focus_plain INTEGER', 'social_plain INTEGER', 'free_text_plain TEXT', 'tags_plain TEXT']) {
+  for (const col of ['mood_plain INTEGER', 'stress_plain INTEGER', 'sleep_plain INTEGER', 'energy_plain INTEGER', 'focus_plain INTEGER', 'social_plain INTEGER', 'free_text_plain TEXT', 'tags_plain TEXT',
+    'support_enc TEXT', 'decisions_enc TEXT', 'support_plain INTEGER', 'decisions_plain INTEGER']) {
     try { db.exec(`ALTER TABLE wellbeing_daily_pulses ADD COLUMN ${col}`); } catch { /* the baseline has it */ }
   }
   const enc = await quiet(() => submitCanonicalCheckin({ DB: d1Over(db), AXAL_ENCRYPTION_SECRET: 'k'.repeat(48), JWT_SECRET } as any, MEMBER, { mood: 4 }));

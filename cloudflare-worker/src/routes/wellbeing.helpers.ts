@@ -11,11 +11,25 @@ import { encryptString } from '../services/cryptoBox';
 export const CHECKIN_KEYS = ['stress', 'sleep', 'support', 'decisions', 'energy'] as const;
 export type CheckinKey = typeof CHECKIN_KEYS[number];
 
-export const DAILY_KEYS = ['mood', 'stress', 'sleep', 'energy', 'focus', 'social'] as const;
+// D574 — support and decisions joined the stored scores (migration 395), so
+// the canvas's five weekly questions are all kept.
+export const DAILY_KEYS = ['mood', 'stress', 'sleep', 'energy', 'focus', 'social', 'support', 'decisions'] as const;
 export type DailyKey = typeof DAILY_KEYS[number];
 
 function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * D574 — the Monday (UTC) of a day's week, and its Sunday: the span one
+ * weekly check-in covers.
+ */
+export function weekSpan(day: string): { start: string; end: string } {
+  const d = new Date(`${day}T00:00:00Z`);
+  const back = (d.getUTCDay() + 6) % 7;
+  const start = new Date(d.getTime() - back * 86_400_000);
+  const end = new Date(start.getTime() + 6 * 86_400_000);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 
 export type ValidationFail = { ok: false; fields: Record<string, string> };
@@ -57,7 +71,7 @@ export function validateDailyBody(body: any):
   | ValidationFail {
   const fields: Record<string, string> = {};
   const values: Record<DailyKey, number | null> = {
-    mood: null, stress: null, sleep: null, energy: null, focus: null, social: null,
+    mood: null, stress: null, sleep: null, energy: null, focus: null, social: null, support: null, decisions: null,
   };
   // `connection` is the task-spec alias for `social`; `mood_1to10`,
   // `stress_1to10` etc. are the legacy frontend field names from the
