@@ -43,6 +43,7 @@ import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
 import { scopedDecisions } from './ic';
@@ -3809,33 +3810,38 @@ const MARKET_SECTOR_ALIASES: Record<string, string[]> = {
 
 research.get('/company-directory', async (c) => {
   await requireAuth(c);
-  const q = String(c.req.query('q') || '').trim().slice(0, 120);
-  const country = String(c.req.query('country') || '').trim().slice(0, 120);
   const sectorKey = String(c.req.query('sector') || '').trim().slice(0, 120).toLowerCase();
   const sectorLabel = sectorKey.replace(/-/g, ' ');
-  const sectorTerms = [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean);
-  const sectorClause = sectorKey ? ` AND (${sectorTerms.map(() => `LOWER(COALESCE(sector, '')) LIKE ?`).join(' OR ')})` : '';
-  const sql = `SELECT uid, name, website, country, founded_year, sector, source_name,
-            source_url, source_license, as_of
-       FROM research_company_directory
-      WHERE (? = '' OR name LIKE '%' || ? || '%' OR website LIKE '%' || ? || '%')
-        AND (? = '' OR country = ?)
-        ${sectorClause}
-      ORDER BY name COLLATE NOCASE LIMIT 1000`;
-  const bindings = [q, q, q, country, country, ...sectorTerms.map((term) => `%${term.toLowerCase()}%`)];
-  const rows = await c.env.DB.prepare(sql).bind(...bindings).all();
-  return c.json({ items: rows.results || [], requested_sector: sectorKey || null, matched_terms: sectorKey ? sectorTerms : [], source: 'Wikidata', source_boundary: 'Discovery metadata only; taxonomy matches are normalized labels and do not equal the separate taxonomy company count.' });
+  const sectorTerms = sectorKey ? [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean) : [];
+  let query;
+  try {
+    query = parseCompanyQuery((k) => c.req.query(k), sectorTerms);
+  } catch (e) {
+    if (e instanceof CompanyQueryError) return c.json({ detail: e.reason, field: e.field }, 400);
+    throw e;
+  }
+  let page;
+  try {
+    page = await listCompanies(c.env, query);
+  } catch {
+    // A failed read says so; it is never an empty directory.
+    return c.json({ detail: 'Unreadable', reason: 'The company directory could not be read' }, 503);
+  }
+  return c.json({ ...page, requested_sector: sectorKey || null, matched_terms: sectorTerms, source: 'Wikidata', source_boundary: 'Discovery metadata only; taxonomy matches are normalized labels and do not equal the separate taxonomy company count.' });
 });
 
+// One company (D534): identity, each metric with its source and as-of date,
+// the migration-370 evidence keyed on company_id = id, and same-sector peers.
 research.get('/company-directory/:uid', async (c) => {
   await requireAuth(c);
-  const row = await c.env.DB.prepare(
-    `SELECT uid, name, website, country, founded_year, sector, source_name,
-            source_url, source_license, as_of
-       FROM research_company_directory WHERE uid = ?`
-  ).bind(c.req.param('uid')).first();
-  if (!row) return c.json({ detail: 'Not found' }, 404);
-  return c.json({ item: row, source_boundary: 'Discovery metadata only; no funding, valuation, revenue, market-size, or diligence claims.' });
+  let company;
+  try {
+    company = await getCompany(c.env, c.req.param('uid'));
+  } catch {
+    return c.json({ detail: 'Unreadable', reason: 'The company could not be read' }, 503);
+  }
+  if (!company) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ...company, source_boundary: 'Metrics are shown only with their recorded source and as-of date; a metric with no record reads Not recorded.' });
 });
 
 // Public fund catalog (D535). Spreadsheet observations are reported fund-size

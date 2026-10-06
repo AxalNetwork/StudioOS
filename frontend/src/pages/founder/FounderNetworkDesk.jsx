@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Network } from 'lucide-react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
@@ -10,6 +10,7 @@ import useAiSpend from '../../hooks/useAiSpend';
 import { COLD_AFTER_DAYS, daysSince, followUp, isCold, organizationOf, strengthLabel } from '../../lib/networkBook';
 import { zonePillClass } from './deskZoneNav';
 import './founderNetworkDesk.css';
+import { LensNavLink } from '../../workspaces/lens';
 
 export const listFrom = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 export const normalizeRelationships = (value) => listFrom(value, 'items');
@@ -74,7 +75,7 @@ export default function FounderNetworkDesk() {
   const state = { founderNetworkSeed: { records } };
   return <main className="a6-network" data-testid="founder-network-desk"><div className="a6-canvas"><div className="a6-main">
     <header className="a6-hero"><h1>Work my relationships</h1><p>Who you know, what you last said, and the introductions recorded across your network.</p>
-      <nav aria-label="Network desk sections">{SECTIONS.map(([label, to]) => <NavLink data-testid={`link-network-${label.toLowerCase()}-anchor`} key={label} to={to} className={zonePillClass}>{label}</NavLink>)}</nav>
+      <nav aria-label="Network desk sections">{SECTIONS.map(([label, to]) => <LensNavLink data-testid={`link-network-${label.toLowerCase()}-anchor`} key={label} to={to} className={zonePillClass}>{label}</LensNavLink>)}</nav>
     </header>
     {error && <div className="a6-error" data-testid="status-network-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-network" type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
     <NetworkSections data={data} loading={initialLoading} state={state} fillsOn={fillsOn} ai={ai} />

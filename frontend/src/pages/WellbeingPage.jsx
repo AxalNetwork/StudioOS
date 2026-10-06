@@ -1,759 +1,424 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { BarChart3, Heart, Lock, AlertTriangle, ExternalLink, Star } from 'lucide-react';
 import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
-import {
-  Heart, Lock, Phone, Users, BookOpen, MessageCircle, ExternalLink,
-  AlertTriangle, BarChart3, Star, Search, Filter, Calendar, X, Check, Globe,
-} from 'lucide-react';
 import { api } from '../lib/api';
+import { Card, Pill, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
+import {
+  CANVAS_SCORES, MORE_SCORES, TOPICS, MAX_TAGS, NOT_STORED_REASON, HISTORY_ROW_CAP,
+  ROUTE_SCORE_KEYS, isDay, utcToday, weekStart, thisWeekEntry, formFromEntry, buildCheckinPayload,
+  answeredCount, pastWeeks, formatDay, formatWhen, splitBookings, bookingStatus, canRate,
+  resourceKind, resourceFacts, safeHref, homeCoverage, countRange,
+} from './wellbeing/wellbeingModel';
+import { BTN, FIELD, PageHeader, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-const DAILY_QUESTIONS = [
-  { key: 'mood',   label: 'Mood',         lowLabel: 'Low',          highLabel: 'Great' },
-  { key: 'stress', label: 'Stress',       lowLabel: 'Calm',         highLabel: 'Overwhelmed', invert: true },
-  { key: 'sleep',  label: 'Sleep',        lowLabel: 'Poor',         highLabel: 'Restful' },
-  { key: 'energy', label: 'Energy',       lowLabel: 'Drained',      highLabel: 'Charged' },
-  { key: 'focus',  label: 'Focus',        lowLabel: 'Scattered',    highLabel: 'Sharp' },
-  { key: 'social', label: 'Connection',   lowLabel: 'Isolated',     highLabel: 'Supported' },
-];
-
-const RESOURCE_CATEGORY_META = {
-  hotline:    { icon: Phone,         label: 'Crisis & hotlines' },
-  therapy:    { icon: Heart,         label: 'Therapy & counselling' },
-  peer_group: { icon: Users,         label: 'Peer & founder groups' },
-  coaching:   { icon: MessageCircle, label: 'Coaching' },
-  reading:    { icon: BookOpen,      label: 'Reading & essays' },
-};
+/**
+ * /wellbeing — the member's Wellbeing home (canvas `wb-home`, D570).
+ *
+ * Four cards on the canvas's two columns: this week's check-in, my past weeks,
+ * my bookings and resources. Each reads on its own, so one failed read never
+ * blanks the others, and each has its own loading, empty and unreadable state.
+ *
+ * WHAT THE CANVAS DREW THAT THE WORKER DOES NOT STORE, and what this page does
+ * about each (the reasons are in `wellbeing/wellbeingModel.js` and D570):
+ *   - Support and decisions are drawn and marked "Not recorded": the check-in
+ *     route has no field for either, and an input it would silently drop is
+ *     worse than none.
+ *   - "One per week" is this page's rule, kept by re-saving onto this week's
+ *     day. The route upserts per day and refuses nothing.
+ *   - A booking records no service, and no route lets a member cancel one.
+ *
+ * Eadwyn reads none of it. The rail's coverage is built from the resource
+ * library alone (`homeCoverage`), because coverage lines are sent to a model
+ * when a reader asks for a read-back.
+ */
 
 function readUser() { return safeReadJSON('user', {}); }
 
-function getBrowserTz() {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; }
-  catch { return null; }
-}
+const IDLE_SAVE = { saving: false, ok: null, error: null, fieldErrors: {} };
 
 // ---------------------------------------------------------------------------
-// Daily pulse
+// This week's check-in
 // ---------------------------------------------------------------------------
-function Slider({ value, onChange, lowLabel, highLabel, invert }) {
+export function CheckinCard({
+  status, today, entry, form, save = IDLE_SAVE, onScore, onNote, onTopic, onSave, onRetry,
+}) {
+  const week = isDay(today) ? weekStart(today) : null;
+  const errors = save.fieldErrors || {};
+  const moreOpen = MORE_SCORES.some((s) => form?.values?.[s.field] != null) || (form?.tags || []).length > 0;
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-1.5">
-        {[1, 2, 3, 4, 5].map((n) => {
-          const active = value === n;
-          const palette = invert
-            ? (n >= 4 ? 'border-red-500 bg-red-50 text-red-700'
-               : n === 3 ? 'border-amber-500 bg-amber-50 text-amber-700'
-               : 'border-emerald-500 bg-emerald-50 text-emerald-700')
-            : (n >= 4 ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-               : n === 3 ? 'border-amber-500 bg-amber-50 text-amber-700'
-               : 'border-red-500 bg-red-50 text-red-700');
-          return (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onChange(n)}
-              className={`flex-1 rounded-lg border py-2.5 text-sm font-medium transition ${
-                active ? palette : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-900 text-slate-500 dark:text-slate-400 hover:border-slate-400'
-              }`}
-            >{n}</button>
-          );
-        })}
-      </div>
-      <div className="flex justify-between text-[11px] text-slate-400 px-0.5">
-        <span>1 — {lowLabel}</span>
-        <span>5 — {highLabel}</span>
-      </div>
-    </div>
-  );
-}
-
-// Tag values are real expertCategories.ts catalogue keys so the
-// `want_category` weighting in the matcher actually fires.
-const QUICK_TAGS = [
-  { tag: 'therapist_clinical',     label: 'Therapy' },
-  { tag: 'executive_coach',        label: 'Executive coaching' },
-  { tag: 'peer_founder_advisor',    label: 'Peer support' },
-  { tag: 'sleep_specialist_physician', label: 'Sleep' },
-  { tag: 'burnout_specialist',     label: 'Burnout' },
-  { tag: 'psychiatrist',           label: 'Anxiety' },
-  { tag: 'relationship_counsellor', label: 'Relationships' },
-  { tag: 'leadership_coach',       label: 'Co-founder conflict' },
-  { tag: 'personal_trainer',       label: 'Fitness' },
-  { tag: 'nutritionist',           label: 'Nutrition' },
-  { tag: 'mindfulness_coach',      label: 'Mindfulness' },
-  { tag: 'fundraising_advisor',    label: 'Fundraising' },
-];
-
-function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted }) {
-  const [values, setValues] = useState(() => initialValues || {
-    mood: 3, stress: 3, sleep: 3, energy: 3, focus: 3, social: 3,
-  });
-  const [text, setText] = useState('');
-  const [tags, setTags] = useState(() => initialTags || []);
-  const [saving, setSaving] = useState(false);
-  const [ok, setOk] = useState(false);
-  const [err, setErr] = useState(null);
-  // Task #33 — per-field validation errors returned by POST /api/wellbeing/daily
-  // (shape: { error, fields: { mood?: '...', stress?: '...', ... } }). Rendered
-  // inline under each slider / textarea so the user knows exactly what to fix.
-  const [fieldErrors, setFieldErrors] = useState({});
-
-  const toggleTag = (t) =>
-    setTags((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].slice(0, 8));
-
-  const submit = async () => {
-    setSaving(true); setErr(null); setOk(false); setFieldErrors({});
-    try {
-      await api.wellbeingDailySubmit({ ...values, free_text: text || null, tags });
-      setOk(true);
-      onSubmitted?.();
-    } catch (e) {
-      // 400 carries { error, fields } — show inline. 5xx → friendly retry banner.
-      if (e?.status === 400 && e?.data?.fields) {
-        setFieldErrors(e.data.fields);
-        setErr(null);
-      } else if (e?.status >= 500) {
-        setErr("Couldn't save — try again. If this persists, contact support.");
-      } else {
-        setErr(e.message || 'Failed to save');
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-6 dark:bg-gray-900">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Today's check-in</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Six quick sliders. Takes under a minute. {alreadyToday && (
-              <span className="ml-1 text-xs font-medium text-emerald-600">
-                You've checked in today — submitting will overwrite.
-              </span>
-            )}
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-400">
-          <Lock className="w-3 h-3" /> Encrypted
-        </span>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        {DAILY_QUESTIONS.map((q) => {
-          // Worker may return either `social` (canonical) or `connection`
-          // (task-spec alias) as the field key. Show whichever is present.
-          const fe = fieldErrors[q.key] || (q.key === 'social' ? fieldErrors.connection : null);
-          return (
-            <div key={q.key}>
-              <div className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">{q.label}</div>
-              <Slider
-                value={values[q.key]}
-                onChange={(n) => setValues((v) => ({ ...v, [q.key]: n }))}
-                lowLabel={q.lowLabel}
-                highLabel={q.highLabel}
-                invert={q.invert}
-              />
-              {fe && <div role="alert" className="mt-1 text-xs text-red-600">{fe}</div>}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-4">
-        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">What's on your mind today? (optional)</label>
-        <p className="text-xs text-slate-500 dark:text-slate-400">Pick a few — these tune your matched experts. Up to 8.</p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {QUICK_TAGS.map((t) => {
-            const on = tags.includes(t.tag);
-            return (
-              <button
-                key={t.tag} type="button" onClick={() => toggleTag(t.tag)}
-                className={`rounded-full px-2.5 py-1 text-xs font-medium border transition ${
-                  on ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-900 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:border-slate-600'
-                }`}
-              >{t.label}</button>
-            );
-          })}
-        </div>
-      </div>
-
-      {fieldErrors.tags && (
-        <div role="alert" className="mt-2 text-xs text-red-600">{fieldErrors.tags}</div>
-      )}
-
-      <div className="mt-4">
-        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Anything else? (optional)</label>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={2}
-          maxLength={4000}
-          placeholder="Encrypted at rest. Only you can read this."
-          className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+    <Card padding="lg" data-testid="card-checkin">
+      <CardHead title="This week’s check-in" meta={week ? `week of ${formatDay(week)} · one per week` : null} />
+      {status === 'loading' ? <Skeleton.Text lines={6} /> : status === 'unreadable' ? (
+        <Unreadable
+          what="Your check-ins"
+          claim="Saving waits until they can be read, so this week’s entry is never written twice."
+          onRetry={onRetry}
         />
-        {fieldErrors.free_text && (
-          <div role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.free_text}</div>
-        )}
-      </div>
-
-      {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
-      {ok && <div className="mt-3 text-sm text-emerald-600">Saved.</div>}
-
-      <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          onClick={submit}
-          disabled={saving}
-          className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : alreadyToday ? 'Update today' : 'Save check-in'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function DailyChart({ pulses }) {
-  if (!pulses?.length) {
-    return (
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-5 dark:bg-gray-900">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Last 30 days</h3>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No check-ins yet. Your first will appear here.</p>
-      </div>
-    );
-  }
-  const data = pulses.map((p) => {
-    const vals = [p.mood, p.sleep, p.energy, p.focus, p.social].filter((v) => typeof v === 'number');
-    if (typeof p.stress === 'number') vals.push(6 - p.stress);
-    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-    return { day: p.day, avg };
-  });
-  return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-5 dark:bg-gray-900">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Last 30 days</h3>
-        <span className="text-xs text-slate-500 dark:text-slate-400">{pulses.length} check-in{pulses.length === 1 ? '' : 's'}</span>
-      </div>
-      <div className="mt-3 flex items-end gap-1 h-24">
-        {data.map((d, i) => (
-          <div
-            key={i}
-            title={`${d.day}: overall ${d.avg?.toFixed(1) ?? '—'}/5`}
-            className="flex-1 rounded-t bg-rose-400/70"
-            style={{ height: d.avg ? `${(d.avg / 5) * 100}%` : '4px' }}
-          />
-        ))}
-      </div>
-      <div className="mt-2 flex justify-between text-[10px] text-slate-400">
-        <span>{data[0]?.day}</span>
-        <span>{data[data.length - 1]?.day}</span>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Experts
-// ---------------------------------------------------------------------------
-function StarRow({ avg, count }) {
-  const filled = Math.round(avg);
-  return (
-    <div className="flex items-center gap-1 text-amber-500">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Star key={n} className={`w-3.5 h-3.5 ${n <= filled ? 'fill-amber-400' : 'opacity-40'}`} />
-      ))}
-      <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
-        {avg ? avg.toFixed(1) : '—'} {count ? `(${count})` : ''}
-      </span>
-    </div>
-  );
-}
-
-function ExpertCard({ expert, onBook, onView, categoryLabels }) {
-  const [showWhy, setShowWhy] = useState(false);
-  const topCats = (expert.categories || []).slice(0, 3).map((k) => categoryLabels.get(k) || k);
-  const langs = (expert.languages || []).map((l) => l.toUpperCase()).join(' · ');
-
-  return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-5 flex flex-col dark:bg-gray-900">
-      <div className="flex items-start gap-3">
-        {expert.photo_url ? (
-          <img src={expert.photo_url} alt={expert.name} className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 object-cover" />
-        ) : (
-          <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800" />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">{expert.name}</div>
-            {expert.verified && (
-              <span title="Verified" className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                <Check className="w-2.5 h-2.5" /> verified
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-slate-600 dark:text-slate-400 truncate">{expert.headline}</div>
-          <div className="mt-1"><StarRow avg={expert.rating_avg} count={expert.rating_count} /></div>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1">
-        {topCats.map((c) => (
-          <span key={c} className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:text-slate-300">{c}</span>
-        ))}
-        {expert.first_session_free && (
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">First session free</span>
-        )}
-        {expert.pricing_model === 'sliding_scale' && (
-          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">Sliding scale</span>
-        )}
-      </div>
-
-      <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-        <span className="inline-flex items-center gap-1"><Globe className="w-3 h-3" />{langs || 'EN'}</span>
-        {expert.hourly_rate_usd ? (
-          <span>${expert.hourly_rate_usd}/hr</span>
-        ) : expert.pricing_model === 'free' ? (
-          <span>Free</span>
-        ) : null}
-      </div>
-
-      {expert.match_breakdown && (
-        <button
-          type="button"
-          onClick={() => setShowWhy((v) => !v)}
-          className="mt-2 self-start text-[11px] font-medium text-rose-600 hover:underline"
-        >
-          {showWhy ? 'Hide' : 'Why these matches?'}
-        </button>
-      )}
-      {showWhy && expert.match_breakdown && (
-        <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-lg p-2">
-          {Object.entries(expert.match_breakdown).map(([k, v]) => (
-            <div key={k} className="flex justify-between">
-              <span className="capitalize">{k.replace(/_/g, ' ')}</span>
-              <span className="font-mono">{Number(v).toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-auto pt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => onView(expert)}
-          className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:border-slate-600"
-        >
-          Profile
-        </button>
-        <button
-          type="button"
-          onClick={() => onBook(expert)}
-          className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
-        >
-          Book consultation
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function formatSlot(iso) {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      weekday: 'short', month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit',
-    });
-  } catch { return iso; }
-}
-
-function BookingModal({ expert, onClose }) {
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
-  const [err, setErr] = useState(null);
-  const [slots, setSlots] = useState(null); // null = loading, [] = none, [...] = available
-  const [external, setExternal] = useState(null); // launch_url string when available
-  const [chosen, setChosen] = useState(null);
-  const [notes, setNotes] = useState('');
-
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.wellbeingExpertSlots(expert.uid)
-      .then((r) => {
-        if (cancelled) return;
-        if (r.external) { setExternal(r.launch_url); setSlots([]); }
-        else { setExternal(null); setSlots(r.slots || []); }
-      })
-      .catch((e) => { if (!cancelled) setErr(e.message || 'Failed to load slots'); });
-    return () => { cancelled = true; };
-  }, [expert.uid]);
-
-  const book = async () => {
-    setBusy(true); setErr(null);
-    try {
-      const payload = external
-        ? {}
-        : { scheduled_at: chosen, duration_minutes: 30, notes: notes || undefined };
-      const r = await api.wellbeingExpertBook(expert.uid, payload);
-      setResult(r);
-      if (r.launch_url && external) window.open(r.launch_url, '_blank', 'noopener,noreferrer');
-    } catch (e) {
-      setErr(e.message || 'Failed to book');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[85vh] overflow-y-auto dark:bg-gray-900"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Book {expert.name}</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{expert.headline}</p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-400">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {!result && (
-          <>
-            {expert.first_session_free && (
-              <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-                First session free with this expert.
-              </div>
-            )}
-
-            {slots === null && <div className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading availability…</div>}
-
-            {slots !== null && external && (
-              <div className="mt-4 rounded-lg bg-slate-50 dark:bg-slate-900 p-3 text-sm text-slate-600 dark:text-slate-400">
-                This expert uses an external scheduler. Clicking "Open scheduler" will open it in a new tab and record your interest in your booking history.
-              </div>
-            )}
-
-            {slots !== null && !external && (
-              <div className="mt-4 space-y-3">
-                <div className="text-sm font-medium text-slate-700 dark:text-slate-300">Pick a time (your local timezone)</div>
-                {slots.length === 0 ? (
-                  <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-                    No internal slots available right now. Please check back later.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-                    {slots.map((s) => (
-                      <button
-                        key={s} type="button" onClick={() => setChosen(s)}
-                        className={`text-left rounded-lg border px-3 py-2 text-xs ${
-                          chosen === s
-                            ? 'border-rose-500 bg-rose-50 text-rose-700 font-medium'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >{formatSlot(s)}</button>
-                    ))}
-                  </div>
-                )}
-                {chosen && (
-                  <div>
-                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Anything the expert should know? (optional)</label>
-                    <textarea
-                      value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={1000}
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={onClose} className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm">Cancel</button>
-              <button
-                onClick={book}
-                disabled={busy || slots === null || (!external && !chosen)}
-                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                {busy ? 'Booking…' : external ? 'Open scheduler' : 'Confirm booking'}
-              </button>
-            </div>
-          </>
-        )}
-
-        {result && (
-          <div className="mt-4 space-y-3">
-            <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 flex items-start gap-2">
-              <Check className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{result.message}</span>
-            </div>
-            {result.launch_url && external && (
-              <a href={result.launch_url} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-rose-600 hover:underline">
-                <Calendar className="w-4 h-4" /> Open scheduler
-              </a>
-            )}
-            <div className="flex justify-end">
-              <button onClick={onClose} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Done</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ExpertDirectory({ wellnessGoals }) {
-  const [matches, setMatches] = useState([]);
-  const [meta, setMeta] = useState({ total_active: 0, filtered_count: 0, view_budget: null });
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState(null);
-
-  const [filters, setFilters] = useState({
-    category: '', language: '', modality: '', price_max: '', q: '',
-  });
-  const LANGUAGE_OPTIONS = [
-    { v: 'en', l: 'English' }, { v: 'es', l: 'Spanish' }, { v: 'fr', l: 'French' },
-    { v: 'de', l: 'German' }, { v: 'pt', l: 'Portuguese' }, { v: 'zh', l: 'Mandarin' },
-    { v: 'ja', l: 'Japanese' }, { v: 'hi', l: 'Hindi' }, { v: 'ar', l: 'Arabic' },
-  ];
-  const [bookingExpert, setBookingExpert] = useState(null);
-  const [tierError, setTierError] = useState(null);
-
-  const tz = useMemo(() => getBrowserTz(), []);
-
-  const categoryLabels = useMemo(() => {
-    const m = new Map();
-    categories.forEach((c) => m.set(c.key, c.label));
-    return m;
-  }, [categories]);
-
-  const load = async () => {
-    setLoading(true); setErr(null);
-    try {
-      const [cats, list] = await Promise.all([
-        api.wellbeingExpertCategories().catch(() => ({ categories: [] })),
-        api.wellbeingExperts({
-          ...filters,
-          tz,
-          want_categories: wellnessGoals,
-          want_languages: ['en'],
-          limit: 6,
-        }),
-      ]);
-      setCategories(cats.categories || []);
-      setMatches(list.matches || []);
-      setMeta({
-        total_active: list.total_active || 0,
-        filtered_count: list.filtered_count || 0,
-        view_budget: list.view_budget || null,
-      });
-    } catch (e) {
-      const msg = (e?.message || '').toLowerCase();
-      if (e?.status === 404 || msg === 'not found') {
-        setMatches([]); setMeta({ total_active: 0, filtered_count: 0, view_budget: null });
-      } else {
-        setErr(e.message || 'Failed to load');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [
-    filters.category, filters.language, filters.modality, filters.price_max, filters.q,
-    JSON.stringify(wellnessGoals || []),
-  ]);
-
-  const handleView = async (expert) => {
-    try {
-      await api.wellbeingExpertGet(expert.uid);
-    } catch (e) {
-      if (e?.status === 402 || (e?.message || '').toLowerCase().includes('tier')) {
-        setTierError(e.data?.message || 'Free tier is capped at 3 matched expert profile views per month. Upgrade to Growth for unlimited matches.');
-        return;
-      }
-      setTierError(e.message || 'Failed to open profile');
-      return;
-    }
-    // Reuse the booking modal as a "Profile" view for v1.
-    setBookingExpert(expert);
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Experts matched to you</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Top {matches.length} of {meta.filtered_count} {meta.filtered_count === 1 ? 'expert' : 'experts'}
-            {meta.total_active ? ` (${meta.total_active} active in directory)` : ''}.
+      ) : (
+        <>
+          <p className="mb-3 text-[13px] text-axal-muted dark:text-gray-400" data-testid="text-checkin-week">
+            {entry
+              ? `You checked in on ${formatDay(entry.day)}. Saving again replaces that entry.`
+              : 'No check-in this week yet.'}
           </p>
-        </div>
-        {meta.view_budget?.views_limit != null && (
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            Free tier: {meta.view_budget.remaining}/{meta.view_budget.views_limit} profile views left this month
+          <div className="space-y-3.5">
+            {CANVAS_SCORES.map((s) => (s.field ? (
+              <div key={s.key}>
+                <ScoreDots
+                  name={s.key}
+                  label={s.label}
+                  low={s.low}
+                  high={s.high}
+                  value={form?.values?.[s.field] ?? null}
+                  onChange={(v) => onScore?.(s.field, v)}
+                  disabled={save.saving}
+                />
+                {errors[s.field] && <p role="alert" className={FIELD.error}>{errors[s.field]}</p>}
+              </div>
+            ) : (
+              <div key={s.key} className="flex flex-wrap items-baseline gap-x-4 gap-y-1" data-testid={`score-${s.key}-not-recorded`}>
+                <span className="min-w-[5.5rem] text-[13px] font-semibold text-axal-ink dark:text-gray-100">{s.label}</span>
+                <NotRecorded reason={NOT_STORED_REASON} />
+              </div>
+            )))}
           </div>
-        )}
-      </div>
 
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-6 gap-2">
-        <div className="md:col-span-2 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text" placeholder="Search experts…"
-            value={filters.q}
-            onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 pl-9 pr-3 py-2 text-sm"
-          />
-        </div>
-        <select
-          value={filters.category}
-          onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
-          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm"
-        >
-          <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c.key} value={c.key}>{c.label}</option>
-          ))}
-        </select>
-        <select
-          value={filters.language}
-          onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
-          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm"
-        >
-          <option value="">Any language</option>
-          {LANGUAGE_OPTIONS.map((o) => (
-            <option key={o.v} value={o.v}>{o.l}</option>
-          ))}
-        </select>
-        <select
-          value={filters.modality}
-          onChange={(e) => setFilters((f) => ({ ...f, modality: e.target.value }))}
-          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm"
-        >
-          <option value="">Any modality</option>
-          <option value="video">Video</option>
-          <option value="phone">Phone</option>
-          <option value="in_person">In person</option>
-          <option value="async_chat">Async chat</option>
-        </select>
-        <select
-          value={filters.price_max}
-          onChange={(e) => setFilters((f) => ({ ...f, price_max: e.target.value }))}
-          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm"
-        >
-          <option value="">Any price</option>
-          <option value="100">≤ $100/hr</option>
-          <option value="200">≤ $200/hr</option>
-          <option value="350">≤ $350/hr</option>
-          <option value="500">≤ $500/hr</option>
-        </select>
-      </div>
-
-      {tierError && (
-        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{tierError}</span>
-          <button onClick={() => setTierError(null)} className="ml-auto text-amber-700"><X className="w-4 h-4" /></button>
-        </div>
-      )}
-      {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
-      {loading && <div className="text-sm text-slate-500 dark:text-slate-400">Loading…</div>}
-      {!loading && !matches.length && (
-        <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          <Filter className="w-5 h-5 mx-auto text-slate-400 mb-1" />
-          No experts match these filters. Try clearing them.
-        </div>
-      )}
-      {!loading && matches.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {matches.map((e) => (
-            <ExpertCard
-              key={e.uid}
-              expert={e}
-              categoryLabels={categoryLabels}
-              onBook={setBookingExpert}
-              onView={handleView}
+          <div className="mt-4">
+            <label htmlFor="checkin-note" className={FIELD.label}>Private note (optional)</label>
+            <textarea
+              id="checkin-note"
+              data-testid="input-checkin-note"
+              rows={3}
+              maxLength={4000}
+              value={form?.note || ''}
+              onChange={(e) => onNote?.(e.target.value)}
+              disabled={save.saving}
+              className={FIELD.input}
             />
+            {errors.free_text && <p role="alert" className={FIELD.error}>{errors.free_text}</p>}
+          </div>
+
+          <details className="mt-3 rounded-axal-md border border-axal-hairline px-3 py-2 dark:border-gray-700" open={moreOpen} data-testid="checkin-more">
+            <summary className="cursor-pointer text-xs font-semibold text-axal-ink dark:text-gray-100">
+              More (optional): mood, focus, connection and topics
+            </summary>
+            <div className="mt-3 space-y-3.5">
+              {MORE_SCORES.map((s) => (
+                <div key={s.key}>
+                  <ScoreDots
+                    name={s.key}
+                    label={s.label}
+                    low={s.low}
+                    high={s.high}
+                    value={form?.values?.[s.field] ?? null}
+                    onChange={(v) => onScore?.(s.field, v)}
+                    disabled={save.saving}
+                  />
+                  {errors[s.field] && <p role="alert" className={FIELD.error}>{errors[s.field]}</p>}
+                </div>
+              ))}
+              <div>
+                <span className={FIELD.label}>Topics</span>
+                <p className={FIELD.note}>Up to {MAX_TAGS}. The experts listed first when you book are the ones who work on these.</p>
+                <div className="mt-2 flex flex-wrap gap-1.5" data-testid="checkin-topics">
+                  {TOPICS.map((t) => {
+                    const on = (form?.tags || []).includes(t.tag);
+                    return (
+                      <button
+                        key={t.tag}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={save.saving}
+                        onClick={() => onTopic?.(t.tag)}
+                        className={`rounded-axal-pill border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          on
+                            ? 'border-axal-violet/40 bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300'
+                            : 'border-axal-hairline bg-white text-axal-muted hover:border-axal-violet/40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {errors.tags && <p role="alert" className={FIELD.error}>{errors.tags}</p>}
+              </div>
+            </div>
+          </details>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
+            <span className="inline-flex items-center gap-1.5 text-xs text-axal-muted dark:text-gray-400">
+              <Lock size={12} aria-hidden="true" /> Stored encrypted. Only you can read it.
+            </span>
+            <button type="button" className={BTN.primary} onClick={onSave} disabled={save.saving} data-testid="button-save-checkin">
+              {save.saving ? 'Saving…' : entry ? 'Update this week' : 'Save check-in'}
+            </button>
+          </div>
+          <div className="mt-2"><Outcome ok={save.ok} error={save.error || errors.day} testId="checkin" /></div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// My past weeks
+// ---------------------------------------------------------------------------
+export function PastWeeksCard({ status, weeks = [], onRetry }) {
+  const recorded = weeks.filter((w) => w.entries > 0).length;
+  const unread = weeks.filter((w) => w.unread);
+  const extra = MORE_SCORES.filter((s) => weeks.some((w) => w.values?.[s.field] != null));
+  return (
+    <Card data-testid="card-past-weeks">
+      <CardHead title="My past weeks" meta={status === 'ready' && weeks.length ? `${weeks.length} weeks · 1 = low · 5 = high` : null} />
+      {status === 'loading' ? <Skeleton.Text lines={5} /> : status === 'unreadable' ? (
+        <Unreadable what="Your past weeks" claim="This is not a sign that you skipped them." onRetry={onRetry} />
+      ) : !recorded && !unread.length ? (
+        <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="text-past-weeks-empty">
+          No past weeks yet. Each weekly check-in adds a point to these lines.
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {CANVAS_SCORES.map((s) => (
+              <li key={s.key} className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-3">
+                <span className="text-xs font-semibold text-axal-ink dark:text-gray-100">{s.label}</span>
+                {s.field
+                  ? <Sparkline series={weeks.map((w) => w.values?.[s.field] ?? null)} label={s.label} testId={`spark-${s.key}`} />
+                  : <Unrecorded reason={NOT_STORED_REASON}>Not recorded</Unrecorded>}
+              </li>
+            ))}
+          </ul>
+          {extra.length > 0 && (
+            <>
+              <SectionLabel className="mt-3">Also recorded</SectionLabel>
+              <ul className="mt-1.5 space-y-2">
+                {extra.map((s) => (
+                  <li key={s.key} className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-3">
+                    <span className="text-xs font-semibold text-axal-ink dark:text-gray-100">{s.label}</span>
+                    <Sparkline series={weeks.map((w) => w.values?.[s.field] ?? null)} label={s.label} testId={`spark-${s.key}`} />
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="mt-3 space-y-1 text-xs text-axal-muted dark:text-gray-400">
+            <p data-testid="text-past-weeks-count">
+              {recorded} of {weeks.length} weeks have a check-in. A week without one is a gap in the line, never a zero.
+            </p>
+            <p>Support and decisions are not recorded: the check-in has no field for either yet.</p>
+            {unread.length > 0 && (
+              <p data-testid="text-past-weeks-unread">
+                Weeks up to {formatDay(unread[unread.length - 1].week)} are left blank: they are older than the {HISTORY_ROW_CAP} most recent check-ins this page reads.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// My bookings
+// ---------------------------------------------------------------------------
+function RateStars({ booking, state, onRate }) {
+  if (state?.stars && !state.busy && !state.error) {
+    return <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300" role="status">Rated {state.stars} of 5.</span>;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1" data-testid={`rate-${booking.uid}`}>
+      <span className="text-xs text-axal-muted dark:text-gray-400">Rate:</span>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          disabled={state?.busy}
+          onClick={() => onRate?.(booking, n)}
+          aria-label={`Rate ${booking.expert_name || 'this expert'} ${n} of 5`}
+          className="rounded p-0.5 text-amber-500 hover:text-amber-600 disabled:opacity-50"
+        >
+          <Star size={14} aria-hidden="true" />
+        </button>
+      ))}
+      {state?.error && <span role="alert" className="text-xs text-red-700 dark:text-red-300">{state.error}</span>}
+    </span>
+  );
+}
+
+function BookingRow({ booking, past, now, rate, onRate, timeZone }) {
+  const status = bookingStatus(booking.status);
+  const when = formatWhen(booking.scheduled_at, { timeZone });
+  const call = safeHref(booking.meet_link);
+  return (
+    <li className="flex flex-wrap items-start justify-between gap-2 py-2.5" data-testid={`booking-${booking.uid}`}>
+      <div className="min-w-0">
+        <div className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">
+          {booking.expert_name || <Unrecorded reason="The booking names no expert.">Expert not recorded</Unrecorded>}
+          {' · '}
+          <Unrecorded reason="A booking does not record which service it was for.">service not recorded</Unrecorded>
+        </div>
+        <div className="text-xs tabular-nums text-axal-muted dark:text-gray-400">
+          {when || <Unrecorded reason="Booked through the expert’s own scheduler, which keeps the time.">Time not recorded</Unrecorded>}
+          {' · '}
+          {Number.isFinite(Number(booking.duration_minutes)) ? `${booking.duration_minutes} min` : 'length not recorded'}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill tone={status.tone}>{status.label}</Pill>
+        {!past && call && <a href={call} target="_blank" rel="noopener noreferrer" className={BTN.link}>Join call <ExternalLink size={12} aria-hidden="true" /></a>}
+        {past && canRate(booking, now) && <RateStars booking={booking} state={rate} onRate={onRate} />}
+      </div>
+    </li>
+  );
+}
+
+export function MyBookingsCard({
+  status, bookings = [], tab = 'upcoming', onTab, now = Date.now(), rated = {}, onRate, onRetry, timeZone,
+}) {
+  const { upcoming, past } = splitBookings(bookings, now);
+  const rows = tab === 'past' ? past : upcoming;
+  const tabs = [['upcoming', 'Upcoming', upcoming.length], ['past', 'Past', past.length]];
+  return (
+    <Card data-testid="card-my-bookings">
+      <CardHead title="My bookings">
+        <div className="flex gap-1" role="tablist" aria-label="Bookings">
+          {tabs.map(([key, label, n]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => onTab?.(key)}
+              className={`rounded-axal-xs px-2.5 py-1.5 text-[12.5px] font-semibold ${
+                tab === key ? 'bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'
+              }`}
+            >
+              {label}{status === 'ready' ? ` · ${n}` : ''}
+            </button>
           ))}
         </div>
+      </CardHead>
+      {status === 'loading' ? <Skeleton.Text lines={3} /> : status === 'unreadable' ? (
+        <Unreadable what="Your bookings" claim="This is not a sign that you have none." onRetry={onRetry} />
+      ) : rows.length ? (
+        <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid={`list-bookings-${tab}`}>
+          {rows.map((b) => (
+            <BookingRow key={b.uid} booking={b} past={tab === 'past'} now={now} rate={rated[b.uid]} onRate={onRate} timeZone={timeZone} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid={`text-bookings-${tab}-empty`}>
+          {tab === 'past' ? 'No past bookings.' : 'No upcoming bookings.'}
+        </p>
       )}
-
-      {bookingExpert && (
-        <BookingModal expert={bookingExpert} onClose={() => setBookingExpert(null)} />
+      {status === 'ready' && tab === 'upcoming' && upcoming.length > 0 && (
+        <p className="mt-2 text-xs text-axal-muted dark:text-gray-400" data-testid="text-cancel-unavailable">
+          Cancelling a booking from this page is not available yet.
+        </p>
       )}
-    </div>
+      {status === 'ready' && tab === 'past' && past.some((b) => canRate(b, now)) && (
+        <p className="mt-2 text-xs text-axal-muted dark:text-gray-400">One rating per expert; rating again replaces it.</p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-3 text-xs text-axal-muted dark:border-gray-700 dark:text-gray-400">
+        <span>Only you and the expert see a booking. A booking made here carries no note, and none records its service.</span>
+        <Link to="/wellbeing/book" className={BTN.link} data-testid="link-book-expert">Book an expert →</Link>
+      </div>
+    </Card>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Resources
 // ---------------------------------------------------------------------------
-function ResourceList({ resources }) {
-  const grouped = useMemo(() => {
-    const g = {};
-    resources.forEach((r) => {
-      if (!g[r.category]) g[r.category] = [];
-      g[r.category].push(r);
-    });
-    return g;
-  }, [resources]);
-
+export function ResourcesCard({ status, resources = [], expanded = false, onToggle, onRetry, isAdmin = false }) {
+  const shown = expanded ? resources : resources.slice(0, 3);
   return (
-    <div className="space-y-6">
-      {Object.entries(RESOURCE_CATEGORY_META).map(([cat, meta]) => {
-        const items = grouped[cat] || [];
-        if (!items.length) return null;
-        const Icon = meta.icon;
-        return (
-          <div key={cat}>
-            <div className="flex items-center gap-2 mb-2">
-              <Icon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-              <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{meta.label}</h4>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {items.map((r) => (
-                <a
-                  key={r.id} href={r.url || '#'} target="_blank" rel="noopener noreferrer"
-                  className="block rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-4 hover:border-slate-300 dark:border-slate-600 hover:shadow-sm transition dark:bg-gray-900"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-medium text-slate-900 dark:text-slate-100 leading-tight">{r.name}</div>
-                    {r.url && <ExternalLink className="w-3.5 h-3.5 text-slate-400 mt-1 shrink-0" />}
-                  </div>
-                  {r.description && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{r.description}</p>}
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {r.is_24_7 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">24/7</span>}
-                    {r.is_free && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">Free</span>}
-                    {r.region && <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400 uppercase">{r.region}</span>}
-                  </div>
-                </a>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <Card data-testid="card-resources">
+      <CardHead title="Resources for you" meta={status === 'ready' ? `${resources.length} in the library` : null} />
+      {status === 'loading' ? <Skeleton.Text lines={3} /> : status === 'unreadable' ? (
+        <Unreadable what="The resource library" claim="This is not a sign that it is empty." onRetry={onRetry} />
+      ) : !resources.length ? (
+        <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="text-resources-empty">No resources yet.</p>
+      ) : (
+        <>
+          <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="list-resources">
+            {shown.map((r) => {
+              const href = safeHref(r.url);
+              const facts = resourceFacts(r);
+              return (
+                <li key={r.id ?? r.uid} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Pill tone={r.category === 'hotline' ? 'warn' : 'neutral'}>{resourceKind(r.category)}</Pill>
+                    {href ? (
+                      <a href={href} target="_blank" rel="noopener noreferrer" className="truncate text-[13px] font-semibold text-axal-ink hover:text-axal-violet dark:text-gray-100">
+                        {r.name}
+                      </a>
+                    ) : (
+                      <span className="truncate text-[13px] font-semibold text-axal-ink dark:text-gray-100">{r.name}</span>
+                    )}
+                  </span>
+                  {facts.length > 0 && <span className="text-xs text-axal-muted dark:text-gray-400">{facts.join(' · ')}</span>}
+                </li>
+              );
+            })}
+          </ul>
+          {resources.length > 3 && (
+            <button type="button" className={`${BTN.link} mt-2`} onClick={onToggle} data-testid="button-resources-toggle">
+              {expanded ? 'Show fewer' : `Show all ${resources.length}`}
+            </button>
+          )}
+        </>
+      )}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-3 text-xs text-axal-muted dark:border-gray-700 dark:text-gray-400">
+        <span>In the library’s own order. Nothing here is chosen from your check-ins, and the library records no reading or listening time.</span>
+        {isAdmin && <Link to="/admin/wellbeing/resources" className={BTN.link} data-testid="link-manage-library">Manage the library →</Link>}
+      </div>
+    </Card>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Admin aggregate
+// Admin aggregate (admin view only)
 // ---------------------------------------------------------------------------
+// D570: the six scores `/aggregate` actually returns. It used to read
+// `support` and `decisions`, which that route never sends, so two of its five
+// tiles were always a dash and the three it does send were never shown.
+const AGGREGATE_LABELS = { mood: 'Mood', stress: 'Stress', sleep: 'Sleep', energy: 'Energy', focus: 'Focus', social: 'Connection' };
+
+function PulseTile({ label, children }) {
+  return (
+    <div className="rounded-axal-md bg-axal-ground p-3">
+      <SectionLabel>{label}</SectionLabel>
+      <div className="text-lg font-semibold tabular-nums text-axal-ink sm:text-2xl dark:text-gray-100">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The pulse's founder and submission counts. `/aggregate` rounds both down
+ * to a multiple of five, so each shows the range it stands for
+ * (`countRange`): printed bare, a cohort of three founders read "0".
+ */
+export function PulseCounts({ data }) {
+  const range = (n) => countRange(n)
+    ?? <span className="text-sm"><Unrecorded reason="The pulse did not return this count.">Not recorded</Unrecorded></span>;
+  return (
+    <div className="mb-4" data-testid="pulse-counts">
+      <div className="grid grid-cols-3 gap-3">
+        <PulseTile label="Founders">{range(data?.cohort_size)}</PulseTile>
+        <PulseTile label="Submissions">{range(data?.submissions)}</PulseTile>
+        <PulseTile label="Window">{data?.window_days}d</PulseTile>
+      </div>
+      <p className="mt-2 text-xs text-axal-muted dark:text-gray-400">
+        Counts are rounded down to a multiple of five so no founder can be singled out, and are shown as the range they stand for.
+      </p>
+    </div>
+  );
+}
+
 function AdminAggregate() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -774,57 +439,44 @@ function AdminAggregate() {
   };
   useEffect(() => { load(days); /* eslint-disable-next-line */ }, [days]);
 
-  const labels = { stress: 'Stress', sleep: 'Sleep', support: 'Support', decisions: 'Decisions', energy: 'Energy' };
-
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-6 dark:bg-gray-900">
-      <div className="flex items-center justify-between mb-3">
+    <Card padding="lg" data-testid="card-admin-aggregate">
+      <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Anonymized founder pulse</h3>
+          <BarChart3 className="h-5 w-5 text-axal-muted dark:text-gray-400" />
+          <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Anonymized founder pulse</h2>
         </div>
         <select
           value={days} onChange={(e) => setDays(Number(e.target.value))}
-          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm"
+          className="rounded-axal-sm border border-axal-hairline bg-white px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
         >
           <option value={30}>Last 30 days</option>
           <option value={90}>Last 90 days</option>
         </select>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 flex items-start gap-1.5">
-        <Lock className="w-3 h-3 mt-0.5 shrink-0" />
+      <p className="mb-4 flex items-start gap-1.5 text-xs text-axal-muted dark:text-gray-400">
+        <Lock className="mt-0.5 h-3 w-3 shrink-0" />
         Aggregate-only. We never show per-founder check-ins. Withheld below the minimum cohort size to prevent re-identification.
       </p>
-      {err && <div className="text-sm text-red-600">{err}</div>}
-      {!data && !err && <div className="text-sm text-slate-500 dark:text-slate-400">Loading…</div>}
+      {err && <div className="text-sm text-red-600 dark:text-red-300">{err}</div>}
+      {!data && !err && <Skeleton.Text lines={2} />}
       {data && (
         <>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-900 p-3">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Founders</div>
-              <div className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{data.cohort_size}</div>
-            </div>
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-900 p-3">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Submissions</div>
-              <div className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{data.submissions}</div>
-            </div>
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-900 p-3">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Window</div>
-              <div className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{data.window_days}d</div>
-            </div>
-          </div>
+          <PulseCounts data={data} />
           {data.insufficient_data ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2 rounded-axal-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>Below the minimum cohort of {data.min_cohort} unique founders. Averages are withheld so a single response can't be inferred.</span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-              {Object.entries(labels).map(([k, label]) => (
-                <div key={k} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
-                  <div className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mt-1">
-                    {data.averages?.[k] ?? '—'}<span className="text-sm text-slate-400 font-normal">/5</span>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              {ROUTE_SCORE_KEYS.map((k) => (
+                <div key={k} className="rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700">
+                  <SectionLabel>{AGGREGATE_LABELS[k]}</SectionLabel>
+                  <div className="mt-1 text-2xl font-semibold text-axal-ink dark:text-gray-100">
+                    {data.averages?.[k] != null
+                      ? <>{data.averages[k]}<span className="text-sm font-normal text-axal-faint">/5</span></>
+                      : <span className="text-sm"><Unrecorded reason="No check-in in this window answered this score.">Not recorded</Unrecorded></span>}
                   </div>
                 </div>
               ))}
@@ -832,7 +484,7 @@ function AdminAggregate() {
           )}
         </>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -843,129 +495,180 @@ export default function WellbeingPage() {
   const user = readUser();
   const role = (user.role || '').toLowerCase();
   const viewMode = (typeof localStorage !== 'undefined' && localStorage.getItem('viewMode')) || role;
-
-  const [daily, setDaily] = useState({ pulses: [], submitted_today: false });
-  const [resources, setResources] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState(null);
-
   const isInvestor = role === 'investor';
-  const showAggregate = role === 'admin' && viewMode === 'admin';
-  const canCheckIn = role === 'founder' || role === 'admin';
+  const isAdmin = role === 'admin';
+  const showAggregate = isAdmin && viewMode === 'admin';
 
-  const load = async () => {
-    setLoading(true); setErr(null);
-    // D332 — a failed read used to be quietly rewritten into the same shape
-    // as a genuinely empty one (`quiet404`), so a broken `/resources` or
-    // `/daily` route rendered exactly like "no resources yet" / "nothing
-    // logged yet" instead of a failure. Both routes are unconditionally
-    // mounted for a non-investor sign-in, so a 404 here is a real defect,
-    // not a shape this page should absorb — it now reaches the outer catch
-    // like any other failed read.
+  const [history, setHistory] = useState({ status: 'loading', checkins: [], today: null });
+  const [form, setForm] = useState(() => formFromEntry(null));
+  const [save, setSave] = useState(IDLE_SAVE);
+  const [bookings, setBookings] = useState({ status: 'loading', rows: [] });
+  const [tab, setTab] = useState('upcoming');
+  const [rated, setRated] = useState({});
+  const [resources, setResources] = useState({ status: 'loading', rows: [] });
+  const [expanded, setExpanded] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    setHistory((h) => ({ ...h, status: 'loading' }));
     try {
-      const [res, d] = await Promise.all([
-        api.wellbeingResources(),
-        canCheckIn
-          ? api.wellbeingDaily(30)
-          : Promise.resolve({ pulses: [], submitted_today: false }),
-      ]);
-      setResources(res.resources || []);
-      setDaily(d);
+      const r = await api.wellbeingMyCheckins();
+      const checkins = Array.isArray(r?.checkins) ? r.checkins : [];
+      const today = isDay(r?.today) ? r.today : utcToday();
+      setHistory({ status: 'ready', checkins, today });
+      // The form starts from what this week already holds, so a save sends
+      // every stored value back rather than erasing the ones not touched.
+      setForm(formFromEntry(thisWeekEntry(checkins, today)));
+    } catch {
+      setHistory({ status: 'unreadable', checkins: [], today: null });
+    }
+  }, []);
+
+  const loadBookings = useCallback(async () => {
+    setBookings((b) => ({ ...b, status: 'loading' }));
+    try {
+      const r = await api.wellbeingMyBookings();
+      setBookings({ status: 'ready', rows: Array.isArray(r?.bookings) ? r.bookings : [] });
+    } catch {
+      setBookings({ status: 'unreadable', rows: [] });
+    }
+  }, []);
+
+  const loadResources = useCallback(async () => {
+    setResources((r) => ({ ...r, status: 'loading' }));
+    try {
+      const r = await api.wellbeingResources();
+      setResources({ status: 'ready', rows: Array.isArray(r?.resources) ? r.resources : [] });
+    } catch {
+      setResources({ status: 'unreadable', rows: [] });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isInvestor) return;
+    loadHistory();
+    loadBookings();
+    loadResources();
+  }, [isInvestor, loadHistory, loadBookings, loadResources]);
+
+  const entry = history.status === 'ready' ? thisWeekEntry(history.checkins, history.today) : null;
+  const weeks = useMemo(
+    () => (history.status === 'ready' ? pastWeeks(history.checkins, history.today) : []),
+    [history],
+  );
+
+  const setScore = (field, value) => {
+    setSave(IDLE_SAVE);
+    setForm((f) => ({ ...f, values: { ...f.values, [field]: value } }));
+  };
+  const setNote = (note) => { setSave(IDLE_SAVE); setForm((f) => ({ ...f, note })); };
+  const toggleTopic = (tag) => {
+    setSave(IDLE_SAVE);
+    setForm((f) => {
+      const tags = f.tags.includes(tag) ? f.tags.filter((t) => t !== tag) : [...f.tags, tag].slice(0, MAX_TAGS);
+      return { ...f, tags };
+    });
+  };
+
+  const submit = async () => {
+    if (history.status !== 'ready') return;
+    const body = buildCheckinPayload({ ...form, entry });
+    if (!answeredCount(body)) {
+      setSave({ ...IDLE_SAVE, error: 'Answer at least one score before saving.' });
+      return;
+    }
+    setSave({ ...IDLE_SAVE, saving: true });
+    try {
+      await api.wellbeingSubmit(body);
+      setSave({
+        ...IDLE_SAVE,
+        ok: entry ? 'Updated this week’s check-in.' : `Saved for the week of ${formatDay(weekStart(history.today))}.`,
+      });
+      await loadHistory();
     } catch (e) {
-      setErr(e.message || 'Failed to load');
-    } finally {
-      setLoading(false);
+      const fields = e?.status === 400 && e?.data?.fields && typeof e.data.fields === 'object' ? e.data.fields : {};
+      setSave({ ...IDLE_SAVE, fieldErrors: fields, error: e?.message || 'The check-in could not be saved.' });
     }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  const rate = async (booking, stars) => {
+    setRated((r) => ({ ...r, [booking.uid]: { busy: true } }));
+    try {
+      await api.wellbeingExpertRate(booking.expert_uid, { stars });
+      setRated((r) => ({ ...r, [booking.uid]: { stars } }));
+    } catch (e) {
+      setRated((r) => ({ ...r, [booking.uid]: { error: e?.message || 'The rating could not be saved.' } }));
+    }
+  };
 
   if (isInvestor) {
     return (
-      <div className="p-6 max-w-3xl">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <Heart className="w-6 h-6 text-rose-500" /> Founder Wellbeing
+      <div className="max-w-3xl">
+        <h1 className="flex items-center gap-2 text-2xl font-extrabold text-axal-ink dark:text-gray-100">
+          <Heart className="h-6 w-6 text-rose-500" /> Wellbeing
         </h1>
         <PageExplainer pageKey="wellbeing" />
-        <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-6 text-sm text-slate-600 dark:text-slate-400 dark:bg-gray-900">
+        <Card padding="lg" className="mt-4 text-sm text-axal-muted dark:text-gray-400">
           Wellbeing data is private to founders and admin operators. Investors do not have access.
-        </div>
+        </Card>
       </div>
     );
   }
 
-  // Initial slider values from today's pulse if present.
-  const todays = (daily.pulses || []).find((p) => p.day === daily.today);
-  const initial = todays ? {
-    mood: todays.mood ?? 3, stress: todays.stress ?? 3, sleep: todays.sleep ?? 3,
-    energy: todays.energy ?? 3, focus: todays.focus ?? 3, social: todays.social ?? 3,
-  } : null;
-
-  // Top categories from recent tags = wellness goals → expert pre-match.
-  const wellnessGoals = useMemo(() => {
-    const counts = new Map();
-    (daily.pulses || []).forEach((p) => {
-      (p.tags || []).forEach((t) => counts.set(t, (counts.get(t) || 0) + 1));
-    });
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k);
-  }, [daily.pulses]);
-
   return (
-    <div className="p-6 max-w-7xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <Heart className="w-6 h-6 text-rose-500" /> Founder Wellbeing
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Daily check-ins, a curated directory of vetted experts, and crisis resources.
-          Your individual answers are encrypted at rest and never shared with investors.
-        </p>
-      </div>
-
-      {err && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
-      {loading && <div className="text-sm text-slate-500 dark:text-slate-400">Loading…</div>}
-
-      {!loading && (
-        <div className="space-y-6">
-          {showAggregate && <AdminAggregate />}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              {canCheckIn && (
-                <DailyPulseCard
-                  alreadyToday={!!daily.submitted_today}
-                  initialValues={initial}
-                  initialTags={todays?.tags || []}
-                  onSubmitted={load}
-                />
-              )}
-            </div>
-            <div className="space-y-6">
-              {canCheckIn && <DailyChart pulses={daily.pulses || []} />}
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-5 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  <Lock className="w-3.5 h-3.5" /> Privacy
-                </div>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Daily answers stored encrypted at rest.</li>
-                  <li>Only you can read your individual check-ins.</li>
-                  <li>Admins see only anonymized averages above a minimum cohort.</li>
-                  <li>Never shared with investors or fed into Market Intelligence.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <ExpertDirectory wellnessGoals={wellnessGoals} />
-
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Resource directory</h3>
-              <span className="text-xs text-slate-500 dark:text-slate-400">{resources.length} curated</span>
-            </div>
-            <ResourceList resources={resources} />
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]" data-testid="wellbeing-home">
+      <section className="min-w-0 space-y-4" aria-label="Wellbeing">
+        <PageHeader
+          title="Wellbeing"
+          sub="A weekly check-in, your bookings with experts, and resources. Check-ins are stored encrypted; only you can read them."
+        />
+        {showAggregate && <AdminAggregate />}
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+          <CheckinCard
+            status={history.status}
+            today={history.today}
+            entry={entry}
+            form={form}
+            save={save}
+            onScore={setScore}
+            onNote={setNote}
+            onTopic={toggleTopic}
+            onSave={submit}
+            onRetry={loadHistory}
+          />
+          <div className="space-y-4">
+            <PastWeeksCard status={history.status} weeks={weeks} onRetry={loadHistory} />
+            <MyBookingsCard
+              status={bookings.status}
+              bookings={bookings.rows}
+              tab={tab}
+              onTab={setTab}
+              rated={rated}
+              onRate={rate}
+              onRetry={loadBookings}
+            />
+            <ResourcesCard
+              status={resources.status}
+              resources={resources.rows}
+              expanded={expanded}
+              onToggle={() => setExpanded((v) => !v)}
+              onRetry={loadResources}
+              isAdmin={isAdmin}
+            />
           </div>
         </div>
-      )}
+      </section>
+      <WorkerRail
+        workspace="Wellbeing"
+        role="founder"
+        className="self-start lg:sticky lg:top-4"
+        stance="Private by design"
+        note="Eadwyn never reads your check-ins, your notes or your bookings. All it can read back on this page is a count of the resource library."
+        coverage={homeCoverage(resources.status === 'ready' ? resources.rows : null)}
+        coverageNote="Counts from the resource library only. Nothing you write on this page is sent to a model."
+        unavailable={[
+          ['How your scores moved', 'Describing your weeks would mean sending your check-ins to a model. They stay private to you, so this is not offered.'],
+        ]}
+      />
     </div>
   );
 }

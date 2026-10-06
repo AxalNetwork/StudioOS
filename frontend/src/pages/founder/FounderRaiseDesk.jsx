@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Folder, Landmark, Scale, Sparkles, Target } from 'lucide-react';
-import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -9,6 +9,7 @@ import useAiSpend from '../../hooks/useAiSpend';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderRaiseDesk.css';
+import { LensNavLink } from '../../workspaces/lens';
 
 // Six labels, six routes — A4's `anchR`, in its order. This was a six-deep
 // ternary chain ending in an `<a href="#raise-…">` fallback no label could
@@ -133,7 +134,7 @@ export default function FounderRaiseDesk() {
         <header className="raise-hero">
           <div className="raise-heading"><div><h1>Get capital, stay legal</h1><p>The highest-stakes page in the product. Its model menu leads with quality, because a wrong answer here costs more than tokens.</p></div>
           </div>
-          <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
+          <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <LensNavLink data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label} className={zonePillClass}>{label}</LensNavLink>)}</nav>
         </header>
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
         <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} projectId={projectId} fillsOn={fillsOn} ai={ai} />

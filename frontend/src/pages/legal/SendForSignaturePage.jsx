@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, Pill, SectionLabel, Unrecorded, Unreadable, WorkerRail } from '../../ui';
+import { Card, Pill, RailFrame, SectionLabel, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 
 /**
  * Send for Signature — /legal/send, and /legal/send?envelope=<id> (D411).
@@ -744,44 +744,48 @@ export default function SendForSignaturePage() {
     ].filter(Boolean);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto grid gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]">
-      <main className="min-w-0">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <Send className="w-6 h-6 text-violet-600" /> Send for signature
-        </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
-          One recipient per envelope. They sign in the browser from a private link, and you are notified when it is executed.
-        </p>
+    <RailFrame
+      rail={(
+        <WorkerRail
+          workspace="Send for signature"
+          // A literal, and the right one: the canvas draws this page in violet
+          // (#7c3aed) for every role it serves, which is the founder accent.
+          // branch_rail_mount.test.mjs caps computed rail roles at five.
+          role="founder"
+          stance="You choose, fill and send"
+          note="Nothing here is drafted for you. The document is the template’s own text with your values in it, and it is fixed and hashed when it is sent."
+          coverage={coverage}
+          unavailable={picker?.absent ? [
+            ['Pre-fill', picker.absent.prefill],
+            ['Pre-send checks', picker.absent.pre_send_checks],
+            ['Signing order', picker.absent.ordered_signers],
+          ].filter(([, why]) => why) : []}
+        />
+      )}
+    >
+      <div className="p-6 max-w-6xl mx-auto">
+        <main className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Send className="w-6 h-6 text-violet-600" /> Send for signature
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
+            One recipient per envelope. They sign in the browser from a private link, and you are notified when it is executed.
+          </p>
 
-        {envelopeId ? (
-          <>
-            {pendingNote && <p className="mb-4 text-sm text-amber-800 dark:text-amber-300" role="status">{pendingNote}</p>}
-            <EnvelopeStatus key={envelopeId} id={envelopeId} />
-          </>
-        ) : pickerErr ? (
-          <Unreadable what="Your templates" claim={pickerErr} onRetry={loadPicker} />
-        ) : !picker ? (
-          <div className="flex items-center gap-2 text-sm text-gray-500 py-10 justify-center"><Loader2 size={15} className="animate-spin" /> Loading templates…</div>
-        ) : (
-          <Compose picker={picker} onSent={onSent} />
-        )}
-      </main>
-      <WorkerRail
-        workspace="Send for signature"
-        // A literal, and the right one: the canvas draws this page in violet
-        // (#7c3aed) for every role it serves, which is the founder accent.
-        // branch_rail_mount.test.mjs caps computed rail roles at five.
-        role="founder"
-        className="self-start lg:sticky lg:top-4"
-        stance="You choose, fill and send"
-        note="Nothing here is drafted for you. The document is the template’s own text with your values in it, and it is fixed and hashed when it is sent."
-        coverage={coverage}
-        unavailable={picker?.absent ? [
-          ['Pre-fill', picker.absent.prefill],
-          ['Pre-send checks', picker.absent.pre_send_checks],
-          ['Signing order', picker.absent.ordered_signers],
-        ].filter(([, why]) => why) : []}
-      />
-    </div>
+          {envelopeId ? (
+            <>
+              {pendingNote && <p className="mb-4 text-sm text-amber-800 dark:text-amber-300" role="status">{pendingNote}</p>}
+              <EnvelopeStatus key={envelopeId} id={envelopeId} />
+            </>
+          ) : pickerErr ? (
+            <Unreadable what="Your templates" claim={pickerErr} onRetry={loadPicker} />
+          ) : !picker ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500 py-10 justify-center"><Loader2 size={15} className="animate-spin" /> Loading templates…</div>
+          ) : (
+            <Compose picker={picker} onSent={onSent} />
+          )}
+        </main>
+      </div>
+    </RailFrame>
   );
 }

@@ -9,6 +9,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { DependenciesDialog, ScenarioDialog, RiskUnavailable } from './RoadmapDialogs';
+import { LensLink } from '../../workspaces/lens';
 
 /**
  * Build · Roadmap (FB3). Task #176.
@@ -123,11 +124,11 @@ export default function FounderBuildRoadmap() {
               <div><h1>Roadmap</h1><p className="fb-roadmap-subtitle">Timeline, dependency chain and saved scenarios for the selected startup.</p></div>
             </div>
             <nav className="fb-roadmap-zone-nav" aria-label="Build sections">
-              <Link to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`}>This week</Link>
-              <Link to={`/build/board${selectedId ? `?project_id=${selectedId}` : ''}`}>Board</Link>
-              <Link to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`} className="is-active" data-testid="link-roadmap-zone">Roadmap</Link>
-              <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
-              <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
+              <LensLink to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`}>This week</LensLink>
+              <LensLink to={`/build/board${selectedId ? `?project_id=${selectedId}` : ''}`}>Board</LensLink>
+              <LensLink to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`} className="is-active" data-testid="link-roadmap-zone">Roadmap</LensLink>
+              <LensLink to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</LensLink>
+              <LensLink to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</LensLink>
             </nav>
             <ZoneToolbar
               filters={founderZoneFilters('build/roadmap', { value: view, onChange: setView })}

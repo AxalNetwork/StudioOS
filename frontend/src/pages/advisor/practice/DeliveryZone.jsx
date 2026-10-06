@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
@@ -14,6 +15,14 @@ import { formatDateTime } from '../advisory/kit';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+import DeliverablesByClient, { DeliverableEditor } from './DeliverablesByClient';
+
+/**
+ * The chip keys a `?view=` may open the page on. D571: the Ops canvas's
+ * `/practice/deliverables` is this zone grouped by client, and that address
+ * redirects here with `?view=by_client` rather than drawing a second list.
+ */
+const VIEWS = new Set(['all', 'by_client', 'unopened', 'opened', 'draft']);
 
 /**
  * Practice · Delivery — canvas PR3, `/practice/delivery`.
@@ -48,8 +57,10 @@ import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 
 export default function DeliveryZone() {
   // 'all', as on the other two Practice zones: every instrument reads the whole
-  // record, and a narrowed default would open the page mid-filter.
-  const [filter, setFilter] = useState('all');
+  // record, and a narrowed default would open the page mid-filter. A `?view=`
+  // naming a chip opens on that chip instead (D571, `/practice/deliverables`).
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState(() => (VIEWS.has(searchParams.get('view')) ? searchParams.get('view') : 'all'));
   const [state, setState] = useState({
     loading: true, error: '', items: [], totals: null,
     sessions: [], reviews: {}, sessionsUnavailable: false,
@@ -61,6 +72,9 @@ export default function DeliveryZone() {
   const [trailFor, setTrailFor] = useState(null);
   const [nudging, setNudging] = useState(false);
   const [engagements, setEngagements] = useState([]);
+  // D571 — one row open for an edit, one for an attach, in either view.
+  const [editing, setEditing] = useState(null);
+  const [attaching, setAttaching] = useState(null);
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
@@ -143,12 +157,45 @@ export default function DeliveryZone() {
     return [...items].sort((a, b) => b.version_count - a.version_count)[0] || null;
   }, [items, trailFor]);
 
-  const act = async (key, fn, failure) => {
+  // `success`, where given, is said once the write lands (D571: a write shows
+  // what it did, not only what it refused).
+  const act = async (key, fn, failure, success) => {
     setBusy(key); setNote(null);
-    try { await fn(); await load(); }
+    try {
+      await fn();
+      if (success) setNote({ ok: true, text: success });
+      await load();
+    }
     catch (error) { setNote({ ok: false, text: error?.message || failure }); }
     finally { setBusy(''); }
   };
+
+  /**
+   * D571 — an edit or an attach answers in two places. A refusal is handed
+   * back to the form that caused it, which stays open; a success closes the
+   * form, reloads, and is said above the list.
+   */
+  const write = async (key, fn, success, failure) => {
+    setBusy(key); setNote(null);
+    try {
+      await fn();
+      setEditing(null); setAttaching(null);
+      setNote({ ok: true, text: success });
+      await load();
+      return null;
+    } catch (error) {
+      return error?.message || failure;
+    } finally { setBusy(''); }
+  };
+
+  const saveEdit = (item, body) => write(`e-${item.id}`,
+    () => api.updateMyAdvisorDeliverable(item.id, body),
+    `Saved “${body.title}”.`, 'That work product could not be saved. Nothing was changed.');
+
+  const attachLink = (item, body) => write(`a-${item.id}`,
+    () => api.addMyAdvisorDeliverableVersion(item.id, body),
+    `Attached to v${Number(item.version_count || 0) + 1} of “${item.title}”, not sent.`,
+    'That link could not be attached. Nothing was recorded.');
 
   const create = () => act('new', async () => {
     await api.createMyAdvisorDeliverable({
@@ -164,11 +211,13 @@ export default function DeliveryZone() {
 
   const addVersion = (item) => act(`v-${item.id}`,
     () => api.addMyAdvisorDeliverableVersion(item.id, {}),
-    'That version could not be added.');
+    'That version could not be added.',
+    `Added v${Number(item.version_count || 0) + 1} of “${item.title}”, not sent.`);
 
   const send = (item) => act(`s-${item.id}`,
     () => api.sendMyAdvisorDeliverableVersion(item.id, item.latest_version.version),
-    'That version could not be sent.');
+    'That version could not be sent.',
+    `Sent ${versionTag(item.latest_version)} of “${item.title}”.`);
 
   /**
    * The nudge. One thread per unopened work product, over the inbox that
@@ -363,12 +412,27 @@ export default function DeliveryZone() {
             </button>
           </div>
         )}
+        {/* D571 — "By client" GROUPS rather than only sorting: the Ops canvas's
+            per-client deliverables (A1), with the flow legend, the due column
+            it cannot fill, and the edit and attach forms. Still every row:
+            grouping reorders, it never narrows. */}
         {visible.length === 0
           ? <p className="text-[12.5px] leading-relaxed text-axal-muted">No work product sits under this view.</p>
-          : <div className="grid gap-2.5">{visible.map((i) => (
-            <Row key={i.id} item={i} now={now} busy={busy} selected={trail?.id === i.id}
-              onTrail={() => setTrailFor(i.id)} onVersion={() => addVersion(i)} onSend={() => send(i)} />
-          ))}</div>}
+          : filter === 'by_client'
+            ? <DeliverablesByClient items={visible} engagements={engagements} busy={busy}
+              editing={editing} attaching={attaching} onEdit={setEditing} onAttachOpen={setAttaching}
+              onSave={saveEdit} onAttach={attachLink} onSend={send} />
+            : <div className="grid gap-2.5">{visible.map((i) => (
+              <React.Fragment key={i.id}>
+                <Row item={i} now={now} busy={busy} selected={trail?.id === i.id} editing={editing === i.id}
+                  onTrail={() => setTrailFor(i.id)} onVersion={() => addVersion(i)} onSend={() => send(i)}
+                  onEdit={() => setEditing(editing === i.id ? null : i.id)} />
+                {editing === i.id && (
+                  <DeliverableEditor item={i} engagements={engagements} busy={busy === `e-${i.id}`}
+                    onCancel={() => setEditing(null)} onSave={saveEdit} />
+                )}
+              </React.Fragment>
+            ))}</div>}
         <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
           Open state is the only honest measure of a deliverable, and it is the client&rsquo;s to give:
           nothing on this page marks a work product opened. A version that has sat unread is worth one
@@ -507,6 +571,11 @@ export default function DeliveryZone() {
           is a claim about somebody else&rsquo;s reading.
         </p>
         <p className="mt-2">
+          <strong>A work product has no due date and no sign-off.</strong> Neither is stored: the state is
+          read from what was sent and opened, so nothing here can mark one planned, in progress or
+          accepted by hand. The client&rsquo;s sign-off has a place in the record and no screen that writes it.
+        </p>
+        <p className="mt-2">
           <strong>There is no consent-gated session summary,</strong> and the gap is five pieces deep
           rather than one control short — see the card above. The artboard also shows a time spent
           reading (&ldquo;9 min on retention&rdquo;); a first-open stamp is all a receipt can carry,
@@ -524,7 +593,7 @@ export default function DeliveryZone() {
  * one: a work product that has never gone out is the row most likely to be
  * forgotten, and it is the only state on this page the advisor can fix alone.
  */
-function Row({ item, now, busy, selected, onTrail, onVersion, onSend }) {
+function Row({ item, now, busy, selected, editing, onTrail, onVersion, onSend, onEdit }) {
   const latest = item.latest_version;
   const seam = seamLine(item, now);
   const draftRow = item.state === 'not_started';
@@ -554,6 +623,8 @@ function Row({ item, now, busy, selected, onTrail, onVersion, onSend }) {
           data-testid={`trail-pr3-${item.id}`}>Trail</button>
         <button type="button" className={ghostButtonClass} disabled={busy === `v-${item.id}`}
           onClick={onVersion} data-testid={`version-pr3-${item.id}`}>Add a version</button>
+        <button type="button" className={ghostButtonClass} onClick={onEdit}
+          data-testid={`edit-pr3-${item.id}`}>{editing ? 'Close' : 'Edit'}</button>
         {/* No Send once it has gone out: a sent date is a fact, and the worker
             answers 409 rather than overwriting it. */}
         {sendable && (

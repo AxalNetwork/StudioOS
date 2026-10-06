@@ -9,6 +9,7 @@ import './founderRaiseDataRoom.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { LensLink } from '../../workspaces/lens';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -108,7 +109,7 @@ export default function FounderRaiseDataRoom() {
         <header className="fr-capital-header">
           <div className="fr-capital-crumb"><Link to={`/raise/status${query}`} data-testid="link-data-room-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Data room</strong></div>
           <div className="fr-capital-title-row"><div><h1>Data room</h1><p className="fr-capital-subtitle">Permission matrix, per-investor grants, view analytics and gap analysis.</p></div></div>
-          <nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`} className="is-active" data-testid="link-data-room-zone">Data room</Link><span className="fr-capital-zone-disabled">Liquidity unavailable</span></nav>
+          <nav className="fr-capital-zone-nav" aria-label="Raise sections"><LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`} className="is-active" data-testid="link-data-room-zone">Data room</LensLink><span className="fr-capital-zone-disabled">Liquidity unavailable</span></nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/data-room', { value: view, onChange: setView })}
               actions={founderZoneActions('raise/data-room', { query, view: { scope: project?.name, header: ['Investor', 'Email', 'Status', 'NDA signed', 'Expires'], rows: grants, cells: (g) => [g.investor_name, g.investor_email, g.status, g.nda_signed ? 'yes' : 'no', g.expires_at] } })}

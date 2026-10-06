@@ -8,6 +8,7 @@ import './founderRaiseStatus.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
+import { LensLink } from '../../workspaces/lens';
 
 const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const clean = (value) => String(value ?? '').trim();
@@ -153,8 +154,8 @@ export default function FounderRaiseStatus() {
           <div className="fr-status-crumb"><Link to="/raise/pitch" data-testid="link-status-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Status</strong></div>
           <div className="fr-status-title-row"><div><h1>Raise war-room</h1><p className="fr-status-subtitle">Blockers, investor list, timeline and the pace that decides the close.</p></div></div>
           <nav className="fr-status-zone-nav" aria-label="Raise sections">
-            <Link to={query ? `/raise/status${query}` : '/raise/status'} className="is-active" data-testid="link-status-zone">Status</Link>
-            <Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-status-zone-disabled">Liquidity unavailable</span>
+            <LensLink to={query ? `/raise/status${query}` : '/raise/status'} className="is-active" data-testid="link-status-zone">Status</LensLink>
+            <LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><span className="fr-status-zone-disabled">Liquidity unavailable</span>
           </nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/status', { value: filter, onChange: setFilter })}

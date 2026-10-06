@@ -46,7 +46,7 @@ const pathOf = (to) => to.split('?')[0].split('#')[0];
 const registered = (to) => ROUTES.has(pathOf(to));
 
 /** App.jsx outside <Routes>: the chrome. */
-const CHROME = APP.slice(0, APP.indexOf('<Routes>')) + APP.slice(APP.indexOf('</Routes>'));
+const CHROME = APP.slice(0, APP.indexOf('<Routes')) + APP.slice(APP.indexOf('</Routes>'));
 
 /* ------------------------------------------------------------------ *
  * The 29

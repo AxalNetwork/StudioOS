@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Layers3, MessageSquare, Quote, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
@@ -10,6 +10,7 @@ import FillProposals from '../../workspaces/FillProposals';
 import useAssistMode from '../../hooks/useAssistMode';
 import './founderValidate.css';
 import './founderValidateWorkspace.css';
+import { LensNavLink } from '../../workspaces/lens';
 
 /**
  * THE HYPOTHESES CARD AND THE VERDICT READ THE BOARD, NOT THE INTERVIEWS.
@@ -211,7 +212,7 @@ export default function FounderValidatePage() {
               </div>
             </div>
             <nav aria-label="Evidence sections" className="validate-anchors">
-              {SECTIONS.map(([label, to], index) => <NavLink data-testid={`link-anchor-${index}`} key={label} to={`${to}${query}`} className={zonePillClass}>{label}</NavLink>)}
+              {SECTIONS.map(([label, to], index) => <LensNavLink data-testid={`link-anchor-${index}`} key={label} to={`${to}${query}`} className={zonePillClass}>{label}</LensNavLink>)}
             </nav>
           </header>
           {state === 'error' && <div className="validate-error" data-testid="status-validate-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-validate" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}

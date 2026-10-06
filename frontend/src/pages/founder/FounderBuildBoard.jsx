@@ -10,6 +10,7 @@ import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { useAuth } from '../../hooks/useAuthSync';
 import { BulkMoveDialog, LanesDialog } from './BoardDialogs';
+import { LensLink } from '../../workspaces/lens';
 
 const STAGES = [
   ['idea', 'Idea'],
@@ -190,11 +191,11 @@ export default function FounderBuildBoard() {
               <div><h1>Execution board</h1><p className="fb-subtitle">The stored work record for this startup. Read-only for founder accounts.</p></div>
             </div>
             <nav className="fb-zone-nav" aria-label="Build sections">
-              <Link to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`}>This week</Link>
-              <Link to={`/build/board${selectedId ? `?project_id=${selectedId}` : ''}`} className="is-active" data-testid="link-board-zone">Board</Link>
-              <Link to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Roadmap</Link>
-              <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
-              <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
+              <LensLink to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`}>This week</LensLink>
+              <LensLink to={`/build/board${selectedId ? `?project_id=${selectedId}` : ''}`} className="is-active" data-testid="link-board-zone">Board</LensLink>
+              <LensLink to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Roadmap</LensLink>
+              <LensLink to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</LensLink>
+              <LensLink to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</LensLink>
             </nav>
             <ZoneToolbar
               filters={founderZoneFilters('build/board', {

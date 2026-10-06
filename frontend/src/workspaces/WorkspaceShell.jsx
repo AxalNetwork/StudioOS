@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import ZoneNav from './ZoneNav';
+import RailFrame from '../ui/RailFrame';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { bucketForPath, zoneForPath } from './shellConfig';
 import { boardFor } from './boards/index.js';
@@ -123,38 +124,16 @@ export default function WorkspaceShell({
   const arch = zone?.archetype;
 
   return (
-    // `min-w-0 flex-1` on the content, a fixed column on the rail: the content
-    // shrinks first. Without `min-w-0` a wide table refuses to shrink below its
-    // intrinsic width and shoves the rail off-screen. `hidden xl:flex`: below
-    // 1280px there is no room for a rail beside a working page, and stacking a
-    // meter above the tool puts the least important thing first.
-    //
-    // NO `gap` WHEN THE RAIL IS A PANEL. The rail draws its own left border and
-    // its own inner padding (see below), so a gap would put a stripe of page
-    // ground between the body and a border that is meant to be the seam
-    // between them. The canvases have the two columns meeting exactly.
-    //
-    // `min-h-full` IS WHAT MAKES `items-stretch` MEAN ANYTHING. Stretch sizes
-    // the two columns to the ROW, and a row with no height of its own is only
-    // as tall as its tallest child — so the rail panel measured
-    // `max(page body, rail contents)` and stopped there, leaving bare ground
-    // between its bottom edge and the footer. Which of the two won produced
-    // the two different gaps: expanded, the rail's own ~600px of blocks
-    // exceeded a sparse page and the panel ended under its last block;
-    // collapsed, `.fwr-body` is `display:none` (workerRail.css) so the aside
-    // shrinks to the rotated title and the page body won instead.
-    //
-    // The height chain above this point is already definite — App.jsx's
-    // `h-screen` shell, its `flex flex-1` row, and `<main className="flex
-    // flex-1 flex-col overflow-y-auto">` — and stops at the page wrapper,
-    // which is a plain block. Percentage height resolves against it, so
-    // `min-h-full` bottoms the row out exactly at the footer, which is
-    // rendered inside `main` after the wrapper. Deliberately NOT `h-screen`
-    // or `100dvh`: those measure the viewport, which is taller than this
-    // wrapper by the 56px header plus the footer, and would push the footer
-    // off-screen. Deliberately `min-h-` and not `h-`: a page longer than the
-    // viewport must still grow. The sticky wrapper below stays for that case.
-    <div className={rail ? 'flex min-h-full items-stretch' : ''}>
+    // THE ROW IS `RailFrame` (D556): the body takes the rest and shrinks
+    // first (`min-w-0`, so a wide table cannot shove the rail off-screen), the
+    // rail is a fixed column beside it, and the two meet at the rail's own
+    // seam with no gap. The row's `min-height: 100%` is what lets the panel
+    // stretch to the footer rather than stop under its last block, and it is
+    // `min-` so a page longer than the window still grows. All of that used
+    // to be written here; it is the same frame every other host now uses,
+    // so it lives once, in ui/RailFrame.jsx and the `.fwr-frame` rules of
+    // ui/workerRail.css.
+    <RailFrame rail={rail}>
       {/*
         THE SHELL OWNS ITS OWN PADDING, and this is the whole of the "one
         padding rule". Every one of the twenty-nine canvases specifies the same
@@ -183,7 +162,7 @@ export default function WorkspaceShell({
         gutter between the body and the rail; the right-hand padding is that
         gutter now, and it lands at the canvases' figure.
       */}
-      <div className="min-w-0 flex-1 p-5">
+      <div className="p-5">
         {bucket && (
           <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-faint">
             <Link to={crumbTo} className="hover:underline" data-testid="link-workspace-crumb">
@@ -255,35 +234,16 @@ export default function WorkspaceShell({
         </div>
       </div>
       {/*
-        THE RAIL IS A PANEL, not a floating column, and that is the whole of
-        why it looked detached and clipped at once. `WorkerRail` itself sets no
-        background, no border and no padding — so on a full-bleed route, where
-        `App.jsx` gives the page container `p-0`, the rail was bare text on the
-        page's grey ground running flush into the viewport's right edge, with
-        the last words of every line cut off.
-
-        All four design canvases draw it the same way and this matches them:
-        a white ground, a hairline on the left as the seam against the body,
-        its own inner padding, and full height so the seam runs the length of
-        the page rather than stopping where the text happens to end.
+        THE RAIL IS A PANEL — and since D556 the panel is `RailFrame`, the
+        one frame every host shares, rather than a slot drawn here. Its
+        figures are this slot's: 280px through `--fwr-track`, a white ground,
+        a hairline seam, 18px of inset and 28px under. Two things changed with
+        the move: the panel shows from 1024px instead of 1280px, the width at
+        which the rail stops being the phone button (D405) — between the two
+        a workspace page drew neither — and the rail scrolls inside its panel
+        when it is taller than the window.
       */}
-      {/*
-        The width is the SAME custom property the twenty host declarations read, so
-        the shell's rail collapses with them rather than staying 280px wide
-        around a 44px spine. `w-[280px]` moved into the fallback: while
-        `--fwr-track` is undefined this is byte-for-byte the width it was.
-        Padding goes with it — 18px of inset either side of a 44px column
-        leaves 8px for the control.
-      */}
-      {rail && (
-        <div
-          className="fwr-shell-slot hidden shrink-0 border-l border-axal-hairline bg-white px-[18px] pb-7 pt-[18px] xl:block dark:border-gray-800 dark:bg-gray-900"
-          style={{ width: 'var(--fwr-track, 280px)' }}
-        >
-          <div className="sticky top-20">{rail}</div>
-        </div>
-      )}
-    </div>
+    </RailFrame>
   );
 }
 

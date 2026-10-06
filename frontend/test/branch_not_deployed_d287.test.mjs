@@ -173,7 +173,7 @@ test('one memoised read of /api/licence/mine per user; a 404 is no strip and no 
 });
 
 test('the shell mounts the strip above the top bar for the plain Admin shell off a branch, and the badge says BRANCH · NOT DEPLOYED', () => {
-  const open = APP.indexOf('<Routes>');
+  const open = APP.indexOf('<Routes');
   const chrome = codeOnly(APP.slice(0, open));
   const mount = chrome.indexOf('<BranchNotDeployedBar strip={notDeployed} />');
   const header = chrome.indexOf('<header ');

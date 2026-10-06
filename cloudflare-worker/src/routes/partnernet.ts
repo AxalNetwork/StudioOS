@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { refuse } from '../util/refusal';
 import type { Env } from '../types';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { getSQL } from '../db';
@@ -29,12 +30,16 @@ export const REL_STATUSES = ['pending', 'accepted', 'declined', 'withdrawn', 're
 const NOTE_TOUCH_MAX = 2000;
 const NOTE_REMINDER_MAX = 500;
 const KIND_MAX = 40;
+/** D572 — an interaction's outcome, free text, as migration 393's CHECK bounds it. */
+const OUTCOME_MAX = 200;
 const ABSURD_YEAR_MIN = 1990;
 const ABSURD_YEAR_MAX = 2100;
 
 const INTERACTION_COLUMNS = [
   `ALTER TABLE partner_interactions ADD COLUMN voided_at TEXT`,
   `ALTER TABLE partner_interactions ADD COLUMN voided_by INTEGER`,
+  // D572 (migration 393): what came of the touch, optional.
+  `ALTER TABLE partner_interactions ADD COLUMN outcome TEXT CHECK (outcome IS NULL OR length(outcome) <= 200)`,
 ];
 
 const REL_REQUEST_COLUMNS = [
@@ -724,10 +729,22 @@ partnernet.post('/relationships/:id/interactions', async (c) => {
       message: 'Say what happened or set when it happened — an empty touch must not move the cold flag.',
     }, 400);
   }
+  // D572 — what came of it, optional. Refused rather than clipped when too
+  // long: an outcome cut mid-sentence can say the opposite of what happened.
+  let outcome: string | null = null;
+  if (data?.outcome != null) {
+    if (typeof data.outcome !== 'string') {
+      return refuse(c, 400, { code: 'invalid_outcome', message: 'An outcome is text.' });
+    }
+    outcome = data.outcome.trim() || null;
+    if (outcome && outcome.length > OUTCOME_MAX) {
+      return refuse(c, 400, { code: 'outcome_too_long', message: `An outcome is at most ${OUTCOME_MAX} characters.` });
+    }
+  }
   const uid = newUid();
   await c.env.DB.prepare(
-    'INSERT INTO partner_interactions (uid, relationship_id, kind, note, interacted_at, recorded_by) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(uid, rel.id, kind, noted.text, interactedAt, user.id).run();
+    'INSERT INTO partner_interactions (uid, relationship_id, kind, note, interacted_at, recorded_by, outcome) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(uid, rel.id, kind, noted.text, interactedAt, user.id, outcome).run();
   const row = await c.env.DB.prepare('SELECT * FROM partner_interactions WHERE uid = ?').bind(uid).first();
   return c.json({
     item: row,
