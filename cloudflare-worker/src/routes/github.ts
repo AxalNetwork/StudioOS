@@ -15,11 +15,11 @@
  *   - events whose body carries the axal-sync source marker, or whose sender
  *     matches GITHUB_SYNC_BOT_LOGIN (the token identity), are acknowledged
  *     and dropped — they are echoes of our own outbound writes. One
- *     exception (D542 follow-up): a `labeled` bounty label from a sender on
+ *     exception (D542): a bounty label added or removed by a sender on
  *     BOUNTY_GRANTERS is processed even when that sender is the sync bot,
  *     because the coordinator labels as the same account. The outbound sync
- *     never adds a bounty label (its label PUT keeps them as they are), so
- *     such an event is a person's decision, not an echo.
+ *     never adds or removes a bounty label (its label PUT keeps them as they
+ *     are), so such an event is a person's decision, not an echo.
  *
  * Public (no auth) but signature-verified. Non-issue events, unknown issue
  * numbers, and irrelevant actions are acknowledged with 2xx so GitHub
@@ -32,7 +32,7 @@ import {
   ensureTicketSyncSchema, recordSyncEvent, releaseSyncEvent, sha256Hex,
   mapGithubStatusToLocal, parseLabelsFromGithub, hasSyncMarker, updateIssue,
 } from '../services/githubSync';
-import { bountyLabelEvent, bountySourceRef, parseGranters } from '../services/bugBounties';
+import { applyBountyTier, bountyLabelEvent, parseGranters } from '../services/bugBounties';
 import { refuse } from '../util/refusal';
 
 const github = new Hono<{ Bindings: Env }>();
@@ -113,10 +113,13 @@ github.post('/webhook', async (c) => {
   const senderLogin: string | null = payload?.sender?.login || null;
   const botLogin = (c.env as any).GITHUB_SYNC_BOT_LOGIN as string | undefined;
   // D542 follow-up — the coordinator labels as the same account the sync
-  // bot uses, so a bounty label ADDED by an allowlisted sender is a decision,
-  // not an echo: the outbound label PUT keeps bounty labels as they are and
-  // never adds one. Every other event from the bot is still dropped.
-  const grantedBountyLabel = event === 'issues' && action === 'labeled' && (() => {
+  // bot uses, so a bounty label ADDED or REMOVED by an allowlisted sender is
+  // a decision, not an echo: the outbound label PUT (`routes/tickets.ts`)
+  // re-sends every label it does not manage, bounty labels included, read
+  // live from the issue, so it neither adds nor removes one. A removal must
+  // count, or the 30-day revoke could never run. Every other event from the
+  // bot is still dropped.
+  const grantedBountyLabel = event === 'issues' && (action === 'labeled' || action === 'unlabeled') && (() => {
     const kind = bountyLabelEvent({
       action, label: payload?.label?.name, sender: senderLogin, granters: parseGranters(c.env.BOUNTY_GRANTERS),
     }).kind;
@@ -240,18 +243,11 @@ github.post('/webhook', async (c) => {
       }
       bountyReport = { kind: bounty.kind, outcome: bounty.outcome, github_closed: githubClosed };
     } else if (bounty.kind === 'tier_added' || bounty.kind === 'tier_removed') {
-      // The grant and its revoke go through the credit grant service, keyed
-      // by the source ref, so a redelivery or a later replay from the label
-      // snapshot grants once. That service is not built yet: nothing is
-      // granted or revoked here, and the response says so.
-      bountyReport = {
-        kind: bounty.kind,
-        rule_key: bounty.ruleKey,
-        source_ref: bountySourceRef(ticket.id),
-        credits: 'not_granted',
-        reason: 'The credit grant service is not built yet. The label is kept in the snapshot, and the grant '
-          + 'is keyed by source_ref, so it can be applied once without loss when the service lands.',
-      };
+      // The grant and its revoke go through the credit grant service (D540),
+      // keyed by the source ref, so a redelivery grants once. A refusal (the
+      // cap, a staff account, a spent grant) is acknowledged with the reason;
+      // a thrown error reaches the catch below, which releases the claim.
+      bountyReport = await applyBountyTier(c.env, { ticketId: Number(ticket.id), userId: ticket.user_id, event: bounty });
     } else if (bounty.kind !== 'ignored') {
       bountyReport = { kind: bounty.kind };
     }
@@ -278,7 +274,7 @@ github.post('/webhook', async (c) => {
         issue_number: issueNumber,
         label: payload?.label?.name ?? null,
         kind: bounty.kind,
-        ...(bounty.kind === 'outcome' ? { outcome: bounty.outcome } : { rule_key: bounty.ruleKey }),
+        ...(bounty.kind === 'outcome' ? { outcome: bounty.outcome } : { rule_key: bounty.ruleKey, credits: bountyReport?.credits ?? null }),
         github_sender: senderLogin,
         via_sync_bot_account: viaSyncBot,
         status_before: ticket.status,
