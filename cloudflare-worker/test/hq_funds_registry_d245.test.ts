@@ -86,6 +86,7 @@ function fundsDb() {
   // D376: the fund's GP and vehicle entities. No fund here is linked, so each
   // jurisdiction is null (not recorded); fabric_entities_d376.test.ts links them.
   db.exec(migration('314_fabric_entities'));
+  db.exec(migration('374_entity_obligations'));
   const f = db.prepare(
     `INSERT INTO vc_funds (id, name, status, gp_entity, fund_size_cents, total_commitment, vintage_year,
                            gp_user_id, gp_name, gp_title, fund_admin, auditor, custodian, lpa_doc_id)
@@ -428,14 +429,16 @@ test('D375: a row is fund-level facts only — no LP and no GP name or email cro
   const r: any = await branchFundsRegistry({ DB: makeD1(fundsDb()), BRANCH_CODE: 'fr' } as any);
   assert.deepEqual(Object.keys(r).sort(), [
     'as_of', 'branch', 'calls_available', 'complete', 'distributions_available', 'entities_available', 'funds',
-    'periods_available',
+    'obligations_available', 'periods_available',
   ]);
   for (const x of r.funds) {
     assert.deepEqual(Object.keys(x).sort(), [
       'called_minor', 'called_ratio', 'committed_minor', 'committed_source', 'distributed_minor', 'dpi',
-      'flags', 'gp_entity', 'gp_entity_jurisdiction', 'id', 'jurisdiction', 'last_issued', 'name', 'status', 'vintage_year',
+      'flags', 'gp_entity', 'gp_entity_jurisdiction', 'id', 'jurisdiction', 'last_issued', 'name', 'next_obligation',
+      'status', 'vintage_year',
     ], `${x.name} carries a key that is not a fund-level fact`);
     assert.equal(x.jurisdiction, null, `${x.name} has a jurisdiction with no vehicle linked`);
+    assert.equal(x.next_obligation, null, `${x.name} has a filing deadline with no entity linked`);
     assert.deepEqual(Object.keys(x.flags).sort(),
       ['custodian_recorded', 'draft_not_issued', 'gp_fields_unset', 'lpa_on_file', 'no_gp_of_record']);
   }

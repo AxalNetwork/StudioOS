@@ -57,6 +57,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/research      → research.ts        (the Research bucket's own stores)
 /api/research      → research_markets.ts (markets and geographies, through the D533 crosswalk)
 /api/advisor-grants → advisor_grants.ts (a founder's per-scope grant to a named advisor)
+/api/learning      → learning.ts        (the Learning center, member side: catalog, courses, items, progress; D557)
+/api/admin/learning → admin_learning.ts (authoring the Learning center; Super Admin only; D557)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
 ```
 

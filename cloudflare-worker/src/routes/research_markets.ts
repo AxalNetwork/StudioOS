@@ -4,7 +4,10 @@
  *   GET /api/research/markets                the 82 markets, searchable, sortable, paged
  *   GET /api/research/markets/:slug          one market: its companies, funds, signals, sub-markets
  *   GET /api/research/geographies            countries with company and fund counts
- *   GET /api/research/geographies/:code      one country: companies by market, companies, funds, signals
+ *   GET /api/research/geographies/:code      one country: companies by market, its largest
+ *                                            companies by headcount, its funds with their
+ *                                            aggregates, and its signals (country, then region)
+ *   GET /api/research/listed-companies       the listed companies `signal_companies` holds
  *
  * Every read is signed-in only (`requireAuth`), and every count goes through
  * the crosswalk in `services/researchTaxonomy.ts`, so a company or fund is
@@ -27,6 +30,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { refuse } from '../util/refusal';
+import { EUR_SOURCE } from '../services/researchFundDirectory';
 import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
 import { periodKey } from '../services/market_intel/scoring';
 import {
@@ -41,8 +46,16 @@ const MAX_LIMIT = 100;
 const LIST_CAP = 50;
 
 interface CompanyRow { uid: string; name: string; website: string; country: string | null; founded_year: number | null; sector: string | null }
-interface FundRow { uid: string; name: string; hq: string | null; sector_focus: string | null; fund_size_cents: number | null; fund_year: number | null; website: string | null }
-interface SignalRow { id: string; type: string; title: string; thesis: string; why_now: string; country: string; region: string; niche: string; industry: string | null; status: string; tags: string; updated_at: string }
+interface FundRow {
+  uid: string; name: string; hq: string | null; sector_focus: string | null; fund_size_cents: number | null;
+  fund_year: number | null; website: string | null; source_name: string; eif_flag: number; eifo_flag: number;
+  notable_lps: string | null; as_of: string | null;
+}
+interface SignalRow {
+  id: string; type: string; title: string; thesis: string; why_now: string; country: string; region: string;
+  sector: string; niche: string; industry: string | null; status: string; tags: string; build_opportunity: string;
+  confidence_score: number; updated_at: string;
+}
 
 /** Integer query parameter clamped to [min, max]; anything unreadable is `fallback`. */
 function intParam(v: string | undefined, fallback: number, min: number, max: number): number {
@@ -64,7 +77,9 @@ async function companies(env: Env): Promise<CompanyRow[]> {
 
 async function funds(env: Env): Promise<FundRow[]> {
   const r = await env.DB.prepare(
-    `SELECT uid, name, hq, sector_focus, fund_size_cents, fund_year, website FROM research_fund_directory`,
+    `SELECT uid, name, hq, sector_focus, fund_size_cents, fund_year, website, source_name,
+            eif_flag, eifo_flag, notable_lps, as_of
+       FROM research_fund_directory`,
   ).all<FundRow>();
   return r.results || [];
 }
@@ -72,17 +87,25 @@ async function funds(env: Env): Promise<FundRow[]> {
 /** Active signals only; `advisor_note` is never selected (S1, #1080). */
 async function signals(env: Env): Promise<SignalRow[]> {
   const r = await env.DB.prepare(
-    `SELECT id, type, title, thesis, why_now, country, region, niche, industry, status, tags, updated_at
+    `SELECT id, type, title, thesis, why_now, country, region, sector, niche, industry, status, tags,
+            build_opportunity, confidence_score, updated_at
        FROM signals WHERE status <> 'archived' ORDER BY rank_score DESC, id`,
   ).all<SignalRow>();
   return r.results || [];
 }
 
+function json<T>(text: string | null | undefined, fallback: T): T {
+  try { const v = JSON.parse(text || ''); return v ?? fallback; } catch { return fallback; }
+}
+
 function signalDto(s: SignalRow) {
-  const { tags, ...rest } = s;
-  let parsed: unknown = [];
-  try { parsed = JSON.parse(tags || '[]'); } catch { parsed = []; }
-  return { ...rest, tags: Array.isArray(parsed) ? parsed : [] };
+  const { tags, build_opportunity, ...rest } = s;
+  const parsed = json<unknown>(tags, []);
+  const build = json<Record<string, unknown>>(build_opportunity, {});
+  // The build opportunity is a JSON object (`BuildOpportunity`); its
+  // `headline` is the one-line pitch a card prints. None written is null.
+  const headline = typeof build?.headline === 'string' && build.headline.trim() ? build.headline.trim() : null;
+  return { ...rest, tags: Array.isArray(parsed) ? parsed : [], build_headline: headline };
 }
 
 const companyDto = (c: CompanyRow, ov: Overrides) => ({
@@ -91,13 +114,40 @@ const companyDto = (c: CompanyRow, ov: Overrides) => ({
   sector: c.sector, market: mapCompanySector(c.sector, ov).targets[0] ?? null,
 });
 
-const fundDto = (f: FundRow, ov: Overrides) => ({
-  uid: f.uid, name: f.name, website: f.website, hq: f.hq, country_codes: mapFundHq(f.hq, ov).targets,
-  sector_focus: f.sector_focus, fund_size_cents: f.fund_size_cents, fund_year: f.fund_year,
-});
+/**
+ * THE CURRENCY RULE (D533, as `researchFundDirectory.presentFund` applies it).
+ * Only the EuroTech list records sizes in a known currency, euros. Any other
+ * source's number is not a size anyone can compare, so it is null with a
+ * reason, never printed as if it were euros or dollars.
+ */
+export function eurSizeCents(f: Pick<FundRow, 'source_name' | 'fund_size_cents'>): number | null {
+  return f.source_name === EUR_SOURCE && f.fund_size_cents != null ? Number(f.fund_size_cents) : null;
+}
+
+/** EIF/EIFO: true, false only when the fund names its LPs, otherwise null (unknown). */
+function backing(flag: number, f: Pick<FundRow, 'notable_lps'>): boolean | null {
+  const lpsKnown = typeof f.notable_lps === 'string' && f.notable_lps.trim() !== '';
+  return flag ? true : lpsKnown ? false : null;
+}
+
+const fundDto = (f: FundRow, ov: Overrides) => {
+  const size = eurSizeCents(f);
+  return {
+    uid: f.uid, name: f.name, website: f.website, hq: f.hq, country_codes: mapFundHq(f.hq, ov).targets,
+    sector_focus: f.sector_focus, fund_year: f.fund_year,
+    fund_size_cents: size,
+    size_currency: size != null ? 'EUR' : null,
+    ...(size != null ? {} : {
+      size_reason: f.source_name === EUR_SOURCE ? 'Not recorded' : 'Not recorded: this list records no size in a known currency',
+    }),
+    eif: backing(f.eif_flag, f),
+    eifo: backing(f.eifo_flag, f),
+  };
+};
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
-const bySize = (a: FundRow, b: FundRow) => (b.fund_size_cents ?? -1) - (a.fund_size_cents ?? -1) || byName(a, b);
+/** Largest euro size first; a fund with no size in a known currency follows, by name. */
+const bySize = (a: FundRow, b: FundRow) => (eurSizeCents(b) ?? -1) - (eurSizeCents(a) ?? -1) || byName(a, b);
 
 function bump(m: Map<string, number>, key: string) { m.set(key, (m.get(key) ?? 0) + 1); }
 const countList = (m: Map<string, number>, keyName: string) =>
@@ -338,6 +388,69 @@ researchMarkets.get('/geographies', async (c) => {
   });
 });
 
+interface CompanyMetricRow extends CompanyRow {
+  employee_count: number | null; employee_as_of: string | null;
+  last_funding_amount: number | null; last_funding_currency: string | null;
+  last_funding_date: string | null; last_funding_type: string | null; as_of: string | null;
+}
+
+/** The directory with migration 375's headcount and last-round columns (D531). */
+async function companiesWithMetrics(env: Env): Promise<CompanyMetricRow[]> {
+  const r = await env.DB.prepare(
+    `SELECT uid, name, website, country, founded_year, sector, employee_count, employee_as_of,
+            last_funding_amount, last_funding_currency, last_funding_date, last_funding_type, as_of
+       FROM research_company_directory`,
+  ).all<CompanyMetricRow>();
+  return r.results || [];
+}
+
+/** Largest recorded headcount first; a company with none follows, by name. */
+export const byHeadcount = (a: CompanyMetricRow, b: CompanyMetricRow) =>
+  (b.employee_count ?? -1) - (a.employee_count ?? -1) || byName(a, b);
+
+/** Fund size bands, in euros (the only currency a size is recorded in). */
+export const SIZE_BANDS: ReadonlyArray<{ key: string; label: string; min: number; max: number | null }> = [
+  { key: 'lt50', label: 'Under €50M', min: 0, max: 50e6 },
+  { key: '50to150', label: '€50M–€150M', min: 50e6, max: 150e6 },
+  { key: '150to500', label: '€150M–€500M', min: 150e6, max: 500e6 },
+  { key: 'gte500', label: '€500M and over', min: 500e6, max: null },
+];
+
+/** What a set of funds adds up to: how many carry each fact, sizes by band, focus keywords. */
+export function fundAggregates(fs: FundRow[]) {
+  const bands = SIZE_BANDS.map((b) => ({ key: b.key, label: b.label, count: 0 }));
+  const focus = new Map<string, number>();
+  let withSize = 0; let withVintage = 0; let withFocus = 0; let latest: string | null = null;
+  for (const f of fs) {
+    const cents = eurSizeCents(f);
+    if (cents != null) {
+      withSize += 1;
+      const eur = cents / 100;
+      const i = SIZE_BANDS.findIndex((b) => eur >= b.min && (b.max == null || eur < b.max));
+      if (i >= 0) bands[i].count += 1;
+    }
+    if (f.fund_year != null) withVintage += 1;
+    const tokens = focusTokens(f.sector_focus);
+    if (tokens.length) withFocus += 1;
+    for (const t of new Set(tokens)) bump(focus, t);
+    if (f.as_of && (!latest || f.as_of > latest)) latest = f.as_of;
+  }
+  return {
+    count: fs.length,
+    with_size: withSize,
+    with_vintage: withVintage,
+    with_focus: withFocus,
+    no_focus: fs.length - withFocus,
+    size_bands: bands,
+    size_not_recorded: fs.length - withSize,
+    focus_keywords: countList(focus, 'label').slice(0, 10),
+    as_of: latest,
+  };
+}
+
+const maxOf = (vals: Array<string | null | undefined>) =>
+  vals.reduce<string | null>((m, v) => (v && (!m || v > m) ? v : m), null);
+
 researchMarkets.get('/geographies/:code', async (c) => {
   await requireAuth(c);
   const code = c.req.param('code').toUpperCase();
@@ -347,29 +460,130 @@ researchMarkets.get('/geographies/:code', async (c) => {
   if (!country) return c.json({ detail: 'Not found' }, 404);
 
   const [ov, cos, fs, sigs, markets] = await Promise.all([
-    loadOverrides(c.env), companies(c.env), funds(c.env), signals(c.env),
+    loadOverrides(c.env), companiesWithMetrics(c.env), funds(c.env), signals(c.env),
     c.env.DB.prepare(`SELECT slug, name FROM research_market_directory`).all<{ slug: string; name: string }>(),
   ]);
   const marketName = new Map((markets.results || []).map((m) => [m.slug, m.name]));
 
-  const here = cos.filter((co) => mapCompanyCountry(co.country, ov).targets[0] === code).sort(byName);
+  const here = cos.filter((co) => mapCompanyCountry(co.country, ov).targets[0] === code).sort(byHeadcount);
   const bySector = new Map<string, number>();
-  for (const co of here) bump(bySector, mapCompanySector(co.sector, ov).targets[0] ?? '');
+  const byLabel = new Map<string, number>();
+  let noLabel = 0;
+  for (const co of here) {
+    bump(bySector, mapCompanySector(co.sector, ov).targets[0] ?? '');
+    const label = String(co.sector ?? '').trim();
+    if (label) bump(byLabel, label); else noLabel += 1;
+  }
   const hqHere = fs.filter((f) => mapFundHq(f.hq, ov).targets.includes(code)).sort(bySize);
-  const sigHere = sigs.filter((s) => mapCompanyCountry(s.country, ov).targets[0] === code);
+  // Signals that name the country come first; then those that name only its
+  // region. Each says which, so a card never passes a regional signal off as
+  // one about this country.
+  const named = sigs.filter((s) => mapCompanyCountry(s.country, ov).targets[0] === code);
+  const namedIds = new Set(named.map((s) => s.id));
+  const regional = sigs.filter((s) => !namedIds.has(s.id) && s.region === country.region);
 
   return c.json({
     item: country,
+    totals: { companies: cos.length, funds: fs.length, signals: sigs.length },
+    as_of: {
+      companies: maxOf(cos.map((co) => co.as_of)),
+      funds: maxOf(fs.map((f) => f.as_of)),
+      signals: maxOf(sigs.map((s) => s.updated_at)),
+    },
     company_count: here.length,
     companies_by_market: countList(bySector, 'slug').map((r) => ({
       slug: r.slug || null,
       name: r.slug ? (marketName.get(r.slug as string) ?? null) : null,
       count: r.count,
     })),
-    companies: here.slice(0, LIST_CAP).map((co) => companyDto(co, ov)),
+    companies_by_label: countList(byLabel, 'label'),
+    companies_without_label: noLabel,
+    companies: here.slice(0, LIST_CAP).map((co) => ({
+      ...companyDto(co, ov),
+      employee_count: co.employee_count ?? null,
+      employee_as_of: co.employee_as_of ?? null,
+      last_round: co.last_funding_amount != null || co.last_funding_type
+        ? { amount: co.last_funding_amount ?? null, currency: co.last_funding_currency ?? null,
+            date: co.last_funding_date ?? null, type: co.last_funding_type ?? null }
+        : null,
+    })),
     fund_count: hqHere.length,
+    fund_aggregates: fundAggregates(hqHere),
     funds: hqHere.slice(0, LIST_CAP).map((f) => fundDto(f, ov)),
-    signals: sigHere.map(signalDto),
+    signals: [
+      ...named.map((s) => ({ ...signalDto(s), match: 'country' as const })),
+      ...regional.map((s) => ({ ...signalDto(s), match: 'region' as const })),
+    ],
+    // Market intelligence is computed worldwide only: no per-country demand
+    // is stored, so the page prints Not recorded with this reason.
+    demand: { status: 'not_recorded', reason: 'Demand data is global only. The sector indexes are computed worldwide, so no per-country demand is stored.' },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Listed companies (the Public tab)
+// ---------------------------------------------------------------------------
+
+interface ListedSortable { name: string; symbol: string; market_cap: number | null }
+const byCap = (a: ListedSortable, b: ListedSortable) =>
+  (a.market_cap == null ? 1 : 0) - (b.market_cap == null ? 1 : 0) || (Number(a.market_cap) - Number(b.market_cap));
+export const LISTED_SORTS: Readonly<Record<string, (a: ListedSortable, b: ListedSortable) => number>> = {
+  'name': (a, b) => byName(a, b) || a.symbol.localeCompare(b.symbol),
+  '-name': (a, b) => byName(b, a) || a.symbol.localeCompare(b.symbol),
+  // A company with no recorded market cap sorts last either way.
+  'market_cap': (a, b) => byCap(a, b) || byName(a, b),
+  '-market_cap': (a, b) => (a.market_cap == null ? 1 : 0) - (b.market_cap == null ? 1 : 0)
+    || (Number(b.market_cap) - Number(a.market_cap)) || byName(a, b),
+};
+
+interface ListedRow {
+  symbol: string; name: string; exchange: string | null; country: string | null; region: string | null;
+  sector: string | null; market_cap: number | null; market_cap_band: string | null; employee_band: string | null;
+  updated_at: string;
+}
+
+researchMarkets.get('/listed-companies', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const sector = String(c.req.query('sector') || '').trim().slice(0, 120);
+  const countryParam = String(c.req.query('country') || '').trim().toUpperCase().slice(0, 2);
+  const sortKey = Object.hasOwn(LISTED_SORTS, String(c.req.query('sort'))) ? String(c.req.query('sort')) : '-market_cap';
+  const limit = intParam(c.req.query('limit'), LIST_CAP, 1, MAX_LIMIT);
+  const offset = intParam(c.req.query('offset'), 0, 0, 10_000);
+
+  let rows: ListedRow[];
+  let ov: Overrides;
+  try {
+    const [r, o] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT symbol, name, exchange, country, region, sector, market_cap, market_cap_band, employee_band, updated_at
+           FROM signal_companies
+          WHERE (? = '' OR name LIKE '%' || ? || '%' OR symbol LIKE ? || '%')
+            AND (? = '' OR sector = ?)`,
+      ).bind(q, q, q, sector, sector).all<ListedRow>(),
+      loadOverrides(c.env),
+    ]);
+    rows = r.results || [];
+    ov = o;
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'listed_companies_unreadable',
+      message: 'The listed companies could not be read. This is not a sign there are none; try again.',
+      raw: e,
+    });
+  }
+  const placed = rows.map((r) => ({ ...r, country_code: mapCompanyCountry(r.country, ov).targets[0] ?? null }));
+  const matched = (countryParam ? placed.filter((r) => r.country_code === countryParam) : placed)
+    .sort(LISTED_SORTS[sortKey]);
+  return c.json({
+    items: matched.slice(offset, offset + limit).map((r) => ({
+      symbol: r.symbol, name: r.name, exchange: r.exchange, country: r.country, country_code: r.country_code,
+      region: r.region, sector: r.sector, market_cap_band: r.market_cap_band, employee_band: r.employee_band,
+      updated_at: r.updated_at,
+    })),
+    total: matched.length,
+    limit, offset, sort: sortKey,
+    as_of: maxOf(rows.map((r) => r.updated_at)),
   });
 });
 

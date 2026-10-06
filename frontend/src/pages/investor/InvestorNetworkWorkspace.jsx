@@ -9,7 +9,8 @@ import './investorNetworkWorkspace.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
-import { daysSince, COLD_AFTER_DAYS } from '../../lib/networkBook';
+import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue } from '../../lib/networkBook';
+import { useAuth } from '../../hooks/useAuthSync';
 import { introTarget, askKey, createIntroRequests } from '../../lib/investorIntroRequest';
 import InvestorIntroRequest from './InvestorIntroRequest';
 
@@ -47,14 +48,8 @@ const askTarget = (ask) => (ask?.founder_user_id ? `Founder #${ask.founder_user_
     : ask?.founder_id ? `Founder record #${ask.founder_id}`
       : 'Target not recorded');
 // The last touch is the interaction log's MAX (migration 338), never a field
-// someone edits. The older keys stay as fallbacks for any row written before
-// the log existed.
-const lastTouchAt = (relationship) => relationship?.last_interaction_at
-  || relationship?.last_touch_at
-  || relationship?.last_contact_at
-  || relationship?.metadata?.last_touch_at
-  || relationship?.metadata?.last_contact_at
-  || null;
+// someone edits and never a metadata fallback.
+const lastTouchAt = (relationship) => relationship?.last_interaction_at || null;
 const relationshipContext = (relationship) => relationship?.context
   || relationship?.deal_name
   || relationship?.fund_name
@@ -116,12 +111,11 @@ function Alert({ children }) {
 // set of derivations behind all four URLs: `organizations` is derived from the
 // relationship rows, so a split would either duplicate that read or invent a
 // second source for it.
-export default function InvestorNetworkWorkspace({ embedded = false, zone = null, role = 'investor', zoneFilters = null }) {
-  // The relationship book's zone view. Two live chips out of five on this
-  // licence — `relationship_type` is a CHECKed set and `co_investor` is a
-  // member of it, and `Founders` narrows on the counterpart's role, which
-  // `/partnernet/relationships` returns. The other three labels are prose on
-  // the row.
+export default function InvestorNetworkWorkspace({ embedded = false, zone = null, role = 'investor', zoneFilters = null, initialActionError = '' }) {
+  const { user } = useAuth() || {};
+  // The relationship book's zone view. Four live chips — Everyone, Founders,
+  // Co-investors and Going cold. LPs stay prose: an LP register is a fund
+  // record, not a relationship row.
   const [bookView, setBookView] = useState('all');
   // The introductions desk's zone view. `Stalled` is `status = 'expired'`,
   // which the route writes lazily on every read. `Asked` is live: an
@@ -133,7 +127,6 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const highlightedIntro = params.get('intro') || '';
   const requestedTab = params.get('tab') || '';
   const [relationships, setRelationships] = useState(null);
-  const [summary, setSummary] = useState(null);
   const [introductions, setIntroductions] = useState(null);
   const [asks, setAsks] = useState(null);
   const [introRequestStates, setIntroRequestStates] = useState({});
@@ -154,7 +147,8 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [errors, setErrors] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [busyUid, setBusyUid] = useState('');
-  const [actionError, setActionError] = useState('');
+  const [actionError, setActionError] = useState(initialActionError);
+  const [touchLog, setTouchLog] = useState([]);
 
   const load = useCallback(async (refresh = false) => {
     setRefreshing(refresh);
@@ -167,7 +161,6 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
       const value = relationshipResult.value;
       setRelationships(Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : []);
     }
-    if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value || null);
     if (introResult.status === 'fulfilled') setIntroductions(introResult.value || { propositions: [], credits: null });
     if (askResult.status === 'fulfilled') setAsks(Array.isArray(askResult.value?.introductions) ? askResult.value.introductions : []);
     if (reminderResult.status === 'fulfilled') setReminders(Array.isArray(reminderResult.value?.items) ? reminderResult.value.items : []);
@@ -235,6 +228,32 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
    * of the last exchange is the only way the flag moves. A reminder surfaces
    * on the desk when it is due; there is no notification fan-out.
    */
+  const openTouch = async (item) => {
+    setActionError('');
+    const open = touchFor === item.id ? null : item.id;
+    setTouchFor(open);
+    setReminderFor(null);
+    setPrivateNoteFor(null);
+    setTouchLog([]);
+    if (!open) return;
+    try {
+      const log = await api.partnerInteractionLog(item.id);
+      setTouchLog(Array.isArray(log?.items) ? log.items : []);
+    } catch (cause) {
+      setActionError(cause?.message || 'The touch log could not be read.');
+    }
+  };
+  const voidTouch = async (rel, uid) => {
+    setActionError('');
+    try {
+      await api.partnerInteractionVoid(rel.id, uid);
+      const log = await api.partnerInteractionLog(rel.id);
+      setTouchLog(Array.isArray(log?.items) ? log.items : []);
+      load();
+    } catch (cause) {
+      setActionError(cause?.message || 'The touch could not be voided.');
+    }
+  };
   const logTouch = async (rel) => {
     setActionError('');
     const note = touchNote.trim();
@@ -300,18 +319,19 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // is a CHECKed set and `co_investor` is one of its five values. `Everyone` is
   // the reset view, which is what the word means over a book the query has
   // already scoped to the reader.
+  const coldRows = coldView(relationships || []);
+  const coldIds = new Set(coldRows.map((row) => row.id));
+  const coldest = relationships ? coldestDays(relationships) : null;
+  const viewerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const visibleRelationships = bookView === 'coinvestors'
     ? (relationships || []).filter((item) => item.relationship_type === 'co_investor')
     : bookView === 'founders'
       ? (relationships || []).filter((item) => String(item.other?.role || '') === 'founder')
       : bookView === 'cold'
-        ? (relationships || []).filter((item) => { const d = daysSince(lastTouchAt(item)); return d !== null && d > COLD_AFTER_DAYS; })
+        ? coldRows
         : (relationships || []);
   const touchCoverage = (relationships || []).filter((item) => lastTouchAt(item)).length;
-  const coldCount = (relationships || []).filter((item) => {
-    const d = daysSince(lastTouchAt(item));
-    return d !== null && d > COLD_AFTER_DAYS;
-  }).length;
+  const coldCount = coldRows.length;
   // The op opens the reminder panel on the first row the current view shows —
   // under `Going cold` that is the first cold tie, under any other view the
   // first row. (Named for the table's handler key, not the state setter.)
@@ -353,7 +373,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {shows('relationships') && <section className="inw-card" aria-labelledby="relationship-book">
             <SectionHeading id="relationship-book" title="Relationship book" detail={detailFor(errors.relationships, relationships, () => {
-              const ties = summary?.active_relationships ?? summary?.relationships_count ?? relationships.length;
+              const ties = relationships.length;
               // A book with no last-touch dates and an EMPTY book are different
               // facts. Only the first is a coverage gap.
               const touch = relationships.length === 0 ? 'no ties recorded'
@@ -361,18 +381,24 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                   : touchCoverage ? `${coldCount} going cold` : 'no touches logged yet';
               return `${ties} ties · ${touch}`;
             })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
-            {/* DUE REMINDERS (migration 338): surface when due, never a
-                notification fan-out. */}
-            {errors.reminders ? <Alert>{errors.reminders}</Alert> : (reminders || []).filter((r) => !r.done && new Date(r.remind_at).getTime() <= Date.now()).length > 0 && (
+            <p className="inw-footnote" data-testid="tile-coldest">
+              Coldest {relationships === null ? '— loading' : coldest == null ? '— not recorded (no tie is past the cold window)' : `— ${coldest}d`}
+            </p>
+            {actionError && <Alert><span data-testid="status-relationship-write">{actionError}</span></Alert>}
+            {/* DUE REMINDERS: a date-only reminder is due on the viewer's day. */}
+            {errors.reminders ? <Alert>{errors.reminders}</Alert> : (reminders || []).filter((r) => !r.done && reminderDue(r.remind_at, Date.now(), viewerZone)).length > 0 && (
               <div className="inw-alert" role="status" data-testid="status-due-reminders">
                 <CircleAlert size={14} />
                 <span>
-                  {(reminders || []).filter((r) => !r.done && new Date(r.remind_at).getTime() <= Date.now()).map((r) => (
+                  {(reminders || []).filter((r) => !r.done && reminderDue(r.remind_at, Date.now(), viewerZone)).map((r) => {
+                    const who = [r.a_name, r.b_name].filter(Boolean).join(' · ') || 'the tie';
+                    return (
                     <span key={r.uid} className="mr-3">
-                      {r.note || 'Re-surface this tie'} — due {age(r.remind_at)}
+                      {who}: {r.note || 'Re-surface this tie'} — due {r.remind_at}
                       <button type="button" onClick={() => doneReminder(r.uid)} data-testid={`button-reminder-done-${r.uid}`} className="ml-1 underline">Done</button>
                     </span>
-                  ))}
+                    );
+                  })}
                 </span>
               </div>
             )}
@@ -382,11 +408,11 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 {visibleRelationships.map((item) => <div key={item.id}>
                   <div className="inw-table-row max-sm:grid-cols-2!" data-testid={`row-relationship-${item.id}`}>
                     <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
-                    <span data-label="Strength"><i className={`inw-strength ${Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
+                    <span data-label="Strength"><i className={`inw-strength ${coldIds.has(item.id) ? 'inw-cold' : Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{coldIds.has(item.id) ? 'Going cold' : Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
                     <span data-label="Context" className="inw-context">{relationshipContext(item)}</span>
                     <time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > COLD_AFTER_DAYS ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
                     <span className="inw-row-actions max-sm:col-span-2">
-                      <button type="button" onClick={() => { setActionError(''); setTouchFor(touchFor === item.id ? null : item.id); setReminderFor(null); setPrivateNoteFor(null); }} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
+                      <button type="button" onClick={() => openTouch(item)} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
                       <button type="button" onClick={() => { setActionError(''); setReminderFor(reminderFor === item.id ? null : item.id); setTouchFor(null); setPrivateNoteFor(null); }} data-testid={`button-remind-${item.id}`}>Remind me</button>
                       <button type="button" onClick={() => {
                         setActionError('');
@@ -401,14 +427,17 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                   {touchFor === item.id && (
                     <div className="inw-inline-form" data-testid={`form-touch-${item.id}`}>
                       <input type="date" value={touchDate} onChange={(e) => setTouchDate(e.target.value)} aria-label="When it happened" data-testid={`input-touch-date-${item.id}`} />
-                      <input value={touchNote} onChange={(e) => setTouchNote(e.target.value)} placeholder="What the last exchange was" aria-label="Touch note" />
+                      <input value={touchNote} onChange={(e) => setTouchNote(e.target.value)} placeholder="What the last exchange was (kept to 2,000 characters)" aria-label="Touch note" maxLength={2000} />
+                      {touchLog.filter((row) => !row.voided_at && Number(row.recorded_by) === Number(user?.id)).map((row) => (
+                        <button type="button" key={row.uid} onClick={() => voidTouch(item, row.uid)} data-testid={`button-void-touch-${row.uid}`}>Void this touch</button>
+                      ))}
                       <button type="button" onClick={() => logTouch(item)} data-testid={`button-touch-save-${item.id}`}>Record the touch</button>
                       <button type="button" onClick={() => setTouchFor(null)}>Cancel</button>
                     </div>
                   )}
                   {privateNoteFor === item.id && (
                     <div className="inw-inline-form" data-testid={`form-private-note-${item.id}`}>
-                      <input value={privateNoteDraft} onChange={(e) => setPrivateNoteDraft(e.target.value)} placeholder="Only you see this note" aria-label="Private note" data-testid={`input-private-note-${item.id}`} />
+                      <input value={privateNoteDraft} onChange={(e) => setPrivateNoteDraft(e.target.value)} placeholder="Only you see this note (kept to 2,000 characters)" aria-label="Private note" data-testid={`input-private-note-${item.id}`} maxLength={2000} />
                       <button type="button" disabled={privateNoteBusy} onClick={() => savePrivateNote(item)} data-testid={`button-private-note-save-${item.id}`}>Save note</button>
                       <button type="button" onClick={() => setPrivateNoteFor(null)}>Cancel</button>
                     </div>
@@ -416,7 +445,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                   {reminderFor === item.id && (
                     <div className="inw-inline-form" data-testid={`form-reminder-${item.id}`}>
                       <input type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} aria-label="Remind on" data-testid={`input-reminder-date-${item.id}`} />
-                      <input value={reminderNote} onChange={(e) => setReminderNote(e.target.value)} placeholder="What to re-surface (optional)" aria-label="Reminder note" />
+                      <input value={reminderNote} onChange={(e) => setReminderNote(e.target.value)} placeholder="What to re-surface (optional, kept to 500 characters)" aria-label="Reminder note" maxLength={500} />
                       <button type="button" onClick={() => setReminder(item)} data-testid={`button-reminder-save-${item.id}`}>Set the reminder</button>
                       <button type="button" onClick={() => setReminderFor(null)}>Cancel</button>
                     </div>

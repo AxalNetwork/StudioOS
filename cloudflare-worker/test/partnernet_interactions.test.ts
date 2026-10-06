@@ -187,13 +187,13 @@ test('private notes are per party — only the writer reads theirs back', async 
   assert.equal(founder.body[0].my_private_note, null);
 });
 
-test('a calendar reminder date lands at end of that UTC day', async () => {
+test('a calendar reminder date is stored as that calendar day (D513)', async () => {
   const db = freshDb();
   const set = await call(investor, `/relationships/${REL}/reminders`, {
     method: 'POST', body: { remind_at: '2026-10-15' },
   }, db);
   assert.equal(set.status, 201);
-  assert.equal(set.body.item.remind_at, '2026-10-15T23:59:59.000Z');
+  assert.equal(set.body.item.remind_at, '2026-10-15');
 });
 
 test('a reminder needs its date, and is the setter’s alone', async () => {

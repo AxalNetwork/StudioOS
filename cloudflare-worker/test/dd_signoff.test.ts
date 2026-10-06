@@ -201,3 +201,23 @@ test('a section completed before the column existed reads unrecorded, not a gues
   const section = (read.body.sections || []).find((s: any) => s.id === 1);
   assert.equal(section?.signed_off_by_name, null, 'no signer is recorded, and none is invented');
 });
+
+// D515 — D466's report assertion was a regex over dueDiligence.ts. The report
+// is a pure function, so it is rendered: a completed section names its signer
+// and date, a pre-column one says "Sign-off not recorded", a section with no
+// verdict carries no sign-off line, and the name is escaped.
+test('the generated report renders the sign-off, unrecorded when absent, escaped', async () => {
+  const { renderReportHtml } = await import('../src/services/dueDiligence.ts');
+  const cs = { uid: 'c1', subject_label: 'Acme', subject_type: 'company', risk_score: 0.2, risk_band: 'green',
+    status: 'open', created_at: '2026-09-01', notes: null };
+  const sec = (over: Record<string, unknown>) => ({ section_key: 'k', title: 'T', weight: 1, status: 'completed',
+    verdict: 'pass', reviewer_notes: null, findings: [], ...over });
+  const html = renderReportHtml(cs, [
+    sec({ section_key: 'legal', title: 'Legal', signed_off_by_name: 'Rae <Reviewer>', completed_at: '2026-09-10 12:00:00' }),
+    sec({ section_key: 'tech', title: 'Tech', signed_off_by_name: null, completed_at: '2026-08-01' }),
+    sec({ section_key: 'mkt', title: 'Market', status: 'pending', verdict: null, signed_off_by_name: null }),
+  ]);
+  assert.match(html, /Signed off by Rae &lt;Reviewer&gt; · 2026-09-10/);
+  assert.equal((html.match(/Sign-off not recorded/g) || []).length, 1, 'only the completed pre-column section says so');
+  assert.doesNotMatch(html, /Signed off by Rae <Reviewer>/, 'the signer name is escaped');
+});
