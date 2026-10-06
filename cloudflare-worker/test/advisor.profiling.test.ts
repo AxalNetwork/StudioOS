@@ -27,9 +27,8 @@ import {
 // Expected fit.* PROFILING-CARD bank sizes per persona. Each persona's card
 // measures ONE fit bank — its rubric + Axal values PLUS (Task #45) Skills,
 // Work-values, and Archetype-trait questions so the four profiling modules have
-// enough signal. The advisor ALSO carries the coach bank in the conversation (for
-// axalFit/bestFit signal), but the completion card is scoped to the primary
-// advisor bank so a advisor's effort is comparable to other personas (Task #41).
+// enough signal. D577 delivers coach separately. Each card is scoped to its
+// current persona's bank, keeping effort comparable.
 const EXPECTED: Record<string, number> = {
   founder: 97, // Profiling v2 Session 9 (D319): +8 pick-ones, +8 reverse-keyed, +8 skills, +9 values, +6 Axal situations
   investor: 82, // D386 investor bank v2
@@ -163,7 +162,7 @@ test('archetype bank is the full trait + role + illustration set for every perso
   }
 });
 
-test('advisor completion card is scoped to the primary bank, but coach is still delivered in-conversation (Task #41)', () => {
+test('D577 advisor completion and conversation exclude coach questions', () => {
   // The card counts ONLY the advisor's primary fit bank — no coach questions —
   // so a advisor reaches "Profiling complete" with the same effort as other
   // personas instead of ~double (was 34).
@@ -172,10 +171,8 @@ test('advisor completion card is scoped to the primary bank, but coach is still 
   assert.ok(card.some((q) => q.id.startsWith('fit.advisor.')), 'card must contain the advisor fit bank');
   assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the advisor card');
 
-  // ...but the coach bank is STILL delivered in the advisor conversation, so the
-  // axalFit/bestFit coach-rubric signal is not lost. Guards against "fixing" the
-  // card by dropping coach from the conversation.
+  // D577 separates delivery while retaining both banks in the registry.
   const convo = bankFor('advisor' as Persona);
-  assert.ok(convo.some((q) => q.id.startsWith('fit.coach.')), 'coach bank must still ride inside the advisor conversation');
+  assert.ok(convo.every((q) => !q.id.startsWith('fit.coach.')), 'coach bank belongs to its own conversation');
   assert.ok(convo.some((q) => q.id.startsWith('fit.advisor.')), 'advisor bank must still be delivered in the advisor conversation');
 });

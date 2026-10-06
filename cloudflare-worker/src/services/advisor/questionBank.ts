@@ -24,7 +24,7 @@
  *   - validate?       — client-side validator name
  */
 
-export type Persona = 'founder' | 'investor' | 'advisor' | 'partner' | 'admin' | 'explorer' | 'unknown';
+export type Persona = 'founder' | 'investor' | 'advisor' | 'coach' | 'partner' | 'admin' | 'explorer' | 'unknown';
 export type Importance = 'critical' | 'high' | 'normal' | 'low';
 export type ValidateKind =
   | 'short' | 'long' | 'number' | 'select' | 'multi'
@@ -60,10 +60,10 @@ export type PartnerSubtype =
   | 'corporate_venture';  // CVC investment + commercial bundle
 
 // Task #19 — Best-Fit. Fit-question personas. Distinct from the advisor
-// `Persona` enum: it adds 'coach' (no advisor role) and drops admin/unknown.
+// `Persona` enum: it drops admin/explorer/unknown and identifies scoring lenses.
 // Fit questions carry id `fit.<FitPersona>.<key>`; fitMeasuresIndex() derives
 // the persona from that id prefix (NOT from Question.persona) so a coach fit
-// bank can ride inside the advisor conversation without touching `Persona`.
+// bank retains its permanent fit.coach.* IDs when routed to the coach conversation.
 export type FitPersona = 'founder' | 'investor' | 'partner' | 'advisor' | 'coach';
 
 // Task #19 — what a fit question measures. Tagged on each `fit.*` question and
@@ -297,11 +297,12 @@ function deliveredBankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }
   switch (persona) {
     // Task #19 — append the persona's Best-Fit bank so the conversational
     // profiling questions are delivered inline (importance:'low' → trailing).
-    // Advisor carries both advisor + coach fit banks (coach has no advisor role).
+    // D577 — advisor and coach profiling are separate conversations.
     case 'founder':  return [...(ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder), ...BANKS.fitFounder];
     case 'investor': return [...BANKS.investor, ...BANKS.fitInvestor];
     case 'partner':  return [...BANKS.operatingPartner, ...BANKS.fitPartner];
-    case 'advisor':   return [...BANKS.advisor, ...BANKS.fitAdvisor, ...BANKS.fitCoach];
+    case 'advisor':   return [...BANKS.advisor, ...BANKS.fitAdvisor];
+    case 'coach':     return [...BANKS.fitCoach];
     case 'admin':    return BANKS.admin;
     case 'explorer': return BANKS.explorer;
     default:         return [];
@@ -379,19 +380,9 @@ export const PROFILING_SECTION_ORDER: ProfilingSectionKey[] = [
 /**
  * The profiling (Best-Fit) bank for a persona: the `fit.*` questions only.
  *
- * Task #41 — the advisor persona ALSO carries the coach fit bank in the
- * conversation (`bankFor` appends fitCoach because coach has no advisor role of
- * its own) and those coach answers still feed axalFit/bestFit. But the
- * "Profiling completion" CARD measures only the advisor's PRIMARY fit bank
- * (fitAdvisor). The coach bank is a second lens over the SAME rubric categories +
- * the identical five Axal values, so counting both would make an advisor answer
- * roughly double every other persona. Scoping the card to the primary bank keeps
- * the completion effort comparable without dropping any conversational coverage
- * or axalFit/bestFit signal. The card measures Skills/Work-values/Archetype on
- * the advisor bank only. Since Session 12 (Profiling v2) the coach bank carries
- * its own archetype, skill and value items so a coach can be classified; they
- * trail the advisor bank in the conversation and are reached only past the
- * advisor floors, so nothing is asked twice on the way to "confident".
+ * D577 — advisor and coach each measure their own unchanged fit bank.
+ * Paid coaching is a conversation persona, not a new account role.
+ * Existing coach answer IDs remain registered and score as before.
  *
  * Admin / unknown have no fit bank, so profiling is "not applicable".
  */
@@ -401,6 +392,7 @@ export function profilingBankFor(persona: Persona): Question[] {
     case 'investor': return [...BANKS.fitInvestor];
     case 'partner':  return [...BANKS.fitPartner];
     case 'advisor':   return [...BANKS.fitAdvisor];
+    case 'coach':     return [...BANKS.fitCoach];
     default:         return [];
   }
 }

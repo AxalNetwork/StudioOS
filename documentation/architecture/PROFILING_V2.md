@@ -128,13 +128,13 @@ question, so `computeArchetype(…, 'coach')` returned null.
 **Session 12 (done).** The coach bank now carries the 20 shared trait probes,
 eight coach-flavoured role probes (`archetypePersonaRows('coach')`), four
 pick-ones and two reverse-keyed probes per trait. It does **not** repeat the
-illustration question: the advisor bank asks it in the same conversation and
-it sets one account-wide choice, so the coach module is
-`archetypeModuleRows('coach')` less `arch_illustration`. Coach questions ride
-in the advisor conversation after the advisor bank, and the profiling modules
-are pooled over both, so adaptive selection reaches them only past the
-advisor floors: they are the coach's own signal and the conversation's
-headroom, not a second survey. There are no separate coach personas; the
+illustration question: it sets one account-wide choice and any existing choice
+is retained. The coach module is `archetypeModuleRows('coach')` less
+`arch_illustration`. D577 separates delivery: active paid advisors
+(`advisors.is_active = 1 AND hourly_rate_usd > 0`) get only the coach bank;
+other advisors get the advisor bank. Each conversation uses its own module
+floors. Rate changes switch the delivered bank while preserving both sets of
+answers under their permanent IDs. There are no separate coach fixture personas; the
 four advisor personas and the advisor blend also answer the coach bank (§9).
 
 ### 2.5 Classification rule (unchanged method)
