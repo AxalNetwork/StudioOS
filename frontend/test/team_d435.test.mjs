@@ -72,8 +72,9 @@ test('the Team page is mounted in workspace mode, the old page is gone, and the 
     assert.match(line, new RegExp(`user\\?\\.role === 'founder' \\? <Navigate to="/build/team\\?mode=workspace&tab=${tab}" replace />`), path);
   }
   assert.doesNotMatch(APP, /to="\/build\/team\?tab=/, 'no redirect sends a bare ?tab= into the Grow desk');
-  const home = codeOnly(read('frontend/src/pages/founder/FounderStudioHome.jsx'));
-  assert.match(home, /to="\/build\/team\?mode=workspace&tab=advisor"/);
+  // The founder home's bookings card that linked here was retired with the
+  // 69dc42f3 body (D564); no founder Studio link sends a bare ?tab= either.
+  assert.doesNotMatch(codeOnly(read('frontend/src/pages/founder/FounderStudioBody.jsx')), /\/build\/team\?tab=/);
 });
 
 test('the legacy tab ids land in the tab that owns the job, and tab changes keep the mode', () => {

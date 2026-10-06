@@ -90,11 +90,13 @@ test('sprites stay pixelated, contained, feet on the floor, and hide on 404', ()
     'dark mode must keep a light tile so a white/transparent sprite stays visible');
 });
 
+// #1235: the owner supplied the Embedded Operator man's sprite (#982), so no
+// slug is exempt any more. A missing file fails here, not on the card, which
+// would silently drop the slot (canvas board S8b).
 test('public/archetypes has the female and male pair for every slug', () => {
   const dir = fileURLToPath(new URL('../public/archetypes/', import.meta.url));
   for (const slug of ARCHETYPE_KEYS) {
     assert.equal(existsSync(`${dir}${slug}_f.png`), true, `missing ${slug}_f.png`);
-    if (slug === 'pt_embedded_operator') continue;
     assert.equal(existsSync(`${dir}${slug}.png`), true, `missing ${slug}.png`);
   }
 });

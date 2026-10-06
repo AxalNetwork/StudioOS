@@ -62,7 +62,7 @@ test('reload re-runs the reads', () => {
   // The counter must be in the effect's dependency list or bumping it does
   // nothing.
   assert.match(src, /const reload = useCallback\(\(\) => setAttempt\(/);
-  assert.match(src, /\}, \[enabled, attempt\]\);/,
+  assert.match(src, /\}, \[enabled, attempt(, pageKey)?\]\);/,
     'the retry counter is not a dependency of the fetch, so Retry fetches nothing');
 });
 
