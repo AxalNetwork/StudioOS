@@ -204,7 +204,7 @@ export function LinkPainDialog({ open, hypotheses = [], painGroups = [], onClose
             <span className={LABEL}>Pain theme</span>
             <select value={groupId} onChange={(e) => setGroupId(e.target.value)} data-testid="select-link-pain-group" className={FIELD}>
               {painGroups.map((g) => (
-                <option key={g.id} value={g.id}>{g.title} · {g.count} interview{g.count === 1 ? '' : 's'}</option>
+                <option key={g.id} value={g.id}>{g.title}</option>
               ))}
             </select>
           </label>
