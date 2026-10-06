@@ -3,9 +3,11 @@
  * tasks. Mounted at /api/admin/ticket-reviews.
  *
  *   GET  /features                       feature requests not yet decided
+ *                                        { items, count, total }
  *   POST /features/:ticketId/approve     { reason }
  *   POST /features/:ticketId/decline     { reason }   the user is sent it
  *   GET  /tasks                          suggested tasks still pending
+ *                                        { items, count, total, audiences }
  *   POST /tasks/:id/approve              { audience, reason }
  *   POST /tasks/:id/decline              { reason }   the user is sent it
  *
@@ -26,7 +28,11 @@
  *     through D540's `grantCredits`, keyed `task:<id>` so it is paid once.
  *     Declining sends the reason.
  *
- * The page that drives these waits on its design (#1107 is `needs-design`).
+ * D606 — the page is `/hq/review` (`pages/hq/ReviewQueuePage.jsx`), built to
+ * the owner's Eadwyn Tickets canvas. A list reads the oldest 200 waiting;
+ * `count` is how many came back and `total` how many are waiting, so a page
+ * past the 200th says how many it cannot show rather than a short number.
+ * A task carries its GitHub issue's number beside its link, as a feature does.
  */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
@@ -113,7 +119,12 @@ r.get('/features', async (c) => {
       ticket_id: x.id, title: x.title, body: x.description, priority: x.priority, created_at: x.created_at,
       asked_by: asker(x), github_issue_number: x.github_issue_number ?? null, github_issue_url: x.github_issue_url ?? null,
     }));
-    return c.json({ items, count: items.length });
+    const waiting = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM tickets t
+        WHERE t.type = 'feature'
+          AND NOT EXISTS (SELECT 1 FROM feature_request_reviews f WHERE f.ticket_id = t.id)`,
+    ).first<{ n: number }>();
+    return c.json({ items, count: items.length, total: Math.max(Number(waiting?.n ?? 0), items.length) });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -163,7 +174,7 @@ r.get('/tasks', async (c) => {
     await requireSuperAdmin(c);
     const rows = await c.env.DB.prepare(
       `SELECT ct.id, ct.ticket_id, ct.title, ct.body, ct.created_at, t.priority, t.user_id, t.submitted_by,
-              t.github_issue_url, u.name AS user_name, u.email AS user_email
+              t.github_issue_number, t.github_issue_url, u.name AS user_name, u.email AS user_email
          FROM community_tasks ct
          JOIN tickets t ON t.id = ct.ticket_id
          LEFT JOIN users u ON u.id = t.user_id
@@ -172,9 +183,13 @@ r.get('/tasks', async (c) => {
     ).all<any>();
     const items = (rows.results || []).map((x: any) => ({
       id: x.id, ticket_id: x.ticket_id, title: x.title, body: x.body, priority: x.priority, created_at: x.created_at,
-      asked_by: asker(x), github_issue_url: x.github_issue_url ?? null,
+      asked_by: asker(x), github_issue_number: x.github_issue_number ?? null, github_issue_url: x.github_issue_url ?? null,
     }));
-    return c.json({ items, count: items.length, audiences: AUDIENCES });
+    const waiting = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM community_tasks ct JOIN tickets t ON t.id = ct.ticket_id
+        WHERE ct.status = 'pending' AND t.type = 'task'`,
+    ).first<{ n: number }>();
+    return c.json({ items, count: items.length, total: Math.max(Number(waiting?.n ?? 0), items.length), audiences: AUDIENCES });
   } catch (e) { return mapError(c, e); }
 });
 

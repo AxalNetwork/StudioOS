@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Search, RefreshCw } from 'lucide-react';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
+import { isSuperAdminUser } from '../lib/shellRole';
 import { TICKET_CATEGORIES } from '../lib/ticketCategories';
 import { createDocsFuse } from '../lib/docs/search';
 import { SECTIONS, filterSectionsForRole } from './docs/sections';
@@ -805,7 +806,7 @@ function TrackerCard({ ticket, isAdmin, onChanged }) {
   );
 }
 
-function OutcomePanel({ ticket }) {
+function OutcomePanel({ ticket, reviewer = false }) {
   if (ticket.type === 'bug') {
     const line = bountyLine(ticket.bounty);
     const panel = bountyPanel(ticket.bounty);
@@ -826,6 +827,13 @@ function OutcomePanel({ ticket }) {
         <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.11em]">Review</h2>
         <p className="mt-1.5 text-[14px] font-extrabold tracking-tight">{line.text}</p>
         <p className="mt-1 text-[12.5px] leading-relaxed">{line.note}</p>
+        {/* D606 — H7's link, now that the queue has its page. The Super
+            Admin decides; everyone else sees the review only. */}
+        {reviewer && ticket.review?.state === 'awaiting' && (
+          <Link to="/hq/review" className="mt-2 inline-block text-[12.5px] font-semibold underline" data-testid="ticket-review-queue-link">
+            Feature review queue →
+          </Link>
+        )}
       </section>
     );
   }
@@ -943,7 +951,7 @@ export function TicketView({ ticket: t, isAdmin, user, outcome, onRefresh }) {
             </dl>
           </RailCard>
           <TrackerCard ticket={t} isAdmin={isAdmin} onChanged={refresh} />
-          <OutcomePanel ticket={t} />
+          <OutcomePanel ticket={t} reviewer={isAdmin && isSuperAdminUser(user)} />
         </aside>
       </div>
     </div>

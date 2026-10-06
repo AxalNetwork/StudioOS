@@ -21,6 +21,7 @@ export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
 export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
+export * from './api/ticketReviews.js';
 // api-modules:end
 
 const BASE = '/api';

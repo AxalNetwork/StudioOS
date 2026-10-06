@@ -82,6 +82,15 @@ test('both callers that create tickets send a type', () => {
     /const found = formErrors\(form\);[\s\S]{0,200}if \(found\.type\) \{ typeRef\.current\?\.focus\(\); return; \}[\s\S]*const res = await api\.createTicket\(form\)/,
     'the Tickets page form sends a ticket without a type',
   );
+  // D606 (#1107, #1108) — the chat's form follows the same rule: no default
+  // type, except from the Tasks panel's "Suggest a task", which opens it on
+  // Task; the submit stops before the request while none is picked.
   const pa = readFileSync('frontend/src/components/advisor/PersonalAdvisor.jsx', 'utf8');
-  assert.match(pa, /const \[type, setType\] = useState\('task'\);/);
+  assert.match(pa, /const \[type, setType\] = useState\(initialType \|\| ''\);/, 'the chat form presets a type again');
+  assert.match(
+    pa,
+    /if \(!TICKET_TYPES\.some\(\(t\) => t\.id === type\)\) \{[\s\S]{0,120}return;\s*\}[\s\S]{0,400}api\.createTicket\(/,
+    'the chat form sends a ticket without a type',
+  );
+  assert.match(pa, /const suggestTask = useCallback\(\(\) => \{ setTicketPreset\('task'\); setTicketOpen\(true\); \}, \[\]\);/);
 });
