@@ -282,7 +282,6 @@ test('§4: the overall figure cannot read 100 while the archetype is short of a 
 
 test('§4: the adaptive queue keeps asking the archetype until every trait is answered, missing traits first', () => {
   const bank = profilingBankFor('investor' as Persona);
-  const qs = bank.filter((q) => moduleForQuestion(q) === 'archetype');
   const answered = investorTwoTraits(bank);
   const next = selectAdaptiveProfiling(bank, answered).filter((q) => moduleForQuestion(q) === 'archetype');
   assert.ok(next.length > 0, 'a module short of a trait is not dropped from the queue');
