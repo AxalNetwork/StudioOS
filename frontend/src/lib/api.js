@@ -3468,6 +3468,7 @@ export const api = {
   // the GitHub mirror strip, in one read. Each part answers for itself: an
   // unreadable escalation board costs its own queue, never the tickets beside it.
   hqSupport: () => request('/admin/hq-support'),
+  hqSupportSetSlaTiers: (tiers) => request('/admin/hq-support/sla-tiers', { method: 'PUT', body: JSON.stringify({ tiers }) }),
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
   // client-side filter would quietly show a handful of rows and read as

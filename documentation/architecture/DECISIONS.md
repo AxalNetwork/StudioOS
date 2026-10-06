@@ -41149,6 +41149,73 @@ caught, including:
 `hq_security_sessions_d481.test.mjs` (12 tests) renders the panel and the
 cards. Eight mutations were each caught.
 
+## D482
+
+**HQ · Support: a ticket's category is one of eight, and HQ's ticket SLA hours
+are a store HQ edits (issue #1022, migration 333).** Slot S07. The owner chose A
+on #1022: migration 333 only, and `services/githubSync.ts`'s runtime ALTERs are
+not touched.
+
+**The category.** Canvas Y1 (`Support Security · Super.dc.html`) draws a fixed
+taxonomy of eight: Fund administration, Contracts, Access & permissions,
+Licence & seats, Billing, Data & reporting, Onboarding, Other. The page said
+the opposite ("Free-text categories would not stay comparable") while counting
+tickets by type.
+
+- `tickets.category` (migration 333) holds one of eight slugs, under a CHECK.
+  `services/ticketCategories.ts` holds the labels. The filing form's copy,
+  `frontend/src/lib/ticketCategories.js`, is held to the CHECK by a test that
+  runs migration 333.
+- NULL is "no category recorded". That covers every ticket filed before 333,
+  and any ticket filed without a category. It is never Other.
+- `POST /api/tickets` stores the category, refuses a value outside the set
+  (400), and stores NULL when none is named.
+- `PUT /api/tickets/:id` changes the category only when the body names the
+  key, alone or beside another field; `null` clears it.
+- The filing form (`TicketsPage.jsx`) asks for a category. The Personal
+  Advisor's ticket path names none, so it files NULL.
+- The panel's taxonomy counts open tickets by category: all eight, in the
+  canvas's order, with zeros, plus the uncategorised count apart.
+
+**The SLA tier store.** D459 settled the P1/P2/P3 band rule and left the hours
+as constants.
+
+- They are now `hq_support_sla_tiers` (migration 333), seeded with D459's
+  24 / 48 / 96, so nothing bands differently the day it applies.
+- `PUT /api/admin/hq-support/sla-tiers`, gated by `requireSuperAdmin` like the
+  page's read, takes all three tiers at once. Each needs whole hours from 1 to
+  720 and a description, with P1 ≤ P2 ≤ P3. A violation is refused 400 and
+  nothing is written.
+- A write that changes something writes one `logAdminAction` row
+  (`hq_support.sla_tiers.update`) carrying each changed tier's before and
+  after. A write that changes nothing writes no row.
+- `GET /api/admin/hq-support` reads the store on every call and bands tickets
+  with it.
+- If the store cannot be read, or is missing a tier, `sla_policy.tiers` is
+  unavailable with its reason. No ticket is banded (`sla_band` and `bands`
+  null), and the seed does not stand in. The queues and their counts stay.
+- The escalation kinds' hours (`rpc/hqOps.ts` `SLA_HOURS`) stay in code. They
+  stamp `due_at` when a branch raises an escalation, which is a second promise.
+
+**Held: the branch copy.** A branch would carry these hours in its licence copy,
+and that is `routes/licence.ts`, slot S05's. Until then a branch bands with the
+hours it shipped with. The panel says so (`branch_copy.held`, "Branch copy
+held"), and so does the page's rail.
+
+**Tests.**
+- `cloudflare-worker/test/support_category_sla_store_d482.test.ts` (6 tests)
+  pins the migration's CHECKs and seed, the category on create and update, the
+  tier write's gate, validation and audit, banding with the stored hours, the
+  category taxonomy, and the unreadable or partial store.
+- `frontend/test/ticket_categories_d482.test.mjs` (5 tests) pins the panel's
+  states, the rail, and the form's list against migration 333.
+- Existing fixtures that build `tickets` now apply 333:
+  `ticket_creation_recovery`, `support_queues_d204`.
+- `support_sla_band_d459` and `hq_support_sla_d455` now read the store-shaped
+  policy and the category taxonomy.
+
+28 mutations were made and every one was caught.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor
