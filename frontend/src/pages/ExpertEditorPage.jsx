@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, CreditCard, Plus, RefreshCcw } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card, SectionLabel, Skeleton, Unrecorded, Unreadable, WorkerRail } from '../ui';
+import { Card, SectionLabel, Skeleton, Unrecorded, Unreadable, RailFrame, WorkerRail } from '../ui';
 import {
   EXPERT_MODALITIES, EXPERT_PRICING_MODELS, browserTimeZone, gridTimeZone, practiceCoverage,
   profileBody, profileDraft, splitBookings,
@@ -226,7 +226,26 @@ export default function ExpertEditorPage() {
   const set = (key) => (e) => setDraft((d) => ({ ...d, [key]: e.target.value }));
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,286px)]" data-testid="wellbeing-practice">
+    <RailFrame
+      data-testid="wellbeing-practice"
+      rail={(
+        <WorkerRail
+          workspace="Wellbeing practice"
+          role="advisor"
+          stance="Your practice, as stored"
+          note="Eadwyn reads back counts only: services, open hours and upcoming bookings. It never sees a member’s name or note, and it changes nothing here."
+          coverage={practiceCoverage({
+            services: services.status === 'ready' ? services.rows : null,
+            windows: windows.status === 'ready' ? windows.rows : null,
+            upcoming,
+          })}
+          coverageNote="Counts only. A member’s name never leaves this page."
+          unavailable={[
+            ['Which hours to open', 'No route records the times members asked for and could not get, so there is nothing to suggest from.'],
+          ]}
+        />
+      )}
+    >
       <section className="min-w-0 space-y-4" aria-label="My practice">
         <PageHeader
           title="My practice"
@@ -389,22 +408,6 @@ export default function ExpertEditorPage() {
           </>
         )}
       </section>
-      <WorkerRail
-        workspace="Wellbeing practice"
-        role="advisor"
-        className="self-start lg:sticky lg:top-4"
-        stance="Your practice, as stored"
-        note="Eadwyn reads back counts only: services, open hours and upcoming bookings. It never sees a member’s name or note, and it changes nothing here."
-        coverage={practiceCoverage({
-          services: services.status === 'ready' ? services.rows : null,
-          windows: windows.status === 'ready' ? windows.rows : null,
-          upcoming,
-        })}
-        coverageNote="Counts only. A member’s name never leaves this page."
-        unavailable={[
-          ['Which hours to open', 'No route records the times members asked for and could not get, so there is nothing to suggest from.'],
-        ]}
-      />
-    </div>
+    </RailFrame>
   );
 }

@@ -15,16 +15,6 @@ import { NOT_LIVE_LINE } from './learningModel';
  * merges. A read that failed is unreadable, and is never drawn as empty.
  */
 
-/** The page and the Worker AI rail beside it; the rail's column collapses with the rail. */
-export function LearningFrame({ children, rail, testid }) {
-  return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_var(--fwr-track,280px)] lg:items-start lg:gap-6" data-testid={testid}>
-      <div className="min-w-0 space-y-4">{children}</div>
-      <div className="mt-4 lg:sticky lg:top-4 lg:mt-0">{rail}</div>
-    </div>
-  );
-}
-
 /** The canvas's header: an optional way back, the title, one line under it, one action. */
 export function LearningHeader({ eyebrow = 'Learning', title, sub, back, action }) {
   return (

@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { WorkerRail } from '../../ui';
+import { RailFrame, WorkerRail } from '../../ui';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { COMING_SOON_LINE, learningComingSoon } from './learningAccess';
 import { NOT_LIVE } from './learningModel';
-import { ComingSoonCard, LearningFrame, LearningHeader, NotLiveYet, SectionCard } from './LearningStates';
+import { ComingSoonCard, LearningHeader, NotLiveYet, SectionCard } from './LearningStates';
 import LearningHome from './LearningHome';
 import CourseOutline from './CourseOutline';
 import LessonPlayer from './LessonPlayer';
@@ -217,10 +217,12 @@ export function LearningSubPage({ view, gated }) {
   const config = LEARNING_VIEWS[view];
   if (!config) return null;
   return (
-    <LearningFrame testid={`learning-${view}`} rail={<SubPageRail tier={config.tier} gated={gated} />}>
-      <LearningHeader title={config.title} sub={config.sub} back={config.back(params)} action={gated ? null : HEADER_ACTION[view]} />
-      {gated ? <ComingSoonCard /> : <ViewBody view={view} />}
-    </LearningFrame>
+    <RailFrame data-testid={`learning-${view}`} rail={<SubPageRail tier={config.tier} gated={gated} />}>
+      <div className="space-y-4">
+        <LearningHeader title={config.title} sub={config.sub} back={config.back(params)} action={gated ? null : HEADER_ACTION[view]} />
+        {gated ? <ComingSoonCard /> : <ViewBody view={view} />}
+      </div>
+    </RailFrame>
   );
 }
 

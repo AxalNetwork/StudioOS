@@ -571,7 +571,8 @@ test('the Worker AI rail sits beside the page with a literal accent and a collap
   assert.match(rail, /workspace="Account"/);
   assert.match(rail, /role="founder"/);
   assert.match(rail, /coverage=\{accountRailCoverage\(data, activeLabel\)\}/);
-  assert.match(page, /lg:grid-cols-\[minmax\(0,1fr\)_var\(--fwr-track,286px\)\]/);
+  // D556's shared frame, whose track narrows through --fwr-track.
+  assert.match(page, /<RailFrame\b[\s\S]*?\brail=\{\(\s*<WorkerRail\b/);
   // The voice rule, on the copy this page hands the rail.
   assert.doesNotMatch(rail, /advis|recommend|fiduciary/i);
 });
