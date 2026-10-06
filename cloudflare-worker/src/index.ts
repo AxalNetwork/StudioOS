@@ -146,7 +146,9 @@ import decks from './routes/decks';
 import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
 import research from './routes/research';
+import researchOverview from './routes/research_overview';
 import researchMarkets from './routes/research_markets';
+import researchSectors from './routes/research_sectors';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -184,6 +186,7 @@ import branchSupportSessionRoutes from './routes/branch_support_sessions';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminCreditRules from './routes/admin_credit_rules';
 import adminTicketReviews from './routes/admin_ticket_reviews';
+import communityTasksRoutes from './routes/community_tasks';
 import adminHq from './routes/admin_hq';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
@@ -983,9 +986,12 @@ app.route('/api/deck-reviewer', deckReviewer);
 // answered only from it. Every read is scoped `WHERE owner_user_id = ?`, and
 // its vectors are deliberately unreachable from /api/search: see the
 // VALID_TYPES comment in routes/search.ts.
+// D536 — mounted before /api/research so its one path is never shadowed.
+app.route('/api/research/overview', researchOverview);
 // D533 — Research · Markets and · Geographies, read through the crosswalk in
 // services/researchTaxonomy.ts. Paths do not overlap research.ts's.
 app.route('/api/research', researchMarkets);
+app.route('/api/research', researchSectors);
 app.route('/api/research', research);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
@@ -1074,6 +1080,8 @@ app.route('/api/data-room', dataRoomRoutes);
 app.route('/api/advisor-grants', advisorGrantRoutes);
 app.route('/api/messages', messagesRoutes);
 app.route('/api/perks', perksRoutes);
+// D545 — the approved community tasks the chat's Tasks panel lists.
+app.route('/api/community-tasks', communityTasksRoutes);
 app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.

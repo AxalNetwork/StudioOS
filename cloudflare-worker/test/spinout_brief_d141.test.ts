@@ -65,7 +65,17 @@ app.route('/', spinoutLab);
  * back to the product default; every date still answers, because no date is
  * read from here.
  */
-function emptyDb() { return new DatabaseSync(':memory:'); }
+function emptyDb() {
+  // D511 — the table exists everywhere (schema_baseline, migration 157); "no
+  // setting" is an EMPTY table. A database with no table at all is a read that
+  // fails, which `brokenDb` below covers.
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE cohort_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+  return db;
+}
+
+/** D511 — a database whose settings read fails. */
+function brokenDb() { return new DatabaseSync(':memory:'); }
 
 /** …and one where an operator HAS set the cohort size. */
 function sizedDb(max: number) {
@@ -145,6 +155,18 @@ test('places reflects what an operator set, and the default is the operative num
   const bare = await get(emptyDb());
   assert.ok(Number.isFinite(bare.body.cohort.places) && bare.body.cohort.places > 0,
     'with no setting the route reports no places at all, rather than the default that is actually in force');
+  assert.equal(bare.body.places_unreadable, false);
+});
+
+test('D511 — a settings read that fails reports no places and says so, never the default', async () => {
+  const errs: unknown[][] = [];
+  const orig = console.error; console.error = (...a: unknown[]) => { errs.push(a); };
+  let broken;
+  try { broken = await get(brokenDb()); } finally { console.error = orig; }
+  assert.equal(broken.status, 200, 'the brief still loads: five of its six facts need no table');
+  assert.equal(broken.body.cohort.places, null, 'a failed read printed a place count nobody set');
+  assert.equal(broken.body.places_unreadable, true);
+  assert.ok(errs.some((a) => String(a[0]).includes('cohort_settings unreadable')), 'the failure is logged');
 });
 
 test('the route sends ONLY the live half — the programme copy is not served from here', async () => {
@@ -153,7 +175,7 @@ test('the route sends ONLY the live half — the programme copy is not served fr
   // the pages that already render them; a route that also served them would be
   // a store invented so a page could look dynamic.
   const { body } = await get(emptyDb());
-  assert.deepEqual(Object.keys(body).sort(), ['applications_open', 'brief', 'cohort', 'zone']);
+  assert.deepEqual(Object.keys(body).sort(), ['applications_open', 'brief', 'cohort', 'places_unreadable', 'zone']);
   for (const k of ['tracks', 'tools', 'groups', 'gates', 'jurs', 'deliverables', 'weeks', 'terms']) {
     assert.equal(body[k], undefined, `the route serves \`${k}\`, which is content rather than a measurement`);
   }

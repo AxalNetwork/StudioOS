@@ -33,3 +33,13 @@ instead of a provider. A read of `market_intel_rows` filters with
 `market_intel_live_rows_d538.test.ts` fails on any query in the Worker that
 reads either table without it. A sector or dimension with no live data is
 `null` with the reason, never a neutral 50.
+
+**No stub row is stored in production (D538).** A source that is off, out of
+quota or failing stores nothing, and the run logs why (`flag_off`,
+`no_live_client`, `quota_exhausted`, `no_live_rows`, `fetch_failed`). The
+stub runs only where `MI_STUB_ROWS = "on"`: put that in `.dev.vars` for local
+data. A draft connector whose `fetchLive` still answers with stub rows stores
+nothing either, because outside development only rows passing `isLiveRow` are
+kept. Flipping a source live is `MI_FLAG_<KEY> = "live"` in BOTH var tables of
+`wrangler.toml`; `market_intel_live_sources_d538.test.ts` fails on a flag in
+one table only, or on a flagged source that reads a key or answers with stubs.

@@ -36,15 +36,15 @@ export const ADVISOR_COPY = {
 /**
  * Network · Organizations, on a licence that renders no body for it.
  *
- * `ORG_BACKED` above is `{founder, investor, partner}`, and this file
- * used to explain that set as a store: "a founder reads `contacts.organization`
- * and the investor workspace has its own section". There is no such column on
- * `contacts`, and the investor path ends at `metadata.organization_name`, which
- * nothing in the product writes. The edge is missing on all four licences.
+ * `ORG_BACKED` below is `{founder, investor, partner}`. A founder's zone
+ * groups `contacts.organization`, which migration 386 (D551, #1144) added and
+ * `PUT /api/contacts/:uid` sets; a partner's groups the book's own column
+ * (migration 224). The investor path still ends at
+ * `metadata.organization_name`, which nothing writes — #1023's IN3 is to read
+ * the same `contacts.organization` there.
  *
- * What differs is only where the absence is said. Founder and investor have a
- * body that says it — an empty table, a stat reading "No organization fields
- * returned", and a header row of notes. Advisor and operator have no body, so
+ * Founder and investor have a body that says what is and is not recorded — a
+ * table, its empty state and the zone's notes. Advisor and operator have no body, so
  * the copy below is the whole surface. The heading is the exact line the
  * overview card shows, so the card, the board section and the rail say one
  * thing.

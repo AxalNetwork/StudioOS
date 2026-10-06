@@ -14,6 +14,12 @@
  *                         typed reason; recorded in admin_audit_log
  *   POST /dsr/:userId/close   close a data-subject erasure request as
  *                         fulfilled or denied, with a typed reason (D168)
+ *   GET  /sessions        D481 — active sessions and live support sessions,
+ *                         the list the Sessions zone acts on
+ *   POST /sessions/:id/revoke   revoke one session, with a typed reason
+ *   POST /sessions/revoke       revoke the selected sessions, one reason,
+ *                         one audit row per session
+ *   POST /impersonations/:id/end   close a live support session's record
  *
  * WHAT IS REAL HERE. The admin action audit (`admin_audit_log`, every action,
  * newest first — the existing /monitoring/audit read allows two actions only);
@@ -50,7 +56,14 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat } from '../auth';
+import {
+  IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat, selectJwt,
+} from '../auth';
+import {
+  listActiveSessions, countActiveSessions, listLiveImpersonations, revokeUserSession, endImpersonation,
+  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT,
+} from '../services/userSessions';
+import { loadTokenAnomalies } from '../services/tokenAnomalies';
 import { logAdminAction } from '../services/adminAudit';
 import { loadGuardrailCounters } from '../services/aiRouter';
 import {
@@ -66,7 +79,6 @@ import {
 const r = new Hono<{ Bindings: Env }>();
 
 const IMPERSONATION_LIMIT = 25;
-const SESSION_WINDOW_DAYS = 30;
 const MIN_REASON = 8;
 
 
@@ -96,11 +108,24 @@ const absent = (reason: string): Absent => ({ available: false, reason });
  * two literals drift the day one of them is reworded.
  */
 const AI_SAFETY_NOT_COUNTED: Array<{ what: string; reason: string }> = [
+  // D481 — 'Token anomalies' WAS THE FIRST ROW HERE AND IS GONE, for the reason
+  // D158 removed the rule row below: the thing was built rather than
+  // re-described. The block now carries `token_anomalies` from
+  // services/tokenAnomalies.ts, which reads `ai_usage_logs` directly.
+  //
+  // The two rows that replace it are H23's own tiles, which this page had not
+  // named at all — the canvas drew them with sample counts and the page drew
+  // nothing, which is neither a figure nor a stated absence.
   {
-    what: 'Token anomalies',
-    reason: 'Nothing watches per-account token consumption for a spike. Spend is capped per user per day and '
-      + 'per month, and a cap being hit is recorded as a refusal — but a refusal is a limit reached, not an '
-      + 'anomaly detected.',
+    what: 'Cross-tenant refusals',
+    reason: 'No store records a refusal to cross a tenant. `ai_usage_logs.refusal` names budget, kill-switch '
+      + 'and model failures only, neither AI table carries a tenant column, and no branch RPC returns one — '
+      + 'so the tenancy wall holding is not something this page can count.',
+  },
+  {
+    what: 'Flagged outputs held for review',
+    reason: 'Nothing holds an output for review. A shadow flag is counted above as Outputs flagged, and the '
+      + 'turn it flagged was still answered; no table records a held output or its release.',
   },
   // D158 — 'Which guardrail rule fired' WAS THE SECOND ROW HERE AND IS GONE,
   // because the thing it described was fixed rather than merely re-described.
@@ -143,6 +168,9 @@ async function aiSafetyBlock(env: Env) {
     since: counters.since,
     verdicts: counters.verdicts,
     enforcement: counters.enforcement,
+    // D481 — its own availability, its own table, its own window (24 hours
+    // against the seven days before), stated in its own `how`.
+    token_anomalies: await loadTokenAnomalies(env),
     not_counted: AI_SAFETY_NOT_COUNTED,
   };
 }
@@ -183,6 +211,48 @@ const DSR_BRANCH_REASON =
   + 'a branch is that branch\'s to answer and is visible there. Every request listed here is held on this '
   + 'database.';
 
+/**
+ * D481 — H23 draws one more tile in the KYC card and one in Backup / DR than
+ * the platform records. Each comes back as a named absence with its reason,
+ * never a zero and never the canvas's sample figure.
+ */
+const KYC_NOT_RECORDED: Array<{ what: string; reason: string }> = [
+  {
+    what: 'Accreditation lapsed',
+    reason: 'An investor\'s accreditation status is stored, but not when it was attested or when it expires, so '
+      + 'no record can be overdue for re-attestation.',
+  },
+];
+const DR_NOT_RECORDED: Array<{ what: string; reason: string }> = [
+  {
+    what: 'Failover test',
+    reason: 'No standby exists to fail over to: HQ runs on one Worker and one D1 database, and no failover '
+      + 'exercise is run or written anywhere. The restore drill is the recovery the platform has, and it writes '
+      + 'its own marker.',
+  },
+];
+
+/**
+ * D481 — which kinds of data-subject request the ledger holds. The zone used
+ * to print "erasure" on every row as a literal, which read as though the
+ * other kinds were simply absent today; they are absent by construction.
+ */
+const DSR_KINDS: Array<{ kind: string; recorded: boolean; reason?: string }> = [
+  { kind: 'erasure', recorded: true },
+  {
+    kind: 'access',
+    recorded: false,
+    reason: 'The ledger records deletion requests only. An account can download its own profile and recent '
+      + 'activity from Settings, but that download is not recorded as a request and runs no clock.',
+  },
+  {
+    kind: 'portability',
+    recorded: false,
+    reason: 'The ledger records deletion requests only, and no request for a machine-readable copy is taken '
+      + 'or timed anywhere on the platform.',
+  },
+];
+
 /** How many branch Workers are bound here, or null when the env cannot be scanned. */
 function boundBranchCount(env: Env): number | null {
   try { return branchBindings(env).length; } catch { return null; }
@@ -219,16 +289,12 @@ r.get('/overview', async (c) => {
     impersonations = absent('The impersonation_sessions table could not be read on this database.');
   }
 
-  // Sessions: one row per JWT mint (routes/settings.ts). "Active" is a row not
-  // revoked and seen inside the window; a token's own expiry is not stored
-  // here, so the window is the honest bound.
-  let sessions: { available: true; active: number; window_days: number } | Absent;
+  // Sessions: one row per JWT mint (routes/settings.ts). "Active" is the
+  // list's own predicate (services/userSessions.ts): not revoked, token not
+  // past its lifetime, and not below the account's sign-out floor.
+  let sessions: { available: true; active: number; token_hours: number } | Absent;
   try {
-    const active = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM user_sessions
-        WHERE revoked_at IS NULL AND last_seen_at >= datetime('now', ?)`,
-    ).bind(`-${SESSION_WINDOW_DAYS} days`).first<{ n: number }>();
-    sessions = { available: true, active: Number(active?.n) || 0, window_days: SESSION_WINDOW_DAYS };
+    sessions = { available: true, active: await countActiveSessions(env), token_hours: SESSION_TOKEN_HOURS };
   } catch {
     sessions = absent('The user_sessions table could not be read on this database.');
   }
@@ -265,6 +331,10 @@ r.get('/overview', async (c) => {
     const seen = ledger.available ? ledger.byUser.get(u.id) : undefined;
     return {
       id: u.id, email: u.email, name: u.name, role: u.role,
+      // D481 — the kind comes from the store that holds the row. Every row
+      // here is read from `deletion_requested_at`, so it is an erasure
+      // request, and the page prints this field rather than a literal.
+      kind: 'erasure',
       requested_at: u.deletion_requested_at,
       // null when the timestamp cannot be parsed: an unknown clock is not a
       // clock at zero. The arithmetic lives in the service so it can fail a
@@ -283,8 +353,10 @@ r.get('/overview', async (c) => {
     sessions,
     mfa: { admins_total: Number(admins?.total) || 0, admins_with_mfa: Number(admins?.with_mfa) || 0 },
     kyc,
+    kyc_not_recorded: KYC_NOT_RECORDED,
     dsr: {
       clock_days: DSR_CLOCK_DAYS,
+      kinds: DSR_KINDS,
       rows: dsr,
       // D200 — H23 draws the DSR clocks "by territory · runs against the
       // holding branch". Every request this database holds is HQ-held by
@@ -315,6 +387,7 @@ r.get('/overview', async (c) => {
     backup_dr: {
       backup: await readBackupHeartbeat(env, 'd1'),
       drill: await readRestoreDrill(env),
+      not_recorded: DR_NOT_RECORDED,
     },
   });
 });
@@ -899,6 +972,230 @@ r.get('/governance', async (c) => {
       + 'support session against ONE account: those two change who you are, and this one changes only which '
       + 'database was read. Every action is absent under it rather than disabled, because no action runs '
       + 'from it.',
+  });
+});
+
+// ── D481 · the Sessions zone acts ─────────────────────────────────────────
+//
+// The zone said "Revoke is recorded" and had no revoke. These four routes are
+// the list it acts on and the three acts. Each write is behind the same bar as
+// force re-auth, for the same reason that route's docblock gives: a revoke is
+// what an attacker holding an admin session reaches for to lock the real
+// holder out. Each revoke writes ONE `logAdminAction` row naming the account
+// whose session it was (`target_user_id`), so the governance feed's join can
+// say whose session ended — and a bulk revoke writes one per session, never
+// one row for "some sessions".
+
+/** A typed reason, or the refusal that says how long it must be. */
+async function reasonOf(c: any): Promise<{ reason: string; body: Record<string, unknown> }> {
+  let body: Record<string, unknown> = {};
+  try { body = (await c.req.json()) as Record<string, unknown>; } catch { body = {}; }
+  return { reason: String(body?.reason ?? '').trim(), body };
+}
+const reasonRefusal = (c: any) => c.json({
+  error: `A reason of at least ${MIN_REASON} characters is required. It is stored with the action.`,
+  code: 'reason_required',
+}, 400);
+
+r.get('/sessions', async (c) => {
+  await requireSuperAdmin(c);
+  const sel = await selectJwt(c);
+  const currentJti = typeof sel?.payload?.jti === 'string' ? (sel.payload.jti as string) : null;
+
+  // UNREADABLE IS A 503, NOT AN EMPTY LIST. "Nobody is signed in" is the one
+  // answer a security desk must never give by accident.
+  let list: Awaited<ReturnType<typeof listActiveSessions>>;
+  try {
+    list = await listActiveSessions(c.env, currentJti);
+  } catch {
+    return c.json({
+      error: 'Unreadable — the user_sessions table could not be read on this database. This is not a claim '
+        + 'that nobody is signed in.',
+      code: 'sessions_unreadable',
+    }, 503);
+  }
+
+  // The support sessions answer for themselves: a database that never
+  // impersonated has no table, and that costs this half, not the list.
+  let impersonations: { available: true; rows: Awaited<ReturnType<typeof listLiveImpersonations>> } | Absent;
+  try {
+    impersonations = { available: true, rows: await listLiveImpersonations(c.env) };
+  } catch {
+    impersonations = absent('The impersonation_sessions table could not be read on this database.');
+  }
+
+  return c.json({
+    token_hours: SESSION_TOKEN_HOURS,
+    total: list.total,
+    rows: list.rows,
+    impersonations,
+    expiry_minutes: IMPERSONATION_EXPIRY_MINUTES,
+  });
+});
+
+r.post('/sessions/:id/revoke', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ error: 'A numeric session id is required.', code: 'invalid_target' }, 400);
+  }
+  const { reason } = await reasonOf(c);
+  if (reason.length < MIN_REASON) return reasonRefusal(c);
+
+  // YOUR OWN CURRENT SESSION IS NOT REVOKED FROM HERE. The row is labelled
+  // Current and offers no Revoke; a request that names it anyway is refused,
+  // because the act would sign the operator out mid-incident with nothing
+  // recorded about why the desk went dark. Sign out is the door for that.
+  const sel = await selectJwt(c);
+  const currentJti = typeof sel?.payload?.jti === 'string' ? (sel.payload.jti as string) : null;
+  if (currentJti) {
+    const own = await c.env.DB.prepare(
+      'SELECT id FROM user_sessions WHERE jti = ?',
+    ).bind(currentJti).first<{ id: number }>();
+    if (own && Number(own.id) === id) {
+      return c.json({
+        error: 'That is the session you are using. Sign out to end it; it is not revoked from this list.',
+        code: 'own_current_session',
+      }, 409);
+    }
+  }
+
+  const out = await revokeUserSession(c.env, id);
+  if (out.outcome === 'not_found') {
+    return c.json({ error: 'No session holds that id.', code: 'session_not_found' }, 404);
+  }
+  if (out.outcome === 'already_revoked') {
+    return c.json({
+      error: `That session was already revoked${out.revoked_at ? ` at ${out.revoked_at}` : ''}. Nothing was changed.`,
+      code: 'already_revoked',
+    }, 409);
+  }
+  // `target_user_id`, never `user_id` — D159's guard, and the key the
+  // governance feed's LEFT JOIN names the account by.
+  await logAdminAction(c.env, actor.id, actor.email, 'security_session_revoked', {
+    reason,
+    target_user_id: out.user_id,
+    session_id: id,
+    revoked_at: out.revoked_at,
+  });
+  return c.json({
+    ok: true,
+    session_id: id,
+    user_id: out.user_id,
+    revoked_at: out.revoked_at,
+    message: 'Revoked. That session\'s token is refused from its next request; the account\'s other sessions '
+      + 'are untouched.',
+  });
+});
+
+r.post('/sessions/revoke', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const { reason, body } = await reasonOf(c);
+  const raw = Array.isArray(body?.ids) ? (body.ids as unknown[]) : null;
+  if (!raw || raw.length === 0) {
+    return c.json({ error: 'Select at least one session.', code: 'no_sessions' }, 400);
+  }
+  if (raw.length > SESSION_BULK_LIMIT) {
+    return c.json({
+      error: `At most ${SESSION_BULK_LIMIT} sessions can be revoked in one request.`,
+      code: 'too_many_sessions',
+    }, 400);
+  }
+  const ids = [...new Set(raw.map((v) => Number(v)))];
+  if (ids.some((v) => !Number.isInteger(v) || v <= 0)) {
+    return c.json({ error: 'Every session id must be a positive number.', code: 'invalid_target' }, 400);
+  }
+  if (reason.length < MIN_REASON) return reasonRefusal(c);
+
+  const sel = await selectJwt(c);
+  const currentJti = typeof sel?.payload?.jti === 'string' ? (sel.payload.jti as string) : null;
+  const own = currentJti
+    ? await c.env.DB.prepare('SELECT id FROM user_sessions WHERE jti = ?').bind(currentJti).first<{ id: number }>()
+    : null;
+  if (own && ids.includes(Number(own.id))) {
+    return c.json({
+      error: 'The selection includes the session you are using. Deselect it; sign out to end it.',
+      code: 'own_current_session',
+    }, 409);
+  }
+
+  // One at a time, each audited as it lands. A batch would be atomic, but the
+  // audit writer is not part of it — and an act recorded for sessions that a
+  // failed batch never revoked is worse than a partial result reported row by
+  // row, which is what this returns.
+  const results: Array<{ id: number; outcome: string }> = [];
+  for (const id of ids) {
+    const out = await revokeUserSession(c.env, id);
+    if (out.outcome === 'revoked') {
+      await logAdminAction(c.env, actor.id, actor.email, 'security_session_revoked', {
+        reason,
+        target_user_id: out.user_id,
+        session_id: id,
+        revoked_at: out.revoked_at,
+        bulk: true,
+      });
+    }
+    results.push({ id, outcome: out.outcome });
+  }
+  const revoked = results.filter((x) => x.outcome === 'revoked').length;
+  return c.json({
+    ok: true,
+    revoked,
+    results,
+    message: revoked === results.length
+      ? `Revoked ${revoked} session${revoked === 1 ? '' : 's'}.`
+      : `Revoked ${revoked} of ${results.length}. The rest were already revoked or no longer exist; each is listed.`,
+  });
+});
+
+r.post('/impersonations/:id/end', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ error: 'A numeric session id is required.', code: 'invalid_target' }, 400);
+  }
+  const { reason } = await reasonOf(c);
+  if (reason.length < MIN_REASON) return reasonRefusal(c);
+
+  let out: Awaited<ReturnType<typeof endImpersonation>>;
+  try {
+    out = await endImpersonation(c.env, id);
+  } catch {
+    return c.json({
+      error: 'Unreadable — the impersonation_sessions table could not be read, so nothing was changed.',
+      code: 'impersonations_unreadable',
+    }, 503);
+  }
+  if (out.outcome === 'not_found') {
+    return c.json({ error: 'No support session holds that id.', code: 'session_not_found' }, 404);
+  }
+  if (out.outcome === 'already_ended') {
+    return c.json({ error: 'That support session has already ended. Nothing was changed.', code: 'already_ended' }, 409);
+  }
+  if (out.outcome === 'past_ceiling') {
+    return c.json({
+      error: 'That record is older than the support-session ceiling, so no token for it can still be valid. '
+        + 'Ending it now would stamp a time it did not end at; it stays recorded as not closed.',
+      code: 'past_ceiling',
+    }, 409);
+  }
+  await logAdminAction(c.env, actor.id, actor.email, 'security_impersonation_ended', {
+    reason,
+    target_user_id: out.row.target_user_id,
+    impersonation_session_id: id,
+    support_admin_user_id: out.row.admin_user_id,
+    started_at: out.row.started_at,
+  });
+  return c.json({
+    ok: true,
+    impersonation_session_id: id,
+    target_user_id: out.row.target_user_id,
+    // THE RESPONSE SAYS WHAT ENDING DID NOT DO. The support token carries no
+    // session id, so it cannot be revoked one by one; it expires on its own
+    // clock. Saying "ended" alone would claim the access stopped now.
+    message: 'The support session is closed and can no longer be extended. Its token carries no session id, so '
+      + `it stays valid until it expires — at most ${IMPERSONATION_EXPIRY_MINUTES} minutes after it was minted. `
+      + 'To cut it now, sign the account out, which also ends that account holder\'s own sessions.',
   });
 });
 

@@ -165,7 +165,8 @@ test('a receipt posts whole cents, the date it landed and the reference — noth
   assert.match(src, /api\.fundsRecordReceipt\(fund\.id, receipt\.lineId, \{\s*amount_cents: cents, received_on: receipt\.date, reference: [^}]*\}\)/);
   assert.match(src, /const cents = parseDollarsToCents\(receipt\.amount\)/);
   // A paid line offers no receipt.
-  assert.match(src, /line\.state !== 'paid' && <button[^>]*button-record-receipt/);
+  // D553 put Draft reminder and Log as sent beside it, in the same paid guard.
+  assert.match(src, /line\.state !== 'paid' && <>\s*<button[^>]*button-record-receipt/);
 });
 
 test('no figure on the page is defaulted to zero', () => {
@@ -237,7 +238,8 @@ test('every filter and op the artboard draws is live or states why not', () => {
   assert.deepEqual(a.map((x) => x.label), ops);
   assert.equal(a.find((x) => x.label === 'New call').kind, 'handler');
   assert.equal(a.find((x) => x.label === 'Export wires').kind, 'export');
-  // The one op left unbuilt says so, and the page's rail names the Eadwyn draft it lacks.
+  // The one op left unbuilt says so. Since D553 a reminder for one line is
+  // drafted on its row, and the rail says that nothing on the page sends it.
   assert.ok(a.find((x) => x.label === 'Send reminders').unbuilt);
-  assert.match(read(PAGE), /\['Reminder letters', 'Eadwyn drafts no reminder for this page yet/);
+  assert.match(read(PAGE), /\['Reminder delivery', 'Eadwyn drafts a reminder for one LP’s line, and nothing here sends it/);
 });
