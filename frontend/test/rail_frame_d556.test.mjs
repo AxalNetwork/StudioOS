@@ -16,6 +16,9 @@
  *     a track that collapses through `--fwr-track`, a dark pair;
  *   · the phone form (D405) still works, because the frame hides its column
  *     below 1024px instead of unmounting the rail;
+ *   · a docked frame reaches the window's edge and the footer, not the
+ *     centred 1280px column's edge and the end of its content, and the HQ
+ *     section strip moves into it so the panel runs from the header;
  *   · Admin Studio has a rail, and its coverage is the studio glance.
  *
  * Run alone:
@@ -28,7 +31,7 @@ import { join, relative, resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
-import RailFrame from '../src/ui/RailFrame.jsx';
+import RailFrame, { RailStripSlot } from '../src/ui/RailFrame.jsx';
 import StudioRail, { studioRailCoverage } from '../src/pages/admin/StudioRail.jsx';
 import { glancesFromStudioGlance, UNAVAILABLE } from '../src/pages/admin/adminStudioOverview.js';
 
@@ -169,6 +172,61 @@ test('the frame docks to the edge only where it can', () => {
   assert.match(CSS_CODE, /> \.fwr-frame\[data-rail="true"\]:first-child > \.fwr-frame-main \{ padding-top: 24px; \}/);
   // App.jsx's padded container is the 24px it cancels.
   assert.match(read('frontend/src/App.jsx'), /flushSurface \? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'/);
+});
+
+test('a docked frame takes the window\'s edge and the column\'s height, not the centred column\'s', () => {
+  // On a licence that is not full-bleed the page container is also
+  // `max-w-7xl mx-auto`: the edge D556 docked to was that column's, 232px
+  // short of a 2000px window, and a short page's panel ended above the footer.
+  assert.match(read('frontend/src/App.jsx'), /\$\{fullWidthSurface \? '' : 'max-w-7xl mx-auto w-full'\}/, 'the cap this lifts moved; re-read it');
+  const desk = CSS_CODE.slice(CSS_CODE.indexOf('@media (min-width: 1024px) {\n  .fwr-frame {'));
+  const at = desk.indexOf('[data-app-main]:not(.edge-to-edge-surface):has(> .fwr-frame[data-rail="true"]) {');
+  assert.ok(at >= 0, 'a container holding a docked frame no longer drops its cap');
+  const holder = desk.slice(desk.indexOf('{', at) + 1, desk.indexOf('}', at));
+  assert.match(holder, /max-width:\s*none/, 'the 1280px cap must go');
+  assert.match(holder, /margin-left:\s*0;\s*margin-right:\s*0/, 'the centring must go');
+  assert.match(holder, /flex:\s*1 0 auto/, 'the container must grow to the footer');
+  assert.match(holder, /display:\s*flex;\s*flex-direction:\s*column/, 'the frame must be able to grow inside it');
+  // ...and the frame grows with it, on the rule every docked frame has.
+  const always = /\[data-app-main\]:not\(\.edge-to-edge-surface\) > \.fwr-frame\[data-rail="true"\] \{([^}]*)\}/.exec(CSS_CODE)[1];
+  assert.match(always, /flex:\s*1 0 auto/, 'the frame must grow to the container\'s height');
+  // The footer is what the container grows against: the last flex item of the scroll column, pushed down.
+  assert.match(read('frontend/src/App.jsx'), /<footer className="mt-auto shrink-0/);
+});
+
+test('the shell\'s section strip moves into a docked frame, so the panel runs from the header', () => {
+  const STRIP = el('nav', null, 'STRIP');
+  const slot = (inFrame) => ({ strip: STRIP, inFrame, dock: () => {} });
+  const framed = (value, rail = el('aside', null, 'RAIL')) => renderToStaticMarkup(
+    el(RailStripSlot.Provider, { value }, el(RailFrame, { rail }, el('p', null, 'BODY'))),
+  );
+  // Held: the strip is the top of the body, and the shell has left its own out.
+  assert.match(framed(slot(true)), /<div class="fwr-frame-main"><div class="fwr-frame-strip"><nav>STRIP<\/nav><\/div><p>BODY<\/p><\/div><div class="fwr-frame-rail"/);
+  // Not held yet: the shell's copy is the one drawn, so the frame draws none.
+  assert.doesNotMatch(framed(slot(false)), /STRIP/);
+  // A frame with no rail docks nothing, so it takes no strip.
+  assert.doesNotMatch(framed(slot(true), null), /STRIP/);
+  // No strip in the shell: the frame is unchanged.
+  assert.doesNotMatch(framed(null), /fwr-frame-strip/);
+
+  // The frame says it holds the strip, and lets go when it unmounts.
+  const frame = codeOnly(read('frontend/src/ui/RailFrame.jsx'));
+  assert.match(frame, /const dock = rail && slot\?\.strip \? slot\.dock : null;/);
+  assert.match(frame, /useLayoutEffect\(\(\) => \{\s*if \(!dock\) return undefined;\s*dock\(true\);\s*return \(\) => dock\(false\);\s*\}, \[dock\]\);/);
+  // The shell draws its copy only while no frame holds it, and offers it to
+  // every page below it.
+  const app = codeOnly(read('frontend/src/App.jsx'));
+  assert.match(app, /const railStrip = hqStrip \? \{ strip: hqStripNav, inFrame: stripInFrame, dock: setStripInFrame \} : null;/);
+  const outer = app.indexOf('{stripInFrame ? null : hqStripNav}');
+  const open = app.indexOf('<RailStripSlot.Provider value={railStrip}>');
+  assert.ok(outer >= 0 && open > outer, 'the shell must draw its own copy above the page, only while no frame holds it');
+  assert.match(app.slice(open), /^<RailStripSlot\.Provider value=\{railStrip\}>\s*<div key=\{[^}]*\} data-app-main[\s\S]*?\{children\}\s*<\/div>\s*<\/RailStripSlot\.Provider>/, 'the slot must wrap the page container');
+  // In the frame it keeps its place: 12px under the header, the page's gap
+  // below it, and none of its own padding or ground.
+  assert.match(CSS_CODE, /\.fwr-frame-strip \{ margin: -4px 0 16px; \}/);
+  assert.match(CSS_CODE, /\.fwr-frame-strip > nav \{ padding: 0; background: none; \}/);
+  assert.match(CSS_CODE, /@media \(min-width: 768px\) \{\s*\.fwr-frame-strip \{ margin: -12px 0 24px; \}/);
+  assert.match(read('frontend/src/components/HqSubNavStrip.jsx'), /className="px-4 md:px-6 pt-3 bg-gray-50 dark:bg-gray-950"/, 'the outer strip\'s padding moved; re-read the offsets');
 });
 
 test('the frame renders the body, then the rail column; with no rail, the body alone', () => {
