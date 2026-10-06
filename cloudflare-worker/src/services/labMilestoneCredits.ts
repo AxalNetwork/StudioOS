@@ -14,6 +14,14 @@
  * times it is recorded. #1102 pays "the first of" `advisor_meeting_booked` and
  * `cofounder_request_sent`: the second one recorded is skipped.
  *
+ * THE PAIR IS DECIDED INSIDE THE INSERT (#1104 follow-up). Each half passes
+ * the other's source ref to `grantCredits` as `unlessPaid`, which the ledger
+ * insert checks in the same statement, so two halves recorded at once land
+ * one grant. A read-before-write check here let both through. Each half keeps
+ * its own `lab:<user_id>:<key>` ref, the shape every earlier version wrote and
+ * reads, so rolling the Worker back cannot make it blind to a grant this one
+ * made (Workers roll back code, not D1).
+ *
  * GRADUATION. `lab:graduation` is paid once, when the certificate is issued,
  * and only to someone whose `incorporation_completed` was itself paid. That is
  * #1102 question 4's pick A (only milestones completed from launch day earn)
@@ -61,14 +69,13 @@ async function hasGrant(env: Env, userId: number, sourceRef: string): Promise<bo
 export async function creditLabMilestone(env: Env, userId: number, key: string): Promise<LabCreditOutcome> {
   try {
     if (!(await isAcceptedMember(env, userId))) return { status: 'skipped', reason: 'not_accepted' };
-    if (FIRST_OF.includes(key)) {
-      const other = FIRST_OF.find((k) => k !== key)!;
-      if (await hasGrant(env, userId, labSourceRef(userId, other))) return { status: 'skipped', reason: 'pair_already_paid' };
-    }
+    const other = FIRST_OF.includes(key) ? FIRST_OF.find((k) => k !== key)! : null;
     const out = await grantCredits(env, {
       userId, ruleKey: `lab:${key}`, sourceRef: labSourceRef(userId, key), actor: LAB_ACTOR,
+      unlessPaid: other ? labSourceRef(userId, other) : null,
     });
     if (out.status === 'refused' && out.code === 'rule_unknown') return { status: 'skipped', reason: 'no_rule' };
+    if (out.status === 'refused' && out.code === 'superseded') return { status: 'skipped', reason: 'pair_already_paid' };
     return out;
   } catch (e) {
     console.warn('[labCredits] milestone grant failed', key, (e as Error).message);
