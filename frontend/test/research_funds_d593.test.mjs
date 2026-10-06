@@ -46,7 +46,6 @@ const DOSSIER = codeOnly(read('frontend/src/pages/research/FundDossier.jsx'));
 
 const h = React.createElement;
 const html = (el, entries) => renderToStaticMarkup(h(MemoryRouter, entries ? { initialEntries: entries } : null, el));
-const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -144,7 +143,10 @@ test('F0: ?view=directory selects the directory, anything else My funds, and a s
 
 test('F0: the page draws the tab its URL names, and both panels stay mounted', () => {
   const at = (url) => html(h(zone.default, { role: 'founder' }), [url]);
-  const panel = (out, key) => out.match(new RegExp(`<div role="tabpanel" id="funds-panel-${key}"[^>]*>`))?.[0] || '';
+  const panel = (out, key) => {
+    const at = out.indexOf(`<div role="tabpanel" id="funds-panel-${key}"`);
+    return at < 0 ? '' : out.slice(at, out.indexOf('>', at) + 1);
+  };
 
   const mine = at('/research/funds');
   assert.match(panel(mine, 'mine'), /aria-labelledby="funds-tab-mine"/);
@@ -349,7 +351,9 @@ test('D: the draft button is disabled up front with its reason; a band given non
   assert.match(button, /disabled=""/, 'the run is still pressable with nothing to draft from');
   const id = button.match(/aria-describedby="([^"]+)"/)?.[1];
   assert.ok(id, 'the disabled button does not name its reason');
-  assert.match(blocked, new RegExp(`<span id="${escapeRe(id)}"[^>]*>${escapeRe(reason)}</span>`));
+  const reasonAt = blocked.indexOf(`<span id="${id}"`);
+  assert.ok(reasonAt >= 0, 'the reason the button names is not drawn');
+  assert.ok(blocked.startsWith(`${reason}</span>`, blocked.indexOf('>', reasonAt) + 1), 'the named span does not hold the reason');
 
   const open = band({});
   const openButton = open.match(/<button[^>]*>Draft the brief<\/button>/)?.[0] || '';

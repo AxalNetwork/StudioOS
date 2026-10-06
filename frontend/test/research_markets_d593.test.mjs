@@ -220,8 +220,8 @@ test('the readings card offers "Record a reading" once the list is read, and the
 
   const form = directory.readingForm(null, '2026-10-06');
   const open = html(h(directory.Readings, { readings: ready(LIST), record: { ...RECORD, form } }));
-  for (const field of ['Service line', 'What it prices', 'Low \\(USD\\)', 'High \\(USD\\)', 'Comparables', 'Run date']) {
-    assert.match(open, new RegExp(`aria-label="${field}"`), field);
+  for (const field of ['Service line', 'What it prices', 'Low (USD)', 'High (USD)', 'Comparables', 'Run date']) {
+    assert.ok(open.includes(`aria-label="${field}"`), field);
   }
   assert.match(open, /<option value="o-brand">Brand refresh<\/option>/);
   assert.match(open, /<option value="o-retainer">Retainer<\/option>/, 'a service line never read is offered');
@@ -273,8 +273,8 @@ test('a save opens the new reading at /research/markets/<uid>; a refused form se
 
 test('each reading shows its run date, its age and its band', () => {
   const t = words(html(h(directory.Readings, { readings: ready(LIST) })));
-  assert.match(t, new RegExp(`Brand refresh run ${LIST.items[0].ran_at} · 120 d old Stale`));
-  assert.match(t, new RegExp(`Fractional seat run ${LIST.items[2].ran_at} · 10 d old Current`));
+  assert.ok(t.includes(`Brand refresh run ${LIST.items[0].ran_at} · 120 d old Stale`), t);
+  assert.ok(t.includes(`Fractional seat run ${LIST.items[2].ran_at} · 10 d old Current`), t);
   assert.doesNotMatch(t, /Retainer/, 'a service line never read is not a reading');
 });
 

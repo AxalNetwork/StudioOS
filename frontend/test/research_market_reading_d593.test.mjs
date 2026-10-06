@@ -68,13 +68,23 @@ function page({ role = 'partner', item = reading(), attachments = [], proposals 
   }));
 }
 
+// One literal pattern per tag a test id sits on: a RegExp built from a
+// variable is what Semgrep's detect-non-literal-regexp refuses.
+const TAG_SCAN = {
+  div: /<(\/?)div\b[^>]*>/g, section: /<(\/?)section\b[^>]*>/g, span: /<(\/?)span\b[^>]*>/g,
+  p: /<(\/?)p\b[^>]*>/g, form: /<(\/?)form\b[^>]*>/g, table: /<(\/?)table\b[^>]*>/g,
+  thead: /<(\/?)thead\b[^>]*>/g, tr: /<(\/?)tr\b[^>]*>/g, header: /<(\/?)header\b[^>]*>/g,
+  a: /<(\/?)a\b[^>]*>/g, button: /<(\/?)button\b[^>]*>/g,
+};
+
 /** The outer HTML of the element that carries `data-testid="<id>"`. */
 function part(html, id) {
   const at = html.indexOf(`data-testid="${id}"`);
   assert.ok(at >= 0, `the page draws no ${id}`);
   const start = html.lastIndexOf('<', at);
   const tag = /^<([a-z0-9]+)/.exec(html.slice(start))[1];
-  const re = new RegExp(`<(/?)${tag}\\b[^>]*>`, 'g');
+  const re = TAG_SCAN[tag];
+  assert.ok(re, `part() has no scan for <${tag}>; add it to TAG_SCAN`);
   re.lastIndex = start;
   let depth = 0;
   for (let m = re.exec(html); m; m = re.exec(html)) {
@@ -87,13 +97,24 @@ function part(html, id) {
 /** What a reader sees, one space between adjacent elements. */
 const words = (html) => renderedText(html.replace(/></g, '> <')).replace(/\s+/g, ' ').trim();
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** The class list of the element whose whole text is `label`. */
+/** The class list of the first a, button or span whose whole text is `label`. */
 function classOf(html, label) {
-  const m = new RegExp(`<(a|button|span)\\b[^>]*class="([^"]*)"[^>]*>${escapeRe(label)}</\\1>`).exec(html);
-  assert.ok(m, `no control reading "${label}"`);
-  return m[2];
+  for (let from = 0; ;) {
+    const at = html.indexOf(`>${label}</`, from);
+    assert.ok(at >= 0, `no control reading "${label}"`);
+    const open = html.slice(html.lastIndexOf('<', at), at + 1);
+    const tag = /^<(a|button|span)\b/.exec(open)?.[1];
+    const cls = /\bclass="([^"]*)"/.exec(open)?.[1];
+    if (tag && cls !== undefined && html.startsWith(`</${tag}>`, at + 1 + label.length)) return cls;
+    from = at + 1;
+  }
+}
+
+/** The class list of the input labelled `field`, or '' when there is none. */
+function inputClass(html, field) {
+  const at = html.indexOf(`<input aria-label="${field}"`);
+  if (at < 0) return '';
+  return /\bclass="([^"]*)"/.exec(html.slice(at, html.indexOf('>', at) + 1))?.[1] || '';
 }
 
 const has = (cls, token) => cls.split(/\s+/).includes(token);
@@ -173,7 +194,7 @@ test('buttons, the ZONEDRAFT pill, Accept, the focus ring and the back link read
     'the back link is not the licence accent on both grounds');
 
   for (const field of ['Scope', 'Low (USD)', 'High (USD)', 'Comparables', 'Run date']) {
-    const cls = new RegExp(`<input aria-label="${escapeRe(field)}"[^>]*class="([^"]*)"`).exec(current)?.[1] || '';
+    const cls = inputClass(current, field);
     assert.ok(has(cls, 'focus:ring-[color:var(--mr-accent)]'), `${field}: the focus ring is not the accent`);
     assert.ok(has(cls, 'dark:focus:ring-[color:var(--mr-accent-dark)]'), `${field}: no dark focus ring`);
   }
@@ -224,7 +245,11 @@ test('the form records a scope, and a blank one is saved as none rather than car
 test('tiles run four across on a desktop, with Age and Proposal at 20px', () => {
   const tiles = part(page(), 'market-reading-tiles');
   assert.match(tiles, /^<div[^>]*class="grid grid-cols-2 gap-3 xl:grid-cols-4"/);
-  const valueClass = (k) => new RegExp(`>${k}</div><div class="([^"]*)"`).exec(tiles)?.[1] || '';
+  const valueClass = (k) => {
+    const head = `>${k}</div><div class="`;
+    const at = tiles.indexOf(head);
+    return at < 0 ? '' : tiles.slice(at + head.length, tiles.indexOf('"', at + head.length));
+  };
   for (const k of ['Age', 'Proposal']) {
     assert.ok(has(valueClass(k), 'sm:text-[20px]'), `${k} is not 20px on a desktop`);
     assert.ok(has(valueClass(k), 'text-[17px]'), `${k} is not 17px on a phone`);
