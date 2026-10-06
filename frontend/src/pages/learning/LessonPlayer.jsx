@@ -1,38 +1,34 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Card, Pill, Unrecorded } from '../../ui';
 import { LearningEmpty, SectionCard, stateBlock } from './LearningStates';
 import { NOT_LIVE, durationLabel, lessonKindLabel } from './learningModel';
 
 /**
- * One lesson: a video or a reading, a transcript panel, previous and next, and
- * "Mark complete" (D562; data #1158, playback #1162).
+ * One lesson, or one standalone video or reading: the media, a transcript
+ * panel, previous and next, and "Mark complete" (D562; data D557, R2
+ * streaming #1162).
  *
- * Props, in the shapes the issues plan:
- *   status     'loading' | 'unreadable' | 'unrecorded' | 'ready'
- *   lesson     { uid, title, kind: 'video' | 'reading' }            (#1158 learning_lessons)
- *   item       { uid, kind, title, body, duration_seconds, thumbnail_url } (#1158 GET /items/:uid)
- *   video      { src, embed } or null: the playable source the page resolves —
- *              #1162's gated stream for an uploaded file, the allow-listed
- *              link (YouTube, Vimeo, Stream) for a linked one, which embeds
- *   moduleTitle, position ("5 of 12")
- *   prev, next { title, href } or null
- *   completed  the member's own progress on this lesson (#1158)
- *   onMarkComplete, marking
+ * Props, in the routes' shapes:
+ *   status      'loading' | 'unreadable' | 'unrecorded' | 'ready'
+ *   lesson      { uid, title, kind } from the course, or null for a standalone item
+ *   item        `GET /api/learning/items/:uid`'s item: { uid, kind, title, body,
+ *               duration_seconds, thumbnail_url, transcript, video_source, video_url }
+ *   video       how it plays (`videoPlayback`): { src, embed } to play, or
+ *               { reason, href } for a video this page cannot play
+ *   transcript  the item's transcript text, or null when none is recorded
+ *   moduleTitle, position ("5 of 12"), prev and next { title, href } or null
+ *   completed   the member's own progress on it
+ *   onMarkComplete, marking, markError
  *
- * NO TRANSCRIPT IS PLANNED. The canvas draws an auto-generated transcript, and
- * no column in #1158 holds one, so the panel says "Not recorded" with its
- * reason instead of inventing lines (D562 GAPS).
- *
- * "Mark complete" is disabled until a page passes the handler, which it does
- * once #1158's `POST /api/learning/progress` exists. A button that looked live
- * and saved nothing would be the dead control D17 refuses.
+ * "Mark complete" is disabled until a page passes the handler: a button that
+ * looked live and saved nothing would be the dead control D17 refuses.
  */
 export default function LessonPlayer({
-  status, lesson, item, video, moduleTitle, position, prev, next,
-  completed = false, onMarkComplete, marking = false, reason = NOT_LIVE.catalogue, onRetry,
+  status, lesson, item, video, transcript = null, moduleTitle, position, prev, next,
+  completed = false, onMarkComplete, marking = false, markError = '', reason = NOT_LIVE.catalogue, onRetry,
 }) {
   const block = stateBlock({
     status, reason, onRetry,
@@ -45,6 +41,7 @@ export default function LessonPlayer({
 
   const kind = lesson?.kind || item?.kind;
   const length = durationLabel(item?.duration_seconds);
+  const text = String(transcript ?? '').trim();
   return (
     <div className="space-y-4" data-testid="lesson-player">
       <Card padding="none" className="overflow-hidden">
@@ -59,8 +56,8 @@ export default function LessonPlayer({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <StepLink step={prev} dir="prev" />
-            <StepLink step={next} dir="next" />
+            {lesson && <StepLink step={prev} dir="prev" />}
+            {lesson && <StepLink step={next} dir="next" />}
             {completed ? (
               <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="text-lesson-completed">
                 <Check size={14} aria-hidden="true" /> Completed
@@ -70,7 +67,7 @@ export default function LessonPlayer({
                 type="button"
                 onClick={onMarkComplete}
                 disabled={!onMarkComplete || marking}
-                title={onMarkComplete ? undefined : 'Progress cannot be saved until the Learning service is live.'}
+                title={onMarkComplete ? undefined : 'Progress cannot be saved here.'}
                 className="rounded-axal-sm bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="button-mark-complete"
               >
@@ -79,12 +76,21 @@ export default function LessonPlayer({
             )}
           </div>
         </div>
+        {markError && (
+          <p className="border-t border-axal-hairline px-4 py-2 text-[12px] text-red-700 dark:border-gray-800 dark:text-red-300" role="alert" data-testid="text-mark-error">
+            {markError}
+          </p>
+        )}
       </Card>
       {kind === 'video' && (
         <SectionCard title="Transcript" testid="lesson-transcript">
-          <p className="text-[12.5px] text-axal-muted dark:text-gray-400">
-            <Unrecorded reason="No transcript is stored for a lesson." /> · No transcript is stored for a lesson.
-          </p>
+          {text ? (
+            <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-[13px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid="lesson-transcript-text">{text}</p>
+          ) : (
+            <p className="text-[12.5px] text-axal-muted dark:text-gray-400">
+              <Unrecorded reason="No transcript is recorded for this video." /> · No transcript is recorded for this video.
+            </p>
+          )}
         </SectionCard>
       )}
     </div>
@@ -93,9 +99,15 @@ export default function LessonPlayer({
 
 function VideoArea({ video, item, length }) {
   if (!video?.src) {
+    const why = video?.reason || 'This video has no playable source yet.';
     return (
-      <div className="flex aspect-video w-full items-center justify-center bg-axal-ground px-6 text-center text-[12.5px] text-axal-muted dark:bg-gray-950 dark:text-gray-400" data-testid="lesson-video-absent">
-        <span><Unrecorded reason="This video has no playable source yet." /> · This video has no playable source yet.</span>
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-axal-ground px-6 text-center text-[12.5px] text-axal-muted dark:bg-gray-950 dark:text-gray-400" data-testid="lesson-video-absent">
+        <span><Unrecorded reason={why} /> · {why}</span>
+        {video?.href && (
+          <a href={video.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-axal-violet-deep underline dark:text-violet-300" data-testid="link-video-elsewhere">
+            Open the video <ExternalLink size={12} aria-hidden="true" />
+          </a>
+        )}
       </div>
     );
   }
@@ -107,6 +119,7 @@ function VideoArea({ video, item, length }) {
         className="aspect-video w-full border-0 bg-black"
         allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
         allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
         data-testid="lesson-video-embed"
       />
     );

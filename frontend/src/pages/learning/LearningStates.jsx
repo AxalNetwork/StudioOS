@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, GraduationCap } from 'lucide-react';
+import { ChevronLeft, CircleAlert, GraduationCap, RefreshCw } from 'lucide-react';
 import { Card, EmptyState, SectionLabel, Skeleton, Unrecorded, Unreadable } from '../../ui';
 import { COMING_SOON_LINE } from './learningAccess';
 import { NOT_LIVE_LINE } from './learningModel';
@@ -77,6 +77,25 @@ export function LearningUnreadable({ what, claim, onRetry }) {
     <div data-testid="learning-unreadable">
       <Unreadable what={what} claim={claim} onRetry={onRetry} />
     </div>
+  );
+}
+
+/**
+ * Unreadable, in the route's own words. The catalog names each failed source
+ * with a sentence of its own ("The course store could not be read, so this is
+ * not a claim that there are no courses."), and a refusal carries one too, so
+ * the sentence is drawn as it came rather than rewritten.
+ */
+export function RouteUnreadable({ reason, onRetry, testid = 'learning-unreadable' }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-red-700 dark:text-red-300" role="alert" data-testid={testid}>
+      <CircleAlert size={13} aria-hidden="true" /> {reason}
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="inline-flex items-center gap-1 underline">
+          <RefreshCw size={11} aria-hidden="true" /> Retry
+        </button>
+      )}
+    </p>
   );
 }
 

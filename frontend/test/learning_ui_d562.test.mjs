@@ -33,11 +33,11 @@ import {
   COMING_SOON_LINE, LEARNING_COMING_SOON, learningComingSoon,
 } from '../src/pages/learning/learningAccess.js';
 import {
-  LEARNING_TABS, NOT_LIVE_LINE, articleRow, combineAll, eventRow, publicationRow, resolveTab, tabMode,
+  LEARNING_TABS, NOT_LIVE, TAB_NOT_LIVE, articleRow, eventRow, publicationRow, resolveTab, tabMode,
 } from '../src/pages/learning/learningModel.js';
 import { readArticles, readEvents, readPublications } from '../src/pages/learning/learningReads.js';
 import LearningPage, { adminLinks } from '../src/pages/learning/LearningPage.jsx';
-import { AllList, ArticleList, EventList, LearningHomeView, PublicationList, homeCoverage } from '../src/pages/learning/LearningHome.jsx';
+import { ArticleList, EventList, LearningHomeView, PublicationList, homeCoverage } from '../src/pages/learning/LearningHome.jsx';
 import CourseOutline from '../src/pages/learning/CourseOutline.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
 import WebinarPanel from '../src/pages/learning/WebinarPanel.jsx';
@@ -156,6 +156,9 @@ test('every Learning route resolves, behind the narrowest guard it needs', () =>
     ['/learning', '/learning', 'home', MEMBERS],
     ['/learning/courses/seed-basics', '/learning/courses/:slug', 'course', MEMBERS],
     ['/learning/courses/seed-basics/l1', '/learning/courses/:slug/:lesson', 'lesson', MEMBERS],
+    // Stage 2: a standalone video at its own address, and every item at the href D557's catalog sends.
+    ['/learning/videos/v1', '/learning/videos/:uid', 'item', MEMBERS],
+    ['/learning/items/r1', '/learning/items/:uid', 'item', MEMBERS],
     ['/learning/webinars/w1', '/learning/webinars/:slug', 'webinar', MEMBERS],
     ['/learning/exercises/e1', '/learning/exercises/:slug', 'exercise', MEMBERS],
     ['/learning/exams/x1', '/learning/exams/:slug', 'exam', MEMBERS],
@@ -338,28 +341,6 @@ test('Events: upcoming, in the event’s own time zone, with its calendar file',
   assert.match(text(h(EventList, { state: ready([zurich]), q: '' })), /18:00 CEST Founder office hours Office Hours Zurich/);
 });
 
-test('All: the three lists as one, labelled by kind, a failed source named rather than dropped', () => {
-  const markup = html(h(AllList, { articles: ARTICLES_READY, publications: PUBLICATIONS_READY, events: EVENTS_READY, q: '' }));
-  const out = flat(markup);
-  // Newest first: the upcoming event, then the 2 Oct article, then the 1 Oct publication; a dateless row last.
-  const order = ['Founder office hours', 'How we price a seed round', 'Q3 sector heat', 'Notes from the floor'].map((t) => out.indexOf(t));
-  assert.deepEqual([...order].sort((x, y) => x - y), order, `All is not newest first: ${order}`);
-  assert.ok(order.every((i) => i >= 0));
-  assert.match(out, /Event Founder office hours/);
-  assert.match(out, /Article How we price a seed round Ada Founder · 6 min read · 2 Oct 2026/);
-  assert.match(out, /Publication Q3 sector heat 1 Oct 2026 · Sector Heat/);
-  assert.match(out, /4 in all across articles, publications and events/);
-  // A source that failed is named, and its rows are not silently zero.
-  const failed = html(h(AllList, { articles: ARTICLES_READY, publications: { status: 'unreadable', rows: [] }, events: EVENTS_READY, q: '' }));
-  assert.match(flat(failed), /The publication list could not be read\. This is not a claim that it is empty\./);
-  assert.match(flat(failed), /Founder office hours/);
-  const partial = flat(html(h(AllList, { articles: ARTICLES_READY, publications: { status: 'loading', rows: [] }, events: { status: 'loading', rows: [] }, q: '' })));
-  assert.match(partial, /Still reading publications and events…/);
-  // The pure merge says the same.
-  const merged = combineAll({ article: ARTICLES_READY, publication: { status: 'unreadable' }, event: { status: 'loading' } });
-  assert.deepEqual([merged.unreadable, merged.loading, merged.count], [['publication'], ['event'], 2]);
-});
-
 test('each live list draws loading, unreadable and empty, and a failed read is never "nothing published"', () => {
   for (const [List, props, claim] of [
     [ArticleList, { onPage: () => {} }, 'This is not a claim that no article is published.'],
@@ -383,22 +364,29 @@ const homeView = (props) => h(LearningHomeView, {
   articles: ARTICLES_READY, publications: PUBLICATIONS_READY, events: EVENTS_READY, ...props,
 });
 
-test('an admin: the five catalogue tabs and the three sections are not recorded, with one plain line, and no row is drawn', () => {
-  for (const tab of ['courses', 'videos', 'webinars', 'exercises', 'exams']) {
+test('an admin: the three tabs and two sections still waiting on a store are not recorded, each with its line, and no row is drawn', () => {
+  // Stage 2: Courses and Videos read D557's catalog; Webinars (#1161), Exercises and Exams (#1160) wait.
+  assert.deepEqual(LEARNING_TABS.filter((t) => !t.live).map((t) => t.key), ['webinars', 'exercises', 'exams']);
+  for (const [tab, line] of [['webinars', 'Webinars are not live yet.'], ['exercises', 'Exercises are not live yet.'], ['exams', 'Exams are not live yet.']]) {
     assert.equal(tabMode(tab, false), 'not_live');
+    assert.equal(TAB_NOT_LIVE[tab], line);
     const markup = html(homeView({ gated: false, tab }));
     const panel = markup.slice(markup.indexOf(`data-testid="panel-${tab}"`));
     assert.match(panel, /data-mode="not_live"/);
-    assert.ok(flat(panel).includes(`Not recorded ${NOT_LIVE_LINE}`), `the ${tab} tab does not say it is not recorded`);
-    assert.doesNotMatch(panel, /data-testid="row-|all-row-|list-/, `the ${tab} tab draws a row`);
+    assert.ok(flat(panel).includes(`Not recorded ${line}`), `the ${tab} tab does not say it is not recorded`);
+    assert.doesNotMatch(panel, /data-testid="row-|catalog-row-|list-/, `the ${tab} tab draws a row`);
   }
+  for (const tab of ['all', 'courses', 'videos']) assert.equal(tabMode(tab, false), 'live');
   const home = html(homeView({ gated: false, tab: 'all' }));
-  for (const section of ['section-continue', 'section-programs', 'section-webinars']) {
+  for (const [section, line] of [['section-programs', NOT_LIVE.programs], ['section-webinars', NOT_LIVE.webinars]]) {
     const at = home.indexOf(`data-testid="${section}"`);
     assert.ok(at >= 0, `${section} is missing`);
-    assert.match(flat(home.slice(at, at + 900)), /Not recorded The course catalogue is not live yet\./);
+    assert.ok(flat(home.slice(at, at + 900)).includes(`Not recorded ${line}`), `${section} does not say it is not recorded`);
   }
-  assert.equal(NOT_LIVE_LINE, 'The course catalogue is not live yet.');
+  // Continue learning reads `GET /me` now: before the read it is loading, never "not live".
+  const continuing = home.slice(home.indexOf('data-testid="section-continue"'), home.indexOf('data-testid="section-programs"'));
+  assert.match(continuing, /learning-loading/);
+  assert.doesNotMatch(continuing, /learning-not-live/);
   assert.doesNotMatch(home, /learning-coming-soon/);
 });
 
@@ -425,7 +413,7 @@ test('a gated profile: Articles open by default, every other tab and section one
     const panel = markup.slice(markup.indexOf(`data-testid="panel-${t.key}"`));
     assert.match(panel, /data-mode="coming_soon"/);
     assert.match(panel, /data-testid="learning-coming-soon"/);
-    assert.doesNotMatch(panel, /list-all|list-publications|list-events|data-testid="row-|learning-not-live/, `${t.key} leaks its list to a gated profile`);
+    assert.doesNotMatch(panel, /data-testid="list-|data-testid="row-|catalog-row-|learning-not-live/, `${t.key} leaks its list to a gated profile`);
     assert.doesNotMatch(markup, /input-learning-search/, 'a closed tab offers a search');
   }
   // The container: a gated profile lands on Articles, and a deep link to a closed tab shows the card.
@@ -438,25 +426,31 @@ test('a gated profile: Articles open by default, every other tab and section one
 });
 
 test('a gated profile on a deep Learning route sees the coming-soon card in place', () => {
-  for (const [url, pattern, view, body] of [
-    ['/learning/courses/seed-basics', '/learning/courses/:slug', 'course', 'course-outline'],
-    ['/learning/courses/seed-basics/l1', '/learning/courses/:slug/:lesson', 'lesson', 'lesson-player'],
-    ['/learning/webinars/w1', '/learning/webinars/:slug', 'webinar', 'webinar-panel'],
-    ['/learning/exercises/e1', '/learning/exercises/:slug', 'exercise', 'exercise-panel'],
-    ['/learning/exams/x1', '/learning/exams/:slug', 'exam', 'exam-flow'],
-    ['/learning/me', '/learning/me', 'me', 'my-learning'],
+  // `wired` views read D557 (stage 2): before the read an admin sees them loading.
+  // The rest still wait on their stores, and an admin sees them not recorded.
+  for (const [url, pattern, view, body, wired] of [
+    ['/learning/courses/seed-basics', '/learning/courses/:slug', 'course', 'course-outline', true],
+    ['/learning/courses/seed-basics/l1', '/learning/courses/:slug/:lesson', 'lesson', 'lesson-player', true],
+    ['/learning/videos/v1', '/learning/videos/:uid', 'item', 'lesson-player', true],
+    ['/learning/items/r1', '/learning/items/:uid', 'item', 'lesson-player', true],
+    ['/learning/webinars/w1', '/learning/webinars/:slug', 'webinar', 'webinar-panel', false],
+    ['/learning/exercises/e1', '/learning/exercises/:slug', 'exercise', 'exercise-panel', false],
+    ['/learning/exams/x1', '/learning/exams/:slug', 'exam', 'exam-flow', false],
+    ['/learning/me', '/learning/me', 'me', 'my-learning', true],
   ]) {
     for (const role of ['founder', 'investor', 'partner', 'advisor']) {
       const markup = page(url, pattern, { view, user: { role }, activeRole: role });
       assert.match(markup, /data-testid="learning-coming-soon"/, `${role} at ${url} does not see the card`);
       assert.ok(!markup.includes(`data-testid="${body}"`), `${role} at ${url} sees the ${view} body`);
+      assert.doesNotMatch(markup, /learning-loading/, `${role} at ${url} starts a Learning read`);
       assert.match(tagOf(markup, 'link-coming-soon-articles'), /href="\/learning\?tab=articles"/, 'the card points at the open tab');
     }
-    // The admin sees the surface itself, in its not-recorded state.
+    // The admin sees the surface itself.
     const admin = page(url, pattern, { view, user: ADMIN, activeRole: 'admin' });
     assert.doesNotMatch(admin, /learning-coming-soon/);
     assert.ok(admin.includes(`data-testid="${body}"`), `the admin at ${url} does not see the ${view} body`);
-    assert.match(admin, /data-testid="learning-not-live"/);
+    if (wired) assert.match(admin, /data-testid="learning-loading"/, `${url} does not read its store`);
+    else assert.match(admin, /data-testid="learning-not-live"/);
   }
 });
 
@@ -485,9 +479,12 @@ test('the Worker AI rail sits on every Learning page, with a literal accent, in 
   assert.match(home, /Worker AI · Learning/);
   assert.match(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Worker AI · Learning studio/);
   assert.match(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Worker AI · Learning programs/);
-  const rails = [read('frontend/src/pages/learning/LearningHome.jsx'), read('frontend/src/pages/learning/LearningPage.jsx')].join('\n');
+  const dir = resolve(ROOT, 'frontend/src/pages/learning');
+  const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
-  assert.equal(mounts.length, 4);
+  // The home, the three tiers of a page that waits on its store, the learner pages that read, and the studio.
+  assert.equal(mounts.length, 6);
+  for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
     assert.match(mount, /role="(founder|admin|super_admin)"/);
@@ -546,7 +543,7 @@ test('LessonPlayer: video, embed, reading, the transcript not recorded, Mark com
   const video = html(h(LessonPlayer, { status: 'ready', lesson, item, video: { src: '/media/i1', embed: false }, moduleTitle: 'Foundations', position: '1 of 4', next: { title: 'Reading the term sheet', href: '/learning/courses/seed-basics/l2' } }));
   assert.match(video, /<video[^>]*src="\/media\/i1"/);
   assert.match(tagOf(video, 'link-lesson-next'), /href="\/learning\/courses\/seed-basics\/l2"/);
-  assert.match(flat(video), /Transcript Not recorded · No transcript is stored for a lesson\./);
+  assert.match(flat(video), /Transcript Not recorded · No transcript is recorded for this video\./);
   assert.match(tagOf(video, 'button-mark-complete'), /disabled=""/, 'Mark complete looks live with nothing to save it');
   const live = html(h(LessonPlayer, { status: 'ready', lesson, item, video: { src: '/media/i1', embed: false }, onMarkComplete: () => {} }));
   assert.ok(tagOf(live, 'button-mark-complete'));
@@ -808,14 +805,25 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
     assert.doesNotMatch(src, /fontFamily|font-family|Space Grotesk|Roboto Mono|font-mono/, `${f} sets a font`);
     assert.doesNotMatch(src, /#[0-9a-fA-F]{6}\b/, `${f} carries a canvas colour`);
     for (const m of src.matchAll(/style=\{\{([^}]*)\}\}/g)) assert.match(m[1], /^\s*width:/, `${f} styles something inline other than a bar's width`);
-    if (f !== 'learningReads.js') assert.doesNotMatch(src, /lib\/api'/, `${f} reads the client; only learningReads.js may`);
+    // Two files call the client: the member reads, and the studio's reads and writes.
+    if (f !== 'learningReads.js' && f !== 'studioActions.js') assert.doesNotMatch(src, /lib\/api(\/\w+(\.js)?)?'/, `${f} reads the client directly`);
   }
-  // The only client this folder reads is three methods api.js already had. When
-  // #1158's Learning client lands, wiring it in is the change that edits this.
+  // Each Learning client from its own module (D527), as research's pages import theirs:
+  // `lib/api` re-exports them, but a named import through it is not what the guards read.
   const reads = codeOnly(read('frontend/src/pages/learning/learningReads.js'));
-  assert.deepEqual([...reads.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]), ['../../lib/api', './learningModel']);
   assert.match(reads, /import \{ articles, publications, eventsPublic \} from '\.\.\/\.\.\/lib\/api';/);
-  // And the client file this stage could have touched carries no Learning method.
-  assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`?'?\/learning/, 'a Learning client method was added to api.js');
-  assert.ok(existsSync(resolve(ROOT, 'frontend/src/lib/api.js')));
+  assert.match(reads, /import \{ learningApi \} from '\.\.\/\.\.\/lib\/api\/learning\.js';/);
+  const studio = codeOnly(read('frontend/src/pages/learning/studioActions.js'));
+  assert.match(studio, /import \{ adminLearningApi \} from '\.\.\/\.\.\/lib\/api\/adminLearning\.js';/);
+  // No client method was added: every Learning method the folder calls is one D557's modules declare.
+  for (const [client, file, calls] of [
+    ['learningApi', 'frontend/src/lib/api/learning.js', /\blearningApi\.(\w+)\(/g],
+    ['adminLearningApi', 'frontend/src/lib/api/adminLearning.js', /\badminLearningApi\.(\w+)\(/g],
+  ]) {
+    assert.ok(existsSync(resolve(ROOT, file)), `${file} is gone`);
+    const declared = read(file);
+    const called = new Set([...(reads + studio).matchAll(calls)].map((m) => m[1]));
+    assert.ok(called.size > 0, `the folder calls no ${client} method`);
+    for (const method of called) assert.ok(declared.includes(`  ${method}: (`), `${client}.${method} is not a method ${file} declares`);
+  }
 });
