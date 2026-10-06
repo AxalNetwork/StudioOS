@@ -92,3 +92,20 @@ export function archetypeTimeline(items, persona = null) {
   }
   return out;
 }
+
+/**
+ * D605 — a match's `values_fit` (from `GET /profile/published-members`) as the
+ * card's one line. A null band is "not enough recorded", never aligned. A
+ * missing `values_fit` (the caller has not published) draws no line: the
+ * reply's `values_fit_reason` says why, once, above the list.
+ */
+export const VALUES_FIT_COPY = {
+  aligned: 'Values: aligned',
+  mixed: 'Values: some differences',
+  far_apart: 'Values: far apart',
+  none: 'Values: not enough recorded',
+};
+export function valuesFitLine(fit) {
+  if (!fit || typeof fit !== 'object') return null;
+  return VALUES_FIT_COPY[fit.band] ?? VALUES_FIT_COPY.none;
+}

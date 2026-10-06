@@ -497,6 +497,15 @@ per user and dimension (no history before Session 7):
 Values age like any answer (§7.2) and re-ask like any answer (§7.3).
 Evidence does not move a value.
 
+**UPDATE 2026-10-06 (D605, #1296): built.** `services/valuesCompat.ts` compares
+the pairs above. Every pair compares the six Axal values; a founder pair adds
+the dimensions both sides are asked; two non-founders compare the Axal values
+only. Each published-member match on `GET /api/profile/published-members`
+carries one band, `aligned`, `mixed`, `far_apart`, or null with fewer than
+three shared dimensions. Any one gap of 0.5 or more on the 0..1 scale is
+`far_apart`, never averaged away. The comparison is shown only when the
+caller has also published, and never names a dimension or a score.
+
 ---
 
 ## 7. Evolution model
