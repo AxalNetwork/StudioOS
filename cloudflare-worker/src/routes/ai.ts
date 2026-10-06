@@ -20,7 +20,9 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { loadMyAiSpend } from '../services/aiSpend';
+import { loadMyAiSpend, loadMyAiSpendForSurface } from '../services/aiSpend';
+import { AI_SURFACES, isAiSurface } from '../services/aiSurfaces';
+import { refuse } from '../util/refusal';
 import { ROUTE, PRICE_USD_PER_1M_TOKENS, run as aiRun } from '../services/aiRouter';
 import { classifyInput } from '../services/advisor/guardrails';
 import { ensureAdminAuditLogTable } from './admin';
@@ -30,9 +32,27 @@ const ai = new Hono<{ Bindings: Env }>();
 
 // GET /api/ai/me/spend — the caller's own month-to-date and today figures,
 // the caps the router enforces, and their last run.
+//
+// D552 — `?surface=<name>` narrows the answer to ONE PAGE: that page's month
+// and that page's last run, from the caller's own rows only. The value must be
+// one of the fixed names in `services/aiSurfaces.ts`, exactly; anything else,
+// an empty value included, is refused rather than read as "no page" or folded
+// into a name it resembles. It filters; it never names whose spend is read.
 ai.get('/me/spend', async (c) => {
   const user = await requireAuth(c);
-  const report = await loadMyAiSpend(c.env, user as any, new Date());
+  const surface = c.req.query('surface');
+  if (surface === undefined) {
+    const report = await loadMyAiSpend(c.env, user as any, new Date());
+    return c.json({ ok: true, ...report });
+  }
+  if (!isAiSurface(surface)) {
+    return refuse(c, 400, {
+      code: 'unknown_surface',
+      message: 'That page does not record AI runs, so it has no spend to show.',
+      extra: { surfaces: AI_SURFACES },
+    });
+  }
+  const report = await loadMyAiSpendForSurface(c.env, user as any, surface, new Date());
   return c.json({ ok: true, ...report });
 });
 
@@ -202,7 +222,7 @@ ai.post('/workspace/explain', async (c) => {
   // reason to keep it rather than to drop it: the day a page starts echoing
   // user-entered text into a coverage line, this is what stands between that
   // text and the model.
-  const safety = await classifyInput(c.env, user.id, facts);
+  const safety = await classifyInput(c.env, user.id, facts, page);
   if (safety.blocked) {
     return c.json({
       error: 'safety_block',

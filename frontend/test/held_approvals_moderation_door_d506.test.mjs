@@ -44,7 +44,8 @@ test('lane 4 links the moderation console, literally, and says it does', () => {
   const row = lane4();
   assert.match(row, /Spinout moderation/);
   assert.match(row, new RegExp(`<Link to="${CONSOLE}" className=\\{CONSOLE\\}>${CONSOLE}</Link>`), 'the console cell is a literal Link, as the other lanes are');
-  assert.match(row, /Links to its console/);
+  // D555: its State cell is now the lane's pending count from the glance.
+  assert.match(row, /<LaneState glance=\{glance\} laneKey="moderation" \/>/);
   assert.doesNotMatch(row, /No console/);
   assert.equal((HELD.match(new RegExp(`to="${CONSOLE}"`, 'g')) || []).length, 1, 'one door, not two');
 });

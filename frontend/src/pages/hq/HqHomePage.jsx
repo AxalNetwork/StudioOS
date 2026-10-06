@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { filterByKind } from '../../lib/licenceKind';
 import { Link } from 'react-router-dom';
 import { Globe, Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -128,9 +129,7 @@ export default function HqHomePage() {
   const ready = data && data !== UNAVAILABLE;
   const licences = ready ? data.licences || [] : [];
   const selected = tenant ? licences.find((l) => l.uid === tenant) || null : null;
-  const kindScoped = kindFilter === 'all'
-    ? licences
-    : licences.filter((l) => l.kind === kindFilter);
+  const kindScoped = filterByKind(licences, kindFilter);
   const shown = selected ? [selected] : kindScoped;
   const events = useMemo(() => {
     if (!ready) return [];

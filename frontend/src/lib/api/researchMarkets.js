@@ -15,4 +15,5 @@ export const researchMarketsApi = {
   get: (slug) => request(`/research/markets/${encodeURIComponent(slug)}`),
   geographies: (params) => request(`/research/geographies${qs(params)}`),
   geography: (code) => request(`/research/geographies/${encodeURIComponent(code)}`),
+  listedCompanies: (params) => request(`/research/listed-companies${qs(params)}`),
 };

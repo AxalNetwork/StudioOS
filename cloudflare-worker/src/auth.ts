@@ -7,7 +7,7 @@ import { ADMIN_FROZEN, FREEZING_STATUSES } from './util/authErrors';
 import { recordSecurityEvent } from './services/securityEvents';
 
 const JWT_ALGORITHM = 'HS256';
-const JWT_EXPIRY_HOURS = 24;
+export const JWT_EXPIRY_HOURS = 24;
 
 /**
  * Phase A5 — call this exactly once at the start of every request handler

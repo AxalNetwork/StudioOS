@@ -84,11 +84,11 @@ idna==3.20
     #   httpx
     #   requests
     #   yarl
-mako==1.4.1
+mako==1.4.2
     # via alembic
 markupsafe==3.0.3
     # via mako
-multidict==6.9.0
+multidict==6.9.1
     # via
     #   aiohttp
     #   yarl

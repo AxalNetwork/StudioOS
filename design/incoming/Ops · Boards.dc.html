@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="padding:56px;display:flex;flex-direction:column;gap:72px">
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="2">
+    <section style="display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;align-items:baseline;gap:14px"><span style="font-weight:700;font-size:26px;letter-spacing:-.02em">{{ r.title }}</span><span style="font-size:14px;color:#6b6577">{{ r.note }}</span></div>
+      <div style="display:flex;gap:56px;align-items:flex-start">
+        <sc-for list="{{ r.boards }}" as="b" hint-placeholder-count="4">
+          <div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px;flex:none">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:600 11px 'Roboto Mono',monospace;padding:4px 8px;border-radius:5px;background:#18181b;color:#fff">{{ b.id }}</span><span style="font-weight:600;font-size:15px">{{ b.title }}</span><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ b.route }}</span></div>
+            <div style="display:flex;gap:28px;align-items:flex-start">
+              <div style="width:1440px;flex:none;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7;box-shadow:0 18px 44px rgba(24,24,27,.07)">
+                <dc-import name="Ops Page" screen="{{ b.screen }}" hint-size="1440px,1200px"></dc-import>
+              </div>
+              <sc-if value="{{ b.phone }}" hint-placeholder-val="{{ false }}">
+                <div style="width:390px;height:844px;flex:none;border:10px solid #18181b;border-radius:40px;overflow:auto;background:#f4f3f7">
+                  <dc-import name="Ops Page" screen="{{ b.screen }}" hint-size="370px,844px"></dc-import>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;set&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;events&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;advisor&quot;,&quot;wellbeing&quot;,&quot;partner&quot;,&quot;events&quot;,&quot;account&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const set = this.props.set ?? 'events';
+    const SETS = {
+      advisor: [{ title: 'Advisor practice tools', note: 'Deliverables, session types, booking links, the access log, and the profile a client sees.', boards: [
+        { id: 'A1', title: 'Deliverables', route: '/practice/deliverables', screen: 'adv-deliverables', phone: false },
+        { id: 'A2', title: 'Session types', route: '/practice/session-types', screen: 'adv-sessions', phone: false },
+        { id: 'A3', title: 'Booking links', route: '/practice/booking-links', screen: 'adv-links', phone: false },
+        { id: 'A4', title: 'Client data access log', route: '/practice/access-log', screen: 'adv-access', phone: false },
+        { id: 'A5', title: 'Profile as a client sees it', route: '/advisors/[handle]', screen: 'advpub-profile', phone: true },
+      ] }],
+      wellbeing: [
+        { title: 'Wellbeing · member', note: 'Weekly check-in, bookings and resources; booking an expert in four steps.', boards: [
+          { id: 'W1', title: 'Wellbeing home', route: '/wellbeing', screen: 'wb-home', phone: true },
+          { id: 'W2', title: 'Book an expert', route: '/wellbeing/book', screen: 'wb-book', phone: true },
+        ] },
+        { title: 'Wellbeing · expert and admin', note: 'The expert\u2019s practice and the admin\u2019s resource library.', boards: [
+          { id: 'W3', title: 'Expert · my practice', route: '/wellbeing/practice', screen: 'wbx-practice', phone: false },
+          { id: 'W4', title: 'Admin · resource library', route: '/admin/wellbeing/resources', screen: 'wba-library', phone: false },
+        ] },
+      ],
+      partner: [
+        { title: 'Partner earnings', note: 'Commissions, referrals, the relationship log and the leaderboard.', boards: [
+          { id: 'P1', title: 'Earnings', route: '/partner/earnings', screen: 'pe-earnings', phone: true },
+          { id: 'P2', title: 'Referrals', route: '/partner/referrals', screen: 'pe-referrals', phone: false },
+          { id: 'P3', title: 'Relationship log', route: '/partner/relationships/[id]', screen: 'pe-log', phone: false },
+          { id: 'P4', title: 'Leaderboard', route: '/partner/leaderboard', screen: 'pe-board', phone: false },
+        ] },
+        { title: 'Admin · commissions and payouts', note: 'Rules, all commissions, the payout queue and the HQ take rate.', boards: [
+          { id: 'P5', title: 'Commissions and payouts', route: '/admin/commissions', screen: 'pea-commissions', phone: false },
+        ] },
+      ],
+      events: [{ title: 'Event organiser', note: 'Eligibility, the registrations queue, a member\u2019s own registration, and the agenda editor.', boards: [
+        { id: 'E1', title: 'Eligibility', route: '/events/[event]/manage', screen: 'evo-eligibility', phone: false },
+        { id: 'E2', title: 'Registrations queue', route: '/events/[event]/manage/registrations', screen: 'evo-queue', phone: false },
+        { id: 'E3', title: 'My registration', route: '/events/[event]', screen: 'ev-mine', phone: true },
+        { id: 'E4', title: 'Agenda editor', route: '/events/[event]/manage/agenda', screen: 'evo-agenda', phone: false },
+      ] }],
+      account: [
+        { title: 'Account center', note: 'One page, /account, with a section list on the left.', boards: [
+          { id: 'C1', title: 'Profile and identity', route: '/account#profile', screen: 'ac-profile', phone: true },
+          { id: 'C2', title: 'Notifications', route: '/account#notifications', screen: 'ac-notifications', phone: true },
+          { id: 'C3', title: 'Sign-in and security', route: '/account#security', screen: 'ac-security', phone: false },
+        ] },
+        { title: 'Account center · continued', note: 'Billing, Following, Developer.', boards: [
+          { id: 'C4', title: 'Billing and orders', route: '/account#billing', screen: 'ac-billing', phone: false },
+          { id: 'C5', title: 'Following', route: '/account#following', screen: 'ac-following', phone: false },
+          { id: 'C6', title: 'Developer', route: '/account#developer', screen: 'ac-developer', phone: false },
+        ] },
+      ],
+    };
+    return { rows: SETS[set] || SETS.advisor };
+  }
+}
+</script>
+</body></html>

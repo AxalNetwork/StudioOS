@@ -22,6 +22,6 @@ test('the book exposes private notes, dated touches, and refuses void touches in
 test('the route scopes private notes and refuses void touches', () => {
   assert.match(ROUTE, /my_private_note/, 'GET never scopes private notes to the caller');
   assert.match(ROUTE, /touch_requires_substance/, 'void touches are still accepted');
-  assert.match(ROUTE, /parseRemindAt/, 'calendar reminder dates are not normalized');
+  assert.match(ROUTE, /parseBookDate/, 'calendar reminder dates are not normalized');
   assert.match(ROUTE, /mergePrivateNote/, 'private notes are not merged per party');
 });

@@ -11,6 +11,7 @@ import { RESEARCH_STORE_GAPS } from './noStoreCopy';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
+import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -88,6 +89,7 @@ import { api } from '../lib/api';
  */
 
 const MarketDirectoryZone = lazy(() => import('../pages/research/MarketDirectoryZone'));
+const GeographiesZone = lazy(() => import('../pages/research/GeographiesZone'));
 const CompanyDirectoryZone = lazy(() => import('../pages/research/CompanyDirectoryZone'));
 const LibraryZone = lazy(() => import('../pages/research/LibraryZone'));
 const AskZone = lazy(() => import('../pages/research/AskZone'));
@@ -111,7 +113,7 @@ function Loading() {
 // needed none — its canvas artboard is "room access", assembled from the
 // `data_room_grants` an investor already holds. All three leave ZONE_COPY here
 // and join the zones that read something.
-const LIVE_ZONES = new Set(['markets', 'companies', 'library', 'ask', 'funds', 'benchmarking', 'diligence', 'client-prep']);
+const LIVE_ZONES = new Set(['markets', 'geographies', 'companies', 'library', 'ask', 'funds', 'benchmarking', 'diligence', 'client-prep']);
 
 /**
  * EMPTY, AND THAT IS THE STATE RATHER THAN AN OVERSIGHT. Every zone this
@@ -146,6 +148,7 @@ const ZONE_BLURB = {
   diligence: 'The rooms founders have opened to you, and how much of each they actually staged.',
   benchmarking: 'What you are measuring, what the peer set says, and how many it was measured over.',
   markets: 'Comparable ranges you entered, each with the date it was run and how old it is.',
+  geographies: 'Where the directory’s companies are based and its funds are headquartered.',
   companies: 'The competitor and market analyses you have run yourself.',
   library: 'Documents you have added, and which of them Ask can actually read.',
   ask: 'Questions answered only from your own library, with the passage each answer used.',
@@ -157,6 +160,9 @@ function ResearchOverview({ role }) {
   const board = boardFor(role, '/research', api);
   if (board) return <>
     {role === 'advisor' && <Link to="/market-intel" className="mb-4 inline-block text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">Open Market Intelligence</Link>}
+    {/* D536 — the Research overview (Research · Main canvas, D546) above the
+        advisor and partner board. The board keeps its own sections. */}
+    <ResearchOverviewPanel />
     <BucketBoard bucket={bucket} role={role} board={board} />
   </>;
   return (
@@ -200,11 +206,18 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
             zoneActions={(rows) => zoneActionsFor(role, 'research/markets', { view: {
               scope: null,
               zone: 'markets',
-              header: ['Sector', 'Companies', 'Slug'],
+              header: ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug'],
               rows,
-              cells: (x) => [x.name, x.company_count, x.slug],
+              cells: (x) => [x.name, x.supplied_count, x.mi_sector || 'Not mapped', x.slug],
             } })}
           />
+        </Suspense>
+      );
+    }
+    if (slug === 'geographies') {
+      return (
+        <Suspense fallback={<Loading />}>
+          <GeographiesZone />
         </Suspense>
       );
     }
