@@ -179,9 +179,11 @@ const CONTRACT = [
   [W('index.ts'), "app.route('/api/admin/learning', adminLearningProgramsRoutes);", P('programReads.js'), "import { adminLearningApi } from '../../lib/api/adminLearning.js';"],
   // A member.
   [W('routes/learning_programs.ts'), "r.get('/programs/enrolled', async", P('programReads.js'), 'learningApi.myEnrolledPrograms()'],
-  [W('routes/learning_programs.ts'), 'programs: (res.results || []).map((p) => ({ ...programView(p), enrolled_at: p.enrolled_at }))', P('programReads.js'), "listOf(await learningApi.myEnrolledPrograms(), 'programs', 'Your programs')"],
-  [W('routes/learning_programs.ts'), "r.get('/programs/:uid', async", P('programReads.js'), 'learningApi.program(program.uid)'],
-  [W('routes/learning_programs.ts'), 'return c.json({ program: programView(p), contents: described, enrolled: s.enrolled, my_completion: mine });', P('programReads.js'), 'Array.isArray(reply.my_completion) ? reply.my_completion : null'],
+  // One read (#1251): each enrolled program carries its contents and the caller's completion, or says it could not.
+  [W('routes/learning_programs.ts'), '...programView(p), enrolled_at: p.enrolled_at,', P('programReads.js'), "listOf(await learningApi.myEnrolledPrograms(), 'programs', 'Your programs')"],
+  [W('routes/learning_programs.ts'), 'slot.contents.push(described[i]);', P('programReads.js'), '!failed && Array.isArray(contents)'],
+  [W('routes/learning_programs.ts'), 'slot.my_completion.push(mine[i]);', P('programReads.js'), 'completion: Array.isArray(completion) ? completion : null'],
+  [W('routes/learning_programs.ts'), "? { contents: null, my_completion: null, contents_error: 'unavailable' }", P('programReads.js'), 'contents_error: failed'],
   [W('routes/learning_programs.ts'), "r.get('/programs', async", P('programReads.js'), 'learningApi.programs()'],
   [W('routes/learning_programs.ts'), "programs: (res.results || []).map((p) => ({ ...programView(p), enrolled: p.my_status === 'active' }))", P('MyPrograms.jsx'), '.filter((p) => !p.enrolled)'],
   [W('routes/learning_programs.ts'), "r.post('/programs/:uid/enrol', async", P('programReads.js'), 'learningApi.enrolInProgram(uid)'],
@@ -192,9 +194,9 @@ const CONTRACT = [
   [W('routes/learning_programs.ts'), "r.get('/programs/mine', async", P('programReads.js'), 'learningApi.assignedPrograms()'],
   [W('routes/learning_programs.ts'), 'programs: (res.results || []).map((p) => ({ ...programView(p), learners: Number(p.learners), contents: Number(p.contents) }))', P('ProgramsTable.jsx'), "count(p.contents, 'item', 'items', 'No content')"],
   [W('routes/learning_programs.ts'), "r.get('/programs/:uid/learners', async", P('programReads.js'), 'learningApi.programLearners(uid)'],
-  [W('routes/learning_programs.ts'), 'learners: await completionFor(c.env, p.id, contents, learners),', P('programReads.js'), "learners: listOf(reply, 'learners', 'The program')"],
+  [W('routes/learning_programs.ts'), 'learners: await completionFor(c.env, contents, learners),', P('programReads.js'), "learners: listOf(reply, 'learners', 'The program')"],
   [W('routes/learning_programs.ts'), "r.get('/programs/:uid/learners/:userUid', async", P('programReads.js'), 'learningApi.programLearner(uid, userUid)'],
-  [W('routes/learning_programs.ts'), 'learner: (await completionFor(c.env, p.id, contents, learners))[0],', P('programReads.js'), '!Array.isArray(reply.learner.completion)'],
+  [W('routes/learning_programs.ts'), 'learner: (await completionFor(c.env, contents, learners))[0],', P('programReads.js'), '!Array.isArray(reply.learner.completion)'],
   [W('routes/learning_programs.ts'), "message: 'You can follow the learners of programs assigned to you.'", P('programReads.js'), "if (err?.status === 403) return { refused: { code: err.code || null, message: err.message || '' } };"],
   [W('routes/learning_programs.ts'), "message: 'No such learner in this program.'", P('LearningPrograms.jsx'), 'notFound={learnerState.message ||'],
   // The Super Admin.
@@ -244,13 +246,15 @@ test('every route D558 mounted sends what the pages read, and takes what they se
 
 // ── The calls, through the real client ─────────────────────────────────────
 
-test('a member: their programs each read with their completion, the open ones, and self-enrolment', async () => {
+test('a member: their programs in one read with their completion, the open ones, and self-enrolment', async () => {
   let mine; let open; let joined;
+  const enrolled = (p, extra) => ({ ...p, enrolled_at: '2026-10-02T09:00:00.000Z', ...extra });
   const calls = await withFetch([
-    { programs: [{ ...NORDICS, enrolled_at: '2026-10-02T09:00:00.000Z' }, { ...OPEN, enrolled_at: '2026-10-03T09:00:00.000Z' }, { ...DACH, status: 'published', enrolled_at: '2026-10-03T09:00:00.000Z' }] },
-    { program: NORDICS, contents: CONTENTS, enrolled: true, my_completion: PIA.completion },
-    { status: 500, body: refusal('internal', 'Something failed.') },
-    { status: 404, body: refusal('not_found', 'No such program.') },
+    { programs: [
+      enrolled(NORDICS, { contents: CONTENTS, my_completion: PIA.completion }),
+      enrolled(OPEN, { contents: [], my_completion: [] }),
+      enrolled({ ...DACH, status: 'published' }, { contents: 'nope', my_completion: null }),
+    ] },
     { programs: [{ ...OPEN, enrolled: true }, { ...NORDICS, enrolment: 'open', enrolled: false }] },
     { status: 201, body: { enrolment: { program_uid: 'p-nordics', status: 'active', enrolled_at: '2026-10-06T10:00:00.000Z' } } },
   ], async () => {
@@ -258,19 +262,33 @@ test('a member: their programs each read with their completion, the open ones, a
     open = await readOpenPrograms();
     joined = await enrolSelf('p-nordics');
   });
+  // One read for every program (#1251), never one more per program.
   assert.deepEqual(lines(calls), [
     'GET /learning/programs/enrolled',
-    'GET /learning/programs/p-nordics',
-    'GET /learning/programs/p-open',
-    'GET /learning/programs/p-dach',
     'GET /learning/programs',
     'POST /learning/programs/p-nordics/enrol',
   ]);
-  assert.equal(calls[5].body, undefined, 'self-enrolment sends no body: the user is the session\'s');
-  assert.deepEqual(mine.rows.map((r) => [r.program.uid, r.detail.status]), [['p-nordics', 'ready'], ['p-open', 'unreadable'], ['p-dach', 'missing']],
-    'one program\'s failed read blanked the others, or was read as empty');
+  assert.equal(calls[2].body, undefined, 'self-enrolment sends no body: the user is the session\'s');
+  assert.deepEqual(mine.rows.map((r) => [r.program.uid, r.detail.status]), [['p-nordics', 'ready'], ['p-open', 'ready'], ['p-dach', 'unreadable']],
+    'a program in the wrong shape blanked the others, or was read as empty');
   assert.deepEqual(mine.rows[0].detail.completion, PIA.completion);
   assert.equal(mine.rows[0].detail.contents.length, 5);
+  assert.deepEqual(mine.rows[1].detail, { status: 'ready', contents: [], completion: [] }, 'a program holding nothing is ready and empty, not unreadable');
+  // The program is the program: the contents and completion are not left on it.
+  assert.deepEqual(Object.keys(mine.rows[0].program).filter((k) => ['contents', 'my_completion', 'contents_error'].includes(k)), []);
+  assert.equal(mine.rows[0].program.enrolled_at, '2026-10-02T09:00:00.000Z');
+  // The route could not read the contents: it says so on each program, and each is unreadable, never a zero.
+  let failed;
+  await withFetch([{ programs: [
+    enrolled(NORDICS, { contents: null, my_completion: null, contents_error: 'unavailable' }),
+    enrolled(OPEN, { contents: null, my_completion: null, contents_error: 'unavailable' }),
+  ] }], async () => { failed = await readMyPrograms(); });
+  assert.deepEqual(failed.rows.map((r) => [r.program.uid, r.detail.status]), [['p-nordics', 'unreadable'], ['p-open', 'unreadable']]);
+  assert.match(failed.rows[0].detail.message, /could not read what this program holds/);
+  // An error flag wins over contents sent beside it.
+  let flagged;
+  await withFetch([{ programs: [enrolled(NORDICS, { contents: CONTENTS, my_completion: PIA.completion, contents_error: 'unavailable' })] }], async () => { flagged = await readMyPrograms(); });
+  assert.equal(flagged.rows[0].detail.status, 'unreadable');
   assert.deepEqual(open.programs.map((p) => [p.uid, p.enrolled]), [['p-open', true], ['p-nordics', false]]);
   assert.equal(joined.status, 'active');
   // A reply in the wrong shape is a failed read, not "in no program".
@@ -520,17 +538,15 @@ test('My programs: each program with its region, the member\'s progress and what
 test('My programs: nothing started is not a zero, one failed program is that program\'s, and every state of the section', () => {
   const rows = [
     { program: NORDICS, detail: { status: 'ready', contents: CONTENTS, completion: OTTO.completion } },
-    { program: OPEN, detail: { status: 'unreadable', message: 'Something failed.' } },
-    { program: DACH, detail: { status: 'missing', message: 'No such program.' } },
+    { program: OPEN, detail: { status: 'unreadable', message: 'The route could not read what this program holds.' } },
   ];
   const markup = html(h(MyProgramsSection, { enrolled: mineState(rows), open: openState([]), onRetry: { enrolled: () => {} } }));
   const out = flat(markup);
   assert.match(out, /Nordics Nordics None of 4 complete yet/);
   assert.doesNotMatch(out, /\b0%|\b0 of /, 'nothing started was drawn as a zero');
   assert.match(markup, /style="width:0%"/);
-  assert.match(flat(sliceFrom(markup, 'my-program-p-open', 'my-program-p-dach')), /Your progress in this program could not be read, so this is not a claim that you have done nothing in it\. Retry/);
-  assert.match(flat(sliceFrom(markup, 'my-program-p-dach')), /This program is no longer open to you\./);
-  assert.equal(count(markup, 'data-testid="my-program-p-'), 3, 'a program whose own read failed was dropped');
+  assert.match(flat(sliceFrom(markup, 'my-program-p-open')), /Your progress in this program could not be read, so this is not a claim that you have done nothing in it\. Retry/);
+  assert.equal(count(markup, 'data-testid="my-program-p-'), 2, 'a program whose contents could not be read was dropped');
   // No published content: no bar, and the line says so.
   const empty = html(h(MyProgramsSection, { enrolled: mineState([{ program: NORDICS, detail: { status: 'ready', contents: [CONTENTS[4]], completion: [OTTO.completion[4]] } }]), open: openState([]) }));
   assert.doesNotMatch(empty, /style="width/);
@@ -892,7 +908,7 @@ test('the calls stay in one file, through methods the clients already declare', 
     'adminLearningApi.listPrograms', 'adminLearningApi.setProgramContents', 'adminLearningApi.unassignProgramAdmin',
     'adminLearningApi.unenrolFromProgram', 'adminLearningApi.updateProgram',
     'api.adminListUsers',
-    'learningApi.assignedPrograms', 'learningApi.enrolInProgram', 'learningApi.myEnrolledPrograms', 'learningApi.program',
+    'learningApi.assignedPrograms', 'learningApi.enrolInProgram', 'learningApi.myEnrolledPrograms',
     'learningApi.programLearner', 'learningApi.programLearners', 'learningApi.programs',
   ]);
   for (const [client, method] of called) assert.ok(declared[client].includes(`  ${method}: (`), `${client}.${method} is not a method the client declares`);
