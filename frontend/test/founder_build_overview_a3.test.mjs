@@ -104,7 +104,7 @@ test('the cards are the artboard’s cards, in its order', () => {
   assert.deepEqual(drawn, titles, 'the overview is no longer the artboard’s five cards in its order');
 });
 
-test('the board draws all four of the artboard’s columns, and says why one is empty', () => {
+test('the board draws all four recorded status columns and preserves unreadable states', () => {
   const columns = [...A3DATA.matchAll(/\{ col:'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(columns, ['Backlog', 'In progress', 'Review', 'Shipped']);
   const table = page.match(/const BOARD_COLUMNS = \[([\s\S]*?)\];/)?.[1] || '';
@@ -113,14 +113,9 @@ test('the board draws all four of the artboard’s columns, and says why one is 
     columns,
     'the execution board no longer draws the artboard’s four columns',
   );
-  // Review is the one with no status behind it, and it must be the ONLY one:
-  // a second null would mean a real column had quietly lost its key.
   const unbacked = [...table.matchAll(/\['([^']+)', null\]/g)].map((m) => m[1]);
-  assert.deepEqual(unbacked, ['Review'], 'exactly one board column may be unbacked, and it is Review');
-  // A zero would read as "nothing is in review", which is a different claim
-  // from "review is not a state this product records".
-  assert.match(page, /if \(key === null\) return \{ label, key, count: null, note: 'No review state is recorded' \};/,
-    'the unbacked column must draw no count at all, and say why');
+  assert.deepEqual(unbacked, [], 'all four board statuses are stored');
+  assert.doesNotMatch(page, /No review state is recorded/);
   assert.match(page, /column\.count === null \? '—' :/);
   // AND THE UNREADABLE BOARD IS A THIRD ABSENCE. `Number(taskCounts.todo) || 0`
   // told a founder their board was empty whenever the read behind it failed,

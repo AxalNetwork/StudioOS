@@ -155,7 +155,7 @@ test('a target written is a target the zone reads back', async () => {
   assert.equal(after.body.items.length, 1, 'the read cannot see the row the write just made');
   assert.deepEqual(
     { ...after.body.items[0], id: undefined, updated_at: undefined },
-    { id: undefined, metric_key: 'mrr', target_value: 42000, direction: 'up', label: 'Q4 plan', updated_at: undefined },
+    { id: undefined, metric_key: 'mrr', is_focus: null, target_value: 42000, direction: 'up', label: 'Q4 plan', updated_at: undefined },
   );
 });
 
