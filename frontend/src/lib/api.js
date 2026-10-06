@@ -4553,6 +4553,10 @@ export const api = {
   // D358 — the caller's answers old enough to be asked again ("is this still
   // true?"). A read-only peek; nothing is marked asked.
   profileReask: () => request('/profile/reask'),
+  // D602 — other members who published one of these archetypes (the card
+  // page's matches). Name, role and the published archetype only.
+  profilePublishedMembers: (slugs) =>
+    request(`/profile/published-members?archetypes=${encodeURIComponent((slugs || []).join(','))}`),
   // D358 — admin: how the profiling population shifts over time. Counts only,
   // small cells hidden by the Worker.
   adminProfilingTrends: (months) =>

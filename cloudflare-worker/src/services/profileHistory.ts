@@ -25,9 +25,9 @@
  * nothing else.
  */
 import type { Env } from '../types';
+import { blendedSkillLevel, evidenceBlendEnabled, profileEngineVersion } from './profileEvidenceBlend';
 import type { FitPersona } from './advisor/questionBank.ts';
 import {
-  ENGINE_VERSION,
   PROFILE_V2_PARAMS,
   ARCHETYPE_TRAITS,
   answerTimeMs,
@@ -63,7 +63,7 @@ export interface SkillAxis {
   self: number | null;
   /** Session 8's evidence weight; null when no evidence was supplied. */
   evidence: number | null;
-  /** Decision b: evidence corroborates, it never moves the level — blended is the self level. */
+  /** Decision b / D592: self by default, bounded blend only while the owner switch is on. */
   blended: number | null;
   state: SkillState;
 }
@@ -138,6 +138,7 @@ export function buildProfile(
   ledger: readonly LedgerAnswer[],
   asOfDay: string,
   evidence?: EvidenceWeights | null,
+  blendEnabled = false,
 ): ProfileV2 {
   const atMs = endOfDayMs(asOfDay);
   const latest = latestAnswers(ledger, atMs);
@@ -152,11 +153,11 @@ export function buildProfile(
     const self = selfByAxis[axis] ?? null;
     const raw = evidence ? evidence[axis] : undefined;
     const ev = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? round2(raw) : null;
-    skills[axis] = { self, evidence: ev, blended: self, state: skillState(self, ev) };
+    skills[axis] = { self, evidence: ev, blended: blendedSkillLevel(self, ev ?? 0, blendEnabled), state: skillState(self, ev) };
   }
   return {
     persona,
-    engine_version: ENGINE_VERSION,
+    engine_version: profileEngineVersion(blendEnabled),
     displayed_slug: display.displayed,
     computed_slug: display.computed,
     secondary_slug: c?.secondary ?? null,
@@ -217,6 +218,8 @@ export function isMaterialChange(prev: Pick<SnapshotRow, 'engine_version' | 'dis
     const n = next.skills[axis];
     if (!p) return true;
     if (p.state !== n.state) return true;
+    if (next.engine_version === profileEngineVersion(true) && p.blended !== null && n.blended !== null
+      && Math.abs(p.blended - n.blended) >= MATERIAL_DELTA) return true;
     if ((p.self === null) !== (n.self === null)) return true;
     if (p.self !== null && n.self !== null && Math.abs(p.self - n.self) >= MATERIAL_DELTA) return true;
   }
@@ -370,6 +373,7 @@ export async function recomputeProfile(env: Env, userId: number, opts: Recompute
   if (!Number.isFinite(asOfMs)) throw new Error('asOf is not a timestamp');
   const asOfDay = dayOf(asOfMs);
   const ledger = await loadLedger(env, userId);
+  const blendEnabled = await evidenceBlendEnabled(env);
   const answeredPersonas = new Set(ledger.map((a) => a.question_id.split('.')[1]));
   const out: RecomputeResult[] = [];
   // Evidence is about the person, not a persona: read Session 8's store once.
@@ -381,7 +385,7 @@ export async function recomputeProfile(env: Env, userId: number, opts: Recompute
     const own = ledger.filter((a) => ids.has(a.question_id));
     if (!own.length) continue;
     const evidence = opts.evidence ? await opts.evidence(persona) : stored;
-    const profile = buildProfile(persona, items, own, asOfDay, evidence);
+    const profile = buildProfile(persona, items, own, asOfDay, evidence, blendEnabled);
     const prev = await loadLatestSnapshot(env, userId, persona);
     const material = isMaterialChange(prev, profile);
     if (material) {

@@ -31,7 +31,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { RESEARCH_STORE_GAPS } from '../src/workspaces/noStoreCopy.js';
+import { RESEARCH_STORE_GAPS, storeGapFor } from '../src/workspaces/noStoreCopy.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const WORKSPACE = codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx'));
@@ -148,17 +148,21 @@ test('the gap renders above the body, and the rail reports it too', () => {
   // Above, never instead. `{body}` has to survive: dropping it is how "record
   // the gap" turns into "delete the zone", which would take a live store —
   // for markets, the comparable readings — off the screen.
-  assert.match(WORKSPACE, /const storeGap = !isRoot && slug \? RESEARCH_STORE_GAPS\[slug\] : null;/,
+  assert.match(WORKSPACE, /const gap = !isRoot && slug \? storeGapFor\(slug, role\) : null;/,
     'the per-zone gap lookup is gone');
+  // D392 — the looked-up entry is narrowed to the licences it names (`roles`),
+  // so a canvas whose object the zone already holds is not told it is missing.
+  // D495 — a licence-specific entry (`markets:investor`) comes first. Both are
+  // pinned on the lookup itself rather than on its source text.
+  assert.equal(storeGapFor('markets', 'partner'), null, 'the partner was told Markets lacks what it holds');
+  assert.equal(storeGapFor('markets', 'advisor'), null);
+  assert.equal(storeGapFor('markets', 'founder'), RESEARCH_STORE_GAPS.markets);
+  assert.equal(storeGapFor('markets', 'investor'), RESEARCH_STORE_GAPS['markets:investor'], 'the investor was not shown the theses gap');
+  assert.equal(storeGapFor('companies', 'partner'), RESEARCH_STORE_GAPS.companies, 'an entry naming no licences stopped applying to all');
   // ANCHORED TO THE BRACE. `/gap && \(/` alone still matches
   // `{false && gap && (`, so a guard that switches the whole block off
   // passed this — found by mutation. Requiring `gap` to be the FIRST
   // operand after the brace is what makes a disabling conjunct fail.
-  // D392 — the rendered variable is `gap`: the looked-up entry narrowed to the
-  // licences it names (`roles`), so a canvas whose object the zone already
-  // holds is not told it is missing. The four properties below are unchanged.
-  assert.match(WORKSPACE, /const gap = storeGap && \(!storeGap\.roles \|\| storeGap\.roles\.includes\(role\)\) \? storeGap : null;/,
-    'the gap is no longer scoped to the licences its entry names');
   assert.match(WORKSPACE, /\{gap && \(/, 'the gap is no longer rendered unconditionally');
   assert.match(WORKSPACE, /eyebrow=\{gap\.eyebrow\}/,
     'the gap renders without its own eyebrow, so it claims the zone has no store at all');
