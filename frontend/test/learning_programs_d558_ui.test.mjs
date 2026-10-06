@@ -179,7 +179,7 @@ const CONTRACT = [
   [W('index.ts'), "app.route('/api/admin/learning', adminLearningProgramsRoutes);", P('programReads.js'), "import { adminLearningApi } from '../../lib/api/adminLearning.js';"],
   // A member.
   [W('routes/learning_programs.ts'), "r.get('/programs/enrolled', async", P('programReads.js'), 'learningApi.myEnrolledPrograms()'],
-  [W('routes/learning_programs.ts'), 'programs: (res.results || []).map((p) => ({ ...programView(p), enrolled_at: p.enrolled_at }))', P('programReads.js'), "listOf(await learningApi.myEnrolledPrograms(), 'programs', 'Your programs')"],
+  [W('routes/learning_programs.ts'), '...programView(p), enrolled_at: p.enrolled_at,', P('programReads.js'), "listOf(await learningApi.myEnrolledPrograms(), 'programs', 'Your programs')"],
   [W('routes/learning_programs.ts'), "r.get('/programs/:uid', async", P('programReads.js'), 'learningApi.program(program.uid)'],
   [W('routes/learning_programs.ts'), 'return c.json({ program: programView(p), contents: described, enrolled: s.enrolled, my_completion: mine });', P('programReads.js'), 'Array.isArray(reply.my_completion) ? reply.my_completion : null'],
   [W('routes/learning_programs.ts'), "r.get('/programs', async", P('programReads.js'), 'learningApi.programs()'],
@@ -192,9 +192,9 @@ const CONTRACT = [
   [W('routes/learning_programs.ts'), "r.get('/programs/mine', async", P('programReads.js'), 'learningApi.assignedPrograms()'],
   [W('routes/learning_programs.ts'), 'programs: (res.results || []).map((p) => ({ ...programView(p), learners: Number(p.learners), contents: Number(p.contents) }))', P('ProgramsTable.jsx'), "count(p.contents, 'item', 'items', 'No content')"],
   [W('routes/learning_programs.ts'), "r.get('/programs/:uid/learners', async", P('programReads.js'), 'learningApi.programLearners(uid)'],
-  [W('routes/learning_programs.ts'), 'learners: await completionFor(c.env, p.id, contents, learners),', P('programReads.js'), "learners: listOf(reply, 'learners', 'The program')"],
+  [W('routes/learning_programs.ts'), 'learners: await completionFor(c.env, contents, learners),', P('programReads.js'), "learners: listOf(reply, 'learners', 'The program')"],
   [W('routes/learning_programs.ts'), "r.get('/programs/:uid/learners/:userUid', async", P('programReads.js'), 'learningApi.programLearner(uid, userUid)'],
-  [W('routes/learning_programs.ts'), 'learner: (await completionFor(c.env, p.id, contents, learners))[0],', P('programReads.js'), '!Array.isArray(reply.learner.completion)'],
+  [W('routes/learning_programs.ts'), 'learner: (await completionFor(c.env, contents, learners))[0],', P('programReads.js'), '!Array.isArray(reply.learner.completion)'],
   [W('routes/learning_programs.ts'), "message: 'You can follow the learners of programs assigned to you.'", P('programReads.js'), "if (err?.status === 403) return { refused: { code: err.code || null, message: err.message || '' } };"],
   [W('routes/learning_programs.ts'), "message: 'No such learner in this program.'", P('LearningPrograms.jsx'), 'notFound={learnerState.message ||'],
   // The Super Admin.
