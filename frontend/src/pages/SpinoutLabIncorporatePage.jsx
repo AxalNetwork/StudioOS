@@ -32,8 +32,10 @@
 //     writes `paid` / `paid_at` into incorporation_meta, which any browser
 //     could set; after Stripe confirms, it re-reads the orders.
 //   - The jurisdiction is the one on the founder's Lab application. Delaware
-//     is formable. Wyoming has no Worker jurisdiction and no catalog SKU, so
-//     for a Wyoming applicant the page stops at that line and says so.
+//     and (D586) a Wyoming C-Corp are formable; the catalog quote says whether
+//     either has a price, and with none the page stops at that line and says
+//     so. The entity and charter read the state: "Wyoming C-Corp", "Articles
+//     of Incorporation".
 //   - `incorporation_completed` (which issues the graduation certificate) is
 //     recorded at payment (the owner's answer A, D585), by the Worker: the
 //     payment webhook records it the moment the order is paid. This page
@@ -54,7 +56,7 @@ import CompanyEinCard, { EinPreviewValue } from '../components/spinout/CompanyEi
 import { companyEinApi } from '../lib/api/companyEin.js';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
-import { PACKET_NOT_BUILT, PACKET_NOT_BUILT_STATUSES, PAID_STATUSES, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
+import { PACKET_NOT_BUILT, PACKET_NOT_BUILT_STATUSES, PAID_STATUSES, charterName, entityLabel, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -306,7 +308,8 @@ export default function SpinoutLabIncorporatePage() {
     const s = (meta.doc_status || {})[key];
     return s && DOC_PILL[s] ? s : initial;
   };
-  const docs = DOCS.map((d) => ({ ...d, status: docStatus(d.key, d.initial) }));
+  // D586 — the charter takes the state's own name (Wyoming files Articles).
+  const docs = DOCS.map((d) => ({ ...d, name: d.key === 'coi' ? charterName(juris.state) : d.name, status: docStatus(d.key, d.initial) }));
   const docsAllDone = paid && docs.every((d) => ['ready', 'done'].includes(d.status));
 
   const orderStatus = order?.status || null;
@@ -319,8 +322,8 @@ export default function SpinoutLabIncorporatePage() {
   const filingSteps = [
     ['Documents prepared', 'Formation package generated and reviewed', 'Ready'],
     [`Submitted to ${juris.state}`, 'Filed with Secretary of State', 'Est. same day'],
-    ['Processing', 'State review of Certificate', '1–3 business days'],
-    ['Formation approved', 'Certificate stamped and returned', 'Est. 1 week'],
+    ['Processing', `State review of the ${charterName(juris.state)}`, '1–3 business days'],
+    ['Formation approved', `${charterName(juris.state)} stamped and returned`, 'Est. 1 week'],
     ['EIN issued', 'IRS SS-4 processed after approval', 'After approval'],
   ].map(([title, detail, time], i) => ({
     title, detail, time,
@@ -440,7 +443,7 @@ export default function SpinoutLabIncorporatePage() {
 
   const exportSummary = () => {
     const blob = new Blob([JSON.stringify({
-      legal_entity: legalName, entity_type: ENTITIES[selected].name, state: juris.state,
+      legal_entity: legalName, entity_type: entityLabel(selected, juris.state), state: juris.state,
       recommended: ENTITIES[rec.rec].name, overridden: hasOverride, override_reason: meta.override_reason || null,
       payment: paid
         ? { status: 'paid', paid_at: paidAt, amount_cents: order?.amount_cents ?? null, currency: order?.currency ?? null }
@@ -720,7 +723,7 @@ export default function SpinoutLabIncorporatePage() {
           <div className="text-[12px] text-gray-600 dark:text-gray-300 leading-relaxed flex-1">
             {hasOverride ? (
               <>
-                You overrode the recommendation. {ENTITIES[selected].name} changes your financing and equity setup — confirm this matches your fundraising intent before filing.
+                You overrode the recommendation. {entityLabel(selected, juris.state)} changes your financing and equity setup — confirm this matches your fundraising intent before filing.
                 <textarea
                   value={meta.override_reason || ''} disabled={!canEdit}
                   onChange={(e) => patchMeta({ override_reason: e.target.value.slice(0, 500) })}
@@ -890,13 +893,13 @@ export default function SpinoutLabIncorporatePage() {
         <div className="fixed inset-0 z-[70] bg-gray-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-6" onClick={() => setDocModal(null)} data-testid="doc-modal">
           <div className="w-full max-w-xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-              <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50">{DOCS.find((d) => d.key === docModal)?.name}</div>
+              <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50">{docs.find((d) => d.key === docModal)?.name}</div>
               <button type="button" onClick={() => setDocModal(null)} data-testid="doc-modal-close" className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 inline-flex items-center justify-center text-gray-500"><X size={14} /></button>
             </div>
             <div className="p-5 text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed space-y-3">
-              <p><b>{legalName}</b> · {ENTITIES[selected].name} · State of {juris.state}.</p>
+              <p><b>{legalName}</b> · {entityLabel(selected, juris.state)} · State of {juris.state}.</p>
               <p>Prefilled from your Spin-Out data: {rec.founders === null ? 'team size unreadable' : `${rec.founders} founder${rec.founders === 1 ? '' : 's'}`}, sector {project.sector || '—'}{project.funding_needed ? `, raising ${fmt(project.funding_needed)}` : ''}. The executed version is assembled into your filing packet after state submission.</p>
-              <p className="text-[11px] text-gray-400">Source: {DOCS.find((d) => d.key === docModal)?.source}. Not legal advice.</p>
+              <p className="text-[11px] text-gray-400">Source: {docs.find((d) => d.key === docModal)?.source}. Not legal advice.</p>
             </div>
           </div>
         </div>
@@ -914,7 +917,7 @@ export default function SpinoutLabIncorporatePage() {
               <div className="rounded-xl px-7 py-6 text-white mb-4" style={{ background: '#0d0d12' }}>
                 <div className="text-[11px] font-bold uppercase tracking-wide text-violet-400">Legal entity</div>
                 <div className="text-[24px] font-extrabold mt-1" data-testid="investor-entity-name">{legalName}</div>
-                <div className="text-[13px] text-violet-100/70 mt-0.5">{ENTITIES[selected].name} · State of {juris.state}</div>
+                <div className="text-[13px] text-violet-100/70 mt-0.5" data-testid="investor-entity-type">{entityLabel(selected, juris.state)} · State of {juris.state}</div>
                 <div className="flex flex-wrap gap-6 mt-4">
                   <div><div className="text-[11px] text-gray-400">Status</div><div className="text-[14px] font-mono font-semibold mt-0.5">{paid ? (filingDone >= 2 ? 'Filed' : 'Paid · not filed') : 'Pre-formation'}</div></div>
                   <div><div className="text-[11px] text-gray-400">EIN</div><div className="text-[14px] font-mono font-semibold mt-0.5" data-testid="investor-ein"><EinPreviewValue ein={ein} /></div></div>

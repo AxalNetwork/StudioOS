@@ -34,6 +34,12 @@ agreement, FAST advisory (`venture_share_agreement_fast_v1`), SAFE /
 term sheet / SPA / bylaws / 83(b) (in `routes/legal.ts` doc sets),
 IP background schedule, member consent, founding resolutions — **all
 existing**.
+**Needed (D586):** Wyoming **Articles of Incorporation** for a C-Corp
+(template key `articles_of_incorporation_wy`). Nothing generates it until
+counsel supplies an approved body and it is published to the D1 template
+store; the wizard lists it as `pending_counsel` instead. Counsel should also
+confirm that the bylaws, founders' stock purchase agreement and 83(b) bodies
+hold for a Wyoming corporation.
 
 ## C. Platform / GP ↔ investors and LPs
 

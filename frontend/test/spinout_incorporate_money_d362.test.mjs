@@ -94,14 +94,18 @@ test('paid is the server order; the page writes no paid flag', () => {
   assert.deepEqual(PAID_STATUSES, ['paid', 'packet_processing', 'packet_ready']);
 });
 
-test('the jurisdiction is the application\'s; Wyoming stops at its line with a reason', () => {
+test('the jurisdiction is the application\'s; one that cannot be formed stops at its line with a reason', () => {
   const de = formationJurisdiction('Delaware C-Corp — Delaware, USA', 'ccorp');
   assert.deepEqual([de.state, de.jurisdictionId, de.fromApplication], ['Delaware', 'us_de_ccorp', true]);
   assert.equal(formationJurisdiction('Delaware C-Corp — Delaware, USA', 'llc').jurisdictionId, 'us_de_llc');
-  const wy = formationJurisdiction('Wyoming C-Corp — Wyoming, USA', 'ccorp');
+  // D586 — a Wyoming C-Corp is formable (us_wy_ccorp); its other entities are not.
+  const wy = formationJurisdiction('Wyoming C-Corp — Wyoming, USA', 'llc');
   assert.equal(wy.state, 'Wyoming');
-  assert.equal(wy.jurisdictionId, null, 'no Worker jurisdiction and no catalog SKU: nothing to charge');
+  assert.equal(wy.jurisdictionId, null, 'no Worker jurisdiction for a Wyoming LLC: nothing to charge');
   assert.match(wy.reason, /Wyoming/);
+  const sg = formationJurisdiction('Singapore Pte Ltd — Singapore', 'ccorp');
+  assert.equal(sg.jurisdictionId, null);
+  assert.match(sg.reason, /Singapore/);
   const none = formationJurisdiction(null, 'ccorp');
   assert.deepEqual([none.state, none.jurisdictionId, none.fromApplication], ['Delaware', 'us_de_ccorp', false]);
   assert.match(PAGE, /formationJurisdiction\(state\?\.application\?\.jurisdiction, selected\)/);
