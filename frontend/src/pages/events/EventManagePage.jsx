@@ -1,265 +1,106 @@
-// Task #40 (E2) — EventManagePage: roster + invites + QR check-in.
-// Roster actions map to the E1 routes (approve / decline / promote). Waitlisted
-// registrants are grouped separately and promoted into open seats. InvitePeopleModal
-// sends invitations; CheckinScanner reads ticket QR codes via the device camera.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import {
-  ArrowLeft, UserPlus, ScanLine, Download, Check, X, ChevronsUp, CheckCircle2,
-} from 'lucide-react';
+// D567 / #1173 — Ops canvas E1, E2, E4. Host authority is enforced by the Worker.
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { events } from '../../lib/api';
 import { eventsApi } from '../../lib/eventsApi';
-import { useToast } from '../../components/useToast';
-import PageExplainer from '../../components/PageExplainer';
+import { PERSONAS } from '../../lib/personas';
+import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import InvitePeopleModal from '../../components/events/InvitePeopleModal';
 import CheckinScanner from '../../components/events/CheckinScanner';
-import ArchetypeBadge from '../../components/play/ArchetypeBadge';
+import { REGISTRATION_TABS, pageRows, recorded, registrationTab } from './eventOrganiserModel';
+import './eventOrganiser.css';
 
-const REG_STATUS_STYLES = {
-  registered: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  confirmed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  waitlisted: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  attended: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
-  cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-  declined: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-};
-
-function RegBadge({ status }) {
-  const cls = REG_STATUS_STYLES[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
-      {String(status || '').replace(/_/g, ' ')}
-    </span>
-  );
+const roles = ['admin', 'founder', 'partner', 'investor', 'exploring'];
+const blankItem = { title: '', starts_at: '', speaker_name: '', location_text: '', location_url: '' };
+export function EventReadState({ loading, error, empty, children }) {
+  if (loading) return <p role="status">Loading…</p>;
+  if (error) return <p role="alert">Unreadable — {error}</p>;
+  if (empty) return <p>No records yet.</p>;
+  return children;
 }
-
+function Pager({ data, setPage }) {
+  return <div className="evo-pager"><span>{data.start}–{data.end} of {data.total}</span><button disabled={data.current <= 1} onClick={() => setPage(data.current - 1)}>Previous</button><button disabled={data.current >= data.lastPage} onClick={() => setPage(data.current + 1)}>Next</button></div>;
+}
 export default function EventManagePage() {
   const { id } = useParams();
-  const { toast, showToast } = useToast();
-
-  const [event, setEvent] = useState(null);
-  const [registrations, setRegistrations] = useState([]);
-  const [invitations, setInvitations] = useState([]);
+  const location = useLocation();
+  const screen = location.pathname.endsWith('/agenda') ? 'agenda' : location.pathname.endsWith('/registrations') ? 'registrations' : 'eligibility';
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState(null);
-  const [showInvite, setShowInvite] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  const [checkingIn, setCheckingIn] = useState(false);
-
+  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [rules, setRules] = useState({ mode: 'everyone', roles: [], personas: [] });
+  const [approval, setApproval] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [tab, setTab] = useState('Pending');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('oldest');
+  const [page, setPage] = useState(1);
+  const [reason, setReason] = useState({});
+  const [item, setItem] = useState(blankItem);
+  const [editing, setEditing] = useState(null);
+  const [invite, setInvite] = useState(false);
+  const [scanner, setScanner] = useState(false);
   const load = useCallback(async () => {
+    setLoading(true); setError('');
     try {
-      const [ev, roster] = await Promise.all([
-        eventsApi.get(id).catch(() => null),
-        eventsApi.roster(id),
-      ]);
-      if (ev) setEvent(ev);
-      setRegistrations(Array.isArray(roster?.registrations) ? roster.registrations : (Array.isArray(roster) ? roster : []));
-      setInvitations(Array.isArray(roster?.invitations) ? roster.invitations : []);
-    } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Could not load the roster.' });
-    } finally {
-      setLoading(false);
-    }
-  }, [id, showToast]);
-
+      const [detail, roster, eligibility] = await Promise.all([events.get(id), events.roster(id), events.eligibility(id)]);
+      if (!detail?.event || !Array.isArray(detail.agenda) || !Array.isArray(roster?.registrations) || typeof eligibility?.eligible !== 'boolean' || typeof eligibility.reason !== 'string' || typeof roster?.counts?.seats_taken !== 'number' || typeof roster.counts.waitlisted !== 'number' || (roster.counts.capacity !== null && typeof roster.counts.capacity !== 'number')) throw new Error('The event response is incomplete.');
+      setData({ ...detail, roster });
+      const parsed = detail.event.audience_rules || JSON.parse(detail.event.audience_rules_json || '{}');
+      setRules({ mode: 'everyone', roles: [], personas: [], ...parsed });
+      setApproval(Boolean(detail.event.approval_required)); setPreview(eligibility);
+    } catch (e) { setError(e.message || 'The event could not be read.'); }
+    finally { setLoading(false); }
+  }, [id]);
   useEffect(() => { load(); }, [load]);
-
-  const audienceRules = useMemo(() => {
-    if (!event) return {};
-    try {
-      return typeof event.audience_rules_json === 'string'
-        ? JSON.parse(event.audience_rules_json || '{}')
-        : (event.audience_rules_json || {});
-    } catch { return {}; }
-  }, [event]);
-
-  const act = async (rid, action) => {
-    setBusyId(rid);
-    try {
-      await eventsApi[action](id, rid);
-      showToast({ kind: 'success', msg: `Registration ${action}d.` });
-      await load();
-    } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || `Could not ${action} this registration.` });
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const onScan = async (code) => {
-    setCheckingIn(true);
-    try {
-      await eventsApi.checkin(id, code);
-      showToast({ kind: 'success', msg: 'Checked in.' });
-      await load();
-    } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Check-in failed — code not recognised.' });
-    } finally {
-      setCheckingIn(false);
-    }
-  };
-
-  const waitlisted = registrations.filter((r) => r.status === 'waitlisted');
-  const pending = registrations.filter((r) => r.status === 'pending' || (r.status === 'registered' && event?.approval_required));
-  const active = registrations.filter((r) => !['waitlisted', 'cancelled', 'declined'].includes(r.status) && !pending.includes(r));
-
-  const nameOf = (r) => r.name || r.full_name || r.user_name || r.email || `#${r.id}`;
-
-  const Row = ({ r, actions }) => (
-    <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{nameOf(r)}</span>
-          <RegBadge status={r.status} />
-          {r.user_id ? <ArchetypeBadge userId={r.user_id} /> : null}
-          {r.comp ? (
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">Free seat</span>
-          ) : null}
-        </div>
-        {r.email && <div className="truncate text-xs text-gray-500 dark:text-gray-400">{r.email}</div>}
-      </div>
-      <div className="flex gap-2">{actions}</div>
-    </li>
-  );
-
-  const btn = (cls) => `inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium disabled:opacity-50 ${cls}`;
-
-  return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
-      <Link to="/my/events" className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-        <ArrowLeft size={15} /> Back to events
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{event?.title || 'Manage event'}</h1>
-          <Link to={`/events/${id}/edit`} className="text-sm font-medium text-violet-700 dark:text-violet-300 hover:underline">Edit details</Link>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setShowInvite(true)} className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700">
-            <UserPlus size={16} /> Invite people
-          </button>
-          <button onClick={() => setShowScanner(true)} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
-            <ScanLine size={16} /> Check in
-          </button>
-          <a href={eventsApi.exportUrl(id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
-            <Download size={16} /> Export
-          </a>
-        </div>
-      </div>
-
-      <PageExplainer pageKey="event_manage" />
-
-      {loading ? (
-        <p className="py-12 text-center text-gray-500 dark:text-gray-400">Loading…</p>
-      ) : (
-        <div className="mt-4 space-y-6">
-          {/* Pending approval */}
-          {pending.length > 0 && (
-            <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-              <h2 className="border-b border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                Awaiting approval ({pending.length})
-              </h2>
-              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-                {pending.map((r) => (
-                  <Row key={r.id} r={r} actions={(
-                    <>
-                      <button disabled={busyId === r.id} onClick={() => act(r.id, 'approve')} className={btn('bg-emerald-600 text-white hover:bg-emerald-700')}><Check size={13} /> Approve</button>
-                      <button disabled={busyId === r.id} onClick={() => act(r.id, 'decline')} className={btn('border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800')}><X size={13} /> Decline</button>
-                    </>
-                  )} />
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {/* Confirmed / registered roster */}
-          <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-            <h2 className="border-b border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Registered ({active.length})
-            </h2>
-            {active.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">No registrations yet.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-                {active.map((r) => (
-                  <Row key={r.id} r={r} actions={
-                    r.status === 'attended' ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 dark:text-violet-300"><CheckCircle2 size={14} /> Checked in</span>
-                    ) : (
-                      <button disabled={busyId === r.id} onClick={() => act(r.id, 'decline')} className={btn('border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800')}><X size={13} /> Remove</button>
-                    )
-                  } />
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Waitlist */}
-          {waitlisted.length > 0 && (
-            <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-              <h2 className="border-b border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                Waitlist ({waitlisted.length})
-              </h2>
-              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-                {waitlisted.map((r) => (
-                  <Row key={r.id} r={r} actions={(
-                    <button disabled={busyId === r.id} onClick={() => act(r.id, 'promote')} className={btn('bg-violet-600 text-white hover:bg-violet-700')}><ChevronsUp size={13} /> Promote</button>
-                  )} />
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {/* Invitations */}
-          {invitations.length > 0 && (
-            <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-              <h2 className="border-b border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                Invitations ({invitations.length})
-              </h2>
-              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-                {invitations.map((inv) => (
-                  <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                    <div className="min-w-0">
-                      <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{inv.invited_name || inv.invited_email || `#${inv.id}`}</span>
-                      {inv.invited_email && <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">{inv.invited_email}</span>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {inv.comp ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">Free seat</span> : null}
-                      <RegBadge status={inv.status} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      )}
-
-      {showInvite && (
-        <InvitePeopleModal
-          eventId={id}
-          audienceRules={audienceRules}
-          onClose={() => setShowInvite(false)}
-          onInvited={(_res, count) => {
-            setShowInvite(false);
-            showToast({ kind: 'success', msg: `${count} invitation${count === 1 ? '' : 's'} sent.` });
-            load();
-          }}
-        />
-      )}
-
-      {showScanner && (
-        <CheckinScanner busy={checkingIn} onDetect={onScan} onClose={() => setShowScanner(false)} />
-      )}
-
-      {toast && (
-        <div className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${
-          toast.kind === 'error' ? 'bg-red-600' : 'bg-gray-900 dark:bg-gray-700'
-        }`}>
-          {toast.msg}
-        </div>
-      )}
+  useEffect(() => { setSearch(''); setPage(1); }, [screen]);
+  async function act(operation) {
+    setBusy(true); setActionError('');
+    try { await operation(); await load(); }
+    catch (e) { setActionError(e.message || 'The change could not be saved.'); }
+    finally { setBusy(false); }
+  }
+  function toggle(key, value) { setRules(r => ({ ...r, [key]: r[key].includes(value) ? r[key].filter(v => v !== value) : [...r[key], value] })); }
+  const agenda = data?.agenda || [];
+  const registrations = data?.roster.registrations || [];
+  const counts = data?.roster.counts;
+  const seatsFree = counts && (counts.capacity === null || counts.seats_taken < counts.capacity);
+  const queue = pageRows(registrations.filter(r => registrationTab(r, data?.event.approval_required) === tab), search, page, sort);
+  const agendaPage = pageRows(agenda, search, page, 'oldest');
+  async function move(index, direction) {
+    const ids = agenda.map(a => a.id); const target = index + direction;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    await act(() => events.reorderAgenda(id, ids));
+  }
+  const title = screen === 'eligibility' ? 'Eligibility' : screen === 'registrations' ? 'Registration queue' : 'Agenda';
+  return <WorkspaceShell title={title} scope={data?.event.title || 'Event organiser'} intro="Manage who may register, their decisions, and the attendee agenda." rail={<aside className="evo-card"><h2>Event organiser</h2><p>Save audience rules before checking the member preview. Pending paid tickets receive no check-in code until payment settles.</p><Link to={`/events/${id}/edit`}>Edit event details</Link></aside>}>
+    <div className="evo">
+      <nav aria-label="Event management" className="evo-tabs">{['eligibility', 'registrations', 'agenda'].map(s => <Link key={s} aria-current={screen === s ? 'page' : undefined} to={`/events/${id}/manage${s === 'eligibility' ? '' : `/${s}`}`}>{s === 'registrations' ? 'Registrations' : s[0].toUpperCase() + s.slice(1)}</Link>)}</nav>
+      {actionError && <p role="alert">Could not save — {actionError}</p>}
+      <EventReadState loading={loading} error={error}>
+        {screen === 'eligibility' && <div className="evo-grid"><form className="evo-card" onSubmit={e => { e.preventDefault(); act(() => events.update(id, { audience_rules_json: JSON.stringify(rules), approval_required: approval })); }}>
+          <h2>Who may register</h2>
+          {[['everyone', 'Everyone'], ['selected', 'Chosen roles or personas'], ['invite_only', 'Invite only']].map(([value, label]) => <label key={value}><input type="radio" name="audience" checked={rules.mode === value} onChange={() => setRules(r => ({ ...r, mode: value }))} /> {label}</label>)}
+          {rules.mode === 'selected' && <><fieldset><legend>Roles</legend>{roles.map(role => <label key={role}><input type="checkbox" checked={rules.roles.includes(role)} onChange={() => toggle('roles', role)} /> {role}</label>)}</fieldset><fieldset><legend>Personas</legend>{PERSONAS.map(p => <label key={p.id}><input type="checkbox" checked={rules.personas.includes(p.id)} onChange={() => toggle('personas', p.id)} /> {p.label}</label>)}</fieldset></>}
+          <label><input type="checkbox" checked={approval} onChange={e => setApproval(e.target.checked)} /> Approval required</label><p>Registrations wait in Pending until you approve them.</p><button className="evo-primary" disabled={busy}>Save rule</button>
+        </form><section className="evo-card"><h2>As a member sees it</h2><p>Preview of the saved rule for your signed-in account.</p>{preview ? <><strong>{preview.eligible ? 'Eligible' : 'Not eligible'}: {preview.reason}</strong><p>{preview.requires_approval ? 'Approval is required.' : 'Approval is not required.'}</p><p>{preview.is_full ? preview.waitlist_enabled ? 'The event is full; new registrations join the waitlist.' : 'The event is full.' : 'Registration has available capacity.'}</p></> : <p>Unreadable — eligibility could not be read.</p>}</section></div>}
+        {screen === 'registrations' && <section className="evo-card"><h2>Capacity</h2>{counts ? <p>{counts.seats_taken} / {counts.capacity === null ? 'No limit recorded' : counts.capacity} seats · {counts.waitlisted} waitlisted</p> : <p>Unreadable — capacity was not returned.</p>}
+          {counts?.capacity > 0 && <progress aria-label="Capacity used" value={Math.min(counts.seats_taken, counts.capacity)} max={counts.capacity} />}
+          <div className="evo-toolbar"><button onClick={() => setInvite(true)}>Invite people</button><button onClick={() => setScanner(true)}>Check in</button><a href={eventsApi.exportUrl(id)} target="_blank" rel="noreferrer">Export</a></div>
+          <div className="evo-tabs">{REGISTRATION_TABS.map(t => <button key={t} aria-pressed={t === tab} onClick={() => { setTab(t); setPage(1); }}>{t} ({registrations.filter(r => registrationTab(r, data?.event.approval_required) === t).length})</button>)}</div>
+          <div className="evo-toolbar"><input aria-label="Search registrations" placeholder="Search members or roles" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /><select aria-label="Sort registrations" value={sort} onChange={e => setSort(e.target.value)}><option value="oldest">Oldest first</option><option value="newest">Newest first</option><option value="name">Name</option></select></div>
+          {tab === 'Waitlist' && seatsFree && queue.total > 0 && <p>A seat is available. You may promote a waiting member.</p>}
+          <EventReadState empty={queue.total === 0}><div className="evo-table-wrap"><table><thead><tr><th>Member</th><th>Role</th><th>Registered</th><th>Rule</th><th>Decision</th><th>Actions</th></tr></thead><tbody>{queue.rows.map(r => <tr key={r.id}><td>{recorded(r.name, 'member name is absent')}</td><td>{recorded(r.role, 'member role is absent')}</td><td>{recorded(r.registered_at, 'registration time is absent')}</td><td>Not recorded — eligibility at registration was not saved.</td><td>{recorded(r.decided_by_name, 'no named decision maker')}<br />{recorded(r.decided_at, 'no decision time')}{r.status === 'declined' && <p>{recorded(r.decision_reason, 'no decline reason was supplied')}</p>}</td><td>{tab === 'Pending' && <button disabled={busy} onClick={() => act(() => events.approveRegistration(id, r.id))}>Approve</button>}{tab === 'Waitlist' && <button disabled={busy || !seatsFree} onClick={() => act(() => events.promoteRegistration(id, r.id))}>Promote</button>}{['Pending', 'Approved', 'Waitlist'].includes(tab) && <><input aria-label={`Decline reason for ${r.name || 'member'}`} placeholder="Optional reason the member sees" maxLength={1000} value={reason[r.id] || ''} onChange={e => setReason(v => ({ ...v, [r.id]: e.target.value }))} /><button disabled={busy} onClick={() => act(() => events.declineRegistration(id, r.id, reason[r.id]))}>Decline</button></>}</td></tr>)}</tbody></table></div></EventReadState><Pager data={queue} setPage={setPage} />
+        </section>}
+        {screen === 'agenda' && <div className="evo-grid"><section className="evo-card"><h2>Agenda items</h2><input aria-label="Search agenda" placeholder="Search titles" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /><EventReadState empty={agendaPage.total === 0}>{agendaPage.rows.map(a => { const index = agenda.findIndex(v => v.id === a.id); return <article key={a.id} className="evo-agenda-row"><strong>{a.title}</strong><p>{recorded(a.starts_at, 'start time is absent')} · {recorded(a.speaker_name, 'speaker is absent')}</p><p>{recorded(a.location_text, 'room is absent')} {a.location_url && <a href={a.location_url} target="_blank" rel="noreferrer">Join</a>}</p><div className="evo-toolbar"><button disabled={busy || Boolean(search) || index === 0} onClick={() => move(index, -1)}>Move up</button><button disabled={busy || Boolean(search) || index === agenda.length - 1} onClick={() => move(index, 1)}>Move down</button><button disabled={busy} onClick={() => { setItem({ ...blankItem, ...a, starts_at: a.starts_at?.slice(0, 16) || '' }); setEditing(a.id); }}>Edit</button><button disabled={busy} onClick={() => act(() => events.deleteAgendaItem(id, a.id))}>Delete</button></div></article>; })}</EventReadState><Pager data={agendaPage} setPage={setPage} />
+          <form onSubmit={e => { e.preventDefault(); const payload = { ...item, starts_at: item.starts_at ? new Date(item.starts_at).toISOString() : null, display_order: editing ? item.display_order : agenda.length }; act(async () => { if (editing) await events.updateAgendaItem(id, editing, payload); else await events.addAgendaItem(id, payload); setItem(blankItem); setEditing(null); }); }}><h2>{editing ? 'Edit item' : 'Add item'}</h2>{[['title', 'Title'], ['starts_at', 'Start time'], ['speaker_name', 'Speaker'], ['location_text', 'Room'], ['location_url', 'Link']].map(([key, label]) => <label key={key}>{label}<input required={key === 'title'} type={key === 'starts_at' ? 'datetime-local' : key === 'location_url' ? 'url' : 'text'} value={item[key] || ''} onChange={e => setItem(v => ({ ...v, [key]: e.target.value }))} /></label>)}<button className="evo-primary" disabled={busy}>Save item</button>{editing && <button type="button" onClick={() => { setEditing(null); setItem(blankItem); }}>Cancel edit</button>}</form></section>
+          <section className="evo-card"><h2>Attendee preview</h2><EventReadState empty={agenda.length === 0}>{agenda.map(a => <article key={a.id} className="evo-agenda-row"><strong>{a.title}</strong><p>{recorded(a.starts_at, 'time is absent')} · {recorded(a.speaker_name, 'speaker is absent')}</p><p>{recorded(a.location_text, 'room is absent')}</p>{a.location_url && <a href={a.location_url} target="_blank" rel="noreferrer">Join</a>}</article>)}</EventReadState></section></div>}
+      </EventReadState>
+      {invite && <InvitePeopleModal eventId={id} audienceRules={rules} onClose={() => setInvite(false)} onInvited={load} />}
+      {scanner && <CheckinScanner busy={busy} onDetect={code => act(() => events.checkin(id, code))} onClose={() => setScanner(false)} />}
     </div>
-  );
+  </WorkspaceShell>;
 }

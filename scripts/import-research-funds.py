@@ -41,6 +41,10 @@ import re
 import unicodedata
 from datetime import date, datetime
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fund_lp_flags import lp_flags  # noqa: E402  (D539: the one EIF/EIFO rule)
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / 'attached_assets'
@@ -142,8 +146,11 @@ def parse_euro(today: date) -> tuple[dict[str, dict], dict[str, dict], int]:
             'fund_size_cents': size_cents, 'fund_date': report_date, 'quarter': period,
             'sector_focus': (row[9] if len(row) > 9 else '').strip() or None,
             'notable_lps': (row[10] if len(row) > 10 else '').strip() or None,
-            'eif_flag': (row[11] if len(row) > 11 else '').strip() == '1',
-            'eifo_flag': (row[12] if len(row) > 12 else '').strip() == '1',
+            # D539 (#1084, owner call A): the flags say only what the LPs say.
+            # Columns L and M (row[11], row[12]) have no header, and M is not
+            # EIFO, so neither is read; migration 380 applies the same rule.
+            'eif_flag': lp_flags(row[10] if len(row) > 10 else '')[0],
+            'eifo_flag': lp_flags(row[10] if len(row) > 10 else '')[1],
             'source_name': 'EuroTech VC Funds (public spreadsheet)', 'source_url': EURO_URL,
         })
         # The row with the latest period wins the directory's "current" snapshot.
