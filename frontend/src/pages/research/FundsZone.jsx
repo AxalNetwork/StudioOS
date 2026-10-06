@@ -244,7 +244,11 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   const [filter, setFilter] = useState('all');
   const [form, setForm] = useState({ name: '', thesis: '', note: '' });
   const [busy, setBusy] = useState(false);
+  // Each note is `{ ok, text }`, the shape `SaveNote` reads: it was given a
+  // bare string as children, so "Added." and every failed save drew nothing.
+  // A row's edit says so above the list; the Add form's under its button.
   const [saved, setSaved] = useState(null);
+  const [rowNote, setRowNote] = useState(null);
   const [directoryBusy, setDirectoryBusy] = useState(null);
   const [directoryNote, setDirectoryNote] = useState(null);
   const [directoryTotal, setDirectoryTotal] = useState(null);
@@ -273,12 +277,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   // One PATCH per change, then a reload — the row the worker returns is the row
   // that is stored, and the counts in the strip above are computed there too.
   const setRead = async (uid, patch) => {
-    setSaved(null);
+    setRowNote(null);
     try {
       await api.research.fundUpdate(uid, patch);
       await load();
     } catch (e) {
-      setSaved(e?.detail || e?.message || 'That did not save.');
+      setRowNote({ ok: false, text: e?.detail || e?.message || 'That did not save.' });
     }
   };
 
@@ -289,10 +293,10 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
     try {
       await api.research.fundCreate({ name: form.name, thesis: form.thesis, note: form.note });
       setForm({ name: '', thesis: '', note: '' });
-      setSaved('Added.');
+      setSaved({ ok: true, text: 'Added.' });
       await load();
     } catch (e) {
-      setSaved(e?.detail || e?.message || 'That did not save.');
+      setSaved({ ok: false, text: e?.detail || e?.message || 'That did not save.' });
     } finally { setBusy(false); }
   };
 
@@ -351,21 +355,23 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         )}
         <ZoneHeading
           title={<span className="flex flex-wrap items-center gap-3">Fund research <Link to="/research/gtm" className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[11px] font-bold text-white"><BrainCircuit size={13} /> GTM intelligence</Link></span>}
-          sub="Thesis in their words, stage and path as separate facts — every fund you have looked into, and why it is on or off the list."
-          right={data ? <Pill tone={data.warm_path_count ? 'ok' : 'neutral'}>{`${data.warm_path_count} with a route in`}</Pill> : null}
+          blurb="Thesis in their words, stage and path as separate facts — every fund you have looked into, and why it is on or off the list."
+          action={data ? <Pill tone={data.warm_path_count ? 'ok' : 'neutral'}>{`${data.warm_path_count} with a route in`}</Pill> : null}
         />
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Researched" value={data?.researched_count} note="funds on file" />
-          <Stat label="Right stage" value={data?.right_stage_count} note="they write where you are" />
-          <Stat
+          <FundStat label="Researched" value={data?.researched_count} note="funds on file" phase={listState} />
+          <FundStat label="Right stage" value={data?.right_stage_count} note="they write where you are" phase={listState} />
+          <FundStat
             label="Cheque overlap"
             value={data?.cheque_overlap_count}
             note={data?.cheque_overlap_note || 'your ask fits their range'}
+            phase={listState}
           />
-          <Stat
+          <FundStat
             label="Passed"
             value={data?.passed_count}
+            phase={listState}
             note={data?.passed_without_reason
               ? `${data.passed_without_reason} with no reason recorded`
               : 'reasons recorded'}
@@ -392,6 +398,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                 Thesis in their own words · what the research says
               </span>
             </div>
+            <SaveNote note={rowNote} />
             {!visible.length ? (
               <p className="text-[12.5px] text-gray-600 dark:text-gray-300">No fund matches this filter.</p>
             ) : (
@@ -562,7 +569,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
               <button type="submit" className={buttonClass} disabled={busy || !form.name.trim()}>
                 {busy ? 'Adding…' : 'Add fund'}
               </button>
-              {saved && <SaveNote>{saved}</SaveNote>}
+              <SaveNote note={saved} />
             </div>
           </form>
         </Card>
@@ -584,14 +591,22 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   );
 }
 
-/** A figure the store actually returned, or the reason it is absent. */
-function Stat({ label, value, note }) {
+/**
+ * A figure the store actually returned, or the reason it is absent. While the
+ * list is still loading it draws no figure, and a failed read is Unreadable:
+ * neither is the list saying a value is not recorded.
+ */
+export function FundStat({ label, value, note, phase = 'ok' }) {
   const absent = value === null || value === undefined;
+  let figure = value;
+  if (phase === 'loading') figure = <span className="text-axal-faint dark:text-gray-500" aria-label="Loading">…</span>;
+  else if (phase === 'unreadable') figure = <UnreadableBadge />;
+  else if (absent) figure = <Unrecorded>Not recorded</Unrecorded>;
   return (
     <Card padding="md">
       <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-gray-600 dark:text-gray-300">{label}</div>
       <div className="mt-1 text-[18px] font-extrabold tracking-tight tabular-nums">
-        {absent ? <Unrecorded>Not recorded</Unrecorded> : value}
+        {figure}
       </div>
       <div className="mt-1 text-[10px] leading-relaxed text-gray-600 dark:text-gray-300">{note}</div>
     </Card>

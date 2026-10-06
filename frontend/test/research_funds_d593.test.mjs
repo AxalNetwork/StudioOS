@@ -384,3 +384,43 @@ test('D: below lg a live fund’s Pass reason card is left out; a passed fund’
   assert.equal(dossier.passCardClass({ status: 'passed', pass_reason: 'Too early — return at $30k MRR' }), '');
   assert.match(DOSSIER, /<Card data-testid="fund-dossier-pass-card" className=\{passCardClass\(fund\)\}>/);
 });
+
+// ── My funds: three silent failures found while building the tabs ─────────
+
+test('a save note is the { ok, text } SaveNote reads, so "Added." and a failed save are shown', () => {
+  // SaveNote reads `note`; a bare string passed as children drew nothing.
+  assert.doesNotMatch(ZONE, /<SaveNote>\s*\{/);
+  assert.match(ZONE, /setSaved\(\{ ok: true, text: 'Added\.' \}\)/);
+  assert.match(ZONE, /setSaved\(\{ ok: false, text: e\?\.detail \|\| e\?\.message \|\| 'That did not save\.' \}\)/);
+  assert.match(ZONE, /<SaveNote note=\{saved\} \/>/);
+  // A row's own edit (stage, path, status) says so above the list it changed,
+  // not under the Add form.
+  const setRead = ZONE.slice(ZONE.indexOf('const setRead = async'), ZONE.indexOf('const add = async'));
+  assert.match(setRead, /setRowNote\(\{ ok: false, text: e\?\.detail \|\| e\?\.message \|\| 'That did not save\.' \}\)/);
+  assert.doesNotMatch(setRead, /setSaved\(/);
+  const profiles = ZONE.slice(ZONE.indexOf('Fund profiles'), ZONE.indexOf('Fund profiles') + 400);
+  assert.match(profiles, /<SaveNote note=\{rowNote\} \/>/);
+});
+
+test('the zone heading gets the props ZoneHeading reads, so its line and its route-in pill render', () => {
+  const heading = ZONE.slice(ZONE.indexOf('<ZoneHeading'), ZONE.indexOf('<FundStat', ZONE.indexOf('<ZoneHeading')));
+  assert.match(heading, /\bblurb="Thesis in their words/);
+  assert.match(heading, /\baction=\{data \? <Pill/);
+  assert.doesNotMatch(heading, /\b(sub|right)=/);
+});
+
+test('a stat tile draws no figure while loading, and a failed read is Unreadable, never Not recorded', () => {
+  const { FundStat } = zone;
+  assert.equal(typeof FundStat, 'function', 'FundStat is not exported');
+  const out = (props) => renderToStaticMarkup(React.createElement(FundStat, { label: 'Researched', note: 'funds on file', ...props }));
+  const loading = out({ value: undefined, phase: 'loading' });
+  assert.match(loading, /aria-label="Loading"/);
+  assert.doesNotMatch(loading, /Not recorded|Unreadable/);
+  const failed = out({ value: undefined, phase: 'unreadable' });
+  assert.match(failed, /Unreadable/);
+  assert.doesNotMatch(failed, /Not recorded/);
+  assert.match(out({ value: null, phase: 'ok' }), /Not recorded/);
+  assert.match(out({ value: 4, phase: 'ok' }), />4</);
+  // The zone passes the list's own state to every tile.
+  assert.equal((ZONE.match(/<FundStat\b[^>]*?phase=\{listState\}/gs) || []).length, 4);
+});
