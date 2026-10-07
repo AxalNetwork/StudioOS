@@ -23,10 +23,14 @@ import { SECTORS } from '../src/services/market_intel/aggregator.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/376_research_taxonomy.sql'), 'utf8');
-const MARKETS: { slug: string }[] = JSON.parse(
-  readFileSync(resolve(ROOT, 'frontend/src/data/marketDirectory.json'), 'utf8'),
-).items;
-const SLUGS = new Set(MARKETS.map((m) => m.slug));
+// The 82 market slugs, from the migration that seeds `research_market_directory`
+// (229). The bundled `marketDirectory.json` this read before #1077 is retired:
+// every Research page now reads the markets through the Worker.
+const SLUGS = new Set(
+  [...readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/229_research_market_directory.sql'), 'utf8')
+    .matchAll(/INSERT OR IGNORE INTO research_market_directory \([^)]*\) VALUES \('([a-z0-9-]+)'/g)]
+    .map((m) => m[1]),
+);
 
 function freshDb() {
   const db = new DatabaseSync(':memory:');
@@ -38,6 +42,7 @@ const envOver = (db: DatabaseSync) => ({ DB: d1Over(db) }) as any;
 // --- the dictionaries point at things that exist --------------------------------
 
 test('every rule target is one of the 82 market slugs', () => {
+  assert.equal(SLUGS.size, 82, 'migration 229 no longer seeds the 82 markets this list reads');
   for (const [label, slug] of Object.entries(COMPANY_SECTOR_RULES)) {
     assert.ok(SLUGS.has(slug), `company sector "${label}" → unknown market "${slug}"`);
   }
