@@ -84,7 +84,8 @@ test('the card writes through updateProject and prints the Worker’s refusal', 
   assert.match(CARD, /api\.updateProject\(project\.id, \{\s+icp_definition_meta: icpPayload\(\{ status, step: nextStep, fields \}\),/);
   assert.match(CARD, /setError\(e\?\.message \|\| 'The ICP definition was not saved\.'\)/);
   assert.match(CARD, /data-testid="icp-definition-unreadable"/);
-  assert.match(CARD, /Generate a landing page from this ICP: <Unrecorded reason=/);
+  // D591 replaced D353's "not built" line with the generator (brand_icp_prefill_d591.test.mjs).
+  assert.match(CARD, /Generate landing page →/);
 });
 
 test('icp_defined is marked from a confirmed stored definition plus the interview gate', () => {

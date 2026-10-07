@@ -11,8 +11,10 @@
 //     Edit opens the design's inline page editor (device preview, four copy
 //     blocks, per-page Save draft / Publish); the full builder at
 //     /build/brand stays linked from the editor for layout & media work.
-//   - Template library: the existing 16-template catalog
-//     (lib/brand/templates.js TEMPLATES) — same names and audiences,
+//   - Template library: the existing template catalog (lib/brand/templates.js
+//     TEMPLATES, eighteen today; the count is read, never typed). D591: the
+//     confirmed ICP recommends one customer template by page type and sector
+//     (lib/brand/icpPrefill.js) — same names and audiences,
 //     rendered in the new library UI; Use Template creates a real page
 //     seeded with the template's visual style, palette, goal and CTA.
 //   - Audience inflows: real waitlist signups
@@ -48,6 +50,7 @@ import {
   TEMPLATES, AUDIENCES, AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES, SHARED_CONTENT_FIELDS,
 } from '../lib/brand/templates';
 import { contentForTemplate, contentFieldsFor } from '../lib/brand/templateContent.js';
+import { recommendCustomerTemplate } from '../lib/brand/icpPrefill.js';
 import BrandTemplatePreview from '../components/brand/templates/BrandTemplatePreview.jsx';
 import TemplateContentEditor from '../components/brand/TemplateContentEditor.jsx';
 import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx';
@@ -58,6 +61,15 @@ import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_ap
 // the FastAPI mirror). The server rejects over-cap creates on its own — this
 // copy exists only so the UI can warn before a save is refused.
 export const MAX_PAGES_PER_PROJECT = 5;
+
+/** D591 — the library's mark on the template the confirmed ICP recommends. */
+function RecommendedBadge() {
+  return (
+    <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300" data-testid="template-recommended-icp">
+      Recommended for your ICP
+    </span>
+  );
+}
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -257,6 +269,8 @@ export default function SpinoutLabBrandPage() {
   // SpinoutLabStartupPage renders as the company identity.
   const [project, setProject] = useState(null);
   const [projectLoading, setProjectLoading] = useState(true);
+  // D591 — null unless the project has a confirmed ICP.
+  const icpRecommendation = useMemo(() => recommendCustomerTemplate(project), [project]);
   const [error, setError] = useState('');
 
   // Brand identity draft (persists via PUT /brand/landing/by-project/:pid).
@@ -1649,6 +1663,7 @@ export default function SpinoutLabBrandPage() {
             {/* ---- template library ---- */}
             <div ref={libraryRef} className="flex items-center gap-2 mb-3 scroll-mt-20">
               <div className={LBL}>Template library</div>
+              <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums" data-testid="library-count">{TEMPLATES.length} templates</span>
               {/* Grid / list view toggle — persisted per browser. */}
               <div
                 className="ml-auto flex gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5"
@@ -1674,6 +1689,11 @@ export default function SpinoutLabBrandPage() {
                 ))}
               </div>
             </div>
+            {icpRecommendation && (
+              <p className="mb-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/60 dark:bg-violet-950/30 px-3 py-2 text-[11.5px] text-gray-600 dark:text-gray-300" data-testid="library-icp-recommendation">
+                <span className="font-bold text-violet-700 dark:text-violet-300">Recommended from your confirmed ICP: {icpRecommendation.label}.</span> {icpRecommendation.reason}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-1.5 mb-4" data-testid="library-filters">
               {['all', ...AUDIENCES].map((a) => (
                 <button
@@ -1702,6 +1722,7 @@ export default function SpinoutLabBrandPage() {
                       <div className="flex items-start gap-2 mt-3">
                         <div className="min-w-0">
                           <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100">{t.label}</div>
+                          {icpRecommendation?.templateId === t.id && <RecommendedBadge />}
                           <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.notes || ''}</div>
                         </div>
                         <span className={`ml-auto flex-none px-2 py-0.5 rounded text-[10.5px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[t.audience]}</span>
@@ -1738,6 +1759,7 @@ export default function SpinoutLabBrandPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">{t.label}</span>
+                          {icpRecommendation?.templateId === t.id && <RecommendedBadge />}
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[t.audience]}</span>
                         </div>
                         <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.notes || ''}</div>
