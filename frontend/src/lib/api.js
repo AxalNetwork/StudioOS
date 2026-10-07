@@ -1329,6 +1329,9 @@ export const api = {
   // the global PaywallModal does NOT auto-open — callers surface it inline).
   dealroomJoin: (id) => request(`/deals/${id}/dealroom/join`, { method: 'POST' }),
   dealroomLeave: (id) => request(`/deals/${id}/dealroom/leave`, { method: 'DELETE' }),
+  // D630 — used against cap ("Unlimited" when `unlimited`), the plan that
+  // raises it, and the rooms this firm is in. Read without joining anything.
+  dealroomQuota: () => request('/deals/dealroom/quota'),
 
   // Task #4 — Deal Flow: funnel aggregates, admin drafting, Deal Room
   // (documents / data room / commitments / activity) and investor invitations.
@@ -2755,6 +2758,9 @@ export const api = {
   networkFxCompounding: () => request('/networkfx/referrals/compounding'),
   networkFxSyndicates: (status) => request('/networkfx/syndicates' + (status ? `?status=${status}` : '')),
   networkFxSyndicate: (id) => request(`/networkfx/syndicates/${id}`),
+  // D630 — the syndicates linked to one company. `syndicates.deal_id` holds a
+  // project id, so the filter is named for what it holds.
+  networkFxProjectSyndicates: (projectId) => request(`/networkfx/syndicates?project_id=${encodeURIComponent(projectId)}`),
   networkFxCreateSyndicate: (data) => request('/networkfx/syndicates', { method: 'POST', body: JSON.stringify(data) }),
   networkFxJoinSyndicate: (id, data) => request(`/networkfx/syndicates/${id}/join`, { method: 'POST', body: JSON.stringify(data) }),
   networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
