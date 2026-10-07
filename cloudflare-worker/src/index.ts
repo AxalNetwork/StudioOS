@@ -98,6 +98,8 @@ import privateData from './routes/private-data';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
 import funds from './routes/funds';
+import fundLedger from './routes/fund_ledger';
+import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
 import pipeline from './routes/pipeline';
@@ -991,6 +993,8 @@ app.route('/api/positions', positions);
 // in-route (founder/admin); no paywall prefix so it's core-available.
 app.route('/api/contacts', contacts);
 app.route('/api/funds', funds);
+app.route('/api/fund-ledger', fundLedger);
+app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
 app.route('/api/pipeline', pipeline);

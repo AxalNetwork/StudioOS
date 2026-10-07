@@ -36,7 +36,7 @@ it, where in their nav, and how do they get there.*
 | Apply and Status | `/spinout-lab/apply` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Brand & Landing Page | `/spinout-lab/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Co-founder Match | `/spinout-lab/cofounder-match` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |

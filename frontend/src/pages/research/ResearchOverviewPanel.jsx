@@ -109,7 +109,8 @@ function Split({ totals }) {
     <Head title="Private, public and government companies" sub="No source records ownership for each company, so each count follows the list the record came from." />
     <div className="grid gap-3 md:grid-cols-3">
       {card('private', 'Private', 'Company directory', s.private, 'companies', s.private?.note || 'Directory records not known to be listed.', 'research_company_directory')}
-      {card('public', 'Public', 'Listed companies', s.public, 'listed companies', s.public?.value != null ? 'Each with its symbol, exchange, market-cap band and employee band.' : (s.public?.reason || ''), 'signal_companies')}
+      {/* #1077 (D536): the Public tab's count, both stores, one row per source; the note is the server's split. */}
+      {card('public', 'Public', 'Listed companies', s.public, 'listed companies', s.public?.value != null ? (s.public?.note || 'Each with its symbol and exchange.') : (s.public?.reason || ''), 'signal_companies + SEC EDGAR')}
       {card('government', 'Government', null, s.government, '', s.government?.reason || 'No source lists government-owned companies yet.', null)}
     </div>
   </section>;

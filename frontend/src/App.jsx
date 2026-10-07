@@ -253,6 +253,7 @@ const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
 // D606 (#1107) — the Super Admin's review queue, the Eadwyn Tickets canvas's T1 and T1b.
 const ReviewQueuePage = lazy(() => import('./pages/hq/ReviewQueuePage'));
+const HqCreditRulesPage = lazy(() => import('./pages/hq/CreditRulesPage'));
 const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
 const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
@@ -361,6 +362,8 @@ const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
+// D632 — a draft variant, renamed and edited in place.
+const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
@@ -2662,6 +2665,7 @@ function AppInner() {
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/hq/review" element={guard(['admin'], hqOnly(<ReviewQueuePage />))} />
+      <Route path="/hq/credits" element={guard(['admin'], hqOnly(<HqCreditRulesPage />))} />
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
       <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
@@ -2765,6 +2769,10 @@ function AppInner() {
           : <FounderRaiseCapital />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
+      {/* D632 — the cap table's draft variants (Ops canvas `ct-variants`). The main
+          cap table stays one per company at /raise/capital/cap-table. */}
+      <Route path="/raise/cap-table/variants" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
+      <Route path="/raise/cap-table/variants/:variant" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
       {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
           Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
           guard keeps admitting investor so the redirect can run. */}

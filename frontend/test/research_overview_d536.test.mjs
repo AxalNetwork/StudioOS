@@ -313,3 +313,16 @@ test('panel: an unchanged index reads "= 0.0%" with no arrow; rises and falls ke
   assert.equal(d(-1.2), '▼ 1.2%');
   assert.equal(d(null), '');
 });
+
+test('panel (#1077): the Public card prints the server\'s split of the two stores, and names both', () => {
+  const data = populated();
+  data.totals.market_split.public = {
+    value: 23, as_of: '2026-10-06', source: 'signal_companies + research_public_companies (SEC EDGAR)', reason: null,
+    note: '21 signal companies with their bands, and 2 from SEC EDGAR with ticker and exchange only.',
+  };
+  const out = html({ phase: 'ready', data });
+  const card = renderedText(out.slice(out.indexOf('data-testid="split-public"'), out.indexOf('data-testid="split-government"')));
+  assert.match(card, /21 signal companies with their bands, and 2 from SEC EDGAR with ticker and exchange only\./);
+  assert.match(card, /signal_companies \+ SEC EDGAR/);
+  assert.doesNotMatch(card, /market-cap band and employee band/, 'EDGAR rows carry no bands, so the card cannot claim every row does');
+});

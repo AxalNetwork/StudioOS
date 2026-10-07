@@ -29,6 +29,7 @@ import { SECTORS } from '../src/services/market_intel/aggregator.ts';
 import { LIVE_INDEX_BASIS, NO_LIVE_SOURCE_REASON, STUB_CITATION_PREFIX } from '../src/services/market_intel/liveRows.ts';
 import { periodKey, WINDOW_DAYS } from '../src/services/market_intel/scoring.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import researchMarkets from '../src/routes/research_markets.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -55,6 +56,8 @@ function fixture() {
   db.exec(readFileSync(resolve(here, '../sql/migrations/379_market_intel_index_basis.sql'), 'utf8'));
   // D597: fund rows are read only through each list's terms review.
   db.exec(readFileSync(resolve(here, '../sql/migrations/406_research_fund_sources.sql'), 'utf8'));
+  // #1077: the Public count reads SEC EDGAR's store too (migration 404).
+  db.exec(readFileSync(resolve(here, '../sql/migrations/404_research_public_companies.sql'), 'utf8'));
   // The crosswalk (D533): its tables and its country and market-sector rows, no directory rows.
   db.exec(readFileSync(resolve(here, '../sql/migrations/376_research_taxonomy.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'founder', 'Fay', 'fay@axal.example')`).run(USER);
@@ -556,4 +559,63 @@ test('D597: a fund list taken down for its terms is neither counted nor named in
   const left = (await get(db)).body.money;
   assert.equal(left.total_funds, 1);
   assert.deepEqual(left.size_bands, []);
+});
+
+// --- #1077 (D536, gap 2): the overview and the Public tab print one count -----------
+
+function edgarRow(db: InstanceType<typeof DatabaseSync>, cik: string, ticker: string, asOf: string) {
+  db.prepare(`INSERT INTO research_public_companies (cik, name, ticker, exchange, source_name, source_url, licence, as_of)
+              VALUES (?, ?, ?, 'NYSE', 'SEC EDGAR', 'https://www.sec.gov/files/company_tickers_exchange.json', 'US government work', ?)`)
+    .run(cik, `${ticker} Corp`, ticker, asOf);
+}
+
+const marketsApp = new Hono<any>();
+marketsApp.route('/api/research', researchMarkets);
+async function publicTab(db: InstanceType<typeof DatabaseSync>) {
+  const token = await new SignJWT({ user_id: USER, role: 'founder' })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await marketsApp.request('/api/research/listed-companies', { headers: { Authorization: `Bearer ${token}` } },
+    { JWT_SECRET, ENVIRONMENT: 'production', DB: d1Over(db) });
+  return { status: res.status, body: await res.json() as any };
+}
+
+test('the overview\'s Public count is the Public tab\'s, and an EDGAR row moves both', async () => {
+  const db = seeded();
+  listed(db, 'AAA', '2026-09-20 00:00:00');
+  listed(db, 'BBB', '2026-09-25 00:00:00');
+  let pub = (await get(db)).body.totals.market_split.public;
+  let tab = (await publicTab(db)).body;
+  assert.equal(pub.value, 2);
+  assert.equal(tab.store_total, 2);
+  assert.equal(tab.total, 2, 'unfiltered, the tab lists every row the overview counts');
+
+  edgarRow(db, '0000000001', 'ZED', '2026-10-06');
+  pub = (await get(db)).body.totals.market_split.public;
+  tab = (await publicTab(db)).body;
+  assert.equal(pub.value, 3, 'the overview did not count the EDGAR row');
+  assert.equal(tab.store_total, 3);
+  assert.equal(tab.total, 3);
+  assert.equal(pub.as_of, '2026-10-06', 'the newer store dates the count');
+  assert.match(pub.source, /research_public_companies \(SEC EDGAR\)/);
+  assert.equal(pub.note, '2 signal companies with their bands, and 1 from SEC EDGAR with ticker and exchange only.');
+
+  // A ticker in both stores is counted once per source, on both pages, and said.
+  edgarRow(db, '0000000002', 'AAA', '2026-10-06');
+  pub = (await get(db)).body.totals.market_split.public;
+  tab = (await publicTab(db)).body;
+  assert.equal(pub.value, 4);
+  assert.equal(tab.total, 4);
+  assert.match(pub.note, /1 tickers appear in both, once per source\.$/);
+  assert.equal(tab.sources.find((s: any) => s.key === 'sec_edgar').also_signal_companies, 1);
+  assert.equal(tab.sources.find((s: any) => s.key === 'signal_companies').store_total, 2);
+});
+
+test('EDGAR\'s store unreadable: the overview says Unreadable, never the signal companies alone', async () => {
+  const db = seeded();
+  listed(db, 'AAA', '2026-09-20 00:00:00');
+  db.exec('DROP TABLE research_public_companies');
+  const pub = (await get(db)).body.totals.market_split.public;
+  assert.equal(pub.value, null);
+  assert.equal(pub.reason, 'Unreadable');
 });

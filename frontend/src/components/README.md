@@ -19,6 +19,7 @@ building blocks.
 | `cofounder/` | Co-founder agreement and matching. |
 | `command-center/` | Founder command-centre widgets. |
 | `discovery/` | Customer-discovery tooling. |
+| `deals/` | The deal room's screens from the Ops canvas (D630): joining and leaving with the quota, the Invitations, Transfers and References tabs, and a syndicate's close drawer. `/deals` and `/deals/:dealId` both mount them, and their words live in `dealRoomCopy.js`. |
 | `events/` | Event cards and RSVP pieces. |
 | `licence/` | Licence-holder pieces. `DomainWizard.jsx` is S17–S19's custom-host wizard: it states its own absence on a branch, because the host register is HQ's and a branch cannot read another tenant's bindings. Registrar chips name where the person publishes the same two records, and Copy all copies one whole record (D449). |
 | `officehours/` | What an office-hours session left behind (D355): `SessionFollowups.jsx` draws the action items both parties keep and the founder's rating. It fetches for itself, because the founder's Office Hours page and the partner's `/partner/office-hours` render the same list and must not drift apart. |
