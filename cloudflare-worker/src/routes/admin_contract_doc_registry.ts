@@ -91,6 +91,7 @@ async function buildHubPayload(env: Env) {
           layer: stored.layer,
           party_roles: stored.party_roles.length ? stored.party_roles : row.party_roles,
           required_fields: stored.required_fields,
+          draft: stored.draft,
           registry_status: 'published' as const,
           source: 'store' as const,
         };
@@ -124,6 +125,7 @@ async function buildHubPayload(env: Env) {
         usage_count: usage.get(s.doc_type) || 0,
         last_used_at: lastUsed.get(s.doc_type) || null,
         required_fields: s.required_fields,
+        draft: s.draft,
         registry_status: s.status === 'published' ? 'published' : 'draft',
         source: 'store',
       });
@@ -139,7 +141,7 @@ async function buildHubPayload(env: Env) {
     const outsideLayers = items.filter((i) => !CODE_LAYER_ORDER.includes(i.layer as typeof CODE_LAYER_ORDER[number]));
 
     const layers = Object.entries(TEMPLATE_LAYERS).map(([id, meta]) => ({ id, ...meta }));
-    const drafts = storeRows.filter((r) => r.status === 'draft').length;
+    const drafts = storeRows.filter((r) => r.status === 'draft' || Boolean(r.draft)).length;
     const publishedStore = storeRows.filter((r) => r.status === 'published').length;
     const overlapCount = [...overlap.values()].filter(Boolean).length;
 
