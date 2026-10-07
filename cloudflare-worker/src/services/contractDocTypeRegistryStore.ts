@@ -3,6 +3,15 @@ import { getSQL } from '../db';
 
 export type RegistryRowStatus = 'draft' | 'published';
 
+/** A save against a published type. Null on a draft-only row, whose values live in the row itself. */
+export interface RegistryPendingDraft {
+  title: string;
+  layer: string;
+  party_roles: string[];
+  required_fields: string[];
+  updated_at: string | null;
+}
+
 export interface RegistryRow {
   doc_type: string;
   title: string;
@@ -15,6 +24,7 @@ export interface RegistryRow {
   published_by: number | null;
   publish_reason: string | null;
   updated_at: string | null;
+  pending_draft: RegistryPendingDraft | null;
   source: 'code' | 'store';
 }
 
@@ -28,12 +38,30 @@ function parseJsonArray(raw: string | null | undefined): string[] {
   }
 }
 
+function pendingDraftOf(r: any): RegistryPendingDraft | null {
+  if (
+    r.draft_title == null
+    && r.draft_layer == null
+    && r.draft_party_roles_json == null
+    && r.draft_required_fields_json == null
+  ) return null;
+  return {
+    title: r.draft_title == null ? '' : String(r.draft_title),
+    layer: r.draft_layer == null ? '' : String(r.draft_layer),
+    party_roles: parseJsonArray(r.draft_party_roles_json),
+    required_fields: parseJsonArray(r.draft_required_fields_json),
+    updated_at: r.draft_updated_at ?? null,
+  };
+}
+
 export async function listRegistryRows(env: Env): Promise<RegistryRow[]> {
   const sql = getSQL(env);
   try {
     const rows: any[] = await sql`
       SELECT doc_type, title, layer, party_roles_json, required_fields_json,
-             status, overlap_note, published_at, published_by, publish_reason, updated_at
+             status, overlap_note, published_at, published_by, publish_reason, updated_at,
+             draft_title, draft_layer, draft_party_roles_json, draft_required_fields_json,
+             draft_updated_at
         FROM contract_doc_type_registry
        ORDER BY doc_type ASC
     `;
@@ -49,6 +77,7 @@ export async function listRegistryRows(env: Env): Promise<RegistryRow[]> {
       published_by: r.published_by ?? null,
       publish_reason: r.publish_reason ?? null,
       updated_at: r.updated_at ?? null,
+      pending_draft: pendingDraftOf(r),
       source: 'store' as const,
     }));
   } catch {
@@ -90,16 +119,58 @@ export async function upsertDraft(
         ${actorId}
       )
       ON CONFLICT(doc_type) DO UPDATE SET
-        title = excluded.title,
-        layer = excluded.layer,
-        party_roles_json = excluded.party_roles_json,
-        required_fields_json = excluded.required_fields_json,
+        title = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN contract_doc_type_registry.title
+          ELSE excluded.title
+        END,
+        layer = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN contract_doc_type_registry.layer
+          ELSE excluded.layer
+        END,
+        party_roles_json = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN contract_doc_type_registry.party_roles_json
+          ELSE excluded.party_roles_json
+        END,
+        required_fields_json = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN contract_doc_type_registry.required_fields_json
+          ELSE excluded.required_fields_json
+        END,
         status = CASE
           WHEN contract_doc_type_registry.status = 'published' THEN contract_doc_type_registry.status
           ELSE 'draft'
         END,
-        updated_by = excluded.updated_by,
-        updated_at = CURRENT_TIMESTAMP
+        draft_title = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN excluded.title
+          ELSE NULL
+        END,
+        draft_layer = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN excluded.layer
+          ELSE NULL
+        END,
+        draft_party_roles_json = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN excluded.party_roles_json
+          ELSE NULL
+        END,
+        draft_required_fields_json = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN excluded.required_fields_json
+          ELSE NULL
+        END,
+        draft_updated_at = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN CURRENT_TIMESTAMP
+          ELSE NULL
+        END,
+        draft_updated_by = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN excluded.updated_by
+          ELSE NULL
+        END,
+        updated_by = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN contract_doc_type_registry.updated_by
+          ELSE excluded.updated_by
+        END,
+        updated_at = CASE
+          WHEN contract_doc_type_registry.status = 'published' THEN contract_doc_type_registry.updated_at
+          ELSE CURRENT_TIMESTAMP
+        END
     `;
   } finally {
     await sql.end();
@@ -122,12 +193,22 @@ export async function publishType(
     }
     await sql`
       UPDATE contract_doc_type_registry
-         SET status = 'published',
+         SET title = CASE WHEN draft_title IS NOT NULL THEN draft_title ELSE title END,
+             layer = CASE WHEN draft_layer IS NOT NULL THEN draft_layer ELSE layer END,
+             party_roles_json = CASE WHEN draft_party_roles_json IS NOT NULL THEN draft_party_roles_json ELSE party_roles_json END,
+             required_fields_json = CASE WHEN draft_required_fields_json IS NOT NULL THEN draft_required_fields_json ELSE required_fields_json END,
+             status = 'published',
              published_at = CURRENT_TIMESTAMP,
              published_by = ${actorId},
              publish_reason = ${reason},
              updated_by = ${actorId},
-             updated_at = CURRENT_TIMESTAMP
+             updated_at = CURRENT_TIMESTAMP,
+             draft_title = NULL,
+             draft_layer = NULL,
+             draft_party_roles_json = NULL,
+             draft_required_fields_json = NULL,
+             draft_updated_at = NULL,
+             draft_updated_by = NULL
        WHERE doc_type = ${docType}
     `;
     return { ok: true };

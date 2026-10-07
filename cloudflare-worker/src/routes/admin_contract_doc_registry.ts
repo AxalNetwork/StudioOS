@@ -41,6 +41,14 @@ type RegistryHubItem = {
     party_roles: string[];
     required_fields: string[];
   };
+  /** Set when a published type has a save that publish has not applied. Null otherwise. */
+  pending_draft: {
+    title: string;
+    layer: string;
+    party_roles: string[];
+    required_fields: string[];
+    updated_at: string | null;
+  } | null;
   registry_status: 'published' | 'draft' | 'code';
   source: 'store' | 'code';
 };
@@ -91,6 +99,7 @@ async function buildHubPayload(env: Env) {
           layer: stored.layer,
           party_roles: stored.party_roles.length ? stored.party_roles : row.party_roles,
           required_fields: stored.required_fields,
+          pending_draft: stored.pending_draft,
           registry_status: 'published' as const,
           source: 'store' as const,
         };
@@ -104,11 +113,12 @@ async function buildHubPayload(env: Env) {
             party_roles: stored.party_roles,
             required_fields: stored.required_fields,
           },
+          pending_draft: null,
           registry_status: 'draft' as const,
           source: 'code' as const,
         };
       }
-      return { ...row, registry_status: 'code' as const, source: 'code' as const };
+      return { ...row, pending_draft: null, registry_status: 'code' as const, source: 'code' as const };
     });
 
     for (const s of storeRows) {
@@ -124,6 +134,7 @@ async function buildHubPayload(env: Env) {
         usage_count: usage.get(s.doc_type) || 0,
         last_used_at: lastUsed.get(s.doc_type) || null,
         required_fields: s.required_fields,
+        pending_draft: s.pending_draft,
         registry_status: s.status === 'published' ? 'published' : 'draft',
         source: 'store',
       });
