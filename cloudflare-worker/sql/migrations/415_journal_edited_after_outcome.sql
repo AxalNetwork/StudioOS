@@ -1,0 +1,12 @@
+-- 415 — record when a decision-journal entry is edited after its outcome (D618, #1315).
+--
+-- PUT /api/journal/:uid can rewrite the thesis after outcome_recorded_at is
+-- set, and until now only updated_at moved. This column is the mark the
+-- journal can show. It stays NULL until a graded field changes after the
+-- outcome. A tags-only save, and a value sent unchanged, do not set it.
+-- Nothing is locked. Nothing is backfilled: an outcome recorded before this
+-- migration has no edit mark, because none was recorded.
+--
+-- Not re-runnable (SQLite has no ADD COLUMN IF NOT EXISTS); the migration
+-- ledger stops the replay.
+ALTER TABLE decision_journal_entries ADD COLUMN edited_after_outcome_at TEXT;
