@@ -234,5 +234,105 @@ class ShaiListTests(unittest.TestCase):
         self.assertNotIn('migration 378', sql_text.split('\n', 2)[-1])
 
 
+
+FIXTURE = Path(__file__).resolve().parent / 'fixtures' / 'shai-goldman-sample.csv'
+# The export's shape around its personal data: notes above the header with a
+# contact, and a Notes column linking to a person's post. All of it invented.
+RAW_WITH_PEOPLE = (
+    ',,,\n'
+    ',sorted by year raised as this is a resource for founders,,\n'
+    '"DM to add, or email someone@example.test",,,\n'
+    'Linkedin https://www.linkedin.com/in/someone/,,,\n'
+    ' ,Fund Name,Amount Raised $M USD,Date announced and or Raised,Year Raised,Fund Number,Location,Notes\n'
+    '1,Example Ventures,$160,1/5/2026,2026,II,NYC,https://twitter.com/someone/status/1\n'
+    '2,"Comma, Capital","$4,100",4/1/2021,2021,III,SF,\n'
+    '3,Mail Fund someone@example.test,$10,1/1/2020,2020,I,LA,\n'
+    '4,Linked Fund https://x.com/someone,$12,1/1/2020,2020,I,LA,\n'
+    ',,,,,,,\n'
+)
+
+
+class ShaiCleanTests(unittest.TestCase):
+    """The committable copy of the third list (#1081, S10): no personal data,
+    and it parses exactly as the raw export does."""
+
+    def test_only_the_columns_the_importer_reads_survive(self):
+        clean = mod.clean_shai_csv(RAW_WITH_PEOPLE)
+        self.assertEqual(clean.splitlines()[0], ','.join(mod.SHAI_COLUMNS))
+        self.assertNotIn('Notes', clean)
+        self.assertNotIn('twitter.com', clean)
+
+    def test_the_notes_above_the_header_are_dropped(self):
+        clean = mod.clean_shai_csv(RAW_WITH_PEOPLE)
+        self.assertNotIn('DM to add', clean)
+        self.assertNotIn('sorted by year raised', clean, 'a note with no contact in it is still not a fund')
+        self.assertNotIn('linkedin.com', clean)
+
+    def test_a_row_carrying_an_email_or_a_person_link_is_dropped(self):
+        clean = mod.clean_shai_csv(RAW_WITH_PEOPLE)
+        self.assertNotIn('@', clean)
+        self.assertNotIn('x.com', clean)
+        self.assertNotIn('Mail Fund', clean)
+        self.assertNotIn('Linked Fund', clean)
+
+    def test_quoted_cells_survive_and_blank_rows_go(self):
+        clean = mod.clean_shai_csv(RAW_WITH_PEOPLE)
+        self.assertEqual(clean.splitlines(), [
+            ','.join(mod.SHAI_COLUMNS),
+            'Example Ventures,$160,1/5/2026,2026,II,NYC',
+            '"Comma, Capital","$4,100",4/1/2021,2021,III,SF',
+        ])
+
+    def test_the_clean_copy_parses_exactly_as_the_raw_export(self):
+        import tempfile
+        raw = FIXTURE.read_text(encoding='utf-8-sig')
+        with tempfile.TemporaryDirectory() as tmp:
+            clean_path = Path(tmp) / 'clean.csv'
+            clean_path.write_text(mod.clean_shai_csv(raw))
+            a, b = {}, {}
+            self.assertEqual(mod.parse_shai(a, FIXTURE), mod.parse_shai(b, clean_path))
+            self.assertEqual(a, b)
+            self.assertGreater(len(a), 0)
+
+    def test_a_sheet_without_a_column_the_importer_reads_is_refused(self):
+        with self.assertRaises(ValueError):
+            mod.clean_shai_csv('Fund Name,Location\nA,NYC\n')
+
+
+class ShaiMigrationTests(unittest.TestCase):
+    def test_the_migration_names_its_number_and_holds_one_upsert_per_added_row(self):
+        import tempfile
+        directory: dict = {}
+        added = mod.parse_shai(directory, FIXTURE)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / '999_x.sql'
+            written = mod.write_shai_migration(directory, out, '999', '2026-10-07')
+            text = out.read_text()
+        self.assertEqual(written, added)
+        self.assertTrue(text.startswith('-- 999 — the third fund list'))
+        self.assertEqual(text.count('INSERT OR REPLACE INTO research_fund_directory '), added)
+        self.assertNotIn('@', text)
+
+    def test_the_migration_is_byte_identical_on_a_second_run(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            outs = []
+            for i in range(2):
+                directory: dict = {}
+                mod.parse_shai(directory, FIXTURE)
+                out = Path(tmp) / f'{i}.sql'
+                mod.write_shai_migration(directory, out, '999', '2026-10-07')
+                outs.append(out.read_text())
+        self.assertEqual(outs[0], outs[1])
+
+    def test_the_cli_refuses_a_number_that_is_not_one(self):
+        for good in ('413', '0426', '999'):
+            self.assertTrue(mod.is_migration_number(good), good)
+        for bad in ('378; DROP', '42', '12345', '41a', ''):
+            self.assertFalse(mod.is_migration_number(bad), bad)
+        with self.assertRaises(SystemExit):
+            mod.main_shai(['shai-migration', '378; DROP'])
+
+
 if __name__ == '__main__':
     unittest.main()
