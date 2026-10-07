@@ -142,6 +142,7 @@
     "scope.sql @ routes/capital.ts": 1,
     "scope.sql @ routes/data_room.ts": 1,
     "scope.sql @ routes/esign.ts": 4,
+    "scope.sql @ routes/fund_ledger.ts": 1,
     "scope.sql @ routes/fund_performance.ts": 1,
     "scope.sql @ routes/funds.ts": 1,
     "scope.sql @ routes/liquidity.ts": 1,

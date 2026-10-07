@@ -3,34 +3,14 @@ import { Calculator } from 'lucide-react';
 import { StatCard, Section, Chip, FilterChips, EmptyState } from './advisor/network/kit';
 import ErrorState from '../components/ErrorState';
 import Skeleton from '../components/Skeleton';
+import FundLedgerPanel from './investor/FundLedgerPanel';
 import InfoStrip from '../components/InfoStrip';
 import { api } from '../lib/api';
 import {
   useFundAnalytics, fmtCents, fmtRate, Unrecorded,
 } from '../lib/fundAnalytics';
 
-/**
- * Fund Accounting — /funds/accounting, a tab of FundOpsWorkspace.
- *
- * Four fabricated sections became two real ones and two refusals:
- *
- *   LP capital accounts  REAL. limited_partners carries commitment, invested
- *                        and returns per LP. A GP sees every LP via
- *                        /funds/:id/lps; an LP sees only their own rows via
- *                        /funds/lp-portal, which is why this page branches on
- *                        role rather than gating the whole tab to admin.
- *   Statements           REAL. /funds/:id/report-periods are the issued
- *                        quarterly periods, each frozen into snapshot_json —
- *                        the reason a re-rendered old report does not silently
- *                        pick up today's marks.
- *   Fee & carry          PART REAL. management_fee and carried_interest are
- *                        contracted terms and are shown. The accrual BY PERIOD
- *                        that the old chart plotted has no table behind it.
- *   Fund expenses        GONE. There is no expense ledger in the schema at
- *                        all, so the section is removed rather than emptied —
- *                        an empty table implies zero expenses, which is itself
- *                        a false claim about a fund.
- */
+/** Fund accounting: D628 operational ledger plus existing capital accounts and issued reports. */
 
 const fmtExact = (cents) =>
   cents == null ? null : `$${Math.round(Number(cents) / 100).toLocaleString()}`;
@@ -39,7 +19,7 @@ const fmtExact = (cents) =>
 const dollarsToCents = (v) => Math.round((Number(v) || 0) * 100);
 
 export default function FundAccountingPage({ embedded = false }) {
-  const { items, unavailable, loading, error, reload } = useFundAnalytics();
+  const { items, loading, error, reload } = useFundAnalytics();
   const [fundId, setFundId] = useState(null);
   const [accounts, setAccounts] = useState({ rows: null, loading: false, error: null, scope: null });
   const [periods, setPeriods] = useState({ rows: null, error: null });
@@ -87,7 +67,7 @@ export default function FundAccountingPage({ embedded = false }) {
   } else if (items.length === 0) {
     content = (
       <EmptyState>
-        No funds are recorded yet. Capital accounts appear here once a fund and its LPs exist.
+        Not recorded: no capital account data is available.
       </EmptyState>
     );
   } else {
@@ -103,11 +83,9 @@ export default function FundAccountingPage({ embedded = false }) {
           storageKey="funds-accounting-basis"
           title="What this page can and cannot account for"
           body={
-            'Capital accounts and issued reporting periods are read from D1. The '
-            + 'management fee and carry RATES are contracted terms and are shown; '
-            + 'accrued amounts per period are not, because no ledger records them. '
-            + 'There is no fund expense table at all, so no expense section is '
-            + 'shown — an empty one would imply zero expenses.'
+            'Capital accounts and issued reports retain their recorded sources. The '
+            + 'operational ledger below reads explicitly posted fees and expenses by '
+            + 'fund and period. Missing entries remain Not recorded; a failed read is Unreadable.'
           }
         />
 
@@ -130,24 +108,10 @@ export default function FundAccountingPage({ embedded = false }) {
           <StatCard label="Unfunded" value={fmtCents(unfunded)} hint="Commitment not yet called" />
         </div>
 
-        <Section title="Management fee & carry">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <StatCard
-              label="Management fee"
-              value={fmtRate(activeFund?.management_fee) || <Unrecorded reason="No management fee rate is set on this fund." />}
-              hint="Contracted rate"
-            />
-            <StatCard
-              label="Carried interest"
-              value={fmtRate(activeFund?.carried_interest) || <Unrecorded reason="No carry rate is set on this fund." />}
-              hint="Contracted rate"
-            />
-            <StatCard
-              label="Accrued to date"
-              value={<Unrecorded reason={unavailable.fee_accrual} />}
-              hint={unavailable.fee_accrual}
-            />
-          </div>
+        <FundLedgerPanel />
+
+        <Section title="Carry setting">
+          <StatCard label="Carried interest setting" value={fmtRate(activeFund?.carried_interest) || <Unrecorded reason="No carry setting is recorded." />} hint="Fund setting; no carry accrual is inferred" />
         </Section>
 
         <Section
@@ -231,7 +195,7 @@ export default function FundAccountingPage({ embedded = false }) {
     );
   }
 
-  if (embedded) return content;
+  if (embedded) return loading || error || items.length === 0 ? <div className="space-y-6"><FundLedgerPanel />{content}</div> : content;
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
@@ -239,10 +203,10 @@ export default function FundAccountingPage({ embedded = false }) {
           <Calculator className="w-6 h-6 text-violet-600" /> Fund Accounting
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          LP capital accounts, contracted terms and issued reporting periods.
+          Operational ledger, LP capital accounts and issued reporting periods.
         </p>
       </div>
-      {content}
+      {loading || error || items.length === 0 ? <div className="space-y-6"><FundLedgerPanel />{content}</div> : content}
     </div>
   );
 }
