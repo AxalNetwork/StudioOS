@@ -29,6 +29,8 @@ import spinoutLab from '../src/routes/spinout_lab.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
 import { creditLabMilestone, creditLabGraduation, backfillLabCredits } from '../src/services/labMilestoneCredits.ts';
 import creditRules from '../src/routes/admin_credit_rules.ts';
+import { recordSpinoutMilestoneAndAdvance } from '../src/services/advisor/writeRouter.ts';
+import { backfillCertificates } from '../src/services/certificateIssuance.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const MEMBER = 101, OUTSIDER = 102, GRAD = 103, OLD_GRAD = 104, ADMIN = 900;
@@ -401,3 +403,68 @@ test('POST /lab-backfill: the Super Admin\'s, with a reason, recorded in the aud
   assert.equal(paged.body.members, 1);
   assert.equal(paged.body.next_after, GRAD);
 });
+
+// ─────────────── Eadwyn's answers and the certificate backfill (#1104 Q1 A) ──
+
+const milestoneRows = (db: any, who: number) =>
+  db.prepare('SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ? ORDER BY id').all(who).map((x: any) => x.milestone_key);
+
+test('a milestone Eadwyn records pays as the Lab page would, once, and only from the answer that recorded it', async () => {
+  const db = freshDb();
+  const env = envOf(db);
+  db.prepare('UPDATE users SET spinout_lab_week = 2 WHERE id = ?').run(MEMBER);
+  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'okrs_created', 2));
+  assert.deepEqual(grants(db, MEMBER), [{ delta: 50, source_ref: `lab:${MEMBER}:okrs_created`, rule_key: 'lab:okrs_created' }]);
+  // The same answer again records nothing new and pays nothing new.
+  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'okrs_created', 2));
+  assert.equal(grants(db, MEMBER).length, 1);
+  // A milestone the Lab page already recorded is not paid again from Eadwyn.
+  await quiet(() => record(db, MEMBER, 'pitch_deck_drafted'));
+  db.prepare("DELETE FROM perk_credit_ledger WHERE source_ref = ?").run(`lab:${MEMBER}:pitch_deck_drafted`);
+  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'pitch_deck_drafted', 2));
+  assert.deepEqual(grants(db, MEMBER).map((g: any) => g.rule_key), ['lab:okrs_created'], 'only the call that recorded it pays');
+  // A milestone with no rule is recorded and pays nothing; an outsider is paid nothing.
+  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'project_created', 1));
+  assert.ok(milestoneRows(db, MEMBER).includes('project_created'));
+  await quiet(() => recordSpinoutMilestoneAndAdvance(env, OUTSIDER, 'brand_basics_filled', 2));
+  assert.ok(milestoneRows(db, OUTSIDER).includes('brand_basics_filled'));
+  assert.deepEqual(grants(db, OUTSIDER), []);
+  assert.equal(grants(db, MEMBER).length, 1);
+});
+
+test('a credit that fails never stops Eadwyn\'s milestone from recording or the week from advancing', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE perk_credit_ledger');
+  db.prepare('UPDATE users SET spinout_lab_week = 1 WHERE id = ?').run(MEMBER);
+  for (const k of ['project_created', 'customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3']) {
+    await quiet(() => recordSpinoutMilestoneAndAdvance(envOf(db), MEMBER, k, 1));
+  }
+  assert.equal(milestoneRows(db, MEMBER).length, 4);
+  const week = (db.prepare('SELECT spinout_lab_week AS w FROM users WHERE id = ?').get(MEMBER) as any).w;
+  assert.ok(week > 1, `the week advanced (${week})`);
+});
+
+test('every answer path that records a Lab milestone goes through the helper that pays', () => {
+  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/advisor/writeRouter.ts'), 'utf8');
+  for (const key of ['project_created', 'brand_basics_filled', 'okrs_created', 'pitch_deck_drafted']) {
+    assert.match(src, new RegExp(`recordSpinoutMilestoneAndAdvance\\(env, user\\.id, '${key}'`), key);
+  }
+  assert.match(src, /recordSpinoutMilestoneAndAdvance\(\s*env, user\.id, `customer_interview_logged_\$\{discoveryMatch\[1\]\}`/);
+  assert.equal((src.match(/INSERT OR IGNORE INTO spinout_lab_milestones/g) || []).length, 1, 'a second milestone insert would bypass the credit');
+});
+
+test('a certificate the backfill issues pays the graduation bonus once, on the live terms', async () => {
+  const db = freshDb();
+  const env = envOf(db);
+  // GRAD's graduation milestone was paid; OLD_GRAD's was not (it predates launch).
+  db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, rule_key) VALUES (?, 400, 'grant', ?, 'lab:incorporation_completed')`)
+    .run(GRAD, `lab:${GRAD}:incorporation_completed`);
+  const first = await quiet(() => backfillCertificates(env));
+  assert.equal(first.issued, 2, JSON.stringify(first));
+  assert.deepEqual(grants(db, GRAD).map((g: any) => [g.rule_key, g.delta]), [['lab:incorporation_completed', 400], ['lab:graduation', 250]]);
+  assert.deepEqual(grants(db, OLD_GRAD), [], 'a graduate whose milestone was not paid gets no bonus here');
+  const second = await quiet(() => backfillCertificates(env));
+  assert.equal(second.issued, 0);
+  assert.equal(grants(db, GRAD).length, 2, 'a second run pays nothing');
+});
+
