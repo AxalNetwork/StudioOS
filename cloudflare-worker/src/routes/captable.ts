@@ -36,6 +36,7 @@ import {
 } from '../services/valuation409a';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { hashEmail } from '../util/hashEmail';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -121,6 +122,26 @@ function serialize(s: ScenarioRow, withResult = true): any {
   };
   if (withResult) out.result = s.result_json ? safeJson<SimulateResult>(s.result_json, null as any) : null;
   return out;
+}
+
+/**
+ * D632 — a cap-table write records its actor in `activity_logs`, with the
+ * project it belongs to. Best effort: the write has already happened, so a
+ * failed log line only warns.
+ */
+async function logScenarioAct(
+  env: Env, user: { id: number; email?: string | null }, action: string,
+  row: { uid: string; project_id: number | null; is_variant?: number | null }, extra: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    const actor = await hashEmail(String(user.email || ''));
+    await env.DB.prepare(
+      'INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)',
+    ).bind(row.project_id ?? null, user.id, action,
+      JSON.stringify({ scenario_uid: row.uid, is_variant: row.is_variant ? 1 : 0, ...extra }), actor).run();
+  } catch (e) {
+    console.warn('[captable] activity log failed', action, (e as Error).message);
+  }
 }
 
 async function loadByUid(env: Env, uid: string): Promise<ScenarioRow | null> {
@@ -488,6 +509,7 @@ captable.post('/scenarios/by-project/:projectId/variants', async (c) => {
   ).bind(uid, user.id, projectId, name, JSON.stringify(inputs), JSON.stringify(result), now, now, now).run();
   const row = await loadByUid(c.env, uid);
   if (!row) return c.json({ detail: 'Insert failed' }, 500);
+  await logScenarioAct(c.env, user as any, 'captable_variant_created', row);
   return c.json(serialize(row));
 });
 
@@ -571,15 +593,20 @@ captable.put('/scenarios/:uid', async (c) => {
     throw e;
   }
   const fresh = await loadByUid(c.env, row.uid);
+  // D632 — a variant renamed or edited in place says so, with the old name.
+  await logScenarioAct(c.env, user as any, 'captable_scenario_updated', fresh as ScenarioRow,
+    row.name !== name ? { renamed_from: row.name } : {});
   return c.json(serialize(fresh as ScenarioRow));
 });
 
 captable.delete('/scenarios/:uid', async (c) => {
   ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
-  try { await ensureScenarioWriteOr404(c, c.req.param('uid'), user); }
+  let gone: ScenarioRow;
+  try { gone = await ensureScenarioWriteOr404(c, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   await c.env.DB.prepare('DELETE FROM cap_table_scenarios WHERE uid = ?').bind(c.req.param('uid')).run();
+  await logScenarioAct(c.env, user as any, 'captable_scenario_deleted', gone);
   return c.json({ ok: true });
 });
 

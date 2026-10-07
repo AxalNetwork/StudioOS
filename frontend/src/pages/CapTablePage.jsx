@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
@@ -710,7 +710,7 @@ function finalLedger(result) {
   return (ledger || []).filter(r => r && r.holder);
 }
 
-function ScenarioComparePanel({ data, loading, error, activeUid, onClose, onRefresh, onDeleteVariant }) {
+export function ScenarioComparePanel({ data, loading, error, activeUid, onClose, onRefresh, onDeleteVariant }) {
   const cols = useMemo(() => {
     if (!data) return [];
     const list = [];
@@ -793,6 +793,11 @@ function ScenarioComparePanel({ data, loading, error, activeUid, onClose, onRefr
                     <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] ${canonical ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                       {canonical ? 'Canonical' : 'Draft'}
                     </span>
+                    {/* D632 — a draft variant is edited in place on its own page. */}
+                    {!canonical && scen.uid ? (
+                      <Link to={`/raise/cap-table/variants/${encodeURIComponent(scen.uid)}`} data-testid={`variant-edit-${scen.uid}`}
+                        className="ml-1 align-middle text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-300 dark:hover:underline">Edit</Link>
+                    ) : null}
                     {!canonical && onDeleteVariant && (
                       <button onClick={() => onDeleteVariant(scen.uid)} title="Delete variant"
                         className="ml-1 align-middle text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>

@@ -359,6 +359,8 @@ const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
+// D632 — a draft variant, renamed and edited in place.
+const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
@@ -2759,6 +2761,10 @@ function AppInner() {
           : <FounderRaiseCapital />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
+      {/* D632 — the cap table's draft variants (Ops canvas `ct-variants`). The main
+          cap table stays one per company at /raise/capital/cap-table. */}
+      <Route path="/raise/cap-table/variants" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
+      <Route path="/raise/cap-table/variants/:variant" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
       {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
           Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
           guard keeps admitting investor so the redirect can run. */}

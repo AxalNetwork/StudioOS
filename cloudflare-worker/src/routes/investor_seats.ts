@@ -1,10 +1,11 @@
 /**
  * Task #6 (W-1) — Investor seats (Institutional-only colleague invites).
  *
- *   GET    /api/investor-seats           — list seats owned by caller
- *   POST   /api/investor-seats/invite    — invite colleague (≤4 active)
- *   POST   /api/investor-seats/accept    — accept by token (any auth user)
- *   DELETE /api/investor-seats/:id       — revoke
+ *   GET    /api/investor-seats            — list seats owned by caller (never the link)
+ *   POST   /api/investor-seats/invite     — invite colleague (≤4 active); the link, once
+ *   POST   /api/investor-seats/invitation — what an invite offers, read by its token (D632)
+ *   POST   /api/investor-seats/accept     — accept by token (any auth user)
+ *   DELETE /api/investor-seats/:id        — revoke
  *
  * Accepted seats inherit the primary's tier transparently via
  * `investor_seat_primary_user_id` on the seat user's row.
@@ -18,6 +19,7 @@ import {
   INVESTOR_QUOTAS,
   type InvestorUser,
 } from '../middleware/requireInvestorTier';
+import { hashEmail } from '../util/hashEmail';
 
 const seats = new Hono<{ Bindings: Env }>();
 
@@ -70,10 +72,13 @@ async function emailSeatInvite(env: Env, to: string, inviterName: string, link: 
   }
 }
 
-/** Pending seats carry the link. Accepted and revoked seats do not, and the token never leaves the row. */
-function seatForInviter(env: Env, row: Record<string, unknown>) {
-  const token = row.invite_token ? String(row.invite_token) : '';
-  const pending = !row.accepted_at && !row.revoked_at && token;
+/**
+ * One seat as its inviter reads it. D632: the link is shown once, in the
+ * invite reply, and never again — the list carries the seat's state and no
+ * link, and its query never selects the token.
+ */
+export function seatForInviter(row: Record<string, unknown>) {
+  const state = row.revoked_at ? 'revoked' : row.accepted_at ? 'accepted' : 'invited';
   return {
     id: row.id,
     seat_email: row.seat_email,
@@ -81,20 +86,57 @@ function seatForInviter(env: Env, row: Record<string, unknown>) {
     invited_at: row.invited_at,
     accepted_at: row.accepted_at,
     revoked_at: row.revoked_at,
-    ...(pending ? { invite_link: inviteLink(env, token) } : {}),
+    state,
   };
+}
+
+/**
+ * D632 — every seat write records its actor in `activity_logs`. A failed log
+ * line must not undo a write that has already happened, so it only warns.
+ */
+async function logSeatAct(env: Env, user: InvestorUser, action: string, details: Record<string, unknown>): Promise<void> {
+  try {
+    const actor = await hashEmail(String(user.email || ''));
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind(action, JSON.stringify(details), actor, user.id).run();
+  } catch (e) {
+    console.warn('[investor-seats] activity log failed', action, (e as Error).message);
+  }
+}
+
+/** Whether the inviting account's plan still covers seats. Fail-closed. */
+async function primaryCover(env: Env, primaryId: number): Promise<{ ok: true; tier: string; status: string } | { ok: false; error: 'primary_unavailable' | 'primary_not_institutional' }> {
+  const primary = await env.DB.prepare(
+    `SELECT investor_tier, investor_subscription_status FROM users WHERE id = ?`
+  ).bind(primaryId).first<{ investor_tier: string | null; investor_subscription_status: string | null }>();
+  if (!primary) return { ok: false, error: 'primary_unavailable' };
+  const tier = (primary.investor_tier ?? 'free').toLowerCase();
+  const status = (primary.investor_subscription_status ?? 'free').toLowerCase();
+  const lapsed = status === 'cancelled' || status === 'past_due' || status === 'unpaid';
+  if (tier !== 'institutional' || lapsed) return { ok: false, error: 'primary_not_institutional' };
+  return { ok: true, tier, status };
+}
+
+/** `ab***@firm.com` — enough for the holder of a link to see it was not theirs. */
+export function maskEmail(email: string): string {
+  const [local, domain] = String(email || '').split('@');
+  if (!domain) return '***';
+  return `${local.slice(0, 2)}***@${domain}`;
 }
 
 async function listOwned(c: any) {
   const user = (await requireAuth(c)) as InvestorUser;
   const rows = await c.env.DB.prepare(
-    `SELECT id, seat_email, seat_user_id, invited_at, accepted_at, revoked_at, invite_token
+    `SELECT id, seat_email, seat_user_id, invited_at, accepted_at, revoked_at
      FROM investor_seats WHERE primary_user_id = ?
      ORDER BY invited_at DESC`
   ).bind(user.id).all();
+  const seatsOut = (rows.results || []).map((row: Record<string, unknown>) => seatForInviter(row));
   return c.json({
-    seats: (rows.results || []).map((row: Record<string, unknown>) => seatForInviter(c.env, row)),
+    seats: seatsOut,
     cap: INVESTOR_QUOTAS.institutional.seats,
+    used: seatsOut.filter((s: { state: string }) => s.state !== 'revoked').length,
   });
 }
 // The client calls `/investor-seats/`. Hono does not treat that as `/`.
@@ -123,7 +165,7 @@ seats.post('/invite', async (c) => {
   }
   const body = await c.req.json().catch(() => ({} as { email?: string }));
   const email = String(body.email || '').trim().toLowerCase();
-  if (!EMAIL_RE.test(email)) return c.json({ error: 'invalid_email' }, 400);
+  if (!EMAIL_RE.test(email)) return c.json({ error: 'invalid_email', message: 'Enter a valid email address.' }, 400);
 
   const cnt = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM investor_seats
@@ -151,23 +193,82 @@ seats.post('/invite', async (c) => {
     ).bind(user.id, email, token).run();
   } catch (e) {
     const msg = (e as Error).message || '';
-    if (/UNIQUE/i.test(msg)) return c.json({ error: 'already_invited' }, 409);
+    if (/UNIQUE/i.test(msg)) return c.json({ error: 'already_invited', message: 'This address already has a seat on your plan.' }, 409);
     throw e;
   }
   await c.env.DB.prepare(
     `UPDATE users SET investor_seat_count = investor_seat_count + 1 WHERE id = ?`
   ).bind(user.id).run();
+  const created = await c.env.DB.prepare(
+    `SELECT id FROM investor_seats WHERE primary_user_id = ? AND seat_email = ?`
+  ).bind(user.id, email).first<{ id: number }>();
 
   const invite_link = inviteLink(c.env, token);
   const email_sent = await emailSeatInvite(c.env, email, user.name || 'An investor', invite_link);
-  return c.json({ ok: true, email, email_sent, invite_link });
+  await logSeatAct(c.env, user, 'investor_seat_invited', { seat_id: created?.id ?? null, email_sent });
+  // D632 — the only reply that ever carries the link. The list does not.
+  return c.json({ ok: true, id: created?.id ?? null, email, email_sent, invite_link });
+});
+
+/**
+ * D632 — what the invitation offers, read by the person holding its link,
+ * before anything changes. The token is a body field, not a path or query
+ * part, so it stays out of request logs. Read-only: no row is written.
+ *
+ * `state` is one of `open`, `revoked`, `accepted`, `wrong_account`,
+ * `plan_lapsed`. The invited address is shown only masked, and only to a
+ * signed-in account it was not sent to.
+ */
+seats.post('/invitation', async (c) => {
+  const user = (await requireAuth(c)) as InvestorUser;
+  const body = await c.req.json().catch(() => ({} as { token?: string }));
+  const token = String(body.token || '').trim();
+  if (!token) return c.json({ error: 'token_required', message: 'This invitation link is missing its token.' }, 400);
+  const seat = await c.env.DB.prepare(
+    `SELECT s.id, s.primary_user_id, s.seat_email, s.seat_user_id, s.accepted_at, s.revoked_at,
+            u.name AS inviter_name
+     FROM investor_seats s LEFT JOIN users u ON u.id = s.primary_user_id
+     WHERE s.invite_token = ?`
+  ).bind(token).first<{
+    id: number; primary_user_id: number; seat_email: string; seat_user_id: number | null;
+    accepted_at: string | null; revoked_at: string | null; inviter_name: string | null;
+  }>();
+  if (!seat) return c.json({ error: 'invalid_token', message: 'This invitation link is not valid. Ask the inviter for a new one.' }, 404);
+
+  // The firm name is the inviter's investor profile. A missing row is "not
+  // recorded"; a read that fails is said apart from that, never as a blank.
+  let firm: string | null = null;
+  let firm_readable = true;
+  try {
+    const p = await c.env.DB.prepare(
+      `SELECT firm_name FROM investor_profiles WHERE user_id = ?`
+    ).bind(seat.primary_user_id).first<{ firm_name: string | null }>();
+    firm = p?.firm_name ? String(p.firm_name) : null;
+  } catch {
+    firm_readable = false;
+  }
+
+  const mine = String(seat.seat_email).toLowerCase() === String(user.email || '').toLowerCase();
+  let state: string;
+  if (seat.revoked_at) state = 'revoked';
+  else if (seat.accepted_at) state = 'accepted';
+  else if (!mine) state = 'wrong_account';
+  else state = (await primaryCover(c.env, seat.primary_user_id)).ok ? 'open' : 'plan_lapsed';
+
+  return c.json({
+    state,
+    inviter: { name: seat.inviter_name || null, firm, firm_readable },
+    yours: seat.accepted_at != null && seat.seat_user_id === user.id,
+    role: user.role,
+    ...(state === 'wrong_account' ? { invited_email: maskEmail(seat.seat_email) } : {}),
+  });
 });
 
 seats.post('/accept', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
   const body = await c.req.json().catch(() => ({} as { token?: string; confirm_role_change?: boolean }));
   const token = String(body.token || '').trim();
-  if (!token) return c.json({ error: 'token_required' }, 400);
+  if (!token) return c.json({ error: 'token_required', message: 'This invitation link is missing its token.' }, 400);
 
   const seat = await c.env.DB.prepare(
     `SELECT id, primary_user_id, seat_email, accepted_at, revoked_at
@@ -176,25 +277,20 @@ seats.post('/accept', async (c) => {
     id: number; primary_user_id: number; seat_email: string;
     accepted_at: string | null; revoked_at: string | null;
   }>();
-  if (!seat) return c.json({ error: 'invalid_token' }, 404);
-  if (seat.revoked_at) return c.json({ error: 'invite_revoked' }, 410);
-  if (seat.accepted_at) return c.json({ error: 'already_accepted' }, 409);
+  if (!seat) return c.json({ error: 'invalid_token', message: 'This invitation link is not valid. Ask the inviter for a new one.' }, 404);
+  if (seat.revoked_at) return c.json({ error: 'invite_revoked', message: 'The inviter revoked this seat. Ask them for a new link.' }, 410);
+  if (seat.accepted_at) return c.json({ error: 'already_accepted', message: 'This seat has already been accepted.' }, 409);
   if (seat.seat_email.toLowerCase() !== String(user.email).toLowerCase()) {
-    return c.json({ error: 'email_mismatch' }, 403);
+    return c.json({ error: 'email_mismatch', message: 'This invitation was sent to a different email address. Sign in with that account.' }, 403);
   }
 
   // Mirror primary's tier onto the seat user so paywall checks pass.
   // Fail-CLOSED: if the primary row is missing, or no longer Institutional,
   // or has lapsed (cancelled/past_due/unpaid), reject the acceptance — a
   // stale invite must never grant paid access on its own.
-  const primary = await c.env.DB.prepare(
-    `SELECT investor_tier, investor_subscription_status FROM users WHERE id = ?`
-  ).bind(seat.primary_user_id).first<{ investor_tier: string | null; investor_subscription_status: string | null }>();
-  if (!primary) return c.json({ error: 'primary_unavailable' }, 410);
-  const primaryTier = (primary.investor_tier ?? 'free').toLowerCase();
-  const primaryStatus = (primary.investor_subscription_status ?? 'free').toLowerCase();
-  const lapsed = primaryStatus === 'cancelled' || primaryStatus === 'past_due' || primaryStatus === 'unpaid';
-  if (primaryTier !== 'institutional' || lapsed) {
+  const cover = await primaryCover(c.env, seat.primary_user_id);
+  if (!cover.ok && cover.error === 'primary_unavailable') return c.json({ error: 'primary_unavailable', message: 'The inviting account no longer exists.' }, 410);
+  if (!cover.ok) {
     return c.json({
       error: 'primary_not_institutional',
       message: 'The inviting account is no longer on an active Institutional plan.',
@@ -215,11 +311,12 @@ seats.post('/accept', async (c) => {
       message: `Accepting this seat changes your ${user.role} account into an investor account.`,
     }, 409);
   }
-  const inheritedTier = primaryTier;
-  const inheritedStatus = primaryStatus;
+  const inheritedTier = cover.tier;
+  const inheritedStatus = cover.status;
+  // D632 — the token stays on the row, so the same link later reads "already
+  // accepted" rather than "not valid". `accepted_at` is what keeps it single-use.
   await c.env.DB.prepare(
-    `UPDATE investor_seats SET seat_user_id = ?, accepted_at = CURRENT_TIMESTAMP,
-                                invite_token = NULL
+    `UPDATE investor_seats SET seat_user_id = ?, accepted_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).bind(user.id, seat.id).run();
   await c.env.DB.prepare(
@@ -229,19 +326,20 @@ seats.post('/accept', async (c) => {
                        investor_subscription_status = ?
      WHERE id = ?`
   ).bind(seat.primary_user_id, inheritedTier, inheritedStatus, user.id).run();
+  await logSeatAct(c.env, user, 'investor_seat_accepted', { seat_id: seat.id, primary_user_id: seat.primary_user_id, previous_role: user.role });
   return c.json({ ok: true, primary_user_id: seat.primary_user_id, tier: inheritedTier });
 });
 
 seats.delete('/:id', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
   const id = Number(c.req.param('id'));
-  if (!Number.isFinite(id)) return c.json({ error: 'bad_id' }, 400);
+  if (!Number.isFinite(id)) return c.json({ error: 'bad_id', message: 'That seat id is not valid.' }, 400);
   const seat = await c.env.DB.prepare(
     `SELECT id, primary_user_id, seat_user_id, revoked_at FROM investor_seats WHERE id = ?`
   ).bind(id).first<{ id: number; primary_user_id: number; seat_user_id: number | null; revoked_at: string | null }>();
-  if (!seat) return c.json({ error: 'not_found' }, 404);
+  if (!seat) return c.json({ error: 'not_found', message: 'That seat does not exist.' }, 404);
   if (seat.primary_user_id !== user.id && user.role !== 'admin') {
-    return c.json({ error: 'forbidden' }, 403);
+    return c.json({ error: 'forbidden', message: 'Only the account that bought the plan can revoke its seats.' }, 403);
   }
   if (seat.revoked_at) return c.json({ ok: true, already_revoked: true });
   await c.env.DB.prepare(
@@ -260,6 +358,7 @@ seats.delete('/:id', async (c) => {
   await c.env.DB.prepare(
     `UPDATE users SET investor_seat_count = MAX(0, investor_seat_count - 1) WHERE id = ?`
   ).bind(seat.primary_user_id).run();
+  await logSeatAct(c.env, user, 'investor_seat_revoked', { seat_id: id, had_accepted: seat.seat_user_id != null });
   return c.json({ ok: true });
 });
 
