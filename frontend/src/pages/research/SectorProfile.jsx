@@ -147,7 +147,8 @@ export default function SectorProfile({ slug, role, LegacyPage }) {
   }, [slug, retry]);
   const state = result.slug === slug ? result : { loading: true };
   if (state.kind === 'redirect') return <Navigate replace to={state.to} />;
-  if (state.kind === 'legacy') return <LegacyPage role={role} />;
+  // #1077: the legacy page draws the market the resolver already read.
+  if (state.kind === 'legacy') return <LegacyPage role={role} market={state.market} />;
   return <WorkspaceShell role={role} title={state.data?.name || 'Sector'} activeSlug="markets">
     <SectorProfileView loading={state.loading} error={state.error} data={state.data}
       highlightedMarket={new URLSearchParams(location.search).get('market') || ''} onRetry={() => setRetry((n) => n + 1)} />

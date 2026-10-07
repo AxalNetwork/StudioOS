@@ -21,6 +21,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { userMayReadDeal } from './deals';
+import { logDealRoomAction } from '../services/dealRoomAudit';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -118,6 +119,7 @@ r.post('/', async (c) => {
            body.notes || null, user.id, nowIso(), nowIso()).run();
     const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<Row>();
+    await logDealRoomAction(c.env, user, 'reference_scheduled', dealId, { reference_id: row?.id });
     return c.json(dto(row!));
   } catch (e) { return mapError(c, e); }
 });
@@ -158,6 +160,9 @@ r.patch('/:id', async (c) => {
     if (!sets.length) return c.json(dto(row, true));
     sets.push('updated_at = ?'); params.push(nowIso()); params.push(id);
     await c.env.DB.prepare(`UPDATE reference_checks SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+    await logDealRoomAction(c.env, user, 'reference_updated', Number(row.deal_id), {
+      reference_id: id, fields: fields.filter((f) => body[f] !== undefined),
+    });
     const fresh = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
     return c.json(dto(fresh!, true));
   } catch (e) { return mapError(c, e); }
@@ -170,6 +175,7 @@ r.delete('/:id', async (c) => {
     if (!row) return c.json(NOT_FOUND, 404);
     const id = row.id;
     await c.env.DB.prepare('DELETE FROM reference_checks WHERE id = ?').bind(id).run();
+    await logDealRoomAction(c.env, user, 'reference_deleted', Number(row.deal_id), { reference_id: id });
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -198,6 +204,7 @@ r.post('/:id/consent', async (c) => {
            status='scheduled', updated_at=? WHERE id = ?`
       ).bind(nowIso(), id).run();
     }
+    await logDealRoomAction(c.env, user, give ? 'reference_consent_given' : 'reference_consent_withdrawn', Number(row.deal_id), { reference_id: id });
     const fresh = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
     return c.json(dto(fresh!));
   } catch (e) { return mapError(c, e); }

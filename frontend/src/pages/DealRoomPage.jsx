@@ -5,6 +5,11 @@ import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import { Unreadable } from '../ui';
+import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../components/deals/DealRoomJoin';
+import DealInvitationsTab from '../components/deals/DealInvitationsTab';
+import DealTransfersTab from '../components/deals/DealTransfersTab';
+import DealReferencesTab from '../components/deals/DealReferencesTab';
+import DealSyndicates from '../components/deals/DealSyndicates';
 import {
   ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
   Users, Clock, ThumbsUp, ThumbsDown,
@@ -30,14 +35,28 @@ function fmtMoney(n) {
   return `$${Number(n).toLocaleString()}`;
 }
 
-const TABS = ['Overview', 'Documents', 'Commitments', 'Activity'];
+/**
+ * The deal room's tabs for a role (D630, #1388). The Ops canvas adds three:
+ *   - Invitations — admin (`GET /deals/:id/invitations` is `requireAdmin`);
+ *   - Transfers — admin and partner, who record them;
+ *   - References — admin and investor (D609; founders and partners are refused).
+ */
+export function dealRoomTabs(role) {
+  const tabs = ['Overview', 'Documents', 'Commitments', 'Activity'];
+  if (role === 'admin') tabs.push('Invitations');
+  if (role === 'admin' || role === 'partner') tabs.push('Transfers');
+  if (role === 'admin' || role === 'investor') tabs.push('References');
+  return tabs;
+}
 
 export default function DealRoomPage() {
   const { dealId } = useParams();
   const navigate = useNavigate();
   const role = useCurrentRole();
+  const { user } = useAuth() || {};
   const isInvestor = role === 'investor';
   const isAdmin = role === 'admin';
+  const tabs = dealRoomTabs(role);
 
   const [deal, setDeal] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +115,7 @@ export default function DealRoomPage() {
           </div>
           <p className="text-gray-600 dark:text-gray-400">{deal.project_sector || 'Deal Room'}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isInvestor && myInvite && myInvite.status === 'invited' && (
             <>
               <button onClick={() => respond('interested')} className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-1"><ThumbsUp size={14} /> Interested</button>
@@ -115,6 +134,8 @@ export default function DealRoomPage() {
         </div>
       </div>
 
+      {isInvestor && <DealRoomMembership dealId={deal.id} />}
+
       {/* Progress banner */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex justify-between text-sm text-gray-500 mb-1">
@@ -127,22 +148,52 @@ export default function DealRoomPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-5">
-        {TABS.map(t => (
+      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800 mb-5">
+        {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-violet-600 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}>
+            className={`whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-violet-600 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}>
             {t}
           </button>
         ))}
       </div>
 
-      {tab === 'Overview' && <OverviewTab deal={deal} />}
+      {tab === 'Overview' && (
+        <>
+          <OverviewTab deal={deal} />
+          <DealSyndicates projectId={deal.project_id} user={user} />
+        </>
+      )}
       {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}
       {tab === 'Commitments' && <CommitmentsTab dealId={deal.id} />}
       {tab === 'Activity' && <ActivityTab dealId={deal.id} />}
+      {tab === 'Invitations' && tabs.includes('Invitations') && (
+        <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
+      )}
+      {tab === 'Transfers' && tabs.includes('Transfers') && <DealTransfersTab dealId={deal.id} canRecord={isAdmin || role === 'partner'} />}
+      {tab === 'References' && tabs.includes('References') && <DealReferencesTab dealId={deal.id} />}
 
       {commitOpen && <CommitModal deal={deal} onClose={() => setCommitOpen(false)} onDone={() => { setCommitOpen(false); loadDeal(); setTab('Commitments'); }} />}
       {inviteOpen && <InviteModal dealId={deal.id} onClose={() => setInviteOpen(false)} />}
+    </div>
+  );
+}
+
+/**
+ * D630 (#1388) — canvas `dr-header`: Join or Leave in the deal header, with
+ * the quota and what joining does. Membership is the quota read's
+ * `member_deal_ids`, narrowed by the active firm the way the deal list's
+ * `is_member` is.
+ */
+function DealRoomMembership({ dealId }) {
+  const [quotaState, reloadQuota] = useDealroomQuota();
+  const member = Boolean(quotaState.quota?.member_deal_ids?.includes(Number(dealId)));
+  return (
+    <div className="mb-5 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 md:flex-row md:items-start md:justify-between dark:border-gray-800 dark:bg-gray-900" data-testid="dr-header">
+      <div className="min-w-0 space-y-1">
+        <QuotaLine state={quotaState} onRetry={reloadQuota} />
+        <JoinNote />
+      </div>
+      {quotaState.quota && <JoinLeaveButton dealId={dealId} member={member} quotaState={quotaState} onChanged={reloadQuota} compact />}
     </div>
   );
 }

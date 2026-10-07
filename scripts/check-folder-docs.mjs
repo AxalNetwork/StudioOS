@@ -69,6 +69,7 @@ const DOCUMENTED = new Map([
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
   ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
+  ['frontend/src/components/deals',           'the deal room screens (D630)'],
   ['frontend/src/components/scoring',         'the scoring engine UI'],
   ['frontend/src/components/spinout',         'the Spin-Out Lab shared pieces'],
   ['frontend/src/decks/templates',            'the pitch-deck slide templates'],

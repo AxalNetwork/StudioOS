@@ -81,6 +81,13 @@ const ICP_VALUES = new Set(['strong', 'partial', 'none']);
 const DIRECTIONS = new Set(['supports', 'contradicts']);
 const DECISIONS = new Set(['proceed', 'pivot', 'stop']);
 
+/** The actor on a Validate write. The row's own column is not the audit log. */
+async function recordActor(env: Env, user: User, projectId: number, action: string, details: string) {
+  await env.DB.prepare(
+    `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
+  ).bind(action, details, `user:${user.id}`, user.id ?? null, projectId).run();
+}
+
 type ProjectRow = ProjectRef & { name: string };
 
 async function loadProject(env: Env, projectId: number): Promise<ProjectRow | null> {
@@ -405,6 +412,7 @@ founderValidate.delete('/links/:id', async (c) => {
   const s = await scope(c, Number(owner.project_id), canWrite);
   if (s instanceof Response) return s;
   await c.env.DB.prepare('DELETE FROM hypothesis_pain_links WHERE id = ?').bind(id).run();
+  await recordActor(c.env, s.user, s.project.id, 'hypothesis_pain_unlinked', `link ${id}`);
   return json({ ok: true });
 });
 
@@ -531,6 +539,7 @@ founderValidate.post('/decision/:projectId', async (c) => {
     `INSERT INTO validation_decisions (project_id, decision, reasoning, decided_by)
      VALUES (?, ?, ?, ?)`,
   ).bind(s.project.id, decision, trimOrNull(b.reasoning), s.user.id).run();
+  await recordActor(c.env, s.user, s.project.id, 'validation_decision_recorded', decision);
   return json({ id: r.meta?.last_row_id, decision }, 201);
 });
 
@@ -570,6 +579,7 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
       "UPDATE discovery_interviews SET interviewee_company = ?, updated_at = datetime('now') WHERE id = ?",
     ).bind(trimOrNull(b.interviewee_company), id).run();
   }
+  await recordActor(c.env, s.user, s.project.id, 'interview_evidence_updated', `interview ${id}`);
   return json({ ok: true });
 });
 
