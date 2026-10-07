@@ -27,8 +27,9 @@
  * below do, and why several of them read BOTH files rather than one.
  *
  * The rest guards the composition: the canvas elements that are here, and the
- * four that are deliberately not — each blocked on a store that does not exist
- * (view counts, article feedback, per-article surface routes, persona arrays).
+ * ones that are deliberately not — each blocked on a store that does not exist
+ * (per-article surface routes, persona arrays). View counts and article
+ * feedback had the same ban until D603 built their stores and D621 wired them.
  * Modelled on `trust_center_contract.test.mjs`, which parses source rather
  * than importing components, for the same reason: these are claims about what
  * the file says, and a claim about rendered output would need a DOM.
@@ -459,12 +460,10 @@ test('no canvas element ships on top of a store that does not exist', () => {
   // Each of these is refused for a stated reason, recorded in ROUTE_MAP and in
   // the block comment above the hero. Reinstating one is a decision someone
   // takes on purpose — which means editing this test, on purpose.
+  // "Popular this week" and "Did this answer it?" were banned here until their
+  // stores existed: D603 (#1286) built them, and D621 (#1280 step 2) lifted
+  // these two bans when it wired the page (`HelpSignals.jsx`).
   const banned = [
-    // Ranks articles by view count. Nothing counts views, so any ranking here
-    // is a claim about other readers invented on the spot.
-    [/Popular this week/i, '"Popular this week" needs a view-count store'],
-    // Needs somewhere to put the answer. There is no feedback table.
-    [/Did this answer it/i, '"Did this answer it?" needs a feedback store'],
     // Needs a `surface` route on ~98 subsections. A wrong deep link is worse
     // than no deep link.
     [/Where this lives/i, '"Where this lives" needs a per-article surface route'],

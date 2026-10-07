@@ -13,6 +13,7 @@ export * from './api/adminLearning.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
 export * from './api/helpCenter.js';
+export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
@@ -918,6 +919,7 @@ export const api = {
   // server rejects any client-supplied `score`/`tier`/`score_breakdown`.
   scoreStartup: (data) => request('/scoring/score', { method: 'POST', body: JSON.stringify(data) }),
   getScores: (projectId, opts = {}) => request(`/scoring/scores/${projectId}${opts.includeSandbox ? '?include_sandbox=1' : ''}`),
+  getCohortBenchmark: (projectId) => request(`/scoring/cohort-benchmark/${encodeURIComponent(projectId)}`),
   generateDealMemo: (projectId) => request(`/scoring/score/${projectId}/deal-memo`, { method: 'POST' }),
   getDealMemos: (projectId) => request(`/scoring/deal-memos/${projectId}`),
   scoringQueue: () => request('/scoring/queue'),
@@ -2028,7 +2030,6 @@ export const api = {
       body: JSON.stringify({ publishable_key: publishableKey }),
     }),
 
-  adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
     request(`/admin/contracts/${uid}/download-url?ttl_seconds=${ttl_seconds}`, { method: 'POST' }),
@@ -3043,11 +3044,9 @@ export const api = {
   infraReembedMetrics: (hours = 24) => request(`/infra/reembed-metrics?hours=${hours}`),
 
   // ---------- Funds & LPs ----------
-  fundsListByStatus: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
   fundGet: (id) => request(`/funds/${id}`),
   fundCreate: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
   fundUpdate: (id, data) => request(`/funds/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  fundLPs: (id) => request(`/funds/${id}/lps`),
   fundAddLP: (id, data) => request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
   fundCapitalCall: (id, amount, note) =>
     request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount, note }) }),
@@ -3156,7 +3155,6 @@ export const api = {
     request(`/funds/distributions/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({}) }),
 
   // ---------- Branded email (Gmail) ----------
-  emailSendDeal: (data) => request('/email/send-deal', { method: 'POST', body: JSON.stringify(data) }),
   emailSendReferralInvites: (contacts, custom_message) =>
     request('/email/send-referral-invites', {
       method: 'POST',
@@ -3458,6 +3456,8 @@ export const api = {
   // content pipeline over `articles` + `admin_publications`, and the
   // platform view over `integrations` + `cron_run_history`.
   hqContent: () => request('/admin/content/summary'),
+  // D487 — push HQ's published games to every branch; reports each branch.
+  hqPublishGames: () => request('/admin/content/games/publish', { method: 'POST' }),
   hqPlatform: () => request('/admin/platform/summary'),
   // 241 — the advisory take rate, in BASIS POINTS. 1500 is 15%. The write
   // refuses a percentage rather than guessing: `15` is ambiguous between
@@ -3870,8 +3870,11 @@ export const api = {
   listInvestorSeats: () => request('/investor-seats/'),
   inviteInvestorSeat: (email) =>
     request('/investor-seats/invite', { method: 'POST', body: JSON.stringify({ email }) }),
-  acceptInvestorSeat: (token) =>
-    request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+  acceptInvestorSeat: (token, extra = {}) =>
+    request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({
+      token,
+      ...(extra.confirm_role_change ? { confirm_role_change: true } : {}),
+    }) }),
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),
@@ -3940,7 +3943,6 @@ export const api = {
     request(`/trust/intro/status?founder=${encodeURIComponent(founder_user_id)}`),
   trustObligationStart: (key) =>
     request(`/trust/obligation/${encodeURIComponent(key)}/start`, { method: 'POST' }),
-  trustSanctions: () => request('/trust/sanctions'),
   trustMySigningUrl: (envelope_uuid) =>
     request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/my_signing_url`),
   // Trust Center v2's per-agreement timeline, fetched when a row is expanded.

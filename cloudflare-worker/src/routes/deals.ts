@@ -951,6 +951,25 @@ async function canReadDeal(sql: any, user: User, dealId: number, projectFounderI
   return false;
 }
 
+/**
+ * D609 — the deal reader rule, for the routes outside this file that hang
+ * data off a deal (reference checks). The same predicate as
+ * `loadDealForRead`, without its response shaping: admins and partners read
+ * any deal, a founder their own project's, an investor only a deal they are
+ * invited to or committed on. False when the deal does not exist.
+ */
+export async function userMayReadDeal(env: Env, user: User, dealId: number): Promise<boolean> {
+  if (!Number.isInteger(dealId) || dealId <= 0) return false;
+  const sql = getSQL(env);
+  try {
+    const rows = await sql`SELECT p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${dealId}`;
+    if (rows.length === 0) return false;
+    return await canReadDeal(sql, user, dealId, (rows[0] as any).project_founder_id);
+  } finally {
+    await sql.end();
+  }
+}
+
 async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);

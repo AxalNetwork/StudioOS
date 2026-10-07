@@ -441,10 +441,10 @@ const GAME_PILL = {
 };
 
 /**
- * One game's line, from what HQ's database holds for it. Where the canvas
- * draws "Live on 4 branches · 812 completions", this draws the completed runs
- * HQ recorded — or says they could not be read — and nothing about branches,
- * which the panel states once below.
+ * One game's line, from what HQ's database holds for it: the completed runs
+ * HQ recorded, or that they could not be read. Its reach on branches is its
+ * own line (`gameReachLine`, D487), so HQ's figures and the branches' never
+ * share a sentence.
  */
 export function gameMeta(g) {
   const parts = [];
@@ -456,7 +456,79 @@ export function gameMeta(g) {
   return parts.join(' · ');
 }
 
-export function AssessmentPanel({ loading, unreadable, assessment }) {
+/**
+ * D487 — where the canvas draws "Live on 4 branches · 812 completions": on how
+ * many branches the game is held as published, of the branches HQ knows, and
+ * the runs those branches recorded. `null` when the summary carries no reach
+ * or no branch is bound (the panel says that once).
+ */
+export function gameReachLine(g, branches) {
+  if (!branches?.recorded || !branches.total) return null;
+  const live = g.live_on === 0 ? `Live on no branch of ${branches.total}` : `Live on ${g.live_on} of ${branches.total} branches`;
+  const runs = g.branch_completions === null || g.branch_completions === undefined
+    ? 'branch runs unreadable'
+    : `${plural(g.branch_completions, 'completion', 'completions')} on branches`;
+  return `${live} · ${runs}`;
+}
+
+/** D487 — what the reach was read from: each branch that did not answer, with its reason. */
+function BranchReach({ branches }) {
+  if (!branches?.recorded) {
+    return <StatedAbsence label="Live on branches" reason={branches?.reason} testid="hq-assessment-branches" />;
+  }
+  const missing = (branches.lines || []).filter((l) => l.status !== 'ok');
+  return (
+    <div className="mt-1.5 text-[11.5px] leading-relaxed text-axal-muted" data-testid="hq-assessment-branches">
+      <p>
+        <span className="font-semibold text-axal-ink dark:text-white">Live on branches</span>
+        {' · '}
+        {branches.total ? `read from ${branches.answered} of ${branches.total} branches.` : branches.reason}
+      </p>
+      {missing.map((l) => (
+        <p key={l.code} data-testid="hq-assessment-branch-missing" data-code={l.code}>
+          {l.code}: <Unrecorded reason={l.reason}>{l.status === 'not_deployed' ? 'Not deployed' : 'Unreadable'}</Unrecorded> — {l.reason}
+        </p>
+      ))}
+      <p className="text-[11px] text-axal-faint">{branches.basis}</p>
+    </div>
+  );
+}
+
+/** D487 — the push, and what it reached: each branch that stored the set, or why not. */
+export function PushGamesControl({ push, onPush }) {
+  const state = push?.state || 'idle';
+  const r = push?.result;
+  return (
+    <div className="mt-2" data-testid="hq-assessment-push">
+      <button
+        type="button"
+        className="rounded-md border border-axal-hairline px-2.5 py-1 text-[11.5px] font-semibold text-axal-ink hover:bg-axal-ground dark:hover:bg-gray-800 disabled:opacity-50 dark:text-white"
+        disabled={state === 'pushing' || !onPush}
+        onClick={onPush}
+        data-testid="button-push-games"
+      >
+        {state === 'pushing' ? 'Pushing…' : 'Push published games to branches'}
+      </button>
+      {state === 'done' && r && (
+        <p className="mt-1 text-[11.5px] text-axal-muted" data-testid="hq-assessment-push-result">
+          {r.total
+            ? `Pushed ${plural(r.game_count, 'published game', 'published games')}: ${r.answered} of ${r.total} branches stored them.`
+            : r.branches_reason}
+          {(r.branches || []).filter((b) => b.status !== 'ok').map((b) => (
+            <span key={b.code} className="block" data-code={b.code}>{b.code}: {b.reason}</span>
+          ))}
+        </p>
+      )}
+      {state === 'failed' && (
+        <p className={`mt-1 text-[11.5px] ${AMBER_INK}`} data-testid="hq-assessment-push-failed">
+          The push could not be sent{push.message ? `: ${push.message}.` : '.'} No branch was changed by this attempt.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function AssessmentPanel({ loading, unreadable, assessment, push, onPushGames }) {
   let body;
   if (loading || unreadable) body = <Pending loading={loading} what="the assessment games" />;
   else if (!assessment?.available) body = <ReadFailure reason={assessment?.reason || 'The assessment games were not in the summary.'} />;
@@ -491,6 +563,11 @@ export function AssessmentPanel({ loading, unreadable, assessment }) {
                   <div className="min-w-0">
                     <div className="truncate text-[12px] font-bold text-axal-ink dark:text-white">{g.title || g.slug}</div>
                     <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{gameMeta(g)}</div>
+                    {gameReachLine(g, assessment.branches) && (
+                      <div className="mt-0.5 font-mono text-[10px] text-axal-muted" data-testid="hq-assessment-reach" data-slug={g.slug}>
+                        {gameReachLine(g, assessment.branches)}
+                      </div>
+                    )}
                   </div>
                   <span className={`${PILL} ${tone}`}>{label}</span>
                 </li>
@@ -509,7 +586,8 @@ export function AssessmentPanel({ loading, unreadable, assessment }) {
           </p>
         )}
         <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{assessment.runs_basis}</p>
-        <StatedAbsence label="Live on branches" reason={assessment.branches?.reason} testid="hq-assessment-branches" />
+        <BranchReach branches={assessment.branches} />
+        <PushGamesControl push={push} onPush={onPushGames} />
       </>
     );
   }
@@ -517,12 +595,13 @@ export function AssessmentPanel({ loading, unreadable, assessment }) {
     <>
       {body}
       {/* The canvas's footer says editing a question "republishes to every
-          branch running that game; the branch is told". Nothing does either,
+          branch running that game; the branch is told". An edit republishes
+          nothing on its own (D487): the push does, and no branch is notified,
           so this says what an edit actually reaches. */}
       <p className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-assessment-edit-reach">
-        Editing a game on the console changes HQ&rsquo;s copy and nothing else: no call sends a game to a branch, so
-        nothing is republished and there is no branch to tell. A branch runs and reads its own cohorts on its
-        Programs page.
+        Editing a game on the console changes HQ&rsquo;s copy only. It reaches the branches at the next push, which
+        sends every published game to every branch and archives on each one any game HQ no longer publishes. Nothing
+        is republished on its own, and no branch is notified.
       </p>
       <Link to="/admin/assessment" className={CONSOLE_LINK} data-testid="hq-content-link-assessment">
         <ConsoleLinkBody
@@ -740,6 +819,7 @@ export default function ContentPage() {
   // has writes behind it, so folding them together would mean a slow escalation
   // board blanked the editorial pipeline too.
   const [lane, setLane] = useState(null);
+  const [push, setPush] = useState({ state: 'idle' });
   const load = useCallback(() => {
     setData(null);
     api.hqContent().then(setData, (e) => { reportError('hq-content', e); setData(UNAVAILABLE); });
@@ -753,6 +833,15 @@ export default function ContentPage() {
   }, []);
   useEffect(() => { load(); loadLane(); }, [load, loadLane]);
 
+  // D487 — push HQ's published games to every branch, then re-read the
+  // summary so each game's reach is what the branches now hold.
+  const pushGames = useCallback(() => {
+    setPush({ state: 'pushing' });
+    api.hqPublishGames().then(
+      (result) => { setPush({ state: 'done', result }); load(); },
+      (e) => { reportError('hq-content-push-games', e); setPush({ state: 'failed', message: e?.message || '' }); },
+    );
+  }, [load]);
   const loading = data === null;
   const unreadable = data === UNAVAILABLE;
   const ready = data && data !== UNAVAILABLE;
@@ -1027,7 +1116,7 @@ export default function ContentPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <Zone title="Assessment Studio" sub="games, chapters, archetypes · authored on HQ only" testid="hq-content-assessment">
-              <AssessmentPanel loading={loading} unreadable={unreadable} assessment={assessment} />
+              <AssessmentPanel loading={loading} unreadable={unreadable} assessment={assessment} push={push} onPushGames={pushGames} />
             </Zone>
             <Zone title="Personas taxonomy" sub="the set is code · a retag is Admin's" testid="hq-content-personas">
               <PersonasPanel loading={loading} unreadable={unreadable} personas={personas} />

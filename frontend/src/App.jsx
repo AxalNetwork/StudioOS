@@ -99,6 +99,7 @@ const CapitalWorkspacePage = lazy(() => import('./pages/CapitalWorkspacePage'));
 const LegalEnginePage = lazy(() => import('./pages/LegalEnginePage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const AcceptCompanyInvitePage = lazy(() => import('./pages/AcceptCompanyInvitePage'));
+const AcceptInvestorSeatPage = lazy(() => import('./pages/AcceptInvestorSeatPage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
@@ -169,6 +170,7 @@ const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage')
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
 const SharedCapTablePage = lazy(() => import('./pages/SharedCapTablePage'));
+const LabReportSharePage = lazy(() => import('./pages/LabReportSharePage'));
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
@@ -2374,6 +2376,8 @@ function AppInner() {
           account yet, and the page bounces them to sign-in with a ?next= that
           returns here. Guarding it would send them somewhere with no way back. */}
       <Route path="/company/invitations/accept" element={<AcceptCompanyInvitePage />} />
+      {/* D611 — the colleague's accept link. Unguarded: they may not be signed in yet. */}
+      <Route path="/investor-seats/accept" element={<AcceptInvestorSeatPage />} />
       {/* Task #9 (X-2) — Public token-gated partner onboarding wizard.
           Mounted at the path embedded in admin-emailed magic links AND a
           query-string variant for fallback share-by-link channels. */}
@@ -2554,6 +2558,8 @@ function AppInner() {
       {/* Build queue #120 — public, audience-scoped cap-table link. No auth:
           the payload is redacted server-side for the link's audience. */}
       <Route path="/share/captable/:token" element={<SharedCapTablePage />} />
+      {/* D588 — signed-in read. The Worker checks the named account. */}
+      <Route path="/share/lab-report/:token" element={<RequireAuth {...authProps}><LabReportSharePage /></RequireAuth>} />
       <Route path="/share/deck/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #2 — public, HMAC-token-gated print target consumed only by
           the Cloudflare Browser Rendering session that drives server-side

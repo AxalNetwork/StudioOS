@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 137 canonical canvases at `design/canvases/`, listed
-179 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 138 canonical canvases at `design/canvases/`, listed
+180 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -211,7 +211,7 @@ it, where in their nav, and how do they get there.*
 | PartnerRail | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
 | System Sheet | — | — (not routed) | Reference (no surface) | Not reachable yet | NEW | Low |
 
-## Shared (multi-workspace) — 19 canvases
+## Shared (multi-workspace) — 20 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -230,6 +230,7 @@ it, where in their nav, and how do they get there.*
 | Perks & Products | `/perks` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Refer & Earn | `/referrals` · `/refer` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Send for Signature | `/esign/:token` | — (no nav entry) | Full page + 5-step wizard | Deep link / in-page action | NEW | Medium |
+| Studio · Archetype card | `/studio/archetype` · `/studio` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Studio · Archetype preview | `/studio` · `/studio/archetype` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Studio · Persona hubs | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Trust Center | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
@@ -261,7 +262,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 100 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 43 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 44 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 36 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

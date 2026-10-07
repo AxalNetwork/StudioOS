@@ -39,6 +39,8 @@ import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
 import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../services/approvalAge';
 import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supportQueues';
+import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
+import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -1174,6 +1176,33 @@ export async function branchApprovalAges(
     window_days: DECISION_WINDOW_DAYS,
     referrals: await referralAges(env, nowMs),
   };
+}
+
+/**
+ * D486 — this branch's activation funnel by creation week, for HQ's H15.
+ * Counts only (`services/activationFunnel.ts` says what travels). A read, so
+ * no secret, on `rpc/index.ts`'s rule.
+ */
+export async function branchActivation(env: Env): Promise<BranchAnswer<{ activation: ActivationRead }>> {
+  const branch = requireBranch(env);
+  const nowMs = Date.now();
+  return { branch, as_of: new Date(nowMs).toISOString(), activation: await activationFunnel(env, nowMs) };
+}
+
+/**
+ * D487 — HQ's published games, pushed whole; `services/gameLibrary.ts` says
+ * what is stored and what is withdrawn. An HQ-authored push, so no secret, on
+ * `rpc/index.ts`'s rule for `publishTemplate`.
+ */
+export async function applyGames(env: Env, p: GameSet) {
+  if (!branchOf(env)) throw new Error('publishGames is only live on a branch');
+  return applyGameSet(env, p);
+}
+
+/** D487 — which games this branch holds and each one's completed runs, for H18. A read, no secret. */
+export async function branchGameHoldings(env: Env): Promise<BranchAnswer<{ holdings: GameHoldings }>> {
+  const branch = requireBranch(env);
+  return { branch, as_of: nowIso(), holdings: await readGameHoldings(env) };
 }
 
 /**

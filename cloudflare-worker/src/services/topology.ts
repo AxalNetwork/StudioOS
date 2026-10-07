@@ -143,10 +143,16 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('approvalAges', true),
       // D485 — HQ · Support fans out to it (admin_hq_support.ts). A read, no secret.
       m('openTickets', true),
+      // D486 — H15's activation funnel fans out to it (admin_hq.ts). A read of counts, no secret.
+      m('activation', true),
+      // D487 — H18's games card fans out to it (admin_content.ts). A read, no secret.
+      m('gameHoldings', true),
       m('applyLicence', true),
       m('applyPromoCeiling', true),
       m('applyEscalationAnswer', true),
       m('publishTemplate', true),
+      // D487 — HQ · Content's games push (admin_content.ts). HQ-authored, no secret.
+      m('publishGames', true),
       m('applyBenchmarks', true),
       m('openSupportSession', true, true),
       m('moveAccountOut', true, true),

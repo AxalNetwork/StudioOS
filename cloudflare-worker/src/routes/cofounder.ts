@@ -10,8 +10,18 @@
  *   3. Express interest creates a directed signal. If the inverse
  *      already exists, a CofounderConnection + two NDA Documents are
  *      minted in `pending_nda` status.
- *   4. After both sides sign, status flips to `active` and identity
- *      (name + email) is exposed via the connections endpoint.
+ *   4. After both sides sign, status flips to `active`.
+ *
+ * D610 (#1310) — WHAT THE CONNECTION READS SHOW OF THE OTHER PERSON
+ * (`serializeConnectionFor`, used by every connection read and write reply):
+ *   - their NAME at every status, `pending_nda` included: the NDA each side
+ *     signs names the counterparty (`renderNda` fills `{counterparty_name}`),
+ *     so the name is part of the document, not something it protects;
+ *   - their EMAIL only once BOTH signatures exist (`nda_signed_at_a` and
+ *     `nda_signed_at_b`), whatever the status. Until then it is null with
+ *     `email_withheld: 'until_both_sign'`, and a connection closed before both
+ *     signed keeps it hidden;
+ *   - an admin's read is unchanged: the email at every status.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -713,7 +723,13 @@ async function loadConnectionOr403(env: Env, uid: string, user: { id: number; ro
   return { ok: true, conn };
 }
 
-async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: number }): Promise<any> {
+/** D610 — the counterparty's email is shown only once both have signed the NDA (or to an admin). */
+export function emailVisible(c: Pick<ConnectionRow, 'nda_signed_at_a' | 'nda_signed_at_b'>, viewer: { role?: string | null }): boolean {
+  if (String(viewer.role ?? '').toLowerCase() === 'admin') return true;
+  return !!c.nda_signed_at_a && !!c.nda_signed_at_b;
+}
+
+async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: number; role?: string | null }): Promise<any> {
   const isA = c.user_a_id === viewer.id;
   const otherId = isA ? c.user_b_id : c.user_a_id;
   const other = await loadUser(env, otherId);
@@ -731,7 +747,9 @@ async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: 
     counterparty: {
       user_id: otherId,
       name: other?.name || null,
-      email: other?.email || null,
+      ...(emailVisible(c, viewer)
+        ? { email: other?.email || null }
+        : { email: null, email_withheld: 'until_both_sign' as const }),
       profile: otherProfile ? serializeProfilePublic(otherProfile, other?.uid || null) : null,
     },
   };

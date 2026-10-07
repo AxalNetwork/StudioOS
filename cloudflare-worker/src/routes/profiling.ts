@@ -472,21 +472,26 @@ ${transcript}`;
 // ---------- Admin endpoints ----------
 
 profiling.get('/admin/list', async (c) => {
-  await requireAdmin(c);
+  const adminUser = await requireAdmin(c);
   await ensureProfileTable(c.env);
   const sql = getSQL(c.env);
+  // The table draws these columns. EIN, chat history and extracted data stay
+  // on the profile read, which is the logged one.
   const rows = await sql`
-    SELECT p.*, u.name as user_name, u.role as user_role
+    SELECT p.email, p.persona, p.legal_entity_name, p.founder_track, p.company_established,
+           p.partnership_goal, p.agreement_type, p.admin_status,
+           u.name as user_name
     FROM partner_profiles p
     LEFT JOIN users u ON u.email = p.email
     ORDER BY p.created_at DESC
   `;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('partner_profile_list_access', ${`Partner profile list read count=${rows.length}`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   await sql.end();
   return c.json(rows);
 });
 
 profiling.get('/admin/:email', async (c) => {
-  await requireAdmin(c);
+  const adminUser = await requireAdmin(c);
   await ensureProfileTable(c.env);
   const email = decodeURIComponent(c.req.param('email'));
   const sql = getSQL(c.env);
@@ -496,8 +501,16 @@ profiling.get('/admin/:email', async (c) => {
     LEFT JOIN users u ON u.email = p.email
     WHERE p.email = ${email}
   `;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Profile not found' }, 404); }
+  const member = await sql`SELECT id FROM users WHERE email = ${email}`;
+  // The profile's own user_id is the member it was written for. The email
+  // lookup is only a fallback: an address can move to a later account.
+  const memberId = rows[0].user_id ?? member[0]?.id ?? null;
+  const details = memberId
+    ? `Admin read partner profile for user_id=${memberId}`
+    : 'Admin read partner profile; no user account';
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('partner_profile_access', ${details}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   await sql.end();
-  if (rows.length === 0) return c.json({ error: 'Profile not found' }, 404);
   return c.json(rows[0]);
 });
 

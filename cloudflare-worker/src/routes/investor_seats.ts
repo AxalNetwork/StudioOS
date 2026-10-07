@@ -29,15 +29,77 @@ seats.use('*', async (c, next) => {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-seats.get('/', async (c) => {
+function publicBase(env: Env): string {
+  return String((env as any).PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+}
+
+/** The accept URL. The token stays in the query; it is never a response field. */
+export function inviteLink(env: Env, token: string): string {
+  return `${publicBase(env)}/investor-seats/accept?token=${encodeURIComponent(token)}`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * The company-invitation mail path: Gmail when it is configured, otherwise
+ * false. A missing credential is the ordinary case, not an error the inviter
+ * should read as "sent".
+ */
+async function emailSeatInvite(env: Env, to: string, inviterName: string, link: string): Promise<boolean> {
+  if (!(env as any).GMAIL_CLIENT_ID || !(env as any).GMAIL_CLIENT_SECRET || !(env as any).GMAIL_REFRESH_TOKEN) {
+    return false;
+  }
+  try {
+    const { sendRawEmail } = await import('../services/email/gmail');
+    const who = String(inviterName || 'An investor').replace(/[\r\n]/g, ' ').slice(0, 80);
+    const safeWho = escapeHtml(who);
+    const safeLink = escapeHtml(link);
+    return await sendRawEmail(env, {
+      to,
+      from: 'Axal VC <noreply@axal.vc>',
+      replyTo: 'noreply@axal.vc',
+      subject: `${who} invited you to a colleague seat`,
+      text: `${who} invited you to share their Institutional investor account on Axal VC.\n\nAccept: ${link}\n\nThe link works only for this email address.\n`,
+      html: `<p>${safeWho} invited you to share their Institutional investor account on Axal VC.</p><p><a href="${safeLink}">Accept the seat</a></p>`,
+    });
+  } catch (e) {
+    console.warn('[investor-seats] invite email failed', e);
+    return false;
+  }
+}
+
+/** Pending seats carry the link. Accepted and revoked seats do not, and the token never leaves the row. */
+function seatForInviter(env: Env, row: Record<string, unknown>) {
+  const token = row.invite_token ? String(row.invite_token) : '';
+  const pending = !row.accepted_at && !row.revoked_at && token;
+  return {
+    id: row.id,
+    seat_email: row.seat_email,
+    seat_user_id: row.seat_user_id,
+    invited_at: row.invited_at,
+    accepted_at: row.accepted_at,
+    revoked_at: row.revoked_at,
+    ...(pending ? { invite_link: inviteLink(env, token) } : {}),
+  };
+}
+
+async function listOwned(c: any) {
   const user = (await requireAuth(c)) as InvestorUser;
   const rows = await c.env.DB.prepare(
-    `SELECT id, seat_email, seat_user_id, invited_at, accepted_at, revoked_at
+    `SELECT id, seat_email, seat_user_id, invited_at, accepted_at, revoked_at, invite_token
      FROM investor_seats WHERE primary_user_id = ?
      ORDER BY invited_at DESC`
   ).bind(user.id).all();
-  return c.json({ seats: rows.results || [], cap: INVESTOR_QUOTAS.institutional.seats });
-});
+  return c.json({
+    seats: (rows.results || []).map((row: Record<string, unknown>) => seatForInviter(c.env, row)),
+    cap: INVESTOR_QUOTAS.institutional.seats,
+  });
+}
+// The client calls `/investor-seats/`. Hono does not treat that as `/`.
+seats.get('/', listOwned);
+seats.get('', listOwned);
 
 seats.post('/invite', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
@@ -96,12 +158,14 @@ seats.post('/invite', async (c) => {
     `UPDATE users SET investor_seat_count = investor_seat_count + 1 WHERE id = ?`
   ).bind(user.id).run();
 
-  return c.json({ ok: true, email, invite_token: token });
+  const invite_link = inviteLink(c.env, token);
+  const email_sent = await emailSeatInvite(c.env, email, user.name || 'An investor', invite_link);
+  return c.json({ ok: true, email, email_sent, invite_link });
 });
 
 seats.post('/accept', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  const body = await c.req.json().catch(() => ({} as { token?: string }));
+  const body = await c.req.json().catch(() => ({} as { token?: string; confirm_role_change?: boolean }));
   const token = String(body.token || '').trim();
   if (!token) return c.json({ error: 'token_required' }, 400);
 
@@ -135,6 +199,21 @@ seats.post('/accept', async (c) => {
       error: 'primary_not_institutional',
       message: 'The inviting account is no longer on an active Institutional plan.',
     }, 410);
+  }
+  // An admin keeps the admin role. Accepting must not turn them into an investor.
+  if (String(user.role) === 'admin') {
+    return c.json({
+      error: 'admin_cannot_take_seat',
+      message: 'An admin account cannot take a colleague seat.',
+    }, 409);
+  }
+  // Anyone who is not already an investor changes role. That is said, then confirmed.
+  if (String(user.role) !== 'investor' && body.confirm_role_change !== true) {
+    return c.json({
+      error: 'role_change_needs_confirmation',
+      role: user.role,
+      message: `Accepting this seat changes your ${user.role} account into an investor account.`,
+    }, 409);
   }
   const inheritedTier = primaryTier;
   const inheritedStatus = primaryStatus;

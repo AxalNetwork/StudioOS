@@ -570,6 +570,14 @@ test('each IN-list has exactly as many placeholders as the array that fills it',
     return (m[1].match(/\?/g) || []).length;
   };
   assert.equal(marks('FEED_ACTIVITY_ACTOR_SIDE_SQL'), arrayLen('ACTOR_SIDE_ACTIONS'));
+  // D625 — the three identity reads join the actor-side feed, and the length is pinned.
+  assert.equal(arrayLen('ACTOR_SIDE_ACTIONS'), 13);
+  const actionsAt = src.indexOf('const ACTOR_SIDE_ACTIONS = [');
+  const actionsEnd = src.indexOf('];', actionsAt);
+  const actions = src.slice(actionsAt, actionsEnd);
+  for (const name of ['kyc_record_access', 'kyc_queue_access', 'partner_profile_access']) {
+    assert.equal(actions.includes(`'${name}'`), true, name);
+  }
   assert.equal(marks('FEED_ACTIVITY_SUSPENSIONS_SQL'), arrayLen('SUSPENSION_ACTIVITY_ACTIONS'));
   assert.equal(marks('FEED_LICENCE_SUSPENSIONS_SQL'), arrayLen('SUSPENSION_LICENCE_EVENTS'));
   // And the arrays are not empty, which would make all three equal at zero

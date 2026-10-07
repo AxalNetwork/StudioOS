@@ -28,6 +28,7 @@ import DeveloperSection from './account/AccountDeveloper';
 import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
+import { ColleagueSeatLink, seatInviteOutcome } from './investorSeatCopy';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
@@ -5259,11 +5260,12 @@ function InvestorROITable({ currentTier }) {
 
 // Seat management is Institutional-only. The endpoints already 403 lower
 // tiers; we just hide the UI to avoid confusion.
-function InvestorSeatsCard({ flash, cap, onChange }) {
-  const [seats, setSeats] = useState([]);
-  const [loading, setLoading] = useState(true);
+export function InvestorSeatsCard({ flash, cap, onChange, initialSeats = null }) {
+  const [seats, setSeats] = useState(initialSeats || []);
+  const [loading, setLoading] = useState(initialSeats == null);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
+  const [copyLink, setCopyLink] = useState('');
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -5273,7 +5275,7 @@ function InvestorSeatsCard({ flash, cap, onChange }) {
       .finally(() => setLoading(false));
   }, [flash]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (initialSeats == null) load(); }, [load, initialSeats]);
 
   const invite = async (e) => {
     e?.preventDefault();
@@ -5281,8 +5283,9 @@ function InvestorSeatsCard({ flash, cap, onChange }) {
     if (!v) return;
     setBusy(true);
     try {
-      await api.inviteInvestorSeat(v);
-      flash?.('Invite sent.');
+      const outcome = seatInviteOutcome(await api.inviteInvestorSeat(v), v);
+      setCopyLink(outcome.link);
+      flash?.(outcome.flash);
       setEmail('');
       load();
       onChange?.();
@@ -5323,6 +5326,11 @@ function InvestorSeatsCard({ flash, cap, onChange }) {
           {busy ? 'Sending…' : 'Send invite'}
         </button>
       </form>
+      {copyLink ? (
+        <p className="text-xs text-gray-600 dark:text-gray-300 mb-3 break-all" data-testid="seat-invite-link">
+          {copyLink}
+        </p>
+      ) : null}
       {full && (
         <div className="text-xs text-amber-700 dark:text-amber-300 mb-3">All {cap} seats used. Revoke a seat to invite someone new.</div>
       )}
@@ -5346,6 +5354,7 @@ function InvestorSeatsCard({ flash, cap, onChange }) {
                     {s.accepted_at ? ` · joined ${new Date(s.accepted_at).toLocaleDateString()}` : ''}
                     {!s.accepted_at && s.invited_at ? ` · invited ${new Date(s.invited_at).toLocaleDateString()}` : ''}
                   </div>
+                  <ColleagueSeatLink seat={s} />
                 </div>
                 <button type="button" onClick={() => revoke(s.id)}
                   className="text-xs text-red-600 dark:text-red-400 hover:underline">Revoke</button>

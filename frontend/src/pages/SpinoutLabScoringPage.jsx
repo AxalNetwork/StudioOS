@@ -15,9 +15,9 @@
 //     8 fabricated axes. Maxima sum to 100, so a dimension's max IS its
 //     weight%.
 //   - Benchmarks and the radar's dashed overlay use the engine's real tier
-//     thresholds (Tier 2 ≥ 70, Tier 1 ≥ 85), labelled as such. The design's
-//     cohort median and percentile sentence have no data source and are not
-//     reproduced.
+//     thresholds (Tier 2 ≥ 70, Tier 1 ≥ 85). The cohort median and percentile
+//     come from GET /scoring/cohort-benchmark (D589) and are omitted, with
+//     the server's reason, when fewer than five ventures have an official run.
 //   - "Run integrity" is run provenance (is_sandbox / integrity_valid /
 //     anomaly_flags / admin_review_status / scored_by) — all real snapshot
 //     columns. It is NOT called "evidence confidence": the HMAC proves the
@@ -27,9 +27,9 @@
 //   - The trajectory ETA and dashed projection derive from OFFICIAL runs only
 //     (never practice/sandbox runs) and only render when every guard passes,
 //     including a minimum 3-day span before any per-week pace is claimed.
-//   - Quick actions: Copy link, Investor view and Export report are real;
-//     Share stays disabled — no backend share token exists yet, and the
-//     reason is rendered visibly, not only in a title tooltip.
+//   - Quick actions: Copy link, Investor view, Export report and Share are
+//     real. Share (D588) mints a link for one named account; without a
+//     project or a scoring run the reason is in the button label.
 //   - Founders may run PRACTICE (sandbox) scores on their own project; the
 //     API permits this explicitly and sandbox runs are never investor-visible.
 //
@@ -66,6 +66,8 @@ import DimensionDrawer from '../components/scoring/DimensionDrawer';
 import ExportReportModal from '../components/scoring/ExportReportModal';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import LabReportShareSheet from '../components/spinout/LabReportShareSheet';
+import { Unreadable } from '../ui/Honesty';
 
 // Worker-only endpoints: ONLY a 404 means "not in this environment" (the dev
 // FastAPI lacks /api/radar and /api/assessment). Same convention as
@@ -137,6 +139,7 @@ export default function SpinoutLabScoringPage() {
   const [state, setState] = useState(null);
   const [project, setProject] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
+  const [cohort, setCohort] = useState(null);
   const [scoresError, setScoresError] = useState(false);
   const [user, setUser] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -146,6 +149,7 @@ export default function SpinoutLabScoringPage() {
   const [copied, setCopied] = useState(''); // '' | 'ok' | 'fail'
   const [investorView, setInvestorView] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [exportError, setExportError] = useState('');
   const [drawerKey, setDrawerKey] = useState(null);
@@ -172,10 +176,14 @@ export default function SpinoutLabScoringPage() {
         if (proj && (st?.unlocked_features || []).includes('scoring')) {
           // Honest states: a failed fetch is "couldn't load", never a silent
           // empty history that pretends no run happened.
-          const scores = await api.getScores(proj.id, { includeSandbox: true }).catch(() => null);
+          const [scores, bench] = await Promise.all([
+            api.getScores(proj.id, { includeSandbox: true }).catch(() => null),
+            api.getCohortBenchmark(proj.id).catch(wkOnly),
+          ]);
           if (dead) return;
           if (Array.isArray(scores)) setSnapshots(scores);
           else setScoresError(true);
+          setCohort(bench || { failed: true });
         }
         setStatus('ready');
       } catch (e) {
@@ -212,8 +220,11 @@ export default function SpinoutLabScoringPage() {
   // bindings declared later (a `const isAdmin` further down caused a TDZ crash).
   const unlocked = user?.role === 'admin' || (state?.unlocked_features || []).includes('scoring');
   const vm = useMemo(
-    () => buildScoringEngineViewModel({ snapshots, state, project, viewerRole: user?.role }),
-    [snapshots, state, project, user],
+    () => buildScoringEngineViewModel({
+      snapshots, state, project, viewerRole: user?.role,
+      cohort: cohort && !cohort.failed && !cohort.unavailable ? cohort : null,
+    }),
+    [snapshots, state, project, user, cohort],
   );
   const displayScore = useCountUp(vm.composite, 850);
   const drawerDim = drawerKey ? vm.dimensions.find((d) => d.key === drawerKey) || null : null;
@@ -402,14 +413,11 @@ export default function SpinoutLabScoringPage() {
             </p>
           )}
 
-          {/* Quick actions. Share needs a backend share token, so it stays
-              honestly disabled with the reason; the other three are real. */}
           <div className="flex flex-wrap items-center gap-1" data-testid="scoring-quick-actions">
-            {/* The reason is in the visible label, not only in `title` — a
-                keyboard or touch user never sees a tooltip. */}
-            <button type="button" disabled title="Sharing needs a backend share link — not available yet" data-testid="button-qa-share"
+            <button type="button" disabled={!project || !vm.hasData} onClick={() => setShareOpen(true)} data-testid="button-qa-share"
               className={labBtn('ghost')}>
-              <Share2 size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" /> Share — needs a share link
+              <Share2 size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" />
+              {!project ? 'Share — no project' : !vm.hasData ? 'Share — run a scoring run first' : 'Share'}
             </button>
             <button type="button" onClick={() => { setExportError(''); setExportOpen(true); }} disabled={!vm.hasData}
               title={vm.hasData ? undefined : 'Run a scoring run first'} data-testid="button-qa-export"
@@ -609,7 +617,13 @@ export default function SpinoutLabScoringPage() {
               <div className={CARD} data-testid="card-benchmark">
                 <div className={`${LBL} mb-1`}>Benchmark comparison</div>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">{vm.benchmarkCaption}</p>
-                <BenchmarkBars benchmarks={vm.benchmarks} markerPct={vm.markerPct} gapSentence={vm.gapSentence} />
+                <BenchmarkBars benchmarks={vm.benchmarks} markerPct={vm.markerPct} gapSentence={vm.gapSentence} cohortNote={vm.cohortSentence} />
+                {cohort?.failed && (
+                  <Unreadable what="The cohort benchmark" claim="This is not a claim that the cohort has no scores." />
+                )}
+                {cohort?.unavailable && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2" data-testid="text-cohort-benchmark-unavailable">The cohort benchmark is not in this environment.</p>
+                )}
               </div>
 
               <div className={CARD} data-testid="card-trajectory">
@@ -707,6 +721,10 @@ export default function SpinoutLabScoringPage() {
         skillState={skillState}
         archetypeState={archetypeState}
       />
+
+      {shareOpen && project && (
+        <LabReportShareSheet projectId={project.id} onClose={() => setShareOpen(false)} />
+      )}
 
       <ExportReportModal
         open={exportOpen}
