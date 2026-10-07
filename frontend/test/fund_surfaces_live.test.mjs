@@ -110,7 +110,7 @@ test('every refusal carries the reason the server gave', () => {
   // "Not recorded" with no explanation sends the GP to support. The server
   // ships an `unavailable` map; the pages must actually thread it through.
   for (const p of FUND_PAGES) {
-    assert.match(scan(read(p)), /reason=\{unavailable\./, `${p} must pass the server's reason`);
+    assert.match(scan(read(p)), /reason=\{unavailable(?:\.|\[)/, `${p} must pass the server's reason`);
   }
 });
 
