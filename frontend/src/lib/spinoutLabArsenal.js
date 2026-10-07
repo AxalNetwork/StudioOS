@@ -32,6 +32,7 @@
 
 import { SLIDE_META } from './pitchDeckViewModel';
 import { numberWordCap } from './numberWords';
+import { TEMPLATES } from './brand/templates.js';
 
 /** The five groups, in the order the arsenal draws them. */
 export const TOOL_GROUPS = ['Company', 'Evidence', 'Build', 'Formation', 'Capital'];
@@ -67,7 +68,7 @@ export const LAB_TOOLS = [
   { id: 'revenue', group: 'Evidence', name: 'Revenue proof', blurb: 'Recorded by source, not asserted.', route: '/spinout-lab/revenue' },
 
   { id: 'roadmap', group: 'Build', name: 'Roadmap and OKRs', blurb: 'MVP scope, value-rated.', route: '/spinout-lab/roadmap' },
-  { id: 'brand', group: 'Build', name: 'Brand and landing pages', blurb: 'Sixteen templates, with lead routing.', route: '/spinout-lab/brand' },
+  { id: 'brand', group: 'Build', name: 'Brand and landing pages', blurb: `${numberWordCap(TEMPLATES.length)} templates, with lead routing.`, route: '/spinout-lab/brand' },
   { id: 'deck', group: 'Build', name: 'Pitch deck', blurb: `${numberWordCap(SLIDE_META.length)} slides from your own data.`, route: '/spinout-lab/pitch-deck' },
 
   { id: 'inc', group: 'Formation', name: 'Incorporation', blurb: 'Entity choice and Delaware formation documents.', route: '/spinout-lab/incorporate' },

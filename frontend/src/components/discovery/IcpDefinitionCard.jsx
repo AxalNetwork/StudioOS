@@ -7,13 +7,16 @@
 // "Confirm ICP" is refused by the Worker unless every required answer is on
 // file — the button's own gate is a convenience, not the rule.
 //
-// Not built here, and said so on screen: "Generate landing page" from the ICP.
-// The landing-template content sanitizer (landingTemplates.ts) accepts no ICP
-// input, so a generator would have nothing to write into.
+// D591 — "Generate landing page →" turns a CONFIRMED ICP into a draft
+// customer page: the recommended template, prefilled field by field through
+// `lib/brand/icpPrefill.js`. It is offered only for a confirmed ICP and only to
+// someone who may edit it; the page is created unpublished, and publishing
+// stays the founder's own action in Brand & Pages.
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Loader2, X } from 'lucide-react';
 import { api } from '../../lib/api';
-import { Unrecorded } from '../../ui';
+import { icpLandingDraft, recommendCustomerTemplate } from '../../lib/brand/icpPrefill';
 import { ICP_STEPS, icpPayload, icpProgress, icpSummary, readIcpDefinition } from '../../lib/icpDefinition';
 
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -39,6 +42,21 @@ export default function IcpDefinitionCard({ project, canEdit, onSaved }) {
   const [fields, setFields] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [gen, setGen] = useState({ state: 'idle', message: '' });
+  // Null unless the ICP is confirmed: the generator is offered for nothing else.
+  const recommendation = recommendCustomerTemplate(project);
+
+  const generate = async () => {
+    const body = icpLandingDraft(project);
+    if (!body) return;
+    setGen({ state: 'busy', message: '' });
+    try {
+      await api.brandCreatePage(project.id, body);
+      setGen({ state: 'done', message: `Draft "${body.name}" created. Nothing is published: review it in Brand & Pages, then publish it yourself.` });
+    } catch (e) {
+      setGen({ state: 'error', message: e?.message || 'The draft page was not created.' });
+    }
+  };
 
   useEffect(() => {
     if (!open) {
@@ -140,9 +158,31 @@ export default function IcpDefinitionCard({ project, canEdit, onSaved }) {
               v{def.version}{shortDate(def.confirmedAt) ? ` · ${shortDate(def.confirmedAt)}` : ''}
             </span>
           </div>
-          <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2" data-testid="icp-landing-unrecorded">
-            Generate a landing page from this ICP: <Unrecorded reason="The landing templates accept no ICP input yet, so there is nothing for a generator to write into. Build the page in Brand & Pages." />
-          </p>
+          {canEdit && recommendation ? (
+            <div className="mt-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/60 dark:bg-violet-950/30 p-2.5" data-testid="icp-landing-generator">
+              <p className="text-[11px] text-gray-600 dark:text-gray-300" data-testid="icp-landing-recommendation">
+                <span className="font-bold text-violet-700 dark:text-violet-300">{recommendation.label}</span> · {recommendation.reason}
+              </p>
+              <button
+                type="button"
+                onClick={generate}
+                disabled={gen.state === 'busy'}
+                className="mt-2 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-[12px] font-bold"
+                data-testid="button-icp-generate-landing"
+              >
+                {gen.state === 'busy' && <Loader2 size={12} className="animate-spin" />}
+                Generate landing page →
+              </button>
+              {gen.state === 'done' && (
+                <p className="mt-1.5 text-[11px] text-emerald-700 dark:text-emerald-300" role="status" data-testid="icp-landing-created">
+                  {gen.message} <Link to="/spinout-lab/brand" className="font-bold underline">Open Brand &amp; Pages</Link>
+                </p>
+              )}
+              {gen.state === 'error' && (
+                <p className="mt-1.5 text-[11px] text-rose-600 dark:text-rose-400" role="alert" data-testid="icp-landing-error">{gen.message}</p>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
 
