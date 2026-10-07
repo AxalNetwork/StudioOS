@@ -23,7 +23,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, isSuperAdmin } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { ensureNewsSchema } from '../services/newsSchema';
 import { bustArticleEdgeCache, renderMarkdown, snapshotRevision } from '../services/newsRender';
@@ -404,15 +404,52 @@ adminArticles.put('/comments/:cid', async (c) => {
   const admin = await requireAdmin(c);
   await ensureNewsSchema(c.env);
   const cid = Number(c.req.param('cid'));
+  if (!Number.isFinite(cid) || cid <= 0) return c.json({ error: 'comment_not_found' }, 404);
   const body: any = await c.req.json().catch(() => ({}));
-  const patch: Record<string, any> = {};
-  if (body.resolved === true) patch.resolved_at = new Date().toISOString();
-  if (body.resolved === false) patch.resolved_at = null;
-  if (typeof body.body === 'string') patch.body = body.body.slice(0, 5000);
-  if (Object.keys(patch).length === 0) return c.json({ error: 'no_changes' }, 400);
-  const sets = Object.keys(patch).map((k) => `${k} = ?`).join(', ');
-  await c.env.DB.prepare(`UPDATE article_review_comments SET ${sets} WHERE id = ?`).bind(...Object.values(patch), cid).run();
-  void admin;
+  const comment = await c.env.DB.prepare(
+    'SELECT id, article_id, author_id, body, resolved_at FROM article_review_comments WHERE id = ?',
+  ).bind(cid).first<{ id: number; article_id: number; author_id: number; body: string; resolved_at: string | null }>();
+  if (!comment) return c.json({ error: 'comment_not_found' }, 404);
+
+  // Column names are literals. A request field never becomes SQL.
+  let nextBody: string | undefined;
+  let nextResolved: string | null | undefined;
+  if (typeof body.body === 'string') {
+    const text = body.body.slice(0, 5000).trim();
+    if (text !== comment.body) {
+      if (!text) return c.json({ error: 'empty' }, 400);
+      if (Number(comment.author_id) !== Number(admin.id) && !isSuperAdmin(admin)) {
+        return c.json({ error: 'not_your_comment' }, 403);
+      }
+      nextBody = text;
+    }
+  }
+  if (body.resolved === true) nextResolved = new Date().toISOString();
+  if (body.resolved === false) nextResolved = null;
+  if (nextBody === undefined && nextResolved === undefined) return c.json({ error: 'no_changes' }, 400);
+
+  if (nextBody !== undefined && nextResolved !== undefined) {
+    await c.env.DB.prepare(
+      'UPDATE article_review_comments SET body = ?, resolved_at = ? WHERE id = ?',
+    ).bind(nextBody, nextResolved, cid).run();
+  } else if (nextBody !== undefined) {
+    await c.env.DB.prepare(
+      'UPDATE article_review_comments SET body = ? WHERE id = ?',
+    ).bind(nextBody, cid).run();
+  } else {
+    await c.env.DB.prepare(
+      'UPDATE article_review_comments SET resolved_at = ? WHERE id = ?',
+    ).bind(nextResolved, cid).run();
+  }
+
+  // Only a Super Admin rewriting someone else's text is an audit event.
+  // The text itself stays out of the row.
+  if (nextBody !== undefined && Number(comment.author_id) !== Number(admin.id)) {
+    await logAdminAction(c.env, admin.id, admin.email || '', 'article_comment_edited', {
+      article_id: comment.article_id,
+      comment_id: comment.id,
+    });
+  }
   return c.json({ ok: true });
 });
 
