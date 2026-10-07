@@ -1393,13 +1393,15 @@ export default function AdminPage({ onImpersonate, section = null }) {
           // only refuse, it is handed no handler and draws no button.
           onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); setOpenUser(null); } : null}
           onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); setOpenUser(null); } : null}
+          // D633 (#1391, Q2) — the member's credits are the Super Admin's.
+          showCredits={isSuperAdminUser(viewer)}
         />
       )}
     </div>
   );
 }
 
-export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive }) {
+export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive, showCredits = false }) {
   useEscapeClose(onClose);
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('profile');
@@ -1939,6 +1941,12 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                 className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
                 <LogIn size={12} /> View As
               </button>
+            )}
+            {showCredits && (
+              <Link to={`/admin/accounts/credits/${u.id}`} data-testid="user-drawer-credits"
+                className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900 rounded-lg font-medium">
+                Credits
+              </Link>
             )}
             {onToggleActive && (
               <button onClick={onToggleActive}
