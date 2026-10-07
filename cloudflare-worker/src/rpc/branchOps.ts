@@ -39,6 +39,7 @@ import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
 import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../services/approvalAge';
 import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supportQueues';
+import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
@@ -1175,6 +1176,17 @@ export async function branchApprovalAges(
     window_days: DECISION_WINDOW_DAYS,
     referrals: await referralAges(env, nowMs),
   };
+}
+
+/**
+ * D486 — this branch's activation funnel by creation week, for HQ's H15.
+ * Counts only (`services/activationFunnel.ts` says what travels). A read, so
+ * no secret, on `rpc/index.ts`'s rule.
+ */
+export async function branchActivation(env: Env): Promise<BranchAnswer<{ activation: ActivationRead }>> {
+  const branch = requireBranch(env);
+  const nowMs = Date.now();
+  return { branch, as_of: new Date(nowMs).toISOString(), activation: await activationFunnel(env, nowMs) };
 }
 
 /**

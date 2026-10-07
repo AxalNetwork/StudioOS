@@ -15,16 +15,17 @@ import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
  * HQ · Analytics — one line per branch, and one for HQ's own deployment (H15,
  * D210).
  *
- * ONE FIGURE IS MEASURED HERE AND THE PAGE SAYS SO. The canvas draws four KPIs
- * and five cards; the platform records what one of them needs. Active accounts
+ * WHAT IS MEASURED HERE, AND THE PAGE SAYS SO. The canvas draws four KPIs
+ * and five cards; the platform records what three of them need. Active accounts
  * per week comes from Analytics Engine, the dataset every Worker writes a row
  * to per metered request, read by `GET /api/admin/hq/analytics` under the SAME
  * definition a branch's own page uses (`services/activeAccounts.ts`). Median
  * approval age is measured too since D483: referrals on every line, from the
- * read each branch's own page uses, and escalations on HQ's own clock. The
- * other three — activation, token spend, revenue by stream — are named by the
- * server with their reasons, and each is drawn as a stated absence rather
- * than a chart of nothing.
+ * read each branch's own page uses, and escalations on HQ's own clock. So is
+ * activation since D486: each line's accounts by the week they were created,
+ * counted on that line's own database. The other two — token spend, revenue
+ * by stream — are named by the server with their reasons, and each is drawn
+ * as a stated absence rather than a chart of nothing.
  *
  * A MISSING WEEK IS NEVER A ZERO. The server sends `null` for a week it cannot
  * count and says why (a capped read, a week older than the store, a line with
@@ -133,6 +134,9 @@ export function hqAnalyticsCoverage(data) {
     ready && data.approval_age && data.approval_age.referrals.all.median_hours !== null
       ? `Median referral decision: ${data.approval_age.referrals.all.median_hours}h over ${data.approval_age.referrals.all.n} decisions on ${data.approval_age.referrals.all.lines_counted} of ${data.approval_age.referrals.all.lines_total} lines`
       : null,
+    ready && data.activation && activationKpi(data.activation).value !== null
+      ? `Activation: ${activationKpi(data.activation).value} · ${activationKpi(data.activation).note}`
+      : null,
   ].filter(Boolean);
 }
 
@@ -196,6 +200,99 @@ export function HqApprovalAgeCard({ age }) {
   );
 }
 
+/**
+ * D486 — the activation KPI: of the accounts created in the newest week whose
+ * second week has closed for every account, the share active in days 8 to 14,
+ * added over the lines that answered. `null` with a reason when no figure
+ * stands; "None created" when lines were read and that week created nobody.
+ */
+export function activationKpi(act) {
+  if (!act) return { value: null, reason: 'The analytics did not carry an activation funnel.', note: null };
+  const all = act.all;
+  const closed = [...all.cohorts].reverse().find((c) => !c.week_two_open);
+  if (!all.lines_counted) {
+    return { value: null, reason: 'No line could be read, so there is no account to count.', note: null };
+  }
+  if (!closed) {
+    return {
+      value: null,
+      reason: 'Every week shown is too recent: no cohort has reached day 14 for every account yet.',
+      note: null,
+    };
+  }
+  const note = `Week of ${weekLabel(closed.week) || closed.week} · ${closed.active_week_two} of ${closed.created} active in week two · ${all.lines_counted} of ${all.lines_total} lines`;
+  if (closed.created === 0) return { value: 'None created', reason: null, note };
+  return { value: `${Math.round((closed.active_week_two / closed.created) * 100)}%`, reason: null, note };
+}
+
+/** Why a funnel cell has no figure, in the server's words where it gave some. */
+export function activationGap(all, cohort, step) {
+  if (step === 'active_week_two' && cohort.week_two_open) {
+    return 'This week\'s accounts have not all reached day 14, so a count now would only be a floor.';
+  }
+  if (step === 'terms_accepted') return all.terms_reason || 'Terms acceptances could not be read.';
+  if (step === 'invited') return all.invited_reason || 'The invitation tables could not be read.';
+  return 'Not recorded.';
+}
+
+const FUNNEL_STEPS = [
+  ['created', 'Created'],
+  ['signed_in', 'Signed in'],
+  ['terms_accepted', 'Terms accepted'],
+  ['active_week_two', 'Active in week two'],
+];
+
+/** The card: the funnel across lines by creation week, newest first, then each line's state. */
+export function HqActivationCard({ act }) {
+  const all = act.all;
+  const rows = [...all.cohorts].reverse();
+  const missingLines = act.lines.filter((l) => !l.available);
+  return (
+    <Card data-testid="h15-activation">
+      <SectionHead title="Activation by the week accounts were created" sub="counts across lines, never records" />
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className="text-left text-[10.5px] uppercase tracking-[.06em] text-axal-faint">
+              <th className="py-1 pr-3 font-bold">Week</th>
+              {FUNNEL_STEPS.map(([k, label]) => <th key={k} className="py-1 pr-3 font-bold">{label}</th>)}
+              <th className="py-1 font-bold">From an invitation</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-axal-hairline">
+            {rows.map((c) => (
+              <tr key={c.week} data-testid="h15-activation-row" data-week={c.week}>
+                <td className="py-1.5 pr-3 font-semibold text-axal-ink">{weekLabel(c.week) || c.week}</td>
+                {[...FUNNEL_STEPS.map(([k]) => k), 'invited'].map((k) => (
+                  <td key={k} className="py-1.5 pr-3 font-mono tabular-nums" data-step={k}>
+                    {c[k] === null ? <Unrecorded reason={activationGap(all, c, k)} /> : c[k]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="mt-2 space-y-0.5 text-[11px] text-axal-faint" data-testid="h15-activation-definition">
+        <li>{act.definition.cohort}</li>
+        <li>Signed in: {act.definition.signed_in}</li>
+        <li>Terms accepted: {act.definition.terms_accepted}</li>
+        <li>Active in week two: {act.definition.active_week_two}</li>
+        <li>From an invitation: {act.definition.invited}</li>
+      </ul>
+      <p className="mt-1 text-[11px] text-axal-faint" data-testid="h15-activation-lines">
+        Added over {all.lines_counted} of {all.lines_total} lines. Each account lives on one line&rsquo;s database,
+        so no account is counted twice.
+      </p>
+      {missingLines.map((l) => (
+        <p key={l.code} className="mt-0.5 text-[11px] text-axal-faint" data-testid="h15-activation-missing" data-line={l.code}>
+          {l.label}: <Unrecorded reason={l.reason}>Unreadable</Unrecorded> {l.reason}
+        </p>
+      ))}
+    </Card>
+  );
+}
+
 function SectionHead({ title, sub }) {
   return (
     <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -254,8 +351,8 @@ export function SeriesLegend({ series, weeks }) {
 }
 
 /**
- * The KPI row. Two figures are measured (D483 added approval age) and two are
- * named absences, each
+ * The KPI row. Three figures are measured (D483 added approval age, D486
+ * activation) and one is a named absence, each
  * carrying the server's own reason — the same four tiles in every state the
  * payload can be in, so a failed metrics read still says which figure it took.
  */
@@ -264,6 +361,7 @@ export function HqKpis({ data }) {
   const kpi = aa.available ? aa.kpi : null;
   const unreadable = !aa.available && Boolean(aa.unreadable);
   const age = approvalAgeKpi(data.approval_age);
+  const act = activationKpi(data.activation);
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="h15-kpis">
       <KpiTile
@@ -286,9 +384,9 @@ export function HqKpis({ data }) {
       />
       <KpiTile
         label="Activation"
-        value={null}
-        reason={notRecordedReason(data, 'activation')}
-        note="Not recorded. The reason is on its card below."
+        value={act.value}
+        reason={act.reason}
+        note={act.note || 'Not recorded. The reason is on its card below.'}
         testId="h15-kpi-activation"
       />
       <KpiTile
@@ -420,7 +518,6 @@ export default function HqAnalyticsPage() {
       coverage={coverage}
       coverageNote={hqCoverageNote(data, coverage)}
       unavailable={[
-        ['Activation', notRecordedReason(data, 'activation')],
         ['Token spend against limit', notRecordedReason(data, 'token_spend')],
         ['Revenue by stream', notRecordedReason(data, 'revenue_by_stream')],
       ]}
@@ -463,6 +560,8 @@ export default function HqAnalyticsPage() {
         {ready && <ActiveAccountsCard data={data} onRetry={retry} />}
 
         {ready && data.approval_age && <HqApprovalAgeCard age={data.approval_age} />}
+
+        {ready && data.activation && <HqActivationCard act={data.activation} />}
 
         {ready && (
           <div className="grid gap-3 md:grid-cols-2" data-testid="h15-not-recorded">

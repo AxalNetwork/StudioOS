@@ -30,7 +30,8 @@ import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
-  moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges, branchOpenTickets, applyGames, branchGameHoldings,
+  moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges, branchOpenTickets, branchActivation,
+  applyGames, branchGameHoldings,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
 } from './branchOps';
 import {
@@ -57,6 +58,10 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // D485 — the tickets this branch's administrators filed on its host, for
   // HQ · Support. A read, so no secret, on the rule above.
   openTickets() { return branchOpenTickets(this.env); }
+
+  // D486 — this branch's activation funnel by creation week, for HQ's H15.
+  // Counts only, so no secret, on the rule above.
+  activation() { return branchActivation(this.env); }
 
   // D487 — the games this branch holds and their completed runs, for H18.
   // A read, so no secret, on the rule above.

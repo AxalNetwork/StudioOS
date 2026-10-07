@@ -55,6 +55,9 @@ import {
   referralAges, type ReferralAges,
 } from '../services/approvalAge';
 import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
+import {
+  ACTIVATION_WEEKS, TOS_KEY, activationFunnel, combineFunnels, type ActivationRead, type FunnelLine,
+} from '../services/activationFunnel';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -577,17 +580,10 @@ r.get('/admins', async (c) => {
 /**
  * H15's tiles that no store can fill, each with the measurement that says so.
  * Sent on the payload, not written into the page (D131). Median approval age
- * left this list with D483: it is measured below (`approvalAgeAcrossBranches`).
+ * left this list with D483 (`approvalAgeAcrossBranches`), and activation with
+ * D486 (`activationAcrossBranches`): both are measured below.
  */
 const HQ_ANALYTICS_NOT_RECORDED = [
-  {
-    key: 'activation',
-    label: 'Activation',
-    reason:
-      'H15 draws a funnel — invited, signed in, agreement signed, active in week two. No step of it is '
-      + 'recorded as an event HQ can count across branches, and each branch keeps its own accounts in '
-      + 'its own database.',
-  },
   {
     key: 'token_spend',
     label: 'Token spend against limit',
@@ -711,6 +707,57 @@ export async function approvalAgeAcrossBranches(
 }
 
 /**
+ * D486 — H15's activation funnel, across HQ and every branch.
+ *
+ * Each line is one database's own accounts, grouped by the week they were
+ * created; `services/activationFunnel.ts` defines each step. HQ reads its own,
+ * and each branch answers `activation()` over RPC with the same read, so a
+ * branch's line is that branch's figure. Only counts travel. The total adds
+ * the lines that answered, because an account lives on exactly one database;
+ * a line that did not answer is named with its reason and adds nothing.
+ */
+export async function activationAcrossBranches(
+  env: Env,
+  registry: Array<{ code: string; brand_name: string | null }>,
+  nowMs: number = Date.now(),
+) {
+  const [own, answers] = await Promise.all([
+    activationFunnel(env, nowMs),
+    fanOut<{ activation: ActivationRead }>(env, 'activation'),
+  ]);
+  const labelOf = new Map(registry.map((r) => [r.code, r.brand_name || r.code]));
+  const results = withRegistry(answers, registry);
+  const lines: FunnelLine[] = [
+    { code: 'hq', label: 'HQ-held', kind: 'hq', read: own },
+    ...results.map((r): FunnelLine => {
+      const read = r.status === 'ok' ? r.data?.activation ?? null : null;
+      return {
+        code: r.code, label: labelOf.get(r.code) || r.code, kind: 'branch', read,
+        ...(read ? {} : { reason: r.status === 'ok' ? 'The branch answered without a funnel.' : (r.reason || 'This branch did not answer.') }),
+      };
+    }),
+  ];
+  const weeks = own.available ? own.weeks : (lines.find((l) => l.read?.available)?.read as { weeks: string[] } | undefined)?.weeks || [];
+  return {
+    weeks,
+    week_count: ACTIVATION_WEEKS,
+    lines: lines.map((l) => ({
+      code: l.code, label: l.label, kind: l.kind,
+      ...(l.read ? l.read : { available: false, unreadable: true, reason: l.reason }),
+    })),
+    all: combineFunnels(lines, weeks, nowMs),
+    coverage: coverage(results),
+    definition: {
+      cohort: 'Accounts grouped by the UTC week (Monday) they were created.',
+      signed_in: 'A sign-in recorded in the activity log, by any sign-in route.',
+      terms_accepted: `The Terms of Service accepted (${TOS_KEY}).`,
+      active_week_two: 'Any activity logged from day 8 to day 14 after the account was created.',
+      invited: 'Counted beside the funnel, not as a step: accounts that came from an accepted invitation.',
+    },
+  };
+}
+
+/**
  * Every deployment HQ provisioned, with the licence it trades under.
  *
  * ITS OWN READ, NOT `deployedBranches()`, because that one answers `[]` when
@@ -763,7 +810,10 @@ r.get('/analytics', async (c) => {
     registryForAnalytics(env),
     loadActiveAccountsByBranchWeek(env, axis),
   ]);
-  const approval_age = await approvalAgeAcrossBranches(env, registry.readable ? registry.rows : []);
+  const [approval_age, activation] = await Promise.all([
+    approvalAgeAcrossBranches(env, registry.readable ? registry.rows : []),
+    activationAcrossBranches(env, registry.readable ? registry.rows : []),
+  ]);
 
   let active_accounts: Record<string, unknown>;
   if (!read.available) {
@@ -856,6 +906,7 @@ r.get('/analytics', async (c) => {
       : { readable: false, reason: registry.reason },
     active_accounts,
     approval_age,
+    activation,
     not_recorded: HQ_ANALYTICS_NOT_RECORDED,
     foot: 'Aggregates, never records.',
   });

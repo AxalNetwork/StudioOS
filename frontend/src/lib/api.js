@@ -3874,8 +3874,11 @@ export const api = {
   listInvestorSeats: () => request('/investor-seats/'),
   inviteInvestorSeat: (email) =>
     request('/investor-seats/invite', { method: 'POST', body: JSON.stringify({ email }) }),
-  acceptInvestorSeat: (token) =>
-    request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+  acceptInvestorSeat: (token, extra = {}) =>
+    request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({
+      token,
+      ...(extra.confirm_role_change ? { confirm_role_change: true } : {}),
+    }) }),
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),

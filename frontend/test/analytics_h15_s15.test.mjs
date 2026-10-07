@@ -45,7 +45,7 @@ import ViewAsBranchContext from '../src/contexts/ViewAsBranchContext.js';
 import HqAnalyticsPage, {
   UNAVAILABLE as HQ_UNAVAILABLE, seriesColor, isSuspended, seriesFlag, notRecordedReason,
   hqAnalyticsCoverage, SeriesLegend, ActiveAccountsCard, HqKpis,
-  approvalAgeKpi, approvalAgeRows, HqApprovalAgeCard,
+  approvalAgeKpi, approvalAgeRows, HqApprovalAgeCard, activationKpi, activationGap, HqActivationCard,
 } from '../src/pages/hq/HqAnalyticsPage.jsx';
 import BranchAnalytics, {
   UNAVAILABLE as BRANCH_UNAVAILABLE, ageTone, pushedLabel, BranchKpis, BranchChartCard, ApprovalAgeList,
@@ -231,6 +231,39 @@ const HQ_AGE = {
   ],
 };
 
+/**
+ * D486 — `activation` as `activationAcrossBranches` sends it: HQ and one
+ * branch answered, one did not; two closed weeks and one still open; the
+ * terms step unreadable on a line, so its total is withheld.
+ */
+const HQ_ACT = {
+  weeks: ['2026-08-31', '2026-09-07', '2026-09-14'],
+  week_count: 8,
+  lines: [
+    { code: 'hq', label: 'HQ-held', kind: 'hq', available: true },
+    { code: 'de', label: 'Axal VC DACH', kind: 'branch', available: false, unreadable: true, reason: 'connection reset' },
+    { code: 'fr', label: 'Axal VC France', kind: 'branch', available: true },
+  ],
+  all: {
+    cohorts: [
+      { week: '2026-08-31', created: 0, signed_in: 0, terms_accepted: null, active_week_two: 0, week_two_open: false, invited: 0 },
+      { week: '2026-09-07', created: 5, signed_in: 4, terms_accepted: null, active_week_two: 2, week_two_open: false, invited: 1 },
+      { week: '2026-09-14', created: 3, signed_in: 3, terms_accepted: null, active_week_two: null, week_two_open: true, invited: 0 },
+    ],
+    lines_counted: 2,
+    lines_total: 3,
+    terms_reason: 'A line that answered could not read its terms acceptances, so no total is added for that step.',
+  },
+  coverage: { total: 2, answered: 1, complete: false, unreadable: ['de'] },
+  definition: {
+    cohort: 'Accounts grouped by the UTC week (Monday) they were created.',
+    signed_in: 'A sign-in recorded in the activity log, by any sign-in route.',
+    terms_accepted: 'The Terms of Service accepted (tos_v1).',
+    active_week_two: 'Any activity logged from day 8 to day 14 after the account was created.',
+    invited: 'Counted beside the funnel, not as a step: accounts that came from an accepted invitation.',
+  },
+};
+
 function hqPayload(over = {}) {
   return {
     range: '8w',
@@ -243,6 +276,7 @@ function hqPayload(over = {}) {
     registry: { readable: true, count: 3 },
     active_accounts: hqActive(),
     approval_age: HQ_AGE,
+    activation: HQ_ACT,
     not_recorded: SERVER_NR,
     foot: 'Aggregates, never records.',
     ...over,
@@ -534,7 +568,11 @@ test('H15 · the KPI row: two figures, and two absences with the server\'s reaso
   assert.equal(kpiValue(markup, 'h15-kpi-approval-age'), '26h');
   assert.match(renderedText(slice(markup, 'data-testid="h15-kpi-approval-age"', 'days')),
     /Referrals · 4 decided across 2 of 3 lines in the last 30 days/);
-  for (const [key, id] of [['activation', 'activation'], ['token_spend', 'token-spend']]) {
+  // D486 — activation is a figure too: the newest closed cohort, across lines.
+  assert.equal(kpiValue(markup, 'h15-kpi-activation'), '40%');
+  assert.match(renderedText(slice(markup, 'data-testid="h15-kpi-activation"', 'lines')),
+    /Week of 7 Sep · 2 of 5 active in week two · 2 of 3 lines/);
+  for (const [key, id] of [['token_spend', 'token-spend']]) {
     const tile = slice(markup, `data-testid="h15-kpi-${id}"`, 'below.');
     assert.ok(tile.includes(`title="Reason for ${key}, as the server wrote it."`), `${key}'s reason rides on its figure`);
     assert.equal(kpiValue(markup, `h15-kpi-${id}`), 'Not recorded', `${key}'s figure itself reads Not recorded`);
@@ -565,7 +603,7 @@ test('H15 · what the rail reads back is only what loaded; a failed read gives n
 });
 
 test('H15 · the rail\'s absences are exactly the ones the server names', () => {
-  assert.equal(SERVER_NR.length, 3, 'admin_hq.ts names three absences since D483 measured approval age');
+  assert.equal(SERVER_NR.length, 2, 'admin_hq.ts names two absences since D483 measured approval age and D486 activation');
   const PAGE = codeOnly(read('frontend/src/pages/hq/HqAnalyticsPage.jsx'));
   assert.equal(count(PAGE, 'unavailable={['), 1, 'the rail\'s absences are one literal array, not a variable');
   const at = PAGE.indexOf('unavailable={[');
@@ -574,8 +612,8 @@ test('H15 · the rail\'s absences are exactly the ones the server names', () => 
   assert.deepEqual([...keys].sort(), SERVER_NR.map((n) => n.key).sort());
 
   assert.equal(notRecordedReason(hqPayload(), 'token_spend'), 'Reason for token_spend, as the server wrote it.');
-  assert.match(notRecordedReason(null, 'activation'), /Reading/);
-  assert.match(notRecordedReason(HQ_UNAVAILABLE, 'activation'), /could not be read/);
+  assert.match(notRecordedReason(null, 'token_spend'), /Reading/);
+  assert.match(notRecordedReason(HQ_UNAVAILABLE, 'token_spend'), /could not be read/);
 });
 
 test('H15 · approval age: the median across lines, each line, escalations, and the untimeable queues (D483)', () => {
@@ -865,4 +903,46 @@ test('no account identifier reaches either page', () => {
     assert.doesNotMatch(src, /\.email\b/, `${f} reads an email`);
     assert.doesNotMatch(src, /\buser_id\b/, `${f} reads a user id`);
   }
+});
+
+test('H15 · activation: the funnel by creation week, a withheld step, an open week, and a line that did not answer (D486)', () => {
+  const markup = html(HqActivationCard, { act: HQ_ACT });
+  assert.deepEqual(attrs(markup, 'data-week'), ['2026-09-14', '2026-09-07', '2026-08-31'], 'newest week first');
+  const row = (w) => slice(markup, `data-week="${w}"`, '</tr>');
+  const cell = (w, step) => renderedText(slice(row(w), `data-step="${step}"`, '</td>'));
+  assert.equal(cell('2026-09-07', 'created'), '5');
+  assert.equal(cell('2026-09-07', 'signed_in'), '4');
+  assert.equal(cell('2026-09-07', 'active_week_two'), '2');
+  assert.equal(cell('2026-09-07', 'invited'), '1');
+  assert.equal(cell('2026-08-31', 'created'), '0', 'a week that created nobody is a measured zero');
+  assert.equal(cell('2026-09-07', 'terms_accepted'), 'Not recorded', 'a withheld total is never drawn as a zero');
+  assert.ok(row('2026-09-07').includes('could not read its terms acceptances'), 'the withheld step carries the server\'s reason');
+  assert.equal(cell('2026-09-14', 'active_week_two'), 'Not recorded');
+  assert.ok(row('2026-09-14').includes('have not all reached day 14'), 'an open week says why it has no week-two figure');
+  assert.match(renderedText(markup), /Added over 2 of 3 lines/);
+  assert.match(slice(markup, 'data-line="de"', '</p>'), /connection reset/);
+  assert.doesNotMatch(markup, /data-line="fr"/, 'a line that answered is not listed as missing');
+  assert.match(renderedText(markup), /day 8 to day 14/);
+  const PAGE = codeOnly(read('frontend/src/pages/hq/HqAnalyticsPage.jsx'));
+  assert.match(PAGE, /\{ready && data\.activation && <HqActivationCard act=\{data\.activation\} \/>\}/, 'the page mounts the card');
+
+  assert.equal(activationGap(HQ_ACT.all, HQ_ACT.all.cohorts[2], 'active_week_two').includes('day 14'), true);
+  assert.match(activationGap({ cohorts: [] }, HQ_ACT.all.cohorts[1], 'invited'), /invitation tables/);
+});
+
+test('H15 · the activation KPI: the newest closed week, or why there is none (D486)', () => {
+  assert.deepEqual(activationKpi(HQ_ACT), {
+    value: '40%', reason: null, note: 'Week of 7 Sep · 2 of 5 active in week two · 2 of 3 lines',
+  });
+  assert.equal(activationKpi(null).value, null);
+  assert.match(activationKpi(null).reason, /did not carry/);
+  const allOpen = { ...HQ_ACT, all: { ...HQ_ACT.all, cohorts: [HQ_ACT.all.cohorts[2]] } };
+  assert.equal(activationKpi(allOpen).value, null);
+  assert.match(activationKpi(allOpen).reason, /too recent/);
+  const none = { ...HQ_ACT, all: { ...HQ_ACT.all, cohorts: [HQ_ACT.all.cohorts[0]] } };
+  assert.equal(activationKpi(none).value, 'None created');
+  const unread = { ...HQ_ACT, all: { ...HQ_ACT.all, lines_counted: 0 } };
+  assert.equal(activationKpi(unread).value, null);
+  assert.match(activationKpi(unread).reason, /No line could be read/);
+  assert.ok(hqAnalyticsCoverage(hqPayload()).includes('Activation: 40% · Week of 7 Sep · 2 of 5 active in week two · 2 of 3 lines'));
 });
