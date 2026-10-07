@@ -152,8 +152,8 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export wires', kind: 'export' },
   ],
   'funds/ledger': [
-    { label: 'Export journal', unbuilt: 'no journal source is connected to this desk' },
-    { label: 'Reconcile', unbuilt: 'no reconciliation state is stored' },
+    { label: 'Export journal', unbuilt: 'journal export is not available on this read-only page' },
+    { label: 'Reconcile', unbuilt: 'this read-only page has no reconciliation form' },
     { label: 'Period close', unbuilt: 'periods are not opened or closed from here' },
   ],
   'funds/reporting': [
