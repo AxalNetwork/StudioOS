@@ -724,6 +724,15 @@ r.post('/:uid/vote', async (c) => {
     // auto-generated fallback thesis (nothing hand-written is lost), and
     // otherwise re-mark it 'other' so the ledger stops saying invest/pass/
     // defer while keeping the voter's own words.
+    //
+    // D624 — A GRADED ENTRY IS NEVER CHANGED WITHOUT A TRACE. Once an entry's
+    // outcome is recorded (`outcome_recorded_at`), this path follows the
+    // journal's own PUT (D618, `journal.ts`): a re-vote that changes the
+    // thesis or the decision stamps `edited_after_outcome_at`, and one that
+    // changes nothing does not. A recusal never deletes a graded entry, even
+    // one still carrying the fallback thesis: it re-marks it 'other' and
+    // stamps it. Nothing here blocks the vote; the vote stays the source of
+    // truth, and the journal only records that its graded words moved.
     if (d.project_id != null && vote !== 'recused') {
       try {
         const decisionMap: Record<string, string> = { yes: 'invest', no: 'pass', abstain: 'defer' };
@@ -732,19 +741,20 @@ r.post('/:uid/vote', async (c) => {
           ? rationale.trim().slice(0, 4000)
           : `IC vote (${vote}) on "${d.title}"`;
         const existing = await c.env.DB.prepare(
-          'SELECT id FROM decision_journal_entries WHERE owner_user_id = ? AND ic_decision_id = ?'
-        ).bind(user.id, d.id).first<{ id: number }>();
+          `SELECT id, thesis, decision, outcome_recorded_at, edited_after_outcome_at
+             FROM decision_journal_entries WHERE owner_user_id = ? AND ic_decision_id = ?`
+        ).bind(user.id, d.id).first<JournalDraftRow>();
         if (existing) {
           // Keep the voter's hand-edited thesis unless they supplied a fresh rationale.
-          if (rationale && rationale.trim().length >= 3) {
-            await c.env.DB.prepare(
-              'UPDATE decision_journal_entries SET decision=?, thesis=?, updated_at=? WHERE id=?'
-            ).bind(journalDecision, thesis, nowIso(), existing.id).run();
-          } else {
-            await c.env.DB.prepare(
-              'UPDATE decision_journal_entries SET decision=?, updated_at=? WHERE id=?'
-            ).bind(journalDecision, nowIso(), existing.id).run();
-          }
+          const nextThesis = (rationale && rationale.trim().length >= 3) ? thesis : existing.thesis;
+          const now = nowIso();
+          await c.env.DB.prepare(
+            'UPDATE decision_journal_entries SET decision=?, thesis=?, edited_after_outcome_at=?, updated_at=? WHERE id=?'
+          ).bind(
+            journalDecision, nextThesis,
+            gradedStamp(existing, { thesis: nextThesis, decision: journalDecision }, now),
+            now, existing.id,
+          ).run();
         } else {
           await c.env.DB.prepare(
             `INSERT INTO decision_journal_entries
@@ -756,17 +766,19 @@ r.post('/:uid/vote', async (c) => {
     } else if (d.project_id != null && vote === 'recused') {
       try {
         const existing = await c.env.DB.prepare(
-          'SELECT id, thesis FROM decision_journal_entries WHERE owner_user_id = ? AND ic_decision_id = ?'
-        ).bind(user.id, d.id).first<{ id: number; thesis: string }>();
+          `SELECT id, thesis, decision, outcome_recorded_at, edited_after_outcome_at
+             FROM decision_journal_entries WHERE owner_user_id = ? AND ic_decision_id = ?`
+        ).bind(user.id, d.id).first<JournalDraftRow>();
         if (existing) {
-          if (String(existing.thesis || '').startsWith('IC vote (')) {
+          if (existing.outcome_recorded_at == null && String(existing.thesis || '').startsWith('IC vote (')) {
             // The fallback thesis carries nothing hand-written; the draft
             // exists only as the old vote's shadow and is now false.
             await c.env.DB.prepare('DELETE FROM decision_journal_entries WHERE id = ?').bind(existing.id).run();
           } else {
+            const now = nowIso();
             await c.env.DB.prepare(
-              "UPDATE decision_journal_entries SET decision='other', updated_at=? WHERE id=?"
-            ).bind(nowIso(), existing.id).run();
+              "UPDATE decision_journal_entries SET decision='other', edited_after_outcome_at=?, updated_at=? WHERE id=?"
+            ).bind(gradedStamp(existing, { thesis: existing.thesis, decision: 'other' }, now), now, existing.id).run();
           }
         }
       } catch { /* same rule: never block the vote on the journal */ }
@@ -775,6 +787,29 @@ r.post('/:uid/vote', async (c) => {
     return c.json(await dto(c.env, fresh!, { votes: true }));
   } catch (e) { return mapError(c, e); }
 });
+
+
+/** The journal columns the vote handler reads to keep D624's rule. */
+type JournalDraftRow = {
+  id: number; thesis: string; decision: string;
+  outcome_recorded_at: string | null; edited_after_outcome_at: string | null;
+};
+
+/**
+ * D624 — the `edited_after_outcome_at` a vote writes: `now` when the entry's
+ * outcome is recorded and the vote changes its thesis or decision, otherwise
+ * whatever was there. The journal's PUT rule (D618), narrowed to the two
+ * graded fields a vote can move. Pure.
+ */
+export function gradedStamp(
+  entry: Pick<JournalDraftRow, 'thesis' | 'decision' | 'outcome_recorded_at' | 'edited_after_outcome_at'>,
+  next: { thesis: string; decision: string },
+  now: string,
+): string | null {
+  const changed = entry.outcome_recorded_at != null
+    && (next.thesis !== entry.thesis || next.decision !== entry.decision);
+  return changed ? now : (entry.edited_after_outcome_at ?? null);
+}
 
 // ---------------------------------------------------------------------------
 // Conditions (migration 334) — the record a later stage can block on.
