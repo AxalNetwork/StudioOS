@@ -27,9 +27,9 @@
 //   - The trajectory ETA and dashed projection derive from OFFICIAL runs only
 //     (never practice/sandbox runs) and only render when every guard passes,
 //     including a minimum 3-day span before any per-week pace is claimed.
-//   - Quick actions: Copy link, Investor view and Export report are real;
-//     Share stays disabled — no backend share token exists yet, and the
-//     reason is rendered visibly, not only in a title tooltip.
+//   - Quick actions: Copy link, Investor view, Export report and Share are
+//     real. Share (D588) mints a link for one named account; without a
+//     project or a scoring run the reason is in the button label.
 //   - Founders may run PRACTICE (sandbox) scores on their own project; the
 //     API permits this explicitly and sandbox runs are never investor-visible.
 //
@@ -66,6 +66,7 @@ import DimensionDrawer from '../components/scoring/DimensionDrawer';
 import ExportReportModal from '../components/scoring/ExportReportModal';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import LabReportShareSheet from '../components/spinout/LabReportShareSheet';
 import { Unreadable } from '../ui/Honesty';
 
 // Worker-only endpoints: ONLY a 404 means "not in this environment" (the dev
@@ -148,6 +149,7 @@ export default function SpinoutLabScoringPage() {
   const [copied, setCopied] = useState(''); // '' | 'ok' | 'fail'
   const [investorView, setInvestorView] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [exportError, setExportError] = useState('');
   const [drawerKey, setDrawerKey] = useState(null);
@@ -410,14 +412,11 @@ export default function SpinoutLabScoringPage() {
             </p>
           )}
 
-          {/* Quick actions. Share needs a backend share token, so it stays
-              honestly disabled with the reason; the other three are real. */}
           <div className="flex flex-wrap items-center gap-1" data-testid="scoring-quick-actions">
-            {/* The reason is in the visible label, not only in `title` — a
-                keyboard or touch user never sees a tooltip. */}
-            <button type="button" disabled title="Sharing needs a backend share link — not available yet" data-testid="button-qa-share"
+            <button type="button" disabled={!project || !vm.hasData} onClick={() => setShareOpen(true)} data-testid="button-qa-share"
               className={labBtn('ghost')}>
-              <Share2 size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" /> Share — needs a share link
+              <Share2 size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" />
+              {!project ? 'Share — no project' : !vm.hasData ? 'Share — run a scoring run first' : 'Share'}
             </button>
             <button type="button" onClick={() => { setExportError(''); setExportOpen(true); }} disabled={!vm.hasData}
               title={vm.hasData ? undefined : 'Run a scoring run first'} data-testid="button-qa-export"
@@ -718,6 +717,10 @@ export default function SpinoutLabScoringPage() {
         skillState={skillState}
         archetypeState={archetypeState}
       />
+
+      {shareOpen && project && (
+        <LabReportShareSheet projectId={project.id} onClose={() => setShareOpen(false)} />
+      )}
 
       <ExportReportModal
         open={exportOpen}

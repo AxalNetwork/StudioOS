@@ -32,6 +32,7 @@ import authGoogle from './routes/auth_google';
 import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
+import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
@@ -733,6 +734,8 @@ for (const p of INVESTOR_PRO_PREFIXES) {
 app.use('/api/market-intel/export', requireInvestorTier('professional'));
 
 app.route('/api/scoring', scoring);
+// D588 (#1215) — a founder shares one official scoring run with one named account.
+app.route('/api/lab-report-shares', labReportShares);
 app.route('/api/projects', projects);
 app.route('/api/legal', legal);
 app.route('/api/legalcap', legalcap);
