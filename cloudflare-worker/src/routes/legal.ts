@@ -884,19 +884,25 @@ legal.post('/templates/:key/generate', async (c) => {
 
   const body = await c.req.json();
   const sql = getSQL(c.env);
-  // IDOR guard: when generating against a project, founders may only do so for their own.
-  // Founders may NOT generate unattached documents (no project_id).
-  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
+  // D639 — the one document access rule, `canAccessFounderResource`, the same
+  // as `GET /documents/:id`: admins and partners for any project, a founder
+  // for their own. An unattached document (no project_id) has no owner, so
+  // only admins and partners generate one. Investors used to pass a role list
+  // here; they get no unmasked founder data through this predicate.
+  let ownerFounderId: number | null = null;
   if (body.project_id) {
     const p = await sql`SELECT founder_id FROM projects WHERE id = ${body.project_id}`;
     if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
-    if (!canAccessFounderResource(user, (p[0] as any).founder_id)) {
-      await sql.end();
-      return c.json({ error: 'Forbidden' }, 403);
-    }
-  } else if (!isPrivileged) {
+    ownerFounderId = (p[0] as any).founder_id ?? null;
+  }
+  if (!canAccessFounderResource(user, ownerFounderId)) {
     await sql.end();
-    return c.json({ error: 'Forbidden' }, 403);
+    return c.json({
+      error: 'forbidden',
+      message: body.project_id
+        ? 'You can only generate documents for your own project.'
+        : 'Only an admin or a partner can generate a document that belongs to no project.',
+    }, 403);
   }
   // Task #2 — esign_envelopes is the single source of truth for actual
   // contracts. Refuse to mint a NEW contract-type row in `documents`;
@@ -931,29 +937,20 @@ legal.get('/documents', async (c) => {
   const user = await requireAuth(c);
   const projectId = c.req.query('project_id');
   const sql = getSQL(c.env);
-  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
-  let docs: any;
-  if (isPrivileged) {
-    // Admins/partners see everything (optionally filtered by project_id).
-    docs = projectId
-      ? await sql`SELECT d.* FROM documents d WHERE d.project_id = ${parseInt(projectId)} ORDER BY d.created_at DESC`
-      : await sql`SELECT d.* FROM documents d ORDER BY d.created_at DESC`;
-  } else {
-    // Founders only see documents tied to their own projects.
-    if (!user.founder_id) { await sql.end(); return c.json([]); }
-    if (projectId) {
-      const p = await sql`SELECT founder_id FROM projects WHERE id = ${parseInt(projectId)}`;
-      if (p.length === 0 || (p[0] as any).founder_id !== user.founder_id) {
-        await sql.end();
-        return c.json([]);
-      }
-      docs = await sql`SELECT d.* FROM documents d WHERE d.project_id = ${parseInt(projectId)} ORDER BY d.created_at DESC`;
-    } else {
-      docs = await sql`SELECT d.* FROM documents d JOIN projects p ON d.project_id = p.id WHERE p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`;
-    }
-  }
+  // D639 — the one document access rule, `canAccessFounderResource`, decides
+  // every row, the same as `GET /documents/:id`, so the list never holds a
+  // document its own read would refuse. Admins and partners see every
+  // document; a founder those of their own projects; an investor none (this
+  // list used to give investors every document, unmasked). The SQL reads; it
+  // does not restate the rule.
+  const pid = projectId ? parseInt(projectId) : null;
+  const docs = pid != null
+    ? await sql`SELECT d.*, p.founder_id AS project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE d.project_id = ${pid} ORDER BY d.created_at DESC`
+    : await sql`SELECT d.*, p.founder_id AS project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id ORDER BY d.created_at DESC`;
   await sql.end();
-  return c.json((docs as any[]).map(safeDoc));
+  return c.json((docs as any[])
+    .filter((d) => canAccessFounderResource(user, d.project_founder_id ?? null))
+    .map(safeDoc));
 });
 
 legal.get('/documents/:id', async (c) => {
