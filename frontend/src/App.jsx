@@ -185,6 +185,8 @@ const InvestorFundLPs = lazy(() => import('./pages/investor/InvestorFundLPs'));
 const InvestorFundCalls = lazy(() => import('./pages/investor/InvestorFundCalls'));
 const InvestorFundAccounting = lazy(() => import('./pages/investor/InvestorFundAccounting'));
 const InvestorFundReporting = lazy(() => import('./pages/investor/InvestorFundReporting'));
+const FundPage = lazy(() => import('./pages/FundPage'));
+const FundReportPeriodPage = lazy(() => import('./pages/FundReportPeriodPage'));
 const InvestorNetworkWorkspace = lazy(() => import('./pages/investor/InvestorNetworkWorkspace'));
 const InvestorResearchWorkspace = lazy(() => import('./pages/investor/InvestorResearchWorkspace'));
 const AdvisorPreviewNotice = lazy(() => import('./pages/advisor/AdvisorPreviewNotice'));
@@ -994,6 +996,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // precisely because the shell had no padding of its own.
   const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
     || SHARED_FULL_BLEED.includes(location.pathname)
+    // D631's two fund child pages carry WorkspaceShell's own inset and rail.
+    || /^\/funds\/[1-9][0-9]*(?:\/reporting\/(?:new|[1-9][0-9]*))?$/.test(location.pathname)
     // The Lab's tool routes, by prefix rather than by twenty-three entries.
     // This is where `/spinout-lab/` is tested, and the only place: it used to
     // be typed on the width flag below AND on the padding flag under it, which
@@ -3257,6 +3261,8 @@ function AppInner() {
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />
       <Route path="/funds/reporting" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundReporting />))} />
+      <Route path="/funds/:fundId" element={guard(['admin', 'investor'], <FundPage role={effectiveRole} />)} />
+      <Route path="/funds/:fundId/reporting/:periodId" element={guard(['admin', 'investor'], <FundReportPeriodPage role={effectiveRole} />)} />
       {/* Task #1 — Contacts merged into the unified Network page. The legacy
           /contacts route now redirects into the Contacts tab. */}
       <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />

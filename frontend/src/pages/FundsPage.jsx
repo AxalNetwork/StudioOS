@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Banknote, FileText, RefreshCw, Plus, X, AlertTriangle, Send, ScrollText,
 } from 'lucide-react';
@@ -368,7 +369,7 @@ export function AdminFundsView() {
         <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-start justify-between mb-3">
             <div>
-              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{active.name}</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Link to={`/funds/${active.id}`}>{active.name}</Link></div>
               <div className="text-xs text-gray-500">Vintage {active.vintage_year || '—'} · {active.lp_count} LPs · {fmtCents(active.fund_size_cents)} target</div>
             </div>
             <div className="flex gap-2 flex-wrap">

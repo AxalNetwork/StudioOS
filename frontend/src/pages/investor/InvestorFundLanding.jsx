@@ -78,7 +78,7 @@ function FundDetail({ fund }) {
     <>
       <section className="i6-summary" id="summary">
         <div>
-          <div className="i6-kicker">{fund.name} {fund.vintage_year ? `· ${fund.vintage_year} vintage` : ''}</div>
+          <div className="i6-kicker"><Link to={`/funds/${fund.id}`}>{fund.name}</Link> {fund.vintage_year ? `· ${fund.vintage_year} vintage` : ''}</div>
           <strong className="i6-money" data-testid="text-fund-committed">{fmtCents(fund.committed_cents)}</strong>
           <span className="i6-caption">committed</span>
         </div>

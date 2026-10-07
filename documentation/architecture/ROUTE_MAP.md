@@ -19,6 +19,13 @@ the root" until 2026-09-07; the root of `design/canvases/` holds only its
 
 ## Status taxonomy
 
+D631 (#1389), Ops area 6:
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| `integrated/ops-data.js` · `fd-page` (F1) | `/funds/:fundId` · admin/GP or own LP | `FundPage.jsx`; `GET /api/funds/:id/page`, whitelist facts, live LP totals, scoped report summaries | CURRENT |
+| `integrated/ops-data.js` · `fd-report` (F2) | `/funds/:fundId/reporting/:periodId` · admin/GP; own LP issued-only | `FundReportPeriodPage.jsx`; scoped period GET and existing report-period POST; `new` draft, explicit issue confirmation, immutable issued report and separate correction | CURRENT |
+
 | Status | Meaning |
 | --- | --- |
 | `CURRENT` | A live route implements this canvas and the shipped UI matches. Do not rebuild. |

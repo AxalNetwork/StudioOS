@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 
 /**
@@ -57,13 +57,14 @@ export function useManagedFund() {
 
 /** The fund switcher, drawn only when there is more than one fund to operate. */
 export function FundPicker({ funds, fund, onSelect, testid = 'select-managed-fund' }) {
-  if (!Array.isArray(funds) || funds.length < 2) return null;
+  if (!fund) return null;
   return (
     <label className="i6-fund-switcher">
       <span>Fund</span>
-      <select data-testid={testid} value={fund ? String(fund.id) : ''} onChange={(e) => onSelect(e.target.value)}>
+      {Array.isArray(funds) && funds.length > 1 && <select data-testid={testid} value={String(fund.id)} onChange={(e) => onSelect(e.target.value)}>
         {funds.map((f) => <option key={f.id} value={String(f.id)}>{f.name || `Fund #${f.id}`}</option>)}
-      </select>
+      </select>}
+      <Link to={`/funds/${fund.id}`}>Open fund</Link>
     </label>
   );
 }

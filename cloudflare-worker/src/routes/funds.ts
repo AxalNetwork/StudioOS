@@ -11,6 +11,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireApprovedKyc } from '../auth';
+import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
 import { Funds, LPs } from '../models/funds';
 import { Jobs } from '../models/jobs';
@@ -375,6 +377,40 @@ funds.get('/:id/analytics', async (c) => {
 });
 
 // /funds/:id MUST come AFTER all /funds/<word> handlers above.
+/** D631: narrow page/read scope; LPs never receive draft reporting periods. */
+async function fundPageAccess(c:any){
+ const user=await requireAuth(c),id=reportId(c.req.param('id'));
+ if(!id||!['admin','investor'].includes(user.role))throw new FundReportRefusal('not_found',404);
+ const fund=await c.env.DB.prepare('SELECT * FROM vc_funds WHERE id=?').bind(id).first();
+ if(!fund)throw new FundReportRefusal('not_found',404);
+ let denied:any=null;
+ if(user.role==='admin'||fund.gp_user_id===user.id){
+  try{await requireFundGp(c,id);return {user,fund,canManage:true};}
+  catch(error){if(!(error instanceof Response))throw error;denied=error;}
+ }
+ const scope=lpMembershipScope(user);
+ const lp=await c.env.DB.prepare(`SELECT 1 AS yes FROM limited_partners lp WHERE lp.fund_id=? AND ${scope.sql} LIMIT 1`).bind(id,...scope.binds).first();
+ if(!lp){if(denied)throw denied;throw new FundReportRefusal('not_found',404);}
+ return {user,fund,canManage:false};
+}
+function fundReportError(c:any,error:any){
+ if(error instanceof Response)return error;
+ if(error instanceof FundReportRefusal)return refuse(c,error.status,{code:'fund_report_refused',message:error.publicMessage});
+ const status=AUTH_ERROR_STATUSES[error?.message];
+ if(status)return refuse(c,status,{code:'fund_access_refused',message:'This account cannot access that fund operation.'});
+ return refuse(c,503,{code:'fund_report_unreadable',message:'Unreadable: the fund or reporting period could not be read or saved. Try again.',raw:error});
+}
+funds.get('/:id/page',async c=>{
+ try{const {fund,canManage}=await fundPageAccess(c);return c.json(await readFundPage(c.env,fund,canManage));}
+ catch(error){return fundReportError(c,error);}
+});
+funds.get('/:id/report-periods/:periodId',async c=>{
+ try{const {fund,canManage}=await fundPageAccess(c);const id=reportId(c.req.param('periodId'));
+  if(!id)throw new FundReportRefusal('not_found',404);
+  return c.json({period:await readFundPeriod(c.env,fund.id,id,canManage),can_manage:canManage});}
+ catch(error){return fundReportError(c,error);}
+});
+
 funds.get('/:id', async (c) => {
   // D370: the fund's GP of record, or an admin. This returned the whole row —
   // size, deployed capital, the GP's email — plus the LP totals to any
@@ -621,18 +657,10 @@ funds.get('/:id/lps', async (c) => {
 
 // ---------- quarterly reporting periods ----------
 //
-// A period row is what makes a quarterly report REPRODUCIBLE. The capital
-// account can be reconstructed as-of any date from dated capital_calls and
-// fund_distributions rows, but portfolio MARKS cannot — position values live in
-// an operator-maintained model with no history — so a report re-rendered next
-// year under an old heading would silently carry today's marks. Issuing a period
-// freezes the fund-level figures into `snapshot_json`, and the GP's own
-// commentary into `notes`, so every later download of that period is the
-// document that was actually sent.
-//
-// Until a period is issued, every report generated for it is a DRAFT: the
-// renderer marks it as such, because a report with no GP letter is not a report
-// a fiduciary has stood behind.
+// D631 freezes the GP narrative and a server-read fund snapshot when issued.
+// Issue status does not claim pack delivery. The existing LP capital-account
+// renderer still uses its live model; the new period reader returns the frozen
+// narrative. A correcting period preserves the immutable original.
 
 const shapePeriod = (row: any) => ({
   ...row,
@@ -641,86 +669,25 @@ const shapePeriod = (row: any) => ({
 });
 
 funds.get('/:id/report-periods', async (c) => {
-  await ensureFundGpColumns(c.env);
-  const fundId = parseInt(c.req.param('id'), 10);
-  if (!Number.isFinite(fundId)) return c.json({ error: 'bad id' }, 400);
-  await requireFundGp(c, fundId);
-  const r = await c.env.DB.prepare(
-    `SELECT * FROM fund_report_periods WHERE fund_id = ? ORDER BY period_end DESC LIMIT 40`
-  ).bind(fundId).all().catch(() => ({ results: [] }));
-  return c.json({ ok: true, items: (r.results || []).map(shapePeriod) });
+ try{
+  const fundId=reportId(c.req.param('id'));
+  if(!fundId)throw new FundReportRefusal('not_found',404);
+  await requireFundGp(c,fundId);
+  const result=await c.env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? ORDER BY period_end DESC LIMIT 40').bind(fundId).all();
+  if(!result.success)throw new Error('Reporting periods unreadable');
+  return c.json({ok:true,items:(result.results||[]).map(shapePeriod)});
+ }catch(error){return fundReportError(c,error);}
 });
 
-/**
- * Create or update a reporting period, and optionally issue it.
- *
- * Issuing is one-way on purpose: once `status = 'issued'`, the snapshot and the
- * narrative are the record of what LPs received. A later edit would rewrite
- * history under a document already in an LP's inbox, so the route refuses it
- * and asks for a correcting period instead.
- */
+/** D631: a guarded draft write and its actor receipt commit together. Issued rows are immutable. */
 funds.post('/:id/report-periods', async (c) => {
-  await ensureFundGpColumns(c.env);
-  const fundId = parseInt(c.req.param('id'), 10);
-  if (!Number.isFinite(fundId)) return c.json({ error: 'bad id' }, 400);
-  // The issuer recorded on the period is now whoever actually issued it —
-  // the GP signing their own quarterly report, or an admin acting for them.
-  const { user: issuer } = await requireFundGp(c, fundId);
-
-  const body = await c.req.json().catch(() => ({} as any));
-  const period = String(body?.period || '').trim();
-  const periodStart = String(body?.period_start || '').trim();
-  const periodEnd = String(body?.period_end || '').trim();
-  if (!period || !periodStart || !periodEnd) {
-    return c.json({ error: 'period, period_start and period_end are required' }, 400);
-  }
-  if (periodEnd < periodStart) return c.json({ error: 'period_end precedes period_start' }, 400);
-
-  const existing: any = await c.env.DB.prepare(
-    `SELECT * FROM fund_report_periods WHERE fund_id = ? AND period = ?`
-  ).bind(fundId, period).first();
-  if (existing?.status === 'issued') {
-    return c.json({ error: 'period already issued — issue a correcting period instead' }, 409);
-  }
-
-  const notes = body?.narrative === undefined
-    ? (existing?.notes ?? null)
-    : JSON.stringify(body.narrative ?? {});
-  const issue = body?.issue === true;
-  // The snapshot is only meaningful at issue: a draft is always re-rendered
-  // from live figures, which is what makes it a draft.
-  const snapshot = issue ? JSON.stringify(body?.snapshot ?? {}) : (existing?.snapshot_json ?? null);
-
-  if (existing) {
-    await c.env.DB.prepare(
-      `UPDATE fund_report_periods
-          SET period_start = ?, period_end = ?, notes = ?, snapshot_json = ?,
-              status = ?, issued_at = ?, issued_by = ?, updated_at = datetime('now')
-        WHERE id = ?`
-    ).bind(
-      periodStart, periodEnd, notes, snapshot,
-      issue ? 'issued' : 'draft',
-      issue ? new Date().toISOString() : null,
-      issue ? issuer.id : null,
-      existing.id,
-    ).run();
-  } else {
-    await c.env.DB.prepare(
-      `INSERT INTO fund_report_periods
-         (fund_id, period, period_start, period_end, notes, snapshot_json, status, issued_at, issued_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      fundId, period, periodStart, periodEnd, notes, snapshot,
-      issue ? 'issued' : 'draft',
-      issue ? new Date().toISOString() : null,
-      issue ? issuer.id : null,
-    ).run();
-  }
-
-  const row: any = await c.env.DB.prepare(
-    `SELECT * FROM fund_report_periods WHERE fund_id = ? AND period = ?`
-  ).bind(fundId, period).first();
-  return c.json({ ok: true, period: row ? shapePeriod(row) : null }, existing ? 200 : 201);
+ try{
+  const fundId=reportId(c.req.param('id'));
+  if(!fundId)throw new FundReportRefusal('not_found',404);
+  const {user:issuer}=await requireFundGp(c,fundId);
+  const result=await saveFundPeriod(c.env,fundId,issuer.id,await c.req.json().catch(()=>null));
+  return c.json({ok:true,period:result.period},result.created?201:200);
+ }catch(error){return fundReportError(c,error);}
 });
 
 /**
