@@ -951,7 +951,7 @@ async function canReadDeal(sql: any, user: User, dealId: number, projectFounderI
   return false;
 }
 
-export async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
+async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.*, p.name AS project_name, p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;

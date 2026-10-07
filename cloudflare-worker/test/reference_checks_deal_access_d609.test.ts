@@ -223,6 +223,28 @@ test('invited investor can access only invited deal; other deal returns 404', as
     headers: { Authorization: `Bearer ${token}` },
   }, env);
   assert.equal(deleteB.status, 404);
+  const refBStillExists = db.prepare('SELECT id FROM reference_checks WHERE id = 201').get();
+  assert.ok(refBStillExists, 'Ref 201 on Deal B must remain in DB after refused delete');
+
+  // Invited investor refused consent on other deal's reference (Deal B Ref 201)
+  const consentB = await app.request('/api/references/201/consent', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ consent_given: true }),
+  }, env);
+  assert.equal(consentB.status, 404);
+  const refBConsent = db.prepare('SELECT consent_given FROM reference_checks WHERE id = 201').get() as any;
+  assert.equal(refBConsent.consent_given, 0, 'Consent on Ref 201 must remain unchanged (0)');
+
+  // Invited investor allowed consent on invited deal's reference (Deal A Ref 101)
+  const consentA = await app.request('/api/references/101/consent', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ consent_given: true, consent_text: 'Agreed' }),
+  }, env);
+  assert.equal(consentA.status, 200);
+  const refAConsent = db.prepare('SELECT consent_given FROM reference_checks WHERE id = 101').get() as any;
+  assert.equal(refAConsent.consent_given, 1, 'Consent on Ref 101 must be recorded');
 
   // Can delete Ref 101 on Deal A
   const deleteA = await app.request('/api/references/101', {
@@ -232,7 +254,7 @@ test('invited investor can access only invited deal; other deal returns 404', as
   assert.equal(deleteA.status, 200);
 });
 
-test('committed investor can access committed deal; uncommitted deal returns 404', async () => {
+test('committed investor can access committed deal across reads and writes; uncommitted deal returns 404', async () => {
   const db = freshDb();
   const { app, env } = makeApp(db);
   const token = await createJWT(env, INV_COMMITTED, 'committed@investor.test', 'investor');
@@ -252,17 +274,104 @@ test('committed investor can access committed deal; uncommitted deal returns 404
   // Cannot read Ref 101 on Deal A (404)
   const getA = await app.request('/api/references/101', { headers: { Authorization: `Bearer ${token}` } }, env);
   assert.equal(getA.status, 404);
+
+  // Allowed write on committed deal: update Ref 201 on Deal B
+  const patchB = await app.request('/api/references/201', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ notes: 'Committed investor note' }),
+  }, env);
+  assert.equal(patchB.status, 200);
+  const row201 = db.prepare('SELECT notes FROM reference_checks WHERE id = 201').get() as any;
+  assert.equal(row201.notes, 'Committed investor note');
+
+  // Allowed write on committed deal: create on Deal B
+  const postB = await app.request('/api/references', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ deal_id: DEAL_B, reference_name: 'Committed New Ref' }),
+  }, env);
+  assert.equal(postB.status, 200);
+
+  // Refused writes on uncommitted deal (Deal A Ref 101)
+  const postA = await app.request('/api/references', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ deal_id: DEAL_A, reference_name: 'Intruder Ref' }),
+  }, env);
+  assert.equal(postA.status, 404);
+
+  const patchA = await app.request('/api/references/101', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ notes: 'Intruder note' }),
+  }, env);
+  assert.equal(patchA.status, 404);
+
+  const deleteA = await app.request('/api/references/101', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  }, env);
+  assert.equal(deleteA.status, 404);
+  assert.ok(db.prepare('SELECT id FROM reference_checks WHERE id = 101').get(), 'Ref 101 must remain untouched');
+
+  const consentA = await app.request('/api/references/101/consent', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ consent_given: true }),
+  }, env);
+  assert.equal(consentA.status, 404);
+  const row101Consent = db.prepare('SELECT consent_given FROM reference_checks WHERE id = 101').get() as any;
+  assert.equal(row101Consent.consent_given, 0, 'Ref 101 consent must remain unchanged (0)');
 });
 
-test('uninvited and uncommitted investor cannot access any deal or reference', async () => {
+test('uninvited and uncommitted investor cannot access any deal or reference across reads and writes', async () => {
   const db = freshDb();
   const { app, env } = makeApp(db);
   const token = await createJWT(env, INV_NEITHER, 'neither@investor.test', 'investor');
 
+  // Reads refused 404
   assert.equal((await app.request(`/api/references?deal_id=${DEAL_A}`, { headers: { Authorization: `Bearer ${token}` } }, env)).status, 404);
   assert.equal((await app.request(`/api/references?deal_id=${DEAL_B}`, { headers: { Authorization: `Bearer ${token}` } }, env)).status, 404);
   assert.equal((await app.request('/api/references/101', { headers: { Authorization: `Bearer ${token}` } }, env)).status, 404);
   assert.equal((await app.request('/api/references/201', { headers: { Authorization: `Bearer ${token}` } }, env)).status, 404);
+
+  // Writes refused 404 with rows untouched
+  const countBefore = (db.prepare('SELECT COUNT(*) AS c FROM reference_checks').get() as any).c;
+
+  const postRes = await app.request('/api/references', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ deal_id: DEAL_A, reference_name: 'Intruder' }),
+  }, env);
+  assert.equal(postRes.status, 404);
+  const countAfter = (db.prepare('SELECT COUNT(*) AS c FROM reference_checks').get() as any).c;
+  assert.equal(countAfter, countBefore, 'No row inserted');
+
+  const patchRes = await app.request('/api/references/101', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ notes: 'Intruder' }),
+  }, env);
+  assert.equal(patchRes.status, 404);
+  const row101 = db.prepare('SELECT notes FROM reference_checks WHERE id = 101').get() as any;
+  assert.equal(row101.notes, null, 'Row 101 notes must remain null');
+
+  const deleteRes = await app.request('/api/references/101', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  }, env);
+  assert.equal(deleteRes.status, 404);
+  assert.ok(db.prepare('SELECT id FROM reference_checks WHERE id = 101').get(), 'Row 101 must not be deleted');
+
+  const consentRes = await app.request('/api/references/101/consent', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ consent_given: true }),
+  }, env);
+  assert.equal(consentRes.status, 404);
+  const consentRow = db.prepare('SELECT consent_given FROM reference_checks WHERE id = 101').get() as any;
+  assert.equal(consentRow.consent_given, 0, 'Consent must remain 0');
 });
 
 test('create checks that the deal exists (404 for unknown deal)', async () => {
