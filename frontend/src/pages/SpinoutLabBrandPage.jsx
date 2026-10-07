@@ -1663,8 +1663,8 @@ export default function SpinoutLabBrandPage() {
             </div>
 
             {/* ---- D636: the address and saved templates (Ops canvas, sp-brand) ---- */}
-            {projectId && <BrandAddressPanel projectId={projectId} pages={pages} onPagesChanged={refreshPages} />}
-            {projectId && <SavedTemplatesPanel projectId={projectId} pages={pages} onPagesChanged={refreshPages} />}
+            <BrandAddressPanel projectId={projectId} pages={pages} onPagesChanged={refreshPages} />
+            <SavedTemplatesPanel projectId={projectId} pages={pages} onPagesChanged={refreshPages} />
 
             {/* ---- template library ---- */}
             <div ref={libraryRef} className="flex items-center gap-2 mb-3 scroll-mt-20">
