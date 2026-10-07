@@ -48,6 +48,8 @@ type RegistryHubItem = {
     party_roles: string[];
     required_fields: string[];
     updated_at: string | null;
+    updated_by: number | null;
+    updated_by_name: string | null;
   } | null;
   registry_status: 'published' | 'draft' | 'code';
   source: 'store' | 'code';
@@ -245,7 +247,7 @@ registry.post('/draft', async (c) => {
 registry.post('/:doc_type/publish', async (c) => {
   const admin = await requireSuperAdminWriteBar(c);
   const docType = String(c.req.param('doc_type') || '').toLowerCase();
-  const body = await c.req.json<{ reason?: string }>();
+  const body = await c.req.json<{ reason?: string; reviewed_draft_at?: string | null }>();
   const reason = String(body.reason || '').trim();
   if (reason.length < REGISTRY_PUBLISH_REASON_MIN) {
     return c.json({
@@ -253,16 +255,22 @@ registry.post('/:doc_type/publish', async (c) => {
       code: 'reason_required',
     }, 400);
   }
-  const result = await publishType(c.env, docType, reason, admin.id);
+  // D622 — the revision the Super Admin reviewed. A publish applies that one
+  // or refuses: a newer save is a 409 and nothing changes.
+  const reviewed = body.reviewed_draft_at == null ? null : String(body.reviewed_draft_at);
+  const result = await publishType(c.env, docType, reason, admin.id, reviewed);
   if (!result.ok) {
-    return c.json({ error: result.message, code: result.code }, 404);
+    const status = result.code === 'not_found' ? 404 : result.code === 'draft_changed' ? 409 : 400;
+    return c.json({ error: result.message, code: result.code }, status);
   }
+  // The audit records what went live: the applied values, not a code title.
   await logAdminAction(c.env, admin.id, admin.email || '', 'registry.type.publish', {
     doc_type: docType,
     reason,
-    title: TEMPLATES[docType]?.title || docType,
+    reviewed_draft_at: reviewed,
+    applied: result.applied,
   });
-  return c.json({ ok: true });
+  return c.json({ ok: true, applied: result.applied });
 });
 
 export default registry;

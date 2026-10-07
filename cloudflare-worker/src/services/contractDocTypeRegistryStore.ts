@@ -10,6 +10,9 @@ export interface RegistryPendingDraft {
   party_roles: string[];
   required_fields: string[];
   updated_at: string | null;
+  /** D622 — who saved the pending revision: the user id, and their name when the users row has one. */
+  updated_by: number | null;
+  updated_by_name: string | null;
 }
 
 export interface RegistryRow {
@@ -51,6 +54,9 @@ function pendingDraftOf(r: any): RegistryPendingDraft | null {
     party_roles: parseJsonArray(r.draft_party_roles_json),
     required_fields: parseJsonArray(r.draft_required_fields_json),
     updated_at: r.draft_updated_at ?? null,
+    updated_by: r.draft_updated_by == null ? null : Number(r.draft_updated_by),
+    updated_by_name: r.draft_updated_by_name == null || String(r.draft_updated_by_name).trim() === ''
+      ? null : String(r.draft_updated_by_name),
   };
 }
 
@@ -58,12 +64,13 @@ export async function listRegistryRows(env: Env): Promise<RegistryRow[]> {
   const sql = getSQL(env);
   try {
     const rows: any[] = await sql`
-      SELECT doc_type, title, layer, party_roles_json, required_fields_json,
-             status, overlap_note, published_at, published_by, publish_reason, updated_at,
-             draft_title, draft_layer, draft_party_roles_json, draft_required_fields_json,
-             draft_updated_at
-        FROM contract_doc_type_registry
-       ORDER BY doc_type ASC
+      SELECT r.doc_type, r.title, r.layer, r.party_roles_json, r.required_fields_json,
+             r.status, r.overlap_note, r.published_at, r.published_by, r.publish_reason, r.updated_at,
+             r.draft_title, r.draft_layer, r.draft_party_roles_json, r.draft_required_fields_json,
+             r.draft_updated_at, r.draft_updated_by, u.name AS draft_updated_by_name
+        FROM contract_doc_type_registry r
+        LEFT JOIN users u ON u.id = r.draft_updated_by
+       ORDER BY r.doc_type ASC
     `;
     return rows.map((r) => ({
       doc_type: String(r.doc_type),
@@ -155,8 +162,10 @@ export async function upsertDraft(
           WHEN contract_doc_type_registry.status = 'published' THEN excluded.required_fields_json
           ELSE NULL
         END,
+        -- D622: millisecond resolution. Publish names the revision it
+        -- reviewed by this stamp, so two saves in one second must not share it.
         draft_updated_at = CASE
-          WHEN contract_doc_type_registry.status = 'published' THEN CURRENT_TIMESTAMP
+          WHEN contract_doc_type_registry.status = 'published' THEN strftime('%Y-%m-%d %H:%M:%f', 'now')
           ELSE NULL
         END,
         draft_updated_by = CASE
@@ -177,21 +186,58 @@ export async function upsertDraft(
   }
 }
 
+/** The live values a publish left in place, which the audit records (D622). */
+export interface RegistryAppliedValues {
+  title: string;
+  layer: string;
+  party_roles: string[];
+  required_fields: string[];
+}
+
+export type PublishResult =
+  | { ok: true; applied: RegistryAppliedValues }
+  | { ok: false; code: 'not_found' | 'reviewed_draft_required' | 'draft_changed'; message: string };
+
+/**
+ * Publish a type. D622: when a revision is pending, the Super Admin names the
+ * `draft_updated_at` they reviewed, and the publish applies that revision or
+ * nothing. A save that lands after the review changes `draft_updated_at`, so
+ * the guarded UPDATE matches no row and the publish is refused rather than
+ * putting a copy nobody reviewed live under a reason written for another.
+ * With nothing pending it publishes as before.
+ */
 export async function publishType(
   env: Env,
   docType: string,
   reason: string,
   actorId: number,
-): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+  reviewedDraftAt?: string | null,
+): Promise<PublishResult> {
   const sql = getSQL(env);
   try {
     const row: any = await sql`
-      SELECT doc_type, status FROM contract_doc_type_registry WHERE doc_type = ${docType} LIMIT 1
+      SELECT doc_type, status, draft_updated_at FROM contract_doc_type_registry WHERE doc_type = ${docType} LIMIT 1
     `;
     if (!row[0]) {
       return { ok: false, code: 'not_found', message: 'No draft exists for this doc type.' };
     }
-    await sql`
+    const pending: string | null = row[0].draft_updated_at ?? null;
+    const reviewed = reviewedDraftAt == null || String(reviewedDraftAt).trim() === '' ? null : String(reviewedDraftAt);
+    if (pending !== null && reviewed === null) {
+      return {
+        ok: false,
+        code: 'reviewed_draft_required',
+        message: 'This type has a pending revision. Publish names the revision you reviewed, so nothing was published.',
+      };
+    }
+    if (pending !== null && reviewed !== pending) {
+      return {
+        ok: false,
+        code: 'draft_changed',
+        message: 'The pending revision was saved again after you reviewed it. Nothing was published: review the new copy, then publish.',
+      };
+    }
+    const updated: any[] = await sql`
       UPDATE contract_doc_type_registry
          SET title = CASE WHEN draft_title IS NOT NULL THEN draft_title ELSE title END,
              layer = CASE WHEN draft_layer IS NOT NULL THEN draft_layer ELSE layer END,
@@ -210,8 +256,26 @@ export async function publishType(
              draft_updated_at = NULL,
              draft_updated_by = NULL
        WHERE doc_type = ${docType}
+         AND draft_updated_at IS ${pending}
+       RETURNING title, layer, party_roles_json, required_fields_json
     `;
-    return { ok: true };
+    if (!updated[0]) {
+      // A save landed between the read above and this write.
+      return {
+        ok: false,
+        code: 'draft_changed',
+        message: 'The pending revision was saved again after you reviewed it. Nothing was published: review the new copy, then publish.',
+      };
+    }
+    return {
+      ok: true,
+      applied: {
+        title: String(updated[0].title),
+        layer: String(updated[0].layer),
+        party_roles: parseJsonArray(updated[0].party_roles_json),
+        required_fields: parseJsonArray(updated[0].required_fields_json),
+      },
+    };
   } finally {
     await sql.end();
   }
