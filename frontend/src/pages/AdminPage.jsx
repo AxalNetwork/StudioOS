@@ -5272,6 +5272,24 @@ function PromoCodesPanel() {
   );
 }
 
+/**
+ * The roster's name cell. D643 — a sample from the development seed is marked
+ * "Sample": it is not a person, and no member list shows or counts it.
+ */
+export function WellbeingExpertName({ expert: e }) {
+  return (
+    <>
+      <div className="font-medium text-gray-900 dark:text-gray-100">
+        {e.name}
+        {e.is_sample && (
+          <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" data-testid={`admin-wellbeing-sample-${e.uid}`}>Sample</span>
+        )}
+      </div>
+      <div className="text-xs text-gray-500">{e.headline || <span className="text-gray-400">—</span>}</div>
+    </>
+  );
+}
+
 function WellbeingExpertsPanel() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -5326,6 +5344,7 @@ function WellbeingExpertsPanel() {
 
   const verifiedCount = rows.filter((r) => r.verified).length;
   const hiddenCount = rows.filter((r) => r.hidden).length;
+  const sampleCount = rows.filter((r) => r.is_sample).length;
 
   const needle = q.trim().toLowerCase();
   const visible = rows.filter((r) => {
@@ -5344,7 +5363,7 @@ function WellbeingExpertsPanel() {
         <Heart size={16} className="text-rose-500" />
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Wellbeing Experts</h3>
         <span className="text-xs text-gray-500">
-          {verifiedCount} verified · {hiddenCount} hidden · {rows.length} total
+          {verifiedCount} verified · {hiddenCount} hidden · {rows.length} total{sampleCount ? ` · ${sampleCount} sample` : ''}
         </span>
         {/* D570 — the resource library members read under Wellbeing. */}
         <Link to="/admin/wellbeing/resources" className="text-xs font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid="link-admin-wellbeing-library">
@@ -5408,8 +5427,7 @@ function WellbeingExpertsPanel() {
                 return (
                   <tr key={e.uid} className="border-b border-gray-100 hover:bg-gray-50/50" data-testid={`admin-wellbeing-row-${e.uid}`}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900 dark:text-gray-100">{e.name}</div>
-                      <div className="text-xs text-gray-500">{e.headline || <span className="text-gray-400">—</span>}</div>
+                      <WellbeingExpertName expert={e} />
                     </td>
                     <td className="px-4 py-3 text-gray-700 text-xs dark:text-gray-300">
                       {cats.length ? cats.slice(0, 3).join(', ') : <span className="text-gray-400">—</span>}

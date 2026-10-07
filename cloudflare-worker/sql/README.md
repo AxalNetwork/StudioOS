@@ -33,5 +33,9 @@ and is not kept in sync.
 - **Money is `*_cents INTEGER`.** Never a float, never a string.
 - Every table gets a `uid TEXT NOT NULL UNIQUE` for external reference, and
   `created_at` / `updated_at` as `TEXT NOT NULL DEFAULT (datetime('now'))`.
+- **A data correction deactivates; it does not delete.** When rows that should
+  never have been shown must go, set them inactive and say why in the
+  migration's header, so an audit can still see they existed. Migration 433
+  (D643) does this for the sample wellbeing experts.
 - Index what you filter on. The public-feed and per-owner lookups are the hot
   paths.

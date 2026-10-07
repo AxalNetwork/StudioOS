@@ -1,14 +1,28 @@
 /**
- * Task #8 (DI) — seed a starter set of experts so the directory renders
- * sane matches on a fresh DB. Idempotent: re-running inserts only the
- * experts whose `seed_key` (mapped to `bio` first line marker) is missing.
+ * Task #8 (DI) — seed a starter set of SAMPLE experts so the directory
+ * renders matches on a fresh development database. Idempotent: `INSERT OR
+ * IGNORE` on the uid.
  *
- * Each expert is multi-category and multi-modality so the matching engine
- * has variety to score against. All seeded experts are flagged
- * `is_active=1` and `verified=1` — admins can demote via direct SQL or a
- * future admin UI.
+ * D643 (#1438) — these are samples, not people. They used to be inserted on
+ * every directory read in production too, as verified and active, with
+ * made-up booking links, and they were the only experts production listed.
+ * Now:
+ *   · `ensureSeededExperts` inserts nothing in production;
+ *   · migration 433 deactivates the eight already there (never deletes them);
+ *   · a sample is known by its uid prefix, `isSampleExpert`, and no
+ *     member-facing read lists, counts, opens or books one. The admin roster
+ *     still sees them, marked `is_sample`.
  */
 import type { Env } from '../../types';
+import { isProductionEnv } from '../../util/paymentMode';
+
+/** Every sample expert's uid starts with this; no real expert's does. */
+export const SAMPLE_EXPERT_UID_PREFIX = 'seed_';
+
+export function isSampleExpert(uid: string | null | undefined): boolean {
+  return typeof uid === 'string' && uid.startsWith(SAMPLE_EXPERT_UID_PREFIX);
+}
+
 
 interface SeedExpert {
   uid: string;
@@ -168,6 +182,8 @@ const SEEDS: SeedExpert[] = [
 ];
 
 export async function ensureSeededExperts(env: Env): Promise<void> {
+  // D643 — production lists only experts who applied and were verified.
+  if (isProductionEnv(env)) return;
   for (const s of SEEDS) {
     try {
       await env.DB.prepare(

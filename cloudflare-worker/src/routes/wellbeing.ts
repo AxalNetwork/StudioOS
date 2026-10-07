@@ -46,7 +46,7 @@ import {
   applyFilters, loadRatingAggregates, rankExperts,
   type ExpertRow, type MatchPrefs,
 } from '../services/wellbeing/match';
-import { ensureSeededExperts } from '../services/wellbeing/seedExperts';
+import { ensureSeededExperts, isSampleExpert, SAMPLE_EXPERT_UID_PREFIX } from '../services/wellbeing/seedExperts';
 import { offeredSlots, type AvailabilityWindow } from '../services/wellbeing/slots';
 import {
   RESOURCE_FILE_MAX_BYTES, RESOURCE_FILE_TYPES, mediaType, newResourceFileKey, resourceFilePath,
@@ -1055,6 +1055,8 @@ function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_av
     website_url: e.website_url,
     verified: !!e.verified,
     hidden: !!e.hidden_by_admin,
+    // D643 — a sample from the development seed, never a real person.
+    is_sample: isSampleExpert(e.uid),
     profile_completion_pct: Number(e.profile_completion_pct || 0),
     accepts_payments: !!(e.stripe_account_id && e.stripe_charges_enabled),
     rating_avg: opts.rating_avg ?? 0,
@@ -1162,17 +1164,19 @@ wellbeing.get('/experts', async (c) => {
     await ensureSeededExperts(c.env);
 
     // Task #4 — directory only shows verified experts with completion >= 70
-    // and not admin-hidden. Admins see everything (review surface).
+    // and not admin-hidden. Admins see everything (review surface), samples
+    // included and marked; D643 — a member is never shown or counted one.
     const isAdmin = role(user) === 'admin';
     const all = isAdmin
       ? await c.env.DB.prepare(`SELECT * FROM experts WHERE is_active = 1`).all<ExpertRow>()
       : await c.env.DB.prepare(
           `SELECT * FROM experts
              WHERE is_active = 1
+               AND substr(uid, 1, ?) <> ?
                AND verified = 1
                AND COALESCE(hidden_by_admin, 0) = 0
                AND COALESCE(profile_completion_pct, 0) >= 70`,
-        ).all<ExpertRow>();
+        ).bind(SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX).all<ExpertRow>();
     const experts = (all.results || []) as ExpertRow[];
 
     const filtered = applyFilters(experts, {
@@ -1246,6 +1250,8 @@ wellbeing.get('/experts/:uid', async (c) => {
     'SELECT * FROM experts WHERE uid = ? AND is_active = 1',
   ).bind(uid).first<ExpertRow>();
   if (!expert) return c.json({ detail: 'Expert not found' }, 404);
+  // D643 — a sample is not an expert a member can open.
+  if (role(user) !== 'admin' && isSampleExpert(expert.uid)) return c.json({ detail: 'Expert not found' }, 404);
 
   // Tier gate: free founders can view at most N distinct experts/month.
   if (role(user) === 'founder' && !userMeetsTier(user as TierUser, 'growth')) {
@@ -1354,6 +1360,8 @@ wellbeing.post('/experts/:uid/book', async (c) => {
   // Task #4 — booking gated on completion >= 70 + not admin-hidden.
   if (role(user) !== 'admin') {
     if ((expert.hidden_by_admin ?? 0) === 1) return c.json({ detail: 'Expert unavailable' }, 404);
+    // D643 — a sample cannot be booked; its booking link was made up.
+    if (isSampleExpert(expert.uid)) return c.json({ detail: 'Expert not found' }, 404);
     if ((expert.profile_completion_pct ?? 0) < 70) {
       return c.json({ detail: 'Expert profile is incomplete and cannot accept bookings yet.' }, 409);
     }
