@@ -454,10 +454,22 @@ adminArticles.put('/comments/:cid', async (c) => {
 });
 
 adminArticles.delete('/comments/:cid', async (c) => {
-  await requireAdmin(c);
+  const admin = await requireAdmin(c);
   await ensureNewsSchema(c.env);
   const cid = Number(c.req.param('cid'));
-  await c.env.DB.prepare(`DELETE FROM article_review_comments WHERE id = ?`).bind(cid).run();
+  if (!Number.isFinite(cid) || cid <= 0) return c.json({ error: 'comment_not_found' }, 404);
+  const comment = await c.env.DB.prepare(
+    'SELECT id, article_id, author_id, body FROM article_review_comments WHERE id = ?',
+  ).bind(cid).first<{ id: number; article_id: number; author_id: number; body: string }>();
+  if (!comment) return c.json({ error: 'comment_not_found' }, 404);
+  if (Number(comment.author_id) !== Number(admin.id) && !isSuperAdmin(admin)) {
+    return c.json({ error: 'not_your_comment' }, 403);
+  }
+  await c.env.DB.prepare('DELETE FROM article_review_comments WHERE id = ?').bind(cid).run();
+  await logAdminAction(c.env, admin.id, admin.email || '', 'article_comment_deleted', {
+    article_id: comment.article_id,
+    comment_id: comment.id,
+  });
   return c.json({ ok: true });
 });
 
