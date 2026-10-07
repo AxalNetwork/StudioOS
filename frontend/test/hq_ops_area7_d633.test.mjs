@@ -203,7 +203,7 @@ test('the routes are the Super Admin\'s, each has its door, and the client calls
   assert.match(admin, /\{showCredits && \(\s*<Link to=\{`\/admin\/accounts\/credits\/\$\{u\.id\}`\}/);
   assert.match(admin, /showCredits=\{isSuperAdminUser\(viewer\)\}/);
   assert.match(codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx')), /<Link to="\/admin\/security\/obligations"/);
-  assert.match(codeOnly(read('frontend/src/pages/hq/MemberCreditsPage.jsx')), /<Link to="\/hq\/credits"/, 'a member\'s credits link to the reward rules (#1384)');
+  assert.match(codeOnly(read('frontend/src/pages/hq/MemberCreditsPage.jsx')), /<Link to="\/admin\/credit-rules"/, 'a member\'s credits link to the reward rules (#1384, #1412)');
   globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
   globalThis.document ??= { cookie: '' };
   const original = globalThis.fetch; const calls = [];

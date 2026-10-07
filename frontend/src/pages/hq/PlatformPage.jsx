@@ -1026,10 +1026,10 @@ export default function PlatformPage() {
             </Zone>
           </div>
 
-          {/* #1384 — the credit rules and grants, beside Promo codes. Its own
-              page changes them; this zone only links there. */}
+          {/* D638 (#1384, #1412) — the credit rules and grants, beside Promo
+              codes. Its own page changes them; this zone only links there. */}
           <Zone title="Perk credits" sub="what each event pays, and what was paid">
-            <Link to="/hq/credits" className={CONSOLE_LINK} data-testid="hq-credits-link">
+            <Link to="/admin/credit-rules" className={CONSOLE_LINK} data-testid="hq-credits-link">
               <ConsoleLinkBody
                 title="Credit rules and grants"
                 note="Each reward rule's credits and on/off, the monthly bounty cap, and every grant with its revoke. Super Admin only."
