@@ -108,6 +108,8 @@ test('voice: a write that does not name it leaves it; null or an empty list clea
 test('the dark logo is stored through the same sanitizers as the light one', async () => {
   const db = fixture();
   const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><circle r="4" onload="x()"/></svg>';
+  // Intentional hostile input to the real sanitizer; db is only the in-memory SQLite fixture, never an HTML sink.
+  // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
   const r = await put(db, OWNER, 1, { logo_dark_svg: svg, logo_dark_url: 'javascript:alert(1)', logo_dark_asset_id: 'brand-logos/10/x.png' });
   assert.equal(r.status, 200);
   const row = db.prepare('SELECT logo_dark_url, logo_dark_svg, logo_dark_asset_id FROM landing_pages WHERE id = 1').get() as any;
