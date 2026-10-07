@@ -25,6 +25,7 @@
  */
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
+import * as aiBudget from './aiBudget';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -464,23 +465,9 @@ const PRIMARY_TIMEOUT_MS = 8_000;
 // ---------------------------------------------------------------------------
 // Budget defaults (overridable via env vars)
 // ---------------------------------------------------------------------------
-const DEFAULTS = {
-  USER_DAY_USD: 5,
-  USER_MONTH_USD: 50,
-  ORG_MONTH_USD: 5_000,
-};
-
 function budgetCaps(env: Env): { userDay: number; userMonth: number; orgMonth: number } {
-  const e = env as unknown as Record<string, string | undefined>;
-  const num = (v: string | undefined, fallback: number) => {
-    const n = v != null ? Number(v) : NaN;
-    return Number.isFinite(n) && n > 0 ? n : fallback;
-  };
-  return {
-    userDay:   num(e.WORKERS_AI_BUDGET_USD_DAY,   DEFAULTS.USER_DAY_USD),
-    userMonth: num(e.WORKERS_AI_BUDGET_USD_MONTH, DEFAULTS.USER_MONTH_USD),
-    orgMonth:  num(e.WORKERS_AI_BUDGET_USD_ORG_MONTH, DEFAULTS.ORG_MONTH_USD),
-  };
+  const caps = aiBudget.environmentAiCaps(env);
+  return {userDay:caps.day,userMonth:caps.month,orgMonth:caps.orgMonth};
 }
 
 // ---------------------------------------------------------------------------
@@ -978,7 +965,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       readSpend(store, monthKey_),
       readSpend(store, orgKey),
     ]);
-    if (d >= caps.userDay) {
+    if (opts.userId <= 0 && d >= caps.userDay) {
       const usage: UsageMeta = {
         task: opts.task, model: primaryModel, latency_ms: 0,
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
@@ -987,7 +974,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       await recordUsage(env, opts.userId, usage, 'budget_user_day', opts.surface);
       return { ok: false, refusal: 'budget_user_day', error: `daily cap ${caps.userDay} USD reached`, usage };
     }
-    if (m >= caps.userMonth) {
+    if (opts.userId <= 0 && m >= caps.userMonth) {
       const usage: UsageMeta = {
         task: opts.task, model: primaryModel, latency_ms: 0,
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
@@ -1005,6 +992,31 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       };
       await recordUsage(env, opts.userId, usage, 'budget_org_month', opts.surface);
       return { ok: false, refusal: 'budget_org_month', error: `org cap ${caps.orgMonth} USD reached`, usage };
+    }
+  }
+
+  let reservation: {uid:string;userId:number} | undefined;
+  if (opts.userId > 0) {
+    try {
+      // UTF-8 bytes bound input tokenization; include chat/system overhead.
+      // Reserve the most expensive offered fallback, refund to the actual logged estimate.
+      const inputBytes = new TextEncoder().encode(defaultContentBlob(opts)+(opts.systemPrompt || '')).byteLength;
+      const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64;
+      const outputBound = opts.maxTokens || 512;
+      if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
+      const models = [primaryModel,...(route.fallbackChain || [])];
+      const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,opts.audioMinutes || 0)));
+      const held = await aiBudget.reserveAiBudget(env,opts.userId,aiBudget.usdToMicro(quote));
+      if (!held.ok) {
+        const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
+        await recordUsage(env,opts.userId,usage,held.refusal,opts.surface);
+        return {ok:false,refusal:held.refusal,error:'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.',usage};
+      }
+      reservation = held.reservation;
+    } catch {
+      const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
+      await recordUsage(env,opts.userId,usage,'misconfigured',opts.surface);
+      return {ok:false,refusal:'misconfigured',error:'Unreadable: your AI allowance and top-up balance could not be checked.',usage};
     }
   }
 
@@ -1096,6 +1108,14 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     cached: false,
     safety_score: safetyScore,
   };
+
+  if (reservation) {
+    try { await aiBudget.settleAiReservation(env,reservation,attempt.ok ? aiBudget.usdToMicro(cost) : 0,!attempt.ok); }
+    catch {
+      await recordUsage(env,opts.userId,usage,'misconfigured',opts.surface);
+      return {ok:false,refusal:'misconfigured',error:'Unreadable: the AI allowance and top-up draw could not be recorded.',usage};
+    }
+  }
 
   if (!attempt.ok) {
     await recordUsage(env, opts.userId, usage, 'all_models_failed', opts.surface);

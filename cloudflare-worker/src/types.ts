@@ -237,6 +237,8 @@ export interface Env {
   STRIPE_CONNECT_CLIENT_ID?: string;
   STRIPE_ATLAS_API_KEY?: string;
   // Task #6 — founder subscription tier price ids (Stripe).
+  /** D629: owner-created one-time USD AI top-up catalog price. */
+  STRIPE_PRICE_AI_TOPUP?: string;
   STRIPE_PRICE_GROWTH?: string;
   STRIPE_PRICE_STUDIO?: string;
   // Task #6 (W-1) — investor paywall price ids. Institutional supports

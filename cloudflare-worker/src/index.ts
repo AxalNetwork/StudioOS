@@ -71,6 +71,7 @@ import marketIntelPublic from './routes/market_intel_public';
 import { investorProfile, investorSignals, aggregateInvestorSignals } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
+import aiBudgetRoutes from './routes/ai_budget';
 import { runTotpRemediation } from './services/totpRemediation';
 import { writeDailySnapshot } from './services/analyticsReports';
 // Task #5 (IE) — Backup + DR. Daily KV snapshot to R2.
@@ -782,6 +783,7 @@ app.route('/api/assistant', assistantRoutes);
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
 app.route('/api/ai', aiRoutes);
+app.route('/api/ai-budget', aiBudgetRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
 // Task #33 — Cloudflare Access perimeter on /api/admin, /api/monitoring and

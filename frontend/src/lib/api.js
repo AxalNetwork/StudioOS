@@ -10,6 +10,7 @@ import { storeReason } from './impersonationBar';
 // api-modules:begin
 export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
+export * from './api/aiBudget.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
 export * from './api/helpCenter.js';
