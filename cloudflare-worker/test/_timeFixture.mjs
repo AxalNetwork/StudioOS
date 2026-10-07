@@ -60,10 +60,23 @@ export function sqlAround(source, anchor, label = 'source') {
  * the date halves MATCH. A relative fixture — "a minute ago" — run at 00:00:30
  * UTC lands on yesterday's date, where the broken predicate is accidentally
  * right, so the test would pass against unfixed code for one minute a day.
- * Midnight-today is always in the past and always on today's date.
+ * Midnight-today is on today's date, so the 'T' versus ' ' comparison is the
+ * one under test. It is also earlier than datetime('now'), except during the
+ * 00:00:00 UTC second, when the two are equal and a `>=` window still includes
+ * it. That one second is waited out; a frozen clock is left alone.
  */
 export function expiredIso(db) {
-  const row = db.prepare("SELECT date('now') AS day").get();
+  const read = () => db.prepare("SELECT date('now') AS day, datetime('now') AS now").get();
+  let row = read();
+  if (String(row.now).endsWith(' 00:00:00')) {
+    const start = Date.now();
+    for (let i = 0; i < 30; i += 1) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      const next = read();
+      if (!String(next.now).endsWith(' 00:00:00')) { row = next; break; }
+      if (Date.now() === start) break;
+    }
+  }
   return `${row.day}T00:00:00.000Z`;
 }
 
