@@ -2229,6 +2229,10 @@ function AppInner() {
     && networkParams.get('mode') !== 'workspace'
     && !networkParams.has('tab')
     && !networkParams.has('intro');
+  // D563: a founder's /liquidity redirects to the Raise zone, and the query and
+  // the hash travel with it, as D422's redirects below do.
+  const liquidityParams = new URLSearchParams(location.search);
+  liquidityParams.set('mode', 'workspace');
   const signalsParams = new URLSearchParams(location.search);
   const signalsMode = signalsParams.get('mode');
   const signalsHasNonProjectQuery = [...signalsParams.keys()].some((key) => key !== 'project_id');
@@ -3008,7 +3012,7 @@ function AppInner() {
       {/* D563: a founder's /liquidity was the same LiquidityPage that
           /raise/liquidity?mode=workspace renders inside the Raise shell, so
           the founder is sent there; a partner or investor still lands here. */}
-      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'founder' ? <Navigate to="/raise/liquidity?mode=workspace" replace /> : <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>)} />
+      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'founder' ? <Navigate replace to={{ pathname: '/raise/liquidity', search: `?${liquidityParams}`, hash: location.hash }} /> : <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>)} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
       <Route path="/lp-portal" element={<LpPortalRedirect />} />

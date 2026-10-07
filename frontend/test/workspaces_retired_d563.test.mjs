@@ -24,6 +24,10 @@ import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { WORKSPACES, PAGE_HOMES, alsoInFor } from '../src/lib/adminPlacement.js';
 import { bucketsFor } from '../src/workspaces/shellConfig.js';
 import { routeBlock } from './_routes.mjs';
+import { createElement as h } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import AlsoIn from '../src/workspaces/AlsoIn.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -142,6 +146,32 @@ test('the Also in list draws exactly the "also" pages, and a row with none draws
   assert.match(comp, /<Link to=\{p\.route\}/);
 });
 
+test('the rendered Also in list links exactly the row\'s "also" pages, in order', () => {
+  // Rendered, not read: a swapped argument (`alsoInFor(row, role)`) empties
+  // every list while every source-text check above still passes.
+  for (const [role, row] of [['investor', 'Portfolio'], ['founder', 'Raise']]) {
+    const html = renderToStaticMarkup(h(MemoryRouter, null, h(AlsoIn, { role, row })));
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(hrefs, alsoInFor(role, row).map((w) => w.route), `${role} · ${row} renders the wrong links`);
+    assert.ok(hrefs.length > 0, `${role} · ${row} renders no list`);
+  }
+  assert.equal(renderToStaticMarkup(h(MemoryRouter, null, h(AlsoIn, { role: 'investor', row: 'Trust' }))), '',
+    'a row with no "also" page draws nothing');
+});
+
+test('a "row" door is the row itself: the row opens that page', () => {
+  // Reclassifying an "also" page as a "row" door drops it from the Also in
+  // list; this is what makes that a failure rather than a silent loss.
+  const ALIAS = { '/portfolio/health': '/portfolio' };
+  for (const [route, homes] of Object.entries(PAGE_HOMES)) {
+    for (const [role, label, door] of homes) {
+      if (door !== 'row') continue;
+      const row = rowsOf(role).find((r) => r.label === label);
+      assert.equal(row.to, ALIAS[route] ?? route, `${route} is a row door of ${role} · ${label}, whose row opens ${row.to}`);
+    }
+  }
+});
+
 test('the Lab page is linked from the Lab\'s own arsenal', () => {
   const arsenal = read('frontend/src/lib/spinoutLabArsenal.js');
   for (const [route, homes] of Object.entries(PAGE_HOMES)) {
@@ -152,7 +182,10 @@ test('the Lab page is linked from the Lab\'s own arsenal', () => {
 
 test('the one retired page redirects a founder to the zone that replaced it, and no one else', () => {
   const block = routeBlock(APP, '/liquidity');
-  assert.match(block, /effectiveRole === 'founder' \? <Navigate to="\/raise\/liquidity\?mode=workspace" replace \/>/);
+  assert.match(block, /effectiveRole === 'founder' \? <Navigate replace to=\{\{ pathname: '\/raise\/liquidity', search: `\?\$\{liquidityParams\}`, hash: location\.hash \}\} \/>/);
+  // The query and the hash travel, as D422's redirects do; only `mode` is set.
+  assert.match(APP, /const liquidityParams = new URLSearchParams\(location\.search\);\n\s*liquidityParams\.set\('mode', 'workspace'\);/,
+    'the redirect must keep the query it arrived with and set mode=workspace');
   assert.match(block, /: <FounderWorkspaceTabs set="raise" user=\{user\}><LiquidityPage currentUser=\{user\} \/><\/FounderWorkspaceTabs>/,
     'a partner or investor no longer lands on /liquidity');
   assert.ok(guardRoles('/raise/liquidity').includes('founder'), 'the redirect lands on a route the founder cannot open');
