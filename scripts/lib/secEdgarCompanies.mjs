@@ -1,10 +1,13 @@
 /**
- * SEC EDGAR's public company list → migration 404's rows (#1230, D595).
+ * SEC EDGAR's public company list → one migration's rows (#1230, D595).
  *
  * The pure half of `../import-sec-edgar.mjs`: it reads the body of
  * `company_tickers_exchange.json` and writes SQL text. It never fetches and
  * never writes to a database; the CLI fetches, and the migration runner is
- * the only thing that ever applies the result.
+ * the only thing that ever applies the result. The migration number in the
+ * header is the leading digits of `--out`, so a later file cannot be labelled
+ * as 404. Migration 404 created the empty table and is applied; the rows are
+ * 412.
  *
  * WHAT A ROW CARRIES is what EDGAR records and nothing more: the CIK, the
  * conformed name, the ticker and the exchange. EDGAR lists a company once per
@@ -18,6 +21,8 @@
  * their registrant name; it holds no officers or addresses, and nothing here
  * asks for any.
  */
+
+import { basename } from 'node:path';
 
 export const EDGAR_URL = 'https://www.sec.gov/files/company_tickers_exchange.json';
 export const EDGAR_SOURCE = 'SEC EDGAR';
@@ -108,11 +113,24 @@ export const TABLE_SQL = `CREATE TABLE IF NOT EXISTS research_public_companies (
 CREATE INDEX IF NOT EXISTS idx_research_public_companies_name ON research_public_companies (name);
 CREATE INDEX IF NOT EXISTS idx_research_public_companies_ticker ON research_public_companies (ticker);`;
 
-/** Migration 404's whole text, from parsed rows and the date the file was read. */
-export function renderMigration({ rows, skipped, listings }, asOf) {
+/**
+ * The migration number is the leading digits of `--out`'s file name
+ * (`412_research_public_companies_edgar.sql` → `412`). A name without that
+ * prefix is refused: the header must not fall back to 404.
+ */
+export function migrationNumberFromOut(outPath) {
+  const name = basename(String(outPath ?? ''));
+  const match = /^(\d+)_/.exec(name);
+  if (!match) throw new Error(`--out must be named <number>_….sql, got ${JSON.stringify(name)}`);
+  return match[1];
+}
+
+/** The migration's whole text. Its number is `migrationNumberFromOut(outPath)`. */
+export function renderMigration({ rows, skipped, listings }, asOf, outPath) {
   if (!DATE_RE.test(String(asOf))) throw new Error(`as_of must be YYYY-MM-DD, got ${asOf}`);
+  const number = migrationNumberFromOut(outPath);
   const head = [
-    '-- Migration 404: US public companies from SEC EDGAR (#1230, D595).',
+    `-- Migration ${number}: US public companies from SEC EDGAR (#1230, D595).`,
     '--',
     '-- WRITTEN BY scripts/import-sec-edgar.mjs. Do not edit by hand: rerun the',
     '-- importer before this file is applied, and never after (an applied',

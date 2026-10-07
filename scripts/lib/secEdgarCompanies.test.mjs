@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  EDGAR_LICENCE, EDGAR_SOURCE, EDGAR_URL, EDGAR_USER_AGENT, ROWS_PER_INSERT, padCik, parseEdgar, renderMigration,
+  EDGAR_LICENCE, EDGAR_SOURCE, EDGAR_URL, EDGAR_USER_AGENT, ROWS_PER_INSERT,
+  migrationNumberFromOut, padCik, parseEdgar, renderMigration,
 } from './secEdgarCompanies.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -48,7 +49,7 @@ test('padCik: ten digits, or null', () => {
 });
 
 test('the migration applies, twice, to unique rows that each cite EDGAR and its licence', () => {
-  const sql = renderMigration(parseEdgar(sample()), '2026-10-06');
+  const sql = renderMigration(parseEdgar(sample()), '2026-10-06', '404_research_public_companies.sql');
   const db = new DatabaseSync(':memory:');
   db.exec(sql);
   db.exec(sql);
@@ -68,10 +69,46 @@ test('the migration applies, twice, to unique rows that each cite EDGAR and its 
 
 test('rows go in batches small enough for one D1 statement', () => {
   const data = Array.from({ length: ROWS_PER_INSERT * 2 + 1 }, (_, i) => [i + 1, `Co ${i}`, `T${i}`, 'NYSE']);
-  const sql = renderMigration(parseEdgar({ fields: ['cik', 'name', 'ticker', 'exchange'], data }), '2026-10-06');
+  const sql = renderMigration(parseEdgar({ fields: ['cik', 'name', 'ticker', 'exchange'], data }), '2026-10-06', '404_research_public_companies.sql');
   assert.equal(sql.match(/^INSERT OR IGNORE INTO/gm).length, 3);
   for (const stmt of sql.split(/;\n/)) assert.ok(stmt.length < 100_000, 'D1 caps a statement at 100 kB');
-  assert.throws(() => renderMigration(parseEdgar(sample()), '6 Oct 2026'), /YYYY-MM-DD/);
+  assert.throws(() => renderMigration(parseEdgar(sample()), '6 Oct 2026', '404_research_public_companies.sql'), /YYYY-MM-DD/);
+});
+
+test('the header number is the leading digits of --out, not a fixed 404', () => {
+  const parsed = parseEdgar(sample());
+  const as412 = renderMigration(parsed, '2026-10-07', '/tmp/412_research_public_companies_edgar.sql');
+  const as404 = renderMigration(parsed, '2026-10-07', '404_research_public_companies.sql');
+  assert.match(as412, /^-- Migration 412: US public companies from SEC EDGAR/);
+  assert.match(as404, /^-- Migration 404: US public companies from SEC EDGAR/);
+  assert.equal(as412.replace('Migration 412', 'Migration 404'), as404, 'only the number changes');
+  assert.equal(migrationNumberFromOut('cloudflare-worker/sql/migrations/412_research_public_companies_edgar.sql'), '412');
+  assert.throws(() => migrationNumberFromOut('research_public_companies.sql'), /--out must be named/);
+  assert.throws(() => renderMigration(parsed, '2026-10-07'), /--out must be named/);
+});
+
+test('migration 412 holds the rows: unique by CIK, each citing EDGAR, numbered 412', () => {
+  const path = resolve(ROOT, 'cloudflare-worker/sql/migrations/412_research_public_companies_edgar.sql');
+  const committed = readFileSync(path, 'utf8');
+  assert.equal(migrationNumberFromOut(path), '412');
+  assert.match(committed, /^-- Migration 412: US public companies from SEC EDGAR \(#1230, D595\)\./);
+  assert.match(committed, /^-- 10434 listings in the file; 8016 companies \(one row per CIK\);/m);
+  assert.match(committed, /^-- 0 listings skipped by the importer's checks\./m);
+  const db = new DatabaseSync(':memory:');
+  db.exec(committed);
+  db.exec(committed);
+  const rows = db.prepare('SELECT cik, source_name, source_url, licence, as_of FROM research_public_companies').all();
+  assert.equal(rows.length, 8016, 'one row per CIK, and applying the file twice adds none');
+  assert.equal(new Set(rows.map((r) => r.cik)).size, rows.length, 'unique by CIK');
+  for (const r of rows) {
+    assert.equal(r.source_name, EDGAR_SOURCE);
+    assert.equal(r.source_url, EDGAR_URL);
+    assert.equal(r.licence, EDGAR_LICENCE);
+    assert.match(r.as_of, /^\d{4}-\d{2}-\d{2}$/);
+  }
+  const apple = db.prepare('SELECT name, ticker FROM research_public_companies WHERE cik = ?').get('0000320193');
+  assert.equal(apple.name, 'Apple Inc.');
+  assert.equal(apple.ticker, 'AAPL');
 });
 
 test('the User-Agent names the public contact in SECURITY.md, and the committed migration is the importer\'s output', () => {

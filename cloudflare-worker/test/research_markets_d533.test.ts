@@ -532,3 +532,27 @@ test('listed companies: an empty EDGAR store reads zero from the store, not a fa
   assert.equal(r.status, 200);
   assert.deepEqual([r.body.total, r.body.sources[1].total, r.body.sources[1].store_total, r.body.sources[1].as_of], [4, 0, 0, null]);
 });
+
+test('listed companies: migration 412\'s rows page and count from the store', async () => {
+  const db = freshDb();
+  db.exec(readFileSync(resolve(MIGRATIONS, '412_research_public_companies_edgar.sql'), 'utf8'));
+  const n = (db.prepare('SELECT COUNT(*) AS n FROM research_public_companies').get() as { n: number }).n;
+  const distinct = (db.prepare('SELECT COUNT(DISTINCT cik) AS n FROM research_public_companies').get() as { n: number }).n;
+  assert.equal(n, 8016);
+  assert.equal(distinct, n, 'unique by CIK');
+  const page = await get(db, '/listed-companies?source=sec_edgar&sort=name&limit=50&offset=0');
+  assert.equal(page.status, 200);
+  assert.equal(page.body.items.length, 50);
+  assert.equal(page.body.total, 8016);
+  const edgar = page.body.sources.find((s: any) => s.key === 'sec_edgar');
+  assert.deepEqual([edgar.total, edgar.store_total, edgar.label], [8016, 8016, 'SEC EDGAR']);
+  assert.equal(page.body.items.every((i: any) => i.source === 'sec_edgar' && i.cik && !('market_cap_band' in i)), true);
+  const next = await get(db, '/listed-companies?source=sec_edgar&sort=name&limit=50&offset=50');
+  assert.equal(next.body.total, 8016);
+  const seen = new Set(page.body.items.map((i: any) => i.cik));
+  for (const item of next.body.items) assert.equal(seen.has(item.cik), false, item.cik);
+  const apple = await get(db, '/listed-companies?source=sec_edgar&q=AAPL');
+  const row = apple.body.items.find((i: any) => i.cik === '0000320193');
+  assert.deepEqual([row?.symbol, row?.name, row?.source], ['AAPL', 'Apple Inc.', 'sec_edgar']);
+  assert.equal(apple.body.sources.find((s: any) => s.key === 'sec_edgar').store_total, 8016, 'the store total is the whole store, whatever the search');
+});
