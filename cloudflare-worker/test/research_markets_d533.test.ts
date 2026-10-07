@@ -52,6 +52,7 @@ function freshDb() {
   db.exec(migration('375'));
   db.exec(tableFrom('229', 'research_market_directory'));
   db.exec(tableFrom('365', 'research_fund_directory'));
+  db.exec(migration('406'));
   db.exec(tableFrom('136', 'signals'));
   db.exec(tableFrom('136', 'signal_companies'));
   db.exec(migration('376'));
