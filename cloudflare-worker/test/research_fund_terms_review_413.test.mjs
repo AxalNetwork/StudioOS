@@ -84,7 +84,7 @@ test('actual dataset becomes 1076 served funds, with 1540 withheld, cited pages 
   assert.equal(new Set([...first.body.items, ...second.body.items].map(row => row.uid)).size, 50);
   for (const row of [...first.body.items, ...second.body.items]) {
     assert.equal(row.source.name, EUR_SOURCE); assert.equal(row.source.verdict, 'cite only');
-    assert.equal(row.source.reviewed_on, '2026-10-07'); assert.match(row.source.url, /docs\.google\.com\/spreadsheets/);
+    assert.equal(row.source.reviewed_on, '2026-10-07'); assert.match(row.source.url, /^https?:\/\/docs\.google\.com\/spreadsheets(?:\/|$)/);
   }
   const removed = first.body.removed_sources.find(row => row.name === DEEP);
   assert.equal(removed.funds_withheld, 1540); assert.equal(removed.evidence_url, TERMS); assert.match(removed.reason, /written permission/);
