@@ -1,0 +1,221 @@
+name: Research data import
+
+# Runs one research importer, or fetches a short list of public pages, on a
+# GitHub-hosted runner, and pushes what it wrote to a new branch named
+# data/<source>-<run id>.
+#
+# WHY A RUNNER. The importers behind #1229 (Wikidata), #1230 (SEC EDGAR) and
+# #1231 (Companies House), and the fund-list sources behind #1081 and #1232,
+# read hosts the agents' sandboxes cannot reach: their proxies refuse
+# query.wikidata.org, www.sec.gov, download.companieshouse.gov.uk,
+# docs.google.com and hello-tomorrow.org (checked on 2026-10-07). A
+# GitHub-hosted runner reaches them, and its log records what was fetched and
+# when.
+#
+# WHAT IT NEVER DOES. It never writes to a database, never touches main, and
+# never opens a pull request. The branch is reviewed like any other: a person
+# or an agent opens the PR with its tests, and the deploy applies a migration
+# only after that PR merges. It refuses a migration number that is already
+# taken, because an applied migration is never rewritten.
+#
+# INPUTS ARRIVE AS ENV VARS and are checked before use. No `${{ }}` expression
+# sits inside `run:`. A URL's host must be on ALLOWED_HOSTS. A redirect from
+# an allowed host (Google's CSV export answers from googleusercontent.com) is
+# followed.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: What to run
+        required: true
+        type: choice
+        options:
+          - wikidata
+          - sec-edgar
+          - companies-house
+          - urls
+      migration:
+        description: 'Importers only: the new migration file, for example 403_research_company_directory_wikidata.sql'
+        required: false
+        type: string
+      urls:
+        description: '"urls" only: space-separated name=https://... pairs, each saved under attached_assets/fetched/'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-import-${{ inputs.source }}
+  cancel-in-progress: false
+
+jobs:
+  import:
+    name: import (${{ inputs.source }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SOURCE: ${{ inputs.source }}
+      MIGRATION: ${{ inputs.migration }}
+      URLS: ${{ inputs.urls }}
+      ALLOWED_HOSTS: query.wikidata.org www.sec.gov download.companieshouse.gov.uk docs.google.com hello-tomorrow.org www.hello-tomorrow.org
+      # The SEC asks for a descriptive User-Agent with a contact. This one names
+      # the project's public security contact from SECURITY.md, never a person.
+      UA: StudioOS research importer (Axal; security@axal.vc)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+
+      - name: Check the inputs
+        run: |
+          set -euo pipefail
+          case "$SOURCE" in
+            wikidata|sec-edgar|companies-house)
+              if ! [[ "$MIGRATION" =~ ^[0-9]{3}_[a-z0-9_]+\.sql$ ]]; then
+                echo "::error::migration must look like 403_research_company_directory_wikidata.sql"
+                exit 1
+              fi
+              if ls cloudflare-worker/sql/migrations | grep -q "^${MIGRATION:0:3}_"; then
+                echo "::error::migration number ${MIGRATION:0:3} is already taken"
+                exit 1
+              fi
+              ;;
+            urls)
+              if [ -z "$URLS" ]; then
+                echo "::error::urls is empty"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::unknown source"
+              exit 1
+              ;;
+          esac
+
+      - name: Run the importer
+        if: inputs.source != 'urls'
+        run: |
+          set -euo pipefail
+          OUT="cloudflare-worker/sql/migrations/$MIGRATION"
+          TODAY="$(date -u +%F)"
+          case "$SOURCE" in
+            wikidata)
+              node --experimental-strip-types --no-warnings scripts/import-wikidata-companies.mjs \
+                --as-of "$TODAY" --out "$OUT"
+              ;;
+            sec-edgar)
+              node scripts/import-sec-edgar.mjs --as-of "$TODAY" --out "$OUT"
+              ;;
+            companies-house)
+              # The month's file is named on the download page; its date is the
+              # register's as-of date.
+              ZIP="$(curl -fsS -A "$UA" https://download.companieshouse.gov.uk/en_output.html \
+                | grep -o -E 'BasicCompanyDataAsOneFile-[0-9]{4}-[0-9]{2}-[0-9]{2}\.zip' | head -n 1 || true)"
+              if [ -z "$ZIP" ]; then
+                echo "::error::en_output.html lists no BasicCompanyDataAsOneFile zip"
+                exit 1
+              fi
+              AS_OF="$(echo "$ZIP" | grep -o -E '[0-9]{4}-[0-9]{2}-[0-9]{2}')"
+              curl -fsS -A "$UA" -o "$RUNNER_TEMP/companies.zip" "https://download.companieshouse.gov.uk/$ZIP"
+              unzip -q -o "$RUNNER_TEMP/companies.zip" -d "$RUNNER_TEMP/companies"
+              CSV="$(ls "$RUNNER_TEMP"/companies/*.csv | head -n 1)"
+              node --experimental-strip-types --no-warnings scripts/import-companies-house.mjs \
+                --from "$CSV" --as-of "$AS_OF" --out "$OUT"
+              ;;
+          esac
+          test -s "$OUT"
+          echo "Wrote \`$OUT\`: $(wc -c < "$OUT") bytes." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fetch the URLs
+        if: inputs.source == 'urls'
+        run: |
+          set -euo pipefail
+          # URLs carry `?`, so the unquoted list below must not glob.
+          set -f
+          DIR=attached_assets/fetched
+          mkdir -p "$DIR"
+          LOG="$DIR/fetch-log.txt"
+          echo "Fetched by the Research data import workflow, run $GITHUB_RUN_ID." >> "$LOG"
+          for pair in $URLS; do
+            name="${pair%%=*}"
+            url="${pair#*=}"
+            if ! [[ "$name" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]; then
+              echo "::error::a name is lower-case letters, digits, dots, hyphens and underscores: $name"
+              exit 1
+            fi
+            if ! [[ "$url" =~ ^https://([a-z0-9.-]+)(/[^[:space:]]*)?$ ]]; then
+              echo "::error::not an https URL: $url"
+              exit 1
+            fi
+            host="${BASH_REMATCH[1]}"
+            case " $ALLOWED_HOSTS " in
+              *" $host "*) ;;
+              *) echo "::error::host not allowed: $host"; exit 1 ;;
+            esac
+            # One URL that fails is recorded and skipped, not fatal: a guessed
+            # terms page may simply not exist.
+            if ! curl -fsSL --max-filesize 20000000 -A "$UA" -o "$RUNNER_TEMP/body" \
+              -w '%{content_type}\n' "$url" > "$RUNNER_TEMP/type"; then
+              echo "$(date -u +%FT%TZ) FAILED $name $url" >> "$LOG"
+              echo "- \`$name\` ← $url: failed" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            type="$(cat "$RUNNER_TEMP/type")"
+            echo "$(date -u +%FT%TZ) OK $name $url ($type)" >> "$LOG"
+            if [[ "$type" == text/html* ]]; then
+              # A page is kept as its text, plus the links that may lead to its
+              # terms, so the next fetch can name the right page.
+              python3 - "$RUNNER_TEMP/body" "$DIR/$name.txt" "$DIR/$name.links.txt" <<'PY'
+          import sys, re
+          from html.parser import HTMLParser
+          src, txt, links = sys.argv[1:]
+          class P(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.skip = 0; self.out = []; self.links = []
+              def handle_starttag(self, tag, attrs):
+                  if tag in ('script', 'style', 'noscript'): self.skip += 1
+                  if tag == 'a':
+                      href = dict(attrs).get('href') or ''
+                      if re.search(r'terms|legal|privacy|licen|condition|copyright|mentions|cgu', href, re.I):
+                          self.links.append(href)
+              def handle_endtag(self, tag):
+                  if tag in ('script', 'style', 'noscript') and self.skip: self.skip -= 1
+                  if tag in ('p', 'div', 'li', 'br', 'tr', 'h1', 'h2', 'h3', 'h4', 'section'): self.out.append('\n')
+              def handle_data(self, data):
+                  if not self.skip: self.out.append(data)
+          p = P(); p.feed(open(src, encoding='utf-8', errors='replace').read())
+          text = re.sub(r'[ \t]+', ' ', ''.join(p.out))
+          text = re.sub(r'\n\s*\n+', '\n\n', text).strip()
+          open(txt, 'w', encoding='utf-8').write(text + '\n')
+          open(links, 'w', encoding='utf-8').write('\n'.join(sorted(set(p.links))) + '\n')
+          PY
+            else
+              mv "$RUNNER_TEMP/body" "$DIR/$name"
+            fi
+            echo "- \`$name\` ← $url ($type)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Push what it wrote to a new branch
+        run: |
+          set -euo pipefail
+          BRANCH="data/${SOURCE}-${GITHUB_RUN_ID}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          git add -A cloudflare-worker/sql/migrations
+          if [ -d attached_assets/fetched ]; then git add -A attached_assets/fetched; fi
+          if git diff --cached --quiet; then
+            echo "::error::the run wrote nothing"
+            exit 1
+          fi
+          git commit -q -m "Research data import: $SOURCE (run $GITHUB_RUN_ID)"
+          git push -q origin "$BRANCH"
+          {
+            echo "Pushed \`$BRANCH\`:"
+            echo '```'
+            git show --stat --format= HEAD
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
