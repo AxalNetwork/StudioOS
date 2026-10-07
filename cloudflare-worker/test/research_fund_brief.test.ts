@@ -1,3 +1,4 @@
+import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
 /**
  * D312 — the fund dossier's pre-meeting brief, and what its Accept writes.
  *
@@ -52,6 +53,7 @@ function freshDb() {
   f.run('f-mine', OWNER, 'Mine Capital', 'We lead seed rounds in tooling.', 'Met them at demo day.', 50_000_000);
   f.run('f-bare', OWNER, 'Bare Partners', null, null, null);
   f.run('f-theirs', OTHER, 'Theirs Ventures', 'A private thesis.', 'A private note.', null);
+  db.exec(AI_LOG_SCHEMA+AI_BUDGET_MIGRATION);
   return db;
 }
 

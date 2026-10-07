@@ -1,3 +1,4 @@
+import {aiBudgetFixture} from './_ai_budget_fixture.mjs';
 /**
  * No citation, no fill. What that costs, and what it refuses.
  *
@@ -77,19 +78,7 @@ function fakeEnv(opts: {
         return { matches: opts.matches ?? [] };
       },
     },
-    DB: {
-      prepare() {
-        const api: any = {
-          bind: () => api,
-          async first() { return null; },
-          async all() { return { results: [] }; },
-          async run() { return { meta: { last_row_id: 0, changes: 0 } }; },
-        };
-        return api;
-      },
-      async exec() { return { count: 0, duration: 0 }; },
-      async batch() { return []; },
-    },
+    DB: aiBudgetFixture().DB,
   };
   return { env, calls };
 }

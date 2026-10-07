@@ -1,3 +1,5 @@
+import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
+import {d1Over} from './_d1_sqlite.mjs';
 /**
  * D551 (#1144) — a founder's contact gets a strength and an organisation, the
  * contact list carries its follow-up rollup, and the founder Network desk's
@@ -36,24 +38,8 @@ function coerce(a: any[]): any[] {
 }
 /** A D1 over node:sqlite that records every statement it is asked to prepare. */
 function makeD1(db: InstanceType<typeof DatabaseSync>, log: string[] = []) {
-  return {
-    prepare(sql: string) {
-      log.push(sql);
-      let b: any[] = [];
-      const api: any = {
-        bind: (...x: any[]) => { b = coerce(x); return api; },
-        async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
-        async run() {
-          const r = db.prepare(sql).run(...b);
-          return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
-        },
-      };
-      return api;
-    },
-    async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
-  };
+ const DB=d1Over(db);
+ return {...DB,prepare(sql:string){log.push(sql);const statement=DB.prepare(sql);const bind=statement.bind;statement.bind=(...args:any[])=>bind(...coerce(args));return statement;}};
 }
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().replace('T', ' ').slice(0, 19);
@@ -93,6 +79,7 @@ function freshDb() {
     db.prepare('INSERT INTO founders (id, name) VALUES (?, ?)').run(who.founder_id, `Founder ${who.user}`);
     db.prepare('INSERT INTO projects (id, uid, name, founder_id) VALUES (?, ?, ?, ?)').run(who.project, `p${who.project}`, `Startup ${who.project}`, who.founder_id);
   }
+  db.exec(AI_LOG_SCHEMA+AI_BUDGET_MIGRATION);
   return db;
 }
 

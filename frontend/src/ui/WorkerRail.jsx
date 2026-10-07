@@ -2,11 +2,13 @@ import { useCallback, useContext, useEffect, useId, useReducer, useRef, useState
 import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { Link, UNSAFE_LocationContext, useInRouterContext } from 'react-router-dom';
+import useAiBudget from '../hooks/useAiBudget';
+import { AiBudgetUsage } from './AiBudgetUsage';
 import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
-import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, pageMonthLine, splitByPage, spendMeter } from './assistCost';
+import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, pageMonthLine, splitByPage } from './assistCost';
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY } from './railModels';
 import { Unreadable } from './Honesty';
@@ -589,6 +591,7 @@ export default function WorkerRail({
   // D552 step 3 — this page's own month and last run come from a third read,
   // `?surface=<pagePath>`, made only for a path the router records.
   const { spend, pricing, pageSpend, spendError, pricingError, pageSpendError, loading, reload } = useAiSpend({ page: pagePath });
+  const budgetReading = useAiBudget();
   const bodyId = `${useId()}-worker-rail-body`;
 
   // One preference for the whole product, not one per page. The stored value
@@ -685,6 +688,7 @@ export default function WorkerRail({
       // them locally: the receipt is the LOG's most recent row, and only a
       // read can say what that is (D401).
       reload();
+      budgetReading.reload();
     } catch (e) {
       // A refusal is not a crash and must not read as one: the router returns
       // a reason and a message for a spent budget or an unreachable model, and
@@ -709,7 +713,7 @@ export default function WorkerRail({
         usage: null,
       });
     }
-  }, [workspace, stance, coverage, activeModel, scopeBranch, reload, pagePath]);
+  }, [workspace, stance, coverage, activeModel, scopeBranch, reload, budgetReading.reload, pagePath]);
 
   // `recorded` false, or no report at all, are the same thing to a reader: the
   // platform cannot say what has been spent. Neither draws a bar.
@@ -717,8 +721,7 @@ export default function WorkerRail({
   // A cap the response did not carry is not a $0 cap. Null draws no "of $…"
   // and no bar, which is what an absent cap should look like — `?? 0` used to
   // stand in for it, and the meter code below only hid that by accident.
-  const cap = typeof spend?.month?.cap_usd === 'number' ? spend.month.cap_usd : null;
-  const meter = known && cap > 0 ? spendMeter(spend.month.spend_usd, cap) : null;
+  // D629: raw usage includes paid runs. The separate allowance ledger owns its meter.
 
   // The accent is the LICENCE's, not the page's, and it comes from the one
   // table that already holds all four — `ACCENT` in the shell config, the same
@@ -1050,7 +1053,9 @@ export default function WorkerRail({
         )}
 
         <section className="fwr-block">
+          <AiBudgetUsage reading={budgetReading} />
           <span>Usage this month</span>
+          <p>Estimated model cost, including paid runs.</p>
           {loading
             ? <strong className="fwr-absent">Loading…</strong>
             : known
@@ -1058,13 +1063,7 @@ export default function WorkerRail({
                 <>
                   <strong data-testid="text-worker-rail-spend">
                     {formatSpend(spend.month.spend_usd)}
-                    {meter && <em> of {formatSpend(cap)}</em>}
                   </strong>
-                  {meter && (
-                    <div className="fwr-meter" role="presentation">
-                      <i className={meter.over ? 'fwr-over' : ''} style={{ width: `${meter.fraction * 100}%` }} />
-                    </div>
-                  )}
                   <p>
                     {spend.month.calls
                       ? `${spend.month.calls} run${spend.month.calls === 1 ? '' : 's'} across the platform this month.`

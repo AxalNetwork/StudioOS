@@ -9,7 +9,8 @@
 // Prices/discount/VAT are recomputed server-side by /orders/intent — the client
 // summary is a live preview only.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import useAiTopupCart from '../hooks/useAiTopupCart';
 import { Elements, PaymentElement, AddressElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, Lock, AlertTriangle, ArrowLeft, ShoppingCart, CheckCircle2 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -208,6 +209,9 @@ export default function CheckoutPage() {
   const { effectiveTheme } = useSettings();
   const isDark = effectiveTheme === 'dark';
   const cart = useCart();
+  const location = useLocation();
+  const wantsAiTopup = new URLSearchParams(location.search).get('ai_topup') === '1';
+  const aiTopupState = useAiTopupCart(cart,wantsAiTopup);
 
   const email = user?.email || '';
   const fullName = user?.full_name || user?.name || '';
@@ -318,6 +322,13 @@ export default function CheckoutPage() {
     setPayError('Payment could not be completed. Please try another card.');
     setSubmitting(false);
   }, [submitting, fullName, email, savePm, finish]);
+
+  if (wantsAiTopup && ['loading','not-configured','unreadable'].includes(aiTopupState)) {
+    return <div className="max-w-lg mx-auto py-16 text-center text-gray-700 dark:text-gray-300" aria-busy={aiTopupState==='loading'}>
+      <h1 className="text-lg font-bold">{aiTopupState==='loading'?'Loading AI top-up…':aiTopupState==='not-configured'?'Top-up not configured':'Unreadable'}</h1>
+      {aiTopupState==='unreadable' && <p>The AI top-up could not be read. Refresh to retry.</p>}
+    </div>;
+  }
 
   if (empty) {
     return (

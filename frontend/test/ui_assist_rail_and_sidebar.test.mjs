@@ -378,14 +378,9 @@ test('an unreadable spend figure hides the meter instead of drawing an empty bar
   // read. A 0% bar drawn from it asserts a spend the platform cannot vouch for.
   const src = scan(read('frontend/src/ui/AssistRail.jsx'));
   assert.match(src, /const spendKnown = typeof spent === 'number' && Number\.isFinite\(spent\)/);
-  // RE-AIMED IN D400. The gate moved from `spendKnown` onto `meter`, which is
-  // now null unless the figure AND the cap are known — a cap the response did
-  // not carry used to be `?? 0`. The property is unchanged: no known figure,
-  // no meter, so no bar and no over-cap warning.
-  assert.match(src, /const meter = spendKnown && capKnown \? spendMeter\(spent, config\.planCap\) : null;/,
-    'the meter is computed from an unknown figure');
-  assert.match(src, /\{meter && \(/, 'the bar is conditional on a known figure');
-  assert.match(src, /\{meter\?\.over && /, 'and so is the over-cap warning');
+  // D629: raw usage includes paid runs. Only the separate included allowance owns a cap meter.
+  assert.match(src, /<LiveAiBudgetUsage/);
+  assert.doesNotMatch(src, /spendMeter\(spent|config\.planCap|meter\?\.over/);
 });
 
 test('the estimate is the caller’s own observed average, not a model', () => {

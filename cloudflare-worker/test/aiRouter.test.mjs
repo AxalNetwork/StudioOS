@@ -13,6 +13,7 @@
  */
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -37,6 +38,7 @@ async function loadRouter() {
   const stripped = src
     .replace(/^import type[^;]+;\s*$/m, '')
     .replace(BRANCH_IMPORT, '')
+    .replace(/^import \* as aiBudget from '\.\/aiBudget';\s*$/m, '')
     .replace(/^export\s+(const|let|function|async\s+function|class|interface|type|enum)\b/gm, '$1')
     .replace(/^export\s+\{[^}]*\};?\s*$/gm, '');
   const unresolved = stripped.match(/^import\s[^;]*;/m);
@@ -45,7 +47,8 @@ async function loadRouter() {
   const outputText = transpileTs(stripped);
   // Re-export the public surface via an IIFE wrapper.
   const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };`;
-  return new Function('branchOf', wrapped)(branchOf);
+  const aiBudget = await import('../src/services/aiBudget.ts');
+  return new Function('branchOf','aiBudget', wrapped)(branchOf,aiBudget);
 }
 
 // --------------------------------------------------------------------------
@@ -72,28 +75,7 @@ function makeKV() {
 // --------------------------------------------------------------------------
 // In-memory D1 stub — only handles the statements aiRouter.ts emits.
 // --------------------------------------------------------------------------
-function makeDB() {
-  const rows = [];
-  let nextId = 1;
-  const exec = async () => undefined;
-  const prepare = (sql) => {
-    const text = sql.replace(/\s+/g, ' ').trim();
-    let bound = [];
-    return {
-      bind(...args) { bound = args; return this; },
-      async run() {
-        if (/^INSERT INTO ai_usage_logs /i.test(text)) {
-          const [user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal] = bound;
-          rows.push({ id: nextId++, user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, created_at: new Date().toISOString() });
-        }
-        return { meta: { last_row_id: nextId - 1 } };
-      },
-      async first() { return null; },
-      async all() { return { results: [] }; },
-    };
-  };
-  return { exec, prepare, _rows: rows };
-}
+function makeDB() { return aiBudgetFixture().DB; }
 
 // --------------------------------------------------------------------------
 // Workers AI stub. `responses` is an array of { fn(model, payload) → result }.

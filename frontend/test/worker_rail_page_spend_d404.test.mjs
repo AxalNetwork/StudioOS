@@ -31,7 +31,7 @@ test('the rail sends the page it sits on, in the shape the router stores', () =>
   assert.match(src, /page: pagePath \|\| undefined,/, 'the read-back does not send its page');
   assert.match(src, /const pagePath = String\(pathname \|\| ''\)\.replace\(\/\\\/\+\$\/, ''\)/,
     'the page is not normalised the way normaliseSurface stores it');
-  assert.match(src, /\}, \[workspace, stance, coverage, activeModel, scopeBranch, reload, pagePath\]\);/,
+  assert.match(src, /\}, \[workspace, stance, coverage, activeModel, scopeBranch, reload, budgetReading\.reload, pagePath\]\);/,
     'readBack closes over a stale page');
   const api = codeOnly(read('frontend/src/lib/api.js'));
   const method = api.slice(api.indexOf('aiWorkspaceExplain:'), api.indexOf('aiWorkspaceExplain:') + 400);

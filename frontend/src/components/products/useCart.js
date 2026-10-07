@@ -3,7 +3,7 @@
 //
 // Persisted to sessionStorage so the drawer/checkout survive a page reload
 // within the same tab session (cleared when the tab closes).
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'axal_cart_v1';
 const PROMO_KEY = 'axal_cart_promo_v1';
@@ -44,6 +44,8 @@ function writePromo(promo) {
 // A cart line: { price_id, product_id, name, currency, unit_amount, quantity }
 export function useCart() {
   const [items, setItems] = useState(readStored);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const [promo, setPromoState] = useState(readPromo);
 
   useEffect(() => { writeStored(items); }, [items]);
@@ -51,7 +53,7 @@ export function useCart() {
   // Cross-tab-in-session sync + same-tab broadcast so the sticky bar and the
   // drawer stay in lock-step no matter which component mutates the cart.
   useEffect(() => {
-    const onChange = () => { setItems(readStored()); setPromoState(readPromo()); };
+    const onChange = () => { const next=readStored();itemsRef.current=next;setItems(next);setPromoState(readPromo()); };
     window.addEventListener('axal:cart', onChange);
     return () => window.removeEventListener('axal:cart', onChange);
   }, []);
@@ -61,14 +63,15 @@ export function useCart() {
   }, []);
 
   const add = useCallback((line, qty = 1) => {
-    setItems((prev) => {
-      const next = prev.slice();
+      // Persist before broadcasting: a deferred React updater lets the cart's
+      // own listener restore the old stored cart over the newly added line.
+      const next = itemsRef.current.slice();
       const i = next.findIndex((x) => x.price_id === line.price_id);
       if (i >= 0) next[i] = { ...next[i], quantity: next[i].quantity + qty };
       else next.push({ ...line, quantity: Math.max(1, qty) });
+      itemsRef.current=next;
       writeStored(next);
-      return next;
-    });
+      setItems(next);
     broadcast();
   }, [broadcast]);
 

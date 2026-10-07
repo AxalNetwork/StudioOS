@@ -37,6 +37,7 @@ import {
   type PricedCart,
 } from '../services/orders';
 import { refuse } from '../util/refusal';
+import { aiTopupCreditQuote, recordAiTopupPurchase } from '../services/aiTopups';
 
 const orders = new Hono<{ Bindings: Env }>();
 
@@ -116,6 +117,8 @@ orders.post('/intent', async (c) => {
   const rate = vatRate(billingCountry);
   const vatCents = Math.round(netAfterDiscount * rate);
   const total = cart.subtotal - discountCents + vatCents;
+
+  const aiQuote = aiTopupCreditQuote(c.env, cart, discountCents);
 
   // 6. Deterministic order id/ref per (user + items + promo + billing_country
   //    + nonce) so a refresh is stable/idempotent.
@@ -220,6 +223,8 @@ orders.post('/intent', async (c) => {
     paymentIntentId: intent.id,
     items: cart.lines,
   });
+
+  await recordAiTopupPurchase(c.env, {paymentIntentId:intent.id,orderRef,userId:user.id,totalCents:total,currency:cart.currency,quote:aiQuote});
 
   return c.json({
     client_secret: intent.client_secret,
