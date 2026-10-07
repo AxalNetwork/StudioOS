@@ -30,6 +30,7 @@ type Row = {
   decided_at: string | null;
   outcome_status: string; outcome_notes: string | null;
   outcome_actual_multiple: number | null; outcome_recorded_at: string | null;
+  edited_after_outcome_at: string | null;
   created_at: string; updated_at: string;
 };
 
@@ -72,6 +73,7 @@ async function dto(env: Env, e: Row): Promise<Record<string, unknown>> {
     outcome_notes: e.outcome_notes,
     outcome_actual_multiple: e.outcome_actual_multiple,
     outcome_recorded_at: e.outcome_recorded_at,
+    edited_after_outcome_at: e.edited_after_outcome_at ?? null,
     created_at: e.created_at,
     updated_at: e.updated_at,
   };
@@ -309,12 +311,26 @@ r.put('/:uid', async (c) => {
     }
     if ('tags' in body) tagsJson = normaliseTags(body.tags);
 
+    const coreFieldsChanged =
+      thesis !== entry.thesis ||
+      keyRisks !== entry.key_risks ||
+      expectedOutcome !== entry.expected_outcome ||
+      decision !== entry.decision ||
+      conviction !== entry.conviction ||
+      expectedMultiple !== entry.expected_multiple ||
+      expectedTimeline !== entry.expected_timeline_months;
+
+    let editedAfterOutcomeAt = entry.edited_after_outcome_at ?? null;
+    if (entry.outcome_recorded_at != null && coreFieldsChanged) {
+      editedAfterOutcomeAt = nowIso();
+    }
+
     await c.env.DB.prepare(
       `UPDATE decision_journal_entries SET decision=?, conviction=?, thesis=?, key_risks=?, expected_outcome=?,
-         expected_multiple=?, expected_timeline_months=?, tags_json=?, updated_at=? WHERE id=?`
+         expected_multiple=?, expected_timeline_months=?, tags_json=?, edited_after_outcome_at=?, updated_at=? WHERE id=?`
     ).bind(
       decision, conviction, thesis, keyRisks, expectedOutcome,
-      expectedMultiple, expectedTimeline, tagsJson, nowIso(), entry.id,
+      expectedMultiple, expectedTimeline, tagsJson, editedAfterOutcomeAt, nowIso(), entry.id,
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM decision_journal_entries WHERE id = ?').bind(entry.id).first<Row>();
     return c.json(await dto(c.env, fresh!));
