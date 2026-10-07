@@ -433,6 +433,7 @@ function ConnectionCard({ conn, onSign, onClosed }) {
               {cp.name || cp.email || 'Counterparty'}
             </span>
             {cp.email && cp.name && <span className="text-xs text-slate-500">({cp.email})</span>}
+            {!cp.email && <span className="text-xs text-slate-500">Shown once you have both signed the NDA</span>}
             {isActive && (
               <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" /> Active

@@ -10,8 +10,11 @@
  *   3. Express interest creates a directed signal. If the inverse
  *      already exists, a CofounderConnection + two NDA Documents are
  *      minted in `pending_nda` status.
- *   4. After both sides sign, status flips to `active` and identity
- *      (name + email) is exposed via the connections endpoint.
+ *   4. The counterparty's name is visible before signing because the
+ *      mutual NDA explicitly names both parties. The email remains
+ *      withheld until both sides have signed the NDA (nda_signed_at_a
+ *      and nda_signed_at_b exist), at which point status flips to
+ *      `active` and email is revealed.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -713,7 +716,7 @@ async function loadConnectionOr403(env: Env, uid: string, user: { id: number; ro
   return { ok: true, conn };
 }
 
-async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: number }): Promise<any> {
+async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: number; role?: string }): Promise<any> {
   const isA = c.user_a_id === viewer.id;
   const otherId = isA ? c.user_b_id : c.user_a_id;
   const other = await loadUser(env, otherId);
@@ -721,6 +724,11 @@ async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: 
   const mySigned = isA ? c.nda_signed_at_a : c.nda_signed_at_b;
   const theirSigned = isA ? c.nda_signed_at_b : c.nda_signed_at_a;
   const myDoc = isA ? c.nda_doc_a_id : c.nda_doc_b_id;
+
+  const bothSigned = Boolean(c.nda_signed_at_a && c.nda_signed_at_b);
+  const isViewerAdmin = Boolean(viewer && (viewer as any).role && isAdmin(viewer as any));
+  const showEmail = isViewerAdmin || bothSigned;
+
   return {
     uid: c.uid,
     status: c.status,
@@ -731,7 +739,8 @@ async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: 
     counterparty: {
       user_id: otherId,
       name: other?.name || null,
-      email: other?.email || null,
+      email: showEmail ? (other?.email || null) : null,
+      ...(showEmail ? {} : { email_withheld: 'until_both_sign' }),
       profile: otherProfile ? serializeProfilePublic(otherProfile, other?.uid || null) : null,
     },
   };
