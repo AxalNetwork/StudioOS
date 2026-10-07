@@ -5,6 +5,7 @@ import { requireAuth, requireApprovedKyc } from '../auth';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 import { bindingKey } from '../util/schemaBootstrap';
+import { logDealRoomAction } from '../services/dealRoomAudit';
 
 const networkfx = new Hono<{ Bindings: Env }>();
 
@@ -171,10 +172,23 @@ networkfx.get('/syndicates', async (c) => {
   await requireAuth(c);
   await ensureSchema(c.env);
   const status = c.req.query('status');
+  // D630 (#1388) — the syndicates linked to one company, for the deal room's
+  // syndicate drawer. `syndicates.deal_id` holds a PROJECT id: the create form
+  // offers projects, and `GET /syndicates/:id` reads it back from `projects`.
+  // The filter is named for what the column holds, not for its name.
+  const rawProject = c.req.query('project_id');
+  const projectId = rawProject != null ? Number(rawProject) : null;
+  if (rawProject != null && !(Number.isInteger(projectId) && (projectId as number) > 0)) {
+    return c.json({ error: 'bad_project_id', detail: 'project_id must be a positive whole number.' }, 400);
+  }
   const sql = getSQL(c.env);
-  const rows = status
-    ? await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.status = ${status} ORDER BY s.created_at DESC LIMIT 100`
-    : await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by ORDER BY s.created_at DESC LIMIT 100`;
+  const rows = projectId != null
+    ? (status
+      ? await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.deal_id = ${projectId} AND s.status = ${status} ORDER BY s.created_at DESC LIMIT 100`
+      : await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.deal_id = ${projectId} ORDER BY s.created_at DESC LIMIT 100`)
+    : status
+      ? await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.status = ${status} ORDER BY s.created_at DESC LIMIT 100`
+      : await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by ORDER BY s.created_at DESC LIMIT 100`;
   const ids = (rows as any[]).map(r => r.id);
   let memberMap: Record<number, any> = {};
   if (ids.length) {
@@ -263,12 +277,21 @@ networkfx.post('/syndicates/:id/close', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
-  const s: any = await c.env.DB.prepare(`SELECT created_by FROM syndicates WHERE id = ?`).bind(id).first();
-  if (!s) return c.json({ error: 'Not found' }, 404);
-  if (s.created_by !== user.id && user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
-  await c.env.DB.prepare(`UPDATE syndicates SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run();
+  const s: any = await c.env.DB.prepare(`SELECT created_by, status, deal_id FROM syndicates WHERE id = ?`).bind(id).first();
+  // D630 (#1388) — each refusal is a sentence the drawer prints as given.
+  if (!s) return c.json({ error: 'syndicate_not_found', detail: 'This syndicate does not exist. Nothing was closed.' }, 404);
+  if (s.created_by !== user.id && user.role !== 'admin') {
+    return c.json({ error: 'syndicate_close_forbidden', detail: 'Only the syndicate’s creator or an admin can close it. Nothing was closed.' }, 403);
+  }
+  if (s.status === 'closed') {
+    return c.json({ error: 'syndicate_already_closed', detail: 'This syndicate is already closed. Nothing changed.' }, 409);
+  }
+  // Funded keeps the time the target was reached in `closed_at`; closing
+  // stamps the close over it, as it always has.
+  await c.env.DB.prepare(`UPDATE syndicates SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'closed'`).bind(id).run();
   await logAction(c.env, 'syndicate_closed', user.id, { syndicate_id: id });
-  return c.json({ ok: true });
+  await logDealRoomAction(c.env, user, 'syndicate_closed', id, { from_status: s.status, project_id: s.deal_id }, 'syndicate');
+  return c.json({ ok: true, status: 'closed' });
 });
 
 networkfx.get('/syndicates/:id/recommendations', async (c) => {

@@ -12,6 +12,7 @@ import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '.
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
 import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
+import { logDealRoomAction } from '../services/dealRoomAudit';
 
 const deals = new Hono<{ Bindings: Env }>();
 
@@ -589,6 +590,43 @@ deals.get('/transfers', async (c) => {
        ORDER BY t.recorded_at DESC LIMIT 500`;
   await sql.end();
   return c.json({ items: (rows as any[]).map(withFirm) });
+});
+
+// D630 (#1388) — the deal-room quota, read without joining anything: used
+// against cap, and the rooms the caller is in. Registered before `/:id` so
+// the literal is not read as an id. The count is the one the join refuses on
+// (every firm); the member list is narrowed by the active firm the same way
+// the deal list's `is_member` is, so the header and the list agree on whether
+// this firm is in the room.
+deals.get('/dealroom/quota', async (c) => {
+  const user = (await requireAuth(c)) as InvestorUser;
+  if (user.role !== 'investor' && !DEALROOM_BYPASS_ROLES.has(String(user.role))) {
+    return c.json({ error: 'investor_only' }, 403);
+  }
+  await ensureInvestorPaywallSchema(c.env);
+  const cap = dealroomCap(user);
+  const used = await dealroomsUsed(c.env, user.id);
+  const companyId = user.role === 'investor' ? await investorActiveCompany(c, user) : null;
+  const rows = companyId === null
+    ? await c.env.DB.prepare(`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ?`).bind(user.id).all()
+    : await c.env.DB.prepare(`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ? AND (company_id = ? OR company_id IS NULL)`).bind(user.id, companyId).all();
+  const tier = effectiveInvestorTier(user);
+  const unlimited = !(cap < DEALROOM_UNLIMITED_AT);
+  const upgradeTo: 'professional' | 'institutional' | null = unlimited ? null : (tier === 'free' ? 'professional' : 'institutional');
+  return c.json({
+    used,
+    cap: unlimited ? null : cap,
+    unlimited,
+    full: !unlimited && used >= cap,
+    tier,
+    upgrade_to: upgradeTo,
+    // The room cap of the plan named above, or null when it is unlimited — so
+    // the page names what the next plan gives rather than typing a number.
+    upgrade_cap: upgradeTo && INVESTOR_QUOTAS[upgradeTo].dealroom_max < DEALROOM_UNLIMITED_AT
+      ? INVESTOR_QUOTAS[upgradeTo].dealroom_max
+      : null,
+    member_deal_ids: ((rows as any).results || []).map((r: any) => Number(r.deal_id)),
+  });
 });
 
 deals.get('/:id', async (c) => {
@@ -1248,6 +1286,7 @@ deals.post('/:id/transfers', async (c) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId).run();
   await sql.end();
+  await logDealRoomAction(c.env, user, 'deal_transfer_recorded', id, { transfer_uid: uid, amount_cents: amountCents, company_id: firm.companyId });
   const row = await c.env.DB.prepare(
     `SELECT t.*, u.name AS recorded_by_name, cp.company_name AS company_name
        FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
@@ -1438,6 +1477,7 @@ deals.post('/:id/invitations', async (c) => {
     // Duplicate invite (ON CONFLICT no-op) — don't double-count or re-notify.
     if (!inserted.length) continue;
     created++;
+    await logDealRoomAction(c.env, admin, 'deal_investor_invited', id, { investor_user_id: iid, email_opt_in: sendEmail });
     try {
       const { notify } = await import('../services/notify');
       await notify(c.env, {
@@ -1507,6 +1547,43 @@ import {
 // admin/partner/advisor capacity and never count against an investor cap.
 const DEALROOM_BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
 
+/**
+ * The caller's deal-room cap: Infinity for a bypass role.
+ *
+ * Task #24 — cap is sourced from `users.investor_dealroom_max` (the
+ * canonical column written by the Stripe webhook + dev-upgrade
+ * helpers + admin-grant codepaths). The billing webhook bumps that
+ * column to 1_000_000 when a user becomes Institutional, so reading
+ * the column directly guarantees Institutional users are never
+ * gated even if the tier-derived default in INVESTOR_QUOTAS drifts
+ * out of sync. Falls back to the tier default when the column is
+ * null (e.g. legacy rows that pre-date 027_investor_paywall.sql and
+ * somehow escaped the schema-bootstrap default of 5).
+ *
+ * D630 moved it here from the join so the quota read and the join cannot
+ * disagree about the number.
+ */
+function dealroomCap(user: InvestorUser): number {
+  if (DEALROOM_BYPASS_ROLES.has(String(user.role))) return Number.POSITIVE_INFINITY;
+  const colCap = (user as { investor_dealroom_max?: number | null }).investor_dealroom_max;
+  const tierCap = INVESTOR_QUOTAS[effectiveInvestorTier(user)].dealroom_max;
+  return Number.isFinite(colCap as number) && (colCap as number) > 0 ? Number(colCap) : tierCap;
+}
+
+/** Rooms the caller has joined, across every firm — what the join counts. */
+async function dealroomsUsed(env: Env, userId: number): Promise<number> {
+  const cnt = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ?`
+  ).bind(userId).first<{ n: number }>();
+  return Number(cnt?.n ?? 0);
+}
+
+/**
+ * A cap at or above this reads as "Unlimited". Institutional is stored as the
+ * 1_000_000 sentinel (INVESTOR_QUOTAS), and nobody joins a million rooms.
+ */
+const DEALROOM_UNLIMITED_AT = 1_000_000;
+
 deals.post('/:id/dealroom/join', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
   await ensureInvestorPaywallSchema(c.env);
@@ -1529,24 +1606,8 @@ deals.post('/:id/dealroom/join', async (c) => {
   if (existing) return c.json({ ok: true, already_member: true });
 
   const tier = effectiveInvestorTier(user);
-  // Task #24 — cap is sourced from `users.investor_dealroom_max` (the
-  // canonical column written by the Stripe webhook + dev-upgrade
-  // helpers + admin-grant codepaths). The billing webhook bumps that
-  // column to 1_000_000 when a user becomes Institutional, so reading
-  // the column directly guarantees Institutional users are never
-  // gated even if the tier-derived default in INVESTOR_QUOTAS drifts
-  // out of sync. Falls back to the tier default when the column is
-  // null (e.g. legacy rows that pre-date 027_investor_paywall.sql and
-  // somehow escaped the schema-bootstrap default of 5).
-  const colCap = (user as { investor_dealroom_max?: number | null }).investor_dealroom_max;
-  const tierCap = INVESTOR_QUOTAS[tier].dealroom_max;
-  const cap = isBypass
-    ? Number.POSITIVE_INFINITY
-    : (Number.isFinite(colCap as number) && (colCap as number) > 0 ? Number(colCap) : tierCap);
-  const cnt = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ?`
-  ).bind(user.id).first<{ n: number }>();
-  const used = Number(cnt?.n ?? 0);
+  const cap = dealroomCap(user);
+  const used = await dealroomsUsed(c.env, user.id);
   if (used >= cap) {
     return c.json(
       {
@@ -1572,6 +1633,8 @@ deals.post('/:id/dealroom/join', async (c) => {
     }
     throw e;
   }
+  // D630 — the join is recorded with its actor, beside the membership row.
+  await logDealRoomAction(c.env, user, 'dealroom_joined', dealId);
   return c.json({ ok: true, used: used + 1, cap, tier });
 });
 
@@ -1584,9 +1647,14 @@ deals.delete('/:id/dealroom/leave', async (c) => {
   }
   const dealId = Number(c.req.param('id'));
   if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
-  await c.env.DB.prepare(
+  const del = await c.env.DB.prepare(
     `DELETE FROM investor_dealroom_members WHERE investor_user_id = ? AND deal_id = ?`
   ).bind(user.id, dealId).run();
+  // D630 — a leave that removed a membership is recorded with its actor. A
+  // leave of a room the caller was not in changed nothing, so it logs nothing.
+  if (Number((del as any)?.meta?.changes ?? 0) > 0) {
+    await logDealRoomAction(c.env, user, 'dealroom_left', dealId);
+  }
   return c.json({ ok: true });
 });
 
