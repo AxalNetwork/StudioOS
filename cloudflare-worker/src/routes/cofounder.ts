@@ -585,13 +585,37 @@ async function getConnection(env: Env, x: number, y: number): Promise<Connection
   ).bind(lo, hi).first<ConnectionRow>();
 }
 
-function renderNda(signer: UserLite, counterparty: UserLite): string {
+/**
+ * D639 — a person's name for the NDA, or null when there is no real one: an
+ * empty name, or one defaulted from the email (the whole address, or the part
+ * before the @), which some sign-up paths store. An email never stands in for
+ * a name: printed in the counterparty's NDA, it would hand over their address
+ * before both have signed (D610).
+ */
+export function ndaName(u: Pick<UserLite, 'name' | 'email'>): string | null {
+  const name = String(u.name ?? '').trim();
+  if (!name) return null;
+  const email = String(u.email ?? '').trim().toLowerCase();
+  const n = name.toLowerCase();
+  if (email && (n === email || n === email.split('@')[0])) return null;
+  return name;
+}
+
+/** The labels the NDA uses where a party has no real name (D639). */
+export const NDA_NEUTRAL = { signer: 'the signing party', counterparty: 'your co-founder' } as const;
+
+export function renderNda(signer: UserLite, counterparty: UserLite): string {
   const today = new Date().toISOString().slice(0, 10);
   return COFOUNDER_NDA_BODY
-    .replaceAll('{signer_name}', signer.name || signer.email)
+    .replaceAll('{signer_name}', ndaName(signer) ?? NDA_NEUTRAL.signer)
     .replaceAll('{signer_email}', signer.email)
-    .replaceAll('{counterparty_name}', counterparty.name || counterparty.email)
+    .replaceAll('{counterparty_name}', ndaName(counterparty) ?? NDA_NEUTRAL.counterparty)
     .replaceAll('{today}', today);
+}
+
+/** D639 — an NDA's title names its signer by uid, never by email. */
+export function ndaTitle(u: Pick<UserLite, 'uid'>): string {
+  return `${COFOUNDER_NDA_TITLE} — ${u.uid || 'member'}`;
 }
 
 async function ensureConnectionWithNdas(env: Env, ux: UserLite, uy: UserLite): Promise<ConnectionRow> {
@@ -623,8 +647,8 @@ async function ensureConnectionWithNdas(env: Env, ux: UserLite, uy: UserLite): P
 
   const userA = lo === ux.id ? ux : uy;
   const userB = hi === uy.id ? uy : ux;
-  const titleA = `${COFOUNDER_NDA_TITLE} — ${userA.email}`;
-  const titleB = `${COFOUNDER_NDA_TITLE} — ${userB.email}`;
+  const titleA = ndaTitle(userA);
+  const titleB = ndaTitle(userB);
   const bodyA = renderNda(userA, userB);
   const bodyB = renderNda(userB, userA);
   const docARes = await env.DB.prepare(
@@ -847,6 +871,12 @@ cofounder.post('/connections/:uid/nda/sign', async (c) => {
   const r = await loadConnectionOr403(c.env, c.req.param('uid'), user);
   if (!r.ok) return r.res;
   let conn = r.conn;
+  // D639 — only the connection's two members sign. The loader admits an admin
+  // to read any connection; signing is not reading, and an admin who is not a
+  // member used to be recorded as party B.
+  if (conn.user_a_id !== user.id && conn.user_b_id !== user.id) {
+    return refuse(c, 403, { code: 'not_a_party', message: 'Only the two people in this connection can sign its NDA. Nothing was signed.' });
+  }
   if (conn.status === 'closed') return refuse(c, 400, { code: 'connection_closed', message: 'This connection is closed, so its NDA can no longer be signed.' });
 
   const isA = conn.user_a_id === user.id;
@@ -881,7 +911,8 @@ cofounder.post('/connections/:uid/nda/sign', async (c) => {
       await c.env.DB.prepare(
         `UPDATE documents SET status = 'signed', signed_by = ?, signed_at = ?, updated_at = ?
            WHERE id = ? AND status <> 'signed'`,
-      ).bind(user.email, now, now, docId).run();
+      // D639 — the signer by uid, never by email.
+      ).bind(user.uid ?? null, now, now, docId).run();
     }
     await logActorAct(c.env, user, 'cofounder_nda_signed', { connection_uid: conn.uid, both_signed: conn.status === 'active' });
   }
