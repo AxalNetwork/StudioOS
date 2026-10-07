@@ -106,7 +106,9 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, owner_user_id INTEGER,
       project_id INTEGER, deal_id INTEGER, ic_decision_id INTEGER,
       decision TEXT, conviction TEXT, thesis TEXT, outcome_status TEXT,
-      decided_at TEXT, created_at TEXT, updated_at TEXT
+      decided_at TEXT, created_at TEXT, updated_at TEXT,
+      -- D624: the vote path reads both (baseline and migration 415).
+      outcome_recorded_at TEXT, edited_after_outcome_at TEXT
     );
     CREATE TABLE ic_conditions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
