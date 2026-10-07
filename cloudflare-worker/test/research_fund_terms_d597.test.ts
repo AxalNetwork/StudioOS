@@ -70,9 +70,12 @@ test('406: the verdicts are only the three allowed, in the CHECK and in the Work
 });
 
 test('406: every list the migrations load, and the production-only list, has a review with its evidence', () => {
-  // Run every migration that writes fund rows, in order, and read the lists back.
+  // Run every migration before 406 that writes fund rows, in order, and read the
+  // lists back: this is 406's own view. Later loaders (429, the third list) need
+  // 406's table, and their state is pinned in research_fund_shai_429.test.ts.
   const db = new DatabaseSync(':memory:');
   const loaders = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f))
+    .filter((f) => Number.parseInt(f, 10) < 406)
     .sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10))
     .filter((f) => /INTO research_fund_directory \(/.test(readFileSync(resolve(MIGRATIONS, f), 'utf8')));
   assert.ok(loaders.length >= 2, `found the fund loaders: ${loaders.join(', ')}`);
