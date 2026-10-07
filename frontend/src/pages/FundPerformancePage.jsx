@@ -4,8 +4,9 @@ import { StatCard, Section, Chip, FilterChips, EmptyState } from './advisor/netw
 import ErrorState from '../components/ErrorState';
 import Skeleton from '../components/Skeleton';
 import { fmtMultiple, fmtRate, Unrecorded } from '../lib/fundAnalytics';
-import { fundPerformanceApi } from '../lib/api';
-import { titleCase } from '../lib/absence';
+import { fundPerformanceApi } from '../lib/api/fundPerformance.js';
+import { titleCase as caseLabel } from '../lib/absence';
+const titleCase = (s) => caseLabel(s) || 'Unknown';
 
 const money = (cents) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 export function PerformanceMetric({ fund, field, label, format = money }) {
