@@ -113,7 +113,7 @@ test('every refusal carries the reason the server gave', () => {
     if (p.endsWith('FundAccountingPage.jsx')) {
       assert.match(scan(read(p)), /<FundLedgerPanel/, 'accounting must reach the live ledger');
       assert.match(scan(read('frontend/src/pages/investor/FundLedgerPanel.jsx')), /<EmptyState>\{fund\.reason\}/, 'ledger must render the server reason');
-    } else assert.match(scan(read(p)), /reason=\{unavailable\./, `${p} must pass the server's reason`);
+    } else assert.match(scan(read(p)), /reason=\{unavailable(?:\.|\[)/, `${p} must pass the server's reason`);
   }
 });
 

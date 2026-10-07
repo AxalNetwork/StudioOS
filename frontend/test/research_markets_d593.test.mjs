@@ -189,12 +189,15 @@ test('M3: not found and unreadable stay the page\'s own states, inside the shell
 });
 
 test('M2: an unmapped market\'s fallback page sits in the Research shell, both when found and when not', () => {
-  // `MarketSectorProfile.jsx` imports a JSON bundle Node cannot load without an
-  // import attribute, so this reads the source rather than rendering it.
+  // #1077: the page draws the market the resolver read, so "not found" is the
+  // resolver's state (inside the shell, `SectorProfile`) and the found page is
+  // wrapped here. Its body is rendered in research_legacy_market_1077.test.mjs.
   const src = codeOnly(read('frontend/src/pages/research/MarketSectorProfile.jsx'));
   const legacy = src.slice(src.indexOf('function LegacyMarketProfile'), src.indexOf('export default function MarketSectorProfile'));
-  assert.match(legacy, /if \(!sector\) return <WorkspaceShell role=\{role\} title="Market" activeSlug="markets">/);
-  assert.match(legacy, /return <WorkspaceShell role=\{role\} title=\{sector\.name\} activeSlug="markets"><div data-testid="market-sector-profile"/);
+  assert.match(legacy, /return <WorkspaceShell role=\{role\} title=\{market\?\.item\?\.name \|\| 'Market'\} activeSlug="markets"><LegacyMarketView market=\{market\} \/><\/WorkspaceShell>/);
+  const sector = codeOnly(read('frontend/src/pages/research/SectorProfile.jsx'));
+  assert.match(sector, /if \(!data\) return <Card variant="dashed"><p>Sector or market not found\.<\/p>/);
+  assert.match(sector, /return <WorkspaceShell role=\{role\} title=\{state\.data\?\.name \|\| 'Sector'\} activeSlug="markets">/);
 });
 
 // ---- Recording a reading ------------------------------------------------------
