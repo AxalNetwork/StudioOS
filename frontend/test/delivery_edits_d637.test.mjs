@@ -106,7 +106,7 @@ test('hours by entry: a month with no entry reads Not recorded, never 0, and eac
   const text = words(markup);
   assert.match(text, /Client · person 2026-10 2026-09 2026-08 Fran · Sam 12\.5 h Delete Not recorded 8 h Delete/);
   const gap = markup.slice(markup.indexOf('data-testid="hours-901-61-2026-09"'));
-  assert.match(gap.slice(0, 300), new RegExp(`title="${NO_HOURS_REASON.replace(/\./g, '\\.')}"`));
+  assert.ok(gap.slice(0, 300).includes(`title="${NO_HOURS_REASON}"`), 'the reason travels with the Not recorded cell');
   assert.doesNotMatch(gap.slice(0, 300), /0 h/);
   assert.equal((markup.match(/>Delete</g) || []).length, 2, 'Delete only where there is an entry');
   assert.match(markup, /aria-label="Delete 12\.5 hours for Sam in 2026-10"/);

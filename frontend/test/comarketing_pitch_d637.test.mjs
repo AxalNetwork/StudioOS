@@ -35,7 +35,7 @@ const view = (pitch) => html(h(CoMarketingPitchView, { read: { kind: 'ready', pi
 test('a proposed pitch shows the form prefilled and editable', () => {
   const markup = view(PROPOSED);
   assert.match(markup, /<option value="webinar" selected="">Webinar<\/option>/);
-  for (const v of ['Webinar on fintech', 'One sharp line', 'Seed founders']) assert.match(markup, new RegExp(`value="${v}"`));
+  for (const v of ['Webinar on fintech', 'One sharp line', 'Seed founders']) assert.ok(markup.includes(`value="${v}"`), v);
   assert.match(markup, />12k newsletter<\/textarea>/);
   assert.doesNotMatch(markup, /disabled=""/, 'nothing is locked while Proposed');
   assert.match(words(markup), /Save changes/);
