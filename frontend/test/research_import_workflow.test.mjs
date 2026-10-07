@@ -47,12 +47,26 @@ function bash(script, env, cwd) {
   return spawnSync('bash', ['-c', script], { cwd, env: { PATH: process.env.PATH, ...env }, encoding: 'utf8' });
 }
 
-test('it runs only when dispatched by hand, never on a push, a PR or a schedule', () => {
+test('it runs only when dispatched, by a person or by a research-import event, never on a push, a PR or a schedule', () => {
   const on = yml.slice(yml.indexOf('\non:'), yml.indexOf('\npermissions:'));
-  assert.match(on, /workflow_dispatch:/);
-  for (const trigger of ['push:', 'pull_request', 'schedule:', 'workflow_run', 'issue_comment']) {
-    assert.ok(!on.includes(trigger), `no ${trigger} trigger`);
+  const triggers = on.split('\n').filter((l) => /^  [a-z_]+:/.test(l)).map((l) => l.trim().replace(/:.*/, ''));
+  assert.deepEqual(triggers, ['workflow_dispatch', 'repository_dispatch']);
+  assert.match(on, /repository_dispatch:\n    types: \[research-import\]\n/);
+});
+
+test('a research-import event carries the same three fields as the inputs, through env', () => {
+  for (const field of ['source', 'migration', 'urls']) {
+    const name = field.toUpperCase();
+    assert.ok(
+      yml.includes(`      ${name}: \${{ inputs.${field} || github.event.client_payload.${field} }}`),
+      `${name} reads the input, or the event's client_payload.${field}`,
+    );
   }
+});
+
+test('no step condition reads inputs, which a research-import event leaves empty', () => {
+  const conditions = lines.filter((l) => /^\s+if: /.test(l)).map((l) => l.trim());
+  assert.deepEqual(conditions, ["if: env.SOURCE != 'urls'", "if: env.SOURCE == 'urls'"]);
 });
 
 test('the token may write contents and nothing else', () => {
