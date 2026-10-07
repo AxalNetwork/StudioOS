@@ -1,6 +1,8 @@
+import { guidePlacement } from './guidePlacement';
+
 // D599 (#1280) — the Help Center's addresses and its one derived figure, as
-// plain functions, so `help_center_contract.test.mjs` can run them rather than
-// read them. No JSX and no imports: the layout and the test share this file.
+// plain functions, so the layout and tests run the same address and signal
+// helpers. D626 supplies task-area labels from the placement table.
 
 /** `/help/<area>/<guide>` → `{ area, guide }`, anything else → null. */
 export function parseGuidePath(pathname) {
@@ -63,7 +65,7 @@ export function guideFor(anchor, sections) {
   const [area, guide] = String(anchor || '').split('/');
   const s = (sections || []).find((x) => x.id === area);
   const sub = s?.subsections.find((x) => x.id === guide);
-  return sub ? { anchor: `${area}/${guide}`, title: sub.title, area: s.title } : null;
+  return sub ? { anchor: `${area}/${guide}`, title: sub.title, area: guidePlacement(`${area}/${guide}`)?.areaTitle || s.title } : null;
 }
 
 /** Cards in "Popular this week"; the page asks the route for its maximum, 10. */

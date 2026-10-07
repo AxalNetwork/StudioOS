@@ -49,6 +49,7 @@ function allSources(dir = resolve(process.cwd(), 'frontend/src'), out = [], ext 
   }
   return out;
 }
+import { GUIDE_PLACEMENT } from '../src/pages/docs/guidePlacement.js';
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from '../src/pages/docs/sections/index.js';
 import { createDocsFuse } from '../src/lib/docs/search.js';
 import {
@@ -279,10 +280,10 @@ test('the category grid is built from the manifest, not a hand-kept list', () =>
   // everyone, since the filtering happens on `visibleSections`.
   assert.match(LAYOUT_CODE, /<BrowseByTask sections=\{visibleSections\}/);
   const body = fnBody(LAYOUT_CODE, 'BrowseByTask');
-  assert.match(body, /sections\.map\(\(section\)/, 'the cards must come from the manifest');
+  assert.match(body, /areas\.map\(\(section\)/, 'the cards must come from the manifest');
   assert.match(
     body,
-    /section\.subsections\.length/,
+    /section\.guides\.length/,
     "the card's count must be the manifest's count",
   );
   // Every real section title must be reachable through it — the sanity check
@@ -456,60 +457,12 @@ test('the contact block points at the flow, not at a menu item', () => {
 // The four canvas elements that are deliberately absent
 // ---------------------------------------------------------------------------
 
-test('no canvas element ships on top of a store that does not exist', () => {
-  // Each of these is refused for a stated reason, recorded in ROUTE_MAP and in
-  // the block comment above the hero. Reinstating one is a decision someone
-  // takes on purpose — which means editing this test, on purpose.
-  // "Popular this week" and "Did this answer it?" were banned here until their
-  // stores existed: D603 (#1286) built them, and D621 (#1280 step 2) lifted
-  // these two bans when it wired the page (`HelpSignals.jsx`).
-  const banned = [
-    // Needs a `surface` route on ~98 subsections. A wrong deep link is worse
-    // than no deep link.
-    [/Where this lives/i, '"Where this lives" needs a per-article surface route'],
-    [/Open the surface/i, '"Open the surface" needs a per-article surface route'],
-    // Reads a `roles` array. Not one section in the manifest has one.
-    [/Applies to/i, '"Applies to" needs per-article persona arrays'],
-  ];
-  for (const [re, why] of banned) {
-    assert.ok(!re.test(LAYOUT_CODE), `${why} — it must not render`);
-  }
-});
-
-test('the persona line is refused for a reason that is still true', () => {
-  // "Applies to <persona>" would read `roles` off each subsection. This
-  // assertion used to require that NO section carried one, and it fired the
-  // moment `sections/admin.js` was re-registered (DECISIONS D61) — which is
-  // exactly what it was written to do: "if a section ever grows one, this fails
-  // and the refusal gets revisited rather than quietly outliving its reason".
-  //
-  // REVISITED, AND THE REFUSAL STANDS, for a reason that survived the change.
-  // The only `roles` array in the corpus is `['admin']`, and admin content is
-  // already invisible to every viewer it would exclude — so the line would read
-  // "Everyone" on all 98 articles a non-admin can see, and "Everyone" on 98 of
-  // the 99 an admin can. A persona label that is a constant everywhere it is
-  // read labels nothing.
-  //
-  // What the guard now watches for is a roles array that would actually
-  // DISCRIMINATE between viewers who share the corpus — `['founder']`,
-  // `['investor', 'partner']`. That is the day the line starts carrying
-  // information, and the day this fails again.
-  const tags = [];
-  for (const s of SECTIONS) {
-    if (Array.isArray(s.roles)) tags.push([s.id, s.roles]);
-    for (const sub of s.subsections) {
-      if (Array.isArray(sub.roles)) tags.push([`${s.id}/${sub.id}`, sub.roles]);
-    }
-  }
-  const discriminating = tags.filter(([, roles]) =>
-    !(roles.length === 1 && roles[0] === 'admin'));
-  assert.deepEqual(
-    discriminating.map(([id, roles]) => `${id}: [${roles.join(', ')}]`), [],
-    'a roles array now distinguishes between viewers who share the corpus — revisit the persona line',
-  );
-  // And the admin tagging is still there to be excluded by: if it vanished, the
-  // refusal above would be resting on a fact nobody had checked.
-  assert.ok(tags.length > 0, 'the admin roles tagging is what the reasoning above rests on');
+test('guide audiences describe readers without changing the visibility roles', () => {
+  const guides = SECTIONS.flatMap((section) => section.subsections.map((sub) => `${section.id}/${sub.id}`));
+  assert.deepEqual(guides.filter((anchor) => !GUIDE_PLACEMENT[anchor]), []);
+  assert.deepEqual(GUIDE_PLACEMENT['account/investor-billing'].appliesTo, ['investor']);
+  assert.equal(GUIDE_PLACEMENT['getting-started/what-is-studioos'].appliesTo, null);
+  assert.deepEqual(filterSectionsForRole(SECTIONS, 'founder').find((section) => section.id === 'account').subsections.map((sub) => sub.id), SECTIONS.find((section) => section.id === 'account').subsections.map((sub) => sub.id));
 });
 
 // ---------------------------------------------------------------------------
