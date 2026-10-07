@@ -10,7 +10,7 @@ import { LedgerRefusal,ledgerId,ledgerCents,ledgerDate,ledgerText,accountCategor
   ledgerPeriod,postLedgerEntry,accrueFundFee,readFundLedger } from '../services/fundLedger';
 const r = new Hono<{Bindings:Env}>();
 r.onError((error,c)=>{
-  if (error instanceof LedgerRefusal) return refuse(c,error.status,{code:'fund_ledger_refused',message:error.message});
+  if (error instanceof LedgerRefusal) return refuse(c,error.status,{code:'fund_ledger_refused',message:error.publicMessage});
   const status=AUTH_ERROR_STATUSES[error.message];
   if (status) return refuse(c,status,{code:'fund_access_refused',message:'This account cannot access the fund ledger.'});
   return refuse(c,503,{code:'fund_ledger_unreadable',message:'Fund ledger is Unreadable. Please retry.',raw:error});

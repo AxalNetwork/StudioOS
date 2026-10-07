@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { makeD1 } from './_d1_sqlite.mjs';
 import route from '../src/routes/fund_ledger.ts';
-import { feeForPeriod,ledgerDate,postLedgerEntry,readFundLedger } from '../src/services/fundLedger.ts';
+import { LedgerRefusal,feeForPeriod,ledgerDate,postLedgerEntry,readFundLedger } from '../src/services/fundLedger.ts';
 const migration=readFileSync(new URL('../sql/migrations/418_fund_ledger.sql',import.meta.url),'utf8');
 const schema=`PRAGMA foreign_keys=ON;
 CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,name TEXT,role TEXT,is_active INTEGER);
@@ -42,6 +42,11 @@ const fee={expense_account_id:1,payable_account_id:2};
 const expense={entry_date:'2024-02-02',description:' Legal invoice 001 ',expense_account_id:4,credit_account_id:3,amount_cents:12345};
 const reconcile={statement_reference:' Bank Q1 ',statement_line_reference:' row 9 ',statement_date:'2024-02-02',statement_amount_cents:1000000};
 const count=(db:any,table:string)=>db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
+test('business refusal sentences cannot carry arbitrary database or provider text',()=>{
+  const refused=new LedgerRefusal('SQLITE secret provider internals' as any);
+  assert.equal(refused.publicMessage,'The ledger request could not be recorded.');
+  assert.doesNotMatch(refused.message,/SQLITE|secret|provider/);
+});
 test('fee arithmetic uses inclusive actual days/365, integer rounding, explicit zero and safe limits',()=>{
   assert.equal(feeForPeriod(100000000,200,'2024-01-01','2024-03-31'),498630);
   assert.equal(feeForPeriod(36500,100,'2024-02-29','2024-02-29'),1);
@@ -282,5 +287,23 @@ test('reported D1 read/write failure does not return success',async()=>{
     f.DB.prepare=prepare;
     const batch=f.DB.batch.bind(f.DB);f.DB.batch=async(stmts:any[])=>{const result=await batch(stmts);return result.map((r:any)=>({...r,success:false}));};
     await assert.rejects(()=>postLedgerEntry(f.env,{id:2,role:'investor'},10,1,entry));
+  }finally{f.db.close();}
+});
+test('a concurrently posted entry cannot enter the trial balance without entering the journal snapshot',async()=>{
+  const f=await fixture();try{
+    await f.request('/10/periods/1/entries',2,'POST',entry);
+    const prepare=f.DB.prepare.bind(f.DB);let inserted=false;
+    f.DB.prepare=(sql:string)=>{
+      if(sql.includes('FROM fund_ledger_lines l') && !inserted) {
+        inserted=true;
+        f.db.exec("INSERT INTO fund_ledger_entries(uid,fund_id,period_id,entry_date,description,kind,recorded_by,posted,debit_cents,credit_cents,line_count) VALUES('concurrent',10,1,'2024-02-02','Concurrent expense','expense',1,1,55,55,2); INSERT INTO fund_ledger_lines(fund_id,entry_id,account_id,debit_cents,credit_cents) VALUES(10,2,4,55,0),(10,2,3,0,55);");
+      }
+      return prepare(sql);
+    };
+    const book=await readFundLedger(f.env,{id:10,name:'Fund A'},true);
+    assert.equal(book.summary.entry_count,1);
+    assert.equal(book.summary.expense_cents,null);
+    assert.deepEqual(book.journal.map((e:any)=>e.description),['Opening cash']);
+    assert.deepEqual(book.trial_balance.map((a:any)=>[a.code,a.debit_cents,a.credit_cents]).sort(),[['CASH',1000000,0],['PAY',0,1000000]]);
   }finally{f.db.close();}
 });

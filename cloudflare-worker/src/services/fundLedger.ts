@@ -1,8 +1,43 @@
 /** D628: integer-cent operational fund books. No HTTP or inferred opening balances. */
 import type { Env } from '../types';
+const LEDGER_SENTENCES = [
+  "Accounting period not found.",
+  "An entry needs between two and fifty account lines.",
+  "Choose a period and its fee expense and payable accounts.",
+  "Choose a period and record the entry.",
+  "Choose a valid accounting period.",
+  "Choose an active investor account or null to remove the administrator.",
+  "Choose close or reopen; reopening requires a reason of up to 500 characters.",
+  "Choose fund accounts and record positive expense cents.",
+  "Choose this fund’s expense and cash or payable accounts.",
+  "Choose this fund’s fee expense and payable accounts.",
+  "Each line needs a fund account and nonnegative integer cents on only one side.",
+  "Every account must belong to this fund.",
+  "Fund not found.",
+  "Not recorded: management fee terms are missing. No fee was posted.",
+  "Only an admin can assign the fund administrator.",
+  "Only an admin or the assigned fund administrator can write this ledger.",
+  "Only the fund administrator or an admin can read the chart of accounts.",
+  "Record a date within this period and a description of up to 500 characters.",
+  "Record a period label and valid start and end dates in order.",
+  "Record a statement reference, line reference, date and signed amount in cents.",
+  "Record an account code, a name of up to 100 characters, and a valid account category.",
+  "Record an effective date, annual basis points from 0 to 10000, basis cents and a source of up to 500 characters.",
+  "Record valid fee terms and accounting dates.",
+  "Split this accounting period at the recorded fee-term change before accruing its fee.",
+  "The entry must balance to the cent, with equal positive debits and credits.",
+  "The fee is too large to record safely in cents.",
+  "The fund or period changed, or this record already exists. Reload before recording it.",
+  "This accounting period is closed. Reopen it with a reason before posting.",
+  "This period already has the requested state."
+] as const;
 export class LedgerRefusal extends Error {
   status: 400 | 404 | 409;
-  constructor(message: string, status: 400 | 404 | 409 = 400) { super(message); this.status=status; }
+  readonly publicMessage: string;
+  constructor(message: typeof LEDGER_SENTENCES[number], status: 400 | 404 | 409 = 400) {
+    const sentence = LEDGER_SENTENCES.includes(message) ? message : "The ledger request could not be recorded.";
+    super(sentence); this.status=status; this.publicMessage=sentence;
+  }
 }
 export const ledgerId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 export const ledgerCents = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
@@ -112,7 +147,8 @@ export async function readFundLedger(env: Env, fund: any, full: boolean, selecte
     l.statement_reference,l.statement_line_reference,l.statement_date,l.statement_amount_cents,l.reconciled_by,l.reconciled_at
     FROM fund_ledger_lines l JOIN fund_ledger_entries e ON e.id=l.entry_id AND e.fund_id=l.fund_id
     JOIN fund_ledger_accounts a ON a.id=l.account_id AND a.fund_id=l.fund_id
-    WHERE e.fund_id=? AND e.period_id=? AND e.posted=1 ORDER BY e.entry_date,e.id,l.id`,[fund.id,period.id]);
+    WHERE e.fund_id=? AND e.period_id=? AND e.posted=1
+      AND e.id IN (SELECT value FROM json_each(?)) ORDER BY e.entry_date,e.id,l.id`,[fund.id,period.id,JSON.stringify(entries.map(e=>e.id))]);
   if (lines.some(l=>!ledgerCents(l.debit_cents) || !ledgerCents(l.credit_cents))) throw new Error('Invalid ledger cents');
   const fees = entries.filter(e=>e.kind==='fee_accrual');
   const expenses = lines.filter(l=>l.category==='expense' && entries.find(e=>e.id===l.entry_id)?.kind!=='fee_accrual');
