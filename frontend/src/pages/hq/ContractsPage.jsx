@@ -4,6 +4,8 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { LegalPanel } from '../AdminPage';
 import { Unrecorded, Unreadable, RailFrame, WorkerRail } from '../../ui';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -60,7 +62,125 @@ export function groupDocTypesByLayer(items, layers) {
   return groups;
 }
 
-function RegistryTypeCard({ row }) {
+// D622 — the route's floor for a publish reason (`REGISTRY_PUBLISH_REASON_MIN`).
+export const PUBLISH_REASON_MIN = 10;
+
+/** Who saved a pending revision, and when, as one sentence. */
+export function pendingSavedLine(pending) {
+  const who = pending?.updated_by_name
+    || (pending?.updated_by != null ? `Admin #${pending.updated_by}` : 'an admin whose account is not recorded');
+  // `draft_updated_at` is SQLite's UTC 'YYYY-MM-DD HH:MM:SS.mmm'.
+  const d = pending?.updated_at ? new Date(`${String(pending.updated_at).replace(' ', 'T')}Z`) : null;
+  return d && !Number.isNaN(d.getTime())
+    ? `Saved by ${who} on ${d.toLocaleString()}.`
+    : `Saved by ${who}, at a time not recorded.`;
+}
+
+/** Live against pending, field by field, so a reviewer sees exactly what would go live. */
+export function revisionRows(live, pending) {
+  const roles = (v) => (v || []).map((r) => PARTY_LABEL[r] || r).join(', ') || '—';
+  const fields = (v) => (v || []).join(', ') || '—';
+  return [
+    { id: 'title', label: 'Title', live: live.title || '—', pending: pending.title || '—' },
+    { id: 'layer', label: 'Layer', live: LAYER_CODE_LABEL[live.layer] || live.layer || '—', pending: LAYER_CODE_LABEL[pending.layer] || pending.layer || '—' },
+    { id: 'party_roles', label: 'Party roles', live: roles(live.party_roles), pending: roles(pending.party_roles) },
+    { id: 'required_fields', label: 'Required fields', live: fields(live.required_fields), pending: fields(pending.required_fields) },
+  ].map((r) => ({ ...r, changed: r.live !== r.pending }));
+}
+
+/** Each refusal of the publish route, as a sentence the reader can act on. */
+export function publishRefusal(e) {
+  const code = e?.code || e?.data?.code || '';
+  if (code === 'reason_required') return `Write a reason of at least ${PUBLISH_REASON_MIN} characters; it is recorded in the audit.`;
+  if (code === 'draft_changed') return 'Someone saved this revision again after you opened it. Nothing was published. The card now shows the newer copy; review it, then publish.';
+  if (code === 'reviewed_draft_required') return 'The publish did not say which revision you reviewed, so nothing was published. Reload the card and try again.';
+  if (code === 'step_up_required') return 'Your step-up has lapsed. Confirm with your authenticator, then publish again. Nothing was published.';
+  if (code === 'not_found') return 'This type is no longer in the store, so there is nothing to publish.';
+  return e?.message ? `The publish was refused: ${e.message}` : 'The publish could not be completed. Nothing was published.';
+}
+
+/**
+ * D622 — a published type's pending revision: who saved it and when, live
+ * against pending, and the publish control, which is a Super Admin's. The
+ * publish names the revision shown here (`reviewed_draft_at`), so a save that
+ * lands after this card was drawn is refused by the route, not put live.
+ */
+export function PendingRevision({ row, canPublish, onPublished, publishFn = api.adminContractRegistryPublish }) {
+  const pending = row.pending_draft;
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const rows = revisionRows(row, pending);
+  const submit = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await publishFn(row.doc_type, { reason: reason.trim(), reviewed_draft_at: pending.updated_at });
+      setReason('');
+      if (onPublished) onPublished();
+    } catch (e) {
+      setError(publishRefusal(e));
+      // A newer save: read the hub again so the card shows what would now go live.
+      if ((e?.code || e?.data?.code) === 'draft_changed' && onPublished) onPublished();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-2 rounded-md border border-violet-200 bg-violet-50/60 p-2 dark:border-violet-800 dark:bg-violet-950/30" data-testid={`registry-pending-${row.doc_type}`}>
+      <p className="text-[10px] font-extrabold uppercase tracking-[.08em] text-violet-900 dark:text-violet-200">Pending revision · not live</p>
+      <p className="mt-0.5 text-[10px] leading-relaxed text-axal-muted dark:text-gray-300" data-testid="registry-pending-saved">{pendingSavedLine(pending)}</p>
+      <table className="mt-1.5 w-full text-left text-[10px]" data-testid="registry-pending-compare">
+        <thead>
+          <tr className="text-axal-faint">
+            <th className="py-0.5 pr-2 font-bold" scope="col"><span className="sr-only">Field</span></th>
+            <th className="py-0.5 pr-2 font-bold" scope="col">Live</th>
+            <th className="py-0.5 font-bold" scope="col">Pending</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} data-testid={`registry-pending-row-${r.id}`} data-changed={r.changed ? 'true' : 'false'}>
+              <th scope="row" className="py-0.5 pr-2 font-bold text-axal-ink dark:text-gray-100">{r.label}</th>
+              <td className="py-0.5 pr-2 text-axal-muted dark:text-gray-300">{r.live}</td>
+              <td className={`py-0.5 ${r.changed ? 'font-bold text-violet-900 dark:text-violet-200' : 'text-axal-muted dark:text-gray-300'}`}>{r.pending}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {canPublish ? (
+        <div className="mt-2" data-testid="registry-publish-control">
+          <label className="block text-[10px] font-bold text-axal-ink dark:text-gray-100" htmlFor={`publish-reason-${row.doc_type}`}>
+            Reason for publishing (at least {PUBLISH_REASON_MIN} characters, recorded in the audit)
+          </label>
+          <textarea
+            id={`publish-reason-${row.doc_type}`}
+            rows={2}
+            className="mt-1 w-full rounded border border-axal-hairline px-2 py-1 text-[11px] dark:border-gray-700 dark:bg-gray-800"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={busy || reason.trim().length < PUBLISH_REASON_MIN}
+            onClick={submit}
+            className="mt-1 rounded bg-[#881337] px-2.5 py-1 text-[10.5px] font-extrabold text-white disabled:opacity-50"
+            data-testid={`registry-publish-${row.doc_type}`}
+          >
+            {busy ? 'Publishing…' : 'Publish this revision'}
+          </button>
+          {error ? <p className="mt-1 text-[10.5px] leading-relaxed text-red-700 dark:text-red-400" role="alert" data-testid="registry-publish-error">{error}</p> : null}
+        </div>
+      ) : (
+        <p className="mt-2 text-[10px] leading-relaxed text-axal-muted dark:text-gray-300" data-testid="registry-publish-waits">
+          It goes live only when a Super Admin reviews and publishes it.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RegistryTypeCard({ row, canPublish, onPublished }) {
   return (
     <div
       className="rounded-lg border border-axal-hairline bg-white p-2.5 dark:border-gray-700 dark:bg-gray-900"
@@ -92,6 +212,9 @@ function RegistryTypeCard({ row }) {
         {formatLastUsed(row.last_used_at) ? ` · last ${formatLastUsed(row.last_used_at)}` : ''}
         {row.registry_status === 'draft' ? ' · draft in store' : ''}
       </p>
+      {row.registry_status === 'published' && row.pending_draft ? (
+        <PendingRevision row={row} canPublish={canPublish} onPublished={onPublished} />
+      ) : null}
     </div>
   );
 }
@@ -99,7 +222,7 @@ function RegistryTypeCard({ row }) {
 /**
  * D480 — doc-type registry hub (X1 layer cards + table fallback).
  */
-export function DocTypeRegistry({ data, onRetry }) {
+export function DocTypeRegistry({ data, onRetry, canPublish = false }) {
   const groups = useMemo(
     () => (data && data !== UNAVAILABLE && data.items ? groupDocTypesByLayer(data.items, data.layers) : []),
     [data],
@@ -171,7 +294,7 @@ export function DocTypeRegistry({ data, onRetry }) {
             ) : null}
             <div className="grid gap-2">
               {g.items.map((row) => (
-                <RegistryTypeCard key={row.doc_type} row={row} />
+                <RegistryTypeCard key={row.doc_type} row={row} canPublish={canPublish} onPublished={onRetry} />
               ))}
             </div>
           </section>
@@ -191,7 +314,7 @@ export function DocTypeRegistry({ data, onRetry }) {
         <section key={g.id} className="rounded-xl border border-dashed border-axal-hairline p-3">
           <h3 className="text-[12px] font-extrabold">{g.label}</h3>
           <p className="text-[10px] text-axal-faint">{g.description}</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">{g.items.map((row) => <RegistryTypeCard key={row.doc_type} row={row} />)}</div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">{g.items.map((row) => <RegistryTypeCard key={row.doc_type} row={row} canPublish={canPublish} onPublished={onRetry} />)}</div>
         </section>
       ))}
     </div>
@@ -330,6 +453,10 @@ function RegistryEditorModal({ open, onClose, onSaved }) {
  * HQ · Contracts — registry hub (D480) and master template library.
  */
 export default function HqContractsPage() {
+  const { user } = useAuth() || {};
+  // D622 — the publish control is a Super Admin's: the route's gate is
+  // `requireSuperAdminWriteBar`, so any other admin is told it waits for one.
+  const canPublish = isSuperAdminUser(user);
   const [registry, setRegistry] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -391,7 +518,7 @@ export default function HqContractsPage() {
               New doc type
             </button>
           </div>
-          <DocTypeRegistry data={registry} onRetry={loadRegistry} />
+          <DocTypeRegistry data={registry} onRetry={loadRegistry} canPublish={canPublish} />
         </section>
 
         <section>

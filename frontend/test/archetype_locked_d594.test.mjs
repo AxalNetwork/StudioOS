@@ -48,7 +48,10 @@ test('the locked card is not a link, is announced as disabled, and holds no arch
   assert.doesNotMatch(markup, /<a\b/, 'a locked card must not be a link');
   assert.doesNotMatch(markup, /href=/);
   assert.match(markup, /aria-disabled="true"/);
-  assert.doesNotMatch(markup, /View full card|Primary archetype|Preview/);
+  assert.doesNotMatch(markup, /View full card|Preview/);
+  // D620 (board A10): the label and "Locked" sit under the lock. Neither is
+  // archetype text; the loop below still refuses every name and tagline.
+  assert.match(renderedText(markup), /Primary archetype\s*Locked\s*The reading unlocks with the plan\./);
   for (const t of ARCHETYPE_TEXT) assert.ok(!markup.includes(t), `archetype text "${t}" reached a locked card`);
 });
 
