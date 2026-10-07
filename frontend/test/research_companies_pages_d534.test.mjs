@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
@@ -231,4 +231,12 @@ test('sources: funding rounds are listed, and a failed rounds read is Unreadable
   assert.match(render(SourcesTable, { ...base, fundingRounds: { status: 'ok', rows: [{}, {}, {}] } }), /Funding rounds\s*3 rows/);
   assert.match(render(SourcesTable, { ...base, fundingRounds: { status: 'unreadable', rows: [] } }), /Funding rounds\s*Unreadable: read failed/);
   assert.match(read('frontend/src/pages/research/CompanyProfile.jsx'), /fundingRounds=\{d\.funding_rounds\}/);
+});
+
+test('#1077: the bundled company directory is deleted, and nothing under src reads it', () => {
+  assert.equal(existsSync(resolve(root, 'frontend/src/data/companyDirectory.json')), false, 'the bundle is back');
+  const walk = (dir) => readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((e) => (
+    e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.(jsx?|mjs|ts)$/.test(e.name) ? [`${dir}/${e.name}`] : []));
+  const importers = walk('frontend/src').filter((f) => /from\s+['"][^'"]*companyDirectory\.json['"]/.test(read(f)));
+  assert.deepEqual(importers, [], 'a page imports the retired bundle');
 });

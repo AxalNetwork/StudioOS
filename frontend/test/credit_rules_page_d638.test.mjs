@@ -13,6 +13,10 @@
  *     client calls the Worker's routes.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/credit_rules_page_d638.test.mjs
+ *
+ * The registry lives beside HQ · Credits (`/hq/credits`, `creditRules.js` and
+ * `CreditRulesPage.jsx`). Those two pages do not share a module: each defines
+ * `refusalSentence`, and the two definitions disagree.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,8 +29,8 @@ import { codeOnly } from './_codeOnly.mjs';
 import {
   REASON_MIN, filterGrants, filterRules, pageOf, reasonReady, refusalSentence, ruleAmount, ruleChanges,
   ruleUpdated, submitRevoke, submitRule,
-} from '../src/lib/creditRules.js';
-import { GrantsTable, RulesTable, ReasonCard } from '../src/pages/hq/CreditRulesPage.jsx';
+} from '../src/lib/creditRulesRegistry.js';
+import { GrantsTable, RulesTable, ReasonCard } from '../src/pages/hq/CreditRulesRegistryPage.jsx';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
