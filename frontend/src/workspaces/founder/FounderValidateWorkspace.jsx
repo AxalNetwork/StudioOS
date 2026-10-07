@@ -17,6 +17,7 @@ import {
   RECENTLY_MOVED_DAYS, daysBefore, historyReaches, laneChangedSince,
   startOfMonth, verdictAsOf, verdictChangedSince,
 } from '../../lib/verdictHistory';
+import { ClaimLinkList, InterviewEvidenceFields, VerdictPanel, earlierDecisions } from '../../pages/founder/validatePieces';
 
 /**
  * Validate — the four evidence stages, as four routes.
@@ -131,6 +132,10 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
   // Bumped after an upload or a transcription so the row re-reads itself
   // rather than holding a stale copy of the record it just changed.
   const [localKey, setLocalKey] = useState(0);
+  const saveEvidence = async (id, patch) => {
+    await api.updateInterviewEvidence(id, patch);
+    setLocalKey((n) => n + 1);
+  };
 
   useEffect(() => {
     if (!ready || !projectId) return undefined;
@@ -265,6 +270,12 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                       phrases from many interviews — there is no single
                       interview on that page to write against. Judging a pain
                       belongs beside the conversation it came out of. */}
+                  <InterviewEvidenceFields
+                    fit={r.icp_fit}
+                    consent={r.quote_consent}
+                    company={r.interviewee_company}
+                    onSave={(patch) => saveEvidence(r.id, patch)}
+                  />
                   {pains.length > 0 && (
                     <PainSeverity
                       interviewId={r.id}
@@ -280,7 +291,7 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
             These are the same records Discovery writes — one log, two doors. Consent to quote is a real field on
             an interview and it is three-state: yes, no, or never asked. Never-asked is counted apart from
             declined rather than folded into it, and nothing here presumes an interview quotable — that is the one
-            mistake this stage cannot make. No screen writes the field yet, so on most rows it is still unasked.
+            mistake this stage cannot make. Fit, consent and company are edited on the row. Not recorded is not None.
           </p>
         </Card>
       )}
@@ -784,7 +795,7 @@ const HYPOTHESIS_VIEWS = {
   retired: (h) => Boolean(h.retired_at),
 };
 
-function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, zoneFilters, zoneActions }) {
+function HypothesisBoard({ projectId, ready, board, onNew, onRetire, onUnlink, retiring, unlinking, zoneFilters, zoneActions }) {
   const { data, error } = board;
   const [view, setView] = useState('all');
   if (!ready) return <Skeleton className="h-40" />;
@@ -871,6 +882,13 @@ function HypothesisBoard({ projectId, ready, board, onNew, onRetire, retiring, z
                         {h.evidence.supporting} support · {h.evidence.contradicting} contradict
                         {h.evidence.fitUnrecorded > 0 && ` · ${h.evidence.fitUnrecorded} of unknown fit`}
                       </div>
+                      <ClaimLinkList
+                        links={h.links || []}
+                        groups={data.pain_groups || []}
+                        withheld={h.verdict == null && (h.evidence?.fitUnrecorded || 0) > 0}
+                        busyId={unlinking}
+                        onUnlink={onUnlink}
+                      />
                       <div className="mt-0.5 text-[11px] text-axal-faint">
                         {h.bar_note || 'Distance to the bar cannot be computed until the fits above are recorded.'}
                       </div>
@@ -952,18 +970,21 @@ const SUMMARY_VIEWS = {
 function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }) {
   const { data, error } = board;
   const [decision, setDecision] = useState(undefined);
+  const [decisionAttempt, setDecisionAttempt] = useState(0);
   const [view, setView] = useState('current');
 
   useEffect(() => {
     if (!ready || !projectId) return undefined;
     let alive = true;
+    setDecision(undefined);
     api.getValidationDecision(projectId)
       // A 403 here is the designed outcome for a partner, not a failure: the
-      // decision is the founder's own and the board above is not.
+      // decision is the founder's own and the board above is not. Any other
+      // failure is unreadable, not an empty history.
       .then((r) => { if (alive) setDecision(r); })
-      .catch(() => { if (alive) setDecision(null); });
+      .catch((e) => { if (alive) setDecision(e?.status === 403 ? { hidden: true } : { failed: true }); });
     return () => { alive = false; };
-  }, [projectId, ready]);
+  }, [projectId, ready, decisionAttempt]);
 
   if (!ready) return <Skeleton className="h-40" />;
   if (!projectId) return <NoVenture what="The validation summary" />;
@@ -1078,30 +1099,19 @@ function ValidationSummary({ projectId, ready, board, zoneFilters, zoneActions }
         </Card>
       )}
 
-      <Card className="p-4">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-          What the venture decided
-        </div>
-        {current === undefined ? <div className="mt-2"><Skeleton className="h-10" /></div>
-          : current === null ? (
-            <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
-              {decision === null
-                ? 'Not shown here. A venture’s proceed, pivot or stop is its own — the board above is read by studio staff and service partners, and this is not.'
-                : 'No decision recorded. The summary above is evidence; this is the call a person makes in front of it, and nobody has made one yet.'}
-            </p>
-          ) : (
-            <>
-              <div className="mt-1.5 text-base font-extrabold capitalize tracking-tight">{current.decision}</div>
-              {current.reasoning && (
-                <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-muted">{current.reasoning}</p>
-              )}
-              <div className="mt-1.5 text-[11px] text-axal-faint">
-                Recorded {String(current.decided_at || '').slice(0, 10)}
-                {(decision?.history?.length || 0) > 1 && ` · ${decision.history.length - 1} earlier decision(s) kept`}
-              </div>
-            </>
-          )}
-      </Card>
+      {decision?.hidden ? null : (
+        <VerdictPanel
+          phase={decision === undefined ? 'loading' : decision?.failed ? 'unreadable' : current ? 'ready' : 'empty'}
+          current={current || null}
+          earlier={earlierDecisions(decision)}
+          onRetry={() => setDecisionAttempt((n) => n + 1)}
+          onRecord={async (picked, reasoning) => {
+            await api.recordValidationDecision(projectId, { decision: picked, reasoning });
+            const next = await api.getValidationDecision(projectId);
+            setDecision(next);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1208,6 +1218,7 @@ export default function FounderValidateWorkspace() {
   // over it filtered an empty set forever. A failure re-reads the board rather
   // than leaving the card showing a state the server did not accept.
   const [retiring, setRetiring] = useState(null);
+  const [unlinking, setUnlinking] = useState(null);
   const retireHypothesis = async (id, retired) => {
     setRetiring(id); setExportError('');
     try {
@@ -1216,6 +1227,17 @@ export default function FounderValidateWorkspace() {
       setExportError(e?.message || 'That claim could not be updated.');
     } finally {
       setRetiring(null);
+      setBoardKey((n) => n + 1);
+    }
+  };
+  const unlinkPain = async (id) => {
+    setUnlinking(id); setExportError('');
+    try {
+      await api.unlinkHypothesisPain(id);
+    } catch (e) {
+      setExportError(e?.message || 'That link could not be removed.');
+    } finally {
+      setUnlinking(null);
       setBoardKey((n) => n + 1);
     }
   };
@@ -1264,7 +1286,9 @@ export default function FounderValidateWorkspace() {
             board={board}
             onNew={() => setHypOpen(true)}
             onRetire={retireHypothesis}
+            onUnlink={unlinkPain}
             retiring={retiring}
+            unlinking={unlinking}
             zoneFilters={(opts) => founderZoneFilters('validate/hypotheses', opts)}
             zoneActions={() => founderZoneActions('validate/hypotheses', { handlers })}
           />
@@ -1295,7 +1319,7 @@ export default function FounderValidateWorkspace() {
     // `busy`, `retiring` and `projectId` all change what the handlers report, so
     // the row would otherwise keep rendering a stale disabled or busy state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zone?.slug, projectId, ready, reloadKey, board, busy, retiring]);
+  }, [zone?.slug, projectId, ready, reloadKey, board, busy, retiring, unlinking]);
 
   // WHY THE ROW MOVED OUT OF THE SHELL'S `actions` SLOT AND INTO THE BODIES.
   // This workspace was the first zone page in the product to use that slot, and
