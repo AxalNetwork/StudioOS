@@ -14,9 +14,12 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/credit_rules_page_d638.test.mjs
  *
- * The registry lives beside HQ · Credits (`/hq/credits`, `creditRules.js` and
- * `CreditRulesPage.jsx`). Those two pages do not share a module: each defines
- * `refusalSentence`, and the two definitions disagree.
+ * Since #1412 this is the only credit rules page: `/hq/credits` (#1399's copy)
+ * redirects here, and what #1399's page showed that this one did not is
+ * carried over and pinned below: what each kind of rule does, the value and
+ * the before/after line in an edit, a deduction and a take-back's reason in
+ * plain sight, the grant's note, a notice after each write, and a sentence
+ * for a refusal that arrives as a bare code.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,10 +30,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  REASON_MIN, filterGrants, filterRules, pageOf, reasonReady, refusalSentence, ruleAmount, ruleChanges,
-  ruleUpdated, submitRevoke, submitRule,
+  CREDITS_MAX, REASON_MIN, editHint, editSummary, filterGrants, filterRules, grantState, grantStateText, kindNotesFor, pageOf,
+  reasonReady, refusalSentence, revokeNotice, ruleAmount, ruleChanges, ruleNotice, ruleUpdated, submitRevoke,
+  submitRule, valueLine,
 } from '../src/lib/creditRulesRegistry.js';
-import { GrantsTable, RulesTable, ReasonCard } from '../src/pages/hq/CreditRulesRegistryPage.jsx';
+import { GrantsTable, Notice, RuleForm, RulesTable, ReasonCard } from '../src/pages/hq/CreditRulesRegistryPage.jsx';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -55,7 +59,8 @@ test('the registries filter by kind, source, state and search, and page by 25 wi
   assert.deepEqual(filterGrants(GRANTS, { source: 'manual' }).map((g) => g.id), [8, 7]);
   assert.deepEqual(filterGrants(GRANTS, { source: 'rule' }).map((g) => g.id), [9, 6]);
   assert.deepEqual(filterGrants(GRANTS, { state: 'revoked' }).map((g) => g.id), [6]);
-  assert.deepEqual(filterGrants(GRANTS, { state: 'standing' }).map((g) => g.id), [9, 8, 7]);
+  assert.deepEqual(filterGrants(GRANTS, { state: 'standing' }).map((g) => g.id), [9, 8]);
+  assert.deepEqual(filterGrants(GRANTS, { state: 'deducted' }).map((g) => g.id), [7], 'a deduction is its own state');
   assert.deepEqual(filterGrants(GRANTS, { q: 'ada' }).map((g) => g.id), [9, 7]);
   assert.deepEqual(filterGrants(GRANTS, { q: '5' }).map((g) => g.id), [8], 'an account id matches exactly');
   assert.deepEqual(filterGrants([{ id: 1, user_id: 15 }], { q: '5' }), [], 'not as part of a longer id');
@@ -93,8 +98,10 @@ test('saving a rule calls the Worker with the changes and the trimmed reason, an
 
 test('taking a grant back: the reason goes with it, and spent credits are refused in a sentence', async () => {
   const calls = [];
-  assert.deepEqual(await submitRevoke(GRANTS[0], ' Paid on a duplicate ', async (...a) => { calls.push(a); }), { ok: true });
+  assert.deepEqual(await submitRevoke(GRANTS[0], ' Paid on a duplicate ', async (...a) => { calls.push(a); }), { ok: true, result: null });
   assert.deepEqual(calls, [[9, 'Paid on a duplicate']]);
+  assert.deepEqual(await submitRevoke(GRANTS[0], 'Paid on a duplicate', async () => ({ status: 'revoked', notified: true })),
+    { ok: true, result: { status: 'revoked', notified: true } }, 'the Worker\'s answer is kept for the notice');
   assert.match((await submitRevoke(GRANTS[0], 'too short', async () => {})).error, /at least 10 characters/);
   const spent = Object.assign(new Error('The account holds 40 credits, fewer than the 150 credits this grant paid: they have been spent, so the grant cannot be taken back without a negative balance.'),
     { status: 409, code: 'would_overdraw', data: { error: 'would_overdraw', balance: 40 } });
@@ -135,7 +142,10 @@ test('each list in its four states: loading, Unreadable with Try again, empty, a
   const g = html(h(GrantsTable, { read: ready({ grants: GRANTS }), onRetry: noop, onChanged: noop }));
   assert.match(g, /title="No email is on record for account #5\.">Not recorded</);
   assert.match(text(h(GrantsTable, { read: ready({ grants: GRANTS }), onRetry: noop, onChanged: noop })), /−20 Manual adjustment/);
-  assert.match(g, /title="Duplicate report">Taken back 2026-10-04/);
+  assert.match(g, /data-testid="grant-state-6">Taken back 2026-10-04: “Duplicate report”</, 'the reason is in plain sight, not a hover');
+  assert.match(g, /data-testid="grant-state-7">Deduction</);
+  assert.match(g, /data-testid="grant-state-9">Standing</);
+  assert.match(text(h(GrantsTable, { read: ready({ grants: GRANTS }), onRetry: noop, onChanged: noop })), /bug_high A bug Standing/, 'the grant\'s note is shown');
   // Take back is offered on a standing grant of credits only.
   const rowOf = (id) => { const at = g.indexOf(`data-testid="grant-row-${id}"`); return g.slice(at, g.indexOf('</tr>', at)); };
   const takeBack = (id) => rowOf(id).includes('>Take back</button>');
@@ -152,6 +162,11 @@ test('the page is the Super Admin\'s at /admin/credit-rules, the review queue li
   const app = codeOnly(read('frontend/src/App.jsx'));
   assert.match(app, /<Route path="\/admin\/credit-rules" element=\{guard\(\['admin'\], hqOnly\(<CreditRulesPage \/>\)\)\} \/>/);
   assert.match(codeOnly(read('frontend/src/pages/hq/ReviewQueuePage.jsx')), /<Link to="\/admin\/credit-rules"/);
+  // #1412 — Platform's Perk credits zone is the other door, and the page lights the Platform row.
+  assert.match(codeOnly(read('frontend/src/pages/hq/PlatformPage.jsx')), /<Link to="\/admin\/credit-rules" className=\{CONSOLE_LINK\} data-testid="hq-credits-link">/);
+  assert.match(codeOnly(read('frontend/src/sidebarConfig.js')), /label: 'Platform', match: \['\/admin\/platform', '\/admin\/credit-rules'\] \}/);
+  assert.match(app, /<Route path="\/hq\/credits" element=\{<HqCreditsRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /pages\/hq\/CreditRulesPage'/, 'one page: #1399\'s copy is gone');
   globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
   globalThis.document ??= { cookie: '' };
   const original = globalThis.fetch; const calls = [];
@@ -163,13 +178,75 @@ test('the page is the Super Admin\'s at /admin/credit-rules, the review queue li
     const { creditRulesApi } = await import('../src/lib/api/creditRules.js');
     await creditRulesApi.rules();
     await creditRulesApi.updateRule('cap:bounty_monthly', { credits: 600 }, 'Raising the cap');
+    await creditRulesApi.updateRule('bug_low', { active: false }, 'Switched off for now');
     await creditRulesApi.grants();
     await creditRulesApi.revokeGrant(9, 'Paid on a duplicate');
     assert.deepEqual(calls, [
       ['GET', '/admin/credit-rules', null],
       ['PUT', '/admin/credit-rules/cap%3Abounty_monthly', { credits: 600, reason: 'Raising the cap' }],
+      ['PUT', '/admin/credit-rules/bug_low', { active: false, reason: 'Switched off for now' }],
       ['GET', '/admin/credit-rules/grants', null],
       ['POST', '/admin/credit-rules/grants/9/revoke', { reason: 'Paid on a duplicate' }],
     ]);
   } finally { globalThis.fetch = original; }
+});
+
+// ---------------------------------------------------------------------------
+// #1412 — what #1399's page showed, carried over
+// ---------------------------------------------------------------------------
+
+const WORKER = read('cloudflare-worker/src/routes/admin_credit_rules.ts');
+
+test('#1412: the reason floor and the credits bound are the Worker\'s', () => {
+  assert.ok(WORKER.includes(`export const CREDIT_REASON_MIN = ${REASON_MIN};`));
+  assert.ok(WORKER.includes(`const CREDITS_MAX = ${CREDITS_MAX.toLocaleString('en-US').replace(/,/g, '_')};`));
+});
+
+test('#1412: the rules say what each kind does, for the kinds listed', () => {
+  assert.deepEqual(kindNotesFor(RULES).map((k) => k.label), ['Bounty', 'Monthly cap', 'Lab milestone']);
+  assert.deepEqual(kindNotesFor([{ kind: 'mystery' }]).map((k) => k.kind), ['reward'], 'an unknown kind reads as a reward');
+  const out = text(h(RulesTable, { read: ready({ rules: RULES }), onRetry: () => {}, onSaved: () => {} }));
+  assert.match(out, /Monthly cap The most bounty credits one member can earn in a calendar month\. A bounty that would cross it is refused whole\./);
+  assert.doesNotMatch(out, /Reward Paid once when the event happens/, 'a kind with no rule is not explained');
+  assert.doesNotMatch(text(h(RulesTable, { read: ready({ rules: [] }), onRetry: () => {}, onSaved: () => {} })), /Paid once/);
+});
+
+test('#1412: an edit shows what the credits are worth and the change it would save', () => {
+  assert.equal(valueLine('175'), 'Worth US$175. 1 credit is US$1; the value follows the credits.');
+  assert.equal(valueLine('1.5'), 'A whole number from 0 to 100,000.');
+  assert.equal(valueLine(''), 'A whole number from 0 to 100,000.', 'an empty field is not worth US$0');
+  assert.equal(editSummary(RULES[0], { credits: 1750 }), 'Was 150 credits, on. Now 1,750 credits, on, worth US$1,750.');
+  assert.equal(editSummary(RULES[2], { active: true }), 'Was 250 credits, off. Now 250 credits, on, worth US$250.');
+  assert.equal(editSummary({ ...RULES[0], credits: 1 }, { active: false }), 'Was 1 credit, on. Now 1 credit, off, worth US$1.');
+  assert.equal(editHint(RULES[0], { credits: '175', active: true }), 'Was 150 credits, on. Now 175 credits, on, worth US$175.');
+  assert.match(editHint(RULES[0], { credits: '150', active: true }), /^Nothing changed\./);
+  assert.match(editHint(RULES[0], { credits: '-1', active: true }), /^Credits must be a whole number/);
+  const form = text(h(RuleForm, { rule: RULES[0], onSaved: () => {}, onCancel: () => {} }));
+  assert.match(form, /Worth US\$150\. 1 credit is US\$1; the value follows the credits\./);
+  assert.match(form, /Nothing changed\./, 'an unchanged form says so instead of a summary');
+  // The form opens unchanged, so a static render cannot reach the before/after
+  // line; the form draws editHint, whose both halves are pinned above.
+  assert.match(codeOnly(read('frontend/src/pages/hq/CreditRulesRegistryPage.jsx')), /data-testid="rule-form-hint">\{editHint\(rule, \{ credits, active \}\)\}<\/p>/);
+});
+
+test('#1412: each write is confirmed in a sentence', () => {
+  assert.equal(ruleNotice(RULES[0], { credits: 175 }), 'bug_high saved. Was 150 credits, on. Now 175 credits, on, worth US$175.');
+  assert.equal(revokeNotice(GRANTS[0], { status: 'revoked', notified: true }), '150 credits taken back from ada@example.test.');
+  assert.equal(revokeNotice(GRANTS[1], { status: 'revoked', notified: false }), '50 credits taken back from account #5. The inbox notice could not be sent.');
+  assert.equal(revokeNotice(GRANTS[0], { status: 'already_revoked' }), 'That grant was already taken back. Nothing more was taken from ada@example.test.');
+  assert.match(html(h(Notice, { text: 'bug_high saved.' })), /role="status"[^>]*>bug_high saved\.</);
+  assert.equal(html(h(Notice, { text: null })), '');
+  assert.deepEqual([grantState(GRANTS[3]), grantStateText({ revoked: true })], ['revoked', 'Taken back']);
+});
+
+test('#1412: a refusal that arrives as a bare code reads as a sentence, never the code', () => {
+  assert.equal(refusalSentence({ code: 'usd_value_fixed', message: 'usd_value_fixed' }, 'F.'), '1 credit is US$1, so the value follows the credits. Change the credits instead.');
+  assert.equal(refusalSentence({ message: 'reason_too_short' }, 'F.'), 'F.', 'a code with no code field is not shown');
+  assert.equal(refusalSentence({ code: 'forbidden' }), 'Only the Super Admin can change credit rules. Nothing was changed.');
+  assert.equal(refusalSentence({ code: 'rule_unknown', message: 'No reward rule is named x.' }), 'No reward rule is named x.', 'the Worker\'s own sentence wins');
+  // Every code the route and the revoke service refuse with has a sentence.
+  const codes = new Set([...WORKER.matchAll(/code: '([a-z_]+)'/g)].map((m) => m[1]));
+  for (const c of ['not_found', 'would_overdraw', 'forbidden']) codes.add(c);
+  assert.ok(codes.size >= 6, [...codes].join());
+  for (const c of codes) assert.notEqual(refusalSentence({ code: c }, 'FALLBACK'), 'FALLBACK', c);
 });

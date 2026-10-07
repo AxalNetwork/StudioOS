@@ -172,7 +172,7 @@ export default function MemberCreditsPage() {
           <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">{name} · credits</h1>
           {read.status === 'ready' && !adjusting ? <button type="button" className={primary} onClick={() => { setAdjusting(true); setNotice(null); }}>Adjust credits</button> : null}
         </div>
-        <p className="mt-1 text-[13px] text-axal-muted">1 credit = US$1 of perk value. Every adjustment is kept in the audit log with its reason. What each reward pays is set on <Link to="/hq/credits" className="font-semibold underline">HQ · Credits</Link>.</p>
+        <p className="mt-1 text-[13px] text-axal-muted">1 credit = US$1 of perk value. Every adjustment is kept in the audit log with its reason. What each reward pays is set on <Link to="/admin/credit-rules" className="font-semibold underline">HQ · Credits</Link>.</p>
       </header>
       {read.status === 'not_found' ? (
         <Card className="p-4" data-testid="member-not-found"><p className="text-[12.5px]"><strong>Unknown member.</strong> No account matches this id. <Link to="/admin/accounts" className="font-semibold underline">Back to Team</Link></p></Card>

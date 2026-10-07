@@ -5,8 +5,9 @@ import { creditRulesApi } from '../../lib/api/creditRules.js';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded } from '../../ui';
 import {
-  GRANT_SOURCES, GRANT_STATES, REASON_MIN, RULE_KINDS, filterGrants, filterRules, kindLabel, pageOf,
-  reasonReady, ruleAmount, ruleChanges, ruleUpdated, submitRevoke, submitRule,
+  GRANT_SOURCES, GRANT_STATES, REASON_MIN, RULE_KINDS, editHint, filterGrants, filterRules, grantState,
+  grantStateText, kindLabel, kindNotesFor, pageOf, reasonReady, revokeNotice, ruleAmount, ruleChanges, ruleNotice,
+  ruleUpdated, submitRevoke, submitRule, valueLine,
 } from '../../lib/creditRulesRegistry.js';
 
 /**
@@ -110,7 +111,7 @@ export function RuleForm({ rule, onSaved, onCancel, save = creditRulesApi.update
     setBusy(true); setError(null);
     const out = await submitRule(rule, { credits, active }, reason, save);
     setBusy(false);
-    if (out.ok) { onSaved(out.rule); return; }
+    if (out.ok) { onSaved(out.rule, ruleNotice(rule, planned.changes)); return; }
     if (out.cause) reportError('CreditRules:update', out.cause);
     setError(out.error);
   };
@@ -125,9 +126,9 @@ export function RuleForm({ rule, onSaved, onCancel, save = creditRulesApi.update
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} data-testid="rule-active-input" />
           {rule.kind === 'cap' ? 'Cap applies' : 'Rule pays'}
         </label>
-        <span className="text-[11.5px] text-axal-muted">Value follows: 1 credit = US$1.</span>
+        <span className="text-[11.5px] text-axal-muted" data-testid="rule-value">{valueLine(credits)}</span>
       </div>
-      {planned.error ? <p className="mt-1 text-[11.5px] text-axal-muted" data-testid="rule-form-hint">{planned.error}</p> : null}
+      <p className="mt-1 text-[11.5px] text-axal-muted" data-testid="rule-form-hint">{editHint(rule, { credits, active })}</p>
     </ReasonCard>
   );
 }
@@ -150,6 +151,13 @@ export function RulesTable({ read, onRetry, onSaved }) {
     <Card className="p-4" data-testid="credit-rules-table">
       <h2 className="text-[15px] font-bold">Reward rules</h2>
       <p className="mt-0.5 text-[12px] text-axal-muted">What each reward pays, and the monthly limit on bounties. Grants read the amount at the moment they pay.</p>
+      {all.length ? (
+        <dl className="mt-2 grid gap-x-3 gap-y-0.5 text-[11.5px] sm:grid-cols-[max-content_1fr]" data-testid="rule-kind-notes">
+          {kindNotesFor(all).map((k) => (
+            <React.Fragment key={k.kind}><dt className="font-semibold">{k.label}</dt><dd className="text-axal-muted">{k.note}</dd></React.Fragment>
+          ))}
+        </dl>
+      ) : null}
       <Toolbar count={read.status === 'ready' ? at.count : ''}>
         <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search rules…" aria-label="Search rules" className={field} />
         <select value={kind} onChange={(e) => { setKind(e.target.value); setPage(1); }} aria-label="Kind" className={field}>
@@ -177,7 +185,7 @@ export function RulesTable({ read, onRetry, onSaved }) {
                     </tr>
                     {editing === r.key ? (
                       <tr><td colSpan={6}>
-                        <RuleForm rule={r} onCancel={() => setEditing(null)} onSaved={(rule) => { setEditing(null); onSaved(rule); }} />
+                        <RuleForm rule={r} onCancel={() => setEditing(null)} onSaved={(rule, notice) => { setEditing(null); onSaved(rule, notice); }} />
                       </td></tr>
                     ) : null}
                   </React.Fragment>
@@ -200,7 +208,7 @@ export function RevokeForm({ grant, onDone, onCancel, revoke = creditRulesApi.re
     setBusy(true); setError(null);
     const out = await submitRevoke(grant, reason, revoke);
     setBusy(false);
-    if (out.ok) { onDone(); return; }
+    if (out.ok) { onDone(revokeNotice(grant, out.result)); return; }
     if (out.cause) reportError('CreditRules:revoke', out.cause);
     setError(out.error);
   };
@@ -253,17 +261,20 @@ export function GrantsTable({ read, onRetry, onChanged }) {
                     <td className="py-2 font-mono text-[12px]">{String(g.created_at || '').slice(0, 10)}</td>
                     <td>{g.email || <Unrecorded reason={`No email is on record for account #${g.user_id}.`} />}</td>
                     <td className="font-mono">{g.credits > 0 ? `+${g.credits}` : `−${Math.abs(g.credits)}`}</td>
-                    <td>{g.manual ? 'Manual adjustment' : <span className="font-mono text-[12px]">{g.rule_key}</span>}</td>
-                    <td>{g.revoked ? <span title={g.revoke_reason || undefined}>Taken back {String(g.revoked_at || '').slice(0, 10)}</span> : 'Standing'}</td>
+                    <td>
+                      {g.manual ? 'Manual adjustment' : <span className="font-mono text-[12px]">{g.rule_key}</span>}
+                      {g.note ? <span className="block text-[11.5px] text-axal-muted">{g.note}</span> : null}
+                    </td>
+                    <td data-testid={`grant-state-${g.id}`}>{grantStateText(g)}</td>
                     <td className="text-right">
-                      {!g.revoked && g.credits > 0
+                      {grantState(g) === 'standing' && g.credits > 0
                         ? <button type="button" className={ghost} onClick={() => setRevoking(revoking === g.id ? null : g.id)}>Take back</button>
                         : null}
                     </td>
                   </tr>
                   {revoking === g.id ? (
                     <tr><td colSpan={6}>
-                      <RevokeForm grant={g} onCancel={() => setRevoking(null)} onDone={() => { setRevoking(null); onChanged(); }} />
+                      <RevokeForm grant={g} onCancel={() => setRevoking(null)} onDone={(notice) => { setRevoking(null); onChanged(notice); }} />
                     </td></tr>
                   ) : null}
                 </React.Fragment>
@@ -274,6 +285,16 @@ export function GrantsTable({ read, onRetry, onChanged }) {
         </>
       )}
     </Card>
+  );
+}
+
+/** What the last save or take-back did, in a sentence. */
+export function Notice({ text }) {
+  if (!text) return null;
+  return (
+    <p role="status" data-testid="credit-notice" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+      {text}
+    </p>
   );
 }
 
@@ -295,15 +316,18 @@ function useRead(fn) {
 export default function CreditRulesPage() {
   const [rules, reloadRules, setRules] = useRead(creditRulesApi.rules);
   const [grants, reloadGrants] = useRead(creditRulesApi.grants);
-  const savedRule = (rule) => {
+  const [notice, setNotice] = useState(null);
+  const savedRule = (rule, said) => {
+    setNotice(said || null);
     if (!rule) { reloadRules(); return; }
     setRules((r) => ({ ...r, data: { rules: (r.data?.rules || []).map((x) => (x.key === rule.key ? rule : x)) } }));
   };
+  const grantsChanged = (said) => { setNotice(said || null); reloadGrants(); };
   return (
     <div className="space-y-4" data-testid="credit-rules-page">
       <header>
         <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-          <Coins size={13} aria-hidden="true" /> HQ · Credits
+          <Coins size={13} aria-hidden="true" /> HQ · Platform · Credits
         </div>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Credit rules</h1>
         <p className="mt-1 max-w-[720px] text-[13.5px] leading-relaxed text-axal-muted dark:text-gray-400">
@@ -312,8 +336,9 @@ export default function CreditRulesPage() {
           <Link to="/hq/review" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Review queue</Link>
         </p>
       </header>
+      <Notice text={notice} />
       <RulesTable read={rules} onRetry={reloadRules} onSaved={savedRule} />
-      <GrantsTable read={grants} onRetry={reloadGrants} onChanged={reloadGrants} />
+      <GrantsTable read={grants} onRetry={reloadGrants} onChanged={grantsChanged} />
     </div>
   );
 }

@@ -31,11 +31,45 @@ export const GRANT_SOURCES = [
 export const GRANT_STATES = [
   { id: 'all', label: 'Any state' },
   { id: 'standing', label: 'Standing' },
+  { id: 'deducted', label: 'Deductions' },
   { id: 'revoked', label: 'Revoked' },
 ];
 
 const KIND_LABEL = { cap: 'Monthly cap', bounty: 'Bounty', lab: 'Lab milestone', reward: 'Reward' };
 export const kindLabel = (kind) => KIND_LABEL[kind] || 'Reward';
+
+/** What each kind of rule does, in the order the page explains them (#1412, from #1399's page). */
+export const KIND_NOTES = [
+  { kind: 'reward', note: 'Paid once when the event happens.' },
+  { kind: 'bounty', note: 'Paid for a reported bug or a shipped feature, by severity. They count toward the monthly cap.' },
+  { kind: 'cap', note: 'The most bounty credits one member can earn in a calendar month. A bounty that would cross it is refused whole.' },
+  { kind: 'lab', note: 'Paid once per member when a Lab milestone is reached.' },
+];
+
+/** The notes for the kinds these rules have; an unknown kind reads as a reward. */
+export function kindNotesFor(rules) {
+  const kinds = new Set((rules || []).map((r) => (KIND_LABEL[r.kind] ? r.kind : 'reward')));
+  return KIND_NOTES.filter((k) => kinds.has(k.kind)).map((k) => ({ ...k, label: kindLabel(k.kind) }));
+}
+
+/**
+ * A grant's state: taken back; a deduction (a manual line that took credits
+ * away, which a revoke does not apply to); or standing, which can be taken back.
+ */
+export function grantState(g) {
+  if (g?.revoked) return 'revoked';
+  if (Number(g?.credits) < 0) return 'deducted';
+  return 'standing';
+}
+
+/** The state cell, with the reason a grant was taken back in plain sight. */
+export function grantStateText(g) {
+  const state = grantState(g);
+  if (state === 'deducted') return 'Deduction';
+  if (state === 'standing') return 'Standing';
+  const day = String(g.revoked_at || '').slice(0, 10);
+  return `Taken back${day ? ` ${day}` : ''}${g.revoke_reason ? `: “${g.revoke_reason}”` : ''}`;
+}
 
 /** What a rule pays, in the words the table uses. The cap is a limit, not a payment. */
 export function ruleAmount(rule) {
@@ -58,8 +92,7 @@ export function filterGrants(grants, { q = '', source = 'all', state = 'all' } =
   return (grants || []).filter((g) => {
     if (source === 'manual' && !g.manual) return false;
     if (source === 'rule' && g.manual) return false;
-    if (state === 'revoked' && !g.revoked) return false;
-    if (state === 'standing' && g.revoked) return false;
+    if (state !== 'all' && grantState(g) !== state) return false;
     if (!needle) return true;
     return has(g.email, needle) || has(g.rule_key, needle) || has(g.source_ref, needle) || has(g.note, needle)
       || String(g.user_id) === needle;
@@ -74,6 +107,29 @@ export function pageOf(list, page = 1, size = PAGE_SIZE) {
   const rows = list.slice((at - 1) * size, at * size);
   const count = total === 0 ? '0 of 0' : `${(at - 1) * size + 1}–${(at - 1) * size + rows.length} of ${total}`;
   return { rows, page: at, pages, total, count };
+}
+
+const plural = (n) => `${Number(n).toLocaleString('en-US')} ${Number(n) === 1 ? 'credit' : 'credits'}`;
+
+/** "Worth US$175.": what the credits typed are worth, at the one fixed rate. */
+export function valueLine(credits) {
+  const s = String(credits ?? '').trim();
+  return /^\d+$/.test(s)
+    ? `Worth US$${Number(s).toLocaleString('en-US')}. 1 credit is US$1; the value follows the credits.`
+    : `A whole number from 0 to ${CREDITS_MAX.toLocaleString('en-US')}.`;
+}
+
+/** "Was 150 credits, on. Now 175 credits, on, worth US$175.": the line before a save. */
+export function editSummary(rule, changes) {
+  const credits = changes.credits ?? Number(rule.credits);
+  const active = changes.active ?? Boolean(rule.active);
+  return `Was ${plural(rule.credits)}, ${rule.active ? 'on' : 'off'}. Now ${plural(credits)}, ${active ? 'on' : 'off'}, worth US$${credits.toLocaleString('en-US')}.`;
+}
+
+/** The line under a rule edit: why it cannot be saved yet, or what it would save. */
+export function editHint(rule, form) {
+  const planned = ruleChanges(rule, form);
+  return planned.error || editSummary(rule, planned.changes);
 }
 
 /** Whether a reason may be sent: trimmed, at least REASON_MIN characters. */
@@ -96,19 +152,35 @@ export function ruleChanges(rule, { credits, active }) {
 }
 
 /**
+ * The sentence for a refusal that arrives with a code and no message of its
+ * own (#1412, from #1399's page), so a code is never what the Super Admin reads.
+ */
+const REFUSALS = {
+  reason_too_short: `Say why, in at least ${REASON_MIN} characters.`,
+  rule_unknown: 'No reward rule has that name any more. Reload the rules.',
+  invalid_credits: `Credits must be a whole number from 0 to ${CREDITS_MAX.toLocaleString('en-US')}.`,
+  usd_value_fixed: '1 credit is US$1, so the value follows the credits. Change the credits instead.',
+  invalid_active: 'A rule is either on or off.',
+  invalid_id: 'That is not a grant id.',
+  not_found: 'No grant has that id. It may have been removed; reload the grants.',
+};
+const CODE_SHAPE = /^[a-z][a-z0-9_]*$/;
+
+/**
  * A refusal from the Worker, as a sentence. The Worker's own message is
- * already one; a few codes get what the page knows on top of it.
+ * already one; a few codes get what the page knows on top of it, and a
+ * message that is only a code is replaced by the code's sentence.
  */
 export function refusalSentence(err, fallback) {
   const code = err?.code || err?.data?.error;
-  const msg = err?.message && err.message !== code ? err.message : null;
+  const raw = typeof err?.message === 'string' ? err.message.trim() : '';
+  const msg = raw && !CODE_SHAPE.test(raw) ? raw : null;
   if (code === 'would_overdraw') {
     const bal = err?.data?.balance;
     return `${msg || 'The credits have already been spent.'}${Number.isFinite(Number(bal)) && !/\bholds\b/.test(msg || '') ? ` The account holds ${bal} credits now.` : ''} Nothing was taken back.`;
   }
-  if (code === 'reason_too_short') return msg || `Say why, in at least ${REASON_MIN} characters.`;
-  if (err?.status === 403) return 'Only the Super Admin can change credit rules. Nothing was changed.';
-  return msg || fallback;
+  if (err?.status === 403 || code === 'forbidden') return 'Only the Super Admin can change credit rules. Nothing was changed.';
+  return msg || REFUSALS[code] || fallback;
 }
 
 /** Who last changed a rule, or why that is not recorded. */
@@ -139,9 +211,18 @@ export async function submitRule(rule, form, reason, save) {
 export async function submitRevoke(grant, reason, revoke) {
   if (!reasonReady(reason)) return { ok: false, error: `Say why, in at least ${REASON_MIN} characters.` };
   try {
-    await revoke(grant.id, String(reason).trim());
-    return { ok: true };
+    return { ok: true, result: (await revoke(grant.id, String(reason).trim())) || null };
   } catch (e) {
     return { ok: false, error: refusalSentence(e, 'The grant could not be taken back. Nothing was changed.'), cause: e };
   }
+}
+
+/** What the page says once a rule is saved. */
+export const ruleNotice = (rule, changes) => `${rule.key} saved. ${editSummary(rule, changes)}`;
+
+/** What the page says once a grant is taken back, or found already taken back. */
+export function revokeNotice(grant, result) {
+  const who = grant.email || `account #${grant.user_id}`;
+  if (result?.status === 'already_revoked') return `That grant was already taken back. Nothing more was taken from ${who}.`;
+  return `${plural(grant.credits)} taken back from ${who}.${result?.notified === false ? ' The inbox notice could not be sent.' : ''}`;
 }

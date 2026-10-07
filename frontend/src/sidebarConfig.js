@@ -127,9 +127,10 @@ export const SIDEBAR_GROUPS = {
       // then Platform. NOT to be confused with `/admin/articles`, the
       // plain-admin Content Queue that reviews one piece at a time.
       { to: '/admin/content', icon: FileStack, label: 'Content' },
-      // #1384 — HQ · Credits (/hq/credits) is reached from Platform, beside
-      // Promo codes, and lights this row; the row keeps its own subtree.
-      { to: '/admin/platform', icon: SlidersHorizontal, label: 'Platform', match: ['/admin/platform', '/hq/credits'] },
+      // D638 (#1412) — the credit rules page (/admin/credit-rules) is reached
+      // from Platform, beside Promo codes, and lights this row; the row keeps
+      // its own subtree.
+      { to: '/admin/platform', icon: SlidersHorizontal, label: 'Platform', match: ['/admin/platform', '/admin/credit-rules'] },
       // Y1 — three queues, not the shared Help Center. /help stays for every role.
       // D606 — the review queue (/hq/review) is Support's: the canvas lights this row.
       { to: '/admin/hq-support', icon: Inbox, label: 'Support', match: ['/admin/hq-support', '/hq/review'] },
