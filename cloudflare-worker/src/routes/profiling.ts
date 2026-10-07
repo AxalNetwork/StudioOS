@@ -486,7 +486,7 @@ profiling.get('/admin/list', async (c) => {
 });
 
 profiling.get('/admin/:email', async (c) => {
-  await requireAdmin(c);
+  const adminUser = await requireAdmin(c);
   await ensureProfileTable(c.env);
   const email = decodeURIComponent(c.req.param('email'));
   const sql = getSQL(c.env);
@@ -496,8 +496,14 @@ profiling.get('/admin/:email', async (c) => {
     LEFT JOIN users u ON u.email = p.email
     WHERE p.email = ${email}
   `;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Profile not found' }, 404); }
+  const member = await sql`SELECT id FROM users WHERE email = ${email}`;
+  const memberId = member[0]?.id ?? null;
+  const details = memberId
+    ? `Admin read partner profile for user_id=${memberId}`
+    : 'Admin read partner profile; no user account';
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('partner_profile_access', ${details}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   await sql.end();
-  if (rows.length === 0) return c.json({ error: 'Profile not found' }, 404);
   return c.json(rows[0]);
 });
 

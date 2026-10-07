@@ -224,19 +224,21 @@ kyc.post('/submit', async (c) => {
 // ---------- ADMIN ENDPOINTS ----------
 
 kyc.get('/admin/queue', async (c) => {
-  await requireAdmin(c);
+  const adminUser = await requireAdmin(c);
   await ensureColumns(c.env);
   const status = c.req.query('status') || 'pending';
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, email, name, role, kyc_status, kyc_provider, kyc_submitted_at, kyc_reviewed_at, kyc_rejection_reason, kyc_data FROM users WHERE kyc_status = ${status} ORDER BY kyc_submitted_at DESC`;
-  await sql.end();
-  return c.json(rows.map((r: any) => ({
+  // Identity stays off the list. The review window reads the record, which is logged.
+  const rows = await sql`SELECT id, email, name, role, kyc_status, kyc_provider, kyc_submitted_at, kyc_reviewed_at, kyc_rejection_reason FROM users WHERE kyc_status = ${status} ORDER BY kyc_submitted_at DESC`;
+  const listed = rows.map((r: any) => ({
     id: r.id, email: r.email, name: r.name, role: r.role,
     kyc_status: r.kyc_status, kyc_provider: r.kyc_provider,
     submitted_at: r.kyc_submitted_at, reviewed_at: r.kyc_reviewed_at,
     rejection_reason: r.kyc_rejection_reason,
-    kyc_data: publicKycData(r.kyc_data),
-  })));
+  }));
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_queue_access', ${`KYC queue read count=${listed.length}`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+  await sql.end();
+  return c.json(listed);
 });
 
 kyc.get('/admin/:userId', async (c) => {
@@ -245,9 +247,10 @@ kyc.get('/admin/:userId', async (c) => {
   const userId = parseInt(c.req.param('userId'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id, email, name, role, kyc_status, kyc_provider, kyc_submitted_at, kyc_reviewed_at, kyc_rejection_reason, kyc_data FROM users WHERE id = ${userId}`;
-  await sql.end();
-  if (!rows.length) return c.json({ error: 'User not found' }, 404);
+  if (!rows.length) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   const r: any = rows[0];
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_record_access', ${`Admin read KYC record for user_id=${r.id}`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+  await sql.end();
   return c.json({
     id: r.id, email: r.email, name: r.name, role: r.role,
     kyc_status: r.kyc_status, kyc_provider: r.kyc_provider,
