@@ -2,15 +2,25 @@
  * T14 — Reference checks (port of backend/app/api/routes/references.py).
  * Mounted at /api/references. Admin / investor only.
  *
+ * D609 (#1309) — SCOPED TO THE DEAL. A reference check holds a third
+ * person's name, email, role, consent and notes, so every route checks the
+ * reference's deal with the deal-room reader rule (`userMayReadDeal`,
+ * routes/deals.ts): an admin reads and writes any deal's references; an
+ * investor only those on a deal they are invited to or committed on. Founders
+ * and partners stay out (`gate`). A reference — or a deal — the caller cannot
+ * open is a 404, the same as a missing one, so its existence does not leak.
+ * The cross-deal list is gone: `GET /` requires `deal_id`.
+ *
  * SCOPE CUT (vs FastAPI): audio recording upload/download, transcription, and
  * AI summarization are STUBBED to 501 Not Implemented in this worker port.
  * The frontend will see the missing-recording state. Schedule + consent
  * capture + manual notes flow is fully functional.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { userMayReadDeal } from './deals';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -39,6 +49,25 @@ function gate(u: User) {
   if (!(isAdmin(u) || isInvestor(u))) throw new Error('Forbidden');
 }
 
+/** A positive whole number, or null. */
+function idOf(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * The reference with this id, only when its deal is one the caller may open.
+ * Null for a missing reference and for one on another deal alike (404).
+ */
+async function loadReference(c: Context<{ Bindings: Env }>, user: User, rawId: string): Promise<Row | null> {
+  const id = idOf(rawId);
+  if (!id) return null;
+  const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
+  if (!row) return null;
+  return (await userMayReadDeal(c.env, user, Number(row.deal_id))) ? row : null;
+}
+const NOT_FOUND = { detail: 'Reference not found' };
+
 function dto(r: Row, includeTranscript = false): any {
   let summary: any = null;
   if (r.summary_json) { try { summary = JSON.parse(r.summary_json); } catch { /* ignore */ } }
@@ -66,10 +95,10 @@ r.post('/', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
     const body = await c.req.json().catch(() => ({} as any));
-    const dealId = Number(body.deal_id);
-    if (!Number.isFinite(dealId)) return c.json({ detail: 'deal_id required' }, 400);
-    const deal = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(dealId).first<{ id: number }>();
-    if (!deal) return c.json({ detail: 'Deal not found' }, 404);
+    const dealId = idOf(body.deal_id);
+    if (!dealId) return c.json({ detail: 'deal_id required' }, 400);
+    // A missing deal and one the caller may not open answer alike.
+    if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Deal not found' }, 404);
     const name = String(body.reference_name || '').trim();
     if (!name) return c.json({ detail: 'reference_name required' }, 400);
     const consent = !!body.consent_given;
@@ -96,13 +125,11 @@ r.post('/', async (c) => {
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    const dealId = c.req.query('deal_id');
-    const sql = dealId
-      ? 'SELECT * FROM reference_checks WHERE deal_id = ? ORDER BY created_at DESC'
-      : 'SELECT * FROM reference_checks ORDER BY created_at DESC LIMIT 200';
-    const rows = dealId
-      ? await c.env.DB.prepare(sql).bind(Number(dealId)).all<Row>()
-      : await c.env.DB.prepare(sql).all<Row>();
+    const dealId = idOf(c.req.query('deal_id'));
+    if (!dealId) return c.json({ error: 'deal_id_required', detail: 'List the reference checks of one deal: deal_id is required.' }, 400);
+    if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Deal not found' }, 404);
+    const rows = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE deal_id = ? ORDER BY created_at DESC')
+      .bind(dealId).all<Row>();
     return c.json((rows.results || []).map((r) => dto(r)));
   } catch (e) { return mapError(c, e); }
 });
@@ -110,9 +137,8 @@ r.get('/', async (c) => {
 r.get('/:id', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    const id = Number(c.req.param('id'));
-    const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
-    if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    const row = await loadReference(c, user, c.req.param('id'));
+    if (!row) return c.json(NOT_FOUND, 404);
     return c.json(dto(row, true));
   } catch (e) { return mapError(c, e); }
 });
@@ -120,9 +146,9 @@ r.get('/:id', async (c) => {
 r.patch('/:id', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    const id = Number(c.req.param('id'));
-    const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
-    if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    const row = await loadReference(c, user, c.req.param('id'));
+    if (!row) return c.json(NOT_FOUND, 404);
+    const id = row.id;
     const body = await c.req.json().catch(() => ({} as any));
     const fields = ['reference_email', 'reference_role', 'relationship', 'scheduled_at', 'notes', 'status'] as const;
     const sets: string[] = []; const params: any[] = [];
@@ -140,9 +166,9 @@ r.patch('/:id', async (c) => {
 r.delete('/:id', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    const id = Number(c.req.param('id'));
-    const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
-    if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    const row = await loadReference(c, user, c.req.param('id'));
+    if (!row) return c.json(NOT_FOUND, 404);
+    const id = row.id;
     await c.env.DB.prepare('DELETE FROM reference_checks WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
@@ -151,9 +177,9 @@ r.delete('/:id', async (c) => {
 r.post('/:id/consent', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    const id = Number(c.req.param('id'));
-    const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
-    if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    const row = await loadReference(c, user, c.req.param('id'));
+    if (!row) return c.json(NOT_FOUND, 404);
+    const id = row.id;
     const body = await c.req.json().catch(() => ({} as any));
     const give = !!body.consent_given;
     if (give) {
