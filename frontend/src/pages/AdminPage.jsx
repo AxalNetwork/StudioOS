@@ -1224,7 +1224,16 @@ export default function AdminPage({ onImpersonate, section = null }) {
                       <td className="px-4 py-3 text-xs text-gray-600">{k.kyc_provider || '—'}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{k.submitted_at ? new Date(k.submitted_at).toLocaleString() : '—'}</td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => { setKycDetail(k); setKycRejectReason(''); }}
+                        <button onClick={async () => {
+                          setKycRejectReason('');
+                          try {
+                            const detail = await api.kycAdminGet(k.id);
+                            setKycDetail(detail);
+                          } catch (e) {
+                            reportError('AdminPage:loadKycDetail', e);
+                            setKycDetail(k);
+                          }
+                        }}
                           className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors">
                           Review
                         </button>
