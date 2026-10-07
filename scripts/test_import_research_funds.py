@@ -312,6 +312,46 @@ class ShaiMigrationTests(unittest.TestCase):
         self.assertTrue(text.startswith('-- 999 — the third fund list'))
         self.assertEqual(text.count('INSERT OR REPLACE INTO research_fund_directory '), added)
         self.assertNotIn('@', text)
+        self.assertIn("UPDATE research_fund_sources SET repo_copy = 'attached_assets/shai-goldman-new-vc-funds.csv'", text)
+        self.assertTrue(text.rstrip().endswith("WHERE source_name = '%s';" % mod.SHAI_SOURCE))
+
+    def test_the_migration_replaces_only_this_lists_rows_and_replays_cleanly(self):
+        import sqlite3
+        import tempfile
+        directory: dict = {}
+        mod.parse_shai(directory, FIXTURE)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / '999_x.sql'
+            mod.write_shai_migration(directory, out, '999', '2026-10-07')
+            text = out.read_text()
+        db = sqlite3.connect(':memory:')
+        db.executescript(
+            'CREATE TABLE research_fund_directory (uid TEXT PRIMARY KEY, name TEXT NOT NULL, website TEXT, linkedin TEXT, hq TEXT, '
+            'fund_number TEXT, fund_size_cents INTEGER, fund_date TEXT, quarter TEXT, fund_year INTEGER, sector_focus TEXT, '
+            'notable_lps TEXT, eif_flag INTEGER NOT NULL DEFAULT 0, eifo_flag INTEGER NOT NULL DEFAULT 0, source_name TEXT NOT NULL, '
+            'source_url TEXT NOT NULL, as_of TEXT NOT NULL);'
+            'CREATE TABLE research_fund_directory_reports (fund_uid TEXT NOT NULL, period TEXT NOT NULL, report_date TEXT, '
+            'fund_size_cents INTEGER, source_url TEXT NOT NULL, PRIMARY KEY (fund_uid, period));'
+            'CREATE TABLE research_fund_sources (source_name TEXT PRIMARY KEY, repo_copy TEXT, repo_copy_note TEXT);'
+        )
+        ins = 'INSERT INTO research_fund_directory (uid,name,source_name,source_url,as_of) VALUES (?,?,?,?,?)'
+        db.execute(ins, ('old-unreproducible-uid', 'Old row', mod.SHAI_SOURCE, 'u', '2026-01-01'))
+        db.execute(ins, ('kept-euro', 'EuroTech row', mod.EURO_SOURCE, 'u', '2026-01-01'))
+        db.execute('INSERT INTO research_fund_directory_reports VALUES (?,?,?,?,?)', ('old-unreproducible-uid', '2025-Q4', None, 1, 'u'))
+        db.execute('INSERT INTO research_fund_sources (source_name) VALUES (?)', (mod.SHAI_SOURCE,))
+        db.executescript(text)
+
+        def uids():
+            return sorted(r[0] for r in db.execute('SELECT uid FROM research_fund_directory'))
+        first = uids()
+        self.assertNotIn('old-unreproducible-uid', first, 'a row nobody can rebuild survived')
+        self.assertIn('kept-euro', first, "another list's row was deleted")
+        self.assertEqual(len(first), len(directory) + 1)
+        self.assertEqual(db.execute('SELECT COUNT(*) FROM research_fund_directory_reports').fetchone()[0], 0)
+        self.assertEqual(db.execute('SELECT repo_copy FROM research_fund_sources').fetchone()[0],
+                         'attached_assets/shai-goldman-new-vc-funds.csv')
+        db.executescript(text)
+        self.assertEqual(uids(), first, 'a replay changed the rows')
 
     def test_the_migration_is_byte_identical_on_a_second_run(self):
         import tempfile
