@@ -12,6 +12,7 @@ export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
+export * from './api/creditRules.js';
 export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/helpCenter.js';
