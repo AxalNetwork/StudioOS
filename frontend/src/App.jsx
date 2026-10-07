@@ -253,6 +253,7 @@ const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
 // D606 (#1107) — the Super Admin's review queue, the Eadwyn Tickets canvas's T1 and T1b.
 const ReviewQueuePage = lazy(() => import('./pages/hq/ReviewQueuePage'));
+const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
@@ -2658,6 +2659,8 @@ function AppInner() {
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/hq/review" element={guard(['admin'], hqOnly(<ReviewQueuePage />))} />
+      {/* D638 (#1384) — the reward rules and grants, Super Admin only; its door is the review queue. */}
+      <Route path="/admin/credit-rules" element={guard(['admin'], hqOnly(<CreditRulesPage />))} />
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
