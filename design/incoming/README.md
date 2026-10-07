@@ -651,8 +651,8 @@ folder's format:
 
 | File | What it is |
 | --- | --- |
-| `Ops · Boards.dc.html` | The board: rows of artboards at 1440 and 390, chosen by its `set` property (`events`, `account`, `partner`, `wellbeing`, `advisor`). Each artboard imports `Ops Page` with one `screen`. |
-| `Ops Page.dc.html` | Every screen's markup, one `sc-if` block per screen id: `evo-eligibility`, `evo-queue`, `ev-mine` and `evo-agenda` for events; `ac-*` for the Account center; `pe-*` and `pea-*` for partner earnings; `wb-*`, `wbx-*` and `wba-*` for Wellbeing; `adv-*` and `advpub-*` for the advisor's practice. |
+| `Ops · Boards.dc.html` | The board: rows of artboards at 1440 and 390, chosen by its `set` property (`events`, `account`, `partner`, `wellbeing`, `advisor`, and since 2026-10-07 `deals`, `hq` and `pieces`). Each artboard imports `Ops Page` with one `screen`. |
+| `Ops Page.dc.html` | Every screen's markup, one `sc-if` block per screen id: `evo-eligibility`, `evo-queue`, `ev-mine` and `evo-agenda` for events; `ac-*` for the Account center; `pe-*` and `pea-*` for partner earnings; `wb-*`, `wbx-*` and `wba-*` for Wellbeing; `adv-*` and `advpub-*` for the advisor's practice. Since 2026-10-07: `dr-*`, `fd-*`, `sy-close`, `ct-variants` and `st-*` for area 6, `hq-*` for area 7, and `sp-*` for area 8. |
 
 | Area | Screens | Governs | Grade | Issue |
 | --- | --- | --- | --- | --- |
@@ -666,6 +666,23 @@ replaced `Ops Page.dc.html` here, and its script is committed beside it as
 `ops-data.js` (the page loads it by that name). Every label, count and state
 each screen draws is now in the repository; the figures are bracketed
 placeholders, never data.
+
+**Areas 6 to 8 arrived on 2026-10-07 (#1387).** They were drawn from #1165's
+prompts for those areas, and they replaced all three files in place in
+`canvases/integrated/`. `design/canvases/README.md` has the record. None of
+their 25 screens is built yet. Each row's task builds them, and each task owns
+its own pages.
+
+| Area | Screens | Governs | Grade | Issue |
+| --- | --- | --- | --- | --- |
+| Deal rooms | D1–D4, M5 References, F3 Close a syndicate | `/deals`; `/deals/:dealId`, its header and three tabs | UPGRADE | #1388 (D630) |
+| Funds | F1 Fund page (phone), F2 Quarterly report editor | a fund's page and its reporting period | NEW | #1389 (D631) |
+| Cap table variants and colleague seats | V1, S1, S2 (phone) | the cap table's variants; seats; `/invite/:token` | NEW (V1, S1), UPGRADE (S2) | #1390 (D632) |
+| HQ: registry, credits, obligations | Q1–Q3 | `/admin/contracts`, `/admin/team`, `/admin/security` | UPGRADE | #1391 (D633) |
+| HQ: content, revenue, identity | Q4–Q6 | `/admin/articles`, `/admin/revenue`, the KYC and partner-profile review windows | UPGRADE | #1392 (D634) |
+| Founder Validate | M1 (phone), M2 (phone), M3 | `/validate/verdict`, `/validate/interviews`, `/validate/hypotheses` | UPGRADE | #1393 (D635) |
+| Brand and watchlist | M4, M6 | `/spinout-lab/brand`, `/watchlist` | UPGRADE | #1394 (D636) |
+| Delivery, co-founders, co-marketing | M7, M8 (phone), M9 | `/delivery/health`, `/delivery/capacity`, `/build/team`, `/comarketing` | UPGRADE | #1395 (D637) |
 
 ## Landed 2026-10-06 — the Learning canvas (#1157)
 
