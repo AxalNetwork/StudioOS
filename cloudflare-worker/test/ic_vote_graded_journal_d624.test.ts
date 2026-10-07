@@ -170,7 +170,6 @@ let AFTER_PRIOR_READ: (() => void) | null = null;
 const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db, { noChanges: NO_CHANGES, afterPriorRead: AFTER_PRIOR_READ }) });
 
 type Who = { user: number; role: string };
-const author = { user: AUTHOR, role: 'investor' };
 const colleague = { user: COLLEAGUE, role: 'investor' };
 
 async function call(
