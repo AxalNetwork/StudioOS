@@ -1,0 +1,3 @@
+Fetched by the Research data import workflow, run 37646578399.
+2026-10-07T15:46:04Z OK eurotech-gviz.csv https://docs.google.com/spreadsheets/d/1cRdFZhXLqat04xe7qO-p48wXQ00GWJyrzgHSb3YVIp0/gviz/tq?tqx=out:csv (text/csv; charset=utf-8)
+2026-10-07T15:46:04Z OK deeptech-gviz.csv https://docs.google.com/spreadsheets/d/1BqNO7l4kXRhjG5jcB89FwRlhuRKBwBKtV7ZHwwLjPhk/gviz/tq?tqx=out:csv (text/csv; charset=utf-8)
