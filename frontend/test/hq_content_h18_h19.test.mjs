@@ -31,7 +31,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
   ContentBoard, AssessmentPanel, PersonasPanel, RosterPanel,
-  bandLine, cardMeta, gameMeta, personaFooting, REACH_LABEL,
+  bandLine, cardMeta, gameMeta, gameReachLine, PushGamesControl, personaFooting, REACH_LABEL,
 } from '../src/pages/hq/ContentPage.jsx';
 import { NO_GAME_HERE } from '../src/pages/branch/BranchPrograms.jsx';
 
@@ -433,7 +433,9 @@ test('C1: the footer says what an edit reaches, and never the canvas\'s republis
     const seen = text(html);
     assert.ok(!seen.includes('republishes to every branch'), 'C1 claims an edit republishes to branches');
     assert.ok(!seen.includes('the branch is told'), 'C1 claims a branch is told');
-    assert.match(seen, /nothing is republished and there is no branch to tell/);
+    // D487 — an edit reaches branches at the next push, and none is notified.
+    assert.match(seen, /It reaches the branches at the next push/);
+    assert.match(seen, /Nothing is republished on its own, and no branch is notified\./);
   }
 });
 
@@ -618,4 +620,67 @@ test('Branch Programs says what its empty game list read, and stops blaming HQ',
   assert.ok(!PROGRAMS.includes('authored at HQ yet'), 'the empty state blames HQ for having authored nothing');
   assert.ok(!/Per-game analytics is what/.test(PROGRAMS), 'the page claims to read per-game analytics');
   assert.ok(!/adminAssessment\.\w*[aA]nalytics/.test(PROGRAMS), 'the page calls per-game analytics after all');
+});
+
+// ─────────────────────────────────────────────── C1 · reach on branches (D487) ──
+
+const REACHED = {
+  ...ASSESSMENT,
+  games: [
+    { ...ASSESSMENT.games[0], live_on: 2, branch_completions: 812 },
+    { ...ASSESSMENT.games[1], live_on: 0, branch_completions: 0 },
+    { ...ASSESSMENT.games[2], live_on: 0, branch_completions: null },
+  ],
+  branches: {
+    recorded: true, total: 4, answered: 2, complete: false, unreadable: ['de', 'pt'],
+    lines: [
+      { code: 'de', status: 'unreadable', reason: 'connection reset' },
+      { code: 'fr', status: 'ok', received: true },
+      { code: 'it', status: 'ok', received: false },
+      { code: 'pt', status: 'not_deployed', reason: 'No service binding yet.' },
+    ],
+    basis: 'Live on a branch means the branch holds the game as published, from HQ\u2019s last push. Only published games travel.',
+  },
+};
+
+test('C1 (D487): each game says on how many branches it is live and their runs; each silent branch says why', () => {
+  const html = render(AssessmentPanel, { assessment: REACHED });
+  const reach = (slug) => text(html.slice(html.indexOf(`data-slug="${slug}"`), html.indexOf('</div>', html.indexOf(`data-slug="${slug}"`))));
+  assert.match(reach('founder-fit'), /Live on 2 of 4 branches · 812 completions on branches/);
+  assert.match(reach('market-read'), /Live on no branch of 4 · 0 completions on branches/);
+  assert.match(reach('old-one'), /branch runs unreadable/, 'an unreadable count is never a zero');
+  const seen = text(html);
+  assert.match(seen, /Live on branches · read from 2 of 4 branches\./);
+  assert.match(seen, /de: Unreadable — connection reset/);
+  assert.match(seen, /pt: Not deployed — No service binding yet\./);
+  assert.ok(!html.includes('data-code="fr"'), 'a branch that answered is listed as silent');
+  assert.match(seen, /Only published games travel/);
+  assert.ok(!/Not recorded — No game reaches a branch/.test(seen));
+  assert.ok(html.includes('data-testid="button-push-games"'), 'the panel offers no push');
+
+  assert.equal(gameReachLine(REACHED.games[0], { recorded: false }), null);
+  assert.equal(gameReachLine(REACHED.games[0], { recorded: true, total: 0 }), null, 'no branch bound: the panel says it once');
+  assert.match(gameReachLine({ live_on: 1, branch_completions: 1 }, { recorded: true, total: 1 }), /1 completion on branches/);
+});
+
+test('C1 (D487): the push button, what the push reached, and a push that could not be sent', () => {
+  const idle = render(PushGamesControl, { push: { state: 'idle' }, onPush: () => {} });
+  assert.match(text(idle), /Push published games to branches/);
+  assert.doesNotMatch(idle, /disabled=""/);
+  assert.match(render(PushGamesControl, { push: { state: 'pushing' }, onPush: () => {} }), /disabled=""[^>]*>Pushing…/);
+  const done = text(render(PushGamesControl, {
+    push: {
+      state: 'done',
+      result: { game_count: 2, answered: 1, total: 2, branches: [{ code: 'fr', status: 'ok', stored: 2 }, { code: 'de', status: 'unreadable', reason: 'connection reset' }] },
+    },
+  }));
+  assert.match(done, /Pushed 2 published games: 1 of 2 branches stored them\./);
+  assert.match(done, /de: connection reset/);
+  assert.doesNotMatch(done, /fr:/);
+  const none = text(render(PushGamesControl, { push: { state: 'done', result: { game_count: 1, answered: 0, total: 0, branches: [], branches_reason: 'No branch Worker is bound to HQ yet.' } } }));
+  assert.match(none, /No branch Worker is bound to HQ yet\./);
+  const failed = text(render(PushGamesControl, { push: { state: 'failed', message: 'Super admin required' } }));
+  assert.match(failed, /The push could not be sent: Super admin required\. No branch was changed by this attempt\./);
+  assert.match(P, /<AssessmentPanel[^>]*push=\{push\} onPushGames=\{pushGames\}/, 'the page wires the push');
+  assert.match(P, /api\.hqPublishGames\(\)/);
 });

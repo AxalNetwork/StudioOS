@@ -41466,6 +41466,107 @@ and the rail's "no branch call returns tickets" absence is gone.
   branch, the rail's read-back, and the rail's retired absence.
 - `support_queues_d204.test.ts`: the total test binds its deployed branch.
 
+## D487
+
+**HQ · Content (H18): HQ's published games reach every branch as one set, and
+each game's "live on N branches" and completions are read from the branches
+(issue #1025, option A).** Slot S09. No migration.
+
+**What was true.** No game reached a branch. Nothing pushed one, a branch's
+database starts with none, and authoring is refused on a branch (D106). H18
+said "live on N branches" had nothing to count.
+
+**Decided (S1, 2026-10-07, under the owner's standing rule): A.**
+- **What travels.** Every published HQ game reaches every branch, as one set:
+  games, chapters, active questions and archetypes. It goes the way the
+  template library does (D147).
+- **What a branch keeps.** A read-only copy, keyed by slug.
+- **Withdrawals.** A withdrawn game is archived on the branch, not deleted.
+- **What HQ reads back.** "Live on N" and the completions are read from each
+  branch.
+
+**The copy lives in the branch's own `assessment_*` tables**
+(`services/gameLibrary.ts`). Authoring is already refused on a branch, so the
+push becomes the only writer there, and no second store or migration is needed.
+`ensureAssessmentSchema` builds the tables on the first push.
+- **Keys.** Slugs, never ids. A branch's row ids are its own, so a member's
+  run keeps pointing at the same game across pushes.
+- **What a push updates.** A push upserts each game, chapter, question and
+  archetype.
+- **What a push withdraws.**
+  - Inside a game HQ still sends:
+    - a question HQ no longer sends goes inactive, as HQ's own delete treats an
+      answered question;
+    - an archetype HQ no longer sends is removed, since a result keeps its
+      archetype's slug and label as text;
+    - a removed chapter stays, holding no active question.
+  - A game the branch holds that HQ no longer sends is archived.
+- **Atomicity.** The write is one `DB.batch`, so a failed push leaves the
+  previous games standing.
+- **The empty push.** An empty push is a real push: HQ publishes nothing, and
+  every game on the branch is archived.
+- **Badges.** They do not travel: they are not part of a game.
+
+**RPC.**
+- `publishGames(set)` on `HqEntrypoint` (`applyGames`). It is HQ-authored,
+  so it takes no secret, on `publishTemplate`'s rule.
+- `gameHoldings()` (`branchGameHoldings` → `readGameHoldings`): each game the
+  branch holds, with its status, version and completed runs.
+  - A branch whose tables were never created answers `received: false` and
+    holds none.
+  - The read never bootstraps the schema (D204), so "never received" stays
+    distinguishable from "holds none".
+- Both methods are listed on the topology page.
+
+**HQ.**
+- **`POST /api/admin/content/games/publish`** (Super Admin) reads every
+  published game whole (`readPublishedGameSet`) and fans out.
+  - **Reported, not thrown.** Each branch's result is reported, never thrown
+    (D111), and with no branch bound the response says so.
+  - **Unreadable games.** If HQ's games cannot be read, it answers 503 and
+    pushes nothing.
+- **`GET /api/admin/content/summary`** fans out `gameHoldings()`, merged with
+  `licence_deployments`.
+  - **Each game** gets `live_on` (branches holding it as published) and
+    `branch_completions`, which is withheld when an answering branch could not
+    read its runs (`gameReachOf`).
+  - **`assessment.branches`** carries the coverage, each line's state, and the
+    basis.
+
+**The page.** `ContentPage.jsx` H18 C1.
+- **Each game** gets a second line: "Live on N of M branches · K completions on
+  branches".
+- **Silent branches.** The reach block names each branch that did not answer,
+  or is not deployed, with its reason.
+- **`PushGamesControl`** pushes and reports what each branch stored.
+- **The footer** now says an edit reaches branches at the next push, and that
+  no branch is notified.
+
+**Tests.**
+- `cloudflare-worker/test/game_reach_d487.test.ts` (9 tests), on real SQLite
+  at both tiers with the tables `ensureAssessmentSchema` builds. It covers:
+  - only published games travel, whole, with no ids;
+  - the boundary coercion;
+  - a never-pushed branch, left without a table;
+  - store, update, retire, remove and archive, keeping the row id and the
+    runs;
+  - a push that fails part-way rolling back;
+  - HQ's tier refused;
+  - the reach rule;
+  - the push and the summary end to end, with an unreadable branch and an
+    undeployed one;
+  - the push with no branch bound.
+
+  Mutations: 15 of 15 caught.
+- `frontend/test/hq_content_h18_h19.test.mjs`:
+  - two new tests: the reach lines and silent branches, and the push control
+    in each state, with the page's wiring;
+  - the footer test is updated.
+
+  Mutations: 10 of 10 caught.
+- `content_studio_d214.test.ts`: `branches.recorded` is now true, with no
+  branch bound.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor

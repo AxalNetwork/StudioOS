@@ -3460,6 +3460,8 @@ export const api = {
   // content pipeline over `articles` + `admin_publications`, and the
   // platform view over `integrations` + `cron_run_history`.
   hqContent: () => request('/admin/content/summary'),
+  // D487 — push HQ's published games to every branch; reports each branch.
+  hqPublishGames: () => request('/admin/content/games/publish', { method: 'POST' }),
   hqPlatform: () => request('/admin/platform/summary'),
   // 241 — the advisory take rate, in BASIS POINTS. 1500 is 15%. The write
   // refuses a percentage rather than guessing: `15` is ambiguous between
