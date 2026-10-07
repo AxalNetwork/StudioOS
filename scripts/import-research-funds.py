@@ -33,6 +33,11 @@ are added to the directory with no `fund_size_cents` (left NULL) rather than
 writing a USD figure into a column documented and consumed as EUR cents —
 recorded here rather than silently guessed. Both source sheet names and URLs
 are kept per row so #1083 can rule on their licences.
+
+The third list (Shai Goldman, "$M USD") is `parse_shai`. Currency is 1A: the
+list's name is the currency, and there is no new column. Those rows are not
+folded into migration 378, which is already applied. `shai_upsert_sql` emits
+the uid-keyed upserts a later migration would apply.
 """
 from __future__ import annotations
 
@@ -180,6 +185,152 @@ def parse_euro(today: date) -> tuple[dict[str, dict], dict[str, dict], int]:
                 reports[key] = {'fund_uid': uid, 'period': annual_period, 'report_date': report_date_annual,
                                  'fund_size_cents': annual_cents, 'source_url': EURO_URL}
     return directory, reports, len(rows) - 1
+
+
+# D597's source_name, byte for byte, so a row joins research_fund_sources.
+SHAI_SOURCE = 'Shai Goldman \u2014 new VC funds at/below $200M'
+SHAI_URL = 'https://docs.google.com/spreadsheets/d/1ebGZ6-ivf_3woBGC4Kz_3217DhjGsefoRu_5iP3nuFQ/edit'
+_EMAIL_RE = re.compile(r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}')
+_USD_M_RE = re.compile(r'\$(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?')
+
+
+def usd_cents_from_millions(value: str | None) -> int | None:
+    """'$160' is 160 million US dollars, in cents. Anything else is not a size.
+
+    The sheet's column is 'Amount Raised $M USD'. A cell that is not that
+    shape ('93/3', a totals label) is left unset rather than guessed.
+    """
+    if not value:
+        return None
+    text = value.strip()
+    if not _USD_M_RE.fullmatch(text):
+        return None
+    amount = parse_amount(text)
+    return round(amount * 100_000_000) if amount is not None else None
+
+
+def parse_us_date(value: str | None) -> str | None:
+    """US sheet dates: M/D/YYYY, or M/YYYY when no day was recorded."""
+    if not value:
+        return None
+    text = value.strip()
+    m = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})', text)
+    if m:
+        month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            return None
+    m = re.fullmatch(r'(\d{1,2})/(\d{4})', text)
+    if m:
+        month, year = int(m.group(1)), int(m.group(2))
+        if 1 <= month <= 12:
+            return f'{year}-{month:02d}-01'
+    return None
+
+
+def shai_year(value: str | None) -> int | None:
+    if not value:
+        return None
+    text = value.strip()
+    return int(text) if re.fullmatch(r'(?:19|20)\d{2}', text) else None
+
+
+def quarter_of(iso: str | None, year: int | None) -> str | None:
+    if iso and re.match(r'^\d{4}-\d{2}-\d{2}$', iso):
+        y, month, _ = iso.split('-')
+        return f'{y}-Q{(int(month) - 1) // 3 + 1}'
+    if year:
+        return f'{year}-Q4'
+    return None
+
+
+def parse_shai(directory: dict[str, dict], path: Path) -> int:
+    """Add the third list. A firm already in `directory` is left as it is.
+
+    The sheet's grain is one raise: the same firm can have Fund I and Fund II.
+    Those stay two rows when the firm is not already in the directory. The uid
+    is the normalized name plus the fund number. Rows above the 'Fund Name'
+    header, and the totals row under the list, are not funds.
+    """
+    with path.open(newline='', encoding='utf-8-sig') as f:
+        rows = list(csv.reader(f))
+    header_at = next((i for i, row in enumerate(rows) if any(cell.strip() == 'Fund Name' for cell in row)), None)
+    if header_at is None:
+        raise ValueError('the sheet has no Fund Name header')
+    header = [cell.strip() for cell in rows[header_at]]
+
+    def index(label: str) -> int:
+        try:
+            return header.index(label)
+        except ValueError as exc:
+            raise ValueError(f'the sheet has no {label} column') from exc
+
+    i_name, i_amt = index('Fund Name'), index('Amount Raised $M USD')
+    i_date, i_year = index('Date announced and or Raised'), index('Year Raised')
+    i_num, i_loc = index('Fund Number'), index('Location')
+
+    def cell(row: list[str], idx: int) -> str:
+        return row[idx].strip() if idx < len(row) else ''
+
+    added = 0
+    for row in rows[header_at + 1:]:
+        name = cell(row, i_name)
+        amount = cell(row, i_amt)
+        if not name or name.casefold() == 'year raised' or amount.casefold() == 'millions usd':
+            continue
+        if _EMAIL_RE.search(name):
+            continue
+        if normalized(name) in directory:
+            continue
+        number = cell(row, i_num) or None
+        # 'I' is a letter, not a word inside the firm name. Match it as its own token.
+        already = bool(number) and re.search(
+            rf'(?<![A-Za-z0-9]){re.escape(number)}(?![A-Za-z0-9])', name, re.IGNORECASE,
+        )
+        shown = name if not number or already else f'{name} {number}'
+        uid = normalized(shown)
+        if uid in directory:
+            continue
+        announced = parse_us_date(cell(row, i_date))
+        year = shai_year(cell(row, i_year))
+        if year is None and announced:
+            year = int(announced[:4])
+        directory[uid] = {
+            'uid': uid, 'name': shown,
+            'website': None, 'linkedin': None,
+            'hq': cell(row, i_loc) or None, 'fund_number': number,
+            'fund_size_cents': usd_cents_from_millions(amount),
+            'fund_date': announced, 'quarter': quarter_of(announced, year),
+            'sector_focus': None, 'notable_lps': None,
+            'eif_flag': False, 'eifo_flag': False,
+            'source_name': SHAI_SOURCE, 'source_url': SHAI_URL,
+        }
+        added += 1
+    return added
+
+
+def shai_upsert_sql(directory: dict[str, dict], as_of: str) -> str:
+    """Uid-keyed upserts for the third list only. Does not write a migration file."""
+    lines = [
+        '-- D535 — the Shai Goldman list, uid-keyed. fund_size_cents is US cents;',
+        '-- the list name is the currency (1A). Not part of migration 378.',
+    ]
+    items = [directory[uid] for uid in sorted(directory) if directory[uid].get('source_name') == SHAI_SOURCE]
+    for item in items:
+        year_m = re.match(r'^(\d{4})', item.get('quarter') or '')
+        fund_year = int(year_m.group(1)) if year_m else None
+        lines.append(
+            'INSERT OR REPLACE INTO research_fund_directory '
+            '(uid,name,website,linkedin,hq,fund_number,fund_size_cents,fund_date,quarter,fund_year,sector_focus,notable_lps,eif_flag,eifo_flag,source_name,source_url,as_of) '
+            'VALUES (%s);' % ','.join(map(sql, [
+                item['uid'], item['name'], item['website'], item['linkedin'], item['hq'], item['fund_number'],
+                item['fund_size_cents'], item['fund_date'], item['quarter'], fund_year,
+                item['sector_focus'], item['notable_lps'], item['eif_flag'], item['eifo_flag'],
+                item['source_name'], item['source_url'], as_of,
+            ]))
+        )
+    return '\n'.join(lines) + '\n'
 
 
 def parse_deep(directory: dict[str, dict]) -> int:
