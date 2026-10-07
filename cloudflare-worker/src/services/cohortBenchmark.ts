@@ -8,6 +8,11 @@
  * The percentile is the rank
  *   round(100 * (strictly below + half the ties) / n)
  * over the same scores, including the founder's own.
+ *
+ * The route returns those two figures coarsened: the median to the nearest
+ * 5 points, the percentile to the nearest 10. The week changes one venture
+ * at a time, and two exact reads either side of a move would recover the
+ * mover's score.
  */
 
 export const COHORT_BENCHMARK_MIN = 5;
@@ -28,4 +33,14 @@ export function percentileRank(values: readonly number[], own: number): number {
     else if (value === own) tied += 1;
   }
   return Math.round((100 * (below + 0.5 * tied)) / values.length);
+}
+
+/** Nearest 5. 33 becomes 35; 38.5 becomes 40. */
+export function coarsenMedian(exact: number): number {
+  return Math.round(exact / 5) * 5;
+}
+
+/** Nearest 10. 40 stays 40; 45 becomes 50. */
+export function coarsenPercentile(exact: number): number {
+  return Math.round(exact / 10) * 10;
 }

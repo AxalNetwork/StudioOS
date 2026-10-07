@@ -370,6 +370,20 @@ export const EXPORT_CONTENTS = [
 // Mirrors the generated PDF's own footer.
 export const EXPORT_NOT_INCLUDED = 'Not included yet (needs backend data): founder-profile detail, per-evidence citations.';
 
+/** The placed official run, not the composite, which may be a practice run. */
+function cohortLine(cohort) {
+  if (cohort?.available === true) {
+    const rank = `the ${ordinal(cohort.percentile)} percentile of the ${cohort.cohort} field`;
+    const score = Number(cohort.own_score);
+    const when = fmtDate(cohort.own_scored_at);
+    if (Number.isFinite(score) && when) return `Your official run of ${score} on ${when} ranks in ${rank}.`;
+    if (Number.isFinite(score)) return `Your official run of ${score} ranks in ${rank}.`;
+    return `Your official run ranks in ${rank}.`;
+  }
+  if (cohort?.available === false) return String(cohort.reason || '');
+  return '';
+}
+
 /** 1st, 2nd, 3rd, 4th — 11th, 12th and 13th stay "th". */
 export function ordinal(n) {
   const v = Math.round(Number(n));
@@ -680,11 +694,9 @@ export function buildScoringEngineViewModel({ snapshots, state, project, viewerR
     ],
     markerPct: `${clamp(composite, 0, 100)}%`,
     benchmarkCaption: cohort?.available === true
-      ? "Against the engine's tier thresholds and this cohort's official runs at the same week. Marker = your composite."
+      ? "Against the engine's tier thresholds and this cohort's official runs at the same week. The median is rounded to the nearest 5 points and the percentile to the nearest 10. Marker = your composite."
       : "Against the engine's real tier thresholds. Marker = your composite.",
-    cohortSentence: cohort?.available === true
-      ? `You rank in the ${ordinal(cohort.percentile)} percentile of the ${cohort.cohort} field.`
-      : (cohort?.available === false ? String(cohort.reason || '') : ''),
+    cohortSentence: cohortLine(cohort),
     gapSentence,
 
     trajectory: {
@@ -723,9 +735,7 @@ export function buildScoringEngineViewModel({ snapshots, state, project, viewerR
         label: `${cohort.cohort} median (Week ${cohort.week})`,
         value: cohort.median,
       } : null,
-      cohortLine: cohort?.available === true
-        ? `You rank in the ${ordinal(cohort.percentile)} percentile of the ${cohort.cohort} field.`
-        : (cohort?.available === false ? String(cohort.reason || '') : ''),
+      cohortLine: cohortLine(cohort),
     },
   };
 }

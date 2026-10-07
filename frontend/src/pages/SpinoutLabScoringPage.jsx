@@ -176,12 +176,13 @@ export default function SpinoutLabScoringPage() {
         if (proj && (st?.unlocked_features || []).includes('scoring')) {
           // Honest states: a failed fetch is "couldn't load", never a silent
           // empty history that pretends no run happened.
-          const scores = await api.getScores(proj.id, { includeSandbox: true }).catch(() => null);
+          const [scores, bench] = await Promise.all([
+            api.getScores(proj.id, { includeSandbox: true }).catch(() => null),
+            api.getCohortBenchmark(proj.id).catch(wkOnly),
+          ]);
           if (dead) return;
           if (Array.isArray(scores)) setSnapshots(scores);
           else setScoresError(true);
-          const bench = await api.getCohortBenchmark(proj.id).catch(() => null);
-          if (dead) return;
           setCohort(bench || { failed: true });
         }
         setStatus('ready');
@@ -221,7 +222,7 @@ export default function SpinoutLabScoringPage() {
   const vm = useMemo(
     () => buildScoringEngineViewModel({
       snapshots, state, project, viewerRole: user?.role,
-      cohort: cohort && !cohort.failed ? cohort : null,
+      cohort: cohort && !cohort.failed && !cohort.unavailable ? cohort : null,
     }),
     [snapshots, state, project, user, cohort],
   );
@@ -619,6 +620,9 @@ export default function SpinoutLabScoringPage() {
                 <BenchmarkBars benchmarks={vm.benchmarks} markerPct={vm.markerPct} gapSentence={vm.gapSentence} cohortNote={vm.cohortSentence} />
                 {cohort?.failed && (
                   <Unreadable what="The cohort benchmark" claim="This is not a claim that the cohort has no scores." />
+                )}
+                {cohort?.unavailable && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2" data-testid="text-cohort-benchmark-unavailable">The cohort benchmark is not in this environment.</p>
                 )}
               </div>
 

@@ -7,7 +7,7 @@ import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
-import { COHORT_BENCHMARK_MIN, medianOf, percentileRank } from '../services/cohortBenchmark';
+import { COHORT_BENCHMARK_MIN, coarsenMedian, coarsenPercentile, medianOf, percentileRank } from '../services/cohortBenchmark';
 import { refuse } from '../util/refusal';
 import { ensureTier } from '../middleware/requireTier';
 import { runFullScore, tierLabel } from '../services/scoring';
@@ -431,16 +431,24 @@ scoring.post('/score/:projectId/deal-memo', async (c) => {
 });
 
 const NOT_ENOUGH = 'There are not enough scored ventures in this cohort at this week yet.';
-const NO_COHORT = 'This account has no Lab cohort recorded, so there is no cohort to compare.';
+const NO_COHORT = 'This project has no Lab cohort recorded, so there is no cohort to compare.';
 const NO_OFFICIAL = 'This project has no official scoring run yet, so there is no percentile to place.';
 
 type OfficialRow = {
   project_id: number;
+  founder_id: number | null;
   id: number;
   total_score: number;
   created_at: string;
   integrity_hash: string | null;
   integrity_version: string | null;
+};
+
+type PlacedRun = {
+  score: number;
+  scoredAt: string;
+  snapshotId: number;
+  hash: string | null;
 };
 
 function laterOfficial(a: OfficialRow, b: OfficialRow): boolean {
@@ -484,45 +492,70 @@ scoring.get('/cohort-benchmark/:projectId', async (c) => {
       return c.json({ available: false, cohort, week, reason: NO_COHORT });
     }
 
+    // One score per founder. This project's founder contributes only this
+    // project, so their other projects cannot fill the set of five. Deleted
+    // projects, practice runs, and flagged or rejected official runs are out.
     const listed = await c.env.DB.prepare(
-      `SELECT p.id AS project_id, s.id, s.total_score, s.created_at, s.integrity_hash, s.integrity_version
+      `SELECT p.id AS project_id, p.founder_id AS founder_id, s.id, s.total_score, s.created_at,
+              s.integrity_hash, s.integrity_version
          FROM projects p
          JOIN users u ON u.founder_id = p.founder_id
          JOIN user_spinout_flags f ON f.user_id = u.id
-         JOIN score_snapshots s ON s.project_id = p.id AND s.is_sandbox = 0
-        WHERE f.spinout_lab_admitted = 1
+         JOIN score_snapshots s ON s.project_id = p.id
+          AND s.is_sandbox = 0
+          AND s.admin_review_status IN ('auto_approved', 'approved')
+        WHERE p.deleted_at IS NULL
+          AND f.spinout_lab_admitted = 1
           AND f.spinout_lab_cohort = ?
-          AND u.spinout_lab_week = ?`,
-    ).bind(cohort, week).all<OfficialRow>();
+          AND u.spinout_lab_week = ?
+          AND (p.founder_id != ? OR p.id = ?)`,
+    ).bind(cohort, week, project.founder_id, projectId).all<OfficialRow>();
 
-    const newestValid = new Map<number, number>();
-    const byProject = new Map<number, OfficialRow[]>();
+    const byFounder = new Map<number, OfficialRow[]>();
     for (const row of listed.results || []) {
-      const list = byProject.get(row.project_id) || [];
+      const key = row.founder_id == null ? -Number(row.project_id) : Number(row.founder_id);
+      const list = byFounder.get(key) || [];
       list.push(row);
-      byProject.set(row.project_id, list);
+      byFounder.set(key, list);
     }
-    for (const [pid, rows] of byProject) {
+    const placed = new Map<number, PlacedRun>();
+    for (const [founderKey, rows] of byFounder) {
       rows.sort((a, b) => (laterOfficial(a, b) ? -1 : 1));
       for (const row of rows) {
         const verified = await verifyScoreHash(c.env, {
-          project_id: pid,
+          project_id: row.project_id,
           total_score: Number(row.total_score),
           integrity_hash: row.integrity_hash,
           integrity_version: row.integrity_version,
           created_at: row.created_at,
         });
         if (!verified.valid) continue;
-        newestValid.set(pid, Number(row.total_score));
+        placed.set(founderKey, {
+          score: Number(row.total_score),
+          scoredAt: row.created_at,
+          snapshotId: row.id,
+          hash: row.integrity_hash,
+        });
         break;
       }
     }
 
-    const own = newestValid.get(projectId);
-    if (own === undefined) {
+    const ownKey = project.founder_id == null ? -projectId : Number(project.founder_id);
+    const own = placed.get(ownKey);
+    if (!own) {
       return c.json({ available: false, cohort, week, reason: NO_OFFICIAL });
     }
-    const scores = [...newestValid.values()];
+    if (isAuditableRole(user.role)) {
+      await logScoreRead(c.env, {
+        snapshotId: own.snapshotId,
+        projectId,
+        userId: user.id ?? null,
+        role: user.role,
+        integrityHash: own.hash,
+        integrityValid: true,
+      });
+    }
+    const scores = [...placed.values()].map((run) => run.score);
     if (scores.length < COHORT_BENCHMARK_MIN) {
       return c.json({ available: false, cohort, week, reason: NOT_ENOUGH });
     }
@@ -530,8 +563,10 @@ scoring.get('/cohort-benchmark/:projectId', async (c) => {
       available: true,
       cohort,
       week,
-      median: medianOf(scores),
-      percentile: percentileRank(scores, own),
+      median: coarsenMedian(medianOf(scores)),
+      percentile: coarsenPercentile(percentileRank(scores, own.score)),
+      own_score: own.score,
+      own_scored_at: own.scoredAt,
     });
   } catch (error) {
     return refuse(c, 503, {
