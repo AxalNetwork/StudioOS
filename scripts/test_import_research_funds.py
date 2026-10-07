@@ -334,5 +334,51 @@ class ShaiMigrationTests(unittest.TestCase):
             mod.main_shai(['shai-migration', '378; DROP'])
 
 
+
+class ShaiDefersOnlyToServedListsTests(unittest.TestCase):
+    """D597 (migration 413) withholds Deep Tech. A firm known only from it must
+    come from the third list, or it is shown by no list at all (#1081)."""
+
+    @staticmethod
+    def row(uid, source):
+        return {'uid': uid, 'name': uid, 'source_name': source, 'fund_size_cents': None}
+
+    def test_only_eurotech_is_served(self):
+        self.assertEqual(mod.SERVED_SOURCES, frozenset({mod.EURO_SOURCE}))
+        self.assertNotIn(mod.DEEP_SOURCE, mod.SERVED_SOURCES)
+
+    def test_a_firm_known_only_from_deep_tech_is_added_from_the_third_list(self):
+        key = mod.normalized('Northwind Capital')
+        directory = {key: self.row(key, mod.DEEP_SOURCE)}
+        mod.parse_shai(directory, FIXTURE, defer_to=mod.SERVED_SOURCES)
+        shown = [v for v in directory.values() if v['source_name'] == mod.SHAI_SOURCE and v['name'].startswith('Northwind')]
+        self.assertEqual(len(shown), 1, 'the Deep Tech row hid the third list\'s fund')
+
+    def test_a_firm_from_eurotech_is_still_left_as_it_is(self):
+        key = mod.normalized('Northwind Capital')
+        directory = {key: self.row(key, mod.EURO_SOURCE)}
+        mod.parse_shai(directory, FIXTURE, defer_to=mod.SERVED_SOURCES)
+        self.assertEqual(directory[key]['source_name'], mod.EURO_SOURCE)
+        self.assertFalse(any(v['name'].startswith('Northwind') and v['source_name'] == mod.SHAI_SOURCE for v in directory.values()))
+
+    def test_a_deep_tech_row_with_the_same_uid_is_replaced(self):
+        directory: dict = {}
+        mod.parse_shai(directory, FIXTURE)
+        uid = next(u for u, v in directory.items() if v['name'].startswith('Northwind'))
+        target = {uid: self.row(uid, mod.DEEP_SOURCE)}
+        mod.parse_shai(target, FIXTURE, defer_to=mod.SERVED_SOURCES)
+        self.assertEqual(target[uid]['source_name'], mod.SHAI_SOURCE)
+
+    def test_without_defer_to_every_known_firm_is_still_skipped(self):
+        key = mod.normalized('Northwind Capital')
+        directory = {key: self.row(key, mod.DEEP_SOURCE)}
+        mod.parse_shai(directory, FIXTURE)
+        self.assertFalse(any(v['source_name'] == mod.SHAI_SOURCE and v['name'].startswith('Northwind') for v in directory.values()))
+
+    def test_the_migration_entry_point_defers_to_the_served_lists(self):
+        src = MODULE_PATH.read_text()
+        self.assertIn('added = parse_shai(directory, SHAI, defer_to=SERVED_SOURCES)', src)
+
+
 if __name__ == '__main__':
     unittest.main()
