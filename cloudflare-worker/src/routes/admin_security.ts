@@ -448,6 +448,7 @@ const DATA_ACCESS_LIMIT = 12;
 const ACTOR_SIDE_ACTIONS = [
   'role_changed', 'user_toggled',
   'kyc_approved_by_admin', 'kyc_bypass_granted', 'kyc_rejected_by_admin', 'kyc_document_access',
+  'kyc_record_access', 'kyc_queue_access', 'partner_profile_access',
   'contract_resent', 'contract_voided',
   'hq_branch_support_session',
   'spinout_moderation',
@@ -561,12 +562,12 @@ const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, 
     WHERE a.action LIKE '%export%'
     ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
 
-/** Ten placeholders, one per entry in ACTOR_SIDE_ACTIONS (D448 added the tenth). */
+/** Thirteen placeholders, one per entry in ACTOR_SIDE_ACTIONS (D625 added the three identity reads). */
 const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
           u.name AS actor_name, u.email AS actor_email
      FROM activity_logs l
      LEFT JOIN users u ON u.id = l.user_id
-    WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
 
 /** One placeholder, one per entry in SUSPENSION_ACTIVITY_ACTIONS. */

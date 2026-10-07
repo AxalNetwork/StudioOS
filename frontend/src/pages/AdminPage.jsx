@@ -690,6 +690,15 @@ export default function AdminPage({ onImpersonate, section = null }) {
     } finally { setLoading(false); }
   };
 
+  const openPartnerProfile = async (p) => {
+    try {
+      setOpenProfile(await api.adminGetProfile(p.email));
+    } catch (e) {
+      reportError('AdminPage:partnerProfile', e);
+      alert(e.message || 'The partner profile could not be read.');
+    }
+  };
+
   const loadKyc = async (status) => {
     try {
       const q = await api.kycAdminQueue(status);
@@ -1132,7 +1141,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                 </thead>
                 <tbody>
                   {profiles.map(p => (
-                    <tr key={p.email} className="border-b border-gray-100 hover:bg-gray-50/50 cursor-pointer" onClick={() => setOpenProfile(p)}>
+                    <tr key={p.email} className="border-b border-gray-100 hover:bg-gray-50/50 cursor-pointer" onClick={() => openPartnerProfile(p)}>
                       <td className="px-4 py-3">
                         <div className="text-gray-900 font-medium dark:text-gray-100">{p.user_name || '—'}</div>
                         <div className="text-xs text-gray-500">{p.email}</div>
@@ -1169,7 +1178,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={(e) => { e.stopPropagation(); setOpenProfile(p); }}
+                        <button onClick={(e) => { e.stopPropagation(); openPartnerProfile(p); }}
                           className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors">
                           Review
                         </button>
