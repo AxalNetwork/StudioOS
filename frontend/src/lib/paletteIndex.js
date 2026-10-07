@@ -2,7 +2,7 @@
  * What the command palette indexes, decided in one pure place (D284).
  *
  * For an admin shell — `admin` or `super_admin` — the palette indexes the
- * shell's own rows, the consoles the H35 map places, and the 29 working
+ * shell's own rows, the consoles the H35 map places, and the 28 working
  * pages. It never offers an `hqOnly` route to someone without the elevation,
  * never indexes the parked X, and every entry carries its real route. The
  * other shells keep indexing their own sidebar, as they did before.

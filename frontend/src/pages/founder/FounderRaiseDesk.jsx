@@ -10,6 +10,7 @@ import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import './founderRaiseDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
+import AlsoIn from '../../workspaces/AlsoIn';
 
 // Six labels, six routes — A4's `anchR`, in its order. This was a six-deep
 // ternary chain ending in an `<a href="#raise-…">` fallback no label could
@@ -138,6 +139,7 @@ export default function FounderRaiseDesk() {
         </header>
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
         <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} projectId={projectId} fillsOn={fillsOn} ai={ai} />
+        <AlsoIn role="founder" row="Raise" />
       </div>
       <WorkerRail
         workspace="Raise"

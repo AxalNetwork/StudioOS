@@ -311,8 +311,9 @@ test('Home is /studio, no role root invented', () => {
   assert.ok(!targets.includes('/founder'), 'no bare /founder root');
 });
 
-test('Spin-Out Lab keeps its row, untouched', () => {
-  assert.match(founder, /\{ to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' \}/);
+test('Spin-Out Lab keeps its row; its match adds only the 83(b) tracker (D563)', () => {
+  assert.match(founder, /\{ to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES \}/);
+  assert.match(src, /const SPINOUT_LAB_PAGES = \['\/spinout-lab\/83b'\];/);
 });
 
 test('the Research row lands somewhere every founder can actually open', () => {

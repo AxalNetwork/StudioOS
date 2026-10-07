@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton } from '../ui';
 import { accentLinkClass, zonePath } from './shellConfig';
 import NoStoreYet from './NoStoreYet';
+import AlsoIn from './AlsoIn';
 import useBucketSources from './useBucketSources';
 
 /**
@@ -79,7 +80,10 @@ export default function BucketBoard({ bucket, role = 'founder', board, className
   if (!bucket?.zones?.length || !board?.sections?.length) return null;
   const zoneBySlug = new Map(bucket.zones.map((z) => [z.slug, z]));
 
+  // D563: the row's working pages outside its zones sit under the board, as
+  // they do under BucketOverview's grid.
   return (
+    <>
     <div className={`grid gap-3.5 md:grid-cols-2 ${className}`.trim()}>
       {board.sections.map((section) => {
         const zone = zoneBySlug.get(section.slug);
@@ -103,6 +107,8 @@ export default function BucketBoard({ bucket, role = 'founder', board, className
         );
       })}
     </div>
+    <AlsoIn role={role} row={bucket.label} />
+    </>
   );
 }
 
