@@ -15,6 +15,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
 
 /**
  * Delivery · Capacity — `/delivery/capacity`.
@@ -138,19 +139,33 @@ export default function PartnerCapacityZone() {
   }, [period]);
   useEffect(() => { load(); }, [load]);
 
+  // D637 — hours by entry, read on its own so a failure here says so here and
+  // leaves the rest of the page standing.
+  const [entries, setEntries] = useState({ kind: 'loading' });
+  const loadEntries = useCallback(async () => {
+    setEntries({ kind: 'loading' });
+    try {
+      const r = await api.listPartnerHourEntries(period);
+      setEntries({ kind: 'ready', periods: r?.periods || [], entries: Array.isArray(r?.entries) ? r.entries : [] });
+    } catch (e) {
+      setEntries({ kind: 'unreadable', message: e?.message || '' });
+    }
+  }, [period]);
+  useEffect(() => { loadEntries(); }, [loadEntries]);
+
   const run = useCallback(async (fn, ok, scope) => {
     setBusy(true);
     setNote(null);
     try {
       await fn();
       setNote({ ok: true, text: ok, scope });
-      await load();
+      await Promise.all([load(), loadEntries()]);
     } catch (e) {
       setNote({ ok: false, text: e?.message || 'That did not save.', scope });
     } finally {
       setBusy(false);
     }
-  }, [load]);
+  }, [load, loadEntries]);
 
   const d = state.data;
   const people = Array.isArray(d?.people) ? d.people : [];
@@ -551,6 +566,15 @@ export default function PartnerCapacityZone() {
               </div>
             </div>
             <SaveNote note={note?.scope === 'hours' ? note : null} />
+            <div className="mt-3">
+              <HoursEntries
+                read={entries} busy={busy} onRetry={loadEntries}
+                onDelete={(e, p) => {
+                  if (!window.confirm(`Delete ${e.hours[p]} h for ${e.person_name || 'this person'} in ${p}? The month then reads Not recorded, not 0.`)) return;
+                  run(() => api.deletePartnerHours(e.engagement_id, e.person_user_id, p), 'Hours entry deleted.', 'hours');
+                }}
+              />
+            </div>
           </Section>
 
           <Section title="Seats inside client systems">
@@ -567,7 +591,10 @@ export default function PartnerCapacityZone() {
                     <span className={s.revoked_at ? 'text-axal-faint line-through' : ''}>
                       {s.founder_name || s.need_title || s.engagement_uid}
                     </span>
-                    {s.scope && <Pill tone="neutral">{s.scope}</Pill>}
+                    <SeatScopeEditor
+                      seat={s} busy={busy}
+                      onSave={(scope) => run(() => api.updatePartnerSeat(s.id, { scope: scope || null }), 'Scope saved.', `seat:${s.id}`)}
+                    />
                     <span className="text-[11px] text-axal-faint">
                       granted {formatDay(s.granted_at)}
                       {s.days_held != null && ` · ${s.days_held}d`}

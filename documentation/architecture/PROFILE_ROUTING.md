@@ -153,7 +153,7 @@ it, where in their nav, and how do they get there.*
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | BD Console | `/partner/operations/overview` · `/capabilities` · `/portfolio` · `/engagements` · `/performance` · `/needs` | Headerless | Full page | Sidebar → Headerless → Pipeline | UPGRADE | High |
-| Co-marketing | `/comarketing` | Headerless | Full page | Sidebar → Headerless → Offers | UPGRADE | High |
+| Co-marketing | `/comarketing` · `/comarketing/:pitch` | Headerless | Full page | Sidebar → Headerless → Offers | UPGRADE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | Headerless | Full page | Sidebar → Headerless → Pipeline | UPGRADE | High |

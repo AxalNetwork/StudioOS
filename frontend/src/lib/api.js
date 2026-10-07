@@ -4501,6 +4501,9 @@ export const api = {
     request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
       method: 'PUT', body: JSON.stringify(data),
     }),
+  // D637 — client hours by entry, this month and the two before it.
+  listPartnerHourEntries: (period) =>
+    request(`/partner/delivery/capacity/hours${period ? `?period=${encodeURIComponent(period)}` : ''}`),
   deletePartnerHours: (engagementId, personId, period) =>
     request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
       method: 'DELETE',
@@ -4636,6 +4639,8 @@ export const api = {
     request('/comarketing/me/pitches', { method: 'POST', body: JSON.stringify(data) }),
   listMyCoMarketingPitches: (status) =>
     request(`/comarketing/me/pitches${status ? `?status=${status}` : ''}`),
+  // D637 — one pitch, for its own page (owner or admin).
+  getCoMarketingPitch: (uid) => request(`/comarketing/me/pitches/${encodeURIComponent(uid)}`),
   editCoMarketingPitch: (uid, data) =>
     request(`/comarketing/me/pitches/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
   withdrawCoMarketingPitch: (uid) =>
@@ -4703,6 +4708,8 @@ export const api = {
   },
   cofounderExpressInterest: (data) =>
     request('/cofounder/interest', { method: 'POST', body: JSON.stringify(data) }),
+  // D637 — the interest I sent and have not withdrawn.
+  cofounderSentInterests: () => request('/cofounder/interests/sent'),
   cofounderWithdrawInterest: (userUid) =>
     request(`/cofounder/interest/${userUid}`, { method: 'DELETE' }),
   cofounderListConnections: () => request('/cofounder/connections'),

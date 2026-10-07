@@ -38,7 +38,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Users, UserCircle, Briefcase, LayoutGrid, Lock, Sparkles, Plus, Download, X, AlertTriangle,
+  Users, UserCircle, Briefcase, LayoutGrid, Lock, Sparkles, Plus, Download, X, AlertTriangle, UserPlus,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
@@ -50,6 +50,7 @@ import IncomingLeadsStrip from '../../components/IncomingLeadsStrip';
 import { buildDecisionModel, DECISION_OUTCOMES } from '../../lib/cofounderMatchViewModel';
 import { Card, Pill, Unrecorded, Unreadable } from '../../ui';
 import AdvisorsPage from '../AdvisorsPage';
+import CofounderMatchingPanel from './CofounderMatchingPanel';
 import CofounderPage from '../CofounderPage';
 import MyJobsPage from '../jobs/MyJobsPage';
 
@@ -62,6 +63,8 @@ export const TABS = [
   { id: 'advisors', label: 'Advisors', icon: UserCircle },
   { id: 'hiring', label: 'Hiring', icon: Briefcase },
   { id: 'coverage', label: 'Coverage', icon: LayoutGrid },
+  // D637 — co-founder matching controls (Ops canvas `sp-cofounder`).
+  { id: 'cofounders', label: 'Co-founders', icon: UserPlus },
 ];
 // The retired page's tab ids, which the founder redirects in App.jsx still
 // send. Each lands in the tab that now owns that job.
@@ -412,6 +415,11 @@ export default function FounderTeamPage() {
           {tab === 'advisors' && <AdvisorsTab data={data} onOpen={setDrawer} />}
           {tab === 'hiring' && <HiringTab data={data} />}
           {tab === 'coverage' && <CoverageTab data={data} company={company} flash={setFlash} onSaved={reload} />}
+          {tab === 'cofounders' && (
+            <TierGate tier="studio" label="Co-founder Match" blurb="Match with a complementary co-founder — identities stay private until interest is mutual.">
+              <CofounderMatchingPanel onBrowse={() => selectTab('hiring')} />
+            </TierGate>
+          )}
 
           <DecisionsPanel />
         </>

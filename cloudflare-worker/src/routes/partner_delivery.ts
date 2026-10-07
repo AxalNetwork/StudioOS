@@ -49,6 +49,7 @@ import {
   daysBetween, healthFor, mergePatch, parseHours, parsePeriod,
   requireOwnEngagement, requirePartnerRole, utilisationFor,
 } from './_partner_workspace_helpers';
+import { logActorAct } from '../services/actorLog';
 
 const partnerDelivery = new Hono<{ Bindings: Env }>();
 
@@ -748,7 +749,7 @@ partnerDelivery.get('/engagements/:engagementId/blockers', async (c) => {
 
 partnerDelivery.post('/engagements/:engagementId/blockers', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
@@ -764,6 +765,7 @@ partnerDelivery.post('/engagements/:engagementId/blockers', async (c) => {
     ).bind(newUid(), engagementId, side, summary, nowIso(), nowIso(), nowIso()).run();
     const row = await c.env.DB.prepare('SELECT * FROM engagement_blockers WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<any>();
+    await logActorAct(c.env, user, 'delivery_blocker_raised', { blocker_id: Number(row.id), engagement_id: engagementId, side });
     return c.json({
       id: Number(row.id), uid: row.uid, side: row.side, summary: row.summary,
       raised_at: row.raised_at, cleared_at: null,
@@ -773,7 +775,7 @@ partnerDelivery.post('/engagements/:engagementId/blockers', async (c) => {
 
 partnerDelivery.patch('/blockers/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker');
     const b = await body<any>(c);
@@ -788,6 +790,12 @@ partnerDelivery.patch('/blockers/:id', async (c) => {
     ).bind(String(merged.side), summary, trimOrNull(merged.cleared_at, 40), nowIso(), id).run();
     const out = await c.env.DB.prepare('SELECT * FROM engagement_blockers WHERE id = ?')
       .bind(id).first<any>();
+    // D637 — Clear keeps the blocker on record with its cleared date; the log
+    // line says which of clear, reopen or edit this was.
+    const action = !row.cleared_at && out.cleared_at ? 'delivery_blocker_cleared'
+      : row.cleared_at && !out.cleared_at ? 'delivery_blocker_reopened'
+      : 'delivery_blocker_edited';
+    await logActorAct(c.env, user, action, { blocker_id: id, engagement_id: Number(out.engagement_id) });
     return c.json({
       id: Number(out.id), uid: out.uid, side: out.side, summary: out.summary,
       raised_at: out.raised_at, cleared_at: out.cleared_at ?? null,
@@ -795,13 +803,21 @@ partnerDelivery.patch('/blockers/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D637 — Delete is not Clear. Clear keeps the blocker on record with the date
+ * it cleared (the PATCH above); Delete removes a blocker raised by mistake, and
+ * the log line is what remains of it.
+ */
 partnerDelivery.delete('/blockers/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    await ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker');
+    const row = await ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker');
     await c.env.DB.prepare('DELETE FROM engagement_blockers WHERE id = ?').bind(id).run();
-    return c.json({ ok: true });
+    await logActorAct(c.env, user, 'delivery_blocker_deleted', {
+      blocker_id: id, engagement_id: Number(row.engagement_id), was_cleared: !!row.cleared_at,
+    });
+    return c.json({ ok: true, deleted: id });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1314,7 +1330,7 @@ partnerDelivery.put('/capacity/internal-hours', async (c) => {
 
 partnerDelivery.post('/engagements/:engagementId/seats', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
@@ -1330,6 +1346,7 @@ partnerDelivery.post('/engagements/:engagementId/seats', async (c) => {
     ).run();
     const row = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<any>();
+    await logActorAct(c.env, user, 'delivery_seat_granted', { seat_id: Number(row.id), engagement_id: engagementId, holder_user_id: Number(holder.id) });
     return c.json({
       id: Number(row.id), uid: row.uid, engagement_id: engagementId,
       holder_user_id: Number(row.holder_user_id), holder_name: holder.name ?? null,
@@ -1344,7 +1361,7 @@ partnerDelivery.post('/engagements/:engagementId/seats', async (c) => {
  */
 partnerDelivery.post('/seats/:id/revoke', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat');
     if (row.revoked_at) return c.json({ detail: 'That seat is already revoked' }, 400);
@@ -1352,15 +1369,18 @@ partnerDelivery.post('/seats/:id/revoke', async (c) => {
     await c.env.DB.prepare(
       'UPDATE engagement_seats SET revoked_at = ?, updated_at = ? WHERE id = ?',
     ).bind(now, now, id).run();
+    await logActorAct(c.env, user, 'delivery_seat_revoked', { seat_id: id, engagement_id: Number(row.engagement_id) });
     return c.json({ ok: true, id, revoked_at: now });
   } catch (e) { return mapError(c, e); }
 });
 
 partnerDelivery.patch('/seats/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat');
+    // D637 — a revoked seat's scope is history: what it held when it ended.
+    if (row.revoked_at) return c.json({ detail: 'This seat is revoked, so its scope can no longer change' }, 409);
     const b = await body<any>(c);
     const merged = mergePatch(row, b, ['scope']);
     await c.env.DB.prepare(
@@ -1368,6 +1388,7 @@ partnerDelivery.patch('/seats/:id', async (c) => {
     ).bind(trimOrNull(merged.scope, 400), nowIso(), id).run();
     const out = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?')
       .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_seat_scope_edited', { seat_id: id, engagement_id: Number(out.engagement_id) });
     return c.json({
       id: Number(out.id), uid: out.uid, engagement_id: Number(out.engagement_id),
       holder_user_id: Number(out.holder_user_id), scope: out.scope ?? null,
@@ -1376,10 +1397,58 @@ partnerDelivery.patch('/seats/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/** `YYYY-MM` minus `n` months. */
+export function periodMinus(period: string, n: number): string {
+  const [y, m] = period.split('-').map(Number);
+  const idx = y * 12 + (m - 1) - n;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+}
+
+/**
+ * D637 — client hours by entry, for the month asked and the two before it.
+ *
+ * `/capacity` sums hours per person, so a single entry cannot be found there
+ * to delete. This lists each client × person pair that has an entry in any of
+ * the three months, with that month's hours or `null`. A `null` is "Not
+ * recorded": no entry, which is not the same as an entry of 0.
+ */
+partnerDelivery.get('/capacity/hours', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const p = parsePeriod(c.req.query('period') || currentPeriod(), 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
+    const periods = [p.period, periodMinus(p.period, 1), periodMinus(p.period, 2)];
+    const rows = await c.env.DB.prepare(
+      `SELECT h.engagement_id, h.person_user_id, h.period, h.hours,
+              u.name AS person_name, n.title AS need_title, f.name AS founder_name
+         FROM engagement_hours h
+         JOIN engagements e ON e.id = h.engagement_id
+         LEFT JOIN users u ON u.id = h.person_user_id
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN users f ON f.id = e.founder_id
+        WHERE e.partner_id = ? AND h.period IN (?, ?, ?)
+        ORDER BY f.name, n.title, u.name`,
+    ).bind(partnerId, periods[0], periods[1], periods[2]).all<any>();
+    const byPair = new Map<string, any>();
+    for (const r of (rows.results || []) as any[]) {
+      const key = `${r.engagement_id}:${r.person_user_id}`;
+      if (!byPair.has(key)) {
+        byPair.set(key, {
+          engagement_id: Number(r.engagement_id), person_user_id: Number(r.person_user_id),
+          person_name: r.person_name ?? null, client: r.founder_name ?? null, need_title: r.need_title ?? null,
+          hours: Object.fromEntries(periods.map((x) => [x, null])),
+        });
+      }
+      byPair.get(key).hours[r.period] = Number(r.hours);
+    }
+    return c.json({ periods, entries: [...byPair.values()] });
+  } catch (e) { return mapError(c, e); }
+});
+
 /** Hours for one person on one engagement in one period. Upserted, not appended. */
 partnerDelivery.put('/engagements/:engagementId/hours/:personId/:period', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const holder = await requireOwnHolder(c.env, partnerId, Number(c.req.param('personId')));
@@ -1403,6 +1472,7 @@ partnerDelivery.put('/engagements/:engagementId/hours/:personId/:period', async 
          VALUES (?, ?, ?, ?, ?, ?)`,
       ).bind(engagementId, holder.id, p.period, h.hours, nowIso(), nowIso()).run();
     }
+    await logActorAct(c.env, user, 'delivery_hours_logged', { engagement_id: engagementId, person_user_id: Number(holder.id), period: p.period });
     return c.json({
       ok: true, engagement_id: engagementId, person_user_id: Number(holder.id),
       period: p.period, hours: h.hours,
@@ -1412,15 +1482,25 @@ partnerDelivery.put('/engagements/:engagementId/hours/:personId/:period', async 
 
 partnerDelivery.delete('/engagements/:engagementId/hours/:personId/:period', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
+    // D637 — the period is checked like the save's. The person is not required
+    // to still be in the firm: the engagement is this firm's, and an entry
+    // logged for someone who has since left can still be a mistake to remove.
+    const personId = Number(c.req.param('personId'));
+    if (!Number.isInteger(personId) || personId <= 0) return c.json({ detail: 'That person id is not valid' }, 400);
+    const p = parsePeriod(c.req.param('period'), 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
     // A real delete rather than writing zero: zero hours is the claim that they
     // did none, which is not the same as nobody having logged any.
-    await c.env.DB.prepare(
+    const res = await c.env.DB.prepare(
       'DELETE FROM engagement_hours WHERE engagement_id = ? AND person_user_id = ? AND period = ?',
-    ).bind(engagementId, Number(c.req.param('personId')), String(c.req.param('period'))).run();
-    return c.json({ ok: true });
+    ).bind(engagementId, personId, p.period).run();
+    const deleted = Number((res as any)?.meta?.changes ?? 0) > 0;
+    if (!deleted) return c.json({ detail: 'No hours are logged for that person, client and month' }, 404);
+    await logActorAct(c.env, user, 'delivery_hours_deleted', { engagement_id: engagementId, person_user_id: personId, period: p.period });
+    return c.json({ ok: true, deleted: true });
   } catch (e) { return mapError(c, e); }
 });
 
