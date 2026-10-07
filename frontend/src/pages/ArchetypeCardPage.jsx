@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, Lock } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
 import { api, assessment } from '../lib/api';
 import { reportError } from '../lib/log';
 import { Unreadable } from '../ui';
@@ -33,7 +33,16 @@ import {
   archetypeBanner,
   archetypeLicenceTitle,
   archetypeMeta,
+  ARCHETYPES,
 } from '../lib/assessmentMeta';
+
+// D620 — a complement chip is edged in that archetype's own colour. The chips
+// are labels (ARCHETYPES[slug].complements), so the colour is looked up by
+// label; a label no archetype carries keeps the hairline grey.
+const ACCENT_BY_LABEL = Object.fromEntries(Object.values(ARCHETYPES).map((a) => [a.label, a.accent]));
+export function complementAccent(label) {
+  return ACCENT_BY_LABEL[label] || '#ececf1';
+}
 
 function confidencePct(value) {
   if (value == null) return null;
@@ -104,6 +113,7 @@ export default function ArchetypeCardPage({ activeRole }) {
   const pct = latest ? confidencePct(latest.confidence) : null;
   const title = latest?.label || meta?.label || latest?.slug;
   const accent = meta?.accent || '#7c3aed';
+  const licence = archetypeLicenceTitle(audience).replace(/ archetype$/, '');
 
   // D619 — the skills radar reads its own source. Skills are never locked
   // (D594), so it shows whatever the archetype read said.
@@ -194,31 +204,39 @@ export default function ArchetypeCardPage({ activeRole }) {
         .acp-hero img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
         .acp-split { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; }
         .acp-split img { position: relative; width: 100%; height: 100%; object-fit: cover; }
+        /* D620 — the still carries its own #140c26 well down the left, so the
+           overlay draws no gradient of its own: only a text shadow. */
         .acp-well {
-          position: absolute; inset: 0 auto 0 0; width: min(46%, 440px);
-          padding: 28px 26px 24px;
-          background: linear-gradient(115deg, rgba(20,12,38,.94) 0%, rgba(91,33,182,.62) 58%, rgba(20,12,38,.06) 100%);
-          color: #f5f3ff;
-          display: flex; flex-direction: column; justify-content: flex-end;
+          position: absolute; left: 0; bottom: 0; width: 42%; min-width: min(360px, 100%);
+          padding: 0 24px 29px; box-sizing: border-box;
+          color: #fff;
           pointer-events: none;
         }
         .acp-bloom { color: #c4b5fd; }
+        .acp-chip { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; white-space: nowrap; background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+        .acp-pill { background: #7c3aed; border-color: #7c3aed; text-transform: none; letter-spacing: 0; font-size: 11px; }
+        .acp-title { margin: 8px 0 0; font-size: 32px; font-weight: 900; letter-spacing: -.025em; line-height: 1.05; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+        .acp-tagline { font-size: 15px; font-weight: 500; color: #f4f0fe; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+        .acp-hairline { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
+        .acp-wellbox { border-radius: 12px; padding: 16px 18px; background: #f8f7fb; border: 1px solid #ececf1; }
+        .dark .acp-wellbox { background: #18181b; border-color: #27272a; }
+        .acp-comp { display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 600; padding: 5px 11px; border-radius: 99px; border: 1px solid #ececf1; background: #fff; color: #18181b; }
+        .dark .acp-comp { background: #111827; color: #f4f4f5; }
+        .acp-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
         @media (max-width: 720px) {
-          .acp-hero { aspect-ratio: 4 / 3; }
-          .acp-well {
-            inset: auto 0 0 0; width: 100%;
-            background: linear-gradient(180deg, rgba(20,12,38,0) 0%, rgba(20,12,38,.94) 55%);
-          }
+          .acp-well { width: 100%; min-width: 0; padding: 0 14px 15px; }
+          .acp-title { font-size: 24px; }
+          .acp-tagline { display: none; }
         }
       `}</style>
 
-      <Link
-        to="/studio"
-        className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#7c3aed] dark:text-violet-300 hover:text-[#6d28d9] mb-4"
-        data-testid="archetype-back"
-      >
-        <ArrowLeft size={14} strokeWidth={2.5} /> Back to studio
-      </Link>
+      {/* D620 — board A5's crumb row. "‹ Back to studio" sits at the card's
+          foot; this is the way back from every state, the empty and locked
+          ones included. */}
+      <div className="mb-4 flex items-center justify-between" data-testid="archetype-crumbs">
+        <Link to="/studio" className="text-[12px] font-semibold text-[#a1a1aa] hover:text-[#7c3aed]" data-testid="archetype-crumb-studio">‹ Studio</Link>
+        <span className="acp-mono text-[11px] text-[#a1a1aa]">Profile &amp; Fit · Archetype</span>
+      </div>
 
       {loading && (
         <div className="acp-card bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 p-[48px] flex justify-center text-gray-400">
@@ -264,6 +282,11 @@ export default function ArchetypeCardPage({ activeRole }) {
 
       {latest && (
         <article className="acp-card bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700" style={{ '--arch-accent': accent }}>
+          {/* D620 — board A5–A8: the banner keeps 21:9 and D325's split for
+              `both` (an unset illustration also reads `both`, so resolving it
+              to one still would show a man to everyone who never chose). The
+              overlay sits in the still's own dark well, and the 3px hairline
+              in the archetype's colour is the banner's own bottom edge. */}
           <div className="acp-hero" data-testid="archetype-banner" data-sex={sex}>
             {sex === 'both' ? (
               <div className="acp-split">
@@ -274,66 +297,112 @@ export default function ArchetypeCardPage({ activeRole }) {
               <BannerImg src={archetypeBanner(latest.slug, sex)} />
             )}
             <div className="acp-well">
-              <div className="acp-lbl acp-bloom mb-2">{archetypeLicenceTitle(audience)}</div>
-              <h1 className="text-[28px] font-extrabold tracking-[-0.03em] leading-tight text-white" data-testid="archetype-title">
-                {title}
-              </h1>
-              {meta?.tagline && (
-                <p className="mt-1.5 text-[13.5px] text-[#e9d5ff] leading-snug">{meta.tagline}</p>
-              )}
-              <div className="mt-3 acp-mono text-[12px] font-bold text-[#c4b5fd]">
-                {pct != null ? `${pct}% confidence` : 'Confidence not recorded'}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="acp-chip" data-testid="archetype-licence">{licence}</span>
+                <span className="acp-lbl acp-bloom">Primary archetype</span>
+              </div>
+              <h1 className="acp-title" data-testid="archetype-title">{title}</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                {meta?.tagline && <span className="acp-tagline">{meta.tagline}</span>}
+                {pct != null && (
+                  <span className="acp-chip acp-mono acp-pill" data-testid="archetype-confidence-pill">{pct}% confidence</span>
+                )}
               </div>
             </div>
+            <div className="acp-hairline" style={{ background: accent }} data-testid="archetype-hairline" />
           </div>
 
-          <div className="p-[22px] flex flex-col gap-5">
-            <XpBar xp={xp} onRetry={readXp} />
-            {meta?.lean && (
-              <div className="acp-lbl text-[#7c3aed] dark:text-violet-300">{meta.lean}</div>
-            )}
-            {meta?.description && (
-              <p className="text-[13.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.55]">{meta.description}</p>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-[22px] md:px-[40px] md:pt-[28px] md:pb-[26px]">
+            <div className="md:col-span-7 grid gap-[22px] content-start">
+              {meta?.tagline && (
+                <div>
+                  <div className="acp-lbl text-[#15803d] dark:text-green-500">Core approach</div>
+                  <div className="mt-1.5 text-[18px] font-bold tracking-[-0.015em] text-[#18181b] dark:text-gray-100">{meta.tagline}</div>
+                  {meta?.lean && <div className="acp-lbl mt-2 text-[#7c3aed] dark:text-violet-300">{meta.lean}</div>}
+                </div>
+              )}
+              {meta?.description && (
+                <div>
+                  <div className="acp-lbl text-[#b45309] dark:text-amber-500">Description</div>
+                  <p className="mt-1.5 max-w-[560px] text-[14px] leading-[1.55] text-[#3f3f46] dark:text-gray-300">{meta.description}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div data-testid="archetype-strengths">
+                  <div className="acp-lbl text-[#15803d] dark:text-green-500">Strengths</div>
+                  <div className="mt-2 grid gap-[7px]">
+                    {(meta?.strengths || []).map((s) => (
+                      <div key={s} className="flex items-start gap-[9px] text-[12.5px] leading-[1.5] text-[#3f3f46] dark:text-gray-300">
+                        <span className="mt-[6px] h-[6px] w-[6px] shrink-0 rounded-full bg-[#15803d]" aria-hidden="true" />
+                        <span>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div data-testid="archetype-blindspots">
+                  <div className="acp-lbl text-[#b45309] dark:text-amber-500">Blind spots</div>
+                  <div className="mt-2 grid gap-[7px]">
+                    {(meta?.blindSpots || []).map((b) => (
+                      <div key={b} className="flex items-start gap-[9px] text-[12.5px] leading-[1.5] text-[#3f3f46] dark:text-gray-300">
+                        <span className="mt-[6px] h-[6px] w-[6px] shrink-0 rounded-full bg-[#b45309]" aria-hidden="true" />
+                        <span>{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div data-testid="archetype-strengths">
-                <div className="acp-lbl text-[#15803d] dark:text-green-500 mb-2">Strengths</div>
-                <div className="flex flex-col gap-1.5">
-                  {(meta?.strengths || []).map((s) => (
-                    <div key={s} className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 flex gap-2">
-                      <span className="font-bold text-[#16a34a] dark:text-green-400">+</span>
-                      <span>{s}</span>
-                    </div>
-                  ))}
+            <div className="md:col-span-5 grid gap-3 content-start">
+              <div className="acp-wellbox" data-testid="archetype-confidence">
+                <div className="acp-lbl text-[#a1a1aa]">Confidence</div>
+                <div className="mt-1.5 flex items-baseline gap-2.5">
+                  <span className="acp-mono text-[28px] font-bold tracking-[-0.02em] text-[#7c3aed] dark:text-violet-300">{pct != null ? `${pct}%` : 'N/A'}</span>
+                  <span className="text-[12.5px] text-[#a1a1aa]">{pct != null ? 'from your conversation with Eadwyn' : 'no reading recorded yet'}</span>
+                </div>
+                {pct != null && (
+                  <div className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-[#ececf1] dark:bg-gray-700">
+                    <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${pct}%` }} />
+                  </div>
+                )}
+                {/* D325's Level / XP bar, which the board does not draw: it
+                    stays, under Confidence (S1's recommendation 3). */}
+                <div className="mt-4">
+                  <XpBar xp={xp} onRetry={readXp} />
                 </div>
               </div>
-              <div data-testid="archetype-blindspots">
-                <div className="acp-lbl text-[#b45309] dark:text-amber-500 mb-2">Likely blind spots</div>
-                <div className="flex flex-col gap-1.5">
-                  {(meta?.blindSpots || []).map((b) => (
-                    <div key={b} className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 flex gap-2">
-                      <span className="font-bold text-[#d97706] dark:text-amber-500">!</span>
-                      <span>{b}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div data-testid="archetype-complements">
-                <div className="acp-lbl text-[#7c3aed] dark:text-violet-300 mb-2">Compatible complements</div>
-                <div className="flex flex-wrap gap-1.5">
+              <div className="acp-wellbox" data-testid="archetype-complements">
+                <div className="acp-lbl text-[#a1a1aa]">Complements</div>
+                <div className="mt-[9px] flex flex-wrap gap-1.5">
                   {(meta?.complements || []).map((c) => (
-                    <span
-                      key={c}
-                      className="text-[11.5px] font-semibold text-[#6d28d9] dark:text-violet-300 bg-[#f5f3ff] dark:bg-violet-900/30 border border-[#ede9fe] dark:border-violet-800 rounded-lg px-2.5 py-1"
-                    >
+                    <span key={c} className="acp-comp" style={{ borderColor: complementAccent(c) }}>
+                      <span className="acp-dot" style={{ background: complementAccent(c) }} aria-hidden="true" />
                       {c}
                     </span>
                   ))}
                 </div>
+                <div className="mt-[9px] text-[11.5px] leading-[1.5] text-[#a1a1aa]">Archetypes whose strengths sit where this one’s blind spots are.</div>
+              </div>
+              <div className="acp-wellbox">
+                <div className="acp-lbl text-[#a1a1aa]">How we read this</div>
+                <div className="mt-1.5 text-[12.5px] leading-[1.5] text-[#3f3f46] dark:text-gray-300">From your conversation with Eadwyn, not a quiz.</div>
+              </div>
+              <div className="flex items-center justify-between px-1">
+                <span className="acp-lbl text-[#a1a1aa]">Illustration</span>
+                <span className="acp-mono text-[11px] text-[#a1a1aa]" data-testid="archetype-illustration">{sex === 'both' ? 'm · f (both)' : sex}</span>
               </div>
             </div>
+          </div>
 
+          <div className="flex items-center justify-between border-t border-[#ececf1] dark:border-gray-700 px-[22px] md:px-[40px] pt-[14px] pb-[22px]">
+            <Link
+              to="/studio"
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#7c3aed] dark:text-violet-300 hover:text-[#6d28d9]"
+              data-testid="archetype-back"
+            >
+              ‹ Back to studio
+            </Link>
+            <span className="acp-mono text-[10.5px] text-[#a1a1aa]" data-testid="archetype-slug">{latest.slug}</span>
           </div>
         </article>
       )}
