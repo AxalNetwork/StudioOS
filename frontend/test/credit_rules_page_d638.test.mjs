@@ -133,7 +133,8 @@ test('each list in its four states: loading, Unreadable with Try again, empty, a
   assert.match(text(h(GrantsTable, { read: ready({ grants: GRANTS }), onRetry: noop, onChanged: noop })), /−20 Manual adjustment/);
   assert.match(g, /title="Duplicate report">Taken back 2026-10-04/);
   // Take back is offered on a standing grant of credits only.
-  const takeBack = (id) => new RegExp(`data-testid="grant-row-${id}"(?:(?!</tr>).)*>Take back</button>`, 's').test(g);
+  const rowOf = (id) => { const at = g.indexOf(`data-testid="grant-row-${id}"`); return g.slice(at, g.indexOf('</tr>', at)); };
+  const takeBack = (id) => rowOf(id).includes('>Take back</button>');
   assert.deepEqual([9, 8, 7, 6].map(takeBack), [true, true, false, false]);
 });
 
