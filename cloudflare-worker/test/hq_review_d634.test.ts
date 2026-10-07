@@ -224,7 +224,7 @@ test('D634: the dispute read names both Stripe states and carries what the page 
   const realFetch = globalThis.fetch;
   try {
     globalThis.fetch = (async () => { throw new Error('network down'); }) as any;
-    const failed = await call(db, '/admin/billing/disputes/dp_1', { env: { STRIPE_SECRET_KEY: 'sk_test_x' } });
+    const failed = await call(db, '/admin/billing/disputes/dp_1', { env: { STRIPE_SECRET_KEY: 'unit-test-stripe-placeholder' } });
     assert.equal(failed.status, 502);
     assert.equal(failed.body.code, 'stripe_error');
 
@@ -233,7 +233,7 @@ test('D634: the dispute read names both Stripe states and carries what the page 
       charge: 'ch_1', payment_intent: 'pi_1', created: 1760000000,
       evidence_details: { due_by: 1760600000, has_evidence: true, submission_count: 2 },
     }), { status: 200, headers: { 'content-type': 'application/json' } })) as any;
-    const ok = await call(db, '/admin/billing/disputes/dp_1', { env: { STRIPE_SECRET_KEY: 'sk_test_x' } });
+    const ok = await call(db, '/admin/billing/disputes/dp_1', { env: { STRIPE_SECRET_KEY: 'unit-test-stripe-placeholder' } });
     assert.equal(ok.status, 200, ok.text);
     assert.deepEqual(ok.body.dispute, {
       id: 'dp_1', amount: 120000, currency: 'eur', status: 'needs_response', reason: 'fraudulent',
