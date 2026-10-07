@@ -1,3 +1,4 @@
+import {aiBudgetFixture} from './_ai_budget_fixture.mjs';
 /**
  * D552 — every AI run records the page it was asked from, and a page can read
  * its own month and its own last run.
@@ -255,7 +256,7 @@ test('the D552 decision file lists every name', () => {
 // ---------------------------------------------------------------------------
 
 function routerEnv() {
-  const { DB, db } = makeD1('CREATE TABLE unrelated (id INTEGER);');
+  const { DB, db } = aiBudgetFixture();
   const env: any = {
     DB,
     AI: { run: async () => ({ response: '{"source": null, "quote": null}', usage: { prompt_tokens: 5, completion_tokens: 1 } }) },

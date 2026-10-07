@@ -28,7 +28,7 @@ import DeveloperSection from './account/AccountDeveloper';
 import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
-import { ColleagueSeatLink, seatInviteOutcome } from './investorSeatCopy';
+import ColleagueSeatsPanel from './ColleagueSeatsPanel';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
@@ -5196,7 +5196,7 @@ function InvestorBillingPanel({ flash, billing }) {
         <InvestorROITable currentTier={tier} />
       </Card>
 
-      {tier === 'institutional' && <InvestorSeatsCard flash={flash} cap={seatCap} onChange={refresh} />}
+      {tier === 'institutional' && <InvestorSeatsCard cap={seatCap} onChange={refresh} />}
     </>
   );
 }
@@ -5259,110 +5259,12 @@ function InvestorROITable({ currentTier }) {
 }
 
 // Seat management is Institutional-only. The endpoints already 403 lower
-// tiers; we just hide the UI to avoid confusion.
-export function InvestorSeatsCard({ flash, cap, onChange, initialSeats = null }) {
-  const [seats, setSeats] = useState(initialSeats || []);
-  const [loading, setLoading] = useState(initialSeats == null);
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [copyLink, setCopyLink] = useState('');
-
-  const load = React.useCallback(() => {
-    setLoading(true);
-    api.listInvestorSeats()
-      .then((res) => setSeats(Array.isArray(res?.seats) ? res.seats : (Array.isArray(res) ? res : [])))
-      .catch((e) => flash?.(e.message || 'Could not load seats', 'error'))
-      .finally(() => setLoading(false));
-  }, [flash]);
-
-  useEffect(() => { if (initialSeats == null) load(); }, [load, initialSeats]);
-
-  const invite = async (e) => {
-    e?.preventDefault();
-    const v = email.trim();
-    if (!v) return;
-    setBusy(true);
-    try {
-      const outcome = seatInviteOutcome(await api.inviteInvestorSeat(v), v);
-      setCopyLink(outcome.link);
-      flash?.(outcome.flash);
-      setEmail('');
-      load();
-      onChange?.();
-    } catch (err) { flash?.(err.message || 'Invite failed', 'error'); }
-    finally { setBusy(false); }
-  };
-
-  const revoke = async (id) => {
-    if (!window.confirm('Revoke this seat? The colleague will lose access immediately.')) return;
-    try {
-      await api.revokeInvestorSeat(id);
-      flash?.('Seat revoked.');
-      load();
-      onChange?.();
-    } catch (err) { flash?.(err.message || 'Revoke failed', 'error'); }
-  };
-
-  // Worker treats revoked rows as historical; only non-revoked rows count
-  // against the seat cap. Counting all rows would falsely disable invites
-  // after a revoke until the page reloads.
-  const activeSeats = seats.filter((s) => !s.revoked_at);
-  const used = activeSeats.length;
-  const full = cap > 0 && used >= cap;
-
+// tiers; we just hide the UI to avoid confusion. D632 — the panel is the
+// canvas's `st-invite`: the invite link once, then each seat's state.
+export function InvestorSeatsCard({ cap, onChange }) {
   return (
     <Card title="Colleague seats" description={`Invite up to ${cap} colleagues to share your Institutional account.`}>
-      <form onSubmit={invite} className="flex gap-2 mb-4">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="colleague@firm.com"
-          disabled={busy || full}
-          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 disabled:opacity-50"
-        />
-        <button type="submit" disabled={busy || full || !email.trim()}
-          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
-          {busy ? 'Sending…' : 'Send invite'}
-        </button>
-      </form>
-      {copyLink ? (
-        <p className="text-xs text-gray-600 dark:text-gray-300 mb-3 break-all" data-testid="seat-invite-link">
-          {copyLink}
-        </p>
-      ) : null}
-      {full && (
-        <div className="text-xs text-amber-700 dark:text-amber-300 mb-3">All {cap} seats used. Revoke a seat to invite someone new.</div>
-      )}
-      {loading ? (
-        <div className="text-sm text-gray-500 dark:text-gray-400">Loading seats…</div>
-      ) : seats.length === 0 ? (
-        <div className="text-sm text-gray-500 dark:text-gray-400">No colleagues invited yet.</div>
-      ) : (
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
-          {seats.filter((s) => !s.revoked_at).map((s) => {
-            // Worker contract (cloudflare-worker/src/routes/investor_seats.ts):
-            //   { id, seat_email, seat_user_id, invited_at, accepted_at, revoked_at }
-            // No `status` column — derive from accepted_at vs revoked_at.
-            const status = s.revoked_at ? 'revoked' : (s.accepted_at ? 'active' : 'pending');
-            return (
-              <div key={s.id} className="flex items-center justify-between px-3 py-2">
-                <div className="min-w-0">
-                  <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{s.seat_email || '—'}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {status}
-                    {s.accepted_at ? ` · joined ${new Date(s.accepted_at).toLocaleDateString()}` : ''}
-                    {!s.accepted_at && s.invited_at ? ` · invited ${new Date(s.invited_at).toLocaleDateString()}` : ''}
-                  </div>
-                  <ColleagueSeatLink seat={s} />
-                </div>
-                <button type="button" onClick={() => revoke(s.id)}
-                  className="text-xs text-red-600 dark:text-red-400 hover:underline">Revoke</button>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <ColleagueSeatsPanel cap={cap} onChange={onChange} />
     </Card>
   );
 }

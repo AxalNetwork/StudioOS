@@ -1816,6 +1816,9 @@ async function handleStripeEvent(
       // order_ref (fulfilOrder no-ops once the order is already paid), so a
       // Stripe webhook retry can never double-fulfil.
       if (meta.kind === 'cart_order') {
+        // D629: signed webhook only; independent of an already fulfilled order. Failure retries the webhook.
+        const { creditAiTopupFromPayment } = await import('../services/aiTopups');
+        await creditAiTopupFromPayment(env, obj);
         const orderRef = (meta.order_ref || '').trim();
         if (!orderRef) return;
         const { fulfilOrder } = await import('../services/orders');

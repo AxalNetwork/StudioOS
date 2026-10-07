@@ -6,6 +6,7 @@
  *   - Anyone: published catalog of approved+live campaigns.
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { safeExternalUrl } from '../lib/url';
 import {
   Megaphone, Send, CheckCircle, XCircle, Loader2, Globe, Copy, Plus, BarChart3,
@@ -542,6 +543,11 @@ function PartnerView() {
                     <div className="mt-2"><AttributionBadge counts={p.attribution} /></div>
                   </div>
                   <div className="flex flex-col gap-2 items-end">
+                    {/* D637 — the pitch's own page: edit while Proposed, results after. */}
+                    <Link to={`/comarketing/${encodeURIComponent(p.uid)}`} data-testid={`pitch-open-${p.uid}`}
+                      className="text-xs border border-violet-300 text-violet-700 px-3 py-1 rounded hover:bg-violet-50 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-950/30">
+                      {p.status === 'proposed' ? 'Edit' : 'Open'}
+                    </Link>
                     <button onClick={() => setOpenUid(p.uid)}
                       className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded">
                       Details
@@ -699,7 +705,19 @@ function AdminView() {
   );
 }
 
-function PublishedFeed() {
+/**
+ * D637 — a click on a published piece's View link records a visit against its
+ * pitch (`POST /comarketing/track`). Fire and forget: the link opens either
+ * way, and a failed record never blocks the reader.
+ */
+export function recordFeedVisit(p, client = api) {
+  if (!p?.attribution_code) return null;
+  return Promise.resolve()
+    .then(() => client.trackCoMarketing({ code: p.attribution_code, event_kind: 'visit', landing_path: '/comarketing' }))
+    .catch(() => null);
+}
+
+export function PublishedFeed() {
   const [items, setItems] = useState([]);
   const [err, setErr] = useState(null);
   useEffect(() => {
@@ -728,7 +746,8 @@ function PublishedFeed() {
           <div className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap dark:text-gray-300">{p.summary}</div>
           {p.published_url && (
             <a href={safeExternalUrl(p.published_url)} target="_blank" rel="noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-xs text-violet-600 hover:underline">
+              onClick={() => { recordFeedVisit(p); }} data-testid={`feed-view-${p.uid}`}
+              className="mt-2 inline-flex items-center gap-1 text-xs text-violet-600 hover:underline dark:text-violet-300 dark:hover:underline">
               <Globe size={12} /> View
             </a>
           )}

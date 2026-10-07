@@ -246,6 +246,7 @@ const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
 const HqRevenuePage = lazy(() => import('./pages/hq/RevenuePage'));
+const HqDisputePage = lazy(() => import('./pages/hq/DisputePage'));
 const HqContentPage = lazy(() => import('./pages/hq/ContentPage'));
 const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
 const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
@@ -255,6 +256,10 @@ const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
 // D606 (#1107) — the Super Admin's review queue, the Eadwyn Tickets canvas's T1 and T1b.
 const ReviewQueuePage = lazy(() => import('./pages/hq/ReviewQueuePage'));
+const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesRegistryPage'));
+const HqCreditRulesPage = lazy(() => import('./pages/hq/CreditRulesPage'));
+const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
+const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
@@ -266,6 +271,7 @@ const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsent
 const AdvisorCohortAssignments = lazy(() => import('./pages/admin/AdvisorCohortAssignments'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
+const CoMarketingPitchPage = lazy(() => import('./pages/CoMarketingPitchPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 // Task #40 (E2) — Event host/attendee surface.
 const MyEventsPage = lazy(() => import('./pages/events/MyEventsPage'));
@@ -290,6 +296,7 @@ const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTren
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
+const WatchlistItemPage = lazy(() => import('./pages/WatchlistItemPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
@@ -361,6 +368,8 @@ const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
+// D632 — a draft variant, renamed and edited in place.
+const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
@@ -2644,6 +2653,8 @@ function AppInner() {
           franchisor, with the holder console above the accounts. */}
       <Route path="/admin/contracts" element={guard(['admin'], hqOnly(<HqContractsPage />))} />
       <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
+      {/* D633 (#1391, Q2) — one member's credits; the Team directory's drawer is its door. */}
+      <Route path="/admin/accounts/credits/:userId" element={guard(['admin'], hqOnly(<MemberCreditsPage />))} />
       {/* HQ · Home (canvas H1). The whole business on one screen; every
           per-subsidiary figure says Not recorded until accounts carry a licence. */}
       <Route path="/hq" element={guard(['admin'], hqOnly(<HqHomePage />))} />
@@ -2653,6 +2664,8 @@ function AppInner() {
       {/* HQ · Security (canvas Y2, decision A4). Four zones read their stores;
           four say what is not recorded. Force re-auth is the one write. */}
       <Route path="/admin/revenue" element={guard(['admin'], hqOnly(<HqRevenuePage />))} />
+      {/* D634 — one billing dispute, read live from Stripe (canvas hq-dispute). */}
+      <Route path="/admin/revenue/disputes/:disputeId" element={guard(['admin'], hqOnly(<HqDisputePage />))} />
       <Route path="/admin/content" element={guard(['admin'], hqOnly(<HqContentPage />))} />
       <Route path="/admin/platform" element={guard(['admin'], hqOnly(<HqPlatformPage />))} />
       {/* D203 — the operator switches. Not a sidebar row: the HQ group is eleven
@@ -2662,7 +2675,13 @@ function AppInner() {
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/hq/review" element={guard(['admin'], hqOnly(<ReviewQueuePage />))} />
+      {/* D638 (#1384) — the reward-rules registry, Super Admin only; its door is the review queue. */}
+      <Route path="/admin/credit-rules" element={guard(['admin'], hqOnly(<CreditRulesPage />))} />
+      {/* #1384 — HQ · Credits, reached from Platform and lit under that row. */}
+      <Route path="/hq/credits" element={guard(['admin'], hqOnly(<HqCreditRulesPage />))} />
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
+      {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
+      <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}
@@ -2763,6 +2782,10 @@ function AppInner() {
           : <FounderRaiseCapital />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapitalWorkspacePage />))} />
+      {/* D632 — the cap table's draft variants (Ops canvas `ct-variants`). The main
+          cap table stays one per company at /raise/capital/cap-table. */}
+      <Route path="/raise/cap-table/variants" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
+      <Route path="/raise/cap-table/variants/:variant" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
       {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
           Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
           guard keeps admitting investor so the redirect can run. */}
@@ -2970,6 +2993,8 @@ function AppInner() {
       <Route path="/office-hours" element={<Navigate to="/practice/opportunities" replace />} />
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>))} />
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], partnerPrivateWorkspace(effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><CoMarketingPage user={user} /></FounderWorkspaceTabs>) : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
+      {/* D637 — one pitch, edited while Proposed. Only a partner owns pitches (or an admin reads one). */}
+      <Route path="/comarketing/:pitch" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPitchPage /></PartnerWorkspaceTabs>))} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyEventsPage />)} />
@@ -3003,6 +3028,7 @@ function AppInner() {
       {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
       <Route path="/portfolio/risk-matrix" element={guard(['admin', 'partner', 'investor'], <RiskMatrixPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
+      <Route path="/watchlist/:uid" element={guard(['admin', 'partner', 'investor'], <WatchlistItemPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       {/* 'advisor' belongs here: services/trust.ts ROLE_MATRIX gives advisors four

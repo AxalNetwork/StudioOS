@@ -15,6 +15,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
 import FounderReviews from './FounderReviews';
+import { BlockerRow, blockerDeleteQuestion } from './deliveryEdits';
 
 /**
  * Delivery · Health — `/delivery/health`.
@@ -309,40 +310,34 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
   }, [engagementId]);
   useEffect(() => { load(); }, [load]);
 
-  if (error) return <p className="text-[12px] text-red-700 dark:text-red-300">{error}</p>;
+  if (error) {
+    return (
+      <div className="text-[12px]" data-testid="blockers-unreadable">
+        <p className="text-red-700 dark:text-red-300">Blockers could not be read just now. {error}</p>
+        <button type="button" className={`${ghostButtonClass} mt-1`} onClick={load}>Try again</button>
+      </div>
+    );
+  }
   if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
+  const act = async (fn) => {
+    try { await fn(); await load(); onChanged(); } catch (e) { onError(e); }
+  };
 
   return (
     <div>
       {rows.length === 0 && (
         <p className="text-[12px] leading-relaxed text-axal-faint">Nothing blocked.</p>
       )}
+      {/* D637 — Clear keeps a blocker on record with its date; Delete removes
+          it. The side is shown, always: a list with no side makes every delay
+          the firm's. */}
       {rows.map((b) => (
-        <div key={b.id} className="flex flex-wrap items-center gap-2 border-t border-axal-hairline py-1.5 first:border-t-0 text-[12.5px]">
-          {/* The side is shown, always. A blocker list with no side makes every
-              delay the firm's — and a report drafted from it would inherit
-              that. */}
-          <Pill tone={b.side === 'client' ? 'info' : 'warn'}>
-            {b.side === 'client' ? 'Client side' : 'Our side'}
-          </Pill>
-          <span className={b.cleared_at ? 'text-axal-faint line-through' : ''}>{b.summary}</span>
-          {b.days_open != null && (
-            <span className="text-[11px] text-axal-faint">{b.days_open}d open</span>
-          )}
-          <button
-            type="button" className={`${ghostButtonClass} ml-auto`} disabled={busy}
-            onClick={async () => {
-              try {
-                await api.updatePartnerBlocker(b.id, {
-                  cleared_at: b.cleared_at ? null : new Date().toISOString(),
-                });
-                await load(); onChanged();
-              } catch (e) { onError(e); }
-            }}
-          >
-            {b.cleared_at ? 'Reopen' : 'Clear'}
-          </button>
-        </div>
+        <BlockerRow
+          key={b.id} b={b} busy={busy}
+          onClear={() => act(() => api.updatePartnerBlocker(b.id, { cleared_at: new Date().toISOString() }))}
+          onReopen={() => act(() => api.updatePartnerBlocker(b.id, { cleared_at: null }))}
+          onDelete={() => { if (window.confirm(blockerDeleteQuestion(b))) act(() => api.deletePartnerBlocker(b.id)); }}
+        />
       ))}
       <div className="mt-2 grid gap-2 md:grid-cols-3">
         <Field label="New blocker">

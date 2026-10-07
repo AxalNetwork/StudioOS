@@ -66,6 +66,8 @@ async function dto(env: Env, w: ItemRow): Promise<Record<string, unknown>> {
     converted_deal_id: w.converted_deal_id,
     converted_at: w.converted_at,
     passed_reason: w.passed_reason,
+    // D636: when it was passed on, so the item page can say how it ended.
+    passed_at: w.passed_at,
     next_check_at: w.next_check_at,
     created_at: w.created_at,
     updated_at: w.updated_at,

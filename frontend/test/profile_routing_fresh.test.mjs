@@ -85,7 +85,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // review queue (T1, T1b) and the Eadwyn chat's panels (T2, T3).
   // 138 the same day (D619, #1006): `Studio · Archetype card`, the board the
   // card page's three sections are built to.
-  assert.equal(recs.length, 138);
+  // 139 on 2026-10-07 (D633, #1391): Ops Page HQ tools Q1–Q3, the document
+  // types, a member's credits and trust obligations by role.
+  assert.equal(recs.length, 139);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

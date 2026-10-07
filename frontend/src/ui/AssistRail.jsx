@@ -1,7 +1,8 @@
 import React from 'react';
+import { LiveAiBudgetUsage } from './AiBudgetUsage';
 import SectionLabel from './SectionLabel';
 import Pill from './Pill';
-import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
+import { formatCost, formatSpend, runCost, batchCost } from './assistCost';
 
 /**
  * AssistRail — the right-hand AI control rail, one component for eight canvases.
@@ -145,9 +146,6 @@ export default function AssistRail({
   // only caller and passes the total or null.
   const spent = config.totalSpend;
   const spendKnown = typeof spent === 'number' && Number.isFinite(spent);
-  const capKnown = typeof config.planCap === 'number' && config.planCap > 0;
-  const meter = spendKnown && capKnown ? spendMeter(spent, config.planCap) : null;
-
   return (
     <aside
       data-testid={testId || 'assist-rail'}
@@ -235,11 +233,12 @@ export default function AssistRail({
       </Card>
 
       <Card>
+        <LiveAiBudgetUsage refreshKey={run?.at} />
         <div className="flex items-baseline justify-between">
-          <SectionLabel tone="faint">This month</SectionLabel>
+          <SectionLabel tone="faint">Estimated usage this month</SectionLabel>
           <span className="font-mono tabular-nums text-xs">
             {spendKnown
-              ? <>{formatSpend(spent)}{capKnown && <span className="text-axal-faint"> / {formatSpend(config.planCap)}</span>}</>
+              ? <>{formatSpend(spent)}</>
               : <span className="text-red-700 dark:text-red-300">Unreadable</span>}
           </span>
         </div>
@@ -253,15 +252,6 @@ export default function AssistRail({
             )}
           </div>
         )}
-        {meter && (
-          <div className="h-[5px] rounded-axal-pill bg-axal-hairline dark:bg-gray-700 mt-2 overflow-hidden">
-            <div
-              className={`h-full ${meter.over ? 'bg-red-500' : accent.fill}`}
-              style={{ width: `${meter.fraction * 100}%` }}
-            />
-          </div>
-        )}
-        {meter?.over && <div className="text-[11px] text-red-700 dark:text-red-400 mt-1">Over plan cap</div>}
         {config.margin && (
           <div className="flex items-baseline justify-between mt-2 text-[11px] text-axal-muted dark:text-gray-400">
             <span>Axal VC margin</span>

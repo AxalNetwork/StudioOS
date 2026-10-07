@@ -11,6 +11,7 @@ import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } f
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { refuse } from '../util/refusal';
+import { logActorAct } from '../services/actorLog';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -169,16 +170,59 @@ r.get('/me/pitches', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D637 — why a pitch that is not Proposed cannot be edited, in the words the
+ * pitch page shows beside the locked form.
+ */
+export function lockedPitchSentence(status: string): string {
+  if (status === 'approved') return 'This pitch is approved, so it can no longer be edited. To change it, withdraw it and propose again.';
+  if (status === 'published') return 'This pitch is published, so it can no longer be edited.';
+  if (status === 'rejected') return 'This pitch was rejected, so it can no longer be edited. Propose a new one instead.';
+  if (status === 'withdrawn') return 'This pitch was withdrawn, so it can no longer be edited. Propose a new one instead.';
+  return 'This pitch can only be edited while it is proposed.';
+}
+
+/**
+ * D637 — one pitch, for its own page. The partner who owns it, or an admin.
+ * Anyone else reads 404, as the edit does, so a uid tells nobody else whether
+ * the pitch exists.
+ */
+r.get('/me/pitches/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
+      .bind(c.req.param('uid')).first<Pitch>();
+    if (!isAdmin(user)) {
+      const partner = await requirePartnerProfile(c.env, user);
+      if (!p || p.partner_id !== partner.id) return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist, or it is not yours.' });
+    } else if (!p) {
+      return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist.' });
+    }
+    return c.json(pitchDto(p!, await attribCounts(c.env, p!.id)));
+  } catch (e) { return mapError(c, e); }
+});
+
 r.patch('/me/pitches/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
     const partner = await requirePartnerProfile(c.env, user);
     const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
       .bind(c.req.param('uid')).first<Pitch>();
-    if (!p || p.partner_id !== partner.id) return c.json({ detail: 'Pitch not found' }, 404);
-    if (p.status !== 'proposed') return c.json({ detail: 'Pitch can only be edited while proposed' }, 409);
+    if (!p || p.partner_id !== partner.id) return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist, or it is not yours.' });
+    if (p.status !== 'proposed') {
+      return refuse(c, 409, { code: 'pitch_locked', message: lockedPitchSentence(p.status), extra: { status: p.status } });
+    }
     const body = await c.req.json().catch(() => ({} as any));
-    if (body.asset_type && !ASSET_TYPES.has(body.asset_type)) return c.json({ detail: 'invalid asset_type' }, 400);
+    if (body.asset_type && !ASSET_TYPES.has(body.asset_type)) {
+      return refuse(c, 400, { code: 'invalid_asset_type', message: 'Choose a webinar, blog post, podcast, event, newsletter or other.' });
+    }
+    // D637 — the create path's floors, so an edit cannot empty what create requires.
+    if (body.title !== undefined && String(body.title ?? '').trim().length < 3) {
+      return refuse(c, 400, { code: 'title_too_short', message: 'Give the pitch a title of at least 3 characters.' });
+    }
+    if (body.summary !== undefined && String(body.summary ?? '').trim().length < 10) {
+      return refuse(c, 400, { code: 'summary_too_short', message: 'Describe the pitch in at least 10 characters.' });
+    }
     const fields = ['title', 'summary', 'asset_type', 'proposed_date', 'target_audience',
       'distribution_channels', 'co_branding_notes', 'asset_url',
       'angle', 'what_you_bring'] as const;
@@ -198,6 +242,9 @@ r.patch('/me/pitches/:uid', async (c) => {
     sets.push('updated_at = ?'); params.push(nowIso()); params.push(p.id);
     await c.env.DB.prepare(`UPDATE comarketing_pitches SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
+    await logActorAct(c.env, user, 'comarketing_pitch_edited', {
+      pitch_uid: p.uid, fields: fields.filter((f) => body[f] !== undefined),
+    });
     return c.json(pitchDto(fresh!, await attribCounts(c.env, p.id)));
   } catch (e) { return mapError(c, e); }
 });
@@ -208,12 +255,17 @@ r.post('/me/pitches/:uid/withdraw', async (c) => {
     const partner = await requirePartnerProfile(c.env, user);
     const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
       .bind(c.req.param('uid')).first<Pitch>();
-    if (!p || p.partner_id !== partner.id) return c.json({ detail: 'Pitch not found' }, 404);
+    if (!p || p.partner_id !== partner.id) return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist, or it is not yours.' });
     if (!LEGAL_TRANSITIONS.withdrawn.has(p.status)) {
-      return c.json({ detail: `Cannot withdraw from ${p.status}` }, 409);
+      return refuse(c, 409, {
+        code: 'cannot_withdraw',
+        message: `This pitch is ${p.status}, so it can no longer be withdrawn. Only a proposed or approved pitch can be.`,
+        extra: { status: p.status },
+      });
     }
     await c.env.DB.prepare("UPDATE comarketing_pitches SET status='withdrawn', updated_at=? WHERE id=?")
       .bind(nowIso(), p.id).run();
+    await logActorAct(c.env, user, 'comarketing_pitch_withdrawn', { pitch_uid: p.uid, from_status: p.status });
     const fresh = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
     return c.json(pitchDto(fresh!, await attribCounts(c.env, p.id)));
   } catch (e) { return mapError(c, e); }
@@ -301,16 +353,16 @@ r.post('/track', async (c) => {
     const user = await requireAuth(c);
     const body = await c.req.json().catch(() => ({} as any));
     const code = String(body.code || '').trim();
-    if (!code) return c.json({ detail: 'code required' }, 400);
+    if (!code) return refuse(c, 400, { code: 'code_required', message: 'This link carries no attribution code.' });
     const kind = String(body.event_kind || 'visit');
     if (!['visit', 'signup', 'lead', 'conversion'].includes(kind)) {
-      return c.json({ detail: 'invalid event_kind' }, 400);
+      return refuse(c, 400, { code: 'invalid_event_kind', message: 'An event is a visit, sign-up, lead or conversion.' });
     }
     const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE attribution_code = ?')
       .bind(code).first<Pitch>();
-    if (!p) return c.json({ detail: 'Unknown attribution code' }, 404);
+    if (!p) return refuse(c, 404, { code: 'unknown_code', message: 'No pitch carries this attribution code.' });
     if (!['approved', 'published'].includes(p.status)) {
-      return c.json({ detail: 'Pitch not active' }, 409);
+      return refuse(c, 409, { code: 'pitch_not_active', message: 'This pitch is not live, so nothing is recorded against it.' });
     }
     const referrer = c.req.header('referer') || c.req.header('referrer') || null;
     const uid = newUid();
@@ -320,7 +372,9 @@ r.post('/track', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, p.id, p.partner_id, kind, user.id,
            body.project_id != null ? Number(body.project_id) : null,
-           body.lead_email || user.email,
+           // D637 — a visit is not a lead: the viewer's address is stored only
+           // for an event that is one, or when the caller names it.
+           body.lead_email || (kind === 'visit' ? null : user.email),
            referrer ? referrer.slice(0, 500) : null,
            body.landing_path || null,
            body.notes ? String(body.notes).slice(0, 1000) : null,

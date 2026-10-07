@@ -29,6 +29,7 @@ import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { ingestContact } from './contacts';
 import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -75,7 +76,8 @@ async function ensureSchema(env: Env): Promise<void> {
        user_id INTEGER NOT NULL,
        name TEXT NOT NULL,
        snapshot_json TEXT NOT NULL,
-       created_at TEXT DEFAULT (datetime('now'))
+       created_at TEXT DEFAULT (datetime('now')),
+       source_project_id INTEGER
      )`,
     `CREATE INDEX IF NOT EXISTS idx_brand_custom_templates_user ON brand_custom_templates(user_id)`,
     `CREATE TABLE IF NOT EXISTS waitlist_signups (
@@ -1216,6 +1218,31 @@ brand.get('/landing/by-project/:pid/preview-url', async (c) => {
 
 // --- Multi-page site endpoints (Task #2) ------------------------------------
 
+/**
+ * D636 (#1394) — the address and template writes record their actor in
+ * `activity_logs`, with the project they were about. A failed audit write never
+ * undoes the change it describes; the warning names it.
+ */
+async function logBrandAction(
+  env: Env, userId: number, action: string, projectId: number | null, details: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      'INSERT INTO activity_logs (action, details, user_id, project_id, entity_type, entity_id) VALUES (?, ?, ?, ?, ?, ?)',
+    ).bind(action, JSON.stringify(details), userId, projectId, 'project', projectId != null ? String(projectId) : null).run();
+  } catch (e: any) {
+    console.warn('[brand] activity_logs write failed', action, e?.message);
+  }
+}
+
+/** D636 — the refusals the site address can give, each a sentence (the Ops canvas, sp-brand). */
+export const SITE_ADDRESS_REFUSALS = {
+  invalid: 'An address is 1 to 48 lowercase letters, digits and hyphens, with no hyphen at either end.',
+  reserved: 'That address is reserved. Choose another.',
+  taken: 'That address is already taken.',
+} as const;
+
+
 // Branded startup URL for a project (get-or-create).
 brand.get('/site/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
@@ -1249,23 +1276,23 @@ brand.put('/site/by-project/:pid', async (c) => {
   await ensureSchema(c.env);
   const body = await c.req.json().catch(() => ({} as any));
   const slug = cleanSlug(body?.slug);
-  if (!slug) {
-    return c.json({ error: 'Slug must be 1-48 characters: lowercase letters, numbers, and hyphens (no leading/trailing hyphen).' }, 400);
-  }
-  if (RESERVED_SITE_SLUGS.has(slug)) return c.json({ error: 'That slug is reserved.' }, 400);
+  if (!slug) return refuse(c, 400, { code: 'address_invalid', message: SITE_ADDRESS_REFUSALS.invalid });
+  if (RESERVED_SITE_SLUGS.has(slug)) return refuse(c, 400, { code: 'address_reserved', message: SITE_ADDRESS_REFUSALS.reserved });
   const proj = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(pid).first<any>();
+  let previous: string | null = null;
   try {
-    await ensureSite(c.env, pid, String(proj?.name || ''));
+    previous = (await ensureSite(c.env, pid, String(proj?.name || ''))).slug;
     await c.env.DB.prepare(
       `UPDATE brand_sites SET slug = ?, updated_at = datetime('now') WHERE project_id = ?`
     ).bind(slug, pid).run();
   } catch (e: any) {
     if (isUniqueError(e, 'brand_sites.slug')) {
-      return c.json({ error: 'That startup URL is already taken.' }, 409);
+      return refuse(c, 409, { code: 'address_taken', message: SITE_ADDRESS_REFUSALS.taken });
     }
     console.error('brand site put:', e?.message);
-    return c.json({ error: 'could not update site slug' }, 500);
+    return refuse(c, 500, { code: 'address_not_saved', message: 'The address could not be saved. Nothing changed; try again.' });
   }
+  if (previous !== slug) await logBrandAction(c.env, user.id, 'brand_site_address_change', pid, { from: previous, to: slug });
   return c.json({ slug, path: `/p/${slug}` });
 });
 
@@ -1448,6 +1475,48 @@ brand.put('/landing/pages/:id', async (c) => {
   return c.json(rowToLanding(row));
 });
 
+/**
+ * D636 (#1394) — change one page's own address, and nothing else. The page
+ * PUT above rewrites every field it is sent, so the Brand page's address row
+ * cannot use it without first reading and resending the whole page. Same three
+ * verdicts as `page-slug-available`, each a sentence; the change records its
+ * actor with the old and new address.
+ */
+export const PAGE_ADDRESS_REFUSALS = {
+  invalid: 'A page address is 1 to 48 lowercase letters, digits and hyphens, with no hyphen at either end.',
+  reserved: 'That page address is reserved. Choose another.',
+  taken: 'You already have a page at that address.',
+} as const;
+
+brand.put('/landing/pages/:id/address', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const existing = await c.env.DB.prepare('SELECT id, project_id, page_slug FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!existing) return refuse(c, 404, { code: 'page_not_found', message: 'That page no longer exists.' });
+  try { await projectOwned(c, user, existing.project_id); }
+  catch { return refuse(c, 403, { code: 'forbidden', message: 'You can only change pages in your own projects.' }); }
+  const body = await c.req.json().catch(() => ({} as any));
+  const pageSlug = cleanSlug(body?.page_slug);
+  if (!pageSlug) return refuse(c, 400, { code: 'page_address_invalid', message: PAGE_ADDRESS_REFUSALS.invalid });
+  if (RESERVED_PAGE_SLUGS.has(pageSlug)) return refuse(c, 400, { code: 'page_address_reserved', message: PAGE_ADDRESS_REFUSALS.reserved });
+  const previous = existing.page_slug || 'home';
+  if (previous === pageSlug) return c.json({ id, page_slug: pageSlug });
+  try {
+    await c.env.DB.prepare(
+      `UPDATE landing_pages SET page_slug = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(pageSlug, id).run();
+  } catch (e: any) {
+    if (isUniqueError(e, 'page_slug') || isUniqueError(e, 'idx_landing_project_page')) {
+      return refuse(c, 409, { code: 'page_address_taken', message: PAGE_ADDRESS_REFUSALS.taken });
+    }
+    console.error('brand page address put:', e?.message);
+    return refuse(c, 500, { code: 'page_address_not_saved', message: 'The page address could not be saved. Nothing changed; try again.' });
+  }
+  await logBrandAction(c.env, user.id, 'brand_page_address_change', existing.project_id, { page_id: id, from: previous, to: pageSlug });
+  return c.json({ id, page_slug: pageSlug });
+});
+
 // Delete a page — but never the last one (unpublish instead).
 brand.delete('/landing/pages/:id', async (c) => {
   const user = await requireAuth(c);
@@ -1599,8 +1668,12 @@ const MAX_CUSTOM_TEMPLATES = 50;
 brand.get('/custom-templates', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
+  // D636: each template names the project it was saved from. A template saved
+  // before migration 426 has no source recorded and answers `project: null`.
   const rows = await c.env.DB.prepare(
-    'SELECT id, name, snapshot_json, created_at FROM brand_custom_templates WHERE user_id = ? ORDER BY created_at DESC, id DESC'
+    `SELECT t.id, t.name, t.snapshot_json, t.created_at, t.source_project_id, p.name AS source_project_name
+       FROM brand_custom_templates t LEFT JOIN projects p ON p.id = t.source_project_id
+      WHERE t.user_id = ? ORDER BY t.created_at DESC, t.id DESC`
   ).bind(user.id).all<any>();
   const templates = ((rows.results ?? []) as any[]).map((r) => {
     let snap: Record<string, any> = {};
@@ -1609,6 +1682,7 @@ brand.get('/custom-templates', async (c) => {
       id: r.id,
       name: r.name,
       created_at: r.created_at,
+      project: r.source_project_id == null ? null : { id: r.source_project_id, name: r.source_project_name ?? null },
       template: snap.template ?? null,
       template_kit: snap.template_kit ?? null,
       theme_color: snap.theme_color ?? null,
@@ -1617,7 +1691,7 @@ brand.get('/custom-templates', async (c) => {
       font_pairing: snap.font_pairing ?? null,
     };
   });
-  return c.json({ templates });
+  return c.json({ templates, limit: MAX_CUSTOM_TEMPLATES });
 });
 
 // Snapshot an owned page into a reusable template (server-side capture).
@@ -1626,22 +1700,28 @@ brand.post('/custom-templates', async (c) => {
   await ensureSchema(c.env);
   const body = await c.req.json().catch(() => ({} as any));
   const name = String(body?.name || '').trim().slice(0, 80);
-  if (!name) return c.json({ error: 'name required' }, 400);
+  if (!name) return refuse(c, 400, { code: 'template_name_required', message: 'Give the template a name.' });
   const fromPageId = parseInt(String(body?.from_page_id ?? '')) || 0;
-  if (!fromPageId) return c.json({ error: 'from_page_id required' }, 400);
+  if (!fromPageId) return refuse(c, 400, { code: 'page_required', message: 'Choose the page to save as a template.' });
   const page = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(fromPageId).first<any>();
-  if (!page) return c.json({ error: 'page not found' }, 404);
+  if (!page) return refuse(c, 404, { code: 'page_not_found', message: 'That page no longer exists.' });
   try { await projectOwned(c, user, page.project_id); }
-  catch { return c.json({ error: 'forbidden' }, 403); }
+  catch { return refuse(c, 403, { code: 'forbidden', message: 'You can only save a page from your own projects.' }); }
   const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM brand_custom_templates WHERE user_id = ?').bind(user.id).first<any>();
   if (Number(count?.n || 0) >= MAX_CUSTOM_TEMPLATES) {
-    return c.json({ error: `Template limit reached (${MAX_CUSTOM_TEMPLATES}) — delete one first.` }, 400);
+    return refuse(c, 409, {
+      code: 'template_limit_reached',
+      message: `You have ${MAX_CUSTOM_TEMPLATES} saved templates, the most allowed across all your projects. Delete one before saving another.`,
+      extra: { limit: MAX_CUSTOM_TEMPLATES },
+    });
   }
   const snapshot = snapshotFromRow(page);
   const res = await c.env.DB.prepare(
-    'INSERT INTO brand_custom_templates (user_id, name, snapshot_json) VALUES (?, ?, ?)'
-  ).bind(user.id, name, JSON.stringify(snapshot)).run();
-  return c.json({ id: Number((res as any).meta?.last_row_id), name, ...{
+    'INSERT INTO brand_custom_templates (user_id, name, snapshot_json, source_project_id) VALUES (?, ?, ?, ?)'
+  ).bind(user.id, name, JSON.stringify(snapshot), page.project_id).run();
+  const id = Number((res as any).meta?.last_row_id);
+  await logBrandAction(c.env, user.id, 'brand_template_save', page.project_id, { template_id: id, name, from_page_id: fromPageId });
+  return c.json({ id, name, ...{
     template: snapshot.template ?? null,
     template_kit: snapshot.template_kit ?? null,
     theme_color: snapshot.theme_color ?? null,
@@ -1655,10 +1735,14 @@ brand.delete('/custom-templates/:id', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
+  const row = await c.env.DB.prepare(
+    'SELECT name, source_project_id FROM brand_custom_templates WHERE id = ? AND user_id = ?'
+  ).bind(id, user.id).first<any>();
   const res = await c.env.DB.prepare(
     'DELETE FROM brand_custom_templates WHERE id = ? AND user_id = ?'
   ).bind(id, user.id).run();
-  if (!Number((res as any).meta?.changes || 0)) return c.json({ error: 'not found' }, 404);
+  if (!Number((res as any).meta?.changes || 0)) return refuse(c, 404, { code: 'template_not_found', message: 'That template no longer exists.' });
+  await logBrandAction(c.env, user.id, 'brand_template_delete', row?.source_project_id ?? null, { template_id: id, name: row?.name ?? null });
   return c.json({ ok: true });
 });
 

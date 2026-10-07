@@ -29,6 +29,8 @@ import { requireAuth } from '../auth';
 import { clientIp } from '../util/clientIp';
 import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
+import { logActorAct } from '../services/actorLog';
+import { refuse } from '../util/refusal';
 import {
   loadUserVectors,
   confidenceAdjustedAlignment,
@@ -279,11 +281,21 @@ cofounder.put('/me', async (c) => {
   return c.json(serializeProfileSelf(fresh as ProfileRow, user.uid || null));
 });
 
+/**
+ * "Unlist me". The profile stays, so listing again keeps it; browse stops
+ * showing it, and nobody can send new interest (POST /interest refuses an
+ * unlisted target). Interest already sent and connections already made stay.
+ */
 cofounder.delete('/me', async (c) => {
   const user = await requireAuth(c);
   try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const existing = await getProfile(c.env, user.id);
+  if (!existing) {
+    return refuse(c, 404, { code: 'no_profile', message: 'You have no co-founder profile to unlist. Create one first.' });
+  }
   await c.env.DB.prepare('UPDATE cofounder_profiles SET listed = 0, updated_at = ? WHERE user_id = ?')
     .bind(new Date().toISOString(), user.id).run();
+  if (existing.listed) await logActorAct(c.env, user, 'cofounder_unlisted', { profile_uid: existing.uid });
   return c.json({ ok: true, listed: false });
 });
 
@@ -643,19 +655,19 @@ cofounder.post('/interest', async (c) => {
   try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
   const body = await c.req.json().catch(() => ({}));
   const targetUid = String(body?.user_uid || '');
-  if (!targetUid) return c.json({ detail: 'user_uid required' }, 400);
+  if (!targetUid) return refuse(c, 400, { code: 'user_uid_required', message: 'Say whose profile the interest is for.' });
   const target = await loadUserByUid(c.env, targetUid);
-  if (!target || !target.is_active) return c.json({ detail: 'User not found' }, 404);
-  if (target.id === user.id) return c.json({ detail: 'cannot_self_interest' }, 400);
+  if (!target || !target.is_active) return refuse(c, 404, { code: 'user_not_found', message: 'That person is no longer on the platform.' });
+  if (target.id === user.id) return refuse(c, 400, { code: 'cannot_self_interest', message: 'You cannot send interest to your own profile.' });
 
   const me = await getProfile(c.env, user.id);
-  if (!me) return c.json({ detail: 'viewer_has_no_profile' }, 400);
+  if (!me) return refuse(c, 400, { code: 'viewer_has_no_profile', message: 'Create your own co-founder profile before sending interest.' });
   const targetProfile = await getProfile(c.env, target.id);
-  if (!targetProfile || !targetProfile.listed) return c.json({ detail: 'target_not_listed' }, 400);
+  if (!targetProfile || !targetProfile.listed) return refuse(c, 400, { code: 'target_not_listed', message: 'This profile is no longer listed, so it cannot receive interest.' });
 
   const existingConn = await getConnection(c.env, user.id, target.id);
   if (existingConn && existingConn.status === 'closed') {
-    return c.json({ detail: 'connection_closed' }, 400);
+    return refuse(c, 400, { code: 'connection_closed', message: 'Your connection with this person was closed, so interest cannot be sent again.' });
   }
 
   const message = body?.message ? String(body.message).slice(0, 500) : null;
@@ -685,6 +697,7 @@ cofounder.post('/interest', async (c) => {
       connectionUid = conn.uid;
     }
   }
+  await logActorAct(c.env, user, 'cofounder_interest_sent', { to_user_id: target.id, mutual: !!inverse, connection_uid: connectionUid });
   return c.json({
     ok: true,
     interest_id: interest?.id ?? null,
@@ -697,7 +710,7 @@ cofounder.delete('/interest/:user_uid', async (c) => {
   const user = await requireAuth(c);
   try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
   const target = await loadUserByUid(c.env, c.req.param('user_uid'));
-  if (!target) return c.json({ detail: 'User not found' }, 404);
+  if (!target) return refuse(c, 404, { code: 'user_not_found', message: 'That person is no longer on the platform.' });
   const interest = await c.env.DB.prepare(
     'SELECT * FROM cofounder_interests WHERE from_user_id = ? AND to_user_id = ?',
   ).bind(user.id, target.id).first<InterestRow>();
@@ -706,7 +719,42 @@ cofounder.delete('/interest/:user_uid', async (c) => {
     `UPDATE cofounder_interests SET status = 'withdrawn', updated_at = datetime('now')
        WHERE from_user_id = ? AND to_user_id = ?`,
   ).bind(user.id, target.id).run();
+  await logActorAct(c.env, user, 'cofounder_interest_withdrawn', { to_user_id: target.id });
   return c.json({ ok: true, withdrew: true });
+});
+
+/**
+ * D637 — the interest I have sent and not withdrawn, newest first, so each can
+ * be withdrawn. The other person's name and what they are looking for come
+ * from their profile; their email never does (D610 keeps it for a connection
+ * both have signed). `listed: false` says their profile has since been
+ * unlisted; `connection_uid` is set once the interest was mutual.
+ */
+cofounder.get('/interests/sent', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const rows = await c.env.DB.prepare(
+    `SELECT i.to_user_id, i.created_at, i.updated_at,
+            u.uid AS user_uid, u.name,
+            p.looking_for, p.listed
+       FROM cofounder_interests i
+       JOIN users u ON u.id = i.to_user_id
+       LEFT JOIN cofounder_profiles p ON p.user_id = i.to_user_id
+      WHERE i.from_user_id = ? AND i.status = 'sent'
+      ORDER BY i.updated_at DESC, i.id DESC`,
+  ).bind(user.id).all<any>();
+  const items = await Promise.all(((rows.results || []) as any[]).map(async (r) => {
+    const conn = await getConnection(c.env, user.id, Number(r.to_user_id));
+    return {
+      user_uid: r.user_uid,
+      name: r.name || null,
+      looking_for: r.looking_for || null,
+      listed: !!r.listed,
+      sent_at: r.updated_at || r.created_at,
+      connection_uid: conn ? conn.uid : null,
+    };
+  }));
+  return c.json({ items });
 });
 
 // ---------------------------------------------------------------------------
@@ -799,7 +847,7 @@ cofounder.post('/connections/:uid/nda/sign', async (c) => {
   const r = await loadConnectionOr403(c.env, c.req.param('uid'), user);
   if (!r.ok) return r.res;
   let conn = r.conn;
-  if (conn.status === 'closed') return c.json({ detail: 'connection_closed' }, 400);
+  if (conn.status === 'closed') return refuse(c, 400, { code: 'connection_closed', message: 'This connection is closed, so its NDA can no longer be signed.' });
 
   const isA = conn.user_a_id === user.id;
   const already = isA ? conn.nda_signed_at_a : conn.nda_signed_at_b;
@@ -835,6 +883,7 @@ cofounder.post('/connections/:uid/nda/sign', async (c) => {
            WHERE id = ? AND status <> 'signed'`,
       ).bind(user.email, now, now, docId).run();
     }
+    await logActorAct(c.env, user, 'cofounder_nda_signed', { connection_uid: conn.uid, both_signed: conn.status === 'active' });
   }
   return c.json(await serializeConnectionFor(c.env, conn, user));
 });
@@ -854,6 +903,7 @@ cofounder.delete('/connections/:uid', async (c) => {
         WHERE id = ?`,
     ).bind(now, reason, now, conn.id).run();
     conn = { ...conn, status: 'closed', closed_at: now, closed_reason: reason };
+    await logActorAct(c.env, user, 'cofounder_connection_closed', { connection_uid: conn.uid });
   }
   return c.json(await serializeConnectionFor(c.env, conn, user));
 });

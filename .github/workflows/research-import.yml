@@ -18,8 +18,14 @@ name: Research data import
 # only after that PR merges. It refuses a migration number that is already
 # taken, because an applied migration is never rewritten.
 #
-# INPUTS ARRIVE AS ENV VARS and are checked before use. No `${{ }}` expression
-# sits inside `run:`. A URL's host must be on ALLOWED_HOSTS. A redirect from
+# TWO WAYS IN. A person dispatches it from the Actions tab. An agent whose
+# GitHub access cannot start a workflow (the Claude GitHub App cannot) sends a
+# `research-import` repository_dispatch instead. That needs write access to
+# the repository's contents only, and its client_payload carries the same
+# three fields as the inputs: {"source", "migration", "urls"}.
+#
+# INPUTS ARRIVE AS ENV VARS and are checked before use, whichever way in. No
+# `${{ }}` expression sits inside `run:`. A URL's host must be on ALLOWED_HOSTS. A redirect from
 # an allowed host (Google's CSV export answers from googleusercontent.com) is
 # followed.
 on:
@@ -42,23 +48,25 @@ on:
         description: '"urls" only: space-separated name=https://... pairs, each saved under attached_assets/fetched/'
         required: false
         type: string
+  repository_dispatch:
+    types: [research-import]
 
 permissions:
   contents: write
 
 concurrency:
-  group: research-import-${{ inputs.source }}
+  group: research-import-${{ inputs.source || github.event.client_payload.source }}
   cancel-in-progress: false
 
 jobs:
   import:
-    name: import (${{ inputs.source }})
+    name: import (${{ inputs.source || github.event.client_payload.source }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      SOURCE: ${{ inputs.source }}
-      MIGRATION: ${{ inputs.migration }}
-      URLS: ${{ inputs.urls }}
+      SOURCE: ${{ inputs.source || github.event.client_payload.source }}
+      MIGRATION: ${{ inputs.migration || github.event.client_payload.migration }}
+      URLS: ${{ inputs.urls || github.event.client_payload.urls }}
       ALLOWED_HOSTS: query.wikidata.org www.sec.gov download.companieshouse.gov.uk docs.google.com hello-tomorrow.org www.hello-tomorrow.org
       # The SEC asks for a descriptive User-Agent with a contact. This one names
       # the project's public security contact from SECURITY.md, never a person.
@@ -96,7 +104,7 @@ jobs:
           esac
 
       - name: Run the importer
-        if: inputs.source != 'urls'
+        if: env.SOURCE != 'urls'
         run: |
           set -euo pipefail
           OUT="cloudflare-worker/sql/migrations/$MIGRATION"
@@ -130,7 +138,7 @@ jobs:
           echo "Wrote \`$OUT\`: $(wc -c < "$OUT") bytes." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fetch the URLs
-        if: inputs.source == 'urls'
+        if: env.SOURCE == 'urls'
         run: |
           set -euo pipefail
           # URLs carry `?`, so the unquoted list below must not glob.

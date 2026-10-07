@@ -15,6 +15,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { run, ROUTE, __resetForTest, bindAi, GATEWAY_TASKS, GATEWAY_METADATA_KEYS } from '../src/services/aiRouter.ts';
 import type { Env } from '../src/types.ts';
 
@@ -33,30 +34,7 @@ function makeKV() {
   };
 }
 
-function makeDB() {
-  const rows: any[] = [];
-  let nextId = 1;
-  return {
-    _rows: rows,
-    exec: async () => undefined,
-    prepare(sql: string) {
-      const text = sql.replace(/\s+/g, ' ').trim();
-      let bound: any[] = [];
-      return {
-        bind(...args: any[]) { bound = args; return this; },
-        async run() {
-          if (/^INSERT INTO ai_usage_logs /i.test(text)) {
-            const [user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal] = bound;
-            rows.push({ id: nextId++, user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal });
-          }
-          return { meta: { last_row_id: nextId - 1 } };
-        },
-        async first() { return null; },
-        async all() { return { results: [] }; },
-      };
-    },
-  };
-}
+function makeDB() { return aiBudgetFixture().DB; }
 
 // Workers AI stub that records whether each call carried a gateway option and
 // lets the test script the raw response shape per call. D261: it also keeps the

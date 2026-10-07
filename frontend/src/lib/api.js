@@ -10,14 +10,17 @@ import { storeReason } from './impersonationBar';
 // api-modules:begin
 export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
+export * from './api/aiBudget.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
+export * from './api/creditRules.js';
 export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReports.js';
 export * from './api/helpCenter.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
+export * from './api/memberCredits.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
@@ -2342,9 +2345,13 @@ export const api = {
   kycSubmit: (data) => request('/kyc/submit', { method: 'POST', body: JSON.stringify(data) }),
   kycAdminQueue: (status = 'pending') => request(`/kyc/admin/queue?status=${encodeURIComponent(status)}`),
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
+  // D634 — one masked KYC field in clear; the Worker logs the showing first.
+  kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
   kycAdminApprove: (userId) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH' }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
+  // D634 — a partner profile's masked tax ID in clear; the showing is logged.
+  adminShowProfileField: (email, field) => request(`/profiling/admin/${encodeURIComponent(email)}/sensitive/${encodeURIComponent(field)}`),
   adminVerifyProfile: (email, data) => request(`/profiling/admin/${encodeURIComponent(email)}/verify`, { method: 'POST', body: JSON.stringify(data) }),
 
   // ----- eSignature -----
@@ -2652,6 +2659,8 @@ export const api = {
     `/brand/landing/by-project/${projectId}/page-slug-available?slug=${encodeURIComponent(slug)}`
     + (excludePageId ? `&exclude_page_id=${encodeURIComponent(excludePageId)}` : ''),
   ),
+  // D636: change one page's own address and nothing else. Refusals are sentences.
+  brandSetPageAddress: (pageId, pageSlug) => request(`/brand/landing/pages/${pageId}/address`, { method: 'PUT', body: JSON.stringify({ page_slug: pageSlug }) }),
   brandListCustomTemplates: () => request('/brand/custom-templates'),
   brandSaveCustomTemplate: (name, fromPageId) => request('/brand/custom-templates', { method: 'POST', body: JSON.stringify({ name, from_page_id: fromPageId }) }),
   brandDeleteCustomTemplate: (id) => request(`/brand/custom-templates/${id}`, { method: 'DELETE' }),
@@ -3879,6 +3888,9 @@ export const api = {
   listInvestorSeats: () => request('/investor-seats/'),
   inviteInvestorSeat: (email) =>
     request('/investor-seats/invite', { method: 'POST', body: JSON.stringify({ email }) }),
+  // D632 — what a seat invitation offers, read by its token before accepting.
+  readInvestorSeatInvitation: (token) =>
+    request('/investor-seats/invitation', { method: 'POST', body: JSON.stringify({ token }) }),
   acceptInvestorSeat: (token, extra = {}) =>
     request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({
       token,
@@ -4498,6 +4510,9 @@ export const api = {
     request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
       method: 'PUT', body: JSON.stringify(data),
     }),
+  // D637 — client hours by entry, this month and the two before it.
+  listPartnerHourEntries: (period) =>
+    request(`/partner/delivery/capacity/hours${period ? `?period=${encodeURIComponent(period)}` : ''}`),
   deletePartnerHours: (engagementId, personId, period) =>
     request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
       method: 'DELETE',
@@ -4633,6 +4648,8 @@ export const api = {
     request('/comarketing/me/pitches', { method: 'POST', body: JSON.stringify(data) }),
   listMyCoMarketingPitches: (status) =>
     request(`/comarketing/me/pitches${status ? `?status=${status}` : ''}`),
+  // D637 — one pitch, for its own page (owner or admin).
+  getCoMarketingPitch: (uid) => request(`/comarketing/me/pitches/${encodeURIComponent(uid)}`),
   editCoMarketingPitch: (uid, data) =>
     request(`/comarketing/me/pitches/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
   withdrawCoMarketingPitch: (uid) =>
@@ -4700,6 +4717,8 @@ export const api = {
   },
   cofounderExpressInterest: (data) =>
     request('/cofounder/interest', { method: 'POST', body: JSON.stringify(data) }),
+  // D637 — the interest I sent and have not withdrawn.
+  cofounderSentInterests: () => request('/cofounder/interests/sent'),
   cofounderWithdrawInterest: (userUid) =>
     request(`/cofounder/interest/${userUid}`, { method: 'DELETE' }),
   cofounderListConnections: () => request('/cofounder/connections'),
@@ -4751,7 +4770,7 @@ export const api = {
 
   journalList: (opts = {}) => {
     const qs = new URLSearchParams();
-    for (const k of ['decision', 'outcome_status', 'project_uid', 'owner']) {
+    for (const k of ['decision', 'outcome_status', 'project_uid', 'watchlist_uid', 'owner']) {
       if (opts[k]) qs.set(k, opts[k]);
     }
     const s = qs.toString();

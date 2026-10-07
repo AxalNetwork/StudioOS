@@ -109,12 +109,15 @@ test('D617: another admin is refused, and an unknown id is not a successful dele
   const refused = await del(db, cid, OTHER);
   assert.equal(refused.status, 403, JSON.stringify(refused.body));
   assert.equal(refused.body.error, 'not_your_comment');
+  // D634: the review page prints the refusal's sentence as given.
+  assert.equal(refused.body.detail, 'Only the comment’s author or a Super Admin can delete it. Nothing was deleted.');
   assert.equal(stillThere(db, cid).body, TEXT);
   assert.equal(audits(db).length, 0);
 
   const missing = await del(db, 999, SUPER);
   assert.equal(missing.status, 404);
   assert.equal(missing.body.error, 'comment_not_found');
+  assert.equal(missing.body.detail, 'This comment no longer exists. Nothing was deleted.');
   assert.equal(missing.body.ok, undefined);
   assert.equal(audits(db).length, 0);
 });

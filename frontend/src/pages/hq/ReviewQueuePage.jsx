@@ -380,6 +380,8 @@ export default function ReviewQueuePage() {
             Feature requests and suggested tasks filed from the Eadwyn chat. Approve sends a feature to the build queue;
             approving a task publishes it and rewards the suggester.{' '}
             <Link to="/admin/hq-support" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Support queues</Link>
+            {' · '}
+            <Link to="/admin/credit-rules" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Credit rules</Link>
           </p>
         </header>
 

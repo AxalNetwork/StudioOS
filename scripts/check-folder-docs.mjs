@@ -69,6 +69,7 @@ const DOCUMENTED = new Map([
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
   ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
+  ['frontend/src/components/hqReview',        'the HQ review pieces (D634)'],
   ['frontend/src/components/deals',           'the deal room screens (D630)'],
   ['frontend/src/components/scoring',         'the scoring engine UI'],
   ['frontend/src/components/spinout',         'the Spin-Out Lab shared pieces'],
@@ -79,6 +80,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
+  ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/learning',             'the Learning center: one routed page, its components, and the coming-soon gate'],
   ['frontend/src/pages/advisor',               'advisor workspace framing, public profiles and booking links'],
