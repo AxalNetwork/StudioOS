@@ -122,6 +122,10 @@ test('the fetch step keeps a page as text with its terms links, a CSV as it came
   const temp = join(dir, 'tmp');
   for (const d of [bin, repo, temp]) mkdirSync(d);
   // A stand-in for curl that answers by URL, the way the real hosts would.
+  // Its page carries a script tag on purpose, because the test proves the
+  // fetch step drops it. `bin` is this test's own temp directory, and
+  // nothing renders the page.
+  // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
   writeFileSync(join(bin, 'curl'), [
     '#!/bin/bash',
     'out=""; url=""',
