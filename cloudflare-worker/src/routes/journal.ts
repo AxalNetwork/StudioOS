@@ -316,7 +316,7 @@ r.put('/:uid', async (c) => {
       keyRisks !== entry.key_risks ||
       expectedOutcome !== entry.expected_outcome ||
       decision !== entry.decision ||
-      conviction !== entry.conviction ||
+      ('conviction' in body && conviction !== Number(entry.conviction)) ||
       expectedMultiple !== entry.expected_multiple ||
       expectedTimeline !== entry.expected_timeline_months;
 
