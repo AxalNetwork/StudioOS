@@ -3879,6 +3879,9 @@ export const api = {
   listInvestorSeats: () => request('/investor-seats/'),
   inviteInvestorSeat: (email) =>
     request('/investor-seats/invite', { method: 'POST', body: JSON.stringify({ email }) }),
+  // D632 — what a seat invitation offers, read by its token before accepting.
+  readInvestorSeatInvitation: (token) =>
+    request('/investor-seats/invitation', { method: 'POST', body: JSON.stringify({ token }) }),
   acceptInvestorSeat: (token, extra = {}) =>
     request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({
       token,

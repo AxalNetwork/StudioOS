@@ -64,7 +64,7 @@ async function call(db: DatabaseSync, method: string, path: string, as: number, 
 
 const roleOf = (db: DatabaseSync, id: number) => (db.prepare('SELECT role FROM users WHERE id = ?').get(id) as { role: string }).role;
 
-test('D611: the inviter gets the link, never the token, and only while the seat is pending', async () => {
+test('D611/D632: the inviter gets the link once, never the token, and the list never carries it', async () => {
   const db = freshDb();
   const invited = await call(db, 'POST', '/investor-seats/invite', 1, { email: 'seat@firm.test' });
   assert.equal(invited.status, 200);
@@ -77,7 +77,8 @@ test('D611: the inviter gets the link, never the token, and only while the seat 
   const listed = await call(db, 'GET', '/investor-seats', 1);
   assert.equal(listed.status, 200, JSON.stringify(listed.body));
   const pending = listed.body.seats.find((s: any) => s.seat_email === 'seat@firm.test');
-  assert.equal(pending.invite_link, invited.body.invite_link);
+  // D632 supersedes D611 here: the link is shown once, in the invite reply.
+  assert.equal(pending.invite_link, undefined);
   assert.equal('invite_token' in pending, false);
 
   const accepted = await call(db, 'POST', '/investor-seats/accept', 4, { token });
