@@ -1,0 +1,6 @@
+Fetched by the Research data import workflow, run 37646442641.
+2026-10-07T15:45:06Z OK eurotech-htmlview https://docs.google.com/spreadsheets/d/1cRdFZhXLqat04xe7qO-p48wXQ00GWJyrzgHSb3YVIp0/htmlview (text/html; charset=utf-8)
+2026-10-07T15:45:10Z OK deeptech-htmlview https://docs.google.com/spreadsheets/d/1BqNO7l4kXRhjG5jcB89FwRlhuRKBwBKtV7ZHwwLjPhk/htmlview (text/html; charset=utf-8)
+2026-10-07T15:45:11Z OK hello-tomorrow-website-terms https://hello-tomorrow.org/website-terms-and-conditions/ (text/html; charset=UTF-8)
+2026-10-07T15:45:13Z OK hello-tomorrow-legal-mentions https://hello-tomorrow.org/legal-mentions/ (text/html; charset=UTF-8)
+2026-10-07T15:45:14Z OK hello-tomorrow-privacy https://hello-tomorrow.org/hello-tomorrow-privacy-cookie-policy/ (text/html; charset=UTF-8)
