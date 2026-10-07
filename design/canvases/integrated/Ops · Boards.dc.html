@@ -36,11 +36,58 @@
   </sc-for>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script="" data-props="{&quot;set&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;events&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;advisor&quot;,&quot;wellbeing&quot;,&quot;partner&quot;,&quot;events&quot;,&quot;account&quot;]}}">
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;set&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;deals&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;deals&quot;,&quot;hq&quot;,&quot;pieces&quot;,&quot;advisor&quot;,&quot;wellbeing&quot;,&quot;partner&quot;,&quot;events&quot;,&quot;account&quot;]}}">
 class Component extends DCLogic {
   renderVals() {
-    const set = this.props.set ?? 'events';
+    const set = this.props.set ?? 'deals';
     const SETS = {
+      deals: [
+        { title: 'Deal rooms', note: 'Join and leave, the quota, invitations, and wire transfers.', boards: [
+          { id: 'D1', title: 'Pipeline · join / leave', route: '/deals', screen: 'dr-pipeline', phone: false },
+          { id: 'D2', title: 'Deal header', route: '/deals/[deal]', screen: 'dr-header', phone: false },
+          { id: 'D3', title: 'Invitations (admin)', route: '/deals/[deal]/invitations', screen: 'dr-invites', phone: false },
+          { id: 'D4', title: 'Transfers', route: '/deals/[deal]/transfers', screen: 'dr-transfers', phone: false },
+        ] },
+        { title: 'Funds and syndicates', note: 'A fund\u2019s page, the quarterly report editor, closing a syndicate.', boards: [
+          { id: 'F1', title: 'Fund page (GP)', route: '/funds/[fund]', screen: 'fd-page', phone: true },
+          { id: 'F2', title: 'Quarterly report editor', route: '/funds/[fund]/reporting/[period]', screen: 'fd-report', phone: false },
+          { id: 'F3', title: 'Close a syndicate', route: '/deals/[deal]/syndicates/[syndicate]', screen: 'sy-close', phone: false },
+        ] },
+        { title: 'Cap table variants and colleague seats', note: 'Draft variants edited in place; seats invited by link, accepted by a colleague.', boards: [
+          { id: 'V1', title: 'Draft variants', route: '/raise/cap-table/variants/[variant]', screen: 'ct-variants', phone: false },
+          { id: 'S1', title: 'Seats · inviter', route: '/firm/seats', screen: 'st-invite', phone: false },
+          { id: 'S2', title: 'Accept a seat (colleague)', route: '/invite/[token]', screen: 'st-accept', phone: true },
+        ] },
+      ],
+      hq: [
+        { title: 'HQ tools · registry, credits, obligations', note: 'Super Admin screens on the HQ shell.', boards: [
+          { id: 'Q1', title: 'Document types · publish', route: '/admin/contracts', screen: 'hq-contracts', phone: false },
+          { id: 'Q2', title: 'Member credits', route: '/admin/team/[member]/credits', screen: 'hq-credits', phone: false },
+          { id: 'Q3', title: 'Trust obligations by role', route: '/admin/security/obligations', screen: 'hq-obligations', phone: false },
+        ] },
+        { title: 'HQ tools · content, revenue, identity', note: 'Review comments, a live Stripe dispute, masked sensitive fields.', boards: [
+          { id: 'Q4', title: 'Article review comments', route: '/admin/articles/[article]/comments', screen: 'hq-comments', phone: false },
+          { id: 'Q5', title: 'Billing dispute', route: '/admin/revenue/disputes/[dispute]', screen: 'hq-dispute', phone: false },
+          { id: 'Q6', title: 'Sensitive fields in review', route: '/admin/kyc/[member]', screen: 'hq-sensitive', phone: false },
+        ] },
+      ],
+      pieces: [
+        { title: 'Founder Validate', note: 'The verdict, interview evidence inline, and a claim\u2019s links.', boards: [
+          { id: 'M1', title: 'Verdict', route: '/validate/verdict', screen: 'sp-verdict', phone: true },
+          { id: 'M2', title: 'Interview evidence', route: '/validate/interviews', screen: 'sp-interviews', phone: true },
+          { id: 'M3', title: 'A claim\u2019s links', route: '/validate/hypotheses', screen: 'sp-claims', phone: false },
+        ] },
+        { title: 'Brand, references, watchlist', note: 'Addresses and saved templates; reference checks on a deal; a watchlist item and journal entry.', boards: [
+          { id: 'M4', title: 'Brand · address and templates', route: '/spinout-lab/brand', screen: 'sp-brand', phone: false },
+          { id: 'M5', title: 'References (deal room tab)', route: '/deals/[deal]/references', screen: 'sp-references', phone: false },
+          { id: 'M6', title: 'Watchlist and journal', route: '/watchlist/[item]', screen: 'sp-watchlist', phone: false },
+        ] },
+        { title: 'Delivery, co-founders, co-marketing', note: 'Partner edits; co-founder matching controls; editing a proposed pitch.', boards: [
+          { id: 'M7', title: 'Partner delivery edits', route: '/delivery/health', screen: 'sp-delivery', phone: false },
+          { id: 'M8', title: 'Co-founder matching', route: '/build/team?tab=cofounders', screen: 'sp-cofounder', phone: true },
+          { id: 'M9', title: 'Co-marketing · edit a pitch', route: '/comarketing/[pitch]', screen: 'sp-comarketing', phone: false },
+        ] },
+      ],
       advisor: [{ title: 'Advisor practice tools', note: 'Deliverables, session types, booking links, the access log, and the profile a client sees.', boards: [
         { id: 'A1', title: 'Deliverables', route: '/practice/deliverables', screen: 'adv-deliverables', phone: false },
         { id: 'A2', title: 'Session types', route: '/practice/session-types', screen: 'adv-sessions', phone: false },

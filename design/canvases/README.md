@@ -239,3 +239,31 @@ resolutions, all in place. None moves a number.
 - `Spin-Out Lab · Landing` does not replace `Spin-Out Lab · Intro`. The landing
   draws one surface and drops the app surface the Intro carries, so it is not a
   superset, and both stay.
+
+**2026-10-07 (#1165), the Ops canvas took areas 6 to 8 in place.** The owner's
+four exports were decoded with `scripts/read-canvas.mjs`: `Ops Page` from
+`LH7tQqy7UZJ8vE52o63PRh`, and the board from `2Dsb5K3ryk1Fw3RmrJXGGc`,
+`6WQ8iZfuayrMvDWqTrdGEq` and `5aDUDavV2TbGetpr7L1BJW`. All three files were
+replaced where they sat, so none moves a number: **`integrated/` stays 83**.
+
+| file | was | is |
+| --- | --- | --- |
+| `Ops Page` | 82 KB · five areas | **147 KB · eight areas, 25 screens added** |
+| `ops-data.js` | 36 KB | **69 KB** |
+| `Ops · Boards` | 7 KB · five sets | **11 KB · eight sets: `deals`, `hq` and `pieces` added** |
+
+- **`ops-data.js` is a strict append.** It removes no line. Each of the 25 new
+  screen ids is defined in it once.
+- **`Ops Page` changes four existing lines,** checked with `diff`.
+  - The font link now asks for Space Grotesk 400 to 700. The old link asked
+    for 800, a weight the family does not have.
+  - The collapsed Eadwyn spine is redrawn.
+  - The shell's two role lines gain an `hq` role: a crimson "AXAL VC HQ"
+    badge, and an accent per role.
+- **The board is the union of three exports.** Each export added one set to
+  the five already here, and the shared sets are identical in all three,
+  checked rather than assumed. The committed board carries all eight sets in
+  area order, with `deals` as the default. It is the one file here that is not
+  a single decode.
+- **The page loads its script by name,** as on 2026-10-06. The decode leaves
+  the script as an asset uuid, which is rewritten to `ops-data.js`.
