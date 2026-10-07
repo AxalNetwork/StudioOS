@@ -244,6 +244,7 @@ const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
 const HqRevenuePage = lazy(() => import('./pages/hq/RevenuePage'));
+const HqDisputePage = lazy(() => import('./pages/hq/DisputePage'));
 const HqContentPage = lazy(() => import('./pages/hq/ContentPage'));
 const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
 const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
@@ -2657,6 +2658,8 @@ function AppInner() {
       {/* HQ · Security (canvas Y2, decision A4). Four zones read their stores;
           four say what is not recorded. Force re-auth is the one write. */}
       <Route path="/admin/revenue" element={guard(['admin'], hqOnly(<HqRevenuePage />))} />
+      {/* D634 — one billing dispute, read live from Stripe (canvas hq-dispute). */}
+      <Route path="/admin/revenue/disputes/:disputeId" element={guard(['admin'], hqOnly(<HqDisputePage />))} />
       <Route path="/admin/content" element={guard(['admin'], hqOnly(<HqContentPage />))} />
       <Route path="/admin/platform" element={guard(['admin'], hqOnly(<HqPlatformPage />))} />
       {/* D203 — the operator switches. Not a sidebar row: the HQ group is eleven

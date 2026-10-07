@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin, requireStepUp, requireBranchNotSuspended } f
 import { putKycDocumentFromDataUri, getKycDocument, deleteKycDocument } from '../services/r2';
 import { hashEmail } from '../util/hashEmail';
 import { bindingKey } from '../util/schemaBootstrap';
+import { KYC_SENSITIVE, type KycSensitive, kycFieldValue, maskKycData } from '../services/sensitiveFields';
 
 const kyc = new Hono<{ Bindings: Env }>();
 
@@ -256,9 +257,34 @@ kyc.get('/admin/:userId', async (c) => {
     kyc_status: r.kyc_status, kyc_provider: r.kyc_provider,
     submitted_at: r.kyc_submitted_at, reviewed_at: r.kyc_reviewed_at,
     rejection_reason: r.kyc_rejection_reason,
-    kyc_data: publicKycData(r.kyc_data),
+    // D634 — sensitive values leave masked. Each one is shown, and logged,
+    // through `GET /admin/:userId/sensitive/:field` below.
+    kyc_data: maskKycData(publicKycData(r.kyc_data)),
     _admin: adminUser.email,
   });
+});
+
+// D634 (#1392) — one sensitive KYC value in clear, and that showing logged.
+// `kyc_field_shown` names the field and the member, never the value. A field
+// the member did not submit is a 404 that writes nothing: nothing was shown.
+kyc.get('/admin/:userId/sensitive/:field', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureColumns(c.env);
+  const field = c.req.param('field') as KycSensitive;
+  if (!(KYC_SENSITIVE as readonly string[]).includes(field)) {
+    return c.json({ error: 'unknown_field', detail: `Only ${KYC_SENSITIVE.join(', ')} can be shown.` }, 400);
+  }
+  const userId = parseInt(c.req.param('userId'));
+  const row = await c.env.DB.prepare('SELECT id, kyc_data FROM users WHERE id = ?').bind(userId).first<any>();
+  if (!row) return c.json({ error: 'user_not_found', detail: 'This member does not exist. Nothing was shown.' }, 404);
+  const value = kycFieldValue(safeParse(row.kyc_data), field);
+  if (value == null) {
+    return c.json({ error: 'field_not_recorded', detail: 'The member did not submit this. Nothing was shown.' }, 404);
+  }
+  const shownAt = new Date().toISOString();
+  await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+    .bind('kyc_field_shown', `Admin showed ${field} on the KYC record for user_id=${row.id}`, await hashEmail(adminUser.email), adminUser.id).run();
+  return c.json({ field, value, shown_at: shownAt, shown_by: adminUser.name || null });
 });
 
 // Stream a KYC document from R2 back to an admin reviewer.

@@ -2344,9 +2344,13 @@ export const api = {
   kycSubmit: (data) => request('/kyc/submit', { method: 'POST', body: JSON.stringify(data) }),
   kycAdminQueue: (status = 'pending') => request(`/kyc/admin/queue?status=${encodeURIComponent(status)}`),
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
+  // D634 — one masked KYC field in clear; the Worker logs the showing first.
+  kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
   kycAdminApprove: (userId) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH' }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
+  // D634 — a partner profile's masked tax ID in clear; the showing is logged.
+  adminShowProfileField: (email, field) => request(`/profiling/admin/${encodeURIComponent(email)}/sensitive/${encodeURIComponent(field)}`),
   adminVerifyProfile: (email, data) => request(`/profiling/admin/${encodeURIComponent(email)}/verify`, { method: 'POST', body: JSON.stringify(data) }),
 
   // ----- eSignature -----
