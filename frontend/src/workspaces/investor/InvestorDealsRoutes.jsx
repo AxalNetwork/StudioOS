@@ -8,6 +8,7 @@ import { boardFor } from '../boards';
 import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 import { api } from '../../lib/api';
 
+const DealRoomsPanel = lazy(() => import('../../components/deals/DealRoomsPanel'));
 const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorDealsWorkspace'));
 /**
  * ONE ZONE AT A TIME, AS EACH ARTBOARD LANDS.
@@ -174,6 +175,15 @@ export default function InvestorDealsRoutes() {
  */
 function DealsRoot({ bucket }) {
   const board = boardFor('investor', bucket.prefix, api);
-  if (board) return <BucketBoard bucket={bucket} role="investor" board={board} />;
-  return <BucketOverview bucket={bucket} role="investor" descriptions={ZONE_LINES} />;
+  // D630 (#1388) — canvas `dr-pipeline`: the deal rooms to join, with the
+  // quota, under the board. `/deals` already serves this page, so the screen
+  // is a panel here rather than a new address.
+  return (
+    <>
+      {board
+        ? <BucketBoard bucket={bucket} role="investor" board={board} />
+        : <BucketOverview bucket={bucket} role="investor" descriptions={ZONE_LINES} />}
+      <DealRoomsPanel />
+    </>
+  );
 }
