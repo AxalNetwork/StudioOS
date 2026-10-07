@@ -2,6 +2,8 @@
 // Worker: routes/admin_credit_rules.ts, at /api/admin/credit-rules. Every
 // route is the Super Admin's, and every write carries a typed reason of at
 // least ten characters, recorded through logAdminAction.
+// D638's registry page passes the reason as its own argument; HQ · Credits
+// passes it inside the change. Both send the same three fields.
 import { request } from '../api.js';
 
 export const creditRulesApi = {
@@ -9,10 +11,12 @@ export const creditRulesApi = {
   rules: () => request('/admin/credit-rules'),
   // Credits and on/off only: the dollar value follows the credits on the
   // Worker (`usd_value_fixed`), so it is never sent.
-  updateRule: (key, { credits, active, reason }) =>
-    request(`/admin/credit-rules/${encodeURIComponent(key)}`, {
+  updateRule: (key, input, typedReason) => {
+    const { credits, active, reason } = typedReason != null ? { ...input, reason: typedReason } : input;
+    return request(`/admin/credit-rules/${encodeURIComponent(key)}`, {
       method: 'PUT', body: JSON.stringify({ credits, active, reason }),
-    }),
+    });
+  },
   // { grants: [...] }: rule grants and manual lines, newest 200.
   grants: () => request('/admin/credit-rules/grants'),
   revokeGrant: (id, reason) =>
