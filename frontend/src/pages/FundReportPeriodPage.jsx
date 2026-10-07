@@ -18,7 +18,7 @@ export default function FundReportPeriodPage({ role = 'investor', reading: suppl
   return <div className="fd-surface"><WorkspaceShell role={role} activeSlug="reporting" title={data?.period.period ? `Quarterly report · ${data.period.period}` : 'New reporting period'}
     scope={data?.fund.name} scopeHref={data ? `/funds/${data.fund.id}` : undefined}
     intro="The fund’s quarterly letter, developments, outlook and subsequent events."
-    rail={<WorkerRail role={role} workspace="Fund reporting" stance="GP-authored reporting" coverage={data ? ['Recorded reporting period'] : []}
+    rail={<WorkerRail role="investor" workspace="Fund reporting" stance="GP-authored reporting" coverage={data ? ['Recorded reporting period'] : []}
       note="Issuing freezes the report. A correction is recorded as a separate period." />}>
     {reading.loading || reading.error || !data || denied ? <FundReadState reading={denied ? { ...reading, error: { status: 403 } } : reading} />
       : <PeriodEditor key={`${data.fund.id}:${data.period.id || 'new'}:${data.period.revision || params.get('corrects') || ''}`}

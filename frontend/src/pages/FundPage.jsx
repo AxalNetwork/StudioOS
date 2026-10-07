@@ -33,7 +33,7 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
   };
   return <div className="fd-surface"><WorkspaceShell role={role} activeSlug={null} title={page?.fund.name || 'Fund page'}
     intro="Recorded fund facts, the general partner of record and service providers."
-    rail={<WorkerRail role={role} workspace="Fund" stance="Recorded fund facts" coverage={page ? ['Fund record and live totals read'] : []}
+    rail={<WorkerRail role="investor" workspace="Fund" stance="Recorded fund facts" coverage={page ? ['Fund record and live totals read'] : []}
       note="Missing providers are shown as Not recorded. Failed reads are Unreadable." />}>
     {reading.loading || reading.error || !page ? <FundReadState reading={reading} /> : <>
       <section className="fd-facts" aria-label="Fund facts">

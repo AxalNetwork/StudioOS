@@ -657,18 +657,10 @@ funds.get('/:id/lps', async (c) => {
 
 // ---------- quarterly reporting periods ----------
 //
-// A period row is what makes a quarterly report REPRODUCIBLE. The capital
-// account can be reconstructed as-of any date from dated capital_calls and
-// fund_distributions rows, but portfolio MARKS cannot — position values live in
-// an operator-maintained model with no history — so a report re-rendered next
-// year under an old heading would silently carry today's marks. Issuing a period
-// freezes the fund-level figures into `snapshot_json`, and the GP's own
-// commentary into `notes`, so every later download of that period is the
-// document that was actually sent.
-//
-// Until a period is issued, every report generated for it is a DRAFT: the
-// renderer marks it as such, because a report with no GP letter is not a report
-// a fiduciary has stood behind.
+// D631 freezes the GP narrative and a server-read fund snapshot when issued.
+// Issue status does not claim pack delivery. The existing LP capital-account
+// renderer still uses its live model; the new period reader returns the frozen
+// narrative. A correcting period preserves the immutable original.
 
 const shapePeriod = (row: any) => ({
   ...row,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fundReportsApi } from '../lib/api';
+import { fundReportsApi } from '../lib/api/fundReports.js';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 
 export const emptyNarrative = () => ({ letter: [], developments: [], outlook: [], subsequent: [] });

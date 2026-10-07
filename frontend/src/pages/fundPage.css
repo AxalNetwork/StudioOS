@@ -1,8 +1,8 @@
-.fd-surface { color: #20212b; font-family: 'Space Grotesk', sans-serif; min-width: 0; }
+.fd-surface { color: #20212b; font-family: var(--font-app); min-width: 0; }
 .fd-card { background: #fff; border: 1px solid #e4e5ec; border-radius: 12px; padding: 16px; margin-bottom: 14px; min-width: 0; overflow-wrap: anywhere; }
 .fd-card h2 { font-size: 13px; font-weight: 700; margin: 0 0 12px; }
 .fd-card small { display: block; color: #686b7b; font-size: 11px; margin-top: 5px; }
-.fd-number { font-family: 'Roboto Mono', monospace; font-size: 20px; }
+.fd-number { font-family: var(--font-mono); font-size: 20px; }
 .fd-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .fd-period { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .fd-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
