@@ -80,6 +80,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
+  ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/learning',             'the Learning center: one routed page, its components, and the coming-soon gate'],
   ['frontend/src/pages/advisor',               'advisor workspace framing, public profiles and booking links'],

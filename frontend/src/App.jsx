@@ -269,6 +269,7 @@ const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsent
 const AdvisorCohortAssignments = lazy(() => import('./pages/admin/AdvisorCohortAssignments'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
+const CoMarketingPitchPage = lazy(() => import('./pages/CoMarketingPitchPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 // Task #40 (E2) — Event host/attendee surface.
 const MyEventsPage = lazy(() => import('./pages/events/MyEventsPage'));
@@ -2988,6 +2989,8 @@ function AppInner() {
       <Route path="/office-hours" element={<Navigate to="/practice/opportunities" replace />} />
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>))} />
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], partnerPrivateWorkspace(effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><CoMarketingPage user={user} /></FounderWorkspaceTabs>) : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
+      {/* D637 — one pitch, edited while Proposed. Only a partner owns pitches (or an admin reads one). */}
+      <Route path="/comarketing/:pitch" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPitchPage /></PartnerWorkspaceTabs>))} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyEventsPage />)} />
