@@ -170,7 +170,7 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
       amount: money(d.amount, d.currency),
       kind: 'Dispute',
       // D634 — each dispute opens its own page, read live from Stripe.
-      href: `/admin/revenue/disputes/${encodeURIComponent(d.id)}`,
+      disputeId: d.id,
       state: d.status,
       note: evidenceOverdue(d, nowSec)
         ? 'Evidence overdue'
@@ -229,7 +229,9 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
                   <td className="py-2 pr-3"><Unrecorded /></td>
                   <td className="py-2 pr-3 tabular-nums">{r.amount ?? <Unrecorded />}</td>
                   <td className="py-2 pr-3">
-                    {r.href ? <Link to={r.href} className="font-semibold underline" data-testid="hq-revenue-dispute-link">{r.kind}</Link> : r.kind}
+                    {r.disputeId
+                      ? <Link to={`/admin/revenue/disputes/${encodeURIComponent(r.disputeId)}`} className="font-semibold underline" data-testid="hq-revenue-dispute-link">{r.kind}</Link>
+                      : r.kind}
                   </td>
                   <td className="py-2 pr-3">{r.state ?? <Unrecorded />}</td>
                   <td className="py-2 text-[11.5px] text-axal-muted">{r.note ?? <Unrecorded />}</td>
