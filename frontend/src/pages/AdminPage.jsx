@@ -31,6 +31,8 @@ import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
 import AdminSpinoutLab from './admin/AdminSpinoutLab';
 import AdminTemplates from './admin/AdminTemplates';
 import AdminForms from './admin/AdminForms';
+import SensitiveField, { KycSensitiveFields, SensitiveLine } from '../components/hqReview/SensitiveField';
+import { SENSITIVE } from '../components/hqReview/hqReviewCopy';
 
 // Task #16 — per-row trust score column on the admin Users table.
 // Task #40 — accepts a pre-fetched `data` prop populated by the parent's
@@ -1277,15 +1279,18 @@ export default function AdminPage({ onImpersonate, section = null }) {
                   <h4 className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide dark:text-gray-300">Submitted Information</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <KV label="Legal Name" value={`${kycDetail.kyc_data.legal_first_name || ''} ${kycDetail.kyc_data.legal_last_name || ''}`.trim()} />
-                    <KV label="Date of Birth" value={kycDetail.kyc_data.date_of_birth} />
                     <KV label="Nationality" value={kycDetail.kyc_data.nationality || '—'} />
                     <KV label="Country" value={kycDetail.kyc_data.country} />
-                    <KV label="Address" value={[kycDetail.kyc_data.address_line1, kycDetail.kyc_data.address_line2, kycDetail.kyc_data.city, kycDetail.kyc_data.state_region, kycDetail.kyc_data.postal_code].filter(Boolean).join(', ')} />
-                    <KV label="Phone" value={kycDetail.kyc_data.phone || '—'} />
                     <KV label="ID Type" value={kycDetail.kyc_data.id_type} />
-                    <KV label="ID Number" value={kycDetail.kyc_data.id_number} />
                     <KV label="Document Uploaded" value={kycDetail.kyc_data.document_uploaded ? `Yes (${kycDetail.kyc_data.document_storage || 'unknown'})` : 'No'} />
                     <KV label="PEP Disclosed" value={kycDetail.kyc_data.pep_self_disclosed ? 'Yes' : 'No'} />
+                  </div>
+                  {/* D634 — masked until Show; each showing is logged by its route. */}
+                  <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+                    <KycSensitiveFields
+                      masked={kycDetail.kyc_data.masked}
+                      onShow={(field) => api.kycAdminShowField(kycDetail.id, field)}
+                    />
                   </div>
                   {kycDetail.kyc_data.document_uploaded && (
                     <div className="mt-3">
@@ -2171,9 +2176,15 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
               <div className="text-xs text-gray-500 mb-0.5">Legal Entity Name</div>
               <div className="text-gray-900 font-medium dark:text-gray-100">{profile.legal_entity_name || '—'}</div>
             </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-0.5">EIN / Tax ID</div>
-              <div className="text-gray-900 font-medium dark:text-gray-100">{profile.ein || '—'}</div>
+            {/* D634 — the tax ID leaves the server masked; Show is logged. */}
+            <div className="-my-1.5">
+              <SensitiveField
+                label="EIN / Tax ID"
+                masked={profile.masked?.ein ?? null}
+                nrReason={SENSITIVE.nrEin}
+                onShow={() => api.adminShowProfileField(profile.email, 'ein')}
+              />
+              <SensitiveLine />
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-0.5">Signatory</div>

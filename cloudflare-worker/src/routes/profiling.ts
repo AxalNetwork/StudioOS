@@ -5,6 +5,7 @@ import { requireAdmin, requireAuth } from '../auth';
 import { notifyOnboardingChat } from '../services/realtime';
 import { createAndSendEnvelope } from './esign';
 import { hashEmail } from '../util/hashEmail';
+import { PARTNER_SENSITIVE, type PartnerSensitive, maskPartnerProfile } from '../services/sensitiveFields';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 // Task #9 — 'exploring' holding state (side table + role-CHECK relax).
@@ -511,7 +512,34 @@ profiling.get('/admin/:email', async (c) => {
     : 'Admin read partner profile; no user account';
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('partner_profile_access', ${details}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   await sql.end();
-  return c.json(rows[0]);
+  // D634 — the tax ID leaves masked; `GET /admin/:email/sensitive/ein` shows it.
+  return c.json(maskPartnerProfile(rows[0] as any));
+});
+
+// D634 (#1392) — the partner's tax ID in clear, and that showing logged as
+// `partner_field_shown`, naming the field and the member, never the value.
+profiling.get('/admin/:email/sensitive/:field', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureProfileTable(c.env);
+  const field = c.req.param('field') as PartnerSensitive;
+  if (!(PARTNER_SENSITIVE as readonly string[]).includes(field)) {
+    return c.json({ error: 'unknown_field', detail: `Only ${PARTNER_SENSITIVE.join(', ')} can be shown.` }, 400);
+  }
+  const email = decodeURIComponent(c.req.param('email'));
+  const row = await c.env.DB.prepare('SELECT p.user_id, p.ein, u.id AS member_id FROM partner_profiles p LEFT JOIN users u ON u.email = p.email WHERE p.email = ?')
+    .bind(email).first<any>();
+  if (!row) return c.json({ error: 'profile_not_found', detail: 'This profile does not exist. Nothing was shown.' }, 404);
+  const value = typeof row.ein === 'string' && row.ein.trim() ? row.ein : null;
+  if (value == null) {
+    return c.json({ error: 'field_not_recorded', detail: 'The partner did not give a tax ID. Nothing was shown.' }, 404);
+  }
+  const memberId = row.user_id ?? row.member_id ?? null;
+  const details = memberId
+    ? `Admin showed ${field} on the partner profile for user_id=${memberId}`
+    : `Admin showed ${field} on a partner profile; no user account`;
+  await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+    .bind('partner_field_shown', details, await hashEmail(adminUser.email), adminUser.id).run();
+  return c.json({ field, value, shown_at: new Date().toISOString(), shown_by: adminUser.name || null });
 });
 
 profiling.post('/admin/:email/verify', async (c) => {

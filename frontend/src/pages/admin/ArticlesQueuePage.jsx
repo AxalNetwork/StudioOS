@@ -7,6 +7,7 @@ import { adminArticles as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import { reportError } from '../../lib/log';
 import { localInputValue, publishAtFromLocal, utcLabel } from './articlePublishAt';
+import ReviewComments from '../../components/hqReview/ReviewComments';
 
 // Admin /admin/articles review queue — the single "Content Queue" (Task #3
 // merged the former News + Articles admin queues). /admin/news redirects here.
@@ -125,6 +126,8 @@ export default function ArticlesQueuePage() {
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
+  // D634 — a failed article read is Unreadable, not "Select an article".
+  const [detailFailed, setDetailFailed] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [prompt, setPrompt] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -143,14 +146,16 @@ export default function ArticlesQueuePage() {
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadDetail = useCallback(async (id) => {
+    setDetailFailed(false);
     try {
       const r = await api.get(id);
       setDetail(r);
     } catch (e) {
       reportError('AdminArticles:detail', e);
-      toast.error('Failed to load article');
+      setDetail(null);
+      setDetailFailed(true);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { if (selectedId) loadDetail(selectedId); else setDetail(null); }, [selectedId, loadDetail]);
@@ -208,7 +213,16 @@ export default function ArticlesQueuePage() {
       await loadDetail(detail.article.id);
     } catch (e) {
       reportError('AdminArticles:resolve', e);
+      toast.error(e?.message || 'The comment was not updated.');
     }
+  };
+
+  // D634 — sent only from the comment's confirmation. A refusal is thrown
+  // back so the comment prints the route's sentence beside the button.
+  const deleteComment = async (cid) => {
+    await api.deleteComment(cid);
+    await loadDetail(detail.article.id);
+    toast.success('Comment deleted');
   };
 
   return (
@@ -263,9 +277,14 @@ export default function ArticlesQueuePage() {
         </div>
 
         <div className="lg:col-span-2">
-          {!detail ? (
+          {!detail && selectedId && detailFailed ? (
+            <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 rounded p-6 text-center text-sm text-red-700 dark:text-red-300" role="alert" data-testid="hq-article-unreadable">
+              Unreadable. The article and its review comments could not be read just now.{' '}
+              <button type="button" onClick={() => loadDetail(selectedId)} className="font-semibold underline">Try again</button>
+            </div>
+          ) : !detail ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-6 text-center text-slate-500">
-              Select an article to review.
+              {selectedId ? 'Loading the article…' : 'Select an article to review.'}
             </div>
           ) : (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded">
@@ -339,21 +358,14 @@ export default function ArticlesQueuePage() {
 
               <div className="p-4 border-b border-slate-200 dark:border-slate-800">
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-1"><MessageSquare className="w-4 h-4" /> Review comments</h3>
-                <ul className="space-y-2 mb-3">
-                  {(detail.comments || []).length === 0 && <li className="text-xs text-slate-500">No comments yet.</li>}
-                  {(detail.comments || []).map((c) => (
-                    <li key={c.id} className={`p-2 border rounded text-sm ${c.resolved_at ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                      <div className="text-xs text-slate-500 flex justify-between">
-                        <span>{c.author_name || 'admin'}</span>
-                        <span>{new Date(c.created_at).toLocaleString()}</span>
-                      </div>
-                      <div className="whitespace-pre-wrap mt-1">{c.body}</div>
-                      <button onClick={() => toggleResolve(c.id, !!c.resolved_at)} className="text-xs text-violet-700 dark:text-violet-300 hover:underline mt-1">
-                        {c.resolved_at ? 'Mark unresolved' : 'Mark resolved'}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <p className="mb-2 text-xs text-slate-500">Resolve keeps a comment on record. Delete removes it for the author too and cannot be undone.</p>
+                <div className="mb-3">
+                  <ReviewComments
+                    state={{ loading: false, error: false, comments: detail.comments || [] }}
+                    onResolve={toggleResolve}
+                    onDelete={deleteComment}
+                  />
+                </div>
                 <div className="flex gap-2">
                   <input
                     value={newComment}

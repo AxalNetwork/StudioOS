@@ -102,7 +102,9 @@ test('D612: a KYC record read is one log row, a missing member logs nothing, and
   const actor = await hashEmail('admin@axal.test');
   const record = await call(db, 'GET', '/kyc/admin/2');
   assert.equal(record.status, 200);
-  assert.equal(record.body.kyc_data.id_number, SECRET_ID);
+  // D634: the record leaves masked; the value is shown through its own logged route.
+  assert.equal(record.body.kyc_data.id_number, undefined);
+  assert.equal(record.body.kyc_data.masked.id_number, '••••••-••-•99');
   const recordLogs = logs(db);
   assert.equal(recordLogs.length, 1);
   assert.equal(recordLogs[0].action, 'kyc_record_access');
@@ -137,7 +139,8 @@ test('D612: a partner profile read is one log row, and a missing profile logs no
   const actor = await hashEmail('admin@axal.test');
   const profile = await call(db, 'GET', `/profiling/admin/${encodeURIComponent(MEMBER_EMAIL)}`);
   assert.equal(profile.status, 200, profile.text);
-  assert.equal(profile.body.ein, SECRET_EIN);
+  assert.equal(profile.body.ein, undefined, 'D634: the tax ID leaves masked');
+  assert.equal(profile.body.masked.ein, '••-•••••89');
   const rows = logs(db);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].action, 'partner_profile_access');
@@ -156,7 +159,7 @@ test('D625: a profile keeps the member it was written for when the address has m
   db.prepare(`UPDATE users SET email = ? WHERE id = 3`).run(MEMBER_EMAIL);
   const profile = await call(db, 'GET', `/profiling/admin/${encodeURIComponent(MEMBER_EMAIL)}`);
   assert.equal(profile.status, 200, profile.text);
-  assert.equal(profile.body.ein, SECRET_EIN);
+  assert.equal(profile.body.masked.ein, '••-•••••89');
   const rows = logs(db);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].action, 'partner_profile_access');
