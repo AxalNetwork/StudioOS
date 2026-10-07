@@ -568,9 +568,12 @@ test('each game carries its own chapters, archetypes, active questions and compl
   assert.equal(a.archetypes_total, 3);
   assert.equal(a.runs_available, true);
   assert.equal(a.truncated, false);
-  // "Live on N branches" is refused, never drawn as a number.
-  assert.equal(a.branches.recorded, false);
-  assert.match(a.branches.reason, /No game reaches a branch/);
+  // D487 — "Live on N branches" is read from each branch
+  // (game_reach_d487.test.ts); with no branch bound it is zero, and says why.
+  assert.equal(a.branches.recorded, true);
+  assert.equal(a.branches.total, 0);
+  assert.match(a.branches.reason, /No branch is bound/);
+  assert.equal(g[1].live_on, 0);
   assert.match(a.runs_basis, /routes that recorded a run are retired/);
 });
 

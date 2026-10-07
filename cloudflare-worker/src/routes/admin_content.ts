@@ -7,6 +7,7 @@
  *   GET /summary      the editorial pipeline and its board, the Assessment
  *                     Studio, the personas taxonomy and the deck roster — and
  *                     what is still not one thing
+ *   POST /games/publish  push HQ's published games to every branch (D487)
  *
  * THE CANVAS'S PREMISE IS A THIRD OUT OF DATE, AND THAT CHANGED THIS ROUTE.
  * The artboard says "Articles, publications and news were three systems that
@@ -63,8 +64,9 @@
  * carries no path, because a field nothing reads is not a pointer:
  *
  *   assessment   games, chapters, archetypes, active questions and completed
- *                runs on HQ's database. "Live on N branches" is refused: no
- *                game reaches a branch.
+ *                runs on HQ's database, and since D487 each game's reach:
+ *                on how many branches it is live and the runs they recorded,
+ *                read from each branch (`POST /games/publish` pushes them).
  *   personas     each active account's primary tag against the twelve
  *                personas the code defines. The set itself is code, so no
  *                console — HQ's included — authors it.
@@ -92,6 +94,8 @@ import { openEscalationSummary, OPEN_ESCALATION_CEILING } from '../rpc/hqOps';
 import {
   DECK_ROSTER_NAMES, DECK_ROSTER_PROFILES, deckAdvisorRole, deckRosterReach,
 } from '../services/decks/deckRoster';
+import { fanOut, coverage, withRegistry, type BranchResult } from '../services/branches';
+import { readPublishedGameSet, type GameHoldings } from '../services/gameLibrary';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -174,6 +178,45 @@ async function newestCards(
     return b.id - a.id;
   });
   return rows.slice(0, BOARD_CARDS);
+}
+
+/**
+ * D487 — which branches hold which games, read from each branch.
+ *
+ * Each branch answers `gameHoldings()` with the games its own database holds
+ * and each one's completed runs. Merged with the deployment registry, so a
+ * provisioned branch with no binding is named `not_deployed` rather than
+ * dropped. A missing registry is an empty one, as on HQ · Platform.
+ */
+export async function readGameReach(env: Env): Promise<Array<BranchResult<{ holdings: GameHoldings }>>> {
+  let registry: Array<{ code: string; hostname: string; status: string; licence_uid: string | null }> = [];
+  try {
+    const dep = await env.DB.prepare(
+      'SELECT code, hostname, status, licence_uid FROM licence_deployments ORDER BY code',
+    ).all<{ code: string; hostname: string; status: string; licence_uid: string | null }>();
+    registry = dep.results || [];
+  } catch { /* migration 258 not applied: an empty registry, as deployedBranches reads it */ }
+  return withRegistry(await fanOut<{ holdings: GameHoldings }>(env, 'gameHoldings'), registry);
+}
+
+/**
+ * Each HQ game's reach: on how many branches it is live (held as published),
+ * and the completed runs those branches recorded. A branch that did not
+ * answer adds nothing and is named; when one answered branch could not read
+ * its runs, the completions total is withheld. Pure.
+ */
+export function gameReachOf(slug: string, results: Array<BranchResult<{ holdings: GameHoldings }>>) {
+  const answered = results.filter((r) => r.status === 'ok' && r.data?.holdings);
+  let liveOn = 0;
+  let completions: number | null = 0;
+  for (const r of answered) {
+    const h = r.data!.holdings;
+    const g = h.games.find((x) => x.slug === slug);
+    if (g && g.status === 'published') liveOn += 1;
+    if (h.received && h.completions_reason) completions = null;
+    if (completions !== null && g) completions += g.completions ?? 0;
+  }
+  return { live_on: liveOn, branch_completions: completions };
 }
 
 r.get('/summary', async (c) => {
@@ -260,6 +303,7 @@ r.get('/summary', async (c) => {
   const board = await readBoard(env, articleByStatus, publicationByStatus);
 
   // ── C1 · the Assessment Studio ────────────────────────────────────────
+  const reach = await readGameReach(env);
   let assessment: unknown;
   try {
     const statusRows = await env.DB.prepare(
@@ -319,6 +363,7 @@ r.get('/summary', async (c) => {
         archetypes: countOf(g.archetypes, 'archetype count'),
         questions: countOf(g.questions, 'question count'),
         runs: runsByGame ? (runsByGame.get(Number(g.id)) ?? 0) : null,
+        ...gameReachOf(String(g.slug ?? ''), reach),
       })),
       truncated: gameRows.length > GAMES_LIST_LIMIT,
       games_total: gamesTotal,
@@ -331,13 +376,29 @@ r.get('/summary', async (c) => {
       runs_basis:
         'Completed runs recorded on HQ\'s own database. The routes that recorded a run are retired, '
         + 'so this count does not grow; it is what was played before they were.',
-      branches: {
-        recorded: false,
-        reason:
-          'No game reaches a branch: no call pushes one, a branch\'s database is built from a '
-          + 'baseline that carries no games, and authoring is refused on a branch. So "live on N '
-          + 'branches" has nothing to count, and a branch\'s own runs have no route to HQ either.',
-      },
+      // D487 — HQ's published games reach every branch (`POST /games/publish`),
+      // and each branch says which it holds. Counted, never assumed: a game
+      // HQ published since the last push is not live anywhere until the next.
+      branches: (() => {
+        const cov = coverage(reach);
+        return {
+          recorded: true,
+          ...cov,
+          lines: reach.map((r) => ({
+            code: r.code,
+            status: r.status,
+            ...(r.status === 'ok' ? { received: Boolean(r.data?.holdings?.received) } : {}),
+            ...(r.reason ? { reason: r.reason } : {}),
+          })),
+          basis:
+            'Live on a branch means the branch holds the game as published, from HQ\'s last push. Only '
+            + 'published games travel; a draft is on no branch. Completions are the runs each branch '
+            + 'recorded on its own database.',
+          ...(reach.length ? {} : {
+            reason: 'No branch is bound to HQ yet, so no game is live on one.',
+          }),
+        };
+      })(),
     };
   } catch {
     assessment = {
@@ -784,5 +845,47 @@ async function readBoard(
     },
   };
 }
+
+// POST /games/publish — push HQ's published games to every branch (D487).
+//
+// THE PUSH IS REPORTED, NEVER THROWN, as the template library's is (D147):
+// HQ's games are HQ's whether or not a branch answered, and one unreachable
+// branch must not read as a push that reached no one. What travels is every
+// PUBLISHED game, whole (`services/gameLibrary.ts`); a branch archives any game
+// it holds that the push no longer carries.
+r.post('/games/publish', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const env = c.env;
+  let games;
+  try {
+    games = await readPublishedGameSet(env);
+  } catch (e) {
+    return c.json({
+      error: 'games_unreadable',
+      message: `HQ's games could not be read, so nothing was pushed: ${(e as Error)?.message || 'unknown'}.`,
+    }, 503);
+  }
+  const pushed_at = new Date().toISOString();
+  const results = await fanOut<{ ok: true; stored: number; archived: number; deactivated: number; removed_archetypes: number }>(
+    env, 'publishGames', [{ games, pushed_at }],
+  );
+  return c.json({
+    ok: true,
+    pushed_at,
+    game_count: games.length,
+    pushed_by: admin.id,
+    branches: results.map((r) => ({
+      code: r.code,
+      status: r.status,
+      ...(r.data ? { stored: r.data.stored, archived: r.data.archived } : {}),
+      ...(r.reason ? { reason: r.reason } : {}),
+    })),
+    answered: results.filter((r) => r.status === 'ok').length,
+    total: results.length,
+    ...(results.length ? {} : {
+      branches_reason: 'No branch Worker is bound to HQ yet, so the games were not pushed anywhere.',
+    }),
+  });
+});
 
 export default r;

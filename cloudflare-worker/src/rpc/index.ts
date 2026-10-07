@@ -25,11 +25,13 @@
  */
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
+import type { GameSet } from '../services/gameLibrary';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
   moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges, branchOpenTickets, branchActivation,
+  applyGames, branchGameHoldings,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
 } from './branchOps';
 import {
@@ -61,6 +63,10 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // Counts only, so no secret, on the rule above.
   activation() { return branchActivation(this.env); }
 
+  // D487 — the games this branch holds and their completed runs, for H18.
+  // A read, so no secret, on the rule above.
+  gameHoldings() { return branchGameHoldings(this.env); }
+
   applyLicence(record: Record<string, unknown>) { return applyLicenceCopy(this.env, record); }
 
   // D266 — NO `revenueSummary` HERE. It was declared, and nothing ever called
@@ -88,6 +94,11 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   publishTemplate(p: { templates: Array<Record<string, unknown>>; pushed_at: string }) {
     return applyTemplateCopy(this.env, p);
   }
+
+  // D487 — HQ's published games, pushed whole, as the template library is:
+  // a set, so a game HQ stops publishing is archived on the branch. Same
+  // category as `publishTemplate`: HQ-authored, no secret.
+  publishGames(p: GameSet) { return applyGames(this.env, p); }
 
   // D148 — the anonymised platform median. Same category as the two pushes
   // above: HQ-authored, no secret. What travels is a SET of metrics, so a
