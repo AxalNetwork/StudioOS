@@ -226,3 +226,22 @@ test('list endpoint (/connections) and single read (/connections/:uid) agree on 
   assert.equal(listItem.counterparty.email, null);
   assert.equal(listItem.counterparty.email_withheld, 'until_both_sign');
 });
+
+test('closed connection after both have signed: email is revealed (status-independent, keyed on signatures)', async () => {
+  const db = freshDb();
+  db.prepare(`
+    INSERT INTO cofounder_connections (id, uid, user_a_id, user_b_id, status, nda_signed_at_a, nda_signed_at_b, closed_at, closed_reason)
+    VALUES (7, 'conn-closed-both-signed', ?, ?, 'closed', '2026-10-06T10:00:00Z', '2026-10-06T11:00:00Z', '2026-10-06T12:00:00Z', 'mutually dissolved')
+  `).run(USER_A, USER_B);
+
+  const { app, env } = makeApp(db);
+  const tokenA = await createJWT(env, USER_A, 'alice@founder.test', 'founder');
+
+  const res = await app.request('/api/cofounder/connections/conn-closed-both-signed', {
+    headers: { Authorization: `Bearer ${tokenA}` },
+  }, env);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.counterparty.email, 'bob@candidate.test');
+  assert.equal(body.counterparty.email_withheld, undefined);
+});

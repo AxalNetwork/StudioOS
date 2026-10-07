@@ -13,8 +13,8 @@
  *   4. The counterparty's name is visible before signing because the
  *      mutual NDA explicitly names both parties. The email remains
  *      withheld until both sides have signed the NDA (nda_signed_at_a
- *      and nda_signed_at_b exist), at which point status flips to
- *      `active` and email is revealed.
+ *      and nda_signed_at_b exist, whatever the connection status),
+ *      or unless viewed by an admin.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
