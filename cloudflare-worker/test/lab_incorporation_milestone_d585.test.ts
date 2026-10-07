@@ -24,7 +24,6 @@ import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 
 import spinoutLab from '../src/routes/spinout_lab.ts';
-import certificates from '../src/routes/spinout_certificates.ts';
 import { recordPaidIncorporation, recordPaidIncorporationFromPaymentIntent } from '../src/services/incorporations.ts';
 import { syncIncorporationMilestone } from '../src/services/labIncorporationMilestone.ts';
 

@@ -52,11 +52,10 @@ import BranchNotDeployedBar from './components/BranchNotDeployedBar';
 import MobileTabBar from './components/MobileTabBar';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
-import WorkspacesLauncher from './components/WorkspacesLauncher';
 import { LensProvider, useLensLocation } from './workspaces/lens';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { RailStripSlot } from './ui/RailFrame';
-import { ADMIN_SHELLS, MESSAGES_ROLES } from './lib/paletteIndex';
+import { MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
 import { disablePush } from './lib/pwa';
@@ -1264,11 +1263,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 Messages
               </Link>
             )}
-            {/* S23 · H37 — the 29 working pages, one launcher on the HQ and
-                Admin shells. Not on the branch shell: S7–S19 draw none, and
-                the pages are the studio's own working surfaces, not a
-                branch's consoles. */}
-            {ADMIN_SHELLS.includes(shellRole) && <WorkspacesLauncher />}
+            {/* D563 — no Workspaces launcher. Its 28 pages each light the
+                profile sidebar row that owns them and are linked from that
+                row's overview ("Also in"); an admin reaches them through
+                View As and the command palette. */}
             <Suspense fallback={<span className="inline-block w-8 h-8" />}>
               <NotificationBell userId={user?.id} />
             </Suspense>
@@ -2231,6 +2229,10 @@ function AppInner() {
     && networkParams.get('mode') !== 'workspace'
     && !networkParams.has('tab')
     && !networkParams.has('intro');
+  // D563: a founder's /liquidity redirects to the Raise zone, and the query and
+  // the hash travel with it, as D422's redirects below do.
+  const liquidityParams = new URLSearchParams(location.search);
+  liquidityParams.set('mode', 'workspace');
   const signalsParams = new URLSearchParams(location.search);
   const signalsMode = signalsParams.get('mode');
   const signalsHasNonProjectQuery = [...signalsParams.keys()].some((key) => key !== 'project_id');
@@ -3007,7 +3009,10 @@ function AppInner() {
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
-      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>))} />
+      {/* D563: a founder's /liquidity was the same LiquidityPage that
+          /raise/liquidity?mode=workspace renders inside the Raise shell, so
+          the founder is sent there; a partner or investor still lands here. */}
+      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'founder' ? <Navigate replace to={{ pathname: '/raise/liquidity', search: `?${liquidityParams}`, hash: location.hash }} /> : <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>)} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
       <Route path="/lp-portal" element={<LpPortalRedirect />} />

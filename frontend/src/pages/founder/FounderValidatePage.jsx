@@ -11,6 +11,7 @@ import useAssistMode from '../../hooks/useAssistMode';
 import './founderValidate.css';
 import './founderValidateWorkspace.css';
 import { LensNavLink } from '../../workspaces/lens';
+import AlsoIn from '../../workspaces/AlsoIn';
 
 /**
  * THE HYPOTHESES CARD AND THE VERDICT READ THE BOARD, NOT THE INTERVIEWS.
@@ -217,6 +218,7 @@ export default function FounderValidatePage() {
           </header>
           {state === 'error' && <div className="validate-error" data-testid="status-validate-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-validate" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
           <EvidenceCards loading={state === 'loading'} projects={projects} projectId={projectId} fillsOn={fillsOn} ai={ai} fillsRecorded={board?.fills_recorded !== false} onApplied={() => setReloadKey((value) => value + 1)} featured={featured} interviews={interviews} evidence={evidence} signals={signals} dateFormat={dateFormat} stageLinks={stageLinks} workspaceNavigationState={workspaceNavigationState} bar={board?.bar} />
+          <AlsoIn role="founder" row="Validate" />
         </div>
         <WorkerRail
           workspace="Validate"

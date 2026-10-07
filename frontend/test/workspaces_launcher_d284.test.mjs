@@ -1,38 +1,33 @@
 /**
- * One launcher, one Messages button, and a palette that indexes what the map
- * places (D284, tasks 420 and 408).
+ * One Messages button, and a palette that indexes what the map places (D284,
+ * tasks 420 and 408), with the Workspaces launcher retired (D563).
  *
- * The 29 working pages left `SIDEBAR_GROUPS.admin` for a top-bar launcher;
- * Messages left it for a top-bar button on both admin shells; and ⌘K for an
- * admin shell now indexes the shell's own rows, the consoles H35 places and
- * the 29 — never the old 50-row sidebar, never an `hqOnly` route for someone
- * without the elevation, never the parked X. The list the launcher and the
- * palette both read is `WORKSPACES` in `lib/adminPlacement.js`; the palette's
- * index is `lib/paletteIndex.js`, pure, so this file puts a holder, a plain
- * admin and a founder through it rather than reading the component.
- *
- * CI runs no browser. A Chromium look at the launcher is a recorded
- * verification in D284; the gate is here.
+ * The 29 working pages (28 since AI Matches went) left `SIDEBAR_GROUPS.admin`
+ * for a top-bar launcher (D284); D563 retired that launcher, and each page now
+ * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Messages
+ * left the admin sidebar for a top-bar button on both admin shells; and ⌘K for
+ * an admin shell indexes the shell's own rows, the consoles H35 places and the
+ * 28 — never the old 50-row sidebar, never an `hqOnly` route for someone
+ * without the elevation, never the parked X. The list the palette reads is
+ * `WORKSPACES` in `lib/adminPlacement.js`; the palette's index is
+ * `lib/paletteIndex.js`, pure, so this file puts a holder, a plain admin and a
+ * founder through it rather than reading the component.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
-import { WORKSPACES, WORKSPACE_GROUPS, WORKSPACE_GROUP_ORDER, ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
+import { WORKSPACES, WORKSPACE_GROUP_ORDER, ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
 import {
   pageItemsFor, sidebarPageItems, groupByKind, KIND_ORDER, ADMIN_SHELLS, MESSAGES_ROLES,
 } from '../src/lib/paletteIndex.js';
-import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = read('frontend/src/App.jsx');
-// The component's CODE, not its header comment, which is allowed to say
-// "29" and to quote the canvas note it explains the absence of.
-const LAUNCHER = codeOnly(read('frontend/src/components/WorkspacesLauncher.jsx'));
 const PALETTE = read('frontend/src/components/CommandPalette.jsx');
 
 /** path → hqOnly, read off every <Route> line. */
@@ -52,12 +47,13 @@ const CHROME = APP.slice(0, APP.indexOf('<Routes')) + APP.slice(APP.indexOf('</R
  * The 29
  * ------------------------------------------------------------------ */
 
-// S23 / H37, verbatim: group, label, route. Pinned because it IS the spec;
-// the descriptions are checked for presence, not restated.
+// S23 / H37: group, label, route. Pinned because it IS the spec; the
+// descriptions are checked for presence, not restated. One label differs from
+// the canvas: /advisory is "Advisory", its page's own heading (D563).
 const CANVAS = [
   ['Studio', 'Pipeline Board', '/pipeline'], ['Studio', 'Scoring Engine', '/scoring'],
   ['Studio', 'Risk Matrix', '/portfolio/risk-matrix'], ['Studio', 'Market Intelligence', '/market-intel'],
-  ['Studio', 'Signals', '/signals'], ['Studio', 'AI Advisory Suite', '/advisory'],
+  ['Studio', 'Signals', '/signals'], ['Studio', 'Advisory', '/advisory'],
   // ['Studio', 'AI Matches', '/matches'] stood here; that page was deleted.
   ['Studio', 'Deal Flow', '/deals'],
   ['Capital & Legal', 'Capital & Investment', '/capital'], ['Capital & Legal', 'Liquidity & Exits', '/liquidity'],
@@ -73,38 +69,28 @@ const CANVAS = [
   ['More', 'Perks', '/perks'],
 ];
 
-test('the launcher list is the canvas list less AI Matches: 28 pages in four groups, every one a registered route', () => {
+test('the palette list is the canvas list less AI Matches: 28 pages in four groups, every one a registered route', () => {
   assert.deepEqual(WORKSPACES.map((w) => [w.group, w.label, w.route]), CANVAS);
   assert.deepEqual(WORKSPACE_GROUP_ORDER, ['Studio', 'Capital & Legal', 'Network & Growth', 'More']);
-  assert.deepEqual(WORKSPACE_GROUPS.map((g) => [g.group, g.count]),
+  assert.deepEqual(WORKSPACE_GROUP_ORDER.map((g) => [g, WORKSPACES.filter((w) => w.group === g).length]),
     [['Studio', 7], ['Capital & Legal', 10], ['Network & Growth', 8], ['More', 3]]);
-  for (const g of WORKSPACE_GROUPS) assert.equal(g.count, g.items.length, `${g.group}'s count is not its length`);
   for (const w of WORKSPACES) {
     assert.ok(w.description && w.description.endsWith('.'), `${w.route} has no description`);
-    assert.ok(registered(w.route), `launcher route ${w.route} is not registered in App.jsx`);
+    assert.ok(registered(w.route), `palette route ${w.route} is not registered in App.jsx`);
   }
-  // One list: the launcher entries are the map's launcher tier, nothing else.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'launcher').length, WORKSPACES.length);
+  // One list: the entries are the map's palette tier, nothing else.
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, WORKSPACES.length);
 });
 
-test('the count is computed from the list, never typed', () => {
-  assert.match(LAUNCHER, /WORKSPACES\.length/, 'the launcher no longer reads its count off the list');
-  assert.doesNotMatch(LAUNCHER, /\b29\b/, 'the launcher types the count');
-  assert.match(LAUNCHER, /pages · not admin consoles/);
-  assert.match(LAUNCHER, /\{g\.group\} · \{g\.count\}/, 'a group heading no longer reads "{group} · {count}"');
-});
-
-test('AI Advisory Suite keeps its shipped label and draws no flag; the founder note is not drawn for an admin', () => {
-  assert.equal(WORKSPACES.find((w) => w.route === '/advisory')?.label, 'AI Advisory Suite');
-  assert.doesNotMatch(LAUNCHER, /Rename to be decided|Shipped label/, 'the launcher draws H37\'s flag');
-  // The three routes redirect ONLY a founder; an admin lands on the page, so
-  // "Opens a founder page" would be false for everyone who sees this launcher.
+test('no page is labelled as an AI advisor, and the three founder redirects still apply only to a founder', () => {
+  // The voice rule: the model is Eadwyn, never an advisor. H37's "AI Advisory
+  // Suite" went with the launcher (D563).
+  assert.ok(!WORKSPACES.some((w) => /\bAI Advis/i.test(w.label)), 'a page is labelled as an AI advisor again');
   for (const path of ['/my/jobs', '/services', '/needs']) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.ok(line, `${path} is not routed`);
     assert.match(line, /user\?\.role === 'founder' \? <Navigate/, `${path} no longer redirects only a founder`);
   }
-  assert.doesNotMatch(LAUNCHER, /Opens a founder page/, 'the founder note is rendered for an admin');
 });
 
 /* ------------------------------------------------------------------ *
@@ -122,10 +108,11 @@ test('the 29 rows and Messages have left the admin sidebar, and a workspace page
   assert.deepEqual(lit, [], 'these admin rows light on a workspace page');
 });
 
-test('the launcher is mounted on the HQ and Admin shells only, and Messages for exactly the roles /messages admits', () => {
-  assert.deepEqual(ADMIN_SHELLS, ['admin', 'super_admin'], 'the branch shell draws no launcher (S7–S19 draw none)');
-  assert.match(CHROME, /ADMIN_SHELLS\.includes\(shellRole\) && <WorkspacesLauncher \/>/,
-    'App.jsx no longer gates the launcher on the admin shells');
+test('no Workspaces launcher is mounted (D563), and Messages is offered to exactly the roles /messages admits', () => {
+  assert.deepEqual(ADMIN_SHELLS, ['admin', 'super_admin']);
+  assert.doesNotMatch(CHROME, /WorkspacesLauncher/, 'App.jsx mounts the Workspaces launcher again');
+  assert.doesNotMatch(APP, /from '\.\/components\/WorkspacesLauncher'/, 'App.jsx imports the launcher again');
+  assert.ok(!existsSync(resolve(root, 'frontend/src/components/WorkspacesLauncher.jsx')), 'the launcher component is back');
   assert.match(CHROME, /MESSAGES_ROLES\.includes\(activeRole\) && \(\s*<Link\s+to="\/messages"/,
     'App.jsx no longer offers the Messages button by role');
   const route = APP.split('\n').find((l) => l.includes('path="/messages"'));
@@ -180,7 +167,7 @@ test('the other shells index their own sidebar, as before', () => {
   const items = pageItemsFor({ role: 'founder', shellRole: 'founder', user: founder });
   assert.deepEqual(items, sidebarPageItems('founder', founder));
   assert.deepEqual(items.map((i) => i.to), SIDEBAR_GROUPS.founder.flatMap((g) => g.items.map((it) => it.to)));
-  assert.ok(!items.some((i) => i.hint.startsWith('Workspaces')), 'a founder was given the admin launcher');
+  assert.ok(!items.some((i) => i.hint.startsWith('Workspaces')), 'a founder was given the admin shells\' page list');
 });
 
 test('an article result renders: every indexed kind has a bucket, in order', () => {

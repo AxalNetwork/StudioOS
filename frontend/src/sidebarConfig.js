@@ -29,6 +29,13 @@ import {
 // resolve extensionless relative specifiers the way Vite does.
 import { allZoneRoutes, bucketsFor } from './workspaces/shellConfig.js';
 
+// D563 — the Lab page the retired Workspaces launcher listed, lit on the
+// founder's Spin-Out Lab row (the Lab's members are founders). The row's `to`
+// still matches only `/spinout-lab` itself, because a `match` list is the
+// row's complete claim (SidebarNav), so no other Lab subtree changes light.
+// The Lab's arsenal (`lib/spinoutLabArsenal.js`) is what links the page.
+const SPINOUT_LAB_PAGES = ['/spinout-lab/83b'];
+
 // Task #6 — Real subscription-tier check. Bypass roles
 // (admin/partner/investor/advisor) always pass; founders are gated by their
 // `subscription_tier` column. Mirrors the worker's `userMeetsTier` helper.
@@ -306,7 +313,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: '', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       // Spin-Out Lab keeps its own tree, untouched by the shell migration.
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES },
       // Each row points at the workspace ROOT, which renders that workspace's
       // overview. Pointing a row at a section page is how the overviews were
       // lost: a rebuild took the desk's slot, the desk was re-mounted on
@@ -316,7 +323,9 @@ export const SIDEBAR_GROUPS = {
         match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
       { to: '/build', icon: Briefcase, label: 'Build',
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
-      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
+      // D563: the launcher's founder legal pages light Raise, and /liquidity
+      // left the list: a founder there is redirected to /raise/liquidity.
+      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/legal-capital', '/incorporate', '/compliance'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
         match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
       // Points at /network, not at the first zone: /network is the one route
@@ -445,12 +454,12 @@ export const SIDEBAR_GROUPS = {
       // a `match` entry would light Delivery beside the footer's own row, two
       // rows for one page. The other successors sit under this row's root.
       { to: '/delivery', icon: Briefcase, label: 'Delivery',
-        match: ['/delivery', '/delivery/health'] },
+        match: ['/delivery', '/delivery/health', '/portfolio/coverage'] },
       { to: '/offers', icon: Package, label: 'Offers',
         match: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours',
                 '/offers/catalog'] },
       { to: '/network', icon: Users, label: 'Network',
-        match: ['/network', '/relationships', '/contacts'] },
+        match: ['/network', '/relationships', '/contacts', '/my/jobs'] },
       { to: '/research', icon: Radar, label: 'Research', match: ['/research', '/signals', '/market-intel'] },
     ]},
   ],
@@ -472,14 +481,15 @@ export const SIDEBAR_GROUPS = {
       // renders the sections. A row aimed at a zone skips the overview, which
       // is precisely how the founder overviews were lost the first time.
       { to: '/deals', icon: Handshake, label: 'Deals',
-        match: ['/deals', '/pipeline', '/raise/data-room'] },
+        match: ['/deals', '/pipeline', '/raise/data-room', '/scoring'] },
       // Positions is the canvas's word for the holdings view. /portfolio is the
       // overview; /portfolio/positions is the book; /portfolio/health is the
       // legacy alias that still renders the overview, and the generic tab bar
       // labels the book "Cap Table" — three names across two pages, and
       // settling that vocabulary is a content decision. What the row owes is
       // the root.
-      { to: '/portfolio', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
+      // D563: the launcher's investor pages outside /portfolio light it too.
+      { to: '/portfolio', icon: Briefcase, label: 'Portfolio', match: ['/portfolio', '/watchlist', '/capital', '/liquidity'] },
       { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
       { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
@@ -524,7 +534,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/expertise', icon: UserCircle, label: 'Expertise',
         match: ['/expertise', '/advisors'] },
       { to: '/network', icon: Users, label: 'Network',
-        match: ['/network', '/relationships', '/contacts', '/advisor/network'] },
+        match: ['/network', '/relationships', '/contacts', '/advisor/network', '/my/jobs'] },
       { to: '/research', icon: Radar, label: 'Research',
         match: ['/research', '/signals', '/market-intel'] },
       // NO Trust row (it belongs to the user dropdown) and NO Practice Settings

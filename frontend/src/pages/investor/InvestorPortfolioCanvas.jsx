@@ -4,6 +4,7 @@ import { Activity, ArrowUpRight, Inbox, RefreshCw, TrendingDown, TrendingUp, Use
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
+import AlsoIn from '../../workspaces/AlsoIn';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorPortfolioCanvas.css';
 import { titleCase } from '../../lib/absence';
@@ -155,6 +156,7 @@ export default function InvestorPortfolioCanvas() {
           {state.analytics.mark_coverage != null ? ` · ${Math.round(state.analytics.mark_coverage * 100)}% mark coverage` : ''}.
         </div>
       )}
+      <AlsoIn role="investor" row="Portfolio" />
       <footer className="i4-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</footer>
     </main>
     {/* The zone row above covers Positions, Updates and Value-add.
