@@ -23,6 +23,7 @@
  *   GET   /admin/queue          everything awaiting review
  *   POST  /admin/:uid/review    approve / reject / pause
  *   POST  /admin/credits        a Super Admin's manual grant or deduction (D608)
+ *   GET   /admin/credits/:userId one member's balance and ledger (Super Admin, D633)
  *
  * THE THREE PRICE KINDS, and why the credit one is the only interesting one:
  *
@@ -793,6 +794,36 @@ r.post('/admin/credits', async (c) => {
       return refuse(c, status, { code: out.code, message: out.message, extra });
     }
     return c.json({ ok: true, ...out });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D633 (#1391, Q2): one member's balance and ledger, for the Super Admin's
+// member credits view. The same lines `GET /mine` gives the member, each with
+// whether a grant was later taken back. Registered before `/admin/:uid/...`
+// and `/:uid` so neither can shadow it.
+r.get('/admin/credits/:userId', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const userId = intOrNull(c.req.param('userId'));
+    if (!userId || userId <= 0) return refuse(c, 400, { code: 'invalid_user', message: 'Name the account by its user id.' });
+    const member = await c.env.DB.prepare('SELECT id, name, email, role FROM users WHERE id = ?')
+      .bind(userId).first<{ id: number; name: string | null; email: string | null; role: string | null }>();
+    if (!member) return refuse(c, 404, { code: 'user_not_found', message: 'No account matches this id. Nothing was changed.' });
+    const ledger = await c.env.DB.prepare(
+      `SELECT l.id, l.delta, l.kind, l.source_ref, l.note, l.created_at, l.rule_key,
+              EXISTS (SELECT 1 FROM perk_credit_ledger r
+                       WHERE r.user_id = l.user_id AND r.kind = 'admin_adjust'
+                         AND r.source_ref = 'revoke:' || l.id) AS revoked
+         FROM perk_credit_ledger l WHERE l.user_id = ?
+        ORDER BY l.created_at DESC, l.id DESC LIMIT 500`,
+    ).bind(userId).all<any>();
+    const lines = (ledger.results || []).map((x: any) => ({ ...x, revoked: Number(x.revoked) === 1 }));
+    return c.json({
+      member: { id: member.id, name: member.name ?? null, email: member.email ?? null, role: member.role ?? null },
+      balance: await balanceOf(c.env, userId),
+      ledger: lines,
+      truncated: lines.length === 500,
+    });
   } catch (e) { return mapError(c, e); }
 });
 

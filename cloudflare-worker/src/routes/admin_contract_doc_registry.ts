@@ -52,8 +52,12 @@ type RegistryHubItem = {
     updated_by_name: string | null;
   } | null;
   registry_status: 'published' | 'draft' | 'code';
+  /** D633 — when, by whom and why a published type went live. Null unless published. */
+  published?: PublishedMeta | null;
   source: 'store' | 'code';
 };
+
+type PublishedMeta = { at: string | null; by: number | null; by_name: string | null; reason: string | null };
 
 export const REGISTRY_PUBLISH_REASON_MIN = 10;
 
@@ -81,6 +85,37 @@ function computeOverlapFlags(
   return out;
 }
 
+/**
+ * D633 (#1391, Q1) — the names of the Super Admins who published the stored
+ * types, one read for all of them. A failed read leaves the names out and
+ * the hub still answers: the page says the name is not recorded.
+ */
+async function readPublisherNames(env: Env, rows: Array<{ published_by: number | null }>): Promise<Map<number, string>> {
+  const ids = [...new Set(rows.map((r) => r.published_by).filter((v): v is number => Number.isInteger(v)))];
+  if (!ids.length) return new Map();
+  try {
+    const res = await env.DB.prepare(
+      'SELECT id, name, email FROM users WHERE id IN (SELECT value FROM json_each(?))',
+    ).bind(JSON.stringify(ids)).all<{ id: number; name: string | null; email: string | null }>();
+    return new Map((res.results || []).map((u) => [Number(u.id), u.name || u.email || '']).filter(([, n]) => n) as Array<[number, string]>);
+  } catch (e) {
+    console.warn('[contracts.registry] publisher names unreadable', (e as Error).message);
+    return new Map();
+  }
+}
+
+function publishedMeta(
+  row: { published_at: string | null; published_by: number | null; publish_reason: string | null },
+  names: Map<number, string>,
+): PublishedMeta {
+  return {
+    at: row.published_at ?? null,
+    by: row.published_by ?? null,
+    by_name: row.published_by != null ? names.get(Number(row.published_by)) ?? null : null,
+    reason: row.publish_reason ?? null,
+  };
+}
+
 async function buildHubPayload(env: Env) {
   const sql = getSQL(env);
   try {
@@ -90,6 +125,7 @@ async function buildHubPayload(env: Env) {
       loadAllContracts(sql),
     ]);
 
+    const publisherNames = await readPublisherNames(env, storeRows);
     const codeItems = buildTemplateCatalog(usage, lastUsed);
     const storeByType = new Map(storeRows.map((r) => [r.doc_type, r]));
     const merged: RegistryHubItem[] = codeItems.map((row) => {
@@ -103,6 +139,7 @@ async function buildHubPayload(env: Env) {
           required_fields: stored.required_fields,
           pending_draft: stored.pending_draft,
           registry_status: 'published' as const,
+          published: publishedMeta(stored, publisherNames),
           source: 'store' as const,
         };
       }
@@ -138,6 +175,7 @@ async function buildHubPayload(env: Env) {
         required_fields: s.required_fields,
         pending_draft: s.pending_draft,
         registry_status: s.status === 'published' ? 'published' : 'draft',
+        published: s.status === 'published' ? publishedMeta(s, publisherNames) : null,
         source: 'store',
       });
     }

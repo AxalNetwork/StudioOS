@@ -88,7 +88,7 @@ canvas behind it still shows up here.
 | HQ | Home | `/hq` | Admin · Super |
 | HQ | Licences | `/admin/licences` | Admin · Super |
 | HQ | Funds | `/admin/funds` | Admin · Super |
-| HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super |
+| HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super, Ops Page · HQ tools (Q1–Q3, D633) |
 | HQ | Team | `/admin/accounts` | Admin · Super |
 | HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Content | `/admin/content` | — (no canvas; shipped ahead of the design corpus) |
@@ -150,4 +150,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Settings (`/branch/settings`)
 
-**Canvas corpus:** 138. **Workspace assignments:** 180.
+**Canvas corpus:** 139. **Workspace assignments:** 181.

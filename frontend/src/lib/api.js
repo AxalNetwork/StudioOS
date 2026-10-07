@@ -19,6 +19,7 @@ export * from './api/fundPerformance.js';
 export * from './api/helpCenter.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
+export * from './api/memberCredits.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';

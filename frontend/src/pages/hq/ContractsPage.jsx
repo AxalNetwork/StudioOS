@@ -180,6 +180,101 @@ export function PendingRevision({ row, canPublish, onPublished, publishFn = api.
   );
 }
 
+/**
+ * D633 (#1391, Q1) — a type's registry state, the Ops canvas's `hq-contracts`
+ * column: In code only, Draft, or Published with when, by whom and the reason
+ * the Super Admin gave (the hub's `published`, from the store). A published
+ * type whose publish predates that record says so rather than inventing it.
+ */
+export function registryState(row) {
+  if (row?.registry_status === 'published') {
+    const p = row.published || null;
+    if (!p || !p.at) {
+      return { label: 'Published', tone: 'ok', nr: 'Published by: this type went live before publishing was recorded.' };
+    }
+    const who = p.by_name || (p.by != null ? `Admin #${p.by}` : null);
+    const d = new Date(`${String(p.at).replace(' ', 'T')}${/[zZ]|[+-]\d\d:?\d\d$/.test(String(p.at)) ? '' : 'Z'}`);
+    const when = Number.isNaN(d.getTime()) ? String(p.at) : d.toLocaleDateString();
+    return {
+      label: 'Published', tone: 'ok',
+      meta: [when, who || 'by an account not recorded', p.reason ? `“${p.reason}”` : 'no reason recorded'].join(' · '),
+    };
+  }
+  if (row?.registry_status === 'draft') return { label: 'Draft', tone: 'amber', meta: 'Drafted in the store, not live' };
+  return { label: 'In code only', tone: 'grey', meta: 'No draft yet' };
+}
+
+const STATE_TONE = {
+  ok: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  amber: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100',
+  grey: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+};
+
+export function RegistryState({ row }) {
+  const st = registryState(row);
+  return (
+    <div className="mt-1.5 text-[9.5px] leading-relaxed" data-testid={`registry-state-${row.doc_type}`}>
+      <span className={`mr-1 rounded-full border px-1.5 py-0.5 font-bold ${STATE_TONE[st.tone]}`}>{st.label}</span>
+      {st.nr ? <Unrecorded reason={st.nr} /> : <span className="text-axal-muted dark:text-gray-300">{st.meta}</span>}
+    </div>
+  );
+}
+
+/** What the publish control says while the route waits for the Super Admin's fresh sign-in. */
+export const PUBLISH_WAITING = 'Waiting for your fresh sign-in. Confirm your identity in the prompt; nothing is published until you do.';
+
+/**
+ * D633 — the publish control of a draft type (one never published), the
+ * canvas's Publish: a reason of at least ten characters, then the fresh
+ * sign-in check the route demands (`requireSuperAdminWriteBar`; lib/api.js
+ * prompts for it on `step_up_required` and retries once). Drawn for a Super
+ * Admin only, as the pending-revision control is.
+ */
+export function DraftPublishView({ row, reason, onReason, phase, error, onSubmit }) {
+  const waiting = phase === 'waiting';
+  return (
+    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-800 dark:bg-amber-950/30" data-testid={`registry-draft-publish-${row.doc_type}`}>
+      <label className="block text-[10px] font-bold text-axal-ink dark:text-gray-100" htmlFor={`draft-publish-reason-${row.doc_type}`}>
+        Reason for publishing (at least {PUBLISH_REASON_MIN} characters, kept with the type)
+      </label>
+      <textarea
+        id={`draft-publish-reason-${row.doc_type}`} rows={2} value={reason} onChange={(e) => onReason(e.target.value)} disabled={waiting}
+        className="mt-1 w-full rounded border border-axal-hairline px-2 py-1 text-[11px] dark:border-gray-700 dark:bg-gray-800"
+      />
+      <p className="mt-0.5 text-[10px] text-axal-muted dark:text-gray-300">Publishing asks you to sign in again before it goes through. It then goes live for every tenant.</p>
+      <button
+        type="button" onClick={onSubmit} disabled={waiting || reason.trim().length < PUBLISH_REASON_MIN}
+        className="mt-1 rounded bg-[#881337] px-2.5 py-1 text-[10.5px] font-extrabold text-white disabled:opacity-50"
+        data-testid={`registry-draft-publish-button-${row.doc_type}`}
+      >
+        {waiting ? 'Waiting for sign-in…' : 'Publish'}
+      </button>
+      {waiting ? <p role="status" className="mt-1 text-[10.5px] text-axal-ink dark:text-gray-100" data-testid="registry-publish-waiting">{PUBLISH_WAITING}</p> : null}
+      {error ? <p className="mt-1 text-[10.5px] leading-relaxed text-red-700 dark:text-red-400" role="alert" data-testid="registry-draft-publish-error">{error}</p> : null}
+    </div>
+  );
+}
+
+export function DraftPublish({ row, onPublished, publishFn = api.adminContractRegistryPublish }) {
+  const [reason, setReason] = useState('');
+  const [phase, setPhase] = useState('idle');
+  const [error, setError] = useState('');
+  const submit = async () => {
+    setPhase('waiting'); setError('');
+    try {
+      await publishFn(row.doc_type, { reason: reason.trim() });
+      setReason('');
+      if (onPublished) onPublished();
+    } catch (e) {
+      setError(publishRefusal(e));
+    } finally { setPhase('idle'); }
+  };
+  return <DraftPublishView row={row} reason={reason} onReason={setReason} phase={phase} error={error} onSubmit={submit} />;
+}
+
+/** A published type's save rule, stated as D615 built it (the canvas's "changes the live type at once" is not this app's rule). */
+export const PUBLISHED_SAVE_NOTE = 'This type is published. Saving changes to it keeps them pending, not live, until a Super Admin reviews and publishes them.';
+
 function RegistryTypeCard({ row, canPublish, onPublished }) {
   return (
     <div
@@ -210,11 +305,15 @@ function RegistryTypeCard({ row, canPublish, onPublished }) {
       <p className="mt-2 text-[9.5px] leading-relaxed text-axal-muted dark:text-gray-300">
         {typeof row.usage_count === 'number' ? `${row.usage_count} uses` : 'Uses unreadable'}
         {formatLastUsed(row.last_used_at) ? ` · last ${formatLastUsed(row.last_used_at)}` : ''}
-        {row.registry_status === 'draft' ? ' · draft in store' : ''}
       </p>
+      <RegistryState row={row} />
+      {row.registry_status === 'published' ? (
+        <p className="mt-1 text-[9.5px] leading-relaxed text-axal-muted dark:text-gray-300" data-testid={`registry-live-note-${row.doc_type}`}>{PUBLISHED_SAVE_NOTE}</p>
+      ) : null}
       {row.registry_status === 'published' && row.pending_draft ? (
         <PendingRevision row={row} canPublish={canPublish} onPublished={onPublished} />
       ) : null}
+      {row.registry_status === 'draft' && canPublish ? <DraftPublish row={row} onPublished={onPublished} /> : null}
     </div>
   );
 }

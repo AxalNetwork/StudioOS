@@ -255,6 +255,8 @@ const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
 const ReviewQueuePage = lazy(() => import('./pages/hq/ReviewQueuePage'));
 const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesRegistryPage'));
 const HqCreditRulesPage = lazy(() => import('./pages/hq/CreditRulesPage'));
+const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
+const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
@@ -2644,6 +2646,8 @@ function AppInner() {
           franchisor, with the holder console above the accounts. */}
       <Route path="/admin/contracts" element={guard(['admin'], hqOnly(<HqContractsPage />))} />
       <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
+      {/* D633 (#1391, Q2) — one member's credits; the Team directory's drawer is its door. */}
+      <Route path="/admin/accounts/credits/:userId" element={guard(['admin'], hqOnly(<MemberCreditsPage />))} />
       {/* HQ · Home (canvas H1). The whole business on one screen; every
           per-subsidiary figure says Not recorded until accounts carry a licence. */}
       <Route path="/hq" element={guard(['admin'], hqOnly(<HqHomePage />))} />
@@ -2667,6 +2671,8 @@ function AppInner() {
       {/* #1384 — HQ · Credits, reached from Platform and lit under that row. */}
       <Route path="/hq/credits" element={guard(['admin'], hqOnly(<HqCreditRulesPage />))} />
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
+      {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
+      <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}

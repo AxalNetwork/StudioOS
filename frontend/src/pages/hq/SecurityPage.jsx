@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -986,6 +987,9 @@ export default function HqSecurityPage() {
             backup read their own stores; the restore drill reads the marker each run writes. Only a licence
             event names a subsidiary and only a security event names its deployment — nothing else here is
             scoped per subsidiary yet, the guardrail counters included.
+          </p>
+          <p className="mt-1 text-[12.5px]">
+            <Link to="/admin/security/obligations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Trust obligations by role</Link>
           </p>
         </header>
 
