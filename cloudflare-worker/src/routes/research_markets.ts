@@ -33,7 +33,7 @@ import type { Env } from '../types';
 import { readListedTotals, type ListedTotals } from '../services/listedCompanies';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
-import { EUR_SOURCE } from '../services/researchFundDirectory';
+import { EUR_SOURCE, SERVED_FUNDS } from '../services/researchFundDirectory';
 import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
 import { periodKey } from '../services/market_intel/scoring';
 import {
@@ -81,7 +81,7 @@ async function funds(env: Env): Promise<FundRow[]> {
   const r = await env.DB.prepare(
     `SELECT uid, name, hq, sector_focus, fund_size_cents, fund_year, website, source_name,
             eif_flag, eifo_flag, notable_lps, as_of
-       FROM research_fund_directory`,
+       FROM ${SERVED_FUNDS} AS f`,
   ).all<FundRow>();
   return r.results || [];
 }
