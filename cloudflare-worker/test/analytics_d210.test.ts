@@ -667,9 +667,10 @@ test('H15 without a read credential says the dataset is unreadable, and draws no
     'no credential is a store this Worker cannot reach — Not recorded, with no retry to offer (D211)');
   assert.match(body.active_accounts.reason, /not a count of zero/);
   assert.equal(body.active_accounts.series, undefined);
-  // D483 measured median approval age (hq_approval_age_d483.test.ts).
+  // D483 measured median approval age (hq_approval_age_d483.test.ts), and
+  // D486 activation (hq_activation_d486.test.ts).
   assert.deepEqual(body.not_recorded.map((n: any) => n.key),
-    ['activation', 'token_spend', 'revenue_by_stream']);
+    ['token_spend', 'revenue_by_stream']);
   assert.equal(body.foot, 'Aggregates, never records.');
 });
 

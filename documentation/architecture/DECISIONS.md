@@ -41466,6 +41466,87 @@ and the rail's "no branch call returns tickets" absence is gone.
   branch, the rail's read-back, and the rail's retired absence.
 - `support_queues_d204.test.ts`: the total test binds its deployed branch.
 
+## D486
+
+**HQ · Analytics (H15): the activation funnel, by the week accounts were
+created, on every line (issue #1025, option A).** Slot S09. No migration.
+
+**What was true.** H15 drew "invited, signed in, agreement signed, active in
+week two" as Not recorded: nothing defined whose funnel it was, and each
+branch keeps its own accounts on its own database.
+
+**Decided (S1, 2026-10-07, under the owner's standing rule): A.**
+- **Cohort.** Accounts are grouped by the UTC week (Monday) of
+  `users.created_at`, eight weeks, the current one included
+  (`ACTIVATION_WEEKS`), on the H15 chart's own week axis.
+- **Signed in.** An `activity_logs` row whose action starts `user_login`
+  (password, recovery code, magic link, Google, passkey, SMS). The `_` is
+  escaped in the `LIKE`, so `userXlogin` does not count.
+- **Terms accepted.** A `legal_acceptances` row for `tos_v1` (`TOS_KEY`).
+  Migration 245 says the key carries the version, and there is no other
+  "current terms" marker.
+- **Active in week two.** Any `activity_logs` row from day 8 to day 14 after
+  the account was created, measured per account. A cohort week has no figure
+  until 21 days after its Monday, when every account in it has reached day 14;
+  before then it reads Not recorded with that reason, never a floor.
+- **No "invited" step.** Accounts that came from an accepted invitation are
+  counted beside the funnel and named so. An invitation names its account by
+  id where its table records one (`company_invitations` and
+  `project_member_invitations` `accepted_by_user_id` with status `accepted`,
+  `partner_invitations.resulting_user_id`). Otherwise it is matched by email,
+  case-insensitively (`branch_invitations` with status `accepted`, whose
+  accept flow matches the email, migration 263).
+
+**One read for both tiers.** `services/activationFunnel.ts`
+`activationFunnel`. Each step is its own query, so an unreadable terms or
+invitation table costs only that step, with its reason. An unreadable
+`users` or `activity_logs` table makes the funnel Unreadable. Only counts
+leave the read.
+
+**The branch's answer.** `activation()` on `HqEntrypoint`
+(`branchActivation`). It is a read of counts, so it needs no secret, on
+`rpc/index.ts`'s rule. It is listed on the topology page.
+
+**HQ.** `admin_hq.ts` `activationAcrossBranches`, on
+`GET /api/admin/hq/analytics` as `activation`.
+- **Lines.** HQ's own line first, then every registered branch. A line that
+  did not answer is named with its reason.
+- **The total** (`combineFunnels`) adds the lines that answered. Each account
+  lives on one database, so no account is counted twice.
+- **A withheld step.** A step is added only when every answering line could
+  read it. Otherwise its total is withheld, with the reason.
+- **Absences.** `activation` leaves `HQ_ANALYTICS_NOT_RECORDED`.
+
+**The page.**
+- **The KPI tile** shows the share of the newest closed week's accounts that
+  were active in week two, with "N of M" and the lines it covers.
+- **`HqActivationCard`** shows the funnel by week, newest first, with each
+  withheld cell's reason, the definitions, and each missing line.
+- **The rail** reads the figure back, and its Activation absence is gone.
+
+**Tests.**
+- `cloudflare-worker/test/hq_activation_d486.test.ts` (8 tests), on real
+  SQLite with each step's own migration. It covers:
+  - each step, including a sign-in route other than password, an action a
+    `LIKE` without its escape would count, day 8's first instant and day 15,
+    a revoked invitation and an email differing in case;
+  - the open-week rule and the axis edges;
+  - that no id, email or name leaves the read;
+  - each unreadable step, and unreadable accounts;
+  - the branch answer, and HQ's tier refused;
+  - the total over lines, with an unanswering branch;
+  - a step one line could not read;
+  - the route.
+  
+  Mutations: 11 of 11 caught.
+- `frontend/test/analytics_h15_s15.test.mjs`:
+  - two new tests: the card in each state, and the KPI's four states with the
+    rail's read-back;
+  - the KPI-row and rail-absence tests are updated for two remaining
+    absences.
+
+  Mutations: 11 of 11 caught.
+
 ## D490
 
 **#871 review follow-ups: private notes, dates, and void touches on the investor

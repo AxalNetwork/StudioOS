@@ -143,6 +143,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('approvalAges', true),
       // D485 — HQ · Support fans out to it (admin_hq_support.ts). A read, no secret.
       m('openTickets', true),
+      // D486 — H15's activation funnel fans out to it (admin_hq.ts). A read of counts, no secret.
+      m('activation', true),
       m('applyLicence', true),
       m('applyPromoCeiling', true),
       m('applyEscalationAnswer', true),

@@ -253,7 +253,8 @@ test('an unreadable escalation log is unreadable, beside referral lines it did r
 
 test('median approval age leaves the not-recorded list; the two untimeable queues travel with their reasons', async () => {
   const { body } = await h15(hqDb(), {});
-  assert.deepEqual(body.not_recorded.map((n: any) => n.key), ['activation', 'token_spend', 'revenue_by_stream']);
+  // D486 measured activation too (hq_activation_d486.test.ts).
+  assert.deepEqual(body.not_recorded.map((n: any) => n.key), ['token_spend', 'revenue_by_stream']);
   assert.deepEqual(body.approval_age.not_recorded, APPROVAL_AGE_NOT_RECORDED.map((q) => ({ ...q })));
   assert.deepEqual(body.approval_age.not_recorded.map((n: any) => n.key), ['lp_applications', 'cohort_applications']);
 });
