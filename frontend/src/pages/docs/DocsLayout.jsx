@@ -17,6 +17,7 @@ import BountyBadge from '../../components/tickets/BountyBadge';
 import ReviewBadge from '../../components/tickets/ReviewBadge';
 import { statusChip } from '../../lib/ticketScreens';
 import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity } from './helpCenter';
+import { GuideAnswersAdmin, GuideFeedback, PopularGuides } from './HelpSignals';
 
 // ---------------------------------------------------------------------------
 // D599 (#1280) — the Help Center, built to its canvas.
@@ -37,11 +38,13 @@ import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByAct
 // notifications, the advisor's tools and bookmarks, so a hash on `/help` now
 // opens that guide's page (see `DocsLayout` below).
 //
-// Four canvas elements stay out, each for want of a store, and
-// `help_center_contract.test.mjs` pins their absence: the view-ranked list
-// (nothing counts views), the yes/no answer (nothing stores it), the per-guide
-// surface line and jump (no guide records its surface), and the licence line
-// (no guide records the licences it applies to). #1280 steps 2 and 3 add them.
+// D621 (#1280 step 2) wires two canvas elements to D603's stores, in
+// `HelpSignals.jsx`: "Popular this week" on the home, and "Did this answer
+// it?" on each guide, with the answers shown to an admin on the home. Two
+// stay out, for want of a store, and `help_center_contract.test.mjs` pins
+// their absence: the per-guide surface line and jump (no guide records its
+// surface), and the licence line (no guide records the licences it applies
+// to). #1280 step 3 adds them.
 // ---------------------------------------------------------------------------
 
 // Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
@@ -583,6 +586,8 @@ function HelpArticle({ sections, area, guide }) {
             )}
           </div>
 
+          <GuideFeedback anchor={`${section.id}/${sub.id}`} />
+
           {related.length > 0 && (
             <section id="related" className="mt-7 scroll-mt-6">
               <h2 className={LABEL}>Related</h2>
@@ -678,7 +683,9 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
         ) : (
           <BrowseByTask sections={visibleSections} />
         )}
+        {!trimmedQuery && <PopularGuides sections={visibleSections} />}
         <YourTicketsCard isAdmin={role === 'admin'} />
+        {role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
         <StillStuck user={user} onOpenChat={onOpenChat} />
       </div>
     </>
