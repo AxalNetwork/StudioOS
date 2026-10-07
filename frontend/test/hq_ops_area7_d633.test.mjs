@@ -61,7 +61,7 @@ test('Q1: the registry draws each state, the overlap mark, the published save ru
   assert.match(sup, /data-testid="registry-state-term_sheet"[^]*?>Draft</);
   assert.match(sup, /data-testid="registry-state-nda"[^]*?>In code only</);
   assert.equal((sup.match(/>OVERLAP</g) || []).length, 2, 'the two types sharing a layer and a party role are marked');
-  assert.match(sup, new RegExp(`data-testid="registry-live-note-side_letter">${PUBLISHED_SAVE_NOTE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
+  assert.ok(sup.includes(`data-testid="registry-live-note-side_letter">${PUBLISHED_SAVE_NOTE}<`), 'the published save rule is stated on the published card');
   assert.doesNotMatch(sup, /registry-live-note-term_sheet|registry-live-note-nda/);
   assert.doesNotMatch(sup, /changes the live type at once/, 'the canvas sentence is not this app\'s rule (D615)');
   assert.match(sup, /data-testid="registry-draft-publish-term_sheet"/);
@@ -78,7 +78,7 @@ test('Q1: a publish waits for the fresh sign-in check, and its reason has a floo
   assert.doesNotMatch(ok, /disabled=""[^>]*data-testid="registry-draft-publish-button/);
   const waiting = html(h(DraftPublishView, { row: DRAFT, reason: 'Counsel approved the text', onReason: noop, phase: 'waiting', error: '', onSubmit: noop }));
   assert.match(waiting, />Waiting for sign-in…</);
-  assert.match(waiting, new RegExp(`data-testid="registry-publish-waiting">${PUBLISH_WAITING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
+  assert.ok(waiting.includes(`data-testid="registry-publish-waiting">${PUBLISH_WAITING}<`), 'the waiting line is drawn');
   assert.match(waiting, /<button type="button"[^>]*disabled=""/);
 });
 
