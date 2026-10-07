@@ -1,0 +1,7 @@
+Fetched by the Research data import workflow, run 37645260003.
+2026-10-07T15:37:26Z FAILED eurotech-first-tab.csv https://docs.google.com/spreadsheets/d/1cRdFZhXLqat04xe7qO-p48wXQ00GWJyrzgHSb3YVIp0/export?format=csv
+2026-10-07T15:37:28Z FAILED deeptech-first-tab.csv https://docs.google.com/spreadsheets/d/1BqNO7l4kXRhjG5jcB89FwRlhuRKBwBKtV7ZHwwLjPhk/export?format=csv
+2026-10-07T15:37:28Z OK shai-goldman-funds.csv https://docs.google.com/spreadsheets/d/1ebGZ6-ivf_3woBGC4Kz_3217DhjGsefoRu_5iP3nuFQ/export?format=csv (text/csv; charset=utf-8)
+2026-10-07T15:37:29Z OK hello-tomorrow-home https://hello-tomorrow.org/ (text/html; charset=UTF-8)
+2026-10-07T15:37:30Z FAILED hello-tomorrow-terms https://hello-tomorrow.org/terms-of-use
+2026-10-07T15:37:31Z FAILED hello-tomorrow-legal https://hello-tomorrow.org/legal-notice
