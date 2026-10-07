@@ -458,7 +458,7 @@ function weekForMilestoneKey(key: string): number | null {
   return null;
 }
 
-async function recordSpinoutMilestoneAndAdvance(
+export async function recordSpinoutMilestoneAndAdvance(
   env: Env, userId: number, key: string, _hintWeek: number,
 ): Promise<void> {
   // Resolve the canonical week for this key. If the key isn't in
@@ -467,10 +467,21 @@ async function recordSpinoutMilestoneAndAdvance(
   const week = weekForMilestoneKey(key);
   if (!week) return;
   // Insert is idempotent via UNIQUE(user_id, milestone_key).
-  await env.DB.prepare(
+  const ins = await env.DB.prepare(
     `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
      VALUES (?, ?, ?)`,
   ).bind(userId, week, key).run();
+  // D541 (#1104, question 1 A): a milestone Eadwyn records pays as the Lab
+  // page's would, and only from the answer that recorded it. The grant is
+  // idempotent on its own, and a failure here never blocks the week advance.
+  if (Number(ins?.meta?.changes ?? 0) === 1) {
+    try {
+      const { creditLabMilestone } = await import('../labMilestoneCredits');
+      await creditLabMilestone(env, userId, key);
+    } catch (e) {
+      console.warn('[writeRouter] lab milestone credit failed', key, (e as Error).message);
+    }
+  }
   // Re-read user lab state. Bail if lab inactive — we never want to
   // advance a non-active lab from a side-effect path.
   const u = await env.DB.prepare(

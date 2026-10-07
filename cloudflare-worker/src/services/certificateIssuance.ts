@@ -227,8 +227,13 @@ export async function backfillCertificates(
     for (const id of ids.slice(0, cap)) {
       out.scanned += 1;
       const r = await issueOnGraduation(env, id);
-      if (r === 'issued') out.issued += 1;
-      else out.skipped += 1;
+      if (r === 'issued') {
+        out.issued += 1;
+        // D541 (#1104, question 1 A): a certificate the backfill issues pays
+        // the graduation bonus on the same terms as one issued live.
+        const { creditLabGraduation } = await import('./labMilestoneCredits');
+        await creditLabGraduation(env, id);
+      } else out.skipped += 1;
     }
   } catch (e) {
     console.error('[certificates] backfill failed', (e as Error)?.message);
