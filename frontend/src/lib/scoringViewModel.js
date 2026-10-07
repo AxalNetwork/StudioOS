@@ -368,7 +368,18 @@ export const EXPORT_CONTENTS = [
 ];
 
 // Mirrors the generated PDF's own footer.
-export const EXPORT_NOT_INCLUDED = 'Not included yet (needs backend data): founder-profile detail, per-evidence citations, cohort positioning.';
+export const EXPORT_NOT_INCLUDED = 'Not included yet (needs backend data): founder-profile detail, per-evidence citations.';
+
+/** 1st, 2nd, 3rd, 4th — 11th, 12th and 13th stay "th". */
+export function ordinal(n) {
+  const v = Math.round(Number(n));
+  const mod100 = v % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${v}th`;
+  if (v % 10 === 1) return `${v}st`;
+  if (v % 10 === 2) return `${v}nd`;
+  if (v % 10 === 3) return `${v}rd`;
+  return `${v}th`;
+}
 
 // Run-level substitute for the design's per-evidence "from Market Intel"
 // attribution — no attribution table exists and inputs_json is stripped for
@@ -457,7 +468,7 @@ function computeEta(traj, startedAtMs, now = Date.now()) {
  *                                       labRoles(['admin'])), so the lock
  *                                       state must mirror the page's own gate.
  */
-export function buildScoringEngineViewModel({ snapshots, state, project, viewerRole } = {}) {
+export function buildScoringEngineViewModel({ snapshots, state, project, viewerRole, cohort } = {}) {
   const list = (Array.isArray(snapshots) ? snapshots : []).filter(Boolean);
   const st = state && typeof state === 'object' ? state : {};
   const proj = project && typeof project === 'object' ? project : {};
@@ -598,8 +609,8 @@ export function buildScoringEngineViewModel({ snapshots, state, project, viewerR
     lockLabel: d.fix ? `${d.fix.label} locked` : (d.fixNote || ''),
   }));
 
-  // ---- benchmarks: the engine's own tier thresholds. There is deliberately
-  // no cohort-median row — no aggregate query over score_snapshots exists.
+  // ---- benchmarks: the engine's tier thresholds, plus the cohort median
+  // when GET /scoring/cohort-benchmark says the set is large enough (D589).
   const gapSentence = composite >= TIER_THRESHOLDS[1].score
     ? 'At Tier 1 — immediate spinout territory.'
     : composite >= TIER_THRESHOLDS[0].score
@@ -658,9 +669,22 @@ export function buildScoringEngineViewModel({ snapshots, state, project, viewerR
       { id: 'you', label: 'Your composite', value: composite, pct: `${composite}%`, barClass: 'bg-violet-600', isYou: true },
       { id: 'tier2', label: TIER_THRESHOLDS[0].label, value: TIER_THRESHOLDS[0].score, pct: `${TIER_THRESHOLDS[0].score}%`, barClass: 'bg-emerald-500', isYou: false },
       { id: 'tier1', label: TIER_THRESHOLDS[1].label, value: TIER_THRESHOLDS[1].score, pct: `${TIER_THRESHOLDS[1].score}%`, barClass: 'bg-gray-400 dark:bg-gray-500', isYou: false },
+      ...(cohort?.available === true ? [{
+        id: 'cohort',
+        label: `${cohort.cohort} median (Week ${cohort.week})`,
+        value: cohort.median,
+        pct: `${clamp(Number(cohort.median), 0, 100)}%`,
+        barClass: 'bg-sky-500',
+        isYou: false,
+      }] : []),
     ],
     markerPct: `${clamp(composite, 0, 100)}%`,
-    benchmarkCaption: "Against the engine's real tier thresholds — cohort medians aren't tracked yet. Marker = your composite.",
+    benchmarkCaption: cohort?.available === true
+      ? "Against the engine's tier thresholds and this cohort's official runs at the same week. Marker = your composite."
+      : "Against the engine's real tier thresholds. Marker = your composite.",
+    cohortSentence: cohort?.available === true
+      ? `You rank in the ${ordinal(cohort.percentile)} percentile of the ${cohort.cohort} field.`
+      : (cohort?.available === false ? String(cohort.reason || '') : ''),
     gapSentence,
 
     trajectory: {
@@ -695,6 +719,13 @@ export function buildScoringEngineViewModel({ snapshots, state, project, viewerR
       radarKeys: DIMENSIONS.map((d) => d.key),
       tiers: TIER_THRESHOLDS,
       contents: EXPORT_CONTENTS,
+      cohortBar: cohort?.available === true ? {
+        label: `${cohort.cohort} median (Week ${cohort.week})`,
+        value: cohort.median,
+      } : null,
+      cohortLine: cohort?.available === true
+        ? `You rank in the ${ordinal(cohort.percentile)} percentile of the ${cohort.cohort} field.`
+        : (cohort?.available === false ? String(cohort.reason || '') : ''),
     },
   };
 }

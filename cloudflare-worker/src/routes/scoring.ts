@@ -7,6 +7,8 @@ import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
+import { COHORT_BENCHMARK_MIN, medianOf, percentileRank } from '../services/cohortBenchmark';
+import { refuse } from '../util/refusal';
 import { ensureTier } from '../middleware/requireTier';
 import { runFullScore, tierLabel } from '../services/scoring';
 import { formatUseOfFundsText } from '../util/useOfFunds';
@@ -22,8 +24,8 @@ import {
   snapshotIsVisible,
   isAuditableRole,
   INTEGRITY_VERSION,
-  ScoreSnapshotRow,
 } from '../services/scoreIntegrity';
+import type { ScoreSnapshotRow } from '../services/scoreIntegrity';
 
 const scoring = new Hono<{ Bindings: Env }>();
 
@@ -426,6 +428,118 @@ scoring.post('/score/:projectId/deal-memo', async (c) => {
     terms: { amount: memo.terms_amount, equity: memo.terms_equity, structure: memo.terms_structure },
     integrity_hash: snapshot.integrity_hash,
   });
+});
+
+const NOT_ENOUGH = 'There are not enough scored ventures in this cohort at this week yet.';
+const NO_COHORT = 'This account has no Lab cohort recorded, so there is no cohort to compare.';
+const NO_OFFICIAL = 'This project has no official scoring run yet, so there is no percentile to place.';
+
+type OfficialRow = {
+  project_id: number;
+  id: number;
+  total_score: number;
+  created_at: string;
+  integrity_hash: string | null;
+  integrity_version: string | null;
+};
+
+function laterOfficial(a: OfficialRow, b: OfficialRow): boolean {
+  if (a.created_at !== b.created_at) return a.created_at > b.created_at;
+  return a.id > b.id;
+}
+
+/** D589 — median and percentile for this project's founder, same cohort and week. */
+scoring.get('/cohort-benchmark/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isInteger(projectId) || projectId < 1) {
+    return refuse(c, 400, { code: 'project_invalid', message: 'Name the project this benchmark is for.' });
+  }
+  try {
+    const project = await c.env.DB.prepare(
+      'SELECT id, founder_id, company_id FROM projects WHERE id = ?',
+    ).bind(projectId).first<{ id: number; founder_id: number | null; company_id: number | null }>();
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+    const isExploringOwner = user.role === 'exploring'
+      && user.founder_id != null && user.founder_id === project.founder_id;
+    if (!canAccessFounderResource(user, project.founder_id) && !isExploringOwner) {
+      return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+    }
+    if (user.role === 'founder' && user.founder_id === project.founder_id
+        && !projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+
+    const owner = await c.env.DB.prepare(
+      `SELECT u.spinout_lab_week AS week, f.spinout_lab_cohort AS cohort, f.spinout_lab_admitted AS admitted
+         FROM users u
+         LEFT JOIN user_spinout_flags f ON f.user_id = u.id
+        WHERE u.founder_id = ?
+        ORDER BY u.spinout_lab_active DESC, u.id ASC
+        LIMIT 1`,
+    ).bind(project.founder_id).first<{ week: number | null; cohort: string | null; admitted: number | null }>();
+    const cohort = owner?.cohort?.trim() ? owner.cohort.trim() : null;
+    const week = owner && Number.isFinite(Number(owner.week)) ? Number(owner.week) : null;
+    if (!owner || !cohort || Number(owner.admitted) !== 1 || week === null) {
+      return c.json({ available: false, cohort, week, reason: NO_COHORT });
+    }
+
+    const listed = await c.env.DB.prepare(
+      `SELECT p.id AS project_id, s.id, s.total_score, s.created_at, s.integrity_hash, s.integrity_version
+         FROM projects p
+         JOIN users u ON u.founder_id = p.founder_id
+         JOIN user_spinout_flags f ON f.user_id = u.id
+         JOIN score_snapshots s ON s.project_id = p.id AND s.is_sandbox = 0
+        WHERE f.spinout_lab_admitted = 1
+          AND f.spinout_lab_cohort = ?
+          AND u.spinout_lab_week = ?`,
+    ).bind(cohort, week).all<OfficialRow>();
+
+    const newestValid = new Map<number, number>();
+    const byProject = new Map<number, OfficialRow[]>();
+    for (const row of listed.results || []) {
+      const list = byProject.get(row.project_id) || [];
+      list.push(row);
+      byProject.set(row.project_id, list);
+    }
+    for (const [pid, rows] of byProject) {
+      rows.sort((a, b) => (laterOfficial(a, b) ? -1 : 1));
+      for (const row of rows) {
+        const verified = await verifyScoreHash(c.env, {
+          project_id: pid,
+          total_score: Number(row.total_score),
+          integrity_hash: row.integrity_hash,
+          integrity_version: row.integrity_version,
+          created_at: row.created_at,
+        });
+        if (!verified.valid) continue;
+        newestValid.set(pid, Number(row.total_score));
+        break;
+      }
+    }
+
+    const own = newestValid.get(projectId);
+    if (own === undefined) {
+      return c.json({ available: false, cohort, week, reason: NO_OFFICIAL });
+    }
+    const scores = [...newestValid.values()];
+    if (scores.length < COHORT_BENCHMARK_MIN) {
+      return c.json({ available: false, cohort, week, reason: NOT_ENOUGH });
+    }
+    return c.json({
+      available: true,
+      cohort,
+      week,
+      median: medianOf(scores),
+      percentile: percentileRank(scores, own),
+    });
+  } catch (error) {
+    return refuse(c, 503, {
+      code: 'cohort_benchmark_unreadable',
+      message: 'The cohort benchmark could not be read.',
+      raw: error,
+    });
+  }
 });
 
 scoring.get('/scores/:projectId', async (c) => {

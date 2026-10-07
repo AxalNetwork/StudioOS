@@ -9,8 +9,8 @@
 // with per-input sub-factor points, a weak-point remediation summary, and
 // benchmark bars against the engine's real tier thresholds with a composite
 // marker. Nothing is fabricated: founder-profile detail, per-evidence source
-// citations, and cohort benchmarks have no client data source yet, and the
-// footer states exactly that.
+// citations have no client data source yet. Cohort positioning is drawn when
+// the Worker returned a median (D589); otherwise the footer states the reason.
 
 const INK = [26, 32, 44];
 const GRAY = [82, 82, 91];
@@ -50,6 +50,7 @@ export function scoringReportFilename(projectName, today = new Date()) {
 export async function exportScoringReportPdf({
   projectName, isSandbox, lastRunLabel, composite, delta, deltaIsPractice,
   aiAdjustment, dimensionsTotal, tierLabel, dims, radarKeys, tiers,
+  cohortBar, cohortLine,
 }) {
   const jspdfMod = await import('jspdf');
   const JsPDF = jspdfMod.jsPDF || jspdfMod.default;
@@ -221,6 +222,7 @@ export async function exportScoringReportPdf({
   const rows = [
     { label: 'Your composite', value: composite, color: VIOLET },
     ...(tiers || []).map((t, i) => ({ label: t.label, value: t.score, color: tierColors[i] || LIGHT })),
+    ...(cohortBar ? [{ label: cohortBar.label, value: cohortBar.value, color: [14, 165, 233] }] : []),
   ];
   for (const r of rows) {
     doc.setFont('helvetica', 'normal');
@@ -252,7 +254,8 @@ export async function exportScoringReportPdf({
   doc.text(
     'Generated client-side in StudioOS from the latest scoring run — the same snapshot the Scoring Engine page renders. '
     + 'Not yet included (needs backend data): founder-profile detail (skill map, archetype matrix, values heatmap), '
-    + 'per-evidence source citations, and cohort benchmark positioning — engine tier thresholds are shown instead.',
+    + 'per-evidence source citations. '
+    + (cohortLine || 'The cohort benchmark was not read with this export.'),
     margin, pageH - 64, { maxWidth: usableW },
   );
 
