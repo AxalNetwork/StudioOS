@@ -70,8 +70,22 @@ export function pageOf(list, page = 1, size = PAGE_SIZE) {
   return { rows, page: at, pages, total, count };
 }
 
+let sourceSeq = 0;
+
+/** Eight hex characters from Web Crypto. Time plus a counter only if crypto is absent. */
+function randomSourcePart() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const bytes = new Uint8Array(4);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch { /* fall through */ }
+  return `${Date.now().toString(36)}${(++sourceSeq).toString(36)}`;
+}
+
 /** A fresh idempotency key per opened form: the same submission sent twice is refused, not paid twice. */
-export function newSourceRef(rand = () => Math.random().toString(36).slice(2, 10), now = Date.now()) {
+export function newSourceRef(rand = randomSourcePart, now = Date.now()) {
   return `hq:${now.toString(36)}:${rand()}`;
 }
 

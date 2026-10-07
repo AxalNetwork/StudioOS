@@ -130,6 +130,10 @@ test('Q2: an adjustment is planned before it is sent; the reason and the amount 
   assert.match(planAdjust({ ...base, note: 'x'.repeat(501) }).error, /at most 500/);
   assert.equal(planAdjust({ ...base, note: '  ' }).body.note, undefined, 'an empty note is not sent');
   assert.match(newSourceRef(() => 'r1', 36), /^hq:10:r1$/);
+  const minted = newSourceRef();
+  assert.match(minted, /^hq:[0-9a-z]+:[0-9a-f]{8}$/);
+  assert.notEqual(minted, newSourceRef());
+  assert.equal(read('frontend/src/lib/memberCredits.js').includes('Math.random'), false);
   const html0 = html(h(AdjustForm, { userId: 4, onDone: noop, onCancel: noop, sourceRef: 'hq:a' }));
   assert.match(html0, /<button type="submit"[^>]*disabled=""/, 'submit waits for a reason');
 });
