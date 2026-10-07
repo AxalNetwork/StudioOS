@@ -36,7 +36,8 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const count = (s, needle) => s.split(needle).length - 1;
 const WORKER = read('cloudflare-worker/src/routes/help_center.ts');
-const workerConst = (name) => Number(new RegExp(`export const ${name} = (\\d+);`).exec(WORKER)?.[1]);
+// A literal pattern per constant, so no expression is built from a string.
+const workerConst = (re) => Number(re.exec(WORKER)?.[1]);
 
 const SECTIONS = [
   { id: 'capital', title: 'Capital', subsections: [{ id: 'cap-table', title: 'Cap tables' }, { id: 'calls', title: 'Capital calls' }] },
@@ -45,11 +46,11 @@ const SECTIONS = [
 ];
 
 test('the page asks the route for what it can serve, and caps what it was told to', () => {
-  assert.equal(POPULAR_ASKED, workerConst('POPULAR_MAX_LIMIT'), 'ask for the most the route returns, so dropped guides leave room');
-  assert.ok(POPULAR_DAYS >= 1 && POPULAR_DAYS <= workerConst('POPULAR_MAX_DAYS'));
+  assert.equal(POPULAR_ASKED, workerConst(/export const POPULAR_MAX_LIMIT = (\d+);/), 'ask for the most the route returns, so dropped guides leave room');
+  assert.ok(POPULAR_DAYS >= 1 && POPULAR_DAYS <= workerConst(/export const POPULAR_MAX_DAYS = (\d+);/));
   assert.equal(POPULAR_DAYS, 7, 'the canvas says "last 7 days"');
   assert.equal(POPULAR_SHOWN, 4, 'the canvas draws four cards');
-  assert.equal(MISSING_MAX, workerConst('MISSING_MAX'), "the field's cap is the Worker's");
+  assert.equal(MISSING_MAX, workerConst(/export const MISSING_MAX = (\d+);/), "the field's cap is the Worker's");
 });
 
 test('popular cards: the route\'s order, only guides this reader can open, at most four', () => {
@@ -132,7 +133,7 @@ test('Popular this week: loading, unreadable, an empty week, and four ranked car
   assert.match(html(h(PopularGuidesView, { read: { status: 'ok', cards: [] } })), /No views are recorded for these guides this week\./);
   const out = html(h(PopularGuidesView, { read: { status: 'ok', cards: CARDS } }));
   assert.equal(count(out, 'data-testid="help-popular-card"'), 4);
-  for (const r of ['01', '02', '03', '04']) assert.match(out, new RegExp(`>${r}<`));
+  for (const r of ['01', '02', '03', '04']) assert.ok(out.includes(`>${r}<`), `rank ${r}`);
   assert.match(out, /href="\/help\/capital\/calls"/);
   assert.match(out, /1,240 views · Capital/);
   assert.equal(count(out, 'bg-violet-50'), 1, 'only the first rank is violet, as the canvas draws it');
