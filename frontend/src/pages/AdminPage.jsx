@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap, GitBranch as Github, Copy, FlaskConical } from 'lucide-react';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
+import ToastMessage from '../components/ToastMessage';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAuth } from '../hooks/useAuthSync';
@@ -3443,7 +3444,7 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
 // Task #14 — Full-screen lightbox for signed eSign documents. PDF preview
 // in an iframe + metadata/audit sidebar + "Forward to legal partner" action.
 // Only opens from the Signed sub-tab when the source is 'esign'.
-function SignedDocLightbox({ uid, onClose, onChanged }) {
+export function SignedDocLightbox({ uid, onClose, onChanged }) {
   const [doc, setDoc] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [err, setErr] = useState('');
@@ -3527,7 +3528,7 @@ function SignedDocLightbox({ uid, onClose, onChanged }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2" onClick={onClose}>
-      {toast}
+      <ToastMessage toast={toast} />
       <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[96vw] h-[96vh] overflow-hidden flex flex-col dark:bg-gray-900">
         {/* Header */}
         <div className="px-5 py-3 border-b border-gray-200 flex items-start justify-between gap-3 dark:border-gray-800 flex-shrink-0">
@@ -4026,7 +4027,7 @@ function MetadataFields({ kind, metadata, onChange, inputCls }) {
 // Task #16 — Admin Payments panel: Stripe publishable key, product catalog
 // CRUD, and webhook endpoint management. All mutations are rate-limited
 // (admin_catalog_writes bucket) and audit-logged server-side.
-function PaymentsPanel() {
+export function PaymentsPanel() {
   const { toast, showToast } = useToast(4000);
   const inputCls = 'rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 w-full';
   const cardCls = 'bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800 mb-6';
@@ -4257,7 +4258,7 @@ function PaymentsPanel() {
 
   return (
     <div>
-      {toast}
+      <ToastMessage toast={toast} />
 
       {/* Mode banner */}
       <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border mb-6 text-sm font-medium ${modeBadge}`}>
@@ -4677,7 +4678,20 @@ function PaymentsPanel() {
 // Task #11 — Billing admin: refunds (per-product policy + referral commission
 // clawback), dispute evidence, and customer LTV. Each action is step-up gated
 // server-side; the api `request` helper transparently handles the challenge.
-function BillingPanel() {
+/** A dispute's evidence fields, empty. */
+export const EMPTY_EVIDENCE = Object.freeze({ uncategorized_text: '', product_description: '', customer_communication: '', refund_policy_disclosure: '', receipt: '' });
+
+/**
+ * #1437 — choosing a dispute. Evidence written for one dispute must never be
+ * carried into another and submitted there, so choosing a different dispute
+ * starts its evidence empty. Choosing the same one again keeps what is typed.
+ */
+export function pickDispute(current, evidence, next) {
+  if (current && next && current.id === next.id) return { selDispute: current, evidence };
+  return { selDispute: next, evidence: { ...EMPTY_EVIDENCE } };
+}
+
+export function BillingPanel() {
   const { toast, showToast } = useToast(4000);
   const inputCls = 'rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 w-full';
   const cardCls = 'bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800';
@@ -4728,7 +4742,7 @@ function BillingPanel() {
   const [disputes, setDisputes] = useState([]);
   const [dispLoading, setDispLoading] = useState(false);
   const [selDispute, setSelDispute] = useState(null);
-  const [evidence, setEvidence] = useState({ uncategorized_text: '', product_description: '', customer_communication: '', refund_policy_disclosure: '', receipt: '' });
+  const [evidence, setEvidence] = useState({ ...EMPTY_EVIDENCE });
   const [evBusy, setEvBusy] = useState(false);
   const setEv = (k, v) => setEvidence((s) => ({ ...s, [k]: v }));
 
@@ -4790,7 +4804,7 @@ function BillingPanel() {
 
   return (
     <div className="space-y-6">
-      {toast}
+      <ToastMessage toast={toast} />
 
       {/* Refund */}
       <div className={cardCls}>
@@ -4876,7 +4890,7 @@ function BillingPanel() {
               <ul className="divide-y divide-gray-100 dark:divide-gray-800 text-xs">
                 {disputes.map((d) => (
                   <li key={d.id}>
-                    <button onClick={() => { setSelDispute(d); }}
+                    <button onClick={() => { const n = pickDispute(selDispute, evidence, d); setSelDispute(n.selDispute); setEvidence(n.evidence); }}
                       className={`w-full text-left py-2 px-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded ${selDispute?.id === d.id ? 'bg-violet-50 dark:bg-violet-950/30' : ''}`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-gray-900 dark:text-gray-100">{fmtMoney(d.amount, d.currency)}</span>

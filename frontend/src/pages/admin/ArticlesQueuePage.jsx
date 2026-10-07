@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { adminArticles as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 import { reportError } from '../../lib/log';
 import { localInputValue, publishAtFromLocal, utcLabel } from './articlePublishAt';
 import ReviewComments from '../../components/hqReview/ReviewComments';
@@ -116,7 +117,7 @@ function PromptModal({ title, placeholder, onConfirm, onCancel, confirmLabel = '
 }
 
 export default function ArticlesQueuePage() {
-  const { showToast } = useToast();
+  const { toast: current, showToast, dismissToast } = useToast();
   const toast = {
     error: (m) => showToast({ kind: 'error', msg: m }),
     success: (m) => showToast({ kind: 'success', msg: m }),
@@ -227,6 +228,7 @@ export default function ArticlesQueuePage() {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
+      <ToastMessage toast={current} onDismiss={dismissToast} />
       <header className="mb-4">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <FileText className="w-6 h-6 text-violet-600" /> Content review queue

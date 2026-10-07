@@ -7,6 +7,7 @@ import {
 import { adminTelegram as api } from '../../lib/api';
 import { toLocalInput, scheduledNote, failedNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 const AUDIENCES = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
@@ -935,6 +936,7 @@ export default function AdminTelegram() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
+      <ToastMessage toast={toast.toast} onDismiss={toast.dismissToast} />
       <header>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Send className="w-6 h-6 text-violet-600" /> Telegram

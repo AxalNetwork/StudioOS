@@ -57,6 +57,7 @@ import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
+import { toastText, toastIsError } from '../components/ToastMessage';
 import { incorporateRoute, pickLabProject } from './SpinoutLabStartupPage';
 import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
@@ -540,7 +541,7 @@ export default function SpinoutLabOfficeHoursPage() {
     try {
       await navigator.clipboard.writeText(briefText);
       setCopiedBrief(true); setTimeout(() => setCopiedBrief(false), 1800);
-    } catch { showToast('Could not copy — clipboard unavailable.', 'error'); }
+    } catch { showToast({ kind: 'error', msg: 'Could not copy — clipboard unavailable.' }); }
   };
 
   // ---- Action items: this week's real milestone checklist (read-only) ----
@@ -620,7 +621,7 @@ export default function SpinoutLabOfficeHoursPage() {
   const bookTopMatch = (role) => {
     const target = matchForRole(role);
     if (target) openDrawer(target);
-    else showToast('No approved host matches this yet.', 'error');
+    else showToast({ kind: 'error', msg: 'No approved host matches this yet.' });
   };
 
   // Partner-authored guidance for the partner whose drawer is open (if any).
@@ -705,7 +706,7 @@ export default function SpinoutLabOfficeHoursPage() {
             <button
               type="button"
               className={labBtn('ghost')}
-              onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); showToast('Link copied.'); } catch { showToast('Could not copy link.', 'error'); } }}
+              onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); showToast('Link copied.'); } catch { showToast({ kind: 'error', msg: 'Could not copy link.' }); } }}
               data-testid="button-copy-link"
             >
               <Copy size={LAB_ICON_SIZE} /> Copy link
@@ -1278,9 +1279,9 @@ export default function SpinoutLabOfficeHoursPage() {
         </div>
       )}
 
-      {toast && (
-        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-xl shadow-lg text-[13px] font-semibold ${toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'}`} data-testid="toast">
-          {toast.msg}
+      {toastText(toast) && (
+        <div role={toastIsError(toast) ? 'alert' : 'status'} className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-xl shadow-lg text-[13px] font-semibold ${toastIsError(toast) ? 'bg-red-600 text-white' : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'}`} data-testid="toast">
+          {toastText(toast)}
         </div>
       )}
     </LabPageShell>

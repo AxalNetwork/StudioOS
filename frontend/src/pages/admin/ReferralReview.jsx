@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 
 const STATUSES = [
   'submitted', 'under_review', 'more_info_needed', 'qualified',
@@ -36,7 +37,7 @@ const LABELS = {
 };
 
 export default function ReferralReview() {
-  const { showToast } = useToast();
+  const { toast, success, error: toastError, dismissToast } = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -60,6 +61,7 @@ export default function ReferralReview() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-5" data-testid="admin-referral-review">
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Referral review</h1>
@@ -147,8 +149,8 @@ export default function ReferralReview() {
               {openUid === r.uid && (
                 <ReviewForm
                   row={r}
-                  onDone={(msg) => { showToast(msg, 'success'); setOpenUid(null); load(); }}
-                  onError={(msg) => showToast(msg, 'error')}
+                  onDone={(msg) => { success(msg); setOpenUid(null); load(); }}
+                  onError={(msg) => toastError(msg)}
                 />
               )}
             </li>

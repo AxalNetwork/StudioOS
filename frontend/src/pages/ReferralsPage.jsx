@@ -17,6 +17,7 @@ import {
 import { api } from '../lib/api';
 import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
 import { useToast } from '../components/useToast';
+import ToastMessage from '../components/ToastMessage';
 import { Unreadable } from '../ui';
 import './referrals/referrals.css';
 import { appOrigin } from '../lib/branchHost';
@@ -386,7 +387,7 @@ function inviteStatus(row) {
 }
 
 export default function ReferralsPage({ embedded = false }) {
-  const { showToast } = useToast();
+  const { toast, showToast, dismissToast } = useToast();
   const policyRef = useRef(null);
   const formatsRef = useRef(null);
   const csvInputRef = useRef(null);
@@ -455,7 +456,7 @@ export default function ReferralsPage({ embedded = false }) {
       }
       setPendingContacts(parsed.rows);
       localStorage.removeItem(PENDING_LINKEDIN_IMPORT_KEY);
-      showToast(`${parsed.rows.length} contacts imported from LinkedIn — review and send invites below.`, 'success');
+      showToast({ kind: 'success', msg: `${parsed.rows.length} contacts imported from LinkedIn — review and send invites below.` });
     } catch { /* ignore */ }
   }, [showToast]);
 
@@ -559,7 +560,7 @@ export default function ReferralsPage({ embedded = false }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      showToast('Could not copy — select the link and copy manually.', 'error');
+      showToast({ kind: 'error', msg: 'Could not copy — select the link and copy manually.' });
     }
   };
 
@@ -569,7 +570,7 @@ export default function ReferralsPage({ embedded = false }) {
       await navigator.clipboard.writeText(link);
       setShareCopied(true);
     } catch {
-      showToast('Could not copy link.', 'error');
+      showToast({ kind: 'error', msg: 'Could not copy link.' });
     }
   };
 
@@ -585,7 +586,7 @@ export default function ReferralsPage({ embedded = false }) {
       setShareToast(`QR downloaded as referral-${overview.referral_code || 'code'}.png`);
       setTimeout(() => setShareToast(''), 2400);
     } catch {
-      showToast('Could not generate QR image.', 'error');
+      showToast({ kind: 'error', msg: 'Could not generate QR image.' });
     }
   };
 
@@ -596,7 +597,7 @@ export default function ReferralsPage({ embedded = false }) {
       setShareToast(note);
       setTimeout(() => setShareToast(''), 2400);
     } catch {
-      showToast('Could not copy the caption.', 'error');
+      showToast({ kind: 'error', msg: 'Could not copy the caption.' });
     }
   };
 
@@ -617,7 +618,7 @@ export default function ReferralsPage({ embedded = false }) {
       setShareToast(`${format.ratio} card downloaded — ${format.label}`);
       setTimeout(() => setShareToast(''), 2400);
     } catch {
-      showToast('Could not generate that card.', 'error');
+      showToast({ kind: 'error', msg: 'Could not generate that card.' });
     }
   };
 
@@ -628,7 +629,7 @@ export default function ReferralsPage({ embedded = false }) {
       setDetail(full);
     } catch (e) {
       setDetail(null);
-      showToast(e?.message || 'Could not open that referral.', 'error');
+      showToast({ kind: 'error', msg: e?.message || 'Could not open that referral.' });
     }
   };
 
@@ -636,18 +637,18 @@ export default function ReferralsPage({ embedded = false }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      showToast('File too large (max 2 MB).', 'error');
+      showToast({ kind: 'error', msg: 'File too large (max 2 MB).' });
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const parsed = parseLinkedInCsv(String(reader.result || ''));
       if (!parsed.length) {
-        showToast('No contacts found — CSV needs an email column.', 'warning');
+        showToast({ kind: 'warning', msg: 'No contacts found — CSV needs an email column.' });
         return;
       }
       setPendingContacts(parsed);
-      showToast(`${parsed.length} contacts ready to invite.`, 'success');
+      showToast({ kind: 'success', msg: `${parsed.length} contacts ready to invite.` });
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -658,15 +659,15 @@ export default function ReferralsPage({ embedded = false }) {
     try {
       if (contact.id && !contact.pending) {
         await api.emailRemindInvite(contact.id);
-        showToast('Reminder sent.', 'success');
+        showToast({ kind: 'success', msg: 'Reminder sent.' });
       } else {
         const r = await api.emailSendReferralInvites([{ email: contact.email, name: contact.name === '—' ? '' : contact.name }]);
         if (r.sent > 0) {
-          showToast('Invite sent.', 'success');
+          showToast({ kind: 'success', msg: 'Invite sent.' });
           setPendingContacts((prev) => prev.filter((p) => p.email !== contact.email));
         } else {
           const reason = r.failed?.[0]?.reason || 'Could not send invite.';
-          showToast(reason, 'warning');
+          showToast({ kind: 'warning', msg: reason });
         }
       }
       const inv = await api.emailInvites().catch(() => null);
@@ -677,7 +678,7 @@ export default function ReferralsPage({ embedded = false }) {
         setInvitesUnreadable(true);
       }
     } catch (err) {
-      showToast(err?.message || 'Could not send invite.', 'error');
+      showToast({ kind: 'error', msg: err?.message || 'Could not send invite.' });
     } finally {
       setSendingInvite(null);
     }
@@ -689,12 +690,12 @@ export default function ReferralsPage({ embedded = false }) {
       if (!st?.connected) {
         const start = await api.linkedinOAuthStart({ return_to: '/referrals' });
         if (start?.url) window.location.href = start.url;
-        else showToast('LinkedIn is not configured.', 'warning');
+        else showToast({ kind: 'warning', msg: 'LinkedIn is not configured.' });
         return;
       }
-      showToast('Upload Connections.csv using Upload CSV — or import from Settings → Integrations.', 'info');
+      showToast({ kind: 'info', msg: 'Upload Connections.csv using Upload CSV — or import from Settings → Integrations.' });
     } catch (e) {
-      showToast(e?.message || 'Could not start LinkedIn import.', 'error');
+      showToast({ kind: 'error', msg: e?.message || 'Could not start LinkedIn import.' });
     }
   };
 
@@ -704,9 +705,9 @@ export default function ReferralsPage({ embedded = false }) {
       setOverview((o) => ({ ...o, strategic_access: 'requested' }));
       setPartnerOpen(false);
       setPartnerNote('');
-      showToast('Partner program request submitted — we’ll follow up directly.', 'success');
+      showToast({ kind: 'success', msg: 'Partner program request submitted — we’ll follow up directly.' });
     } catch (e) {
-      showToast(e?.message || 'Could not submit request.', 'error');
+      showToast({ kind: 'error', msg: e?.message || 'Could not submit request.' });
     }
   };
 
@@ -718,6 +719,7 @@ export default function ReferralsPage({ embedded = false }) {
 
   return (
     <div className={`rf-page ${embedded ? 'space-y-6' : ''}`} data-testid="referrals-page">
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
       {!embedded && (
         <div className="rf-header">
           <div className="rf-header-inner">
@@ -1099,6 +1101,7 @@ export default function ReferralsPage({ embedded = false }) {
           categories={(overview?.categories || []).filter((c) => !c.locked)}
           onClose={() => setSubmitOpen(false)}
           onDone={() => { setSubmitOpen(false); load(); }}
+          notify={showToast}
         />
       )}
 
@@ -1107,6 +1110,7 @@ export default function ReferralsPage({ embedded = false }) {
           detail={detail}
           onClose={() => setDetail(null)}
           onUpdated={(next) => { setDetail(next); load(); }}
+          notify={showToast}
         />
       )}
 
@@ -1176,8 +1180,7 @@ export default function ReferralsPage({ embedded = false }) {
   );
 }
 
-function SubmitDrawer({ categories, onClose, onDone }) {
-  const { showToast } = useToast();
+function SubmitDrawer({ categories, onClose, onDone, notify }) {
   const [formCat, setFormCat] = useState(categories[0]?.key || 'startup');
   const [warm, setWarm] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -1220,7 +1223,7 @@ function SubmitDrawer({ categories, onClose, onDone }) {
     try {
       const csv = ['name,org,context', ...importRows.map((r) => `${r.name},${r.org},${r.context}`)].join('\n');
       const r = await api.referralImport({ category: importCat, csv });
-      showToast(`Imported ${r.imported}${r.failed?.length ? ` · ${r.failed.length} skipped` : ''}.`, r.failed?.length ? 'warning' : 'success');
+      notify?.({ kind: r.failed?.length ? 'warning' : 'success', msg: `Imported ${r.imported}${r.failed?.length ? ` · ${r.failed.length} skipped` : ''}.` });
       setImportRows([]);
       onDone();
     } catch (err) {
@@ -1384,8 +1387,7 @@ function SubmitDrawer({ categories, onClose, onDone }) {
   );
 }
 
-function DetailDrawer({ detail, onClose, onUpdated }) {
-  const { showToast } = useToast();
+function DetailDrawer({ detail, onClose, onUpdated, notify }) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -1416,10 +1418,10 @@ function DetailDrawer({ detail, onClose, onUpdated }) {
     try {
       const next = await api.referralAddContext(detail.uid, { note });
       setNote('');
-      showToast('Added.', 'success');
+      notify?.({ kind: 'success', msg: 'Added.' });
       onUpdated(next);
     } catch (e) {
-      showToast(e?.message || 'Could not add that.', 'error');
+      notify?.({ kind: 'error', msg: e?.message || 'Could not add that.' });
     } finally {
       setSaving(false);
     }
