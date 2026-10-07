@@ -117,9 +117,10 @@ test('compact scored card is one hit target to the full archetype page', () => {
   assert.match(fitCode, /clickable = Boolean\(compact && latest\)/);
   assert.match(fitCode, /<Link to=\{to\} className=\{cls\}/);
   assert.match(fitCode, /View full card →/);
-  assert.match(fitCode, />Preview<\/span>/);
+  // D620 (board A1): no "Preview" chip, and hover adds a shadow to the lift.
+  assert.doesNotMatch(fitCode, />Preview<\/span>/);
   assert.match(fit, /\.pf-card-hit \{/);
-  assert.match(fit, /\.pf-card-hit:hover \{ transform: translateY\(-2px\); border-color: var\(--arch-accent, #7c3aed\); \}/);
+  assert.match(fit, /\.pf-card-hit:hover \{ transform: translateY\(-2px\); box-shadow: 0 6px 18px rgba\(24,24,27,\.08\); border-color: var\(--arch-accent, #7c3aed\); \}/);
   assert.match(fit, /\.pf-card-hit:focus-visible \{ outline: 2px solid #7c3aed/);
   assert.doesNotMatch(fitCode, /archetypeBanner/,
     'compact /studio stays on pixel sprites — cinematic banners belong on the full page');

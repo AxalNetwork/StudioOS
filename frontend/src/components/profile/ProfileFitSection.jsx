@@ -329,6 +329,12 @@ export function ArchetypeCard({ state, fitState, className, audience = 'founder'
       >
         <h4 className="pf-lbl text-[#a1a1aa] dark:text-gray-400">{archetypeLicenceTitle(audience)}</h4>
         <LockedArchetype plan={lock} />
+        {/* D620 — board A10 under the lock: the label, "Locked" and what
+            unlocking does. The tile keeps D594's line, which names the plan
+            and already says the answers are kept, so it is not said twice. */}
+        <div className="pf-lbl mt-4 text-[#a1a1aa] dark:text-gray-400">Primary archetype</div>
+        <div className="mt-[5px] text-[18px] font-extrabold tracking-[-0.02em] text-[#a1a1aa] dark:text-gray-400" data-testid="archetype-locked-status">Locked</div>
+        <div className="mt-[10px] text-[12.5px] leading-[1.5] text-[#a1a1aa] dark:text-gray-400">The reading unlocks with the plan.</div>
       </div>
     );
   }
@@ -366,7 +372,7 @@ export function ArchetypeCard({ state, fitState, className, audience = 'founder'
           </div>
         )}
         {(compact ? (meta?.summary || meta?.description) : meta?.description) && (
-          <div>
+          <div className={compact ? 'hidden md:block' : undefined} data-testid="archetype-description">
             <div className="pf-lbl text-[#b45309] dark:text-amber-500 mb-[9px]">Description</div>
             <div className="text-[12.5px] text-[#3f3f46] dark:text-gray-300 leading-[1.5]">
               {compact ? (meta.summary || meta.description) : meta.description}
@@ -376,20 +382,31 @@ export function ArchetypeCard({ state, fitState, className, audience = 'founder'
       </>
     );
 
+    // D620 — board A1–A4 and A9. On a phone the sprite drops to 96px beside
+    // the name and the description is left to the page; from md up the
+    // sprite sits above, as on the 400px column. The footer row carries the
+    // one "View full card" and the illustration setting the card is drawn in.
     body = compact ? (
       <div className="flex min-w-0 flex-col gap-3">
-        <ArchetypeArt slug={latest.slug} sex={sex} compact name={title} />
-        <div>
-          <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-1">Primary archetype</div>
-          <div className="flex items-baseline justify-between gap-2">
-            <div className="text-[18px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
-            <div className="pf-mono shrink-0 text-[12px] font-bold text-[#7c3aed] dark:text-violet-300">
-              {pct != null ? `${pct}%` : 'N/A'}
+        <div className="flex items-center gap-[14px] md:flex-col md:items-stretch md:gap-3" data-testid="archetype-compact-head">
+          <div className="w-[96px] shrink-0 md:w-auto" data-testid="archetype-compact-art">
+            <ArchetypeArt slug={latest.slug} sex={sex} compact name={title} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="pf-lbl text-[10.5px] text-[#7c3aed] dark:text-violet-300 mb-1">Primary archetype</div>
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="text-[18px] font-extrabold tracking-[-0.02em] leading-tight text-[#27272a] dark:text-gray-100">{title}</div>
+              <div className="pf-mono shrink-0 text-[12px] font-bold text-[#7c3aed] dark:text-violet-300">
+                {pct != null ? `${pct}%` : 'N/A'}
+              </div>
             </div>
           </div>
         </div>
         {copy}
-        <div className="pf-lbl text-[#7c3aed] dark:text-violet-300 pt-1">View full card →</div>
+        <div className="flex items-center justify-between gap-3 border-t border-[#ececf1] dark:border-gray-700 pt-3" data-testid="archetype-compact-footer">
+          <span className="text-[12px] font-bold text-[#7c3aed] dark:text-violet-300">View full card →</span>
+          <span className="pf-mono text-[10px] text-[#a1a1aa]" data-testid="archetype-compact-sex">illustration · {sex}</span>
+        </div>
       </div>
     ) : (
       <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-[26px] items-start">
@@ -421,16 +438,14 @@ export function ArchetypeCard({ state, fitState, className, audience = 'founder'
   const ariaLabel = clickable
     ? `${archetypeLicenceTitle(audience)}: ${ariaTitle}${ariaPct != null ? `, ${ariaPct}% confidence` : ''}. View full card`
     : undefined;
-  const previewChip = clickable ? (
-    <span className="pf-lbl text-[10px] tracking-[0.08em] text-[#7c3aed] dark:text-violet-300 border border-[#ede9fe] dark:border-violet-800 rounded-full px-[10px] py-[3px]">Preview</span>
-  ) : null;
+  // D620 — board A1 draws no "Preview" chip: the footer's "View full card →"
+  // is the card's one statement of where it goes.
   return (
     <CardShell
       title={archetypeLicenceTitle(audience)}
       className={className}
       to={clickable ? '/studio/archetype' : undefined}
       accent={clickable ? (meta?.accent || '#7c3aed') : undefined}
-      badge={previewChip}
       testId={clickable ? 'archetype-preview-card' : undefined}
       ariaLabel={ariaLabel}
     >
@@ -920,9 +935,9 @@ export default function ProfileFitSection({ className = '', compact = false, stu
           .pf-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
           .pf-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); }
           .pf-sprite { image-rendering: pixelated; }
-          .pf-card-hit { text-decoration: none; color: inherit; display: block; cursor: pointer; transition: transform .15s ease, border-color .15s ease; }
-          .pf-card-hit:hover { transform: translateY(-2px); border-color: var(--arch-accent, #7c3aed); }
-          .pf-card-hit:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+          .pf-card-hit { text-decoration: none; color: inherit; display: block; cursor: pointer; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+          .pf-card-hit:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(24,24,27,.08); border-color: var(--arch-accent, #7c3aed); }
+          .pf-card-hit:focus-visible { outline: 2px solid #7c3aed; outline-offset: 3px; }
           @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
         `}</style>
         <div className="pf-lbl mb-3 text-[#a1a1aa] dark:text-gray-400" data-testid="profile-fit-label">Profile &amp; Fit</div>
@@ -958,9 +973,9 @@ export default function ProfileFitSection({ className = '', compact = false, stu
         .pf-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
         .pf-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); }
         .pf-sprite { image-rendering: pixelated; }
-        .pf-card-hit { text-decoration: none; color: inherit; display: block; cursor: pointer; transition: transform .15s ease, border-color .15s ease; }
-        .pf-card-hit:hover { transform: translateY(-2px); border-color: var(--arch-accent, #7c3aed); }
-        .pf-card-hit:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+        .pf-card-hit { text-decoration: none; color: inherit; display: block; cursor: pointer; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+        .pf-card-hit:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(24,24,27,.08); border-color: var(--arch-accent, #7c3aed); }
+        .pf-card-hit:focus-visible { outline: 2px solid #7c3aed; outline-offset: 3px; }
         @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
       `}</style>
       
