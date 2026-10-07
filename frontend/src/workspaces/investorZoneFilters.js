@@ -40,8 +40,7 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // `/funds/ledger` fails for one reason across several filters, so the reason
 // is written once and shared by every entry it covers rather than restated per
 // label. (`/funds/calls` shared one too, until D371 built its ledger.)
-const NO_LEDGER_LINES =
-  'the fund analytics contract returns totals, not the journal, fee movements or audit rows behind them';
+const NO_LEDGER_LINES = 'the operational ledger has its own fund and period controls below; LP accounts receive summaries, and only the assigned administrator or an admin may read journal lines';
 const NO_EXTRACTION_LAYER =
   'the update feed returns submitted values and narratives, never the extraction proposal behind them or the rules that would produce one';
 // The third kind of reason, and the founder table never needed one. `Mine` is

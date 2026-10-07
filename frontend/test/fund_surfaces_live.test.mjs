@@ -110,7 +110,10 @@ test('every refusal carries the reason the server gave', () => {
   // "Not recorded" with no explanation sends the GP to support. The server
   // ships an `unavailable` map; the pages must actually thread it through.
   for (const p of FUND_PAGES) {
-    assert.match(scan(read(p)), /reason=\{unavailable(?:\.|\[)/, `${p} must pass the server's reason`);
+    if (p.endsWith('FundAccountingPage.jsx')) {
+      assert.match(scan(read(p)), /<FundLedgerPanel/, 'accounting must reach the live ledger');
+      assert.match(scan(read('frontend/src/pages/investor/FundLedgerPanel.jsx')), /<EmptyState>\{fund\.reason\}/, 'ledger must render the server reason');
+    } else assert.match(scan(read(p)), /reason=\{unavailable(?:\.|\[)/, `${p} must pass the server's reason`);
   }
 });
 
