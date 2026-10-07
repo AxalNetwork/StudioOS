@@ -283,6 +283,7 @@ export function GuideAnswersAdminView({ read, onRetry, all, onAll }) {
               {g.area ? (
                 <Link to={guideHref(g.anchor)} className="min-w-0 text-[13px] font-bold tracking-tight text-gray-900 hover:text-violet-700 dark:text-gray-100 dark:hover:text-violet-300">
                   {g.title}
+                  <span className="mt-0.5 block font-mono text-[10px] font-normal text-gray-500 dark:text-gray-400">{g.area}</span>
                 </Link>
               ) : (
                 <span className="min-w-0 font-mono text-[12px] text-gray-500 dark:text-gray-400" title="This guide is no longer in the Help Center.">{g.title}</span>

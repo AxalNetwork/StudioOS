@@ -68,7 +68,7 @@ test('popular cards: the route\'s order, only guides this reader can open, at mo
     { anchor: 'capital/calls', title: 'Capital calls', area: 'Capital', views: 1240 },
     { anchor: 'start/welcome', title: 'Welcome', area: 'Getting started', views: 980 },
     { anchor: 'data/room', title: 'Preparing a data room', area: 'Data rooms', views: 870 },
-    { anchor: 'capital/cap-table', title: 'Cap tables', area: 'Capital', views: 640 },
+    { anchor: 'capital/cap-table', title: 'Cap tables', area: 'Raising & cap table', views: 640 },
   ]);
   assert.deepEqual(popularGuides({ guides: [] }, SECTIONS), []);
   assert.equal(popularGuides({ window_days: 7 }, SECTIONS), null, 'no list is a failed read, not an empty week');

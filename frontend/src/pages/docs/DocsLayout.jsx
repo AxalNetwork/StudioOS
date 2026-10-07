@@ -8,6 +8,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from './sections';
 import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/search';
+import { useViewMode } from '../../contexts/ViewModeContext';
 import { useAuth } from '../../hooks/useAuthSync';
 import { request, api } from '../../lib/api';
 import { overallStatus } from '../../lib/statusOverall';
@@ -16,7 +17,8 @@ import CustomerChatWidget from '../../components/CustomerChatWidget';
 import BountyBadge from '../../components/tickets/BountyBadge';
 import ReviewBadge from '../../components/tickets/ReviewBadge';
 import { statusChip } from '../../lib/ticketScreens';
-import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity } from './helpCenter';
+import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor } from './helpCenter';
+import { canOpenSurface, guidePlacement, helpAreas } from './guidePlacement';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides } from './HelpSignals';
 
 // ---------------------------------------------------------------------------
@@ -40,11 +42,9 @@ import { GuideAnswersAdmin, GuideFeedback, PopularGuides } from './HelpSignals';
 //
 // D621 (#1280 step 2) wires two canvas elements to D603's stores, in
 // `HelpSignals.jsx`: "Popular this week" on the home, and "Did this answer
-// it?" on each guide, with the answers shown to an admin on the home. Two
-// stay out, for want of a store, and `help_center_contract.test.mjs` pins
-// their absence: the per-guide surface line and jump (no guide records its
-// surface), and the licence line (no guide records the licences it applies
-// to). #1280 step 3 adds them.
+// it?" on each guide, with the answers shown to an admin on the home.
+// D626 (#1369, step 3) groups guides by task and records their surfaces and
+// descriptive audiences in guidePlacement.js. Guide addresses never change.
 // ---------------------------------------------------------------------------
 
 // Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
@@ -195,28 +195,27 @@ function HelpHero({ query, setQuery, searchInputRef, guideCount, areaCount }) {
 }
 
 // "Browse by what you are doing" — one card per area, built from the
-// role-filtered manifest rather than a hand-kept list, so a new section file
-// appears here the moment it is added to `sections/index.js` and an admin-only
-// one never appears for anyone else. The card's only figure is its guide
-// count, which is `subsections.length`: a fact about the manifest in hand.
+// role-filtered manifest through D626's placement table. Descriptive audiences
+// never filter the guides. Counts come from each area's actual guide array.
 const PREVIEW_PER_AREA = 4;
 
-function BrowseByTask({ sections }) {
+export function BrowseByTask({ sections }) {
   const [expanded, setExpanded] = useState({});
-  const total = sections.reduce((n, s) => n + s.subsections.length, 0);
+  const areas = helpAreas(sections);
+  const total = areas.reduce((n, area) => n + area.guides.length, 0);
   return (
     <section aria-labelledby="help-browse">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 id="help-browse" className={LABEL}>Browse by what you are doing</h2>
         <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">
-          {sections.length} areas · {total} guides
+          {areas.length} areas · {total} guides
         </span>
       </div>
       <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
-        {sections.map((section) => {
-          const count = section.subsections.length;
+        {areas.map((section) => {
+          const count = section.guides.length;
           const open = !!expanded[section.id];
-          const shown = open ? section.subsections : section.subsections.slice(0, PREVIEW_PER_AREA);
+          const shown = open ? section.guides : section.guides.slice(0, PREVIEW_PER_AREA);
           return (
             <div
               key={section.id}
@@ -228,6 +227,7 @@ function BrowseByTask({ sections }) {
                 </span>
                 <div className="min-w-0">
                   <h3 className="text-[14.5px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">{section.title}</h3>
+                  {section.badge && <span className={LABEL}>{section.badge}</span>}
                   <div className="mt-1 font-mono text-[10px] text-gray-500 dark:text-gray-400">
                     {count} guide{count === 1 ? '' : 's'}
                   </div>
@@ -235,11 +235,12 @@ function BrowseByTask({ sections }) {
               </div>
               <ul className="mt-3.5 grid gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
                 {shown.map((sub) => (
-                  <li key={sub.id}>
-                    <Link to={guideHref(`${section.id}/${sub.id}`)} className="group flex items-start gap-2.5">
+                  <li key={sub.anchor}>
+                    <Link to={guideHref(sub.anchor)} className="group flex items-start gap-2.5">
                       <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-violet-600" aria-hidden />
                       <span className="text-[12.5px] font-semibold leading-snug text-gray-800 group-hover:text-violet-700 dark:text-gray-200 dark:group-hover:text-violet-300">
                         {sub.title}
+                        <span className="mt-0.5 block font-mono text-[10px] font-normal text-gray-500 dark:text-gray-400">{sub.surfaceInfo?.label || 'No single screen'}</span>
                       </span>
                     </Link>
                   </li>
@@ -265,7 +266,7 @@ function BrowseByTask({ sections }) {
 
 // The search results, in the column the browse grid leaves. Each result is
 // the guide's own page now, not an anchor further down this one.
-function SearchResults({ results, query }) {
+export function SearchResults({ results, query, sections }) {
   return (
     <section aria-live="polite">
       <h2 className={LABEL}>
@@ -286,7 +287,7 @@ function SearchResults({ results, query }) {
                 <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100">
                   {highlight(r.subsectionTitle, query)}
                 </div>
-                <div className="mt-0.5 font-mono text-[10px] text-gray-500 dark:text-gray-400">{r.sectionTitle}</div>
+                <div className="mt-0.5 font-mono text-[10px] text-gray-500 dark:text-gray-400">{guideFor(r.anchor, sections)?.area || r.sectionTitle}</div>
                 <div className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
                   {highlight(snippet(r.text, query), query)}
                 </div>
@@ -467,9 +468,8 @@ function StillStuck({ user, onOpenChat }) {
 // The canvas's article column (about 65 characters) and its "On this page"
 // rail, filled from what each guide records: the overview is the lede, the
 // how-to steps are the body, tips and pitfalls are the two callouts, and
-// `related` is the Related list. Where the canvas puts the licence line and the
-// surface jumps, the rail lists the guide's own area instead; both of those
-// wait on #1280 step 3.
+// `related` is the Related list. D626 records the surface and audience metadata,
+// with jumps gated like the router; the rail lists the task area's guides.
 // ---------------------------------------------------------------------------
 
 function scrollToId(e, id) {
@@ -491,11 +491,15 @@ function GuideNotFound() {
   );
 }
 
-function HelpArticle({ sections, area, guide }) {
+export function HelpArticle({ sections, area, guide, user }) {
+  const session = useViewMode();
   const section = sections.find((s) => s.id === area);
   const sub = section?.subsections.find((g) => g.id === guide);
   if (!section || !sub) return <GuideNotFound />;
 
+  const placement = guidePlacement(`${area}/${guide}`);
+  const areaTitle = placement?.areaTitle || section.title;
+  const areaGuides = helpAreas(sections).find((item) => item.id === placement?.area)?.guides || [];
   const howto = Array.isArray(sub.howto) ? sub.howto : [];
   const tips = Array.isArray(sub.tips) ? sub.tips : [];
   const pitfalls = Array.isArray(sub.pitfalls) ? sub.pitfalls : [];
@@ -504,10 +508,7 @@ function HelpArticle({ sections, area, guide }) {
   const related = (Array.isArray(sub.related) ? sub.related : [])
     .map((r) => {
       const anchor = String(r.href || '').replace(/^#/, '');
-      const [a, g] = anchor.split('/');
-      const s = sections.find((x) => x.id === a);
-      const target = s?.subsections.find((x) => x.id === g);
-      return target ? { anchor, title: target.title, area: s.title } : null;
+      return guideFor(anchor, sections);
     })
     .filter(Boolean);
   const outline = [
@@ -523,7 +524,7 @@ function HelpArticle({ sections, area, guide }) {
         <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.11em] text-gray-500 dark:text-gray-400">
           <Link to="/help" className="hover:text-violet-700 dark:hover:text-violet-300">Help</Link>
           <span aria-hidden className="text-gray-300 dark:text-gray-600">/</span>
-          <span>{section.title}</span>
+          <span>{areaTitle}</span>
           <span aria-hidden className="text-gray-300 dark:text-gray-600">/</span>
           <span aria-current="page" className="text-gray-900 dark:text-gray-100">{sub.title}</span>
         </nav>
@@ -531,7 +532,7 @@ function HelpArticle({ sections, area, guide }) {
         <div className="mt-7 max-w-[620px]">
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[0.08em] text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300">
-              {section.title}
+              {areaTitle}
             </span>
             <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{readingMinutes(sub)} min read</span>
           </div>
@@ -540,6 +541,15 @@ function HelpArticle({ sections, area, guide }) {
             <p className="mt-2.5 text-[15px] leading-relaxed text-gray-500 dark:text-gray-400">{sub.overview}</p>
           )}
 
+          <div className="mt-5 flex gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/40">
+            <Info size={17} className="shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
+            <div><div className={LABEL}>Where this lives</div><p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{placement?.surfaceInfo?.label || 'No single screen'}</p></div>
+          </div>
+          <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-800">
+            <div className={LABEL}>Applies to</div>
+            <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{placement?.appliesTo ? placement.appliesTo.map((role) => role[0].toUpperCase() + role.slice(1)).join(', ') : 'Every account'}</p>
+            {canOpenSurface(placement?.surfaceInfo, user, session) && <Link to={placement.surface} className="mt-3 inline-flex text-sm font-bold text-violet-700 dark:text-violet-300">Open the surface <ChevronRight size={15} /></Link>}
+          </div>
           <div className="mt-6 grid gap-4">
             {sub.markdownUrl && <MarkdownBody url={sub.markdownUrl} />}
 
@@ -634,15 +644,15 @@ function HelpArticle({ sections, area, guide }) {
           </>
         )}
         <div className={outline.length > 0 ? 'mt-6 border-t border-gray-100 pt-5 dark:border-gray-800' : ''}>
-          <div className={LABEL}>In {section.title}</div>
-          <nav aria-label={`Guides in ${section.title}`} className="mt-3 grid gap-1">
-            {section.subsections.map((g) => (
+          <div className={LABEL}>In {areaTitle}</div>
+          <nav aria-label={`Guides in ${areaTitle}`} className="mt-3 grid gap-1">
+            {areaGuides.map((g) => (
               <Link
-                key={g.id}
-                to={guideHref(`${section.id}/${g.id}`)}
-                aria-current={g.id === sub.id ? 'page' : undefined}
+                key={g.anchor}
+                to={guideHref(g.anchor)}
+                aria-current={g.anchor === `${section.id}/${sub.id}` ? 'page' : undefined}
                 className={`text-[12.5px] leading-snug ${
-                  g.id === sub.id
+                  g.anchor === `${section.id}/${sub.id}`
                     ? 'font-bold text-violet-700 dark:text-violet-300'
                     : 'text-gray-600 hover:text-violet-700 dark:text-gray-300 dark:hover:text-violet-300'
                 }`}
@@ -675,11 +685,11 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
         setQuery={setQuery}
         searchInputRef={searchInputRef}
         guideCount={guideCount}
-        areaCount={visibleSections.length}
+        areaCount={helpAreas(visibleSections).length}
       />
       <div className="mx-auto grid max-w-5xl gap-5 px-4 pb-10 pt-6 md:px-8">
         {trimmedQuery ? (
-          <SearchResults results={searchResults} query={trimmedQuery} />
+          <SearchResults results={searchResults} query={trimmedQuery} sections={visibleSections} />
         ) : (
           <BrowseByTask sections={visibleSections} />
         )}
@@ -755,7 +765,7 @@ export default function DocsLayout() {
   return (
     <div className="-mx-4 -my-4 min-h-[calc(100vh-64px)] bg-gray-50 md:-mx-6 md:-my-6 dark:bg-gray-950">
       {route ? (
-        <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} />
+        <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} user={user} />
       ) : (
         <HelpHome
           visibleSections={visibleSections}
