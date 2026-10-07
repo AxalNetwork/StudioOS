@@ -145,6 +145,7 @@ r.get('/', async (c) => {
     const decision = c.req.query('decision');
     const outcomeStatus = c.req.query('outcome_status');
     const projectUid = c.req.query('project_uid');
+    const watchlistUid = c.req.query('watchlist_uid');
     const owner = c.req.query('owner') || 'me';
     let where = 'owner_user_id = ?';
     const params: any[] = [user.id];
@@ -174,6 +175,16 @@ r.get('/', async (c) => {
       if (!proj) return c.json(emptyCounts());
       where += ' AND project_id = ?';
       params.push(proj.id);
+    }
+    // D636: the entries written about one watchlist item, for its page
+    // (/watchlist/:uid). The owner filter above still applies, so an
+    // investor reads only their own entries about it.
+    if (watchlistUid) {
+      const item = await c.env.DB.prepare('SELECT id FROM watchlist_items WHERE uid = ?')
+        .bind(watchlistUid).first<{ id: number }>();
+      if (!item) return c.json(emptyCounts());
+      where += ' AND watchlist_item_id = ?';
+      params.push(item.id);
     }
     const rows = ((await c.env.DB.prepare(
       `SELECT * FROM decision_journal_entries WHERE ${where} ORDER BY COALESCE(decided_at, created_at) DESC LIMIT 500`

@@ -293,6 +293,7 @@ const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTren
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
+const WatchlistItemPage = lazy(() => import('./pages/WatchlistItemPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
@@ -3020,6 +3021,7 @@ function AppInner() {
       {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
       <Route path="/portfolio/risk-matrix" element={guard(['admin', 'partner', 'investor'], <RiskMatrixPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
+      <Route path="/watchlist/:uid" element={guard(['admin', 'partner', 'investor'], <WatchlistItemPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       {/* 'advisor' belongs here: services/trust.ts ROLE_MATRIX gives advisors four

@@ -56,6 +56,8 @@ import TemplateContentEditor from '../components/brand/TemplateContentEditor.jsx
 import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx';
 import { getPreviewComponent } from '../components/brand/templates/templateRegistry.js';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
+import BrandAddressPanel from '../components/brand/BrandAddressPanel';
+import SavedTemplatesPanel from '../components/brand/SavedTemplatesPanel';
 
 // Mirrors MAX_PAGES_PER_PROJECT in cloudflare-worker/src/routes/brand.ts (and
 // the FastAPI mirror). The server rejects over-cap creates on its own — this
@@ -1659,6 +1661,10 @@ export default function SpinoutLabBrandPage() {
                 </button>
               ))}
             </div>
+
+            {/* ---- D636: the address and saved templates (Ops canvas, sp-brand) ---- */}
+            <BrandAddressPanel projectId={projectId} pages={pages} onPagesChanged={refreshPages} />
+            <SavedTemplatesPanel projectId={projectId} pages={pages} onPagesChanged={refreshPages} />
 
             {/* ---- template library ---- */}
             <div ref={libraryRef} className="flex items-center gap-2 mb-3 scroll-mt-20">

@@ -2658,6 +2658,8 @@ export const api = {
     `/brand/landing/by-project/${projectId}/page-slug-available?slug=${encodeURIComponent(slug)}`
     + (excludePageId ? `&exclude_page_id=${encodeURIComponent(excludePageId)}` : ''),
   ),
+  // D636: change one page's own address and nothing else. Refusals are sentences.
+  brandSetPageAddress: (pageId, pageSlug) => request(`/brand/landing/pages/${pageId}/address`, { method: 'PUT', body: JSON.stringify({ page_slug: pageSlug }) }),
   brandListCustomTemplates: () => request('/brand/custom-templates'),
   brandSaveCustomTemplate: (name, fromPageId) => request('/brand/custom-templates', { method: 'POST', body: JSON.stringify({ name, from_page_id: fromPageId }) }),
   brandDeleteCustomTemplate: (id) => request(`/brand/custom-templates/${id}`, { method: 'DELETE' }),
@@ -4760,7 +4762,7 @@ export const api = {
 
   journalList: (opts = {}) => {
     const qs = new URLSearchParams();
-    for (const k of ['decision', 'outcome_status', 'project_uid', 'owner']) {
+    for (const k of ['decision', 'outcome_status', 'project_uid', 'watchlist_uid', 'owner']) {
       if (opts[k]) qs.set(k, opts[k]);
     }
     const s = qs.toString();

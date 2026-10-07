@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -67,7 +68,7 @@ function Section({ title, children, action }) {
   );
 }
 
-function Modal({ open, onClose, title, children }) {
+export function Modal({ open, onClose, title, children }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
@@ -191,7 +192,9 @@ function WatchlistTab({ canSeeAll }) {
               <tr key={it.uid} className="hover:bg-slate-50">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-900">
-                    {it.project ? it.project.name : (it.external_name || '—')}
+                    <Link to={`/watchlist/${encodeURIComponent(it.uid)}`} className="hover:underline" data-testid="watchlist-item-link">
+                      {it.project ? it.project.name : (it.external_name || '—')}
+                    </Link>
                   </div>
                   <div className="text-xs text-slate-500">
                     {it.project ? `${it.project.sector || ''} · ${it.project.stage || ''}` : it.external_url || ''}
@@ -469,13 +472,16 @@ function JournalTab({ canSeeAll }) {
   );
 }
 
-function JournalForm({ onSubmit, busy }) {
+// D636: exported so a watchlist item's page (/watchlist/:uid) writes an entry
+// about that item with the same form; `initial` pre-fills its link.
+export function JournalForm({ onSubmit, busy, initial = {} }) {
   const [form, setForm] = useState({
     project_uid: '', watchlist_uid: '',
     decision: 'invest', conviction: 3,
     thesis: '', key_risks: '', expected_outcome: '',
     expected_multiple: '', expected_timeline_months: '',
     tags: '',
+    ...initial,
   });
   const upd = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   return (
@@ -537,7 +543,7 @@ function JournalForm({ onSubmit, busy }) {
   );
 }
 
-function OutcomeForm({ onSubmit, busy }) {
+export function OutcomeForm({ onSubmit, busy }) {
   const [form, setForm] = useState({ outcome_status: 'hit', outcome_notes: '', outcome_actual_multiple: '' });
   const upd = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   return (
