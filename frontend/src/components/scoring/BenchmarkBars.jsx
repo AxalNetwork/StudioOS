@@ -1,12 +1,11 @@
 // Benchmark comparison — bars against the engine's REAL tier thresholds, with
 // the composite marker overlaid on every bar.
 //
-// The design's third row ("Cohort 3 median (Week 3) = 54") and its "62nd
-// percentile" sentence are omitted: no aggregate query over score_snapshots
-// exists in any worker route, and spinoutLab.cohort() returns members without
-// scores. The gap sentence below is real arithmetic against real thresholds.
+// The cohort row is added by the view model only when the Worker returned a
+// median (D589). The tier rows stay. A small cohort passes cohortNote, a
+// reason, and no extra bar.
 
-export default function BenchmarkBars({ benchmarks, markerPct, gapSentence }) {
+export default function BenchmarkBars({ benchmarks, markerPct, gapSentence, cohortNote }) {
   if (!benchmarks || !benchmarks.length) return null;
 
   return (
@@ -31,6 +30,9 @@ export default function BenchmarkBars({ benchmarks, markerPct, gapSentence }) {
         ))}
       </div>
       <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-3" data-testid="text-benchmark-gap">{gapSentence}</p>
+      {cohortNote ? (
+        <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-2" data-testid="text-cohort-benchmark">{cohortNote}</p>
+      ) : null}
     </>
   );
 }

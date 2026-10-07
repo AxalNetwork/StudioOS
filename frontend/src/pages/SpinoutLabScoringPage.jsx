@@ -15,9 +15,9 @@
 //     8 fabricated axes. Maxima sum to 100, so a dimension's max IS its
 //     weight%.
 //   - Benchmarks and the radar's dashed overlay use the engine's real tier
-//     thresholds (Tier 2 ≥ 70, Tier 1 ≥ 85), labelled as such. The design's
-//     cohort median and percentile sentence have no data source and are not
-//     reproduced.
+//     thresholds (Tier 2 ≥ 70, Tier 1 ≥ 85). The cohort median and percentile
+//     come from GET /scoring/cohort-benchmark (D589) and are omitted, with
+//     the server's reason, when fewer than five ventures have an official run.
 //   - "Run integrity" is run provenance (is_sandbox / integrity_valid /
 //     anomaly_flags / admin_review_status / scored_by) — all real snapshot
 //     columns. It is NOT called "evidence confidence": the HMAC proves the
@@ -67,6 +67,7 @@ import ExportReportModal from '../components/scoring/ExportReportModal';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import LabReportShareSheet from '../components/spinout/LabReportShareSheet';
+import { Unreadable } from '../ui/Honesty';
 
 // Worker-only endpoints: ONLY a 404 means "not in this environment" (the dev
 // FastAPI lacks /api/radar and /api/assessment). Same convention as
@@ -138,6 +139,7 @@ export default function SpinoutLabScoringPage() {
   const [state, setState] = useState(null);
   const [project, setProject] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
+  const [cohort, setCohort] = useState(null);
   const [scoresError, setScoresError] = useState(false);
   const [user, setUser] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -174,10 +176,14 @@ export default function SpinoutLabScoringPage() {
         if (proj && (st?.unlocked_features || []).includes('scoring')) {
           // Honest states: a failed fetch is "couldn't load", never a silent
           // empty history that pretends no run happened.
-          const scores = await api.getScores(proj.id, { includeSandbox: true }).catch(() => null);
+          const [scores, bench] = await Promise.all([
+            api.getScores(proj.id, { includeSandbox: true }).catch(() => null),
+            api.getCohortBenchmark(proj.id).catch(wkOnly),
+          ]);
           if (dead) return;
           if (Array.isArray(scores)) setSnapshots(scores);
           else setScoresError(true);
+          setCohort(bench || { failed: true });
         }
         setStatus('ready');
       } catch (e) {
@@ -214,8 +220,11 @@ export default function SpinoutLabScoringPage() {
   // bindings declared later (a `const isAdmin` further down caused a TDZ crash).
   const unlocked = user?.role === 'admin' || (state?.unlocked_features || []).includes('scoring');
   const vm = useMemo(
-    () => buildScoringEngineViewModel({ snapshots, state, project, viewerRole: user?.role }),
-    [snapshots, state, project, user],
+    () => buildScoringEngineViewModel({
+      snapshots, state, project, viewerRole: user?.role,
+      cohort: cohort && !cohort.failed && !cohort.unavailable ? cohort : null,
+    }),
+    [snapshots, state, project, user, cohort],
   );
   const displayScore = useCountUp(vm.composite, 850);
   const drawerDim = drawerKey ? vm.dimensions.find((d) => d.key === drawerKey) || null : null;
@@ -608,7 +617,13 @@ export default function SpinoutLabScoringPage() {
               <div className={CARD} data-testid="card-benchmark">
                 <div className={`${LBL} mb-1`}>Benchmark comparison</div>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">{vm.benchmarkCaption}</p>
-                <BenchmarkBars benchmarks={vm.benchmarks} markerPct={vm.markerPct} gapSentence={vm.gapSentence} />
+                <BenchmarkBars benchmarks={vm.benchmarks} markerPct={vm.markerPct} gapSentence={vm.gapSentence} cohortNote={vm.cohortSentence} />
+                {cohort?.failed && (
+                  <Unreadable what="The cohort benchmark" claim="This is not a claim that the cohort has no scores." />
+                )}
+                {cohort?.unavailable && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2" data-testid="text-cohort-benchmark-unavailable">The cohort benchmark is not in this environment.</p>
+                )}
               </div>
 
               <div className={CARD} data-testid="card-trajectory">
