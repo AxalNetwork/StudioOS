@@ -409,7 +409,13 @@ function ConnectionsTab() {
   );
 }
 
-function ConnectionCard({ conn, onSign, onClosed }) {
+/**
+ * One co-founder connection on the Connections tab. D610: the Worker sends
+ * the other person's email only once you have both signed the NDA
+ * (`counterparty.email_withheld: 'until_both_sign'` until then), and the card
+ * says why none is shown.
+ */
+export function ConnectionCard({ conn, onSign, onClosed }) {
   const { user } = useAuth();
   const isActive = conn.status === 'active';
   const isClosed = conn.status === 'closed';
@@ -433,6 +439,11 @@ function ConnectionCard({ conn, onSign, onClosed }) {
               {cp.name || cp.email || 'Counterparty'}
             </span>
             {cp.email && cp.name && <span className="text-xs text-slate-500">({cp.email})</span>}
+            {cp.email_withheld === 'until_both_sign' && (
+              <span data-testid="connection-email-withheld" className="text-xs text-slate-500">
+                {isClosed ? 'Email not shared: you did not both sign the NDA' : 'Email: Shown once you have both signed the NDA'}
+              </span>
+            )}
             {isActive && (
               <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" /> Active
