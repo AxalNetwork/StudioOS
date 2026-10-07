@@ -148,7 +148,7 @@ pull.
 | `import-wikidata-companies.mjs` | Migration 403: Research directory companies from Wikidata's SPARQL endpoint, chosen by the crosswalk's industries (D533) and by country, round-robin across industries to a cap, figures left NULL (D537). Its functions are pure and exported, tested on fixtures in `cloudflare-worker/test/research_wikidata_companies_d537.test.mjs`. Run it with `node --experimental-strip-types`, because it imports the crosswalk's TypeScript. |
 | `import-sec-edgar.mjs` | Migration 404: SEC EDGAR's public company list (the company tickers exchange file on sec.gov), one row per CIK with its name, ticker and exchange, each citing EDGAR, its URL, its licence and the date read (D595). It never writes to a database. The SEC requires a descriptive User-Agent, and this one names `SECURITY.md`'s public contact. `node scripts/import-sec-edgar.mjs`, or `--from` a saved copy with `--as-of YYYY-MM-DD` to read a copy. The rules live in `lib/secEdgarCompanies.mjs`. |
 | `import-companies-house.mjs` | Migration 405: UK companies from Companies House's free bulk company data (D596). Active, UK-origin, non-dormant limited companies in a SIC code its reviewed table maps to the crosswalk, oldest first and round-robin across sectors to a cap; every row cites the register, the company's page and the OGL line. It reads no address column and takes no officer or person with significant control. Tested on fixtures in `cloudflare-worker/test/research_companies_house_d596.test.mjs`. Run it with `node --experimental-strip-types`, on the unzipped month's file. |
-| `import-research-funds.py` | Migration 378: the fund directory and its reports, rebuilt from the two public spreadsheets in `attached_assets/` (D535). |
+| `import-research-funds.py` | Migration 378: the fund directory and its reports, rebuilt from the two public spreadsheets in `attached_assets/` (D535). `parse_shai` reads the third list from a CSV with that sheet's shape; `fixtures/shai-goldman-sample.csv` is the fixture. Those rows are US cents under the list's own name (1A) and are not written into migration 378. |
 | `import-eurotech-funds.py` | Migration 365, the earlier fund snapshot that 378 replaced. |
 
 ## Subfolders
@@ -156,6 +156,7 @@ pull.
 | Folder | What lives there |
 | --- | --- |
 | `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`, `sourceTreeHash.mjs`, `branchConfig.mjs`) and their unit tests — `npm run test:retention` runs every `*.test.mjs` here. |
+| `fixtures/` | Small inputs for the importers. `shai-goldman-sample.csv` has the third fund list's shape and no real row from that list. |
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `__pycache__/` | Python bytecode. Not source. |

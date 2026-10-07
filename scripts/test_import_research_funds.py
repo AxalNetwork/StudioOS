@@ -146,5 +146,93 @@ class IdempotencyTests(unittest.TestCase):
             self.assertIsNone(item['fund_size_cents'])
 
 
+FIXTURE = Path(__file__).resolve().parent / 'fixtures' / 'shai-goldman-sample.csv'
+
+
+class ShaiListTests(unittest.TestCase):
+    """The third list, on a fixture with the sheet's shape (D535, currency 1A).
+
+    The real export is not in the repo: the rows above its header name a
+    person. This fixture keeps that shape, including a notes line, two
+    vintages of one firm, a dollar amount with a thousands separator, a
+    size that is not a dollar amount, a month-only date, and the totals row.
+    """
+
+    def test_dollar_millions_are_us_cents_and_a_non_amount_is_unset(self):
+        self.assertEqual(mod.usd_cents_from_millions('$160'), 16_000_000_000)
+        self.assertEqual(mod.usd_cents_from_millions('$7.5'), 750_000_000)
+        self.assertEqual(mod.usd_cents_from_millions('$4,100'), 410_000_000_000)
+        self.assertIsNone(mod.usd_cents_from_millions('93/3'))
+        self.assertIsNone(mod.usd_cents_from_millions('Millions USD'))
+        self.assertIsNone(mod.usd_cents_from_millions(''))
+
+    def test_dates_are_the_sheets_us_order(self):
+        self.assertEqual(mod.parse_us_date('1/5/2026'), '2026-01-05')
+        self.assertEqual(mod.parse_us_date('10/2014'), '2014-10-01')
+        self.assertIsNone(mod.parse_us_date('not a date'))
+        self.assertIsNone(mod.shai_year('$82'))
+        self.assertEqual(mod.shai_year('2026'), 2026)
+
+    def test_the_fixture_keeps_two_vintages_and_drops_the_preamble_and_the_totals(self):
+        directory: dict = {}
+        added = mod.parse_shai(directory, FIXTURE)
+        self.assertEqual(added, 6)
+        names = {item['name'] for item in directory.values()}
+        self.assertEqual(names, {
+            'Example Ventures II', 'Example Ventures I', 'Northwind Capital I',
+            'Plain Amount III', 'Odd Size III', 'Month Only I',
+        })
+        newer = directory['exampleventuresii']
+        self.assertEqual(newer['fund_size_cents'], 16_000_000_000)
+        self.assertEqual(newer['fund_date'], '2026-01-05')
+        self.assertEqual(newer['quarter'], '2026-Q1')
+        self.assertEqual(newer['hq'], 'NYC')
+        self.assertEqual(newer['fund_number'], 'II')
+        self.assertEqual(newer['source_name'], mod.SHAI_SOURCE)
+        self.assertEqual(newer['source_url'], mod.SHAI_URL)
+        self.assertIsNone(directory['oddsizeiii']['fund_size_cents'])
+        self.assertEqual(directory['plainamountiii']['fund_size_cents'], 410_000_000_000)
+        self.assertEqual(directory['monthonlyi']['fund_date'], '2014-10-01')
+        self.assertEqual(directory['monthonlyi']['quarter'], '2014-Q4')
+        blob = repr(directory)
+        self.assertNotIn('founder@example.test', blob)
+        self.assertNotIn('year raised', blob.casefold())
+
+    def test_a_firm_already_in_the_directory_is_not_replaced(self):
+        kept = {
+            'uid': 'exampleventures', 'name': 'Example Ventures',
+            'fund_size_cents': 100, 'source_name': 'EuroTech VC Funds (public spreadsheet)',
+        }
+        directory = {'exampleventures': dict(kept)}
+        added = mod.parse_shai(directory, FIXTURE)
+        self.assertEqual(directory['exampleventures'], kept)
+        self.assertNotIn('exampleventuresii', directory)
+        self.assertNotIn('exampleventuresi', directory)
+        # The other firms are still added. Example Ventures' two rows are not.
+        self.assertEqual(added, 4)
+
+    def test_running_twice_adds_nothing_the_second_time(self):
+        directory: dict = {}
+        first = mod.parse_shai(directory, FIXTURE)
+        snapshot = {uid: dict(item) for uid, item in directory.items()}
+        second = mod.parse_shai(directory, FIXTURE)
+        self.assertGreater(first, 0)
+        self.assertEqual(second, 0)
+        self.assertEqual(directory, snapshot)
+
+    def test_the_upsert_is_uid_keyed_and_carries_us_cents(self):
+        directory: dict = {}
+        mod.parse_shai(directory, FIXTURE)
+        sql_text = mod.shai_upsert_sql(directory, '2026-10-07')
+        self.assertIn('INSERT OR REPLACE INTO research_fund_directory', sql_text)
+        self.assertEqual(sql_text.count('INSERT OR REPLACE'), 6)
+        self.assertIn("'exampleventuresii'", sql_text)
+        self.assertIn('16000000000', sql_text)
+        self.assertIn(mod.SHAI_SOURCE, sql_text)
+        self.assertIn("'2026'", sql_text)
+        self.assertNotIn('founder@example.test', sql_text)
+        self.assertNotIn('migration 378', sql_text.split('\n', 2)[-1])
+
+
 if __name__ == '__main__':
     unittest.main()
