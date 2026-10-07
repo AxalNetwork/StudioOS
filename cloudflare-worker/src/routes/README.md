@@ -61,6 +61,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/learning → admin_learning.ts (authoring the Learning center; Super Admin only; D557)
 /api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
+/api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
 ```
 

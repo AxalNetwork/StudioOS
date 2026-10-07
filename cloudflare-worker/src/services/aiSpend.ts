@@ -39,6 +39,7 @@ import type { Env } from '../types';
 import { AI_CAP_DEFAULTS, AI_CAP_VARS, environmentAiCaps, resolveAiCaps } from './aiBudget';
 import { aiUsageSelfScope } from './tenancyScope';
 import type { Actor } from './tenancyScope';
+import { taskLabel } from './aiCatalog';
 
 export interface AiSpendPeriod {
   /** 'YYYY-MM' for the month, 'YYYY-MM-DD' for the day. */
@@ -58,6 +59,8 @@ export interface AiSpendReport {
   today: AiSpendPeriod;
   last_run: {
     task: string;
+    /** D641 — the task in plain words; null for a task the router no longer has. */
+    label: string | null;
     model: string;
     cost_usd: number;
     /**
@@ -87,7 +90,7 @@ export interface AiSpendReport {
    * the first. Now `null` + `true` is no calls, and `false` is unreadable.
    */
   last_run_recorded: boolean;
-  by_task: Array<{ task: string; calls: number; spend_usd: number }>;
+  by_task: Array<{ task: string; label: string | null; calls: number; spend_usd: number }>;
   /** The same split for the task breakdown the rail's average is drawn from. */
   by_task_recorded: boolean;
   /**
@@ -101,7 +104,44 @@ export interface AiSpendReport {
   by_surface: Array<{ surface: string | null; calls: number; spend_usd: number }>;
   /** False when that read failed — including before migration 319 is applied. */
   by_surface_recorded: boolean;
+  /**
+   * D641 — this month per model. `null` with `by_model_recorded: false` when
+   * the read failed: never an empty list, which would read as "no model ran".
+   */
+  by_model: AiModelSpend[] | null;
+  by_model_recorded: boolean;
+  /**
+   * D641 — the last 30 UTC days, oldest first, today last. A day with no run
+   * is a recorded 0. `null` with `days_recorded: false` when the read failed.
+   */
+  days: Array<{ day: string; calls: number; spend_usd: number }> | null;
+  days_recorded: boolean;
 }
+
+export interface AiModelSpend {
+  model: string;
+  calls: number;
+  spend_usd: number;
+  /**
+   * Summed only over the rows where D401 counts a figure in that direction:
+   * a live call (not cached, not refused) whose recorded count is positive.
+   * The same rule as `last_run`'s token counts.
+   */
+  prompt_tokens: number;
+  completion_tokens: number;
+  /**
+   * Calls whose zero in either direction is not a count: cached answers and
+   * refusals (no model ran), streamed replies (no completion side is read)
+   * and transcriptions (billed by the minute, no prompt tokens). Their calls
+   * and cost are in the totals above; their tokens are in neither sum.
+   */
+  uncounted_calls: number;
+  cached_calls: number;
+  fallback_calls: number;
+}
+
+/** D641 — how many UTC days `days` covers, today included. */
+export const SPEND_DAYS = 30;
 
 /** UTC, sortable, no locale drift — the same keys aiRouter writes. */
 function monthKey(now: Date): string { return now.toISOString().slice(0, 7); }
@@ -154,6 +194,7 @@ function lastRunFromRow(r: any): LastRun {
   };
   return {
     task: String(r.task ?? ''),
+    label: taskLabel(r.task),
     model: String(r.model ?? ''),
     cost_usd: Number(r.est_cost_usd) || 0,
     prompt_tokens: called ? tok(r.prompt_tokens) : null,
@@ -246,6 +287,10 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
   let by_task_recorded = false;
   let by_surface: AiSpendReport['by_surface'] = [];
   let by_surface_recorded = false;
+  let by_model: AiSpendReport['by_model'] = null;
+  let by_model_recorded = false;
+  let days: AiSpendReport['days'] = null;
+  let days_recorded = false;
   if (recorded) {
     try {
       // Bounded by `now`, like every other figure in this report. Without the
@@ -275,6 +320,7 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
       ).bind(...scope.binds, mKey).all<{ task: string; calls: number; spend: number }>();
       by_task = (rows.results || []).map((t) => ({
         task: String(t.task),
+        label: taskLabel(t.task),
         calls: Number(t.calls) || 0,
         spend_usd: Number(t.spend) || 0,
       }));
@@ -299,9 +345,72 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
       }));
       by_surface_recorded = true;
     } catch { /* unrecorded, not empty */ }
+
+    try {
+      // D641 — per model. A token direction is summed only where D401 counts
+      // it (see `lastRunFromRow`): a live call, and a positive figure. Every
+      // other call is in `uncounted_calls`, never summed as 0 tokens.
+      const rows = await env.DB.prepare(
+        `SELECT u.model AS model, COUNT(*) AS calls, COALESCE(SUM(u.est_cost_usd), 0) AS spend,
+                COALESCE(SUM(CASE WHEN u.cached = 0 AND COALESCE(u.refusal, '') = '' AND u.prompt_tokens > 0
+                                  THEN u.prompt_tokens ELSE 0 END), 0) AS prompt_tokens,
+                COALESCE(SUM(CASE WHEN u.cached = 0 AND COALESCE(u.refusal, '') = '' AND u.completion_tokens > 0
+                                  THEN u.completion_tokens ELSE 0 END), 0) AS completion_tokens,
+                COALESCE(SUM(CASE WHEN u.cached <> 0 OR COALESCE(u.refusal, '') <> ''
+                                       OR COALESCE(u.prompt_tokens, 0) <= 0 OR COALESCE(u.completion_tokens, 0) <= 0
+                                  THEN 1 ELSE 0 END), 0) AS uncounted,
+                COALESCE(SUM(CASE WHEN u.cached <> 0 THEN 1 ELSE 0 END), 0) AS cached_calls,
+                COALESCE(SUM(CASE WHEN u.fallback_used <> 0 THEN 1 ELSE 0 END), 0) AS fallback_calls
+           FROM ai_usage_logs u
+          WHERE ${scope.sql} AND substr(u.created_at, 1, 7) = ?
+          GROUP BY u.model
+          ORDER BY spend DESC, u.model ASC`,
+      ).bind(...scope.binds, mKey).all<any>();
+      by_model = (rows.results || []).map((m) => ({
+        model: String(m.model),
+        calls: Number(m.calls) || 0,
+        spend_usd: Number(m.spend) || 0,
+        prompt_tokens: Number(m.prompt_tokens) || 0,
+        completion_tokens: Number(m.completion_tokens) || 0,
+        uncounted_calls: Number(m.uncounted) || 0,
+        cached_calls: Number(m.cached_calls) || 0,
+        fallback_calls: Number(m.fallback_calls) || 0,
+      }));
+      by_model_recorded = true;
+    } catch { by_model = null; }
+
+    try {
+      // D641 — the last SPEND_DAYS UTC days, today included. A range on the
+      // raw column, so the (user_id, created_at) index serves it: every
+      // 'YYYY-MM-DD HH:MM:SS' on the first day sorts after the bare first-day
+      // key, and every one today sorts before tomorrow's bare key.
+      const keys = lastDays(now, SPEND_DAYS);
+      const tomorrow = dayKey(new Date(Date.parse(`${dKey}T00:00:00Z`) + 86_400_000));
+      const rows = await env.DB.prepare(
+        `SELECT substr(u.created_at, 1, 10) AS day, COUNT(*) AS calls, COALESCE(SUM(u.est_cost_usd), 0) AS spend
+           FROM ai_usage_logs u
+          WHERE ${scope.sql} AND u.created_at >= ? AND u.created_at < ?
+          GROUP BY substr(u.created_at, 1, 10)`,
+      ).bind(...scope.binds, keys[0], tomorrow).all<{ day: string; calls: number; spend: number }>();
+      const seen = new Map((rows.results || []).map((d) => [String(d.day), d]));
+      days = keys.map((day) => {
+        const d = seen.get(day);
+        return { day, calls: d ? Number(d.calls) || 0 : 0, spend_usd: d ? Number(d.spend) || 0 : 0 };
+      });
+      days_recorded = true;
+    } catch { days = null; }
   }
 
-  return { recorded, month, today, last_run, last_run_recorded, by_task, by_task_recorded, by_surface, by_surface_recorded };
+  return {
+    recorded, month, today, last_run, last_run_recorded, by_task, by_task_recorded, by_surface, by_surface_recorded,
+    by_model, by_model_recorded, days, days_recorded,
+  };
+}
+
+/** The `n` UTC day keys ending today, oldest first. */
+export function lastDays(now: Date, n: number): string[] {
+  const today = Date.parse(`${dayKey(now)}T00:00:00Z`);
+  return Array.from({ length: n }, (_, i) => dayKey(new Date(today - (n - 1 - i) * 86_400_000)));
 }
 
 /**
