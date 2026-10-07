@@ -330,5 +330,339 @@ Object.assign(screens['ac-developer'].vals, {
   sync: { last: '[12 Oct] · [09:41]', cta: 'Re-sync search indexes' },
 });
 
+/* ───────── DEAL ROOMS · FUNDS · SEATS ───────── */
+screens['dr-pipeline'] = {
+  area: 'Deals', route: '/deals', sideActive: 'Deals', role: 'investor',
+  head: { h1: 'Deal pipeline', sub: 'Join a deal room to follow a company in your portfolio and research views, and to open a diligence case on it.' },
+  list: { search: 'Search companies…', filters: ['Stage', 'Sector', 'Round'], sort: 'Updated', count: '1–25 of [N]' },
+  rail: { title: 'Room summary', body: 'Summarise what joining [Company] adds to your portfolio and research views.', writes: 'Accept writes a note. It does not join a room.' },
+  states: { empty: 'No deals in this stage.', emptyCta: 'Clear filters', nr: 'Round size: the company has not recorded one.', unread: 'The pipeline could not be read just now.' },
+  vals: {
+    quota: { used: '[3]', cap: 'of [5] deal rooms', pct: '60%', full: false },
+    quotaFull: { used: '[5]', cap: 'of [5] deal rooms', plan: 'Professional raises this to [N]. Institutional is unlimited.' },
+    joinNote: 'Joining adds the company to your portfolio and research views, and lets you open a diligence case on it. It does not open the room\u2019s documents; only an invited or committed investor reads them.',
+    deals: [1, 2, 3, 4, 5].map(i => ({ co: '[Company]', sector: '[Sector]', stage: ['Sourced', 'Screening', 'Diligence', 'Screening', 'IC'][i - 1], stageStyle: i === 3 ? ST.violet : ST.grey, round: '[Seed] · [€1.5M]', joined: i === 1 || i === 3, action: i === 1 || i === 3 ? 'Leave' : 'Join deal room', actionStyle: i === 1 || i === 3 ? btn.ghost : btn.primary, memberT: i === 1 || i === 3 ? 'Member' : '' })),
+  },
+};
+screens['dr-header'] = {
+  area: 'Deals', route: '/deals/[deal]', sideActive: 'Deals', role: 'investor',
+  head: { h1: '[Company]', sub: '[Sector] · [Seed] · [€1.5M] round · lead [Firm]', back: 'Deal pipeline', cta: 'Join deal room' },
+  rail: false,
+  states: { empty: 'No documents are open to you. Only an invited or committed investor reads them.', emptyCta: 'Ask for an invitation', nr: 'Lead: no lead investor has been recorded for this round.', unread: 'This deal could not be read just now.' },
+  vals: {
+    tabs: ['Overview', 'Documents', 'Invitations', 'Transfers', 'Conditions'].map((t, i) => ({ t, style: 'font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:8px;white-space:nowrap;' + (i === 0 ? 'background:#f4f0fe;color:#6d28d9' : 'color:#6b6577') })),
+    quota: { used: '[3]', cap: 'of [5] deal rooms' },
+    joinNote: 'Joining adds the company to your portfolio and research views, and lets you open a diligence case on it. It does not open the room\u2019s documents.',
+    facts: [{ k: 'Round', v: '[Seed] · [€1.5M]' }, { k: 'Committed', v: '[€900k]' }, { k: 'Closing target', v: '[30 Nov]' }, { k: 'Members', v: '[n] investors' }],
+    docsLocked: { t: 'Documents are not open to you', d: 'You are a member of this room, not an invited or committed investor. The founder opens documents to investors they invite.' },
+  },
+};
+screens['dr-invites'] = {
+  area: 'Deals', route: '/deals/[deal]/invitations', sideActive: 'Deals', role: 'admin',
+  head: { h1: 'Invitations', sub: '[Company] · every investor invited into this room, and how they answered.', back: '[Company]', cta: 'Invite an investor' },
+  list: { search: 'Search invited investors…', filters: ['Status', 'Emailed', 'Invited'], sort: 'Invited', count: '1–25 of [N]' },
+  rail: { title: 'Follow-up', body: 'Draft a short note to the [n] investors who were invited over 14 days ago and have not answered.', writes: 'Accept writes drafts. It does not send them.' },
+  states: { empty: 'Nobody has been invited into this room yet.', emptyCta: 'Invite an investor', nr: 'Answered: this investor has not answered yet.', unread: 'Invitations could not be read just now.' },
+  vals: {
+    invites: [1, 2, 3, 4, 5].map(i => ({ who: '[Investor name]', email: '[email]', st: ['Invited', 'Interested', 'Passed', 'Interested', 'Invited'][i - 1], stStyle: [ST.grey, ST.ok, ST.bad, ST.ok, ST.grey][i - 1], msg: '[The message that was sent, one line]', emailed: i !== 5, emailedT: i !== 5 ? 'Email sent' : 'No email', invited: '[12 Oct]', answered: i === 1 || i === 5 ? '' : '[14 Oct]', answeredNR: i === 1 || i === 5 })),
+  },
+};
+screens['dr-transfers'] = {
+  area: 'Deals', route: '/deals/[deal]/transfers', sideActive: 'Deals', role: 'admin',
+  head: { h1: 'Transfers', sub: '[Company] · wires recorded against this round. Visible to the admin, the partner, the founder, and invited or committed investors.', back: '[Company]', cta: 'Record a transfer' },
+  list: { search: 'Search by reference…', filters: ['Firm', 'Verified', 'Recorded'], sort: 'Recorded', count: '1–25 of [N]' },
+  rail: false,
+  states: { empty: 'No wire has been recorded for this round.', emptyCta: 'Record a transfer', nr: 'Firm: the transfer was recorded without a firm. The recorder can add one.', unread: 'Transfers could not be read just now.' },
+  vals: {
+    wires: [1, 2, 3, 4].map(i => ({ amt: '[€' + (i * 50) + ',000]', ref: '[WIRE-REF-' + i + ']', verified: i !== 3, verifiedT: i !== 3 ? 'Phone-verified' : 'Not verified', verifiedStyle: i !== 3 ? ST.ok : ST.amber, note: '[Note, one line]', by: '[Admin name]', when: '[12 Oct] · [09:4' + i + ']', firm: i === 2 ? '' : '[Firm]', firmNR: i === 2 })),
+    form: [{ k: 'Amount', v: '[€50,000]' }, { k: 'Reference', v: '[WIRE-REF]' }, { k: 'Firm', v: '[Firm] · required' }, { k: 'Phone-verified', v: 'Yes · No' }, { k: 'Note', v: 'optional' }],
+    refusals: [
+      { t: '[n] open conditions', d: 'A transfer cannot be recorded while closing conditions are open. Resolve them on the Conditions tab.', style: 'border:1px solid #fcd34d;background:#fffdf5;color:#92400e' },
+      { t: 'The closing check could not be read', d: 'Try again. Nothing was recorded.', style: 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c' },
+      { t: 'Invalid amount', d: 'Enter a positive amount in the round\u2019s currency.', style: 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c' },
+      { t: 'No firm given', d: 'Name the firm the wire came from.', style: 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c' },
+    ],
+  },
+};
+screens['fd-page'] = {
+  area: 'Fund', route: '/funds/[fund]', sideActive: 'Fund', role: 'investor',
+  head: { h1: '[Fund name]', sub: 'Size, status, LPs counted live, commitments, the general partner of record, service providers and the LPA.', back: 'Funds' },
+  rail: { title: 'Fund brief', body: 'Draft a one-paragraph description of this fund from its recorded facts.', writes: 'Accept writes a note. It changes no fund record.' },
+  states: { empty: 'No LP has committed yet.', emptyCta: 'Open LPs', nr: 'Auditor: no service provider has been recorded for this role.', unread: 'This fund could not be read just now.' },
+  vals: {
+    facts: [{ k: 'Size', v: '[€10M]' }, { k: 'Status', v: 'Investing', pill: ST.violet }, { k: 'LPs', v: '[12]', note: 'counted live' }, { k: 'Vintage', v: '[2026]' }].map(f => Object.assign({ pill: '', note: '' }, f, { isPill: !!f.pill, plain: !f.pill && !f.note })),
+    totals: [{ k: 'Committed', v: '[€6.2M]' }, { k: 'Invested', v: '[€2.4M]' }],
+    gp: { name: '[General partner of record]', title: '[Title]', entity: '[GP entity]', email: '[email]' },
+    providers: [{ k: 'Fund administrator', v: '[Firm]' }, { k: 'Auditor', v: '' }, { k: 'Legal counsel', v: '[Firm]' }, { k: 'Custodian', v: '' }, { k: 'Valuation policy', v: '[Policy name]' }].map(p => Object.assign(p, { nr: !p.v })),
+    lpa: { st: 'Signed', stStyle: ST.ok, version: 'v[3]', date: '[12 Mar 2026]' },
+  },
+};
+screens['fd-report'] = {
+  area: 'Fund', route: '/funds/[fund]/reporting/[period]', sideActive: 'Fund', role: 'investor',
+  head: { h1: 'Quarterly report · Q2 [2026]', sub: 'Draft the letter, key developments, outlook and subsequent events. Issuing cannot be undone.', back: 'Reporting' },
+  rail: { title: 'Letter draft', body: 'Draft the letter\u2019s opening paragraph from this period\u2019s recorded capital movements.', writes: 'Accept writes into the draft. Issuing stays a human click.' },
+  states: { empty: 'This period has no content yet.', emptyCta: 'Start the letter', nr: 'End date: not set for this period.', unread: 'This period could not be read just now.' },
+  vals: {
+    period: [{ k: 'Label', v: 'Q2 [2026]' }, { k: 'Start', v: '[1 Apr 2026]' }, { k: 'End', v: '[30 Jun 2026]' }],
+    sections: [
+      { t: 'Letter', kind: 'paragraphs', rows: ['[Paragraph]', '[Paragraph]'] },
+      { t: 'Key developments', kind: 'dated', rows: ['[12 May] · [Title] — [text]', '[3 Jun] · [Title] — [text]'] },
+      { t: 'Outlook', kind: 'paragraphs', rows: ['[Paragraph]'] },
+      { t: 'Subsequent events', kind: 'dated', rows: ['[8 Jul] · [text]'] },
+    ],
+    issueConfirm: { t: 'Issue Q2 [2026]?', d: 'Issuing cannot be undone. LPs see the report as issued. To change it later, issue a correcting period.' },
+    issued: { st: 'Issued', stStyle: ST.ok, when: '[15 Jul 2026]', by: '[GP name]' },
+  },
+};
+screens['sy-close'] = {
+  area: 'Deals', route: '/deals/[deal]/syndicates/[syndicate]', sideActive: 'Deals', role: 'investor',
+  head: { h1: '[Syndicate name]', sub: 'Open while it gathers commitments, Funded once the target is reached, Closed when its creator or an admin closes it.', back: '[Company]' },
+  rail: false,
+  states: { empty: 'No member has committed yet.', emptyCta: 'Invite members', nr: 'Target: no target has been set for this syndicate.', unread: 'This syndicate could not be read just now.' },
+  vals: {
+    flow: ['Open', 'Funded', 'Closed'].map((t, i) => ({ t, style: i === 1 ? ST.violet : ST.grey, cur: i === 1 })),
+    facts: [{ k: 'Target', v: '[€500k]' }, { k: 'Committed', v: '[€500k]' }, { k: 'Members', v: '[n]' }, { k: 'Creator', v: '[Name]' }],
+    members: [1, 2, 3].map(() => ({ who: '[Member name]', amt: '[€100k]', when: '[12 Oct]' })),
+    closeConfirm: { t: 'Close this syndicate?', d: 'Its status becomes Closed. Members are not notified. Only the creator or an admin can do this.' },
+  },
+};
+screens['ct-variants'] = {
+  area: 'Cap table', route: '/raise/cap-table/variants/[variant]', sideActive: 'Raise', role: 'member',
+  head: { h1: 'Draft variants', sub: 'Model alternatives without touching the main cap table. The main table stays one per company.', back: 'Cap table', cta: 'New variant' },
+  rail: { title: 'Variant read', body: 'Describe how [Variant name] differs from the main table, in plain words.', writes: 'Accept writes a note. It does not change a variant.' },
+  states: { empty: 'No draft variants yet. The main cap table is the only table.', emptyCta: 'New variant', nr: 'Exit value: none has been set for this variant.', unread: 'Variants could not be read just now.' },
+  vals: {
+    variants: [{ name: '[Variant name]', sel: true }, { name: '[Variant name]', sel: false }, { name: 'Main cap table', sel: false, main: true }].map(v => Object.assign({ main: false }, v, { style: 'font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:8px;white-space:nowrap;' + (v.sel ? 'background:#f4f0fe;color:#6d28d9' : 'color:#6b6577') })),
+    rename: { label: 'Variant name', v: '[Variant name]' },
+    groups: [
+      { t: 'Founders', cols: ['Name', 'Shares', 'Vesting'], rows: [['[Founder]', '[4,000,000]', '[4y · 1y cliff]'], ['[Founder]', '[4,000,000]', '[4y · 1y cliff]']] },
+      { t: 'Option pool', cols: ['Pool', 'Size', 'Granted'], rows: [['[Pool]', '[10%]', '[2%]']] },
+      { t: 'SAFEs', cols: ['Investor', 'Amount', 'Cap · discount'], rows: [['[Investor]', '[€250k]', '[€8M] · [20%]']] },
+      { t: 'Rounds', cols: ['Round', 'Raise', 'Pre-money'], rows: [['[Seed]', '[€1.5M]', '[€6M]']] },
+      { t: 'Exit value', cols: ['Scenario', 'Value', ''], rows: [['[Exit]', '[€40M]', '']] },
+    ].map(g => ({ t: g.t, cols: g.cols, rows: g.rows.map(r => ({ c: r })) })),
+  },
+};
+screens['st-invite'] = {
+  area: 'Firm Settings', route: '/firm/seats', sideActive: 'Firm Settings', role: 'investor',
+  head: { h1: 'Colleague seats', sub: 'Institutional plans include seats for colleagues. No email is sent: copy the link and pass it on yourself.', cta: 'Invite a colleague' },
+  list: { search: 'Search seats…', filters: ['State'], sort: 'Invited', count: '1–25 of [N]' },
+  rail: false,
+  states: { empty: 'No seat has been used yet.', emptyCta: 'Invite a colleague', nr: 'Accepted: this seat has not been accepted yet.', unread: 'Seats could not be read just now.' },
+  vals: {
+    quota: { used: '[2]', cap: 'of [4] seats' },
+    once: { t: 'Copy this link now. It is shown once, because no email is sent.', url: 'axal.vc/invite/[token]', email: '[colleague email]' },
+    seats: [1, 2, 3].map(i => ({ email: '[colleague email]', st: ['Accepted', 'Invited', 'Revoked'][i - 1], stStyle: [ST.ok, ST.grey, ST.bad][i - 1], invited: '[12 Oct]', accepted: i === 1 ? '[13 Oct]' : '', acceptedNR: i !== 1, canRevoke: i !== 3 })),
+  },
+};
+screens['st-accept'] = {
+  area: 'Invitation', route: '/invite/[token]', sideActive: '', role: 'member', rail: false,
+  head: { h1: 'You have been offered a seat', sub: '[Inviter name] at [Firm] invited you to join their Institutional plan as a colleague.' },
+  states: { empty: 'This invitation has no seat attached.', emptyCta: 'Ask the inviter', nr: 'Firm: the inviter has not recorded a firm name.', unread: 'This invitation could not be read just now.' },
+  vals: {
+    gives: ['Their deal rooms, pipeline and portfolio views', 'Their fund pages and reporting', 'Seats, research and introductions on the firm\u2019s plan'],
+    warn: 'Accepting turns your account into an investor account. Your current workspace stays, but your role changes.',
+    cases: [
+      { t: 'Signed out', d: 'Sign in, then come back to this link.', cta: 'Sign in', style: ST.grey },
+      { t: 'Wrong account', d: 'This invitation was for [other email]. Sign in with that account.', cta: 'Switch account', style: ST.amber },
+      { t: 'Revoked', d: '[Inviter name] revoked this seat. Ask them for a new link.', cta: '', style: ST.bad },
+      { t: 'Already accepted', d: 'This seat is yours. Open your workspace.', cta: 'Open workspace', style: ST.ok },
+      { t: 'Plan no longer covers seats', d: 'The inviter\u2019s plan changed. The seat cannot be accepted until it does again.', cta: '', style: ST.amber },
+    ].map(c => Object.assign(c, { hasCta: !!c.cta })),
+  },
+};
+
+/* ───────── HQ TOOLS ───────── */
+screens['hq-contracts'] = {
+  area: 'Contracts', route: '/admin/contracts', sideActive: 'Contracts', role: 'hq',
+  head: { h1: 'Document types', sub: 'The contract registry. A type lives in code until it is drafted here; publishing makes it live for every tenant.' },
+  list: { search: 'Search document types…', filters: ['Layer', 'Party role', 'State'], sort: 'Layer', count: '1–25 of [N]' },
+  rail: { title: 'Overlap read', body: 'Describe how [Type] and [Type] overlap on layer and party role, and what distinguishes them.', writes: 'Accept writes a note. It does not publish or merge a type.' },
+  states: { empty: 'No document type matches these filters.', emptyCta: 'Clear filters', nr: 'Published by: this type went live before publishing was recorded.', unread: 'The registry could not be read just now.' },
+  vals: {
+    types: [
+      { name: '[Document type]', layer: 'GP', role: '[party role]', st: 'Published', stStyle: ST.ok, meta: '[12 Oct] · [Admin name] · "[reason]"', overlap: true, action: 'Edit draft' },
+      { name: '[Document type]', layer: 'FUND', role: '[party role]', st: 'Draft', stStyle: ST.amber, meta: 'drafted [10 Oct]', overlap: false, action: 'Publish' },
+      { name: '[Document type]', layer: 'PORTFOLIO', role: '[party role]', st: 'In code only', stStyle: ST.grey, meta: 'no draft yet', overlap: false, action: 'Draft' },
+      { name: '[Document type]', layer: 'GP', role: '[party role]', st: 'Published', stStyle: ST.ok, meta: '[2 Sep] · [Admin name] · "[reason]"', overlap: true, action: 'Edit draft' },
+      { name: '[Document type]', layer: 'COMPLIANCE', role: '[party role]', st: 'Draft', stStyle: ST.amber, meta: 'drafted [1 Oct]', overlap: false, action: 'Publish' },
+    ],
+    publishFlow: [{ n: '1', t: 'Reason', d: 'At least 10 characters. Kept with the type.' }, { n: '2', t: 'Fresh sign-in', d: 'Confirm your identity again before it goes through.' }, { n: '3', t: 'Live', d: 'Every tenant\u2019s template picker shows the new version.' }],
+    liveWarn: 'This type is published. Saving its draft changes the live type at once, for every tenant.',
+    reasonField: '[Why this type is being published]',
+  },
+};
+screens['hq-credits'] = {
+  area: 'Team', route: '/admin/team/[member]/credits', sideActive: 'Team', role: 'hq',
+  head: { h1: '[Member name] · credits', sub: '1 credit = US$1 of perk value. Every adjustment is kept in the audit log with its reason.', back: '[Member name]', cta: 'Adjust credits' },
+  list: { search: 'Search the ledger…', filters: ['Source', 'Period'], sort: 'Newest', count: '1–25 of [N]' },
+  rail: false,
+  states: { empty: 'No credit has been granted or spent yet.', emptyCta: 'Adjust credits', nr: 'Note: this entry was recorded without a note to the member.', unread: 'The ledger could not be read just now.' },
+  vals: {
+    balance: { v: '[n]', note: 'credits · US$[n] of perk value' },
+    ledger: [1, 2, 3, 4, 5].map(i => ({ when: '[12 Oct]', change: i % 2 ? '+[10]' : '−[25]', changeColor: i % 2 ? '#047857' : '#b91c1c', src: ['Task approved', 'Perk claimed', 'Bug bounty', 'Perk claimed', 'Adjustment'][i - 1], note: i === 4 ? '' : '[Note the member sees]', noteNR: i === 4 })),
+    form: [{ k: 'Amount', v: '+[10] · or −[10]' }, { k: 'Reason', v: '[At least 10 characters · kept in the audit log]' }, { k: 'Note to the member', v: '[What they see on their balance]' }],
+    refusals: [
+      { t: 'Balance would go below zero', d: 'The member has [n] credits. A change of −[m] is refused.' },
+      { t: 'Unknown member', d: 'No account matches this id. Nothing was changed.' },
+      { t: 'Same change sent twice', d: 'An identical adjustment was recorded [n] seconds ago. The second one was ignored.' },
+    ],
+  },
+};
+screens['hq-obligations'] = {
+  area: 'Security', route: '/admin/security/obligations', sideActive: 'Security', role: 'hq',
+  head: { h1: 'Trust obligations by role', sub: 'What each role must sign or prove, whether it is required, and how long it stays valid before renewal. Read-only. One member\u2019s list can differ from these defaults.' },
+  rail: false,
+  states: { empty: 'This role carries no obligation.', emptyCta: 'Back', nr: 'Validity: this obligation does not expire, so no period is recorded.', unread: 'Obligations could not be read just now.' },
+  vals: {
+    roles: ['Founder', 'Investor', 'Advisor', 'Partner', 'Admin'].map((r, ri) => ({ r, rows: [
+      { t: 'Terms of service', req: true, valid: 'Until the terms change' },
+      { t: 'Privacy', req: true, valid: 'Until the policy changes' },
+      { t: ['Founder NDA', 'Investor NDA', 'Advisor NDA', 'Partner NDA + non-solicit', 'Data access acknowledgment'][ri], req: true, valid: '[12] months' },
+      { t: 'Identity check', req: ri !== 4, valid: '[24] months' },
+      { t: 'Accreditation', req: ri === 1, valid: ri === 1 ? '[12] months' : '' },
+    ].map(o => ({ t: o.t, reqT: o.req ? 'Required' : 'Optional', reqStyle: o.req ? ST.violet : ST.grey, valid: o.valid, validNR: !o.valid })) })),
+  },
+};
+screens['hq-comments'] = {
+  area: 'Content', route: '/admin/articles/[article]/comments', sideActive: 'Content', role: 'hq',
+  head: { h1: '[Article title] · review comments', sub: 'Resolve stays the first action. Delete removes the comment for the author too and cannot be undone.', back: 'Content queue' },
+  list: { search: 'Search comments…', filters: ['Open', 'Resolved', 'Reviewer'], sort: 'Newest', count: '1–25 of [N]' },
+  rail: { title: 'Summary', body: 'Summarise the [n] open comments for the author in three lines.', writes: 'Accept writes a draft note. It does not resolve or delete a comment.' },
+  states: { empty: 'No comments on this article.', emptyCta: 'Back to the queue', nr: 'Section: this comment is not anchored to a section.', unread: 'Comments could not be read just now.' },
+  vals: {
+    comments: [1, 2, 3, 4].map(i => ({ who: '[Reviewer name]', when: '[12 Oct] · [09:4' + i + ']', anchor: i === 3 ? '' : '[Section]', anchorNR: i === 3, text: '[The comment, one or two lines.]', resolved: i === 2 })),
+    deleteConfirm: { t: 'Delete this comment?', d: 'The author loses it too. This cannot be undone. To keep it on record, resolve it instead.' },
+  },
+};
+screens['hq-dispute'] = {
+  area: 'Revenue', route: '/admin/revenue/disputes/[dispute]', sideActive: 'Revenue', role: 'hq',
+  head: { h1: 'Dispute [dp_…]', sub: 'Read live from Stripe each time this page opens. Nothing here is stored on the platform.', back: 'Disputes' },
+  rail: false,
+  states: { empty: 'No evidence has been sent for this dispute.', emptyCta: 'Open in Stripe', nr: 'Due date: Stripe returned none for this dispute.', unread: 'Stripe could not be read. Try again.' },
+  vals: {
+    facts: [{ k: 'Amount', v: '[€1,200.00] EUR' }, { k: 'Status', v: 'Needs response', pill: ST.amber }, { k: 'Reason', v: '[fraudulent]' }, { k: 'Due', v: '[19 Oct]' }].map(f => Object.assign({ pill: '' }, f, { isPill: !!f.pill })),
+    refs: [{ k: 'Charge', v: '[ch_…]' }, { k: 'Payment intent', v: '[pi_…]' }, { k: 'Customer', v: '[cus_…]' }],
+    evidence: { sent: true, times: '[n]', last: '[14 Oct]' },
+    stripeStates: [
+      { t: 'Stripe is not configured', d: 'No Stripe key is set for this tenant. Disputes cannot be read until one is.', style: 'border:1px solid #fcd34d;background:#fffdf5;color:#92400e' },
+      { t: 'Stripe could not be read', d: 'The request failed or timed out. Nothing is cached; try again.', style: 'border:1px solid #fecaca;background:#fef2f2;color:#b91c1c' },
+    ],
+  },
+};
+screens['hq-sensitive'] = {
+  area: 'Team', route: '/admin/kyc/[member]', sideActive: 'Team', role: 'hq',
+  head: { h1: '[Member name] · identity review', sub: 'Sensitive fields are masked by default. Each showing is logged with your name and the time.', back: 'KYC queue' },
+  rail: false,
+  states: { empty: 'This member has not submitted identity details.', emptyCta: 'Back to the queue', nr: 'Tax ID: the member did not submit one.', unread: 'Identity details could not be read just now.' },
+  vals: {
+    fields: [{ k: 'Date of birth', m: '•••• •• ••' }, { k: 'ID number', m: '•••• •••• ••12' }, { k: 'Address', m: '•••••••••••••••••' }, { k: 'Phone', m: '+•• ••• ••• •34' }, { k: 'Tax ID', m: '' }].map(f => Object.assign(f, { nr: !f.m })),
+    shown: { k: 'Date of birth', v: '[DD Mon YYYY]', log: 'Shown by [Admin name] · [12 Oct] · [09:41]' },
+    windows: [{ t: 'KYC queue', d: 'Identity details from the member\u2019s submission.' }, { t: 'Partner profiles', d: 'Principal\u2019s details on a partner profile under review.' }],
+    plain: [{ k: 'Legal name', v: '[Name]' }, { k: 'Nationality', v: '[Country]' }, { k: 'Submitted', v: '[12 Oct]' }],
+  },
+};
+
+/* ───────── SMALL PIECES ───────── */
+screens['sp-verdict'] = {
+  area: 'Validate', route: '/validate/verdict', sideActive: 'Validate', role: 'member',
+  head: { h1: 'Verdict', sub: 'Record Proceed, Pivot or Stop with your reasoning. Decisions are never overwritten. Partners do not see this card.' },
+  rail: { title: 'Evidence read', body: 'List what the interviews and claims support and contradict, so the reasoning is grounded.', writes: 'Accept writes a draft of the reasoning. The decision is yours to record.' },
+  states: { empty: 'No decision recorded yet.', emptyCta: 'Record a decision', nr: 'Reasoning: this decision was recorded without any.', unread: 'Decisions could not be read just now.' },
+  vals: {
+    opts: ['Proceed', 'Pivot', 'Stop'].map((t, i) => ({ t, style: 'flex:1;text-align:center;font-size:13px;font-weight:600;padding:10px;border-radius:9px;border:1px solid ' + (i === 0 ? '#7c3aed' : '#ececf1') + ';background:' + (i === 0 ? '#f4f0fe' : '#fff') + ';color:' + (i === 0 ? '#6d28d9' : '#6b6577') })),
+    current: { d: 'Proceed', dStyle: ST.ok, when: '[12 Oct]', by: '[Founder name]', why: '[The reasoning, two or three lines.]' },
+    earlier: [{ d: 'Pivot', dStyle: ST.amber, when: '[3 Sep]', by: '[Founder name]', why: '[Earlier reasoning.]' }, { d: 'Proceed', dStyle: ST.ok, when: '[14 Jul]', by: '[Founder name]', why: '[Earlier reasoning.]' }],
+  },
+};
+screens['sp-interviews'] = {
+  area: 'Validate', route: '/validate/interviews', sideActive: 'Validate', role: 'member',
+  head: { h1: 'Interviews', sub: 'ICP fit, quote consent and the interviewee\u2019s company, inline on each row. Not recorded is not None.' },
+  list: { search: 'Search interviews…', filters: ['ICP fit', 'Consent', 'Company'], sort: 'Newest', count: '1–25 of [N]' },
+  rail: { title: 'Fit read', body: 'From the transcript of [Interviewee], propose an ICP fit with the lines that support it.', writes: 'Accept writes nothing until you set the fit yourself.' },
+  states: { empty: 'No interviews yet.', emptyCta: 'Log an interview', nr: 'ICP fit: not set. The claim it supports shows Verdict withheld until it is.', unread: 'Interviews could not be read just now.' },
+  vals: {
+    fitOpts: ['Strong', 'Partial', 'None', 'Not recorded'],
+    consentOpts: ['Yes', 'No', 'Not asked'],
+    rows: [1, 2, 3, 4].map(i => ({ who: '[Interviewee]', co: '[Company]', when: '[12 Oct]', fit: ['Strong', 'Partial', '', 'None'][i - 1], fitNR: i === 3, fitStyle: [ST.ok, ST.violet, ST.nr, ST.grey][i - 1], consent: ['Yes', 'Not asked', 'No', 'Yes'][i - 1], consentStyle: [ST.ok, ST.grey, ST.bad, ST.ok][i - 1] })),
+    withheld: { t: 'Verdict withheld', d: '[Claim] has an interview whose ICP fit is not recorded. Set it to let the verdict compute.' },
+  },
+};
+screens['sp-claims'] = {
+  area: 'Validate', route: '/validate/hypotheses', sideActive: 'Validate', role: 'member',
+  head: { h1: 'Claims', sub: 'Each claim links to the pain themes that support or contradict it. Unlink from the row.' },
+  rail: { title: 'Link suggestions', body: 'Which pain themes in your interviews bear on [Claim], and in which direction?', writes: 'Accept writes nothing; you link themes yourself.' },
+  states: { empty: 'This claim has no linked themes.', emptyCta: 'Link a theme', nr: 'Direction: this link was made without supporting or contradicting set.', unread: 'Claims could not be read just now.' },
+  vals: {
+    claims: [1, 2].map(i => ({ t: '[Claim]', verdict: i === 1 ? 'Supported' : 'Verdict withheld', verdictStyle: i === 1 ? ST.ok : ST.nr, links: [{ theme: '[Pain theme]', dir: 'Supporting', dirStyle: ST.ok }, { theme: '[Pain theme]', dir: 'Supporting', dirStyle: ST.ok }, { theme: '[Pain theme]', dir: 'Contradicting', dirStyle: ST.bad }].slice(0, i === 1 ? 3 : 2) })),
+  },
+};
+screens['sp-brand'] = {
+  area: 'Brand', route: '/spinout-lab/brand', sideActive: 'Grow', role: 'member',
+  head: { h1: 'Brand & landing pages', sub: 'The startup\u2019s address, each page\u2019s own address, and saved templates.' },
+  rail: false,
+  states: { empty: 'No saved templates yet. Save any page as one.', emptyCta: 'Open a page', nr: 'Address: this page has no address of its own yet.', unread: 'Pages could not be read just now.' },
+  vals: {
+    site: { url: 'axal.vc/p/[slug]', rules: '1 to 48 lowercase letters, digits and hyphens. Reserved words are refused.', warn: 'Old links stop working after a change.', taken: 'That address is already taken.' },
+    pages: [{ t: '[Page title]', path: 'axal.vc/p/[slug]/[page]', avail: 'Available', availStyle: ST.ok }, { t: '[Page title]', path: 'axal.vc/p/[slug]/[page]', avail: 'Taken', availStyle: ST.bad }, { t: '[Page title]', path: '', availNR: true }].map(p => Object.assign({ availNR: false }, p)),
+    templates: { count: '[n] of 50', note: 'across all your projects', rows: [1, 2, 3].map(() => ({ t: '[Template name]', from: 'from [Project]', when: '[12 Oct]' })) },
+  },
+};
+screens['sp-references'] = {
+  area: 'Deals', route: '/deals/[deal]/references', sideActive: 'Deals', role: 'investor',
+  head: { h1: 'References', sub: '[Company] · reference checks on the founders. Recording, transcript and summary are not available yet.', back: '[Company]', cta: 'Schedule a reference' },
+  list: { search: 'Search references…', filters: ['Status', 'Consent', 'Role'], sort: 'Scheduled', count: '1–25 of [N]' },
+  rail: false,
+  states: { empty: 'No reference has been scheduled.', emptyCta: 'Schedule a reference', nr: 'Consent: not yet given or refused.', unread: 'References could not be read just now.' },
+  vals: {
+    refs: [1, 2, 3, 4].map(i => ({ who: '[Reference name]', email: '[email]', role: '[Role]', rel: '[Relationship]', when: '[14 Oct] · [15:00]', consent: i === 2 ? '' : 'Given [12 Oct]', consentNR: i === 2, st: ['Scheduled', 'Recorded', 'Summarised', 'Cancelled'][i - 1], stStyle: [ST.violet, ST.amber, ST.ok, ST.grey][i - 1], notes: '[Notes, one line]' })),
+    artefacts: ['Recording', 'Transcript', 'Summary'],
+  },
+};
+screens['sp-watchlist'] = {
+  area: 'Watchlist', route: '/watchlist/[item]', sideActive: 'Deals', role: 'investor',
+  head: { h1: '[Company]', sub: '[Sector] · [Stage] · on the watchlist since [date]', back: 'Watchlist' },
+  rail: { title: 'Thesis check', body: 'Compare this thesis with what the company has done since the last check.', writes: 'Accept writes a note. The conviction is yours to set.' },
+  states: { empty: 'No journal entry for this company yet.', emptyCta: 'Write an entry', nr: 'Next check: no date set.', unread: 'This item could not be read just now.' },
+  vals: {
+    item: [{ k: 'Thesis', v: '[Thesis, two lines]' }, { k: 'Conviction', v: 'High', pill: ST.ok }, { k: 'Source', v: '[Source]' }, { k: 'Tags', v: '[tag] · [tag]' }, { k: 'Status', v: 'Watching', pill: ST.violet }, { k: 'Next check', v: '[1 Nov]' }, { k: 'Ended', v: 'Passed · [reason]', pill: ST.grey }].map(f => Object.assign({ pill: '' }, f, { isPill: !!f.pill })),
+    entry: { decision: 'Defer', decisionStyle: ST.amber, conviction: '[3] / 5', thesis: '[Thesis]', risks: '[Risks]', expected: '[Outcome] · [3×] · [5 years]', outcome: 'Partial', outcomeStyle: ST.amber, notes: '[Outcome notes]', actual: '[1.4×]', edited: true, editedT: 'Edited after the outcome' },
+  },
+};
+screens['sp-delivery'] = {
+  area: 'Delivery', route: '/delivery/health', sideActive: 'Delivery', role: 'partner',
+  head: { h1: 'Health and capacity edits', sub: 'Clear a blocker and keep it on record, or delete it. Edit a seat\u2019s scope. Delete an hours entry, which is not the same as logging 0.' },
+  rail: false,
+  states: { empty: 'No open blocker on this client.', emptyCta: 'Back', nr: 'Hours: no entry for this week. Not the same as 0.', unread: 'Delivery could not be read just now.' },
+  vals: {
+    blockers: [{ t: '[Blocker]', since: '[12 Oct]' }, { t: '[Blocker]', since: '[9 Oct]' }],
+    seat: { who: '[Operator]', client: '[Client]', scope: ['Board', 'KPIs'], all: ['Board', 'KPIs', 'Roadmap', 'Data room'] },
+    hours: [{ wk: '[W41]', v: '[12.5] h' }, { wk: '[W40]', v: '' }, { wk: '[W39]', v: '[8] h' }].map(h => Object.assign(h, { nr: !h.v })),
+  },
+};
+screens['sp-cofounder'] = {
+  area: 'Team', route: '/build/team?tab=cofounders', sideActive: 'Build', role: 'member',
+  head: { h1: 'Co-founder matching', sub: 'Your listing, the interest you sent, and each connection\u2019s NDA state.' },
+  rail: false,
+  states: { empty: 'You have not sent interest to anyone.', emptyCta: 'Browse profiles', nr: 'Email: shown once both NDAs are signed.', unread: 'Matching could not be read just now.' },
+  vals: {
+    me: { st: 'Listed', stStyle: ST.ok },
+    sent: [1, 2].map(() => ({ who: '[Profile]', role: '[Looking for]', when: '[12 Oct]' })),
+    conn: { st: 'Waiting for both NDAs', stStyle: ST.amber, signed: [{ who: 'You', ok: true }, { who: '[Other person]', ok: false }], revealed: false },
+    connActive: { st: 'Active', stStyle: ST.ok, name: '[Other person]', email: '[email]' },
+  },
+};
+screens['sp-comarketing'] = {
+  area: 'Co-marketing', route: '/comarketing/[pitch]', sideActive: 'Grow', role: 'member',
+  head: { h1: '[Pitch title]', sub: 'Edit while the pitch is Proposed. Locked once approved, rejected or withdrawn.', back: 'Co-marketing' },
+  rail: { title: 'Angle', body: 'Sharpen the angle in one line for the audience you named.', writes: 'Accept writes into the form. Submitting is yours.' },
+  states: { empty: 'No results yet. They appear once the piece is live.', emptyCta: 'Back', nr: 'Conversions: not tracked on this channel.', unread: 'This pitch could not be read just now.' },
+  vals: {
+    form: [{ k: 'Type', v: 'Webinar · Blog post · Podcast' }, { k: 'Title', v: '[Pitch title]' }, { k: 'Angle', v: '[Angle, one line]' }, { k: 'Audience', v: '[Audience]' }, { k: 'What you bring', v: '[Audience size, distribution]' }],
+    locked: { st: 'Approved', stStyle: ST.ok, note: 'Approved on [12 Oct]. The form is locked; to change the pitch, withdraw it and propose again.' },
+    results: [{ k: 'Visits', v: '[n]' }, { k: 'Sign-ups', v: '[n]' }, { k: 'Leads', v: '[n]' }, { k: 'Conversions', v: '', nr: true }].map(r => Object.assign({ nr: false }, r)),
+  },
+};
+
 window.OPS_DATA = { screens, shared: { ST, btn } };
 })();
