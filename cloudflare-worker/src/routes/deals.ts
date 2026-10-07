@@ -937,7 +937,7 @@ type ReadCtx =
 //   (2026-06-25 audit). NOTE: the predicate is intentionally invited-OR-committed
 //   and does NOT include investor_dealroom_members, because Postgres (the dev
 //   backend) has no such table — the two backends must decide identically.
-async function investorHasDealRelationship(sql: any, userId: number, dealId: number): Promise<boolean> {
+export async function investorHasDealRelationship(sql: any, userId: number, dealId: number): Promise<boolean> {
   const inv = await sql`SELECT 1 AS x FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${userId} LIMIT 1`;
   if (inv.length) return true;
   const com = await sql`SELECT 1 AS x FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${userId} LIMIT 1`;
@@ -951,7 +951,7 @@ async function canReadDeal(sql: any, user: User, dealId: number, projectFounderI
   return false;
 }
 
-async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
+export async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.*, p.name AS project_name, p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;

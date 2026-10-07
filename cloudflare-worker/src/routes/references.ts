@@ -10,7 +10,9 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { getSQL } from '../db';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { investorHasDealRelationship } from './deals';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -37,6 +39,17 @@ type Row = {
 
 function gate(u: User) {
   if (!(isAdmin(u) || isInvestor(u))) throw new Error('Forbidden');
+}
+
+async function canAccessDealReferences(env: Env, user: User, dealId: number): Promise<boolean> {
+  if (isAdmin(user)) return true;
+  if (!isInvestor(user)) return false;
+  const sql = getSQL(env);
+  try {
+    return await investorHasDealRelationship(sql, user.id, dealId);
+  } finally {
+    await sql.end();
+  }
 }
 
 function dto(r: Row, includeTranscript = false): any {
@@ -70,6 +83,9 @@ r.post('/', async (c) => {
     if (!Number.isFinite(dealId)) return c.json({ detail: 'deal_id required' }, 400);
     const deal = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(dealId).first<{ id: number }>();
     if (!deal) return c.json({ detail: 'Deal not found' }, 404);
+    if (!(await canAccessDealReferences(c.env, user, dealId))) {
+      return c.json({ detail: 'Deal not found' }, 404);
+    }
     const name = String(body.reference_name || '').trim();
     if (!name) return c.json({ detail: 'reference_name required' }, 400);
     const consent = !!body.consent_given;
@@ -96,13 +112,19 @@ r.post('/', async (c) => {
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    const dealId = c.req.query('deal_id');
-    const sql = dealId
-      ? 'SELECT * FROM reference_checks WHERE deal_id = ? ORDER BY created_at DESC'
-      : 'SELECT * FROM reference_checks ORDER BY created_at DESC LIMIT 200';
-    const rows = dealId
-      ? await c.env.DB.prepare(sql).bind(Number(dealId)).all<Row>()
-      : await c.env.DB.prepare(sql).all<Row>();
+    const dealIdParam = c.req.query('deal_id');
+    if (!dealIdParam || !Number.isFinite(Number(dealIdParam))) {
+      return c.json({ error: 'deal_id_required', detail: 'deal_id_required' }, 400);
+    }
+    const dealId = Number(dealIdParam);
+    const deal = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(dealId).first<{ id: number }>();
+    if (!deal) return c.json({ detail: 'Deal not found' }, 404);
+    if (!(await canAccessDealReferences(c.env, user, dealId))) {
+      return c.json({ detail: 'Deal not found' }, 404);
+    }
+    const rows = await c.env.DB.prepare(
+      'SELECT * FROM reference_checks WHERE deal_id = ? ORDER BY created_at DESC'
+    ).bind(dealId).all<Row>();
     return c.json((rows.results || []).map((r) => dto(r)));
   } catch (e) { return mapError(c, e); }
 });
@@ -113,6 +135,9 @@ r.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
     if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    if (!(await canAccessDealReferences(c.env, user, row.deal_id))) {
+      return c.json({ detail: 'Reference not found' }, 404);
+    }
     return c.json(dto(row, true));
   } catch (e) { return mapError(c, e); }
 });
@@ -123,6 +148,9 @@ r.patch('/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
     if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    if (!(await canAccessDealReferences(c.env, user, row.deal_id))) {
+      return c.json({ detail: 'Reference not found' }, 404);
+    }
     const body = await c.req.json().catch(() => ({} as any));
     const fields = ['reference_email', 'reference_role', 'relationship', 'scheduled_at', 'notes', 'status'] as const;
     const sets: string[] = []; const params: any[] = [];
@@ -143,6 +171,9 @@ r.delete('/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
     if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    if (!(await canAccessDealReferences(c.env, user, row.deal_id))) {
+      return c.json({ detail: 'Reference not found' }, 404);
+    }
     await c.env.DB.prepare('DELETE FROM reference_checks WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
@@ -154,6 +185,9 @@ r.post('/:id/consent', async (c) => {
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(id).first<Row>();
     if (!row) return c.json({ detail: 'Reference not found' }, 404);
+    if (!(await canAccessDealReferences(c.env, user, row.deal_id))) {
+      return c.json({ detail: 'Reference not found' }, 404);
+    }
     const body = await c.req.json().catch(() => ({} as any));
     const give = !!body.consent_given;
     if (give) {
