@@ -551,7 +551,8 @@ interface EdgarRow {
 /**
  * The two stores the Public tab reads (D595, #1230), each labelled. The
  * signal companies carry the bands their source sets; the SEC EDGAR rows
- * (migration 404, `research_public_companies`) carry what EDGAR records and
+ * (`research_public_companies`: the table from migration 404, the rows from
+ * migration 412) carry what EDGAR records and
  * nothing more — CIK, name, ticker, exchange — so a filter on sector or
  * country, which EDGAR does not record, matches none of them.
  */
