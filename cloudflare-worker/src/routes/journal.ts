@@ -30,6 +30,7 @@ type Row = {
   decided_at: string | null;
   outcome_status: string; outcome_notes: string | null;
   outcome_actual_multiple: number | null; outcome_recorded_at: string | null;
+  edited_after_outcome_at?: string | null;
   created_at: string; updated_at: string;
 };
 
@@ -38,6 +39,12 @@ const OUTCOME_VALUES = new Set(['pending', 'hit', 'miss', 'partial', 'inconclusi
 
 function canUseJournal(u: User): boolean {
   return isAdmin(u) || isInvestor(u) || isPartner(u);
+}
+
+function sameNumber(a: number | null, b: number | null): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return Number(a) === Number(b);
 }
 
 async function dto(env: Env, e: Row): Promise<Record<string, unknown>> {
@@ -72,6 +79,7 @@ async function dto(env: Env, e: Row): Promise<Record<string, unknown>> {
     outcome_notes: e.outcome_notes,
     outcome_actual_multiple: e.outcome_actual_multiple,
     outcome_recorded_at: e.outcome_recorded_at,
+    edited_after_outcome_at: e.edited_after_outcome_at ?? null,
     created_at: e.created_at,
     updated_at: e.updated_at,
   };
@@ -309,12 +317,26 @@ r.put('/:uid', async (c) => {
     }
     if ('tags' in body) tagsJson = normaliseTags(body.tags);
 
+    // A graded edit after the outcome is marked. Tags do not count, and a
+    // value that arrives unchanged does not count. Nothing is locked.
+    const now = nowIso();
+    const gradedChanged = entry.outcome_recorded_at != null && (
+      thesis !== entry.thesis
+      || (keyRisks ?? null) !== (entry.key_risks ?? null)
+      || (expectedOutcome ?? null) !== (entry.expected_outcome ?? null)
+      || decision !== entry.decision
+      || Number(conviction) !== Number(entry.conviction)
+      || !sameNumber(expectedMultiple, entry.expected_multiple)
+      || !sameNumber(expectedTimeline, entry.expected_timeline_months)
+    );
+    const editedAfter = gradedChanged ? now : (entry.edited_after_outcome_at ?? null);
+
     await c.env.DB.prepare(
       `UPDATE decision_journal_entries SET decision=?, conviction=?, thesis=?, key_risks=?, expected_outcome=?,
-         expected_multiple=?, expected_timeline_months=?, tags_json=?, updated_at=? WHERE id=?`
+         expected_multiple=?, expected_timeline_months=?, tags_json=?, edited_after_outcome_at=?, updated_at=? WHERE id=?`
     ).bind(
       decision, conviction, thesis, keyRisks, expectedOutcome,
-      expectedMultiple, expectedTimeline, tagsJson, nowIso(), entry.id,
+      expectedMultiple, expectedTimeline, tagsJson, editedAfter, now, entry.id,
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM decision_journal_entries WHERE id = ?').bind(entry.id).first<Row>();
     return c.json(await dto(c.env, fresh!));
