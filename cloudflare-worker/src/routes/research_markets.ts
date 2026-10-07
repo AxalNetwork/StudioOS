@@ -30,6 +30,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { readListedTotals, type ListedTotals } from '../services/listedCompanies';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { EUR_SOURCE } from '../services/researchFundDirectory';
@@ -605,7 +606,7 @@ researchMarkets.get('/listed-companies', async (c) => {
   let rows: ListedRow[];
   let ov: Overrides;
   let edgarTotal = 0;
-  let edgarStore: { n: number; as_of: string | null; overlap: number };
+  let stores: ListedTotals;
   let place: (skip: number, take: number) => Promise<EdgarRow[]>;
   try {
     const [r, o, store, count] = await Promise.all([
@@ -616,13 +617,10 @@ researchMarkets.get('/listed-companies', async (c) => {
             AND (? = '' OR sector = ?)`,
       ).bind(q, q, q, sector, sector).all<ListedRow>(),
       loadOverrides(c.env),
-      // The whole store, unfiltered: its size, its date, and how many of its
-      // tickers are also a signal company's symbol (shown twice, once per source).
-      c.env.DB.prepare(
-        `SELECT COUNT(*) AS n, MAX(as_of) AS as_of,
-                SUM(CASE WHEN ticker IN (SELECT symbol FROM signal_companies) THEN 1 ELSE 0 END) AS overlap
-           FROM research_public_companies`,
-      ).first<{ n: number; as_of: string | null; overlap: number | null }>(),
+      // Both stores, unfiltered: their sizes, dates, and how many EDGAR tickers
+      // are also a signal company's symbol (shown twice, once per source). The
+      // same read the Research overview's Public count prints (#1077, D536).
+      readListedTotals(c.env),
       edgarIn
         ? c.env.DB.prepare(
           `SELECT COUNT(*) AS n FROM research_public_companies
@@ -632,7 +630,7 @@ researchMarkets.get('/listed-companies', async (c) => {
     ]);
     rows = signalIn ? (r.results || []) : [];
     ov = o;
-    edgarStore = { n: Number(store?.n ?? 0), as_of: store?.as_of ?? null, overlap: Number(store?.overlap ?? 0) };
+    stores = store;
     edgarTotal = Number(count?.n ?? 0);
     place = async (skip, take) => {
       if (!edgarIn || take <= 0) return [];
@@ -672,16 +670,21 @@ researchMarkets.get('/listed-companies', async (c) => {
       })),
     ],
     total: matched.length + edgarTotal,
+    // Both stores, unfiltered, one row per source: the overview's Public count.
+    store_total: stores.total,
     limit, offset, sort: sortKey, source: source || null,
     as_of: maxOf(rows.map((r) => r.updated_at)),
     sources: [
-      { key: 'signal_companies', label: SIGNAL_SOURCE_LABEL, total: matched.length, as_of: maxOf(rows.map((r) => r.updated_at)) },
+      {
+        key: 'signal_companies', label: SIGNAL_SOURCE_LABEL, total: matched.length,
+        store_total: stores.signal.n, as_of: maxOf(rows.map((r) => r.updated_at)),
+      },
       {
         key: 'sec_edgar', label: EDGAR_SOURCE_LABEL, total: edgarTotal,
-        store_total: edgarStore.n, as_of: edgarStore.as_of,
+        store_total: stores.edgar.n, as_of: stores.edgar.as_of,
         url: 'https://www.sec.gov/files/company_tickers_exchange.json',
         licence: 'US government work, not subject to copyright in the United States (17 U.S.C. § 105)',
-        also_signal_companies: edgarStore.overlap,
+        also_signal_companies: stores.edgar.overlap,
         not_recorded: ['country', 'sector', 'market_cap_band', 'employee_band'],
       },
     ],

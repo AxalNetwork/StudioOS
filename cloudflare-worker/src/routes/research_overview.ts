@@ -36,6 +36,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { readListedTotals } from '../services/listedCompanies';
 import { requireAuth } from '../auth';
 import { SECTORS, recomputeIndexes } from '../services/market_intel/aggregator';
 import { liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
@@ -107,7 +108,12 @@ function unreadable(source: string): Total {
 
 /** Why the government count is empty: no store records ownership type (#1083 Q3 decides only the wording). */
 export const GOVERNMENT_REASON = 'No source lists government-owned companies yet; no store holds ownership type';
-const PUBLIC_SOURCE = 'signal_companies: listed companies, each with its symbol and exchange';
+/**
+ * #1077 (D536): the Public count is the Public tab's, read through the same
+ * statement (`readListedTotals`): the signal companies plus SEC EDGAR's rows,
+ * one row per source.
+ */
+const PUBLIC_SOURCE = 'signal_companies + research_public_companies (SEC EDGAR): the listed companies, one row per source';
 const SECTORS_SOURCE = 'market_intel_indexes: the market-intelligence sectors, live rows only';
 
 /**
@@ -154,8 +160,7 @@ async function readTotals(env: Env) {
         `SELECT source_name AS name, COUNT(*) AS funds, MAX(as_of) AS as_of FROM ${SERVED_FUNDS} AS f
           GROUP BY source_name ORDER BY funds DESC, source_name`
       ).all<{ name: string; funds: number; as_of: string | null }>()).results || []),
-      readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(updated_at) AS as_of FROM signal_companies`)
-        .first<{ n: number; as_of: string | null }>()),
+      readTotal(() => readListedTotals(env)),
       readSectorsTracked(env),
     ]);
     const countriesSource = `${COMPANY_SOURCE}: distinct countries`;
@@ -193,8 +198,13 @@ async function readTotals(env: Env) {
           ...companies,
           note: 'Company directory records not known to be listed. Listing status is not recorded per company, so a few may trade on an exchange.',
         },
-        public: pub === 'unreadable' ? unreadable(PUBLIC_SOURCE)
-          : total(pub?.n, pub?.as_of, PUBLIC_SOURCE, 'No listed company is recorded yet'),
+        public: pub === 'unreadable' ? unreadable(PUBLIC_SOURCE) : {
+          ...total(pub?.total, pub?.as_of, PUBLIC_SOURCE, 'No listed company is recorded yet'),
+          ...(pub && pub.total > 0 ? {
+            note: `${pub.signal.n} signal companies with their bands, and ${pub.edgar.n} from SEC EDGAR with ticker and exchange only`
+              + (pub.edgar.overlap ? `; ${pub.edgar.overlap} tickers appear in both, once per source.` : '.'),
+          } : {}),
+        },
         government: { value: null, as_of: null, source: null, reason: GOVERNMENT_REASON },
       },
     };
