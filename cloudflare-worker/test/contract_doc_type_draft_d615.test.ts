@@ -173,7 +173,9 @@ test('D615: a draft save on a published type keeps the live values, and publishi
   assert.equal(rowOf(db, 'side_letter_axal').draft_title, 'Side letter next');
   assert.equal(publishes(db).length, 1);
 
-  const applied = await call(db, 'POST', '/api/admin/contracts/registry/side_letter_axal/publish', { reason: REASON });
+  // D622: a publish names the pending revision it reviewed.
+  const reviewed = itemOf((await call(db, 'GET', '/api/admin/contracts/registry')).body, 'side_letter_axal').pending_draft.updated_at;
+  const applied = await call(db, 'POST', '/api/admin/contracts/registry/side_letter_axal/publish', { reason: REASON, reviewed_draft_at: reviewed });
   assert.equal(applied.status, 200, applied.text);
   const live = rowOf(db, 'side_letter_axal');
   assert.equal(live.status, 'published');
@@ -197,7 +199,8 @@ test('D615: a draft save on a published type keeps the live values, and publishi
   const details = JSON.parse(audit[1].details);
   assert.equal(details.doc_type, 'side_letter_axal');
   assert.equal(details.reason, REASON);
-  assert.equal(String(audit[1].details).includes('Side letter next'), false);
+  // D622: the audit records the values that went live.
+  assert.deepEqual(details.applied, { title: 'Side letter next', layer: 'portfolio', party_roles: ['founder'], required_fields: ['closing'] });
 });
 
 test('D615: a published code type keeps its live title when a later draft is saved', async () => {
