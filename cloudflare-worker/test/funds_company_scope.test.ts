@@ -1,3 +1,4 @@
+import {d1Over} from './_d1_sqlite.mjs';
 /**
  * Company scoping, stage 7: the investor's Fund (the GP add-on at /funds).
  *
@@ -49,24 +50,9 @@ const FUND_OTHER = 4;     // run by OTHER_GP, under FIRM_A
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-function makeD1(db: InstanceType<typeof DatabaseSync>) {
-  return {
-    prepare(sql: string) {
-      let b: any[] = [];
-      const api: any = {
-        bind: (...x: any[]) => { b = coerce(x); return api; },
-        async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
-        async run() {
-          const r = db.prepare(sql).run(...b);
-          return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
-        },
-      };
-      return api;
-    },
-    async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
-  };
+function makeD1(db:InstanceType<typeof DatabaseSync>){
+ const DB=d1Over(db);
+ return {...DB,prepare(sql:string){const statement=DB.prepare(sql);const bind=statement.bind;statement.bind=(...args:any[])=>bind(...coerce(args));return statement;}};
 }
 
 function freshDb() {
