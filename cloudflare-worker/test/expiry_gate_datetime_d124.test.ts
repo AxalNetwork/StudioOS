@@ -72,11 +72,36 @@ function db(...tables: string[]) {
   return d;
 }
 
-test('a magic-link token that expired today cannot be claimed', () => {
+/**
+ * ONE UTC DAY PER RUN (#1342). `expiredIso` pins the spent row to the date
+ * SQLite reads when the row is WRITTEN; the gate reads `datetime('now')` when
+ * it RUNS. If midnight UTC falls between the two, the spent row is on
+ * yesterday's date, where even the broken bare comparison is right, so every
+ * assertion below would pass against unfixed code. The body therefore reports
+ * each fixture it wrote, the day is read again from the same SQLite clock after
+ * the last assertion, and a body that straddled midnight runs once more on the
+ * new day. Two midnights inside one test cannot happen; that is a failure.
+ */
+function onOneUtcDay(body: (expired: (d: DatabaseSync) => string) => DatabaseSync) {
+  for (let run = 1; ; run += 1) {
+    const written: string[] = [];
+    const d = body((x) => {
+      const iso = expiredIso(x);
+      written.push(iso.slice(0, 10));
+      return iso;
+    });
+    const day = String((d.prepare("SELECT date('now') AS day").get() as any).day);
+    assert.ok(written.length > 0, 'the body wrote no expired fixture, so it tests nothing');
+    if (written.every((w) => w === day)) return;
+    assert.ok(run < 2, `the UTC date moved during two runs (fixtures ${written.join(', ')}, now ${day})`);
+  }
+}
+
+test('a magic-link token that expired today cannot be claimed', () => onOneUtcDay((expired) => {
   const d = db('magic_link_tokens');
   const sql = sqlAround(src('routes/auth.ts'), 'UPDATE magic_link_tokens SET used_at', 'auth.ts');
   const ins = d.prepare('INSERT INTO magic_link_tokens (email, token_hash, expires_at) VALUES (?, ?, ?)');
-  ins.run('spent@example.com', 'hash-spent', expiredIso(d));
+  ins.run('spent@example.com', 'hash-spent', expired(d));
   ins.run('live@example.com', 'hash-live', LIVE_ISO);
   // The same instant as the spent one, written the way SQLite would write it —
   // proof the fix did not simply stop matching everything.
@@ -85,27 +110,29 @@ test('a magic-link token that expired today cannot be claimed', () => {
   assert.equal(d.prepare(sql).get('hash-spent'), undefined, 'a spent link still signed someone in');
   assert.equal((d.prepare(sql).get('hash-live') as any)?.email, 'live@example.com', 'a live link stopped working');
   assert.equal((d.prepare(sql).get('hash-sql') as any)?.email, 'sql@example.com', 'a correctly-written live link stopped working');
-});
+  return d;
+}));
 
-test('a passkey challenge that expired today cannot be claimed', () => {
+test('a passkey challenge that expired today cannot be claimed', () => onOneUtcDay((expired) => {
   const d = db('webauthn_challenges');
   const sql = sqlAround(src('routes/auth_passkey.ts'), 'UPDATE webauthn_challenges SET used_at', 'auth_passkey.ts');
   const ins = d.prepare('INSERT INTO webauthn_challenges (challenge, user_id, kind, expires_at) VALUES (?, ?, ?, ?)');
-  ins.run('c-spent', 1, 'authentication', expiredIso(d));
+  ins.run('c-spent', 1, 'authentication', expired(d));
   ins.run('c-live', 1, 'authentication', LIVE_ISO);
 
   assert.equal(d.prepare(sql).get('c-spent', 'authentication'), undefined, 'a stale challenge was still replayable');
   assert.ok(d.prepare(sql).get('c-live', 'authentication'), 'a live challenge stopped working');
-});
+  return d;
+}));
 
-test('an advisor grant that expired today no longer opens the brief', () => {
+test('an advisor grant that expired today no longer opens the brief', () => onOneUtcDay((expired) => {
   const d = db('advisor_client_grants');
   const sql = sqlAround(src('routes/advisor_grants.ts'), 'SELECT * FROM advisor_client_grants\n', 'advisor_grants.ts');
   const ins = d.prepare(
     `INSERT INTO advisor_client_grants (uid, project_id, advisor_user_id, granted_by_user_id, status, expires_at)
      VALUES (?, ?, ?, 9, 'active', ?)`,
   );
-  ins.run('g-spent', 1, 100, expiredIso(d));
+  ins.run('g-spent', 1, 100, expired(d));
   ins.run('g-live', 2, 100, LIVE_ISO);
   // The shipped SPA sends no expires_at at all, so the commonest row is NULL —
   // "no expiry" must keep meaning "does not expire", not "expired".
@@ -114,47 +141,50 @@ test('an advisor grant that expired today no longer opens the brief', () => {
   assert.equal(d.prepare(sql).get(1, 100), undefined, 'an expired advisor grant still opened the client brief');
   assert.ok(d.prepare(sql).get(2, 100), 'a live advisor grant was closed');
   assert.ok(d.prepare(sql).get(3, 100), 'a grant with no expiry was treated as expired');
-});
+  return d;
+}));
 
-test('a data-room grant that expired today no longer lists files', () => {
+test('a data-room grant that expired today no longer lists files', () => onOneUtcDay((expired) => {
   const d = db('data_room_grants');
   const sql = sqlAround(src('routes/data_room.ts'), 'SELECT * FROM data_room_grants', 'data_room.ts');
   const ins = d.prepare(
     `INSERT INTO data_room_grants (uid, project_id, investor_user_id, granted_by_user_id, status, expires_at)
      VALUES (?, ?, ?, 9, 'active', ?)`,
   );
-  ins.run('d-spent', 1, 200, expiredIso(d));
+  ins.run('d-spent', 1, 200, expired(d));
   ins.run('d-live', 2, 200, LIVE_ISO);
   ins.run('d-null', 3, 200, null);
 
   assert.equal(d.prepare(sql).get(1, 200), undefined, 'an expired data-room grant still listed the founder files');
   assert.ok(d.prepare(sql).get(2, 200), 'a live data-room grant was closed');
   assert.ok(d.prepare(sql).get(3, 200), 'a grant with no expiry was treated as expired');
-});
+  return d;
+}));
 
-test('an NDA whose term ended today stops reading as active', () => {
+test('an NDA whose term ended today stops reading as active', () => onOneUtcDay((expired) => {
   const d = db('pairwise_ndas');
   const sql = sqlAround(src('routes/data_room.ts'), 'SELECT 1 FROM pairwise_ndas\n', 'data_room.ts');
   const ins = d.prepare(
     `INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status, valid_until) VALUES (?, ?, 'active', ?)`,
   );
-  ins.run(1, 10, expiredIso(d));
+  ins.run(1, 10, expired(d));
   ins.run(2, 20, LIVE_ISO);
   ins.run(3, 30, null);
 
   assert.equal(d.prepare(sql).get(1, 10), undefined, 'an ended NDA still gated the data room open');
   assert.ok(d.prepare(sql).get(2, 20), 'a live NDA stopped counting');
   assert.ok(d.prepare(sql).get(3, 30), 'an open-ended NDA was treated as ended');
-});
+  return d;
+}));
 
-test('the daily sweep expires the artifacts whose term ended today', () => {
+test('the daily sweep expires the artifacts whose term ended today', () => onOneUtcDay((expired) => {
   const d = db('pairwise_ndas', 'legal_obligations');
 
   const ndaSweep = sqlAround(src('services/trust.ts'), "UPDATE pairwise_ndas\n          SET status = 'expired'", 'trust.ts');
   const nda = d.prepare(
     `INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status, valid_until) VALUES (?, ?, 'active', ?)`,
   );
-  nda.run(1, 10, expiredIso(d));
+  nda.run(1, 10, expired(d));
   nda.run(2, 20, LIVE_ISO);
   nda.run(3, 30, null);
   d.prepare(ndaSweep).run();
@@ -169,14 +199,15 @@ test('the daily sweep expires the artifacts whose term ended today', () => {
   const ob = d.prepare(
     `INSERT INTO legal_obligations (${/user_id/.test(cols) ? 'user_id, ' : ''}obligation_key, status, expires_at) VALUES (${/user_id/.test(cols) ? '?, ' : ''}?, 'satisfied', ?)`,
   );
-  if (/user_id/.test(cols)) { ob.run(1, 'tos_v1', expiredIso(d)); ob.run(2, 'privacy_v1', LIVE_ISO); }
-  else { ob.run('tos_v1', expiredIso(d)); ob.run('privacy_v1', LIVE_ISO); }
+  if (/user_id/.test(cols)) { ob.run(1, 'tos_v1', expired(d)); ob.run(2, 'privacy_v1', LIVE_ISO); }
+  else { ob.run('tos_v1', expired(d)); ob.run('privacy_v1', LIVE_ISO); }
   d.prepare(obSweep).run();
   const obState = (k: string) =>
     (d.prepare('SELECT status FROM legal_obligations WHERE obligation_key = ?').get(k) as any).status;
   assert.equal(obState('tos_v1'), 'expired', 'the sweep left an expired obligation satisfied');
   assert.equal(obState('privacy_v1'), 'satisfied', 'the sweep expired an obligation still in force');
-});
+  return d;
+}));
 
 test('no access-control gate compares a bare timestamp column', () => {
   // The behavioural tests above cover six gates. Seven more read the same four

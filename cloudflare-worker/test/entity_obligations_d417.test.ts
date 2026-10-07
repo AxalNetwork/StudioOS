@@ -17,7 +17,7 @@
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/entity_obligations_d417.test.ts
  */
-import test from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -43,8 +43,17 @@ const PARTNER = 2;
 const FOUNDER = 3;
 const ROLE: Record<number, string> = { [ADMIN]: 'admin', [PARTNER]: 'partner', [FOUNDER]: 'founder' };
 
-const TODAY = new Date().toISOString().slice(0, 10);
-const plusDays = (n: number) => new Date(Date.parse(`${TODAY}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+// ONE CLOCK PER TEST, HELD STILL (#1342). The routes read `new Date()` on every
+// request, so "today" here must come from that same clock at the moment it is
+// used, never from a constant fixed when the file loaded: a run that crossed
+// midnight UTC between loading and a later test was off by one day (`days_left`
+// 19 for 20). Each test freezes the JS clock at the real instant it starts, so
+// the fixture's dates and the route's `today()` agree even if midnight passes
+// mid-test. Only `Date` is mocked; timers and SQLite's own clock are untouched.
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: Date.now() }));
+afterEach(() => mock.timers.reset());
+const today = () => new Date().toISOString().slice(0, 10);
+const plusDays = (n: number) => new Date(Date.parse(`${today()}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -261,7 +270,7 @@ test('D417: seeding a pack refuses an unknown one, skips what needs a formation 
   const again = await call(db, ADMIN, 'POST', '/entities/2/obligations/pack', { pack: 'us_de_llc' });
   assert.deepEqual([again.body.added, again.body.already_on_calendar, again.body.skipped.length], [1, 1, 0]);
   assert.equal(count(db, `source = 'pack'`), 2);
-  assert.equal(count(db, `kind = 'registered_agent' AND due_date >= '${TODAY}'`), 1, 'a renewal dated before today');
+  assert.equal(count(db, `kind = 'registered_agent' AND due_date >= '${today()}'`), 1, 'a renewal dated before today');
 });
 
 test('D417: filing a recurring obligation opens the next and links it; a one-off opens none; nothing files twice', async () => {
@@ -276,7 +285,7 @@ test('D417: filing a recurring obligation opens the next and links it; a one-off
   const filed = await call(db, ADMIN, 'POST', `/entities/2/obligations/${uid}/file`, { note: 'Paid online' });
   assert.equal(filed.status, 200, filed.text);
   assert.equal(filed.body.obligation.status, 'filed');
-  assert.equal(filed.body.obligation.resolved_on, TODAY);
+  assert.equal(filed.body.obligation.resolved_on, today());
   assert.equal(filed.body.next.due_date, nextDue(due, 'annual'));
   assert.equal(filed.body.next.status, 'open');
   assert.equal(filed.body.obligation.next_uid, filed.body.next.uid);
@@ -322,7 +331,7 @@ test('D417: a filing that loses a race to another is refused and opens no next o
   const batch = racing.batch;
   racing.batch = async (x: any[]) => {
     db.prepare(`UPDATE entity_obligations SET status = 'waived', resolved_on = ?, resolution_note = 'Waived by the other admin' WHERE uid = ?`)
-      .run(TODAY, uid);
+      .run(today(), uid);
     return batch(x);
   };
   const r = await call(db, ADMIN, 'POST', `/entities/2/obligations/${uid}/file`, {}, racing);
@@ -350,7 +359,7 @@ test('D417: waiving needs a reason, keeps it, and opens no next occurrence', asy
   assert.equal(audits(db).at(-1).action, 'legal.entity.obligation_waived');
 
   const list = await call(db, PARTNER, 'GET', '/entities/2/obligations');
-  assert.equal(list.body.as_of, TODAY);
+  assert.equal(list.body.as_of, today());
   assert.equal(list.body.obligations[0].days_left, null, 'a resolved row has no days left');
 });
 
