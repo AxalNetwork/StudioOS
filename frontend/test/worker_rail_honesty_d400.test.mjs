@@ -134,7 +134,7 @@ test('AssistRail: an unreadable usage log renders Unreadable, never $0.00', () =
   assert.match(html, />Retry</, 'the unreadable spend has no retry');
 });
 
-test('AssistRail: a readable total still draws the figure and the cap', () => {
+test('AssistRail: raw usage remains visible while its separate included allowance is loading', () => {
   const cfg = eadwynConfig({
     surface: 'advisory',
     spend: { recorded: true, month: { spend_usd: 12.5, cap_usd: 50, calls: 3 }, by_task: [] },
@@ -142,7 +142,8 @@ test('AssistRail: a readable total still draws the figure and the cap', () => {
   });
   const text = renderedText(renderToStaticMarkup(React.createElement(AssistRail, { config: cfg, page: 'advisory' })));
   assert.match(text, /\$12\.50/);
-  assert.match(text, /\$50\.00/);
+  assert.match(text, /Loading AI allowance/);
+  assert.doesNotMatch(text, /\$50\.00/);
   assert.doesNotMatch(text, /Unreadable/);
 });
 

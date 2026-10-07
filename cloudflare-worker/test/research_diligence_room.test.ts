@@ -1,3 +1,4 @@
+import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
 /**
  * The investor's room and document reads, keyed by the grant they hold, and
  * the list's "open to you" count — run against real SQLite.
@@ -83,6 +84,7 @@ function freshDb() {
   f.run(31, 'f-open', 7, OPEN_NAME, 'k/open', 'application/pdf', 2048, 'open');
   f.run(32, 'f-nda', 7, NDA_NAME, 'k/nda', 'application/pdf', 4096, 'nda');
   f.run(33, 'f-elsewhere', 8, 'Elsewhere plan.pdf', 'k/else', 'application/pdf', 10, 'open');
+  db.exec(AI_LOG_SCHEMA+AI_BUDGET_MIGRATION);
   return db;
 }
 

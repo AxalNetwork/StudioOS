@@ -1,3 +1,4 @@
+import {aiBudgetFixture} from './_ai_budget_fixture.mjs';
 /**
  * THE CARD MAY NAME A MODEL BECAUSE THIS ROUTE RUNS ONE.
  *
@@ -203,6 +204,8 @@ test('a model the task does not offer comes back as its own reason', () => {
  * leaves a privileged read with no trace.
  */
 function envThatRecordsWrites() {
+  const budget=aiBudgetFixture();
+  budget.db.prepare("UPDATE users SET role='admin',email='hq@axal.vc' WHERE id=7").run();
   const sql: string[] = [];
   const binds: unknown[][] = [];
   return {
@@ -214,6 +217,10 @@ function envThatRecordsWrites() {
         prepare: (q: string) => {
           sql.push(q);
           let bound: unknown[] = [];
+          if (/ai_licence_caps|ai_topup_accounts|ai_included_spend|ai_budget_reservations|ai_topup_ledger|ai_usage_logs|SELECT \* FROM users/.test(q)) {
+            const statement=budget.DB.prepare(q);const bind=statement.bind;
+            statement.bind=(...b:unknown[])=>{binds.push(b);return bind(...b);};return statement;
+          }
           const api: any = {
             bind: (...b: unknown[]) => { bound = b; binds.push(b); return api; },
             // THE ACCOUNT LOOKUP HAS TO ANSWER, or every test below passes
@@ -241,6 +248,7 @@ function envThatRecordsWrites() {
           };
           return api;
         },
+        batch: budget.DB.batch,
         exec: async () => ({ count: 0, duration: 0 }),
       },
       AI: { run: async () => ({ response: 'x' }) },

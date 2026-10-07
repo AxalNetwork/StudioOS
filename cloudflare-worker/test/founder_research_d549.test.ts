@@ -1,3 +1,5 @@
+import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
+import {d1Over} from './_d1_sqlite.mjs';
 /** D549: mounted routes against the canonical Library/Ask migrations. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,19 +26,10 @@ function fixture() {
   db.exec("INSERT INTO research_documents (id,uid,owner_user_id,title,r2_key,index_state) VALUES (1,'own-doc',701,'Interview','r/own','indexed'),(2,'other-doc',702,'Other file','r/other','indexed')");
   db.exec("INSERT INTO research_ask_sessions (id,uid,owner_user_id) VALUES (1,'own-session',701),(2,'other-session',702)");
   db.exec("INSERT INTO research_ask_answers (uid,session_id,owner_user_id,question,answer,reason,saved) VALUES ('own-answer',1,701,'Why?','Because','answered',1),('other-answer',2,702,'Private?','Private','answered',0)");
+  db.exec(AI_LOG_SCHEMA+AI_BUDGET_MIGRATION);
   const statements: string[] = [];
-  const DB = {
-    prepare(query: string) {
-      statements.push(query); let values: any[] = [];
-      const statement: any = {
-        bind(...params: any[]) { values = params; return statement; },
-        async first(column?: string) { const row: any = db.prepare(query).get(...values) ?? null; return column ? row?.[column] ?? null : row; },
-        async all() { return { results: db.prepare(query).all(...values) }; },
-        async run() { const result = db.prepare(query).run(...values); return { meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) } }; },
-      }; return statement;
-    },
-    async exec(query: string) { db.exec(query); },
-  };
+  const underlying=d1Over(db);
+  const DB={...underlying,prepare(query:string){statements.push(query);return underlying.prepare(query);}};
   return { db, statements, env: { DB, JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any };
 }
 async function call(f: ReturnType<typeof fixture>, method: string, path: string, body?: unknown, who = 701) {

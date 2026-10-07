@@ -21,10 +21,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { makeD1 } from './_d1_sqlite.mjs';
+import { AI_USERS_SCHEMA, AI_BUDGET_MIGRATION } from './_ai_budget_fixture.mjs';
 import { loadMyAiSpend, SPEND_CAP_DEFAULTS, SPEND_CAP_VARS } from '../src/services/aiSpend.ts';
 import { aiUsageSelfScope, ALL_ROWS, NO_ROWS } from '../src/services/tenancyScope.ts';
 
-const SCHEMA = `
+const SCHEMA = AI_USERS_SCHEMA + AI_BUDGET_MIGRATION + `
 CREATE TABLE ai_usage_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER,
@@ -44,6 +45,7 @@ CREATE TABLE ai_usage_logs (
 
 /** Rows spanning two months, three users, and one unattributed call. */
 const SEED = `
+INSERT INTO users(id,role) VALUES(7,'investor'),(9,'founder'),(11,'founder'),(4242,'founder');
 INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, cached, fallback_used, refusal, created_at) VALUES
   (7,    'advisor_turn', 'llama-3.3-70b', 0.0100, 0, 0, NULL,             '2026-08-01 09:00:00'),
   (7,    'advisor_turn', 'llama-3.3-70b', 0.0200, 0, 1, NULL,             '2026-08-27 10:00:00'),
@@ -243,19 +245,14 @@ test('a denied actor reads nobody’s meter', async () => {
 
 // ---------- the meter must not draw a cap the router does not enforce ----------
 
-test('the meter reads the same cap names and defaults as the router', () => {
-  // aiSpend.ts re-declares the caps rather than importing budgetCaps(), which
-  // aiRouter keeps private. That is a copy, and a copy that drifts would show
-  // a user a $50 ceiling while the router refuses them at $10. The claim in
-  // aiSpend's comment is only true while this test holds it.
-  const routerSrc = readFileSync(
-    resolve(process.cwd(), 'cloudflare-worker/src/services/aiRouter.ts'), 'utf8');
-  assert.match(routerSrc, /USER_DAY_USD:\s*5\b/, 'router day default');
-  assert.match(routerSrc, /USER_MONTH_USD:\s*50\b/, 'router month default');
-  assert.equal(SPEND_CAP_DEFAULTS.day, 5);
-  assert.equal(SPEND_CAP_DEFAULTS.month, 50);
-  assert.match(routerSrc, new RegExp(`\\b${SPEND_CAP_VARS.day}\\b`), 'router reads the day var');
-  assert.match(routerSrc, new RegExp(`\\b${SPEND_CAP_VARS.month}\\b`), 'router reads the month var');
+test('the meter and router share the cap resolver rather than copying defaults', () => {
+  const routerSrc=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/services/aiRouter.ts'),'utf8');
+  const spendSrc=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/services/aiSpend.ts'),'utf8');
+  const budgetSrc=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/services/aiBudget.ts'),'utf8');
+  assert.match(routerSrc,/aiBudget\.environmentAiCaps/);
+  assert.match(spendSrc,/resolveAiCaps\(env,callerId\)/);
+  assert.equal(SPEND_CAP_DEFAULTS.day,5); assert.equal(SPEND_CAP_DEFAULTS.month,50);
+  assert.match(budgetSrc,new RegExp(SPEND_CAP_VARS.day)); assert.match(budgetSrc,new RegExp(SPEND_CAP_VARS.month));
 });
 
 test('the org rollup stays admin-gated — this endpoint did not open it up', () => {

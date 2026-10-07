@@ -36,6 +36,7 @@
  * honest answer there, and the same rule the fund surfaces follow.
  */
 import type { Env } from '../types';
+import { AI_CAP_DEFAULTS, AI_CAP_VARS, environmentAiCaps, resolveAiCaps } from './aiBudget';
 import { aiUsageSelfScope } from './tenancyScope';
 import type { Actor } from './tenancyScope';
 
@@ -45,7 +46,7 @@ export interface AiSpendPeriod {
   /** Σ est_cost_usd over the period. `null` when nothing is recorded. */
   spend_usd: number | null;
   /** The cap the router enforces for this period, from budgetCaps(). */
-  cap_usd: number;
+  cap_usd: number | null;
   /** The KV counter the router actually checks. `null` when unavailable. */
   enforced_usd: number | null;
   calls: number;
@@ -134,23 +135,8 @@ async function readEnforced(env: Env, key: string): Promise<number | null> {
  * defaults rather than re-declared, so the meter cannot draw a cap the router
  * does not use. A test pins the two lists against each other.
  */
-export const SPEND_CAP_VARS = {
-  day: 'WORKERS_AI_BUDGET_USD_DAY',
-  month: 'WORKERS_AI_BUDGET_USD_MONTH',
-} as const;
-export const SPEND_CAP_DEFAULTS = { day: 5, month: 50 } as const;
-
-function caps(env: Env): { day: number; month: number } {
-  const e = env as unknown as Record<string, string | undefined>;
-  const num = (v: string | undefined, fallback: number) => {
-    const n = v != null ? Number(v) : NaN;
-    return Number.isFinite(n) && n > 0 ? n : fallback;
-  };
-  return {
-    day: num(e[SPEND_CAP_VARS.day], SPEND_CAP_DEFAULTS.day),
-    month: num(e[SPEND_CAP_VARS.month], SPEND_CAP_DEFAULTS.month),
-  };
-}
+export const SPEND_CAP_VARS = AI_CAP_VARS;
+export const SPEND_CAP_DEFAULTS = {day:AI_CAP_DEFAULTS.day,month:AI_CAP_DEFAULTS.month} as const;
 
 type LastRun = NonNullable<AiSpendReport['last_run']>;
 
@@ -186,14 +172,19 @@ function lastRunFromRow(r: any): LastRun {
  */
 export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<AiSpendReport> {
   const scope = aiUsageSelfScope(actor);
-  const cap = caps(env);
+  let cap: {day:number|null;month:number|null} = environmentAiCaps(env);
+  const callerId = scope.binds[0];
+  if (typeof callerId === 'number' && callerId>0) {
+    try { const resolved=await resolveAiCaps(env,callerId); cap={day:resolved.daily_microusd/1000000,month:resolved.monthly_microusd/1000000}; }
+    catch { cap={day:null,month:null}; }
+  }
   const mKey = monthKey(now);
   const dKey = dayKey(now);
   // 'YYYY-MM-DD HH:MM:SS' — the shape aiRouter writes into created_at, so a
   // string comparison orders correctly without a date function.
   const asAt = now.toISOString().slice(0, 19).replace('T', ' ');
 
-  const empty = (key: string, cap_usd: number): AiSpendPeriod =>
+  const empty = (key: string, cap_usd: number | null): AiSpendPeriod =>
     ({ key, spend_usd: null, cap_usd, enforced_usd: null, calls: 0 });
 
   // One query per period rather than a CASE-folded single scan: D1 is cheap
