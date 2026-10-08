@@ -3,6 +3,7 @@ import { FileText, X, Eye, Download, Loader2, AlertTriangle, RefreshCw } from 'l
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
+import { ConsoleUnreadable } from './consoles/shared';
 
 // Task #9 — Hardcoded IRS-style forms subsection.
 //
@@ -155,6 +156,8 @@ export default function AdminForms() {
     );
   }
 
+  if (error) return <ConsoleUnreadable what="Forms" onRetry={reload} />;
+
   return (
     <div data-testid="legal-forms-grid">
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -172,6 +175,7 @@ export default function AdminForms() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {!items.length && <p>No form is available.</p>}
         {items.map((form) => (
           <div
             key={form.id}
@@ -182,6 +186,7 @@ export default function AdminForms() {
               <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{form.title}</div>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 flex-1">{form.description}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Last edited: Not recorded. The form catalogue does not record editor history.</p>
             <div className="flex items-center gap-2 mt-3">
               <span className="text-[11px] text-gray-400">{form.pages} page{form.pages > 1 ? 's' : ''}</span>
               <div className="ml-auto flex items-center gap-2">

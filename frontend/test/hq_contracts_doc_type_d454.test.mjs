@@ -11,7 +11,7 @@ import { codeOnly } from './_codeOnly.mjs';
 import { DocTypeRegistry, groupDocTypesByLayer, UNAVAILABLE } from '../src/pages/hq/ContractsPage.jsx';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnly(raw('frontend/src/pages/hq/ContractsPage.jsx'));
+const PAGE = codeOnly(raw('frontend/src/pages/hq/ContractRegistry.jsx'));
 const API = codeOnly(raw('frontend/src/lib/api.js'));
 const ROUTE = raw('cloudflare-worker/src/routes/admin_contract_doc_registry.ts');
 
@@ -45,13 +45,13 @@ test('an unreadable registry is not an empty one', () => {
   const html = renderToStaticMarkup(
     React.createElement(DocTypeRegistry, { data: UNAVAILABLE, onRetry: () => {} }),
   );
-  assert.match(html, /This is not a claim that no contract types exist/);
+  assert.match(html, /This is not a sign that there are none/);
 });
 
 test('the page wires the doc-types endpoint and names oversight honestly', () => {
   assert.match(PAGE, /api\.adminContractRegistryHub\(\)/);
   assert.match(PAGE, /DocTypeRegistry/);
-  assert.match(PAGE, /Cross-tenant oversight/);
+  assert.match(PAGE, /isSuperAdminUser/);
   assert.match(PAGE, /Unrecorded/);
   assert.doesNotMatch(PAGE, /registry the canvas draws above it has no store/);
   assert.match(API, /adminContractDocTypes:/);

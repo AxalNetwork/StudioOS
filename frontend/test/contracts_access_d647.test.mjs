@@ -32,11 +32,11 @@ test('D647: both shells render Contracts, but only canonical Super Admins see re
       globalThis.localStorage = { getItem: (key) => key === 'user' ? JSON.stringify({ id: 2, role: 'admin', is_super_admin: elevated ? 1 : 0 }) : null };
       const markup = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/admin/contracts?moved=legal'] },
         React.createElement(AuthProvider, null, React.createElement(ContractsPage))));
-      assert.match(markup, /Master template library/);
+      assert.match(markup, /Contracts tabs/);
       assert.match(markup, /Legal now lives under Contracts/);
-      assert.equal(markup.includes('registry-new-doc-type'), elevated);
-      assert.equal(markup.includes('Doc-type registry'), elevated);
-      assert.equal(markup.includes('Loading the registry'), elevated);
+      assert.equal(markup.includes('Document types'), elevated);
+      assert.equal(markup.includes('registry-new-doc-type'), false);
+      assert.equal(markup.includes('Loading the registry'), false);
       assert.match(markup, elevated ? /HQ.*Contracts/ : /Admin.*Contracts/);
     }
   } finally { globalThis.localStorage = previous; }

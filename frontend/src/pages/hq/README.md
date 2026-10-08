@@ -44,4 +44,4 @@ only its registry controls and routes require the elevation.
   per subsidiary stays blocked by U1 and metering (D261), separate from revenue.
 - Dark mode is not optional; `npm run test:drift` runs `check-dark-mode`.
 
-D647 (#1441): `ContractsPage.jsx` is reachable at `/admin/contracts` in both shells, retaining existing components while the redesign is pending. Plain admins do not load or render the document-type registry. The legacy Legal deep link redirects before console mounting; `moved=legal` shows its notice.
+D647 (#1441): `ContractsPage.jsx` is reachable at `/admin/contracts` in both shells, rendering the K1–K8 desk in `pages/admin/contracts/`. `ContractRegistry.jsx` retains D622 registry behavior and compatible exports. Plain admins do not load or render the document-type registry. The legacy Legal deep link redirects before console mounting; `moved=legal` shows its notice.

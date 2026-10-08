@@ -19,7 +19,7 @@ import {
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 
-const pageCode = codeOnly(readFileSync(fileURLToPath(new URL('../src/pages/hq/ContractsPage.jsx', import.meta.url)), 'utf8'));
+const pageCode = codeOnly(readFileSync(fileURLToPath(new URL('../src/pages/hq/ContractRegistry.jsx', import.meta.url)), 'utf8'));
 const routeSrc = readFileSync(fileURLToPath(new URL('../../cloudflare-worker/src/routes/admin_contract_doc_registry.ts', import.meta.url)), 'utf8');
 
 const PENDING = {
@@ -74,8 +74,8 @@ test('only a Super Admin gets the publish control; anyone else is told it waits 
   assert.doesNotMatch(other, /registry-publish-control|registry-publish-side_letter_axal/);
   assert.match(renderedText(other), /It goes live only when a Super Admin reviews and publishes it\./);
   // The page decides from the signed-in identity, not from a view mode.
-  assert.match(pageCode, /const canPublish = isSuperAdminUser\(user\);/);
-  assert.match(pageCode, /<DocTypeRegistry data=\{registry\} onRetry=\{loadRegistry\} canPublish=\{canPublish\} \/>/);
+  assert.match(pageCode, /const allowed = isSuperAdminUser\(user\);/);
+  assert.match(pageCode, /<DocTypeRegistry data=\{registry\} onRetry=\{reload\} canPublish \/>/);
   // The floor matches the route's.
   assert.match(routeSrc, new RegExp(`REGISTRY_PUBLISH_REASON_MIN = ${PUBLISH_REASON_MIN};`));
   assert.match(pageCode, /disabled=\{busy \|\| reason\.trim\(\)\.length < PUBLISH_REASON_MIN\}/);
