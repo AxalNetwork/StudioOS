@@ -564,7 +564,7 @@ adminContracts.get('/', async (c) => {
   let controls;
   try { controls = { ...contractPage(c.req.query()), ...contractOrder(c.req.query()) }; }
   catch (error) {
-    if (error instanceof ContractQueryError) return c.json({ error: error.message }, 400);
+    if (error instanceof ContractQueryError) return c.json({ error: 'invalid_contract_query', message: 'Choose valid paging, search, sort and filter values.' }, 400);
     throw error;
   }
   const { limit, offset, sort, direction } = controls;
@@ -639,7 +639,10 @@ adminContracts.get('/recipients', async (c) => {
   const admin = await requireAdmin(c);
   let page;
   try { page = contractPage(c.req.query()); }
-  catch (error) { return c.json({ error: (error as Error).message }, 400); }
+  catch (error) {
+    if (error instanceof ContractQueryError) return c.json({ error: 'invalid_picker_query', message: 'Choose valid paging and search values.' }, 400);
+    throw error;
+  }
   const pattern = contractLike(page.q);
   const allowed = isSuperAdmin(admin) ? 1 : 0;
   try {
@@ -664,7 +667,10 @@ adminContracts.get('/deal-options', async (c) => {
   await requireAdmin(c);
   let page;
   try { page = contractPage(c.req.query()); }
-  catch (error) { return c.json({ error: (error as Error).message }, 400); }
+  catch (error) {
+    if (error instanceof ContractQueryError) return c.json({ error: 'invalid_picker_query', message: 'Choose valid paging and search values.' }, 400);
+    throw error;
+  }
   const pattern = contractLike(page.q);
   try {
     const total = await c.env.DB.prepare(
