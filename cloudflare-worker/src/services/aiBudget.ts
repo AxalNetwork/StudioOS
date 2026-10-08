@@ -41,6 +41,23 @@ export async function resolveAiCaps(env: Env, userId:number) {
     daily_microusd:recorded ? amount(recorded.daily_microusd) : usdToMicro(fallback.day),
     monthly_microusd:recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month) };
 }
+export async function listAiLicenceCaps(env:Env) {
+  const rows=await env.DB.prepare(`SELECT c.licence_key,c.daily_microusd,c.monthly_microusd,c.recorded_by,
+    u.name AS recorded_by_name,c.updated_at AS recorded_at FROM ai_licence_caps c
+    LEFT JOIN users u ON u.id=c.recorded_by`).all<any>();
+  if (rows.success !== true) throw new Error('AI caps unreadable');
+  const byKey=new Map(rows.results.map(row=>[row.licence_key,row]));
+  const fallback=environmentAiCaps(env);
+  return AI_LICENCE_KEYS.map(licence_key=>{
+    const recorded=byKey.get(licence_key);
+    return {licence_key,source:recorded?'recorded' as const:'environment' as const,
+      daily_microusd:recorded?amount(recorded.daily_microusd):usdToMicro(fallback.day),
+      monthly_microusd:recorded?amount(recorded.monthly_microusd):usdToMicro(fallback.month),
+      recorded_by:recorded?amount(recorded.recorded_by):null,
+      recorded_by_name:recorded?recorded.recorded_by_name:null,
+      recorded_at:recorded?recorded.recorded_at:null};
+  });
+}
 async function batch(env:Env, statements:D1PreparedStatement[]) {
   const results = await env.DB.batch(statements);
   if (results.length !== statements.length || results.some(r=>r.success !== true)) throw new Error('AI budget unreadable');
@@ -74,36 +91,101 @@ async function initialize(env:Env,userId:number,now:Date) {
   if (bank.success !== true) throw new Error('AI budget unreadable');
 }
 export interface AiReservation { uid:string; userId:number }
-/** CAS settlement token makes all following updates harmless on replay. */
+export class AiBudgetReviewConflict extends Error {}
+export class AiBudgetReviewNotFound extends Error {}
+type ReviewAudit={actorId:number;reason:string;recordedCost:number;action:'charge'|'refund'};
+/** CAS settlement token makes every money update and the optional audit harmless on replay. */
+async function commitSettlement(env:Env,row:any,costMicrousd:number,refund:boolean,expectedStatus:'pending'|'review',audit?:ReviewAudit) {
+  const included=Math.min(costMicrousd,amount(row.included_microusd));
+  const paid=costMicrousd-included;
+  const token=crypto.randomUUID();
+  const statements=[
+    env.DB.prepare(`UPDATE ai_budget_reservations SET status=?, settlement_uid=?, actual_included_microusd=?, actual_topup_microusd=?, updated_at=datetime('now')
+      WHERE uid=? AND user_id=? AND status=?`).bind(refund?'refunded':'settled',token,included,paid,row.uid,row.user_id,expectedStatus),
+    env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd-?,updated_at=datetime('now')
+      WHERE user_id=? AND period_kind='day' AND period_key=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
+      .bind(row.included_microusd-included,row.user_id,row.day_key,row.uid,token),
+    env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd-?,updated_at=datetime('now')
+      WHERE user_id=? AND period_kind='month' AND period_key=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
+      .bind(row.included_microusd-included,row.user_id,row.month_key,row.uid,token),
+    env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+?,updated_at=datetime('now')
+      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
+      .bind(row.topup_microusd-paid,row.user_id,row.uid,token),
+    env.DB.prepare(`INSERT INTO ai_topup_ledger(uid,user_id,kind,amount_microusd,reservation_uid,actor)
+      SELECT ?,user_id,'draw',actual_topup_microusd,uid,CAST(user_id AS TEXT) FROM ai_budget_reservations
+      WHERE uid=? AND settlement_uid=? AND actual_topup_microusd>0`).bind(token,row.uid,token),
+  ];
+  if (audit) {
+    const held=amount(amount(row.included_microusd)+amount(row.topup_microusd));
+    const details=JSON.stringify({reservation_uid:row.uid,member_id:row.user_id,
+      held_microusd:held,recorded_cost_microusd:audit.recordedCost,charged_microusd:costMicrousd,
+      absorbed_microusd:amount(audit.recordedCost-costMicrousd),
+      included_microusd:included,topup_microusd:paid,reason:audit.reason});
+    statements.push(env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
+      SELECT ?,?,?,user_id FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?`)
+      .bind(`ai_budget_review_${audit.action}`,details,String(audit.actorId),row.uid,token));
+  }
+  const result=await batch(env,statements);
+  return result[0].meta.changes === 1;
+}
+/** A provider overage stays held, with its recorded cost on the same row. */
 export async function settleAiReservation(env:Env, reservation:AiReservation, costMicrousd:number, refund=false) {
   amount(costMicrousd);
   const row=await env.DB.prepare('SELECT * FROM ai_budget_reservations WHERE uid = ? AND user_id = ?').bind(reservation.uid,reservation.userId).first<any>();
   if (!row) throw new Error('AI reservation unreadable');
   if (row.status !== 'pending') return;
-  if (costMicrousd > row.included_microusd + row.topup_microusd) {
-    // Unexpected provider usage cannot be silently capped or refunded. Preserve the hold for review.
-    await env.DB.prepare("UPDATE ai_budget_reservations SET status='review', updated_at=datetime('now') WHERE uid=? AND user_id=? AND status='pending'").bind(reservation.uid,reservation.userId).run();
+  const held=amount(amount(row.included_microusd)+amount(row.topup_microusd));
+  if (costMicrousd > held) {
+    const result=await env.DB.prepare(`UPDATE ai_budget_reservations
+      SET status='review',recorded_cost_microusd=?,updated_at=datetime('now')
+      WHERE uid=? AND user_id=? AND status='pending'`).bind(costMicrousd,reservation.uid,reservation.userId).run();
+    if (result.success !== true) throw new Error('AI budget unreadable');
     throw new Error('AI usage exceeds reservation');
   }
-  const included=Math.min(costMicrousd,amount(row.included_microusd));
-  const paid=costMicrousd-included;
-  const token=crypto.randomUUID();
-  await batch(env,[
-    env.DB.prepare(`UPDATE ai_budget_reservations SET status=?, settlement_uid=?, actual_included_microusd=?, actual_topup_microusd=?, updated_at=datetime('now')
-      WHERE uid=? AND user_id=? AND status='pending'`).bind(refund?'refunded':'settled',token,included,paid,reservation.uid,reservation.userId),
-    env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd-?,updated_at=datetime('now')
-      WHERE user_id=? AND period_kind='day' AND period_key=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
-      .bind(row.included_microusd-included,reservation.userId,row.day_key,reservation.uid,token),
-    env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd-?,updated_at=datetime('now')
-      WHERE user_id=? AND period_kind='month' AND period_key=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
-      .bind(row.included_microusd-included,reservation.userId,row.month_key,reservation.uid,token),
-    env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+?,updated_at=datetime('now')
-      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
-      .bind(row.topup_microusd-paid,reservation.userId,reservation.uid,token),
-    env.DB.prepare(`INSERT INTO ai_topup_ledger(uid,user_id,kind,amount_microusd,reservation_uid,actor)
-      SELECT ?,user_id,'draw',actual_topup_microusd,uid,CAST(user_id AS TEXT) FROM ai_budget_reservations
-      WHERE uid=? AND settlement_uid=? AND actual_topup_microusd>0`).bind(token,reservation.uid,token),
-  ]);
+  await commitSettlement(env,row,costMicrousd,refund,'pending');
+}
+export async function listAiBudgetReviews(env:Env) {
+  const rows=await env.DB.prepare(`SELECT r.uid,r.user_id,u.name AS member_name,r.created_at AS at,
+    r.included_microusd,r.topup_microusd,r.recorded_cost_microusd
+    FROM ai_budget_reservations r JOIN users u ON u.id=r.user_id
+    WHERE r.status='review' ORDER BY r.created_at,r.uid`).all<any>();
+  if (rows.success !== true) throw new Error('AI reviews unreadable');
+  return rows.results.map(row=>({uid:row.uid,member_id:row.user_id,member_name:row.member_name,at:row.at,
+    held_microusd:amount(amount(row.included_microusd)+amount(row.topup_microusd)),
+    recorded_cost_microusd:amount(row.recorded_cost_microusd)}));
+}
+/** Only the Super Admin route calls this after validating its actor and reason. */
+export async function settleAiBudgetReview(env:Env,uid:string,action:'charge'|'refund',actorId:number,reason:string) {
+  if (!Number.isSafeInteger(actorId) || actorId<=0 || typeof reason!=='string' || reason.trim().length<10)
+    throw new Error('AI review decision unreadable');
+  const row=await env.DB.prepare('SELECT * FROM ai_budget_reservations WHERE uid=?').bind(uid).first<any>();
+  if (!row) throw new AiBudgetReviewNotFound('AI review not found');
+  const held=amount(amount(row.included_microusd)+amount(row.topup_microusd));
+  const desired=action==='charge'?'settled':'refunded';
+  if (row.status!== 'review') {
+    const alreadyCharged=row.actual_included_microusd==null || row.actual_topup_microusd==null
+      ? null : amount(amount(row.actual_included_microusd)+amount(row.actual_topup_microusd));
+    if (row.status===desired && row.recorded_cost_microusd!=null && alreadyCharged===(action==='charge'?held:0))
+      return {uid,status:desired,already_settled:true,held_microusd:held,recorded_cost_microusd:amount(row.recorded_cost_microusd),
+        charged_microusd:action==='charge'?held:0};
+    throw new AiBudgetReviewConflict('AI hold is not in review');
+  }
+  const recordedCost=amount(row.recorded_cost_microusd);
+  const charged=action==='charge'?held:0;
+  const changed=await commitSettlement(env,row,charged,action==='refund','review',
+    {actorId,reason:reason.trim(),recordedCost,action});
+  if (!changed) {
+    const latest=await env.DB.prepare(`SELECT status,recorded_cost_microusd,actual_included_microusd,actual_topup_microusd
+      FROM ai_budget_reservations WHERE uid=?`).bind(uid).first<any>();
+    const latestCharged=latest?.actual_included_microusd==null || latest?.actual_topup_microusd==null
+      ? null : amount(amount(latest.actual_included_microusd)+amount(latest.actual_topup_microusd));
+    if (latest?.status===desired && latest.recorded_cost_microusd!=null && latestCharged===charged)
+      return {uid,status:desired,already_settled:true,held_microusd:held,
+        recorded_cost_microusd:recordedCost,charged_microusd:charged};
+    throw new AiBudgetReviewConflict('AI hold is no longer in review');
+  }
+  return {uid,status:desired,already_settled:false,held_microusd:held,
+    recorded_cost_microusd:recordedCost,charged_microusd:charged};
 }
 async function releaseExpired(env:Env,userId:number,now:Date) {
   const rows=await env.DB.prepare("SELECT uid FROM ai_budget_reservations WHERE user_id=? AND status='pending' AND expires_at<=? ORDER BY expires_at LIMIT 100")
@@ -120,21 +202,27 @@ export async function loadAiBudget(env:Env,userId:number,now=new Date()) {
   const row=await env.DB.prepare(`SELECT a.balance_microusd,d.spend_microusd AS daily,m.spend_microusd AS monthly,
       (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review') AND day_key=?) AS day_held,
       (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review') AND month_key=?) AS month_held,
-      (SELECT COALESCE(SUM(topup_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review')) AS paid_held,
-      (SELECT COUNT(*) FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review') AS reviews
+      (SELECT COALESCE(SUM(topup_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review')) AS paid_held
     FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
       JOIN ai_included_spend m ON m.user_id=a.user_id AND m.period_kind='month' AND m.period_key=? WHERE a.user_id=?`)
     .bind(t.day,t.month,t.day,t.month,userId).first<any>();
-  if (!row || row.reviews) throw new Error('AI budget unreadable');
+  if (!row) throw new Error('AI budget unreadable');
+  const held=await env.DB.prepare(`SELECT uid,created_at AS at,included_microusd,topup_microusd,recorded_cost_microusd
+    FROM ai_budget_reservations WHERE user_id=? AND status='review' ORDER BY created_at,uid`).bind(userId).all<any>();
+  if (held.success !== true) throw new Error('AI reviews unreadable');
   const daily=amount(row.daily),monthly=amount(row.monthly),dayHeld=amount(row.day_held),monthHeld=amount(row.month_held);
   return { ...caps, day_key:t.day,month_key:t.month,
     day_spend_microusd:amount(daily-dayHeld),month_spend_microusd:amount(monthly-monthHeld),
     day_reserved_microusd:dayHeld,month_reserved_microusd:monthHeld,
-    balance_microusd:amount(row.balance_microusd),topup_reserved_microusd:amount(row.paid_held) };
+    balance_microusd:amount(row.balance_microusd),topup_reserved_microusd:amount(row.paid_held),
+    held_for_review:held.results.map(r=>({uid:r.uid,at:r.at,
+      held_microusd:amount(amount(r.included_microusd)+amount(r.topup_microusd)),
+      recorded_cost_microusd:amount(r.recorded_cost_microusd)})) };
 }
 export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number,now=new Date()) {
   amount(quoteMicrousd);
   const report=await loadAiBudget(env,userId,now);
+  if (report.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
   const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+300000)).at;
   // Compute the split from current counters inside the write transaction, never from a stale read.
   const results=await batch(env,[
@@ -156,6 +244,7 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
   ]);
   if (!results[0].meta.changes) {
     const current=await loadAiBudget(env,userId,now);
+    if (current.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
     const dayRemaining=Math.max(0,current.daily_microusd-current.day_spend_microusd-current.day_reserved_microusd);
     const monthRemaining=Math.max(0,current.monthly_microusd-current.month_spend_microusd-current.month_reserved_microusd);
     return {ok:false as const,refusal:dayRemaining<=monthRemaining?'budget_user_day' as const:'budget_user_month' as const};

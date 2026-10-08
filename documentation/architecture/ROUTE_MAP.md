@@ -19,6 +19,10 @@ the root" until 2026-09-07; the root of `design/canvases/` holds only its
 
 ## Status taxonomy
 
+### AI allowance Worker contract (D640, #1433)
+
+The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for S09's screens, not frontend API methods added by this issue.
+
 D631 (#1389), Ops area 6:
 
 | Canvas | Live route | Component and Worker | Status |

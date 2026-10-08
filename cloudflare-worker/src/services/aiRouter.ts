@@ -58,6 +58,7 @@ export type TaskClass =
 export type RefusalReason =
   | 'budget_user_day'
   | 'budget_user_month'
+  | 'budget_review'
   | 'budget_org_month'
   | 'kill_switch'
   | 'safety_block'
@@ -1010,7 +1011,9 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env,opts.userId,usage,held.refusal,opts.surface);
-        return {ok:false,refusal:held.refusal,error:'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.',usage};
+        return {ok:false,refusal:held.refusal,error:held.refusal==='budget_review'
+          ? 'An AI run is held for review. New runs can start after it is settled.'
+          : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.',usage};
       }
       reservation = held.reservation;
     } catch {
