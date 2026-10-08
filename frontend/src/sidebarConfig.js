@@ -240,8 +240,10 @@ export const SIDEBAR_GROUPS = {
     // fails if any role grows a group with no destinations again.
   ],
 
-  // Task #19 — regroup the founder sidebar around the venture lifecycle:
-  // Home → Build → Validate → Raise → Launch → More → Account. This replaces the
+  // Task #19 — regroup the founder sidebar around the venture lifecycle. The
+  // rows today run Studio · (Spin-Out Lab, for its members) · Validate · Build
+  // · Raise · Grow · Network · Research (#1447), the order the Worker's lifecycle stages follow too
+  // (`LIFECYCLE_STAGES` in routes/progress.ts: Raise before Grow). This replaced the
   // former 8-group layout (which crammed execution + validation + fundraising
   // into one "Build" bucket and duplicated Home via a parallel portal)
   // so every feature has exactly one home and founders face far fewer top-level

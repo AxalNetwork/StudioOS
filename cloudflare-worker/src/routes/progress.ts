@@ -2748,7 +2748,9 @@ progress.post('/metrics/:projectId/import-stripe', async (c) => {
 // playbook_week trio — those are never touched here. Advancement is SUGGESTED,
 // never automatic: the founder confirms a move via PUT.
 // ---------------------------------------------------------------------------
-const LIFECYCLE_STAGES = ['idea', 'validate', 'build', 'launch', 'grow', 'raise'] as const;
+// #1447 — Raise comes before Grow, as in the founder sidebar and the owner's
+// blueprint (#1440). Studio's "Do these next" reads the current stage's checklist.
+export const LIFECYCLE_STAGES = ['idea', 'validate', 'build', 'launch', 'raise', 'grow'] as const;
 type LifecycleStage = typeof LIFECYCLE_STAGES[number];
 
 const LIFECYCLE_STAGE_META: Record<LifecycleStage, { label: string; goal: string }> = {
@@ -2756,8 +2758,8 @@ const LIFECYCLE_STAGE_META: Record<LifecycleStage, { label: string; goal: string
   validate: { label: 'Validate', goal: 'Prove someone wants it' },
   build: { label: 'Build', goal: 'Ship the MVP with the right people' },
   launch: { label: 'Launch', goal: 'Get to market' },
-  grow: { label: 'Grow', goal: 'Find repeatable traction' },
   raise: { label: 'Raise', goal: 'Fund the next stage' },
+  grow: { label: 'Grow', goal: 'Find repeatable traction' },
 };
 
 // Additive + idempotent columns on `projects`, same WeakMap pattern as the
@@ -2858,9 +2860,9 @@ async function computeLifecycleSignals(env: Env, projectId: number): Promise<Lif
 // The unstored default: infer the furthest stage the real signals justify.
 // Deliberately conservative (never jumps to build/launch, which have no reliable
 // signal) — suggestions nudge the founder forward from there.
-function inferStageFromSignals(s: LifecycleSignals): LifecycleStage {
-  if (s.active_prospects > 0) return 'raise';
+export function inferStageFromSignals(s: LifecycleSignals): LifecycleStage {
   if ((s.latest_mrr ?? 0) > 0) return 'grow';
+  if (s.active_prospects > 0) return 'raise';
   if (s.landing_published && s.interview_count >= 5) return 'validate';
   return 'idea';
 }
@@ -2917,7 +2919,7 @@ function buildLifecycleChecklist(
 
 // Only ever suggest moving FORWARD one stage, and only when the next stage's
 // signals actually appear. Returns [] when nothing to suggest.
-function buildLifecycleSuggestions(
+export function buildLifecycleSuggestions(
   stage: LifecycleStage,
   s: LifecycleSignals,
 ): Array<{ to: LifecycleStage; reason: string }> {
@@ -2927,11 +2929,11 @@ function buildLifecycleSuggestions(
   if (stage === 'validate' && s.landing_published && s.interview_count >= 5) {
     return [{ to: 'build', reason: 'Landing page live and 5+ interviews logged — time to Build?' }];
   }
-  if (stage === 'launch' && (s.latest_mrr ?? 0) > 0) {
-    return [{ to: 'grow', reason: "You're generating revenue — move to Grow?" }];
-  }
-  if (stage === 'grow' && s.active_prospects > 0) {
+  if (stage === 'launch' && s.active_prospects > 0) {
     return [{ to: 'raise', reason: 'Investors are in your pipeline — ready to Raise?' }];
+  }
+  if (stage === 'raise' && (s.latest_mrr ?? 0) > 0) {
+    return [{ to: 'grow', reason: "You're generating revenue — move to Grow?" }];
   }
   return [];
 }

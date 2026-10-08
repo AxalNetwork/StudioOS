@@ -155,7 +155,7 @@ export default function FounderRaiseStatus() {
           <div className="fr-status-title-row"><div><h1>Raise war-room</h1><p className="fr-status-subtitle">Blockers, investor list, timeline and the pace that decides the close.</p></div></div>
           <nav className="fr-status-zone-nav" aria-label="Raise sections">
             <LensLink to={query ? `/raise/status${query}` : '/raise/status'} className="is-active" data-testid="link-status-zone">Status</LensLink>
-            <LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><span className="fr-status-zone-disabled">Liquidity unavailable</span>
+            <LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><LensLink to={`/raise/liquidity${query}`}>Liquidity</LensLink>
           </nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/status', { value: filter, onChange: setFilter })}
