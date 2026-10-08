@@ -52,3 +52,5 @@ its drawing pieces with the partner earnings screens (`parts.jsx`).
   without leaving a trail is a bug, not a convenience.
 - Being admin-only is not a reason to invent data. These screens show real rows
   or say the list is empty.
+
+D647: `LegacyContractsRedirect.jsx` sends `/admin?tab=legal` to `/admin/contracts?moved=legal` before the console mounts, preserving other console sections.

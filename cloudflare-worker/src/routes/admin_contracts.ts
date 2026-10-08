@@ -3,6 +3,10 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin, requireFactor, requireStepUp, requireHqAuthoring } from '../auth';
+import { ContractQueryError, contractPage, contractOrder, orderContracts, contractLike } from '../services/contractListQuery';
+import { isSuperAdmin } from '../auth';
+import { extractMergeFields } from '../services/legalTemplateStore';
+import { isAutoMergeKey } from './esign';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
@@ -152,8 +156,8 @@ function daysBetween(a: any, b: any): number | null {
   if (!a || !b) return null;
   const t1 = new Date(a).getTime();
   const t2 = new Date(b).getTime();
-  if (!Number.isFinite(t1) || !Number.isFinite(t2)) return null;
-  return Math.max(0, Math.floor((t1 - t2) / 86400000));
+  if (!Number.isFinite(t1) || !Number.isFinite(t2) || t1 < t2) return null;
+  return Math.floor((t1 - t2) / 86400000);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +179,7 @@ interface UnifiedContract {
   project_id: number | null;
   project_name: string | null;
   recipient_email: string | null;
+  recipient_name?: string | null;
   signed_by: string | null;
   signed_at: string | null;
   signed_ip: string | null;
@@ -268,9 +273,10 @@ function enrichEsignRow(e: any): UnifiedContract {
     doc_type: e.document_type,
     status: mapEsignStatus(e.status),
     template_name: e.document_type,
-    project_id: e.deal_id ?? null,
-    project_name: null,
+    project_id: e.project_id ?? null,
+    project_name: e.project_name ?? null,
     recipient_email: e.recipient_email || null,
+    recipient_name: e.recipient_name || null,
     signed_by: e.signer_name || e.recipient_name || e.recipient_email || null,
     signed_at: e.last_signed_at || e.completed_at || null,
     signed_ip: e.signer_ip || null,
@@ -297,7 +303,7 @@ async function loadEsignContracts(sql: ReturnType<typeof getSQL>): Promise<Unifi
   // recipient + signature info into a single row per envelope.
   const rows: any[] = await sql`
     SELECT
-      e.id, e.envelope_uuid, e.user_id, e.deal_id,
+      e.id, e.envelope_uuid, e.user_id, e.deal_id, d.project_id, p.name AS project_name,
       e.document_type, e.document_title,
       e.status, e.created_at, e.completed_at, e.signed_r2_key,
       COALESCE(e.provider, 'native') AS provider,
@@ -307,6 +313,8 @@ async function loadEsignContracts(sql: ReturnType<typeof getSQL>): Promise<Unifi
       (SELECT signer_ip       FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_ip,
       (SELECT MAX(signed_at)  FROM esign_recipients WHERE envelope_id = e.id) AS last_signed_at
     FROM esign_envelopes e
+    LEFT JOIN deals d ON d.id = e.deal_id
+    LEFT JOIN projects p ON p.id = d.project_id
     ORDER BY e.created_at DESC
   `;
   return rows.map(r => decorateDocType(enrichEsignRow(r)));
@@ -365,7 +373,7 @@ function mapPairwiseStatus(s: string): string {
   return 'sent';
 }
 
-async function loadPairwiseNdaContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+async function loadPairwiseNdaContracts(sql: ReturnType<typeof getSQL>, strict = false): Promise<UnifiedContract[]> {
   let rows: any[] = [];
   try {
     rows = await sql`
@@ -378,7 +386,8 @@ async function loadPairwiseNdaContracts(sql: ReturnType<typeof getSQL>): Promise
         LEFT JOIN users ub ON ub.id = p.party_b_user_id
        ORDER BY p.created_at DESC
     `;
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     // table not present on this env (older D1) — surface empty.
     return [];
   }
@@ -425,7 +434,7 @@ function mapPartnerDealStatus(s: string): string {
   return 'sent';
 }
 
-async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict = false): Promise<UnifiedContract[]> {
   let rows: any[] = [];
   try {
     // The same three wrong names corrected at the other partner_deals query
@@ -441,7 +450,8 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise
         LEFT JOIN users u ON u.id = d.user_id
        ORDER BY d.created_at DESC
     `;
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     return [];
   }
   return rows.map((r): UnifiedContract => {
@@ -479,7 +489,7 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise
   });
 }
 
-export async function loadAllContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+export async function loadAllContracts(sql: ReturnType<typeof getSQL>, strict = false): Promise<UnifiedContract[]> {
   // Task #3 — true 4-source union: legacy documents + e-sign envelopes
   // (live signing) + pairwise NDAs (Y-1) + partner deals (X-1). Each
   // loader returns rows already normalised to UnifiedContract; failures
@@ -488,8 +498,8 @@ export async function loadAllContracts(sql: ReturnType<typeof getSQL>): Promise<
   const [docRows, esignRows, pairwiseRows, partnerRows] = await Promise.all([
     loadDocumentsContracts(sql),
     loadEsignContracts(sql),
-    loadPairwiseNdaContracts(sql),
-    loadPartnerDealContracts(sql),
+    loadPairwiseNdaContracts(sql, strict),
+    loadPartnerDealContracts(sql, strict),
   ]);
   const merged = [...docRows, ...esignRows, ...pairwiseRows, ...partnerRows];
   merged.sort((a, b) => {
@@ -542,7 +552,6 @@ adminContracts.get('/', async (c) => {
   const status = (c.req.query('status') || '').toLowerCase();
   const docType = c.req.query('doc_type') || '';
   const projectId = c.req.query('project_id');
-  const q = (c.req.query('q') || '').toLowerCase();
   // Task #2 — provider filter chip ("All / Native / DocuSign"). Only
   // applies to esign-source rows; legacy `documents` rows are always
   // 'native' so the filter naturally hides them when 'docusign' is
@@ -552,14 +561,34 @@ adminContracts.get('/', async (c) => {
   // (founder|investor|advisor|partner|axal). Matches if the doc's
   // role set contains the requested role.
   const partyRole = (c.req.query('party_role') || '').toLowerCase() as PartyRole | '';
-  const limit = Math.min(parseInt(c.req.query('limit') || '50', 10) || 50, 500);
-  const offset = parseInt(c.req.query('offset') || '0', 10) || 0;
+  let controls;
+  try { controls = { ...contractPage(c.req.query()), ...contractOrder(c.req.query()) }; }
+  catch (error) {
+    if (error instanceof ContractQueryError) return c.json({ error: error.message }, 400);
+    throw error;
+  }
+  const { limit, offset, sort, direction } = controls;
+  const q = controls.q.toLowerCase();
+  if (status && !['all', 'draft', 'generated', 'sent', 'signed', 'void', 'awaiting_signature'].includes(status)) return c.json({ error: 'Unknown contract status' }, 400);
+  if (provider && !['native', 'docusign'].includes(provider)) return c.json({ error: 'Unknown provider' }, 400);
+  if (partyRole && !['founder', 'investor', 'advisor', 'partner', 'axal'].includes(partyRole)) return c.json({ error: 'Unknown party role' }, 400);
+  if (projectId && (!/^\d+$/.test(projectId) || !Number.isSafeInteger(Number(projectId)) || Number(projectId) < 1)) return c.json({ error: 'Invalid project id' }, 400);
+  const template = c.req.query('template') || '';
+  const signedRecent = c.req.query('signed_recent');
+  if (signedRecent && signedRecent !== 'true') return c.json({ error: 'signed_recent must be true' }, 400);
 
   const sql = getSQL(c.env);
   try {
-    let rows = await loadAllContracts(sql);
+    let rows = await loadAllContracts(sql, true);
 
-    if (status)    rows = rows.filter(r => r.status === status);
+    if (status && status !== 'all') rows = rows.filter(r => status === 'awaiting_signature'
+      ? ['sent', 'generated'].includes(r.status) : r.status === status);
+    if (template) rows = rows.filter(r => r.template_name === template || r.doc_type === template);
+    if (signedRecent) {
+      const now = Date.now(), cutoff = now - 30 * 86400000;
+      rows = rows.filter(r => r.status === 'signed' && r.signed_at != null
+        && Date.parse(r.signed_at) >= cutoff && Date.parse(r.signed_at) <= now);
+    }
     if (docType)   rows = rows.filter(r => r.doc_type === docType);
     if (projectId) rows = rows.filter(r => r.project_id === parseInt(projectId));
     if (provider === 'native' || provider === 'docusign') {
@@ -572,11 +601,13 @@ adminContracts.get('/', async (c) => {
       rows = rows.filter(r =>
         (r.title || '').toLowerCase().includes(q) ||
         (r.recipient_email || '').toLowerCase().includes(q) ||
+        (r.recipient_name || '').toLowerCase().includes(q) ||
         (r.template_name || '').toLowerCase().includes(q) ||
         (r.project_name || '').toLowerCase().includes(q)
       );
     }
 
+    orderContracts(rows, sort, direction);
     const total = rows.length;
     const items = rows.slice(offset, offset + limit);
     // Task #45 — attach void_reason/voided_at to every void row in the
@@ -592,12 +623,82 @@ adminContracts.get('/', async (c) => {
       }
     }
     return c.json({
-      total, limit, offset,
+      total, limit, offset, sort, direction,
       items,
       meta: { sources: ['documents', 'esign_envelopes', 'pairwise_ndas', 'partner_deals'], unioned: true },
     });
+  } catch {
+    return c.json({ error: 'Contracts are unreadable. Try again.', code: 'contracts_unreadable' }, 503);
   } finally {
     await sql.end();
+  }
+});
+
+// D647 — minimal member/deal choices for the guided envelope composer.
+adminContracts.get('/recipients', async (c) => {
+  const admin = await requireAdmin(c);
+  let page;
+  try { page = contractPage(c.req.query()); }
+  catch (error) { return c.json({ error: (error as Error).message }, 400); }
+  const pattern = contractLike(page.q);
+  const allowed = isSuperAdmin(admin) ? 1 : 0;
+  try {
+    const total = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM users
+       WHERE is_active = 1 AND (? = 1 OR role <> 'admin' OR id = ?)
+         AND (name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')`,
+    ).bind(allowed, admin.id, pattern, pattern).first<{ total: number }>();
+    const rows = await c.env.DB.prepare(
+      `SELECT id, name, email, role FROM users
+       WHERE is_active = 1 AND (? = 1 OR role <> 'admin' OR id = ?)
+         AND (name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')
+       ORDER BY name COLLATE NOCASE, id LIMIT ? OFFSET ?`,
+    ).bind(allowed, admin.id, pattern, pattern, page.limit, page.offset).all();
+    return c.json({ items: rows.results || [], total: Number(total?.total ?? 0), limit: page.limit, offset: page.offset });
+  } catch {
+    return c.json({ error: 'Recipients are unreadable. Try again.', code: 'recipients_unreadable' }, 503);
+  }
+});
+
+adminContracts.get('/deal-options', async (c) => {
+  await requireAdmin(c);
+  let page;
+  try { page = contractPage(c.req.query()); }
+  catch (error) { return c.json({ error: (error as Error).message }, 400); }
+  const pattern = contractLike(page.q);
+  try {
+    const total = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM deals d JOIN projects p ON p.id = d.project_id
+       WHERE p.name LIKE ? ESCAPE '\\' OR d.uid LIKE ? ESCAPE '\\'`,
+    ).bind(pattern, pattern).first<{ total: number }>();
+    const rows = await c.env.DB.prepare(
+      `SELECT d.id, d.uid, d.status, d.project_id, p.name AS project_name
+       FROM deals d JOIN projects p ON p.id = d.project_id
+       WHERE p.name LIKE ? ESCAPE '\\' OR d.uid LIKE ? ESCAPE '\\'
+       ORDER BY p.name COLLATE NOCASE, d.id LIMIT ? OFFSET ?`,
+    ).bind(pattern, pattern, page.limit, page.offset).all();
+    return c.json({ items: rows.results || [], total: Number(total?.total ?? 0), limit: page.limit, offset: page.offset });
+  } catch {
+    return c.json({ error: 'Deals are unreadable. Try again.', code: 'deals_unreadable' }, 503);
+  }
+});
+
+adminContracts.get('/templates/store/:slug/fields', async (c) => {
+  await requireAdmin(c);
+  const slug = c.req.param('slug');
+  if (!/^[a-z0-9_-]{1,100}$/.test(slug)) return c.json({ error: 'Template not found' }, 404);
+  try {
+    const template = await storeGetTemplate(c.env, slug);
+    if (!template || template.is_stub || !template.body_md.trim()) return c.json({ error: 'Template not found' }, 404);
+    const fields = extractMergeFields(template.body_md).map((key) => ({
+      key, label: key.replace(/[._]+/g, ' '),
+      required: !isAutoMergeKey(key), filled_by: isAutoMergeKey(key) ? 'send' : 'sender',
+    }));
+    return c.json({ slug: template.slug, title: template.title, version: template.version, fields,
+      publication_state: 'not_recorded',
+      publication_reason: 'The template store records active versions, but not a per-template published version.' });
+  } catch {
+    return c.json({ error: 'Template fields are unreadable. Try again.', code: 'template_fields_unreadable' }, 503);
   }
 });
 
@@ -606,7 +707,7 @@ adminContracts.get('/stats', async (c) => {
   await requireAdmin(c);
   const sql = getSQL(c.env);
   try {
-    const rows = await loadAllContracts(sql);
+    const rows = await loadAllContracts(sql, true);
     const byStatus: Record<string, number> = { draft: 0, generated: 0, sent: 0, signed: 0, void: 0 };
     const byTypeCount = new Map<string, number>();
     const signDays: number[] = [];
@@ -617,10 +718,10 @@ adminContracts.get('/stats', async (c) => {
       if (r.status in byStatus) byStatus[r.status]++;
       if (r.doc_type) byTypeCount.set(r.doc_type, (byTypeCount.get(r.doc_type) || 0) + 1);
       const days = daysBetween(r.signed_at, r.created_at);
-      if (days != null) signDays.push(days);
-      if (r.signed_at) {
+      if (r.status === 'signed' && days != null) signDays.push(days);
+      if (r.status === 'signed' && r.signed_at) {
         const t = new Date(r.signed_at).getTime();
-        if (Number.isFinite(t) && t >= cutoff) signedRecent++;
+        if (Number.isFinite(t) && t >= cutoff && t <= Date.now()) signedRecent++;
       }
     }
 
@@ -639,6 +740,8 @@ adminContracts.get('/stats', async (c) => {
       signed_last_30d: signedRecent,
       pending_signature: byStatus.sent + byStatus.generated,
     });
+  } catch {
+    return c.json({ error: 'Contracts are unreadable. Try again.', code: 'contracts_unreadable' }, 503);
   } finally {
     await sql.end();
   }
@@ -938,7 +1041,7 @@ adminContracts.get('/:uid', async (c) => {
     // payload matches list shape.
     const envRows: any[] = await sql`
       SELECT
-        e.id, e.envelope_uuid, e.user_id, e.deal_id,
+        e.id, e.envelope_uuid, e.user_id, e.deal_id, d.project_id, p.name AS project_name,
         e.document_type, e.document_title,
         e.status, e.created_at, e.completed_at, e.signed_r2_key,
         (SELECT recipient_email FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_email,
@@ -946,7 +1049,10 @@ adminContracts.get('/:uid', async (c) => {
         (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_name,
         (SELECT signer_ip       FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_ip,
         (SELECT MAX(signed_at)  FROM esign_recipients WHERE envelope_id = e.id) AS last_signed_at
-      FROM esign_envelopes e WHERE e.id = ${ref.row.id} LIMIT 1
+      FROM esign_envelopes e
+      LEFT JOIN deals d ON d.id = e.deal_id
+      LEFT JOIN projects p ON p.id = d.project_id
+      WHERE e.id = ${ref.row.id} LIMIT 1
     `;
     if (!envRows[0]) return c.json({ error: 'Contract not found' }, 404);
     const detail = decorateDocType(enrichEsignRow(envRows[0])) as any;
