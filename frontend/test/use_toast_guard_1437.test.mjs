@@ -42,12 +42,45 @@ function files(dir) {
   return out;
 }
 
-const esc = (s) => s.replace(/[$.]/g, (c) => `\\${c}`);
+// No RegExp is built from a name at runtime (Semgrep detect-non-literal-regexp):
+// names are found with indexOf and checked at their boundaries, and only the
+// fixed literals below are regular expressions.
+const IDENT = /[\w$]/;
+const FIELD = /^[A-Za-z_$][\w$]*/;
+const KIND_TAIL = /^(?:[^,()]*\?\s*)?(['"])[A-Za-z]+\1(?:\s*:\s*(['"])[A-Za-z]+\2)?$/;
+
+/** Each index where `name` stands as a whole identifier (or dotted path). */
+function occurrences(code, name) {
+  const out = [];
+  for (let i = code.indexOf(name); i >= 0; i = code.indexOf(name, i + 1)) {
+    const before = code[i - 1] || '';
+    const after = code[i + name.length] || '';
+    if (!IDENT.test(before) && before !== '.' && !IDENT.test(after)) out.push(i);
+  }
+  return out;
+}
+
+/** The first non-space character at or after `i` (or before it, going back), with its index. */
+function nextChar(code, i) { while (i < code.length && /\s/.test(code[i])) i += 1; return [code[i] || '', i]; }
+function prevChar(code, i) { while (i >= 0 && /\s/.test(code[i])) i -= 1; return [code[i] || '', i]; }
 
 /** `showToast(msg, 'success')`: the second argument is a duration, not a kind. */
 function kindAsDuration(code, call) {
-  const re = new RegExp(`(?<![\\w$])${esc(call)}\\s*\\((?:[^()]|\\([^()]*\\))*?,\\s*(?:[^,()]*\\?\\s*)?(['"])[A-Za-z]+\\1(?:\\s*:\\s*(['"])[A-Za-z]+\\2)?\\s*\\)`);
-  return re.test(code);
+  for (const at of occurrences(code, call)) {
+    const [open, o] = nextChar(code, at + call.length);
+    if (open !== '(') continue;
+    let depth = 0;
+    let close = -1;
+    let lastComma = -1;
+    for (let k = o; k < code.length; k += 1) {
+      if (code[k] === '(') depth += 1;
+      else if (code[k] === ')') { depth -= 1; if (depth === 0) { close = k; break; } }
+      else if (code[k] === ',' && depth === 1) lastComma = k;
+    }
+    if (close < 0 || lastComma < 0) continue;
+    if (KIND_TAIL.test(code.slice(lastComma + 1, close).trim())) return true;
+  }
+  return false;
 }
 
 /** Every misuse of `useToast` in one file's code, as sentences. */
@@ -68,22 +101,31 @@ export function toastMisuses(code) {
         if (field === 'showToast' && kindAsDuration(code, alias || field)) problems.push(`passes a kind as "${alias || field}"'s duration; use success(msg), error(msg) or showToast({ kind, msg })`);
       }
       if (toastName) {
-        const t = esc(toastName);
-        if (new RegExp(`(?<![\\w$.])${t}\\s*\\(`).test(code)) problems.push(`calls "${toastName}" (the current message) as a function`);
-        if (new RegExp(`(?<![=\\w$])\\{\\s*${t}\\s*\\}(?!\\s*=)`).test(code)) problems.push(`renders "${toastName}" raw; use <ToastMessage toast={${toastName}} /> or toastText(${toastName})`);
-        const uses = code.match(new RegExp(`(?<![\\w$.])${t}(?![\\w$])`, 'g')) || [];
+        const uses = occurrences(code, toastName);
+        if (uses.some((i) => nextChar(code, i + toastName.length)[0] === '(')) problems.push(`calls "${toastName}" (the current message) as a function`);
+        const raw = uses.some((i) => {
+          const [before, b] = prevChar(code, i - 1);
+          const [after, a] = nextChar(code, i + toastName.length);
+          if (before !== '{' || after !== '}') return false;
+          const outer = code[b - 1] || '';
+          return outer !== '=' && !IDENT.test(outer) && nextChar(code, a + 1)[0] !== '=';
+        });
+        if (raw) problems.push(`renders "${toastName}" raw; use <ToastMessage toast={${toastName}} /> or toastText(${toastName})`);
         drawn = uses.length > 1;
       } else {
         drawn = false;
       }
     } else {
-      const o = esc(lhs);
-      for (const f of code.matchAll(new RegExp(`(?<![\\w$.])${o}\\.([A-Za-z_$][\\w$]*)`, 'g'))) {
-        if (!RETURNS.has(f[1])) problems.push(`reads "${lhs}.${f[1]}", which useToast does not return`);
-        else if (f[1] !== 'toast') setters = true;
+      const fields = occurrences(code, lhs)
+        .filter((i) => code[i + lhs.length] === '.')
+        .map((i) => FIELD.exec(code.slice(i + lhs.length + 1))?.[0])
+        .filter(Boolean);
+      for (const f of fields) {
+        if (!RETURNS.has(f)) problems.push(`reads "${lhs}.${f}", which useToast does not return`);
+        else if (f !== 'toast') setters = true;
       }
       if (kindAsDuration(code, `${lhs}.showToast`)) problems.push(`passes a kind as "${lhs}.showToast"'s duration; use ${lhs}.success(msg), ${lhs}.error(msg) or ${lhs}.showToast({ kind, msg })`);
-      drawn = new RegExp(`(?<![\\w$.])${o}\\.toast(?![\\w$])`).test(code);
+      drawn = fields.includes('toast');
     }
     if (setters && !drawn) problems.push('sets messages but never draws them');
   }
@@ -119,6 +161,8 @@ test('the guard catches each misuse it names', () => {
   assert.deepEqual(toastMisuses(`const { toast, showToast } = useToast(); showToast(\`n \${a}\`, r.failed?.length ? 'warning' : 'success'); <ToastMessage toast={toast} />`), [kindAsMs]);
   assert.deepEqual(toastMisuses(`const t = useToast(); t.showToast('x', 'error'); <ToastMessage toast={t.toast} />`), ['passes a kind as "t.showToast"\'s duration; use t.success(msg), t.error(msg) or t.showToast({ kind, msg })']);
   assert.deepEqual(toastMisuses(`const { toast, showToast } = useToast(); showToast({ kind: 'error', msg: 'x' }, 6000); showToast('Saved', ms); <ToastMessage toast={toast} />`), []);
+  // A name inside a longer identifier is not the binding: `lastToast(...)`, `{shoppingToast}` and `x.toast(` are other things.
+  assert.deepEqual(toastMisuses(`const { toast, showToast } = useToast(); showToast({ kind: 'ok', msg: 'x' }); lastToast('a', 'error'); <p>{shoppingToast}</p>; api.toast('x'); <ToastMessage toast={toast} />`), []);
 });
 
 test('ToastMessage draws both payload shapes, and nothing for no message', () => {
