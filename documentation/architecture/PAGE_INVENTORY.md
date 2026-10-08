@@ -68,7 +68,7 @@ canvas behind it still shows up here.
 | Admin | Approvals | `/admin/held/approvals` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Programs | `/admin/held/programs` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Community | `/admin/held/community` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Contracts | `/admin?tab=legal` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Contracts | `/admin/contracts` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Insights | `/admin/held/insights` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Settings | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
 
@@ -130,7 +130,7 @@ rather than merely absent.
 - admin · Admin · Approvals (`/admin/held/approvals`)
 - admin · Admin · Programs (`/admin/held/programs`)
 - admin · Admin · Community (`/admin/held/community`)
-- admin · Admin · Contracts (`/admin?tab=legal`)
+- admin · Admin · Contracts (`/admin/contracts`)
 - admin · Admin · Insights (`/admin/held/insights`)
 - admin · Admin · Settings (`/admin/my-licence`)
 - exploring · Home · Studio (`/exploring`)

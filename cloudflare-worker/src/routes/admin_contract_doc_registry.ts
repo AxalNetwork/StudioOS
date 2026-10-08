@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireHqAuthoring, requireSuperAdminWriteBar } from '../auth';
+import { requireAdmin, requireHqAuthoring, requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import {
   buildTemplateCatalog,
@@ -62,6 +62,11 @@ type PublishedMeta = { at: string | null; by: number | null; by_name: string | n
 export const REGISTRY_PUBLISH_REASON_MIN = 10;
 
 const registry = new Hono<{ Bindings: Env }>();
+// D647 — document-type metadata and authoring belong to HQ's Super Admin.
+registry.use('*', async (c, next) => {
+  await requireSuperAdmin(c);
+  await next();
+});
 
 function rolesOverlap(a: readonly string[], b: readonly string[]): boolean {
   const sa = new Set(a);

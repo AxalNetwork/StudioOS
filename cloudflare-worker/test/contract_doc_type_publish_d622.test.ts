@@ -40,7 +40,7 @@ function freshDb() {
     enableForeignKeyConstraints: false,
     enableDoubleQuotedStringLiterals: true,
   });
-  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'documents', 'esign_envelopes', 'esign_recipients']) {
+  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'documents', 'deals', 'projects', 'founders', 'esign_envelopes', 'esign_recipients']) {
     db.exec(ddl(t));
   }
   db.exec(read('cloudflare-worker/sql/migrations/332_contract_doc_type_registry.sql'));
@@ -112,12 +112,12 @@ const publish = (db: DatabaseSync, body: Record<string, unknown>, dbBinding?: an
   call(db, 'POST', '/api/admin/contracts/registry/side_letter_axal/publish', { reason: REASON, ...body }, SUPER, dbBinding);
 const hubItem = async (db: DatabaseSync) => itemOf((await call(db, 'GET', '/api/admin/contracts/registry')).body, 'side_letter_axal');
 
-/** A published type with one pending revision saved by ADMIN; returns its stamp. */
+/** A published type with one pending revision saved by SUPER; returns its stamp. */
 async function publishedWithPending(db: DatabaseSync): Promise<string> {
   assert.equal((await draft(db, 'Side letter', 'gp')).status, 201);
   assert.equal((await publish(db, {})).status, 200, 'nothing pending: publishes as before');
   await sleep(5);
-  assert.equal((await draft(db, 'Side letter next', 'portfolio', ADMIN)).status, 201);
+  assert.equal((await draft(db, 'Side letter next', 'portfolio', SUPER)).status, 201);
   const stamp = (await hubItem(db)).pending_draft?.updated_at;
   assert.ok(stamp, 'the pending revision carries its stamp');
   return stamp;
@@ -127,8 +127,8 @@ test('D622: the hub names who saved the pending revision, and when', async () =>
   const db = freshDb();
   await publishedWithPending(db);
   const item = await hubItem(db);
-  assert.equal(item.pending_draft.updated_by, ADMIN);
-  assert.equal(item.pending_draft.updated_by_name, 'Ada Admin');
+  assert.equal(item.pending_draft.updated_by, SUPER);
+  assert.equal(item.pending_draft.updated_by_name, 'Sam Super');
   assert.match(item.pending_draft.updated_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/, 'millisecond resolution');
 });
 
@@ -154,7 +154,7 @@ test('D622: a publish after a newer save is a 409 with a sentence, and nothing c
   const db = freshDb();
   const reviewed = await publishedWithPending(db);
   await sleep(5);
-  assert.equal((await draft(db, 'Side letter unreviewed', 'fund', ADMIN)).status, 201);
+  assert.equal((await draft(db, 'Side letter unreviewed', 'fund', SUPER)).status, 201);
   const res = await publish(db, { reviewed_draft_at: reviewed });
   assert.equal(res.status, 409, res.text);
   assert.equal(res.body.code, 'draft_changed');
