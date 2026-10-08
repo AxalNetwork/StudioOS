@@ -40,7 +40,7 @@ const SECRETS = 'cloudflare-worker/src/services/cloudflareSecrets.ts';
 const SYNC = 'cloudflare-worker/src/services/githubSync.ts';
 const MIGRATION = 'cloudflare-worker/sql/migrations/273_ticket_sync_status.sql';
 const TICKETS_PAGE = 'frontend/src/pages/TicketsPage.jsx';
-const ADMIN_PAGE = 'frontend/src/pages/AdminPage.jsx';
+const ADMIN_PAGE = 'frontend/src/pages/admin/consoles/GithubSyncConsole.jsx';
 const API = 'frontend/src/lib/api.js';
 
 /** The body of `r.post('/test', …)`, bounded so a neighbouring route's code

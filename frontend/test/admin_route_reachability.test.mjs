@@ -47,12 +47,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
 import { readRoutesSource, lazyImports, conflictingLazyImports } from './_routesSource.mjs';
+import { adminConsoleSource, ADMIN_CONSOLE_FILES } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -249,12 +250,22 @@ const SECOND_MOUNTS = new Map([
   // The Admin Console's own tabs. These two are also the `same-component-elsewhere`
   // exemptions, so one table feeds both and they cannot disagree.
   ['frontend/src/pages/AdminPage.jsx', ['AdminNetworkProfiles', 'AdminSpinoutLab']],
-  // HQ's Accounts page frames the whole Admin Console with a `section=` prop, so
-  // /admin/accounts is a second mount of every door AdminPage carries.
-  ['frontend/src/pages/hq/AccountsPage.jsx', ['AdminPage']],
   // The founder-journey walkthrough renders the real apply page on simulated data
   // (its own comment at AdminSpinoutLab.jsx:743-745 describes the read-only tour).
   ['frontend/src/pages/admin/AdminSpinoutJourneyPreview.jsx', ['SpinoutLabApplyPage']],
+]);
+
+/**
+ * D648 — files a routed page renders that are NOT routes themselves. Since
+ * D648 the Admin Console is a shell and each console is its own file under
+ * `pages/admin/consoles/`, so a door a console draws (the Wellbeing roster's
+ * resource-library link, the account drawer's credits link) lives in that
+ * file, not in AdminPage.jsx. HQ's Accounts page mounts the Users console
+ * alone. Checked against the hosts' own imports below, so it cannot drift.
+ */
+const COMPOSED = new Map([
+  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx')],
+  ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
 ]);
 
 /** path → the files whose doors that path can reach. */
@@ -264,7 +275,7 @@ function filesFor(path) {
   const own = FILE_OF.get(r.component);
   if (!own) return [];
   const extra = (SECOND_MOUNTS.get(own) || []).map((c) => FILE_OF.get(c)).filter(Boolean);
-  return [own, ...extra];
+  return [own, ...extra, ...(COMPOSED.get(own) || [])];
 }
 
 const AMBIGUOUS = [];
@@ -493,7 +504,7 @@ test('a parked sidebar row still names a row that is present but commented out',
 });
 
 test('a route exempted as a tab still mounts the same component behind that tab', () => {
-  const adminPage = read('frontend/src/pages/AdminPage.jsx');
+  const adminPage = adminConsoleSource();
   for (const e of EXEMPT.filter((x) => x.kind === 'same-component-elsewhere')) {
     const component = BY_PATH.get(e.path)?.component;
     assert.ok(component, `${e.path} has no component to compare`);
@@ -518,7 +529,7 @@ test('a route exempted as a tab still mounts the same component behind that tab'
 
 test('the ?tab= deep link is honoured and validated', () => {
   // Without this the exemptions above rest on a URL nothing reads.
-  const adminPage = read('frontend/src/pages/AdminPage.jsx');
+  const adminPage = adminConsoleSource();
   // NOT AN ALTERNATION. The first draft read
   //   /get\('tab'\)|searchParams|URLSearchParams/
   // and a mutation that broke the actual `tab` read escaped, because the two
@@ -581,6 +592,25 @@ test('a component mounted at a second path is declared once', () => {
   assert.deepEqual(found.sort(), declared.sort(),
     'a routed /admin component is imported by another routed component and not declared in '
     + 'SECOND_MOUNTS (or vice versa); the closure and the tab exemptions read this table');
+});
+
+test('D648: every composed console file is imported by the page it is credited to', () => {
+  for (const [host, files] of COMPOSED) {
+    const src = read(host);
+    for (const f of files) {
+      const rel = relative(dirname(resolve(root, host)), resolve(root, f)).replace(/\.jsx$/, '');
+      const spec = rel.startsWith('.') ? rel : `./${rel}`;
+      if (f.endsWith('/shared.jsx')) continue; // imported by the consoles, not the shell
+      assert.ok(src.includes(`from '${spec}'`), `${host} does not import ${f}, so its doors are not that page's`);
+    }
+  }
+  // …and nothing a host imports from the consoles folder is missing from the table.
+  for (const [host, files] of COMPOSED) {
+    for (const m of read(host).matchAll(/from '([^']*admin\/consoles\/\w+)'/g)) {
+      const f = relative(root, resolve(dirname(resolve(root, host)), m[1])) + '.jsx';
+      assert.ok(files.includes(f), `${host} imports ${f} but COMPOSED does not credit its doors`);
+    }
+  }
 });
 
 test('the Spin-Out Lab preview button renders in both framings', () => {

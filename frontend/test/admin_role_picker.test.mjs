@@ -36,9 +36,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = raw('frontend/src/pages/AdminPage.jsx');
+const PAGE = adminConsoleSource();
 const src = codeOnly(PAGE);
 
 /** `RoleDropdown` alone, bounded at both ends — the rest of this 5k-line file

@@ -30,11 +30,12 @@ import {
 } from '../src/lib/adminPlacement.js';
 // D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
 import { readRoutesSource } from './_routesSource.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = readRoutesSource();
-const ADMIN_PAGE = read('frontend/src/pages/AdminPage.jsx');
+const ADMIN_PAGE = adminConsoleSource();
 const SIDEBAR_RAW = read('frontend/src/sidebarConfig.js');
 
 /* ------------------------------------------------------------------ *
