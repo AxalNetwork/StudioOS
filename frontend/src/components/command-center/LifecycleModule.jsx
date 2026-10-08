@@ -1,8 +1,8 @@
 /**
  * LifecycleModule — the founder-facing heart of the Command Center Overview.
  *
- * Renders a 6-stage lifecycle rail (idea → validate → build → launch → grow →
- * raise), a "next best action", any advance-stage suggestions, and the current
+ * Renders a 6-stage lifecycle rail (idea → validate → build → launch → raise →
+ * grow, in the Worker's order), a "next best action", any advance-stage suggestions, and the current
  * stage's checklist. The stage + manual check-offs are founder-editable and
  * persist via the parent's `onSetStage` / `onToggleCheck` (PUT
  * /progress/lifecycle/:id). Auto-derived checklist items (manual: false) are

@@ -135,7 +135,7 @@ export default function FounderRaiseLegal() {
         <header className="fr-capital-header">
           <div className="fr-capital-crumb"><Link to={`/raise/status${query}`} data-testid="link-legal-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Legal</strong></div>
           <div className="fr-capital-title-row"><div><h1>Legal engine</h1><p className="fr-capital-subtitle">Entity, agreements, compliance calendar and signature archive.</p></div></div>
-          <nav className="fr-capital-zone-nav" aria-label="Raise sections"><LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`} className="is-active" data-testid="link-legal-zone">Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><span className="fr-capital-zone-disabled">Liquidity unavailable</span></nav>
+          <nav className="fr-capital-zone-nav" aria-label="Raise sections"><LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`} className="is-active" data-testid="link-legal-zone">Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><LensLink to={`/raise/liquidity${query}`}>Liquidity</LensLink></nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/legal', { value: filter, onChange: setFilter })}
               actions={founderZoneActions('raise/legal', { query })}
