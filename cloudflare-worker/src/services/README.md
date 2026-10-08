@@ -53,3 +53,8 @@ runs these directly against an in-process SQLite, with no request at all.
   allow — both have been fixed here after doing the opposite.
 
 D647 (#1441): `contractListQuery.ts` validates paging/search/sort and supplies literal picker searches, null-last sorting and stable union tie breaks. See `documentation/architecture/decisions/D647.md` for route/read contracts and access gates.
+
+D647: `contractPublication.ts` reads migration 434's approved template snapshots,
+prepares validated documents from those snapshots, and publishes with an actor
+audit in one batch. It never infers publication from draft activity or bootstraps
+migration 434 at runtime.

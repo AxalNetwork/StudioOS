@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye, Download, Send } from 'lucide-react';
 import { api } from '../../lib/api';
+import { contractsApi } from '../../lib/api/contracts';
+import { ConsoleUnreadable } from './consoles/shared';
+import { Recorded, Pagination, input as contractInput, button as contractButton } from './contracts/parts';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import PaperPreview from '../../components/PaperPreview';
@@ -42,7 +45,7 @@ function detectMergeFields(body) {
   return Array.from(seen).sort();
 }
 
-export default function AdminTemplates({ onOpenUsage }) {
+export default function AdminTemplates({ onOpenUsage, recordedPublication = false }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -54,13 +57,20 @@ export default function AdminTemplates({ onOpenUsage }) {
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
   const [publishErr, setPublishErr] = useState('');
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [offset, setOffset] = useState(0);
+  const matching = useMemo(() => items.filter(t => (!categoryFilter || t.category === categoryFilter)
+    && `${t.title} ${t.slug}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) =>
+      String(b.updated_at || '').localeCompare(String(a.updated_at || '')) || a.slug.localeCompare(b.slug)), [items, search, categoryFilter]);
 
   const reload = async () => {
     setLoading(true);
     setErr('');
     setUnavailable(false);
     try {
-      const r = await api.adminTemplateStoreList();
+      const r = await (recordedPublication ? contractsApi.templates() : api.adminTemplateStoreList());
       setItems(r.items || []);
     } catch (e) {
       if (e?.status === 404) setUnavailable(true);
@@ -93,11 +103,12 @@ export default function AdminTemplates({ onOpenUsage }) {
     setPublishing(true);
     setPublishErr('');
     try {
-      setPublishResult(await api.adminTemplatesPublish());
+      setPublishResult(await (recordedPublication ? contractsApi.publish() : api.adminTemplatesPublish()));
+      setConfirmPublish(false);
     } catch (e) {
       // The library is untouched: this only failed to SEND. Saying which is the
       // difference between "retry" and "check what you just saved".
-      setPublishErr(e.message || 'The library could not be sent. Nothing in it changed.');
+      setPublishErr(recordedPublication ? 'Publication could not be confirmed. Reload the published versions before retrying.' : (e.message || 'The library could not be sent. Nothing in it changed.'));
       reportError('AdminTemplates:publish', e);
     } finally {
       setPublishing(false);
@@ -116,12 +127,12 @@ export default function AdminTemplates({ onOpenUsage }) {
           </button>
           <button
             type="button"
-            onClick={publish}
+            onClick={recordedPublication ? () => setConfirmPublish(true) : publish}
             disabled={unavailable || publishing || !items.length}
             data-testid="template-publish"
             title="Send this library to every branch Worker bound to HQ"
             className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-400 disabled:opacity-50 font-medium flex items-center gap-1 dark:border-gray-800 dark:text-gray-200">
-            <Send size={12} /> {publishing ? 'Publishing…' : 'Publish to branches'}
+            <Send size={12} /> {publishing ? 'Publishing…' : recordedPublication ? 'Publish' : 'Publish to branches'}
           </button>
           <button
             onClick={() => setEditing({ isNew: true })}
@@ -133,7 +144,14 @@ export default function AdminTemplates({ onOpenUsage }) {
         </div>
       </div>
 
-      {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded mb-3">{err}</div>}
+      {err && <ConsoleUnreadable what="Templates" onRetry={reload} />}
+      {recordedPublication && !loading && !err && <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">{items.filter(t => t.has_unpublished_changes).length} templates have unpublished changes. Publishing offers the latest saved versions to New envelope.</p>}
+      {confirmPublish && <div role="dialog" aria-modal="true" aria-label="Publish templates" className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
+        <h3 className="font-semibold">Publish templates</h3><p>Publishing makes these versions the versions New envelope offers. Saved drafts stop changing that body until you publish again. Archived or blank templates are withdrawn; agreements already sent keep their copy. The catalogue is also sent to bound branches.</p>
+        <ul>{items.filter(t => !t.is_stub && t.body_md?.trim()).map(t => <li key={t.slug}>{t.title} · v{t.version}</li>)}</ul>
+        <ul>{items.filter(t => t.published_version != null && (t.is_stub || !t.body_md?.trim())).map(t => <li key={t.slug}>Withdraw {t.title} · published v{t.published_version}</li>)}</ul>
+        <button type="button" onClick={publish} disabled={publishing}>Confirm publish</button>{' '}<button type="button" onClick={() => setConfirmPublish(false)} disabled={publishing}>Cancel</button>
+      </div>}
 
       {publishErr && (
         <div
@@ -148,7 +166,7 @@ export default function AdminTemplates({ onOpenUsage }) {
           data-testid="template-publish-result"
           className="bg-gray-50 border border-gray-200 text-xs p-3 rounded-lg mb-3 dark:bg-gray-900 dark:border-gray-800">
           <div className="font-semibold text-gray-900 dark:text-gray-100">
-            {publishResult.template_count} template{publishResult.template_count === 1 ? '' : 's'} sent
+            {publishResult.template_count} template{publishResult.template_count === 1 ? '' : 's'} {recordedPublication ? 'published' : 'sent'}
             {' · '}
             {publishResult.answered} of {publishResult.total} branch{publishResult.total === 1 ? '' : 'es'} answered
           </div>
@@ -186,11 +204,19 @@ export default function AdminTemplates({ onOpenUsage }) {
 
       {loading ? (
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">Loading…</div>
-      ) : !unavailable && items.length === 0 ? (
+      ) : err ? null : !unavailable && items.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           No templates yet. Click <span className="font-semibold">New template</span> to add one.
         </div>
-      ) : (
+      ) : recordedPublication ? <section className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-wrap gap-3 p-3"><label className="flex-1">Search templates<input className={contractInput} value={search} onChange={e => { setSearch(e.target.value); setOffset(0); }} /></label><label>Layer<select className={contractInput} value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setOffset(0); }}><option value="">Every layer</option>{CATEGORY_ORDER.map(id => <option key={id} value={id}>{CATEGORY_META[id].label}</option>)}</select></label><span className="self-end text-xs text-gray-500">Last edited, newest</span></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-xs"><thead><tr>{['Template', 'Version', 'Last edited', 'Usage'].map(label => <th className="p-3" key={label}>{label}</th>)}</tr></thead><tbody>{matching.slice(offset, offset + 25).map(t => <tr className="border-t border-gray-200 dark:border-gray-800" key={t.slug}>
+          <td className="p-3"><button type="button" className="font-semibold" data-testid={`template-card-${t.slug}`} onClick={() => setEditing({ slug: t.slug })}>{t.title}</button><p className="font-mono text-gray-500">{t.slug}</p></td>
+          <td className="p-3">v{t.version}<p>{t.published_version == null ? 'Unpublished' : `Published v${t.published_version}`}{t.has_unpublished_changes ? ' · pending changes' : ''}</p></td>
+          <td className="p-3"><Recorded value={fmtDate(t.updated_at)} reason="No edit date was recorded." /><p>{t.updated_by != null ? `Admin #${t.updated_by}` : 'Not recorded: imported before editors were recorded.'}</p></td>
+          <td className="p-3"><button type="button" className={contractButton} onClick={() => onOpenUsage?.(t.slug, t)}>{t.usage_count} uses</button></td>
+        </tr>)}</tbody></table></div>{!matching.length && <p className="p-4">No template matches these filters.</p>}<Pagination data={{ total: matching.length, items: matching.slice(offset, offset + 25) }} offset={offset} onPage={setOffset} />
+      </section> : (
         <div className="space-y-6">
           {CATEGORY_ORDER.filter(cat => (grouped[cat] || []).length).map(cat => (
             <section key={cat}>
@@ -212,6 +238,7 @@ export default function AdminTemplates({ onOpenUsage }) {
                       <div className="min-w-0">
                         <div className="font-semibold text-gray-900 truncate dark:text-gray-100">{t.title}</div>
                         <div className="text-[11px] text-gray-500 mt-0.5">v{t.version}{t.is_stub ? ' · stub' : ''}</div>
+                        {recordedPublication && <div className="text-[11px] text-gray-500">{t.published_version == null ? 'Unpublished' : `Published v${t.published_version}`}{t.has_unpublished_changes ? ' · pending changes' : ''}</div>}
                       </div>
                       <button
                         type="button"
@@ -222,6 +249,7 @@ export default function AdminTemplates({ onOpenUsage }) {
                       </button>
                     </div>
                     <div className="text-[11px] text-gray-500 mt-3">Last used: {fmtDate(t.last_used_at) || 'Never'}</div>
+                    <div className="text-[11px] text-gray-500">Last edited: {fmtDate(t.updated_at) || 'Not recorded'} · {t.updated_by != null ? `Admin #${t.updated_by}` : 'Not recorded: imported before editors were recorded.'}</div>
                     <div className="text-[10px] text-gray-400 mt-1 font-mono truncate">{t.slug}</div>
                   </div>
                 ))}
@@ -247,6 +275,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [err, setErr] = useState('');
 
@@ -315,7 +344,6 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
 
   const remove = async () => {
     if (isNew) return;
-    if (!window.confirm(`Soft-delete "${title || slug}"? It will be hidden from the catalog but kept for audit.`)) return;
     setErr('');
     setDeleting(true);
     try {
@@ -482,13 +510,17 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
           </div>
         )}
 
+        {confirmDelete && <section role="alertdialog" aria-label="Delete template" className="border-t border-rose-200 p-4 dark:border-rose-900">
+          <p>Delete “{title || slug}”? It will be hidden from the catalogue and New envelope. Agreements already sent keep their copy.</p>
+          <button type="button" onClick={remove} disabled={deleting || saving}>Confirm delete</button>{' '}<button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
+        </section>}
         {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-2 dark:border-gray-800">
           <div>
             {!isNew && (
               <button
                 type="button"
-                onClick={remove}
+                onClick={() => setConfirmDelete(true)}
                 disabled={deleting || saving}
                 data-testid="template-delete"
                 className="text-xs px-3 py-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-50 flex items-center gap-1">

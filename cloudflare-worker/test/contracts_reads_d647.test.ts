@@ -18,11 +18,13 @@ const ago = (days: number) => new Date(seedNow - days * 86400000).toISOString();
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const name of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'documents',
-    'projects', 'founders', 'deals', 'esign_envelopes', 'esign_recipients', 'pairwise_ndas', 'partner_deals', 'partner_referral_redemptions', 'legal_templates']) {
+    'projects', 'founders', 'deals', 'esign_envelopes', 'esign_recipients', 'esign_audit_events', 'pairwise_ndas', 'partner_deals', 'partner_referral_redemptions', 'legal_templates']) {
     db.exec(tableFromBaseline(baseline, name));
   }
   db.exec(readFileSync('cloudflare-worker/sql/migrations/332_contract_doc_type_registry.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/416_contract_doc_type_pending_draft.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/434_contract_template_publications.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/264_admin_notices.sql', 'utf8'));
   const user = db.prepare('INSERT INTO users(id,role,name,email,is_active) VALUES(?,?,?,?,?)');
   user.run(1, 'admin', 'HQ owner', 'hq@example.test', 1);
   user.run(2, 'admin', 'Plain admin', 'admin@example.test', 1);
@@ -48,11 +50,12 @@ const app = new Hono<any>();
 app.route('/contracts/registry', registry);
 app.route('/contracts', contracts);
 app.onError((err, c) => c.json({ error: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
-async function call(db: DatabaseSync, path: string, who: number | null = 2, method = 'GET') {
+async function call(db: DatabaseSync, path: string, who: number | null = 2, method = 'GET', body?: unknown, extraEnv = {}) {
   const headers: Record<string,string> = {};
   if (who) headers.Authorization = `Bearer ${await new SignJWT({user_id: who, role: who <= 2 ? 'admin' : 'founder'})
     .setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET))}`;
-  const res = await app.request(`/contracts${path}`, {method,headers}, {JWT_SECRET:SECRET,ENVIRONMENT:'development',DB:d1Over(db)});
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const res = await app.request(`/contracts${path}`, {method,headers, ...(body !== undefined ? {body:JSON.stringify(body)} : {})}, {JWT_SECRET:SECRET,ENVIRONMENT:'development',DB:d1Over(db), ...extraEnv});
   return {status:res.status,body:await res.json() as any};
 }
 
@@ -114,7 +117,7 @@ test('D647: picker searches are literal, paged, minimal and scoped away from oth
   assert.equal((await call(db,'/deal-options?q=%25')).body.total,0);
 });
 
-test('D647: template fields derive from the body, hide unusable templates and never invent publication',async()=>{
+test('D647: template fields derive from the body, hide unusable templates and never infer publication from a draft',async()=>{
   const db=fixture();
   db.prepare("INSERT INTO legal_templates(slug,title,body_md,merge_fields,version) VALUES('safe','SAFE',?,'[\"stale\"]',3)")
     .run('{{recipient_email}} {{counterparty.name}} {{price}} {{price}} {{scope}}');
@@ -123,7 +126,7 @@ test('D647: template fields derive from the body, hide unusable templates and ne
     ['counterparty.name',false,'send'],['price',true,'sender'],['recipient_email',false,'send'],['scope',true,'sender'],
   ]);
   assert.equal(r.body.fields[0].label,'counterparty name');
-  assert.equal(r.body.publication_state,'not_recorded'); assert.ok(r.body.publication_reason.length>30);
+  assert.equal(r.body.publication_state,'unpublished'); assert.ok(r.body.publication_reason.length>30);
   for(const update of ['is_stub=1','is_stub=0,is_active=0',"is_active=1,body_md=' '"]) {
     db.exec(`UPDATE legal_templates SET ${update}`); assert.equal((await call(db,'/templates/store/safe/fields')).status,404);
   }
@@ -151,4 +154,100 @@ test('D647: admin reads refuse anonymous/members; every registry route refuses p
     assert.equal(r.body.error,'Super admin required');
   }
   assert.equal((await call(db,'/registry',1)).status,200);
+});
+
+test('D647: the desk uses recorded send times, not creation or synthetic activity dates', async () => {
+  const db=fixture();
+  db.exec("UPDATE pairwise_ndas SET status='active',updated_at='2026-10-07T10:00:00Z'; UPDATE partner_deals SET status='active'");
+  db.prepare("INSERT INTO esign_audit_events(envelope_id,ts,action) VALUES(1,?,'email_sent')").run(ago(3));
+  const rows=await call(db,'?recorded=true&sort=sent_at&limit=500');
+  assert.equal(rows.status,200);
+  const signed=rows.body.items.find((r:any)=>r.uid==='env-0');
+  assert.equal(signed.sent_at,ago(3)); assert.equal(signed.days_to_sign,2);
+  assert.equal(rows.body.items.find((r:any)=>r.uid==='env-3').days_to_sign,null);
+  assert.equal(rows.body.items.find((r:any)=>r.source==='pairwise_nda').signed_at,null);
+  const stats=await call(db,'/stats?recorded=true'); assert.equal(stats.body.avg_days_to_sign,2);
+  db.exec('DELETE FROM esign_audit_events'); assert.equal((await call(db,'/stats?recorded=true')).body.avg_days_to_sign,null);
+  db.exec('DROP TABLE esign_audit_events'); assert.equal((await call(db,'?recorded=true')).status,503);
+});
+
+test('D647: published picker, preview and send verify the same version and body before any write', async()=>{
+  const db=fixture();
+  db.exec("INSERT INTO legal_templates(slug,title,body_md,version) VALUES('safe','SAFE','Hello {{recipient_name}} {{price}}',3)");
+  assert.equal((await call(db,'/published-templates')).body.items.length,0);
+  const publish=await call(db,'/published-templates/publish',1,'POST',{}); assert.equal(publish.status,200); assert.equal(publish.body.template_count,1);
+  const picker=await call(db,'/published-templates'); assert.equal(picker.body.items[0].version,3); assert.equal(picker.body.items[0].body_md,undefined);
+  const input={template_slug:'safe',template_version:3,recipient_name:'New signer',recipient_email:'new@example.test',fields:{price:'100'},provider:'native'};
+  const count=()=>Number(db.prepare('SELECT COUNT(*) AS n FROM esign_envelopes').get()!.n);
+  const before=count();
+  const missing=await call(db,'/envelopes/preview',1,'POST',{...input,fields:{}}); assert.equal(missing.status,422); assert.deepEqual(missing.body.fields,['price']);
+  const preview=await call(db,'/envelopes/preview',1,'POST',input); assert.equal(preview.status,200); assert.ok(atob(preview.body.pdf_base64).startsWith('%PDF-')); assert.match(preview.body.body_sha256,/^[a-f0-9]{64}$/);
+  db.exec("UPDATE legal_templates SET body_md='Draft change',version=4");
+  const stillApproved=await call(db,'/envelopes/preview',1,'POST',input); assert.equal(stillApproved.body.body_sha256,preview.body.body_sha256);
+  const forged=await call(db,'/envelopes/send',1,'POST',{...input,preview_sha256:'forged'}); assert.equal(forged.status,409); assert.equal(count(),before);
+  const changed=await call(db,'/envelopes/send',1,'POST',{...input,fields:{price:'200'},preview_sha256:preview.body.body_sha256}); assert.equal(changed.status,409); assert.equal(count(),before);
+  await call(db,'/published-templates/publish',1,'POST',{});
+  const stale=await call(db,'/envelopes/send',1,'POST',{...input,preview_sha256:preview.body.body_sha256}); assert.equal(stale.status,409); assert.equal(count(),before);
+});
+
+test('D647: signing history projects no bearer secrets, scopes other admins, hashes actual PDF bytes',async()=>{
+  const db=fixture();
+  db.exec("INSERT INTO esign_audit_events(envelope_id,action,meta,ip) VALUES(1,'envelope_signed','{\"signing_url\":\"secret-test-link\"}','203.0.113.1'); UPDATE esign_envelopes SET signed_r2_key='esign/signed/test.pdf' WHERE id=1");
+  assert.equal((await call(db,'/env-0/history',2)).status,403);
+  const history=await call(db,'/env-0/history',1); assert.equal(history.status,200); assert.equal(history.body.parties[0].email,'asigner@example.test'); assert.equal(history.body.timeline[0].action,'envelope_signed'); assert.doesNotMatch(JSON.stringify(history.body),/signing_token|secret-test-link|meta/);
+  const bytes=new TextEncoder().encode('%PDF-1.7\nactual signed document');
+  const pdf=await call(db,'/env-0/signed-pdf',1,'GET',undefined,{FILES:{get:async()=>({size:bytes.length,arrayBuffer:async()=>bytes.buffer})}});
+  assert.equal(pdf.status,200); assert.equal(pdf.body.available,true); assert.equal(atob(pdf.body.pdf_base64),new TextDecoder().decode(bytes));
+  const expected=await crypto.subtle.digest('SHA-256',bytes); assert.equal(pdf.body.sha256,Array.from(new Uint8Array(expected),b=>b.toString(16).padStart(2,'0')).join(''));
+  assert.equal((await call(db,'/env-0/signed-pdf',2)).status,403);
+  assert.equal((await call(db,'/env-0/signed-pdf',1,'GET',undefined,{FILES:{get:async()=>null}})).status,503);
+  assert.equal((await call(db,'/env-1/signed-pdf',1)).body.available,false);
+  db.exec('DROP TABLE esign_audit_events'); assert.equal((await call(db,'/env-0/history',1)).status,503);
+});
+
+test('D647: NDA/deal tabs count and page real rows; missing stores never become empty answers',async()=>{
+  const db=fixture();
+  const nda=await call(db,'/pairwise-ndas?q=Founder&limit=1'); assert.equal(nda.body.total,1); assert.equal(nda.body.items.length,1);
+  const next=await call(db,'/pairwise-ndas?offset=1'); assert.equal(next.body.total,1); assert.equal(next.body.items.length,0);
+  const deals=await call(db,'/partner-deals?status=pending&deal_type=services'); assert.equal(deals.body.total,1); assert.equal(deals.body.items[0].redemption_count,0);
+  db.exec('DROP TABLE pairwise_ndas; DROP TABLE partner_deals');
+  assert.equal((await call(db,'/pairwise-ndas')).status,503); assert.equal((await call(db,'/partner-deals')).status,503);
+});
+
+test('D647: the guided native send stores the approved body, binds its signer and omits bearer URLs',async()=>{
+  const db=fixture();
+  db.exec("INSERT INTO legal_templates(slug,title,body_md,version) VALUES('safe','SAFE','Hello {{recipient_name}} {{price}}',3)");
+  await call(db,'/published-templates/publish',1,'POST',{});
+  const input={template_slug:'safe',template_version:3,recipient_name:'Founder',recipient_email:'founder@example.test',fields:{price:'100'},provider:'native'};
+  const preview=await call(db,'/envelopes/preview',1,'POST',input);
+  const result=await call(db,'/envelopes/send',1,'POST',{...input,preview_sha256:preview.body.body_sha256});
+  assert.equal(result.status,200); assert.equal(result.body.signing_url,undefined); assert.equal(result.body.template_version,3);
+  const env=db.prepare('SELECT document_body,body_sha256,created_by FROM esign_envelopes WHERE envelope_uuid=?').get(result.body.envelope_uuid)!;
+  assert.equal(env.document_body,'Hello Founder 100'); assert.equal(env.body_sha256,preview.body.body_sha256); assert.equal(env.created_by,1);
+  const signer=db.prepare('SELECT user_id FROM esign_recipients WHERE envelope_id=?').get(result.body.envelope_id)!; assert.equal(signer.user_id,3);
+  const audit=db.prepare("SELECT user_id,details FROM activity_logs WHERE action='contract_envelope_send_requested'").get()!; assert.equal(audit.user_id,1); assert.equal(JSON.parse(String(audit.details)).template_version,3); assert.doesNotMatch(String(audit.details),/founder@example|signing_url/);
+});
+
+test('D647: every new publication/envelope/history route rejects anonymous and member callers',async()=>{
+  const db=fixture();
+  for(const [path,method] of [['/published-templates','GET'],['/published-templates/publish','POST'],['/envelope-providers','GET'],['/envelopes/preview','POST'],['/envelopes/send','POST'],['/env-0/history','GET'],['/env-0/signed-pdf','GET']] as const){
+    assert.equal((await call(db,path,null,method,method==='POST'?{}:undefined)).status,401,path);
+    assert.equal((await call(db,path,3,method,method==='POST'?{}:undefined)).status,403,path);
+  }
+});
+
+test('D647: a recorded successful resend supplies the missing send date and timeline',async()=>{
+  const db=fixture();
+  db.prepare("INSERT INTO activity_logs(action,details,created_at) VALUES('contract_resent',?,?)").run(JSON.stringify({envelope_uuid:'env-0',email_sent:true}),ago(3));
+  db.prepare("INSERT INTO activity_logs(action,details,created_at) VALUES('contract_resent',?,?)").run(JSON.stringify({envelope_uuid:'env-0',email_sent:false}),ago(4));
+  const list=await call(db,'?recorded=true&sort=sent_at&limit=500'); const row=list.body.items.find((r:any)=>r.uid==='env-0');
+  assert.equal(row.sent_at,ago(3)); assert.equal(row.days_to_sign,2);
+  const history=await call(db,'/env-0/history',1); assert.equal(history.body.timeline.length,1); assert.equal(history.body.timeline[0].action,'email_resent'); assert.equal(history.body.timeline[0].ts,ago(3));
+});
+
+test('D647 successful DocuSign sends have a recorded send time and named timeline event',async()=>{
+  const db=fixture();db.exec("UPDATE esign_envelopes SET provider='docusign' WHERE id=4");
+  db.prepare("INSERT INTO esign_audit_events(envelope_id,ts,action,meta) VALUES(4,?,'envelope_created','{\"provider\":\"docusign\"}')").run(ago(52));
+  const list=await call(db,'?recorded=true&limit=500');const row=list.body.items.find((r:any)=>r.uid==='env-3');assert.equal(row.sent_at,ago(52));assert.equal(row.days_to_sign,2);
+  const history=await call(db,'/env-3/history',1);assert.equal(history.body.timeline[0].action,'provider_sent');
 });

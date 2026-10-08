@@ -12,6 +12,11 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
 import { usageFromContractRows } from '../services/contractTemplateUsage';
+import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError } from '../services/contractPublication';
+import { createAndSendEnvelope } from './esign';
+import { userMeetsTier } from '../middleware/requireTier';
+import { findActiveDocusignIntegrationForUser } from '../integrations/providers/docusign';
+import { sha256Hex, sha256HexBytes } from '../services/pdf';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -28,6 +33,113 @@ type ContractDownloadResult =
   | { ok?: undefined; error: Response };
 
 const adminContracts = new Hono<{ Bindings: Env }>();
+
+adminContracts.get('/published-templates', async (c) => {
+  await requireAdmin(c);
+  try {
+    const templates = await publishedContractTemplates(c.env);
+    return c.json({ items: templates.map(({ body_md: _body, ...template }) => ({
+      ...template, fields: publicationFields({ ...template, body_md: _body }),
+    })) });
+  } catch {
+    return c.json({ error: 'Published templates are unreadable. Try again.', code: 'publications_unreadable' }, 503);
+  }
+});
+
+adminContracts.post('/published-templates/publish', async (c) => {
+  const admin = await requireHqAuthoring(c);
+  let templates;
+  try {
+    templates = await publishContractTemplates(c.env, admin.id, await hashEmail(admin.email));
+  } catch {
+    return c.json({ error: 'Publication could not be recorded. Try again.', code: 'publication_failed' }, 503);
+  }
+  const payload = { templates: templates.map(t => ({ slug: t.slug, title: t.title, category: t.category, version: t.version })), pushed_at: new Date().toISOString() };
+  const branches = await fanOut<{ stored: number; withdrawn: number }>(c.env, 'publishTemplate', [payload]);
+  return c.json({ ok: true, items: templates.map(({ body_md: _body, ...template }) => template),
+    template_count: templates.length, answered: branches.filter(b => b.status === 'ok').length, total: branches.length,
+    branches: branches.map(b => ({ code: b.code, status: b.status, ...b.data, reason: b.reason })),
+    ...(branches.length ? {} : { branches_reason: 'No branch Worker is bound. Publication is recorded here; no branch received the catalogue.' }) });
+});
+
+adminContracts.get('/envelope-providers', async (c) => {
+  const admin = await requireAdmin(c);
+  if (!userMeetsTier(admin, 'studio')) return c.json({ native: { available: true }, docusign: { available: false, code: 'tier_required', reason: 'DocuSign is not on this plan. It requires Studio.' } });
+  try {
+    const connected = !!await findActiveDocusignIntegrationForUser(c.env, admin.id);
+    return c.json({ native: { available: true }, docusign: { available: connected,
+      ...(connected ? {} : { code: 'docusign_not_connected', reason: 'Connect DocuSign before sending through it.' }) } });
+  } catch {
+    return c.json({ error: 'Signing providers are unreadable. Try again.', code: 'providers_unreadable' }, 503);
+  }
+});
+
+// Preview and send derive their body from the same recorded snapshot. Neither
+// accepts a caller-supplied document body or a caller-supplied signer identity.
+function envelopeHandler(operation: 'preview' | 'send') {
+  return async (c: AppContext, admin: Awaited<ReturnType<typeof requireAdmin>>) => {
+    let input: Record<string, unknown>;
+    try { input = await c.req.json(); }
+    catch { return c.json({ error: 'invalid_request' }, 400); }
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return c.json({ error: 'invalid_request' }, 400);
+    let prepared;
+    try { prepared = await preparePublishedContract(c.env, input, admin.id, isSuperAdmin(admin)); }
+    catch (e) {
+      if (e instanceof ContractPreparationError) return c.json({ error: e.code, code: e.code, fields: e.fields }, e.status);
+      return c.json({ error: 'The document could not be prepared. Nothing was sent. Try again.', code: 'preparation_unreadable' }, 503);
+    }
+    if (operation === 'preview') {
+      const pdf = await renderTemplatePreviewPdf({ documentTitle: prepared.template.title,
+        documentBody: prepared.body, documentVersion: prepared.template.version,
+        documentType: prepared.template.slug, category: prepared.template.category });
+      let binary = '';
+      for (const byte of pdf) binary += String.fromCharCode(byte);
+      c.header('Cache-Control', 'no-store');
+      return c.json({ pdf_base64: btoa(binary), body_sha256: await sha256Hex(prepared.body), template_version: prepared.template.version });
+    }
+    if (input.preview_sha256 !== await sha256Hex(prepared.body)) return c.json({ error: 'Preview this document again before sending.', code: 'preview_changed' }, 409);
+    if (input.provider !== 'native' && input.provider !== 'docusign') return c.json({ error: 'provider_invalid' }, 400);
+    if (input.provider === 'docusign' && !userMeetsTier(admin, 'studio')) return c.json({ error: 'tier_required' }, 402);
+    try {
+      await c.env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id)
+        VALUES ('contract_envelope_send_requested', ?, ?, ?)`).bind(JSON.stringify({
+          template_slug: prepared.template.slug, template_version: prepared.template.version,
+          body_sha256: input.preview_sha256, provider: input.provider,
+        }), await hashEmail(admin.email), admin.id).run();
+    } catch {
+      return c.json({ error: 'The send could not be audited. Nothing was sent. Try again.', code: 'send_audit_unreadable' }, 503);
+    }
+    try {
+      const result = await createAndSendEnvelope(c.env, {
+        adminUserId: admin.id, adminName: admin.name || admin.email,
+        recipientUserId: prepared.recipientUserId, recipientEmail: prepared.recipientEmail, recipientName: prepared.recipientName,
+        documentType: prepared.template.slug, dealId: prepared.dealId, appUrl: c.env.APP_URL || 'https://axal.vc',
+        viaProvider: input.provider, actorIp: c.req.header('CF-Connecting-IP') || undefined,
+        renderedBody: { title: prepared.template.title, body: prepared.body }, refuseUnfilled: true,
+      });
+      // Signing URLs contain a bearer credential; this admin flow only needs
+      // the envelope id and the delivery outcome.
+      if (!result) return c.json({ error: 'The send could not be confirmed. Check Agreements before retrying.', code: 'send_unconfirmed' }, 503);
+      const { signing_url: _signingUrl, ...outcome } = result;
+      return c.json({ ...outcome, template_version: prepared.template.version });
+    } catch (e) {
+      const message = (e as Error).message || '';
+      if (message.startsWith('docusign_not_connected')) return c.json({ error: 'docusign_not_connected' }, 412);
+      if (message.startsWith('docusign_')) return c.json({ error: 'docusign_send_failed' }, 502);
+      // A write or mail failure can be ambiguous. Do not claim nothing was
+      // sent when the existing envelope helper may already have committed.
+      return c.json({ error: 'The send could not be confirmed. Check Agreements before retrying.', code: 'send_unconfirmed' }, 503);
+    }
+  };
+}
+adminContracts.post('/envelopes/preview', async (c) => {
+  const admin = await requireAdmin(c);
+  return envelopeHandler('preview')(c, admin);
+});
+adminContracts.post('/envelopes/send', async (c) => {
+  const admin = await requireAdmin(c);
+  return envelopeHandler('send')(c, admin);
+});
 
 export const TEMPLATE_LAYERS: Record<string, { label: string; description: string }> = {
   gp: { label: 'Internal Management (GP Level)', description: 'Governance, partner economics, and decision-making framework' },
@@ -510,6 +622,28 @@ export async function loadAllContracts(sql: ReturnType<typeof getSQL>, strict = 
   return merged;
 }
 
+async function recordedSigningDates(c: AppContext, rows: UnifiedContract[]) {
+  const events = await c.env.DB.prepare(`SELECT sent.envelope_uuid, MIN(sent.sent_at) AS sent_at FROM (
+    SELECT e.envelope_uuid, CASE WHEN a.action = 'email_sent' OR
+      (a.action = 'envelope_created' AND e.provider = 'docusign'
+       AND CASE WHEN json_valid(a.meta) = 1 THEN json_extract(a.meta, '$.provider') END = 'docusign')
+      THEN strftime('%Y-%m-%dT%H:%M:%fZ', a.ts) END AS sent_at
+    FROM esign_envelopes e LEFT JOIN esign_audit_events a ON a.envelope_id=e.id
+    UNION ALL
+    SELECT e.envelope_uuid, strftime('%Y-%m-%dT%H:%M:%fZ', l.created_at) AS sent_at
+      FROM esign_envelopes e JOIN activity_logs l ON l.action='contract_resent'
+        AND CASE WHEN json_valid(l.details)=1 THEN json_extract(l.details, '$.envelope_uuid') END = e.envelope_uuid
+      WHERE CASE WHEN json_valid(l.details)=1 THEN json_extract(l.details, '$.email_sent') END = 1
+    ) sent GROUP BY sent.envelope_uuid`).all<{ envelope_uuid: string; sent_at: string | null }>();
+  const dates = new Map((events.results || []).map(e => [e.envelope_uuid, e.sent_at]));
+  return rows.map(row => ({ ...row,
+    // Synthetic NDA/deal updated_at is last activity, not a signature date.
+    signed_at: ['pairwise_nda', 'partner_deal'].includes(row.source) ? null : row.signed_at,
+    sent_at: row.source === 'esign' ? dates.get(row.uid) ?? null : null,
+    days_to_sign: row.source === 'esign' ? daysBetween(row.signed_at, dates.get(row.uid)) : null,
+  }));
+}
+
 // Task #45 — batch sibling of `loadVoidReason` used by the list endpoint.
 // Single SQL pass over `activity_logs` for every void-state row in the
 // returned page (keyed by either `details.uid` or `details.envelope_uuid`).
@@ -580,6 +714,7 @@ adminContracts.get('/', async (c) => {
   const sql = getSQL(c.env);
   try {
     let rows = await loadAllContracts(sql, true);
+    if (c.req.query('recorded') === 'true') rows = await recordedSigningDates(c, rows);
 
     if (status && status !== 'all') rows = rows.filter(r => status === 'awaiting_signature'
       ? ['sent', 'generated'].includes(r.status) : r.status === status);
@@ -700,9 +835,11 @@ adminContracts.get('/templates/store/:slug/fields', async (c) => {
       key, label: key.replace(/[._]+/g, ' '),
       required: !isAutoMergeKey(key), filled_by: isAutoMergeKey(key) ? 'send' : 'sender',
     }));
+    const publication = (await publishedContractTemplates(c.env)).find(row => row.slug === slug);
     return c.json({ slug: template.slug, title: template.title, version: template.version, fields,
-      publication_state: 'not_recorded',
-      publication_reason: 'The template store records active versions, but not a per-template published version.' });
+      publication_state: publication ? 'published' : 'unpublished', published_version: publication?.version ?? null,
+      publication_reason: publication ? 'The recorded published version is offered by New envelope; this field schema describes the current editable draft.'
+        : 'No publication has been recorded for this template. Publish it before using New envelope.' });
   } catch {
     return c.json({ error: 'Template fields are unreadable. Try again.', code: 'template_fields_unreadable' }, 503);
   }
@@ -713,7 +850,9 @@ adminContracts.get('/stats', async (c) => {
   await requireAdmin(c);
   const sql = getSQL(c.env);
   try {
-    const rows = await loadAllContracts(sql, true);
+    const loaded = await loadAllContracts(sql, true);
+    const recorded = c.req.query('recorded') === 'true';
+    const rows = recorded ? await recordedSigningDates(c, loaded) : loaded;
     const byStatus: Record<string, number> = { draft: 0, generated: 0, sent: 0, signed: 0, void: 0 };
     const byTypeCount = new Map<string, number>();
     const signDays: number[] = [];
@@ -723,7 +862,7 @@ adminContracts.get('/stats', async (c) => {
     for (const r of rows) {
       if (r.status in byStatus) byStatus[r.status]++;
       if (r.doc_type) byTypeCount.set(r.doc_type, (byTypeCount.get(r.doc_type) || 0) + 1);
-      const days = daysBetween(r.signed_at, r.created_at);
+      const days = recorded ? r.days_to_sign : daysBetween(r.signed_at, r.created_at);
       if (r.status === 'signed' && days != null) signDays.push(days);
       if (r.status === 'signed' && r.signed_at) {
         const t = new Date(r.signed_at).getTime();
@@ -753,9 +892,9 @@ adminContracts.get('/stats', async (c) => {
   }
 });
 
-export async function loadTemplateUsage(sql: ReturnType<typeof getSQL>) {
+export async function loadTemplateUsage(sql: ReturnType<typeof getSQL>, strict = false) {
   const catalogKeys = new Set(Object.keys(TEMPLATES));
-  const rows = await loadAllContracts(sql);
+  const rows = await loadAllContracts(sql, strict);
   return usageFromContractRows(rows, catalogKeys);
 }
 
@@ -884,6 +1023,9 @@ async function loadVoidReason(
 // ---------------------------------------------------------------------------
 adminContracts.get('/pairwise-ndas', async (c) => {
   await requireAdmin(c);
+  let page;
+  try { page = contractPage(c.req.query()); }
+  catch { return c.json({ error: 'invalid_picker_query' }, 400); }
   const statusFilter = (c.req.query('status') || '').toLowerCase();
   const intermediaryFilter = (c.req.query('intermediary') || '').toLowerCase();
   const sql = getSQL(c.env);
@@ -901,16 +1043,16 @@ adminContracts.get('/pairwise-ndas', async (c) => {
           LEFT JOIN users ua ON ua.id = p.party_a_user_id
           LEFT JOIN users ub ON ub.id = p.party_b_user_id
           LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
-         ORDER BY p.created_at DESC
-         LIMIT 500
+         ORDER BY p.updated_at DESC, p.id DESC
       `;
     } catch (e) {
       console.warn('[admin_contracts] pairwise_ndas query failed', e);
-      return c.json({ items: [], note: 'pairwise_ndas table not present on this environment' });
+      return c.json({ error: 'NDAs are unreadable. Try again.', code: 'ndas_unreadable' }, 503);
     }
     if (statusFilter) rows = rows.filter(r => String(r.status || '').toLowerCase() === statusFilter);
     if (intermediaryFilter) rows = rows.filter(r => String(r.intermediary || '').toLowerCase() === intermediaryFilter);
-    return c.json({ items: rows });
+    if (page.q) rows = rows.filter(r => [r.party_a_name,r.party_b_name,r.party_a_email,r.party_b_email].some(v => String(v || '').toLowerCase().includes(page.q.toLowerCase())));
+    return c.json({ items: rows.slice(page.offset, page.offset + page.limit), total: rows.length, ...page });
   } finally {
     await sql.end();
   }
@@ -921,7 +1063,11 @@ adminContracts.get('/pairwise-ndas', async (c) => {
 // ---------------------------------------------------------------------------
 adminContracts.get('/partner-deals', async (c) => {
   await requireAdmin(c);
+  let page;
+  try { page = contractPage(c.req.query()); }
+  catch { return c.json({ error: 'invalid_picker_query' }, 400); }
   const dealType = (c.req.query('deal_type') || '').toLowerCase();
+  const statusFilter = (c.req.query('status') || '').toLowerCase();
   const sql = getSQL(c.env);
   try {
     let rows: any[] = [];
@@ -935,25 +1081,84 @@ adminContracts.get('/partner-deals', async (c) => {
                  WHERE r.partner_deal_id = d.id) AS redemption_count
           FROM partner_deals d
           LEFT JOIN users u ON u.id = d.user_id
-         ORDER BY d.created_at DESC
-         LIMIT 500
+         ORDER BY u.name COLLATE NOCASE, d.id
       `;
     } catch (e: any) {
       console.error('admin partner-deals:', e?.message);
-      return c.json({ items: [], note: `partner deals unavailable: ${e?.message || 'query failed'}` });
+      return c.json({ error: 'Partner deals are unreadable. Try again.', code: 'partner_deals_unreadable' }, 503);
     }
     if (dealType) rows = rows.filter(r => String(r.deal_type || '').toLowerCase() === dealType);
+    if (statusFilter) rows = rows.filter(r => String(r.status || '').toLowerCase() === statusFilter);
+    if (page.q) rows = rows.filter(r => [r.partner_name,r.partner_email].some(v => String(v || '').toLowerCase().includes(page.q.toLowerCase())));
     const items = rows.map(r => ({
       ...r,
       granted_tiers: [r.granted_tier_founder, r.granted_tier_investor].filter(Boolean).join(', ') || null,
     }));
-    return c.json({ items });
+    return c.json({ items: items.slice(page.offset, page.offset + page.limit), total: items.length, ...page });
   } finally {
     await sql.end();
   }
 });
 
 // GET /api/admin/contracts/:uid — detail (UNION-aware).
+adminContracts.get('/:uid/history', async (c) => {
+  const admin = await requireAdmin(c);
+  const sql = getSQL(c.env);
+  try {
+    const ref = await findContractByUid(sql, c.req.param('uid'));
+    if (!ref) return c.json({ error: 'Contract not found' }, 404);
+    if (ref.source !== 'esign') return c.json({ parties: [], timeline: [], reason: 'This store does not record an envelope signing timeline or its parties.' });
+    if (!isSuperAdmin(admin) && ref.row.created_by !== admin.id) return c.json({ error: 'Super admin required' }, 403);
+    const sender = await c.env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(ref.row.created_by).first();
+    const parties = await c.env.DB.prepare(`SELECT recipient_name AS name, recipient_email AS email,
+      status, signed_at, signer_ip FROM esign_recipients WHERE envelope_id = ? ORDER BY id`).bind(ref.row.id).all();
+    // Project named audit fields; legacy metadata can contain signing links.
+    const events = await c.env.DB.prepare(`SELECT ts,
+      CASE WHEN action='envelope_created' AND CASE WHEN json_valid(meta)=1 THEN json_extract(meta, '$.provider') END = 'docusign'
+        THEN 'provider_sent' ELSE action END AS action, signer_email, ip FROM esign_audit_events
+      WHERE envelope_id = ? ORDER BY ts, id`).bind(ref.row.id).all();
+    const voids = await c.env.DB.prepare(`SELECT created_at AS ts, json_extract(details, '$.reason') AS reason
+      FROM activity_logs WHERE action='contract_voided' AND json_valid(details)=1
+      AND json_extract(details, '$.envelope_uuid') = ? ORDER BY id`).bind(ref.row.envelope_uuid).all();
+    const resends = await c.env.DB.prepare(`SELECT created_at AS ts, 'email_resent' AS action FROM activity_logs
+      WHERE action='contract_resent' AND json_valid(details)=1
+      AND json_extract(details, '$.email_sent')=1 AND json_extract(details, '$.envelope_uuid')=? ORDER BY id`).bind(ref.row.envelope_uuid).all();
+    const timeline = [...(events.results || []), ...(resends.results || [])].sort((a, b) => Date.parse(String(a.ts)) - Date.parse(String(b.ts)));
+    return c.json({ sender, parties: parties.results || [], timeline, voids: voids.results || [] });
+  } catch {
+    return c.json({ error: 'Signing history is unreadable. Try again.', code: 'history_unreadable' }, 503);
+  } finally { await sql.end(); }
+});
+
+adminContracts.get('/:uid/signed-pdf', async (c) => {
+  const admin = await requireAdmin(c);
+  const sql = getSQL(c.env);
+  try {
+    const ref = await findContractByUid(sql, c.req.param('uid'));
+    if (!ref) return c.json({ error: 'Contract not found' }, 404);
+    if (ref.source === 'esign' && !isSuperAdmin(admin) && ref.row.created_by !== admin.id) return c.json({ error: 'Super admin required' }, 403);
+    const key = ref.source === 'esign' && ref.row.status === 'completed' ? ref.row.signed_r2_key
+      : ref.source === 'documents' && ref.row.status === 'signed' && ref.row.file_content_type === 'application/pdf' ? ref.row.file_key : null;
+    if (!key) return c.json({ available: false, reason: 'This contract has no recorded signed PDF.' });
+    if (typeof key !== 'string' || !/^(contracts?|esign|documents)\//.test(key)) return c.json({ error: 'invalid_storage_key' }, 400);
+    if (!c.env.FILES) return c.json({ error: 'Signed PDF is unreadable. Try again.' }, 503);
+    const object = await c.env.FILES.get(key);
+    if (!object || object.size > 10 * 1024 * 1024) return c.json({ error: 'Signed PDF is unreadable. Try again.' }, 503);
+    let bytes: Uint8Array | null = new Uint8Array(await object.arrayBuffer());
+    if (key.endsWith('.enc')) {
+      const { decryptBytes } = await import('../services/cryptoBox');
+      bytes = await decryptBytes(c.env, bytes);
+    }
+    if (!bytes || new TextDecoder().decode(bytes.subarray(0, 5)) !== '%PDF-') return c.json({ error: 'Signed PDF is unreadable. Try again.' }, 503);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    c.header('Cache-Control', 'no-store');
+    return c.json({ available: true, pdf_base64: btoa(binary), sha256: await sha256HexBytes(bytes) });
+  } catch {
+    return c.json({ error: 'Signed PDF is unreadable. Try again.', code: 'signed_pdf_unreadable' }, 503);
+  } finally { await sql.end(); }
+});
+
 adminContracts.get('/:uid', async (c) => {
   await requireAdmin(c);
   const uid = c.req.param('uid') ?? '';
@@ -1049,7 +1254,7 @@ adminContracts.get('/:uid', async (c) => {
       SELECT
         e.id, e.envelope_uuid, e.user_id, e.deal_id, d.project_id, p.name AS project_name,
         e.document_type, e.document_title,
-        e.status, e.created_at, e.completed_at, e.signed_r2_key,
+        e.status, e.provider, e.created_at, e.completed_at, e.signed_r2_key,
         (SELECT recipient_email FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_email,
         (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_name,
         (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_name,
@@ -1386,7 +1591,8 @@ adminContracts.get('/templates/store', async (c) => {
 
   const sql = getSQL(c.env);
   try {
-    const { usage, lastUsed } = await loadTemplateUsage(sql);
+    const { usage, lastUsed } = await loadTemplateUsage(sql, c.req.query('recorded') === 'true');
+    const publications = c.req.query('recorded') === 'true' ? new Map((await publishedContractTemplates(c.env)).map(t => [t.slug, t])) : null;
 
     const out = items.map((t) => ({
       ...t,
@@ -1394,8 +1600,13 @@ adminContracts.get('/templates/store', async (c) => {
       layer_label: TEMPLATE_LAYERS[t.category]?.label || t.category,
       usage_count: usage.get(t.slug) || 0,
       last_used_at: lastUsed.get(t.slug) || null,
+      ...(publications ? { published_version: publications.get(t.slug)?.version ?? null,
+        has_unpublished_changes: publications.has(t.slug) ? !!t.is_stub || !t.body_md.trim() || publications.get(t.slug)?.version !== t.version
+          : !t.is_stub && !!t.body_md.trim() } : {}),
     }));
     return c.json({ items: out, total: out.length });
+  } catch {
+    return c.json({ error: 'Templates or their usage are unreadable. Try again.', code: 'templates_unreadable' }, 503);
   } finally {
     await sql.end();
   }

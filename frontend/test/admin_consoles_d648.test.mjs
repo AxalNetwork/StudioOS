@@ -297,9 +297,9 @@ test('D647: empty agreements and template usage point at the visible envelope ac
   }
 });
 
-test('D647: Contracts imports the extracted console without the Admin Console module', () => {
+test('D647: Contracts imports its own desk without the Admin Console module', () => {
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/ContractsPage.jsx'), 'utf8');
-  assert.match(page, /import \{ LegalPanel \} from '\.\.\/admin\/consoles\/LegalConsole'/);
+  assert.match(page, /export \{ default \} from '\.\.\/admin\/contracts\/ContractsDesk\.jsx'/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
 });
 

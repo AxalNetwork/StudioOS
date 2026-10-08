@@ -48,3 +48,8 @@ each, in alphabetical order. The rules themselves live in
 `scripts/lib/apiModules.mjs` and are tested by
 `scripts/lib/apiModules.test.mjs`. The Worker's own drift tests
 (`cloudflare-worker/test/api_drift.test.*`) read this folder too.
+
+D647: `contracts.js` calls the mounted admin_contracts publication, guided
+preview/send, provider, counted picker, recorded agreement/stat, history and
+signed-PDF endpoints. Binary PDFs are returned as authenticated JSON/base64
+through the shared request client; callers create and revoke temporary blob URLs.

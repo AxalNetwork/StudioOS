@@ -13,7 +13,7 @@ const CANVAS = readFileSync(
   resolve(REPO, 'design/canvases/integrated/Contracts · Super.dc.html'),
   'utf8',
 );
-const PAGE = codeOnly(readFileSync(resolve(REPO, 'frontend/src/pages/hq/ContractsPage.jsx'), 'utf8'));
+const PAGE = codeOnly(readFileSync(resolve(REPO, 'frontend/src/pages/hq/ContractRegistry.jsx'), 'utf8'));
 
 const x1Start = CANVAS.indexOf('<section class="ab" id="x1">');
 const x2Start = CANVAS.indexOf('<section class="ab" id="x2">');
@@ -30,7 +30,8 @@ test('the HQ page implements X1 hub elements', () => {
   assert.match(PAGE, /registry-health-tiles/);
   assert.match(PAGE, /registry-layer-cards/);
   assert.match(PAGE, /registry-new-doc-type/);
-  assert.match(PAGE, /WorkerRail/);
-  assert.match(PAGE, /hq-contracts-rail/);
+  const desk = codeOnly(readFileSync(resolve(REPO, 'frontend/src/pages/admin/contracts/ContractsDesk.jsx'), 'utf8'));
+  assert.match(desk, /WorkerRail/);
+  assert.match(desk, /hq-contracts-rail/);
   assert.match(PAGE, /pending owner decision/);
 });

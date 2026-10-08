@@ -659,14 +659,13 @@ asks for none is how a header grows a button nobody specified and nothing backs
 — the exact failure the rest of this pass exists to avoid. When those canvases
 gain an `ops:` array, the zones can have it.
 
-D647 (#1441): `/admin/contracts` is available in both admin shells. Plain
-admins do not render Document types and the Worker registry requires canonical
-Super Admin authority. Contracts imports the extracted Legal panel directly;
-there is no Admin Console shell dependency. `GET /api/admin/contracts` supports
-validated `limit`, `offset`, `sort`, `direction`, filters and an exact union
-`total`; `/recipients`, `/deal-options` and `/templates/store/:slug/fields`
-supply the wizard reads. Field publication is explicitly `not_recorded`,
-pending the owner's definition. The dead Incorporation tab is replaced by a
-quiet link to Spin-Out Lab, where Formation orders live. The K1–K8 redesign,
-guided published-template wizard and detail timeline/signed-PDF fingerprint
-remain pending; the older integrated Ops canvas does not cover these frames.
+D647 (#1441): `/admin/contracts` is one desk for both admin shells, with five
+tabs for admins and the Super Admin-only Document types tab. ContractsPage
+exports the desk from `pages/admin/contracts/`; ContractRegistry keeps D622's
+pending drafts and publish checks. No Admin Console shell is imported.
+Validated agreement paging/sorting/filtering returns the full union total;
+`recorded=true` uses actual send dates. Migration 434 supports the guided
+published-template picker and preview/send version/body check. History and
+signed-PDF endpoints expose safe projections and the exact PDF fingerprint.
+The legacy Legal deep link redirects with a moved notice. Formation orders are
+reached through the existing Spin-Out Lab page. Canvas reference: #1456 K1–K8.

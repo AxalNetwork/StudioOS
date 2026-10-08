@@ -115,5 +115,7 @@ filters/paging/search and null-last sorting, stats, recipient/deal pickers,
 template fields and existing template/actions/download reads. Union list/stats
 fail with 503 Unreadable rather than inventing empty sources. The separate
 `admin_contract_doc_registry.ts` mount at `/api/admin/contracts/registry` is
-canonical Super Admin only. Template fields report publication as Not recorded;
-per-template publication remains an owner decision.
+canonical Super Admin only. Migration 434 records explicit published template snapshots. The new guided
+preview/send routes verify the same version and body fingerprint, and history
+and signed-PDF routes project safe fields and hash the actual PDF bytes. The
+new desk opts into recorded send-event dates with `recorded=true`.

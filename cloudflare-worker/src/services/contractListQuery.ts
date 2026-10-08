@@ -1,5 +1,5 @@
 /** D647 — validated list controls shared by the Contracts page and its pickers. */
-export const CONTRACT_SORTS = ['created_at', 'signed_at', 'title', 'recipient', 'days_to_sign'] as const;
+export const CONTRACT_SORTS = ['created_at', 'sent_at', 'signed_at', 'title', 'recipient', 'days_to_sign'] as const;
 export class ContractQueryError extends Error {}
 
 export function contractPage(query: Record<string, string>) {
@@ -26,11 +26,11 @@ export function contractOrder(query: Record<string, string>) {
   return { sort: sort as typeof CONTRACT_SORTS[number], direction };
 }
 
-type SortableContract = { id: number; uid: string; source: string; title: string; recipient_email: string | null; created_at: string | null; signed_at: string | null; days_to_sign: number | null };
+type SortableContract = { id: number; uid: string; source: string; title: string; recipient_email: string | null; created_at: string | null; sent_at?: string | null; signed_at: string | null; days_to_sign: number | null };
 export function orderContracts<T extends SortableContract>(rows: T[], sort: typeof CONTRACT_SORTS[number], direction: string): T[] {
   const value = (r: T): string | number | null => {
     if (sort === 'days_to_sign') return r.days_to_sign;
-    if (sort === 'created_at' || sort === 'signed_at') {
+    if (sort === 'created_at' || sort === 'signed_at' || sort === 'sent_at') {
       const raw = r[sort];
       const time = raw ? Date.parse(raw) : NaN;
       return Number.isFinite(time) ? time : null;

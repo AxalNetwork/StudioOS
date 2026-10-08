@@ -47,6 +47,9 @@ its drawing pieces with the partner earnings screens (`parts.jsx`).
 
 `assessment/` holds the assessment game editor — see its own README.
 
+`contracts/` owns the D647 desk, counted agreement pages, related lists,
+signing detail and guided envelope panel. Both shells reach `/admin/contracts`.
+
 ## Rules
 
 - **The route guard is the boundary.** A component here assumes an admin caller;
