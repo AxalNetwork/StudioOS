@@ -23,7 +23,8 @@ import { requireAuth } from '../auth';
 import { loadMyAiSpend, loadMyAiSpendForSurface } from '../services/aiSpend';
 import { AI_SURFACES } from '../services/aiSurfaces';
 import { refuse } from '../util/refusal';
-import { ROUTE, PRICE_USD_PER_1M_TOKENS, run as aiRun, normaliseSurface } from '../services/aiRouter';
+import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, run as aiRun, normaliseSurface } from '../services/aiRouter';
+import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
 import { classifyInput } from '../services/advisor/guardrails';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
@@ -125,6 +126,36 @@ ai.get('/pricing', async (c) => {
     prices: PRICE_USD_PER_1M_TOKENS,
     routes,
   });
+});
+
+/**
+ * D641 (#1434) — GET /api/ai/rates: the rate card the Usage page draws.
+ *
+ * One row per model either of the router's price tables holds, which covers
+ * every model `ROUTE` can send work to (a primary, a fallback or an
+ * alternate; a test holds that). A token model is priced in and out per
+ * million tokens; an audio model per minute. `retired: true` marks a model
+ * kept only so past runs keep their cost.
+ *
+ * The figures are read from `PRICE_USD_PER_1M_TOKENS` and
+ * `PRICE_USD_PER_AUDIO_MINUTE` on every request, never copied, so the card
+ * cannot quote a price the receipt is not computed from. Any signed-in member.
+ */
+export function rateCard() {
+  const row = (id: string) => ({ id, name: MODEL_NAMES[id] ?? id, ...(RETIRED_MODELS.has(id) ? { retired: true } : {}) });
+  return [
+    ...Object.entries(PRICE_USD_PER_1M_TOKENS).map(([id, p]) => ({
+      ...row(id), in_per_1m_usd: p.in, out_per_1m_usd: p.out,
+    })),
+    ...Object.entries(PRICE_USD_PER_AUDIO_MINUTE).map(([id, perMinute]) => ({
+      ...row(id), per_audio_minute_usd: perMinute,
+    })),
+  ];
+}
+
+ai.get('/rates', async (c) => {
+  await requireAuth(c);
+  return c.json({ ok: true, models: rateCard() });
 });
 
 /**
