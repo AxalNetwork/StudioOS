@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { adminExploring as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 
 const ASSIGNABLE_ROLES = ['founder', 'investor', 'partner', 'advisor'];
 
@@ -168,7 +169,7 @@ export default function AdminExploring() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
-  const { showToast } = useToast();
+  const { toast, showToast, dismissToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,6 +220,7 @@ export default function AdminExploring() {
 
   return (
     <div className="space-y-6">
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">

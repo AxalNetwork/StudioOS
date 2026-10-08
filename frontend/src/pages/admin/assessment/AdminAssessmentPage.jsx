@@ -5,9 +5,10 @@
 // them, so expect 404s in the dev preview — the studio is validated by the
 // build / drift / dark-mode gates and runs for real on the prod worker.
 import React, { useState, useEffect, useCallback } from 'react';
-import { Gamepad2, Plus, RefreshCw, AlertTriangle, X } from 'lucide-react';
+import { Gamepad2, Plus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { adminAssessment } from '../../../lib/api';
 import { useToast } from '../../../components/useToast';
+import ToastMessage from '../../../components/ToastMessage';
 import PageExplainer from '../../../components/PageExplainer';
 import {
   Field, TextInput, Textarea, Button, Modal, StatusBadge, inputCls,
@@ -31,27 +32,6 @@ const TABS = [
   { id: 'badges', label: 'Badges', scoped: false },
 ];
 
-function ToastHost({ toast, onDismiss }) {
-  if (!toast?.msg) return null;
-  const ok = toast.kind === 'success';
-  return (
-    <div className="fixed bottom-4 right-4 z-[60] max-w-sm">
-      <div
-        className={`flex items-start gap-2 rounded-lg px-4 py-3 shadow-lg text-sm ${
-          ok
-            ? 'bg-emerald-600 text-white'
-            : 'bg-red-600 text-white'
-        }`}
-        role="status"
-      >
-        <span className="flex-1">{toast.msg}</span>
-        <button type="button" onClick={onDismiss} aria-label="Dismiss" className="opacity-80 hover:opacity-100">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 const BLANK_GAME = { slug: '', track: '', title: '', subtitle: '', description: '', target_role: '', display_order: 0 };
 
@@ -323,7 +303,7 @@ export default function AdminAssessmentPage() {
         <CreateGameModal onClose={() => setShowCreate(false)} onCreated={onCreated} toast={toast} />
       )}
 
-      <ToastHost toast={toast.toast} onDismiss={toast.dismissToast} />
+      <ToastMessage toast={toast.toast} onDismiss={toast.dismissToast} />
     </div>
   );
 }

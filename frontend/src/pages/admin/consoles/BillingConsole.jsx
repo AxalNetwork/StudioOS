@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { api } from '../../../lib/api';
 import { Send, Search, RefreshCw, Loader2, ShieldAlert, AlertTriangle, CreditCard } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
+import ToastMessage from '../../../components/ToastMessage';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../../lib/refundReason';
 import { ConsoleUnreadable } from './shared';
 
@@ -12,6 +13,19 @@ import { ConsoleUnreadable } from './shared';
 // Task #11 — Billing admin: refunds (per-product policy + referral commission
 // clawback), dispute evidence, and customer LTV. Each action is step-up gated
 // server-side; the api `request` helper transparently handles the challenge.
+/** A dispute's evidence fields, empty. */
+export const EMPTY_EVIDENCE = Object.freeze({ uncategorized_text: '', product_description: '', customer_communication: '', refund_policy_disclosure: '', receipt: '' });
+
+/**
+ * #1437 — choosing a dispute. Evidence written for one dispute must never be
+ * carried into another and submitted there, so choosing a different dispute
+ * starts its evidence empty. Choosing the same one again keeps what is typed.
+ */
+export function pickDispute(current, evidence, next) {
+  if (current && next && current.id === next.id) return { selDispute: current, evidence };
+  return { selDispute: next, evidence: { ...EMPTY_EVIDENCE } };
+}
+
 export function BillingPanel() {
   const { toast, showToast } = useToast(4000);
   const inputCls = 'rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 w-full';
@@ -65,7 +79,7 @@ export function BillingPanel() {
   // D648 — a failed read is said, never drawn as an empty list.
   const [failed, setFailed] = useState(false);
   const [selDispute, setSelDispute] = useState(null);
-  const [evidence, setEvidence] = useState({ uncategorized_text: '', product_description: '', customer_communication: '', refund_policy_disclosure: '', receipt: '' });
+  const [evidence, setEvidence] = useState({ ...EMPTY_EVIDENCE });
   const [evBusy, setEvBusy] = useState(false);
   const setEv = (k, v) => setEvidence((s) => ({ ...s, [k]: v }));
 
@@ -129,7 +143,7 @@ export function BillingPanel() {
 
   return (
     <div className="space-y-6">
-      {toast}
+      <ToastMessage toast={toast} />
 
       {/* Refund */}
       <div className={cardCls}>
@@ -217,7 +231,7 @@ export function BillingPanel() {
               <ul className="divide-y divide-gray-100 dark:divide-gray-800 text-xs">
                 {disputes.map((d) => (
                   <li key={d.id}>
-                    <button onClick={() => { setSelDispute(d); }}
+                    <button onClick={() => { const n = pickDispute(selDispute, evidence, d); setSelDispute(n.selDispute); setEvidence(n.evidence); }}
                       className={`w-full text-left py-2 px-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded ${selDispute?.id === d.id ? 'bg-violet-50 dark:bg-violet-950/30' : ''}`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-gray-900 dark:text-gray-100">{fmtMoney(d.amount, d.currency)}</span>

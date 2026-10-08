@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
+import { toastText } from '../components/ToastMessage';
 
 // Task #46 — Reserve allocation page (modernized).
 // Drag-style numeric inputs across portfolio companies with a live
@@ -317,7 +318,7 @@ export default function ReservesPage({ embedded = false }) {
       )}
       {savedMsg && (
         <div className="mb-4 p-3 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 text-sm text-emerald-800 flex items-center gap-2">
-          <Sparkles className="w-4 h-4" /> {savedMsg}
+          <Sparkles className="w-4 h-4" /> {toastText(savedMsg)}
         </div>
       )}
 

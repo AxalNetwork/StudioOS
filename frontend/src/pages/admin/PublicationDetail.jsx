@@ -3,11 +3,12 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Save, FileDown, Image as ImageIcon, Table2, Send, ExternalLink, Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 
 export default function PublicationDetail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { showToast } = useToast();
+  const { toast: current, showToast, dismissToast } = useToast();
   const toast = (msg, kind = 'info') => showToast({ kind, msg });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +93,7 @@ export default function PublicationDetail() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 dark:text-gray-100">
+      <ToastMessage toast={current} onDismiss={dismissToast} />
       <button onClick={() => nav('/admin/publications')} className="text-sm text-gray-500 hover:text-violet-600 flex items-center gap-1 mb-4">
         <ArrowLeft className="w-4 h-4" /> Back
       </button>

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { articles as api, adminArticles as adminApi } from '../lib/api';
 import { useToast } from '../components/useToast';
+import ToastMessage from '../components/ToastMessage';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import ReactMarkdown from 'react-markdown';
@@ -337,7 +338,7 @@ function ArticleList({ items, selectedId, onSelect, onNew, refreshing, refresh, 
 export default function ArticleAuthorPage() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
-  const { showToast } = useToast();
+  const { toast: current, showToast, dismissToast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const toast = {
@@ -827,6 +828,7 @@ export default function ArticleAuthorPage() {
   }
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <ToastMessage toast={current} onDismiss={dismissToast} />
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">

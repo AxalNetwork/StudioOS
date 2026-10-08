@@ -373,12 +373,19 @@ export default function AdminLpApplications() {
 
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={LBL}>Internal review note</span>
+                  {/* #1437 — not internal: services/lpApplications.ts returns
+                      `review_note` to the applicant on purpose, so a declined
+                      applicant reads the reason. */}
+                  <span className={LBL}>Note to the applicant</span>
                 </div>
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3}
                   data-testid="lpapps-note"
-                  placeholder="Record the reasoning — what you verified, what remains open, what the applicant was told."
+                  aria-describedby="lpapps-note-visible"
+                  placeholder="What you decided and why, in words the applicant can read."
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 outline-none resize-y" />
+                <p id="lpapps-note-visible" data-testid="lpapps-note-visible" className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  The applicant sees this note on their application.
+                </p>
                 <button type="button" onClick={saveNoteOnly} disabled={busy || !note.trim()}
                   data-testid="lpapps-save-note"
                   className="mt-2 px-4 py-2 rounded-lg text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:text-gray-400 disabled:cursor-not-allowed">
