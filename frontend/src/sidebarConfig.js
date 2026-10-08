@@ -203,8 +203,8 @@ export const SIDEBAR_GROUPS = {
   // rows (Exploring: Accounts, and an Approvals lane) matches its FIRST
   // placement in the map. The `/admin` tabs light rows by QUERY, not path —
   // `adminRowFor` in `lib/hqStrips.js`, read from the same map — which is why
-  // the Contracts row can point at `/admin?tab=legal` without lighting on
-  // every other tab.
+  // Contracts has its own /admin/contracts route (D647); the remaining
+  // console tabs retain query-based matching.
   admin: [
     { key: 'admin', label: 'Admin', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
@@ -218,10 +218,10 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
         match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment', '/admin/profiling-trends'] },
       { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
-      // The template library, on the Admin Console's Legal tab. Not "read-only":
+      // D647 — the shared Contracts page and template library. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin
       // authors templates today. Whether they should is D286's filed question.
-      { to: '/admin?tab=legal', icon: FileText, label: 'Contracts' },
+      { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
       { to: '/admin/held/insights', icon: TrendingUp, label: 'Insights' },
       // Licensing appears only here, as the administrator's own read of their
       // licence (S20's wall rule 4). HQ's ledger of every licence
@@ -240,8 +240,10 @@ export const SIDEBAR_GROUPS = {
     // fails if any role grows a group with no destinations again.
   ],
 
-  // Task #19 — regroup the founder sidebar around the venture lifecycle:
-  // Home → Build → Validate → Raise → Launch → More → Account. This replaces the
+  // Task #19 — regroup the founder sidebar around the venture lifecycle. The
+  // rows today run Studio · (Spin-Out Lab, for its members) · Validate · Build
+  // · Raise · Grow · Network · Research (#1447), the order the Worker's lifecycle stages follow too
+  // (`LIFECYCLE_STAGES` in routes/progress.ts: Raise before Grow). This replaced the
   // former 8-group layout (which crammed execution + validation + fundraising
   // into one "Build" bucket and duplicated Home via a parallel portal)
   // so every feature has exactly one home and founders face far fewer top-level

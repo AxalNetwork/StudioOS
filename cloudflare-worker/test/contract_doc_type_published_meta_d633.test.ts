@@ -37,7 +37,7 @@ function freshDb() {
     enableForeignKeyConstraints: false,
     enableDoubleQuotedStringLiterals: true,
   });
-  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'documents', 'esign_envelopes', 'esign_recipients']) {
+  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'documents', 'deals', 'projects', 'founders', 'esign_envelopes', 'esign_recipients']) {
     db.exec(ddl(t));
   }
   db.exec(read('cloudflare-worker/sql/migrations/332_contract_doc_type_registry.sql'));

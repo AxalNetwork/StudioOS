@@ -40,3 +40,5 @@ re-checks with `requireSuperAdmin` on every call regardless.
   render as Not recorded with that reason, never as a sample or a zero. Token P&L
   per subsidiary stays blocked by U1 and metering (D261), separate from revenue.
 - Dark mode is not optional; `npm run test:drift` runs `check-dark-mode`.
+
+D647 (#1441): `ContractsPage.jsx` is reachable at `/admin/contracts` in both shells, retaining existing components while the redesign is pending. Plain admins do not load or render the document-type registry. The legacy Legal deep link redirects before console mounting; `moved=legal` shows its notice.

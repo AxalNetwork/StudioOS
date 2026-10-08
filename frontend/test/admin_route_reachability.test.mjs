@@ -86,7 +86,7 @@ function routes(src) {
       path: p[1],
       body,
       redirect: els[0] === 'Navigate',
-      component: els.find((e) => e !== 'Navigate') ?? null,
+      component: els.find((e) => e !== 'Navigate' && e !== 'LegacyContractsRedirect') ?? null,
     });
   }
   return out;
