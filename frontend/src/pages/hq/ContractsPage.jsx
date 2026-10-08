@@ -1,3 +1,5 @@
+import { useLocation } from 'react-router-dom';
+import { CONTRACTS_MOVED_NOTICE } from '../admin/LegacyContractsRedirect';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -553,6 +555,7 @@ function RegistryEditorModal({ open, onClose, onSaved }) {
  */
 export default function HqContractsPage() {
   const { user } = useAuth() || {};
+  const { search } = useLocation();
   // D622 — the publish control is a Super Admin's: the route's gate is
   // `requireSuperAdminWriteBar`, so any other admin is told it waits for one.
   const canPublish = isSuperAdminUser(user);
@@ -560,34 +563,38 @@ export default function HqContractsPage() {
   const [editorOpen, setEditorOpen] = useState(false);
 
   const loadRegistry = useCallback(() => {
+    if (!canPublish) return;
     setRegistry(null);
     api.adminContractRegistryHub()
       .then(setRegistry, (e) => {
         reportError('hq-contracts-registry', e);
         setRegistry(UNAVAILABLE);
       });
-  }, []);
+  }, [canPublish]);
 
   useEffect(() => { loadRegistry(); }, [loadRegistry]);
 
   const coverage = registry && registry !== UNAVAILABLE && registry.coverage ? registry.coverage : [];
-  const rail = (
+  const rail = canPublish ? (
     <WorkerRail
       workspace="Contracts"
       role="super_admin"
-      stance="Registry + library"
-      note="This rail summarises registered doc types and live contract counts from the union read. It does not send envelopes or publish types — publish is a separate step-up action audited as registry.type.publish."
+      stance={canPublish ? 'Registry + library' : 'Agreements + library'}
+      note={canPublish ? 'Registered document types and contract counts. Publishing requires a fresh sign-in and a reason.' : 'Browse agreements and the template library.'}
       coverage={coverage}
-      coverageNote={registry === UNAVAILABLE
+      coverageNote={!canPublish ? undefined : registry === UNAVAILABLE
         ? 'The registry could not be read — this is not a claim that no contract types exist.'
         : (registry === null ? 'Loading the registry…' : undefined)}
-      unavailable={[
+      unavailable={canPublish ? [
         ['Cross-tenant oversight', 'No contract row names the subsidiary it belongs to (U1).'],
         ['Canvas ↔ code layer map', 'PLATFORM / VENTURE / FUND / ENGAGEMENT vs gp / fund / portfolio / compliance — pending owner decision.'],
         ['e-sign originators', 'Whether this registry governs esignOriginators.ts — pending owner decision.'],
-      ]}
+      ] : []}
       data-testid="hq-contracts-rail"
     />
+  ) : (
+    <WorkerRail workspace="Contracts" role="admin" stance="Agreements + library"
+      note="Browse agreements and the template library." data-testid="admin-contracts-rail" />
   );
 
   return (
@@ -595,17 +602,16 @@ export default function HqContractsPage() {
       <div className="space-y-5">
         <header>
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-            <FileText size={13} /> HQ · Contracts
+            <FileText size={13} /> {canPublish ? 'HQ' : 'Admin'} · Contracts
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Contracts</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            The doc-type registry names what a contract may be; the template library below holds versioned bodies
-            tenants instantiate. Cross-tenant oversight: <Unrecorded /> — no contract row names the subsidiary it
-            belongs to (U1).
+            Manage agreements and browse versioned contract templates.
           </p>
         </header>
 
-        <section className="rounded-xl border border-axal-hairline bg-white p-4 dark:bg-gray-900">
+        {new URLSearchParams(search).get('moved') === 'legal' && <p role="status">{CONTRACTS_MOVED_NOTICE}</p>}
+        {canPublish && <section className="rounded-xl border border-axal-hairline bg-white p-4 dark:bg-gray-900">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="text-[14.5px] font-extrabold tracking-tight">Doc-type registry</h2>
             <button
@@ -618,14 +624,14 @@ export default function HqContractsPage() {
             </button>
           </div>
           <DocTypeRegistry data={registry} onRetry={loadRegistry} canPublish={canPublish} />
-        </section>
+        </section>}
 
         <section>
           <h2 className="mb-2 text-[14.5px] font-extrabold tracking-tight">Master template library</h2>
           <LegalPanel />
         </section>
       </div>
-      <RegistryEditorModal open={editorOpen} onClose={() => setEditorOpen(false)} onSaved={loadRegistry} />
+      {canPublish && <RegistryEditorModal open={editorOpen} onClose={() => setEditorOpen(false)} onSaved={loadRegistry} />}
     </RailFrame>
   );
 }

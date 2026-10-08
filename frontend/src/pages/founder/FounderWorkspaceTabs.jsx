@@ -45,8 +45,14 @@ import { hasTier } from '../../sidebarConfig';
  *   open it, so the row is never a bounce.
  */
 
+// WHERE THIS BAR STILL DRAWS (#1447). The canvas zone pages — /validate/*,
+// /build/this-week and the other Build sections, /raise/status … /raise/liquidity,
+// /grow/* and /research/* — each draw their own section row, so none of them
+// is wrapped in this bar. It is drawn only on the older editor pages those
+// zones hand off to (`?mode=workspace`, /execution, /raise/legal-engine,
+// /build/metrics, /comarketing, …), which have no section row of their own.
 const SETS = {
-  // Canvas has no Validate page, so these are the three rows the group held.
+  // The editors behind Validate's stage pages (/validate/interviews, …).
   validate: [
     { to: '/build/discovery', label: 'Discovery', icon: MessageSquare,
       roles: ['admin', 'founder', 'partner', 'investor'] },
@@ -55,8 +61,8 @@ const SETS = {
     { to: '/advisory', label: 'Advisory', icon: Brain,
       roles: ['admin', 'founder'] },
   ],
-  // Canvas zones: This week · Board · Roadmap · Cadence · KPI entry.
-  // This week + Board are ExecutionPage; Cadence has no route outside the Lab.
+  // Canvas zones: This week · Board · Roadmap · Cadence · KPI entry, each its
+  // own page now. These are the editors behind them.
   build: [
     { to: '/execution', label: 'Execution', icon: Briefcase,
       roles: ['admin', 'founder'] },
@@ -71,8 +77,9 @@ const SETS = {
     { to: '/build/metrics', label: 'Metrics', icon: TrendingUp,
       roles: ['admin', 'founder', 'partner', 'investor'] },
   ],
-  // Canvas zones: Status · Pitch · Capital · Legal · Data room · Liquidity.
-  // Status has no route; the other five are all here.
+  // Canvas zones: Status · Pitch · Capital · Legal · Data room · Liquidity, each
+  // its own page at /raise/<zone>. These are the editors behind five of them;
+  // Status is a read with no editor.
   raise: [
     { to: '/raise/pitch', label: 'Pitch', icon: Sparkles,
       roles: ['admin', 'founder'] },
@@ -88,9 +95,9 @@ const SETS = {
       roles: ['admin', 'founder', 'partner', 'investor'], requiredTier: 'studio' },
   ],
   // Canvas zones: Focus · Talent · Customers · Partnerships · Capital match ·
-  // Brand · Launch. Only Talent, Brand and Launch have routes today; Perks and
-  // Network effects are not canvas zones but are real surfaces that lost their
-  // rows here, so they keep a door.
+  // Brand · Launch, each its own page at /grow/<zone>. These are the editors
+  // behind them; Perks and Network effects are not canvas zones but are real
+  // surfaces that lost their rows here, so they keep a door.
   grow: [
     { to: '/build/team', label: 'Talent', icon: Users,
       roles: ['admin', 'founder'] },
@@ -103,9 +110,9 @@ const SETS = {
     { to: '/network-effects', label: 'Network effects', icon: Network,
       roles: ['admin', 'founder', 'partner', 'investor'] },
   ],
-  // Canvas zones: Ask · Markets · Companies · Funds · Library. Only Markets has
-  // a route; Signals is the founder's other backed research surface and had no
-  // door left. The four unbacked tabs withdrawn in task #172 stay withdrawn.
+  // Canvas zones: Ask · Markets · Companies · Funds · Library, each its own page
+  // at /research/<zone>. Market intel and Signals are the older editors behind
+  // them.
   research: [
     { to: '/market-intel', label: 'Market', icon: Globe,
       roles: ['admin', 'founder', 'partner', 'investor'], labOnlyFor: ['founder'] },

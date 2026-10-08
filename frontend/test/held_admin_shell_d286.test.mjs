@@ -80,7 +80,7 @@ test('the eight rows are S20\'s, in S20\'s order, one group, each an /admin cons
     '/admin/held/approvals',
     '/admin/held/programs',
     '/admin/held/community',
-    '/admin?tab=legal',
+    '/admin/contracts',
     '/admin/held/insights',
     '/admin/my-licence',
   ]);
@@ -264,7 +264,7 @@ test('the three false labels are not rendered, and no gate was narrowed or raise
     assert.doesNotMatch(CODE[file], /read-only/i, `${file} says read-only`);
   }
   for (const r of rows) assert.doesNotMatch(r.label, /read-only/i, `${r.label} says read-only`);
-  assert.equal(rows.find((r) => r.label === 'Contracts').to, '/admin?tab=legal');
+  assert.equal(rows.find((r) => r.label === 'Contracts').to, '/admin/contracts');
   // The gates this item touches nothing of.
   for (const path of ['/admin/assessment', '/admin', '/monitoring', '/admin/articles', '/admin/publications', '/admin/team']) {
     const line = routeLine(path);

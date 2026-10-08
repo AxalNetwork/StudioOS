@@ -1,3 +1,4 @@
+import LegacyContractsRedirect from './pages/admin/LegacyContractsRedirect';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
@@ -2583,7 +2584,7 @@ function AppInner() {
           PDF / PPTX exports. Not auth-guarded; the token is signed and
           short-lived. */}
       <Route path="/deck/print-export/:token" element={<PitchDeckPrintPage exportMode />} />
-      <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin" element={guard(['admin'], <LegacyContractsRedirect><AdminPage onImpersonate={handleImpersonate} /></LegacyContractsRedirect>)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferralReview />)} />
       {/* D569 — every read on it is `requireAdmin` and answers on either tier,
@@ -2651,7 +2652,7 @@ function AppInner() {
       {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}
-      <Route path="/admin/contracts" element={guard(['admin'], hqOnly(<HqContractsPage />))} />
+      <Route path="/admin/contracts" element={guard(['admin'], <HqContractsPage />)} />
       <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
       {/* D633 (#1391, Q2) — one member's credits; the Team directory's drawer is its door. */}
       <Route path="/admin/accounts/credits/:userId" element={guard(['admin'], hqOnly(<MemberCreditsPage />))} />

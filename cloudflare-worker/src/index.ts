@@ -155,6 +155,7 @@ import decks from './routes/decks';
 import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
 import research from './routes/research';
+import usage from './routes/usage';
 import researchOverview from './routes/research_overview';
 import researchMarkets from './routes/research_markets';
 import researchSectors from './routes/research_sectors';
@@ -1038,6 +1039,8 @@ app.route('/api/research/overview', researchOverview);
 app.route('/api/research', researchMarkets);
 app.route('/api/research', researchSectors);
 app.route('/api/research', research);
+// D642 — usage is keyed on the caller, across all their companies.
+app.route('/api/usage', usage);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;

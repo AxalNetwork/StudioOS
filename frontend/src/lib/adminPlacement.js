@@ -101,8 +101,8 @@ export const ADMIN_PLACEMENT = [
   tab('kyc', 'KYC Queue', admin('Approvals', 'lane'),
     { how: 'A lane. HQ · Team carries a card link to it.', also: [hq('Team', 'card link')] }),
   tab('lab-applications', 'Spin-Out Lab', admin('Programs', 'embedded'), { how: 'Embedded panel.' }),
-  tab('legal', 'Legal', hq('Contracts', 'embedded'),
-    { how: 'Already embedded on HQ · Contracts; embedded on Admin · Contracts.', also: [admin('Contracts', 'embedded')] }),
+  tab('legal', 'Contracts', hq('Contracts', 'embedded'),
+    { route: '/admin/contracts', how: 'One Contracts page in both shells; the legacy Legal link redirects here.', also: [admin('Contracts', 'embedded')] }),
   tab('personas', 'Personas', hq('Content', 'sub-nav'),
     { how: 'Sub-navigation item (the taxonomy). Retagging one person lives on Admin · Accounts.', also: [admin('Accounts', 'card link')] }),
   tab('directory', 'Directory', admin('Approvals', 'lane'), { how: 'A lane.' }),
@@ -177,6 +177,11 @@ export const WORKSPACES = ADMIN_PLACEMENT
  *   'lab'   — a Spin-Out Lab page: the row's `match` lists it and the Lab's
  *             own arsenal (`lib/spinoutLabArsenal.js`) links it.
  *
+ * An optional fourth element, `{ label, description }`, is what that profile
+ * calls the page in its "Also in" list. The palette entry's label is the
+ * ADMIN name ("Co-Marketing Review"); a founder's Grow row lists the page
+ * under the name the page itself carries for them (#1447).
+ *
  * Only roles the page's route guard admits are named, and a page has at most
  * one home per role, which is the sidebar's own rule ("items must not appear
  * in more than one group within a role"). `frontend/test/
@@ -212,7 +217,10 @@ export const PAGE_HOMES = {
   '/needs': [['partner', 'Pipeline', 'also']],
   '/partner/insights': [['partner', 'Pipeline', 'also']],
   '/partner/office-hours': [['partner', 'Offers', 'also']],
-  '/comarketing': [['partner', 'Offers', 'also'], ['founder', 'Grow', 'also']],
+  '/comarketing': [['partner', 'Offers', 'also'], ['founder', 'Grow', 'also', {
+    label: 'Co-marketing',
+    description: 'Pitch a webinar, post or podcast with a partner, and see what it brought in.',
+  }]],
   '/incorporate/cofounder-agreement': [['founder', 'Raise', 'also']],
   '/spinout-lab/83b': [['founder', 'Spin-Out Lab', 'lab']],
   '/perks': [['founder', 'Grow', 'also']],
@@ -220,8 +228,11 @@ export const PAGE_HOMES = {
 
 /** The pages a profile row's overview lists under "Also in", in map order. */
 export function alsoInFor(role, row) {
-  return WORKSPACES.filter((w) => (PAGE_HOMES[w.route] || [])
-    .some(([r, label, door]) => r === role && label === row && door === 'also'));
+  return WORKSPACES.flatMap((w) => {
+    const home = (PAGE_HOMES[w.route] || [])
+      .find(([r, label, door]) => r === role && label === row && door === 'also');
+    return home ? [{ ...w, ...(home[3] || {}) }] : [];
+  });
 }
 
 // Legacy entries with no placement of their own, each with its reason. The
