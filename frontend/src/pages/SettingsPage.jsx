@@ -24,6 +24,7 @@ import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import FollowingSection from './account/AccountFollowing';
+import UsageSection from './account/AccountUsage';
 import DeveloperSection from './account/AccountDeveloper';
 import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
@@ -223,6 +224,8 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications' },
   { id: 'security-privacy', label: 'Sign-in and security' },
   { id: 'billing', label: 'Billing and orders' },
+  // D642 (#1435) — Usage, after Billing and orders, as the Usage canvas draws it.
+  { id: 'usage', label: 'Usage' },
   { id: 'following', label: 'Following' },
   // `GET /settings/developer` answers 403 to every role but admin.
   { id: 'developer', label: 'Developer', roles: ['admin'] },
@@ -253,6 +256,7 @@ const PATH_TO_SECTION = {
   // which the nav could open but a reload of its URL could not.
   following: 'following',
   developer: 'developer',
+  usage: 'usage',
   'sign-in': 'security-privacy',
   orders: 'billing',
   activity: 'activity',
@@ -493,6 +497,7 @@ export default function SettingsPage() {
             </>
           )}
           {safeActive === 'following' && <FollowingSection />}
+          {safeActive === 'usage' && <UsageSection role={role} />}
           {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab />}

@@ -37,7 +37,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |
-| `account/` | The Account center's sections (D568), mounted by `SettingsPage.jsx`, which is still `/account`: the section list and shared kit in `AccountCenter.jsx`, one file per canvas section, and the pure helpers in `accountCenterModel.js`. Keep it under eight files or document it in `scripts/check-folder-docs.mjs`. |
+| `account/` | The Account center's sections (D568), mounted by `SettingsPage.jsx`, which is still `/account`: the section list and shared kit in `AccountCenter.jsx`, one file per canvas section, and the pure helpers in `accountCenterModel.js` and `usageModel.js`. Documented in `scripts/check-folder-docs.mjs` and in its own README. |
 
 ## Rules
 

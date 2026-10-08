@@ -252,6 +252,8 @@ const HqDisputePage = lazy(() => import('./pages/hq/DisputePage'));
 const HqContentPage = lazy(() => import('./pages/hq/ContentPage'));
 const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
 const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
+// D642 (#1435) — U7, each plan's AI allowance and the runs held for a check.
+const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowancesPage'));
 const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
 const HqAnalyticsPage = lazy(() => import('./pages/hq/HqAnalyticsPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
@@ -701,6 +703,11 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Account
           </Link>
+          {/* D642 (#1435) — the member's own usage, right under Account. */}
+          <Link to="/account/usage" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Usage
+          </Link>
           <Link to="/trust" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Trust Center
@@ -1035,6 +1042,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform">Overview</StripLink>
           <StripLink to="/admin/platform/switches">Switches</StripLink>
           <StripLink to="/admin/platform/topology">Topology</StripLink>
+          <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
           <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
           <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
           <StripLink to="/admin?tab=payments">Payments</StripLink>
@@ -2674,6 +2682,7 @@ function AppInner() {
           zone by a literal link, which the reachability walk counts. */}
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
+      <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/hq/review" element={guard(['admin'], hqOnly(<ReviewQueuePage />))} />
       {/* D638 (#1384, #1412) — the one page for the reward rules and grants, Super Admin only.

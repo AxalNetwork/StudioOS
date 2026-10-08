@@ -52,6 +52,8 @@ const PLATFORM = [
   ['Integration keys', '/admin?tab=integration-keys'], ['GitHub Sync', '/admin?tab=github'], ['Payments', '/admin?tab=payments'],
   ['Promo codes', '/admin?tab=promos'], ['Monitoring', '/monitoring'], ['Telegram', '/admin/telegram'],
 ];
+// D642 (#1435) — U7's page joins the Platform row after Topology, so it lights that row.
+PLATFORM.splice(3, 0, ['AI allowances', '/admin/platform/allowances']);
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
   ['Assessment Studio', '/admin/assessment'], ['Personas', '/admin?tab=personas'],

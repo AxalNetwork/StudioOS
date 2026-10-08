@@ -1,8 +1,7 @@
 /**
- * D642 (#1435) — the storage read's records. D642 deferred them while other
- * PRs held the routes README and ROUTE_MAP; this pins them now that those
- * files are free, so the mounted `/api/usage` read is never undocumented and
- * the two screens are not recorded as built before their canvas lands.
+ * D642 (#1435) — the storage read's records, and the two screens'. The
+ * mounted `/api/usage` read is never undocumented, and ROUTE_MAP names the
+ * component that draws each Usage screen.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/usage_records_d642.test.mjs
  */
@@ -46,12 +45,13 @@ test('ROUTE_MAP records the storage read with every area key', () => {
   const [prose, table = ''] = section.split('| Canvas |');
   assert.match(prose, /`GET \/api\/usage\/storage` \(`usage\.ts`/);
   for (const key of AREA_KEYS) assert.ok(prose.includes(`\`${key}\``), `ROUTE_MAP does not name ${key}`);
-  assert.match(table, /\| `\/account\/usage` \|[^\n]*`GET \/api\/usage\/storage`/);
+  assert.match(table, /\| `\/account\/usage` [^\n]*`GET \/api\/usage\/storage`/);
 });
 
-test('ROUTE_MAP marks both screens NEW until their canvas is committed', () => {
+test('ROUTE_MAP marks both screens CURRENT, naming the component that draws each', () => {
   const section = d642Section();
   assert.ok(section, 'the D642 section is missing');
-  assert.match(section, /\| `\/account\/usage` \|[^\n]*\| NEW \|/);
-  assert.match(section, /\| `\/admin\/platform\/allowances` \|[^\n]*\| NEW \|/);
+  assert.match(section, /\| `\/account\/usage` \([^\n]*\| `pages\/account\/AccountUsage\.jsx`[^\n]*\| CURRENT \|/);
+  assert.match(section, /\| `\/admin\/platform\/allowances` ·[^\n]*\| `pages\/hq\/PlatformAllowancesPage\.jsx`[^\n]*\| CURRENT \|/);
+  assert.doesNotMatch(section, /\| NEW \|/, 'no screen is left recorded as unbuilt');
 });
