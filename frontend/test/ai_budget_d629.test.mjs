@@ -22,10 +22,13 @@ test('an explicitly zero allowance and zero balance remain recorded zeros with n
  assert.match(html,/Today · \$0\.00 of \$0\.00/);assert.match(html,/Top-up balance · \$0\.00/);
  assert.doesNotMatch(html,/width:|NaN|Infinity|Unreadable/);
 });
+// D642 (#1435) — the card's one link opens the Usage page; what these tests
+// forbid is a CHECKOUT action, so they name the checkout href.
 test('unconfigured top-up never shows a checkout action; known allowance is retained',()=>{
  const html=render({product:{configured:false,product:null}});
  assert.match(html,/Top-up not configured/);assert.match(html,/\$1\.234567/);
- assert.doesNotMatch(html,/Add tokens|href=|Unreadable/);
+ assert.doesNotMatch(html,/Add tokens|href="\/checkout|Unreadable/);
+ assert.match(html,/href="\/account\/usage"[^>]*>See usage</,'the compact card links to the Usage page');
 });
 test('loading hides all stale budget, balance and checkout figures',()=>{
  const html=render({loading:true});assert.match(html,/Loading AI allowance/);assert.match(html,/aria-busy="true"/);
@@ -37,8 +40,8 @@ test('failed or malformed budget reads are Unreadable with retry and no guessed 
  }
 });
 test('product read failure is independent: show known allowance/balance, no checkout action',()=>{
-  const html=render({product:null,productError:true});assert.match(html,/Unreadable/);assert.match(html,/\$9\.876543/);assert.doesNotMatch(html,/Add tokens|href=/);
-  assert.doesNotMatch(render({productError:true}),/Add tokens|href=/);
+  const html=render({product:null,productError:true});assert.match(html,/Unreadable/);assert.match(html,/\$9\.876543/);assert.doesNotMatch(html,/Add tokens|href="\/checkout/);
+  assert.doesNotMatch(render({productError:true}),/Add tokens|href="\/checkout/);
 });
 test('holds remain labelled as reservations, separate from recorded spend and available balance',()=>{
  const html=render({budget:{...budget,day_reserved_microusd:100000,month_reserved_microusd:100000,topup_reserved_microusd:250000}});

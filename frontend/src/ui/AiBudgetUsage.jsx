@@ -17,6 +17,8 @@ export function AiBudgetUsage({reading}) {
   const held=b.day_reserved_microusd+b.month_reserved_microusd+b.topup_reserved_microusd>0;
   return <div className="space-y-2 text-xs text-gray-700 dark:text-gray-300" data-testid="ai-budget-usage">
     <p className="font-semibold">Included allowance · {b.licence.replace(':',' / ')}</p>
+    {/* D642 (#1435) — the compact card opens the full Usage page. */}
+    <a href="/account/usage" className="inline-block underline text-violet-700 dark:text-violet-300" data-testid="ai-budget-usage-link">See usage</a>
     <p>Today · {money(b.day_spend_microusd)} of {money(b.daily_microusd)}</p>
     <p>This month · {money(b.month_spend_microusd)} of {money(b.monthly_microusd)}</p>
     {b.monthly_microusd>0 && <div className="h-1 rounded-full bg-gray-200 dark:bg-gray-700" role="presentation">

@@ -26,12 +26,14 @@ The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/a
 
 ### Usage page and HQ allowances (D642, #1435)
 
-`GET /api/usage/storage` (`usage.ts`, `services/storageUsage.ts`) is mounted. It reads the caller's own stored files across all their companies, whatever company the sidebar has selected. It returns `{ total_bytes, files, unknown_size_files, areas }`, one area per store: `data_room`, `diligence_files`, `research_library`, `message_attachments` and `interview_recordings` (a recording counts toward the member who owns its project). A NULL size counts as unknown, never as 0 bytes; a failed read marks only that area `recorded: false`. With D640 (`ai_budget.ts`) and D641 (`ai.ts`: `by_model`, `days`, task labels, `GET /ai/rates`), every read the two screens need is on `main`. The screens themselves wait on the U1–U7 canvas (#1430), which is not yet under `design/`, so no frontend method calls these reads yet.
+`GET /api/usage/storage` (`usage.ts`, `services/storageUsage.ts`) reads the caller's own stored files across all their companies, whatever company the sidebar has selected. It returns `{ total_bytes, files, unknown_size_files, areas }`, with one area per store: `data_room`, `diligence_files`, `research_library`, `message_attachments` and `interview_recordings`. A recording counts toward the member who owns its project. A NULL size counts as unknown, never as 0 bytes, and a failed read marks only that area `recorded: false`.
+
+Both screens are built to the Usage canvas (`Ops · Boards.dc.html`, set `usage`; `us-*` and `hq-allowances` in `Ops Page.dc.html` and `ops-data.js`, committed by #1456). Their figures come from D640 (`ai_budget.ts`), D641 (`ai.ts`: `by_model`, `days`, task labels, `GET /ai/rates`) and the storage read above, never from the canvas's bracketed placeholders.
 
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
-| #1430 U1–U6 (pending) | `/account/usage` | — (no page yet); `GET /api/ai-budget/me`, `GET /api/ai-budget/top-up`, `GET /api/ai/me/spend`, `GET /api/ai/rates`, `GET /api/usage/storage` | NEW |
-| #1430 U7 (pending) | `/admin/platform/allowances` | — (no page yet); `GET /api/ai-budget/caps`, `PUT /api/ai-budget/caps/:licence`, `GET /api/ai-budget/reviews`, `POST /api/ai-budget/reviews/:uid/charge\|refund` | NEW |
+| `integrated/ops-data.js` · `us-allowance`, `us-days`, `us-where`, `us-models`, `us-receipt`, `us-storage` (U1–U6) | `/account/usage` (`#days`, `#where`, `#models`, `#last-run`, `#storage`) · every signed-in role; "Usage" in the user menu, under Account | `pages/account/AccountUsage.jsx` (in `SettingsPage.jsx`, after Billing and orders); `GET /api/ai-budget/me`, `GET /api/ai-budget/top-up`, `GET /api/ai/me/spend`, `GET /api/ai/rates`, `GET /api/usage/storage` | CURRENT |
+| `integrated/ops-data.js` · `hq-allowances` (U7) | `/admin/platform/allowances` · Super Admin; on the Platform strip, linked from Platform | `pages/hq/PlatformAllowancesPage.jsx`; `GET /api/ai-budget/caps`, `PUT /api/ai-budget/caps/:licence`, `GET /api/ai-budget/reviews`, `POST /api/ai-budget/reviews/:uid/charge\|refund` | CURRENT |
 
 D631 (#1389), Ops area 6:
 

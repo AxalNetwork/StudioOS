@@ -1349,6 +1349,18 @@ export default function PlatformPage() {
                   Throw or release the switches HQ owns, with a reason. Each change is recorded in the audit log.
                 </div>
               </Link>
+              {/* D642 (#1435) — the other HQ write on this row: each plan's AI
+                  allowance, and the runs held for a check. A literal `to`. */}
+              <Link
+                to="/admin/platform/allowances"
+                className="mt-2 block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700"
+                data-testid="hq-platform-allowances-link"
+              >
+                <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">AI allowances</div>
+                <div className="mt-0.5 text-[11px] leading-relaxed text-axal-faint">
+                  Each plan's daily and monthly AI allowance, and the runs held for a check. Every change is recorded.
+                </div>
+              </Link>
             </Zone>
           </div>
         </div>

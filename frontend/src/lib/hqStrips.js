@@ -2,7 +2,7 @@
  * The H36 sub-navigation strips, and which HQ row a location lights (D285).
  *
  * Two rows of the HQ shell hold consoles the old Admin Console still renders:
- * Platform (nine items) and Content (seven). H36 draws each as a strip that
+ * Platform (ten items) and Content (seven). H36 draws each as a strip that
  * stays visible after the item lands in the old console, with the row still
  * lit. The strips below are H36's order, verbatim; the H35 map (D283) is what
  * they are held to — every legacy console placed as a sub-navigation item on
@@ -27,6 +27,7 @@ export const HQ_STRIPS = {
     ['Overview', '/admin/platform'],
     ['Switches', '/admin/platform/switches'],
     ['Topology', '/admin/platform/topology'],
+    ['AI allowances', '/admin/platform/allowances'],
     ['Integration keys', '/admin?tab=integration-keys'],
     ['GitHub Sync', '/admin?tab=github'],
     ['Payments', '/admin?tab=payments'],

@@ -567,15 +567,16 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   const page = read('frontend/src/pages/SettingsPage.jsx');
   const block = page.slice(page.indexOf('const SECTIONS = ['), page.indexOf('];', page.indexOf('const SECTIONS = [')));
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(labels.slice(0, 6), ['Profile and identity', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Following', 'Developer']);
+  // D642 (#1435) — the Usage canvas's acNav puts Usage after Billing and orders.
+  assert.deepEqual(labels.slice(0, 7), ['Profile and identity', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Following', 'Developer']);
   assert.match(block, /\{ id: 'developer', label: 'Developer', roles: \['admin'\] \}/);
   for (const id of ['onboarding', 'integrations', 'appearance', 'activity']) {
     assert.match(block, new RegExp(`\\{ id: '${id}', label: '[^']+', group: 'more' \\}`), `${id} is kept, under More`);
   }
-  for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity']]) {
+  for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage']]) {
     assert.match(page, new RegExp(`\\n  ${path.replace(/[-']/g, (c) => (c === '-' ? '\\-' : "'"))}: '${id}',`), `${path} resolves to ${id}`);
   }
-  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<DeveloperSection role={data.role} />']) {
+  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<DeveloperSection role={data.role} />']) {
     assert.ok(page.includes(mount), `${mount} is mounted`);
   }
   assert.match(page, /<ProfileTabs key=\{profileRev\}/, 'the editors below the profile cards remount after a card saves');
