@@ -9,7 +9,7 @@ import { useEscapeClose } from '../../../components/useEscapeClose';
 import { Unreadable } from '../../../ui';
 import AdminTemplates from '../AdminTemplates';
 import AdminForms from '../AdminForms';
-import { Field, fmtDate } from './shared';
+import { Field, fmtDate, ConsoleUnreadable } from './shared';
 
 /**
  * D648 (#1448) — the Legal console, as it was in `pages/AdminPage.jsx`.
@@ -66,6 +66,7 @@ const PARTY_ROLE_OPTIONS = [
 export function LegalPanel() {
   const [stats, setStats] = useState(null);
   const [items, setItems] = useState([]);
+  const [listUnreadable, setListUnreadable] = useState(false);
   const [pairwise, setPairwise] = useState([]);
   const [pairwiseUnreadable, setPairwiseUnreadable] = useState(false);
   const [partnerDeals, setPartnerDeals] = useState([]);
@@ -101,6 +102,7 @@ export function LegalPanel() {
       ]);
       setStats(s);
       setItems(list?.items || []);
+      setListUnreadable(false);
       setPairwiseUnreadable(false);
       setPartnerDealsUnreadable(false);
       if (sub === 'pairwise') {
@@ -112,6 +114,7 @@ export function LegalPanel() {
       }
     } catch (e) {
       reportError('AdminPage:loadContracts', e);
+      if (isListSub) setListUnreadable(true);
       if (sub === 'pairwise') {
         setPairwise([]);
         setPairwiseUnreadable(true);
@@ -226,6 +229,8 @@ export function LegalPanel() {
 
       {loading ? (
         <div className="text-center text-gray-500 py-12 text-sm">Loading…</div>
+      ) : isListSub && listUnreadable ? (
+        <ConsoleUnreadable what="The agreements" onRetry={reload} />
       ) : sub === 'templates' ? (
         <AdminTemplates onOpenUsage={(docType, fallback) => setOpenTplUsage({ docType, fallback })} />
       ) : sub === 'pairwise' ? (
