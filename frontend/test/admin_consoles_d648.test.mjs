@@ -118,6 +118,14 @@ async function mount(element, search = '') {
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   return {
     text: () => textOf(container),
+    async click(label) {
+      const walk = (node) => [node, ...(node.childNodes || []).flatMap(walk)];
+      const button = walk(container).find((node) => node.tagName === 'BUTTON' && textOf(node).trim() === label);
+      assert.ok(button, `No button: ${label}`);
+      const props = Object.entries(button).find(([key]) => key.startsWith('__reactProps$'))?.[1];
+      assert.equal(typeof props?.onClick, 'function');
+      await act(async () => { props.onClick(); });
+    },
     async unmount() { await act(async () => root.unmount()); restoreDoc(); },
   };
 }
@@ -127,6 +135,9 @@ const UNREADABLE = /could not be read\. This is not a sign that there are none\.
 
 /** Each console: its reads, what an empty answer is, and what it then says. */
 const CONSOLES = [
+  { name: 'Contracts', el: () => React.createElement(LegalPanel), reads: ['adminContractStats', 'adminListContracts'],
+    empty: { adminContractStats: async () => ({ total: 0, by_type: [] }), adminListContracts: async () => ({ items: [], total: 0 }) },
+    says: /No contracts found/, loading: /Loading…/ },
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
     empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading admin console\.\.\./ },
   { name: 'Partner Profiles', el: () => React.createElement(PartnerProfilesConsole), reads: ['adminListProfiles'],
@@ -290,4 +301,25 @@ test('D647: Contracts imports the extracted console without the Admin Console mo
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/ContractsPage.jsx'), 'utf8');
   assert.match(page, /import \{ LegalPanel \} from '\.\.\/admin\/consoles\/LegalConsole'/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
+});
+
+
+test('D647: retrying an unreadable agreement list loads again and clears the failed state', async () => {
+  let calls = 0;
+  let finish;
+  stubApi({
+    adminContractStats: async () => ({ total: 0, by_type: [] }),
+    adminListContracts: () => ++calls === 1 ? fail() : new Promise((resolve) => { finish = resolve; }),
+  });
+  const v = await mount(React.createElement(LegalPanel));
+  try {
+    assert.match(v.text(), UNREADABLE);
+    await v.click('Try again');
+    assert.equal(calls, 2);
+    assert.match(v.text(), /Loading…/);
+    assert.doesNotMatch(v.text(), /could not be read|No contracts found/);
+    await act(async () => { finish({ items: [], total: 0 }); });
+    assert.match(v.text(), /No contracts found/);
+    assert.doesNotMatch(v.text(), /could not be read|Loading…/);
+  } finally { await v.unmount(); restoreApi(); }
 });

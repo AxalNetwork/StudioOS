@@ -42,3 +42,5 @@ D647 (#1441): Legal no longer has a dead Incorporation tab. Its quiet Programs
 link opens Spin-Out Lab, where the admin selects Formation orders. Empty
 agreement/template-usage copy names New envelope. The pending Contracts canvas
 will replace this reused panel; no per-template publication state is implied.
+A failed agreement-list read draws the existing ConsoleUnreadable with Try
+again; a successful retry clears the failure and can show a real empty list.
