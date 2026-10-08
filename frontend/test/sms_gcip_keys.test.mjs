@@ -7,11 +7,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 test('Admin Integration Keys lists Google Identity (SMS)', () => {
-  const src = readFileSync(resolve(root, 'frontend/src/pages/AdminPage.jsx'), 'utf8');
+  const src = adminConsoleSource();
   assert.match(src, /gcip:\s*'Google Identity \(SMS\)'/);
   assert.match(src, /gcip:\s*\['GCIP_PROJECT_ID',\s*'GCIP_API_KEY'\]/);
 });

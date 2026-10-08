@@ -25,6 +25,7 @@ import {
 } from '../src/components/hqReview/hqReviewCopy.js';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(`../src/${rel}`, import.meta.url)), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -163,7 +164,7 @@ test('Q6: the KYC window masks date of birth, ID number, address and phone, says
   assert.equal((markup.match(/data-testid="hq-sensitive-show"/g) || []).length, 3);
   assert.equal(SENSITIVE.line, 'Sensitive fields are masked by default. Each showing is logged with your name and the time.');
   // The window draws the masks and calls the logged route; the clear values are gone from it.
-  const admin = codeOnly(read('pages/AdminPage.jsx'));
+  const admin = codeOnly(adminConsoleSource());
   assert.match(admin, /<KycSensitiveFields\s*masked=\{kycDetail\.kyc_data\.masked\}\s*onShow=\{\(field\) => api\.kycAdminShowField\(kycDetail\.id, field\)\}/);
   assert.doesNotMatch(admin, /kyc_data\.(date_of_birth|id_number|phone|address_line1)/);
   assert.match(admin, /onShow=\{\(\) => api\.adminShowProfileField\(profile\.email, 'ein'\)\}/);

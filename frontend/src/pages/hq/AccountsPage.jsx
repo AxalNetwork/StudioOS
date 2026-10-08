@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Users } from 'lucide-react';
-import AdminPage from '../AdminPage';
+import UsersConsole from '../admin/consoles/UsersConsole';
 import SuperAdminHolders from './SuperAdminHolders';
 import HqTeamTable from './HqTeamTable';
 import HqTeamActions from './HqTeamActions';
@@ -118,7 +118,7 @@ export default function HqAccountsPage({ onImpersonate }) {
               read the same word on every line. A branch&rsquo;s accounts live on its own database and are
               asked for through the Team search above.
             </p>
-            <AdminPage onImpersonate={onImpersonate} section="users" />
+            <UsersConsole onImpersonate={onImpersonate} />
           </>
         )}
       </div>

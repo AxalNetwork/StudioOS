@@ -40,12 +40,13 @@ import { HQ_STRIPS, ADMIN_ROW_ROUTE, NO_ROW, adminRowFor } from '../src/lib/hqSt
 import { shellRoleFor } from '../src/lib/shellRole.js';
 import { ACCENT } from '../src/workspaces/shellConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = read('frontend/src/App.jsx');
 const SIDEBAR_NAV = codeOnly(read('frontend/src/ui/SidebarNav.jsx'));
-const ADMIN_PAGE = read('frontend/src/pages/AdminPage.jsx');
+const ADMIN_PAGE = adminConsoleSource();
 const SIDEBAR_SRC = read('frontend/src/sidebarConfig.js');
 
 const LANDINGS = {
