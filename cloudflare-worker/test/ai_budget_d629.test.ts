@@ -275,11 +275,13 @@ test('router charges its real estimated cost, releases failed models, preserves 
   assert.equal(calls,1);
  }finally{f.db.close();}
 });
-test('provider overage preserves a review hold and refuses subsequent reads instead of silently undercharging',async()=>{
+test('provider overage preserves a review hold and reports it without silently undercharging',async()=>{
  const f=fixture();try{
   const r=await reserveAiBudget(f.env,2,100,now);if(!r.ok)throw Error('reserve');
   await assert.rejects(()=>settleAiReservation(f.env,r.reservation,101),/exceeds/);
-  await assert.rejects(()=>loadAiBudget(f.env,2,new Date('2026-10-08')),/unreadable/);
+  const report=await loadAiBudget(f.env,2,new Date('2026-10-08'));
+  assert.deepEqual(report.held_for_review.map((hold:any)=>({uid:hold.uid,held_microusd:hold.held_microusd,recorded_cost_microusd:hold.recorded_cost_microusd})),
+   [{uid:r.reservation.uid,held_microusd:100,recorded_cost_microusd:101}]);
   assert.equal(f.db.prepare('SELECT status FROM ai_budget_reservations').get().status,'review');
  }finally{f.db.close();}
 });

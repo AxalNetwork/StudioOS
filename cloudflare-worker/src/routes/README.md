@@ -41,6 +41,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin         → admin.ts
 /api/private-data  → private-data.ts
 /api/monitoring    → monitoring.ts
+/api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/liquidity     → liquidity.ts

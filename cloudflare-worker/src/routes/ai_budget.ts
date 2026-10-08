@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireSuperAdmin } from '../auth';
-import { AI_LICENCE_KEYS, loadAiBudget, usdToMicro } from '../services/aiBudget';
+import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
+  listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, usdToMicro } from '../services/aiBudget';
 import { readAiTopupProduct } from '../services/aiTopups';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
@@ -21,6 +22,29 @@ r.get('/top-up',async c=>{
   await requireAuth(c);
   try { return c.json(await readAiTopupProduct(c.env)); }
   catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error,audience:'member'}); }
+});
+r.get('/caps',async c=>{
+  await requireSuperAdmin(c);
+  try { return c.json({plans:await listAiLicenceCaps(c.env)}); }
+  catch(error) { return refuse(c,503,{code:'ai_caps_unreadable',message:'Unreadable: the AI plan allowances could not be read.',raw:error}); }
+});
+r.get('/reviews',async c=>{
+  await requireSuperAdmin(c);
+  try { return c.json({items:await listAiBudgetReviews(c.env)}); }
+  catch(error) { return refuse(c,503,{code:'ai_reviews_unreadable',message:'Unreadable: the held AI runs could not be read.',raw:error}); }
+});
+for (const action of ['charge','refund'] as const) r.post(`/reviews/:uid/${action}`,async c=>{
+  const actor=await requireSuperAdmin(c);
+  const body=await c.req.json().catch(()=>null);
+  const reason=body?.reason;
+  if (typeof reason!=='string' || reason.trim().length<10 || reason.length>2000)
+    return refuse(c,400,{code:'ai_review_reason_required',message:'Give a reason of at least 10 characters to settle this held run.'});
+  try { return c.json(await settleAiBudgetReview(c.env,c.req.param('uid'),action,actor.id,reason)); }
+  catch(error) {
+    if (error instanceof AiBudgetReviewNotFound) return refuse(c,404,{code:'ai_review_not_found',message:'This held AI run was not found.'});
+    if (error instanceof AiBudgetReviewConflict) return refuse(c,409,{code:'ai_review_not_pending',message:'This AI run is no longer held for review.'});
+    return refuse(c,503,{code:'ai_review_not_settled',message:'Unreadable: the held AI run could not be settled.',raw:error});
+  }
 });
 r.put('/caps/:licence',async c=>{
   const actor=await requireSuperAdmin(c);
