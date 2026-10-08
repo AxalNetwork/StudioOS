@@ -46,3 +46,5 @@ the first `)`.
   remote call, and runs the rate-limit middleware and the schema bootstrap
   against stubs whose promises never settle. Test a stall, not just a failure:
   the 30s sign-in outage of 2026-09-12 passed every existing test (D74).
+
+D642: `usage_storage_d642.test.ts` exercises caller-only storage aggregates through JWT/Hono and the canonical SQLite schema (including migration 323), covering company independence, unknown sizes, partial failures, precision and recording attribution.
