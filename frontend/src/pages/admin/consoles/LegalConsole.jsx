@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import React, { useEffect, useRef, useState } from 'react';
 import { reportError } from '../../../lib/log';
 import { api } from '../../../lib/api';
@@ -12,8 +13,8 @@ import { Field, fmtDate } from './shared';
 
 /**
  * D648 (#1448) — the Legal console, as it was in `pages/AdminPage.jsx`.
- * `pages/hq/ContractsPage.jsx` mounts `LegalPanel` alone (through the
- * re-export in `AdminPage.jsx`), and #1441 is rebuilding that page.
+ * `pages/hq/ContractsPage.jsx` imports `LegalPanel` directly; it does not
+ * load the Admin Console shell. #1441 is rebuilding that page.
  */
 
 // ===== Admin Contracts Management ======================================
@@ -71,7 +72,7 @@ export function LegalPanel() {
   const [partnerDealsUnreadable, setPartnerDealsUnreadable] = useState(false);
   const [partnerDealsNote, setPartnerDealsNote] = useState('');
   const [loading, setLoading] = useState(true);
-  const [sub, setSub] = useState('all'); // all | pending | signed | voided | pairwise | partner | templates | forms | incorporation
+  const [sub, setSub] = useState('all'); // all | pending | signed | voided | pairwise | partner | templates | forms
   const [q, setQ] = useState('');
   const [docType, setDocType] = useState('');
   const [providerFilter, setProviderFilter] = useState(''); // '' | 'native' | 'docusign'
@@ -167,7 +168,6 @@ export function LegalPanel() {
           ['partner',       'Partner Deals'],
           ['templates',     'Templates'],
           ['forms',         'Forms'],
-          ['incorporation', 'Incorporation'],
         ].map(([k, label]) => (
           <button key={k} data-testid={`legal-sub-${k}`} onClick={() => setSub(k)}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${sub === k ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300'}`}>
@@ -181,6 +181,10 @@ export function LegalPanel() {
           <RefreshCw size={12} /> Refresh
         </button>
       </div>
+
+      <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+        Formation orders are in <Link to="/admin/spinout-lab" className="text-violet-600 underline dark:text-violet-400">Programs › Spin-Out Lab</Link>. Open its Formation orders tab.
+      </p>
 
       {/* Filters (only on the contract-list sub-tabs) */}
       {isListSub && (
@@ -240,16 +244,12 @@ export function LegalPanel() {
         )
       ) : sub === 'forms' ? (
         <AdminForms />
-      ) : sub === 'incorporation' ? (
-        <div data-testid="legal-incorporation-placeholder" className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
-          Incorporation packets will appear here soon.
-        </div>
       ) : items.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           {sub === 'pending' && 'No contracts are currently awaiting signature. New sends will appear here within a few seconds.'}
           {sub === 'signed' && 'No signed contracts yet. Once a recipient completes signing, the contract will appear here with its signed-at timestamp.'}
           {sub === 'voided' && 'No voided contracts. When you void a sent contract its row appears here with the recorded reason.'}
-          {sub === 'all' && 'No contracts found. Send your first agreement from the Profiles tab to get started.'}
+          {sub === 'all' && 'No contracts found. Use New envelope to send an agreement.'}
           {sub !== 'pending' && sub !== 'signed' && sub !== 'voided' && sub !== 'all' && 'No contracts found for this filter.'}
         </div>
       ) : (
@@ -673,7 +673,7 @@ function ContractRow({ c, onOpen }) {
 // clickable and opens the existing ContractDetailModal so admins can
 // drill all the way through (resend / void / download / share-link)
 // without leaving the modal stack.
-function TemplateUsageModal({ docType, fallback, onClose }) {
+export function TemplateUsageModal({ docType, fallback, onClose }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
@@ -751,7 +751,7 @@ function TemplateUsageModal({ docType, fallback, onClose }) {
               <div className="bg-white border border-gray-200 rounded-xl p-6 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">Loading…</div>
             ) : items.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
-                This template hasn't been used yet. Send your first envelope from the Profiles tab.
+                This template hasn't been used yet. Use New envelope in Contracts to send an agreement.
               </div>
             ) : (
               <div className="overflow-x-auto border border-gray-200 rounded-xl dark:border-gray-800">

@@ -80,8 +80,6 @@ is a follow-up:
 
 - `integrations.py` — `/api/integrations/*` (used by `IntegrationsPage`
   webhook config). No worker file exists.
-- `admin_contracts.py` — `/api/admin/contracts/*` (used by the admin
-  contract-download UI in `frontend/src/lib/api.js`). No worker file exists.
 - `pipeline_votes.py` — `/api/pipeline/vote*`, `/api/pipeline/votes*` (used by
   the deal-card voting widget). The worker `pipeline.ts` only handles
   `/active`, `/projects/*`, `/ws/*` — voting endpoints are missing.
@@ -109,3 +107,12 @@ If you ever decide to revisit the FastAPI-canonical plan, you'll need to:
 4. Keep `realtime.ts` mounted at the edge (Durable Objects can't move).
 
 Until that work happens, treat the files in this folder as the live API.
+
+D647 (#1441): `admin_contracts.ts` is mounted at `/api/admin/contracts` in
+`index.ts`. It provides the four-source agreement union, validated bound
+filters/paging/search and null-last sorting, stats, recipient/deal pickers,
+template fields and existing template/actions/download reads. Union list/stats
+fail with 503 Unreadable rather than inventing empty sources. The separate
+`admin_contract_doc_registry.ts` mount at `/api/admin/contracts/registry` is
+canonical Super Admin only. Template fields report publication as Not recorded;
+per-template publication remains an owner decision.

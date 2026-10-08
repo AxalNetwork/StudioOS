@@ -33,7 +33,12 @@ them directly.
   `ConsoleUnreadable` ("… could not be read", with Try again) when its read
   fails, never the empty list.
 - **Mount a console alone where only one is needed.** HQ · Accounts mounts
-  `UsersConsole`; Contracts mounts `LegalPanel` (re-exported by `AdminPage.jsx`).
+  `UsersConsole`; Contracts imports `LegalPanel` directly from `LegalConsole.jsx`.
 - **Tests read the consoles through `frontend/test/_adminConsoles.mjs`**, which
   lists every file here; a new console file is added to that list and to the
   `COMPOSED` table in `admin_route_reachability.test.mjs`.
+
+D647 (#1441): Legal no longer has a dead Incorporation tab. Its quiet Programs
+link opens Spin-Out Lab, where the admin selects Formation orders. Empty
+agreement/template-usage copy names New envelope. The pending Contracts canvas
+will replace this reused panel; no per-template publication state is implied.

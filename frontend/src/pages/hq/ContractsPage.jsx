@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { LegalPanel } from '../AdminPage';
+import { LegalPanel } from '../admin/consoles/LegalConsole';
 import { Unrecorded, Unreadable, RailFrame, WorkerRail } from '../../ui';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
