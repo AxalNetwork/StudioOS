@@ -21,7 +21,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import { ExpertColumn, NO_EXPERTS_LISTED } from '../src/pages/wellbeing/WellbeingBookPage.jsx';
-import { WellbeingExpertName } from '../src/pages/AdminPage.jsx';
+import { WellbeingExpertName } from '../src/pages/admin/consoles/WellbeingConsole.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -62,6 +62,6 @@ test('the admin roster marks a sample "Sample", and a real expert not', () => {
   const real = html(h(WellbeingExpertName, { expert: { uid: 'real1', name: 'Rae Real', headline: 'Coach', is_sample: false } }));
   assert.doesNotMatch(real, />Sample</);
   assert.match(real, /Rae Real/);
-  const panel = codeOnly(read('frontend/src/pages/AdminPage.jsx'));
+  const panel = codeOnly(read('frontend/src/pages/admin/consoles/WellbeingConsole.jsx'));
   assert.match(panel, /<WellbeingExpertName expert=\{e\} \/>/, 'the roster row draws the name cell');
 });

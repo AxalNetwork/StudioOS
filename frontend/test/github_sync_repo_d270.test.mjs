@@ -19,9 +19,9 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
-import { GithubRepoReadOnly } from '../src/pages/AdminPage.jsx';
+import { GithubRepoReadOnly } from '../src/pages/admin/consoles/GithubSyncConsole.jsx';
 
-const PAGE = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/AdminPage.jsx'), 'utf8'));
+const PAGE = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/admin/consoles/GithubSyncConsole.jsx'), 'utf8'));
 function panel(name) {
   const at = PAGE.indexOf(`function ${name}(`);
   assert.ok(at >= 0, `${name} is gone from AdminPage.jsx`);

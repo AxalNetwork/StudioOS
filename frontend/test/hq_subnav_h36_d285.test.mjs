@@ -21,12 +21,13 @@ import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
 import { HQ_STRIPS, HQ_ROW_ROUTE, hqRowFor, stripFor, hereFrom } from '../src/lib/hqStrips.js';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = read('frontend/src/App.jsx');
 const CHROME = APP.slice(0, APP.indexOf('<Routes')) + APP.slice(APP.indexOf('</Routes>'));
-const ADMIN_PAGE = codeOnly(read('frontend/src/pages/AdminPage.jsx'));
+const ADMIN_PAGE = codeOnly(adminConsoleSource());
 const STRIP = codeOnly(read('frontend/src/components/HqSubNavStrip.jsx'));
 const SIDEBAR_NAV = codeOnly(read('frontend/src/ui/SidebarNav.jsx'));
 
@@ -174,8 +175,8 @@ test('the Admin Console tab follows location.search, writes back with replace, a
     'a pick no longer writes back to the URL with replace');
   assert.match(ADMIN_PAGE, /onChange=\{pickTab\}/, 'the section nav does not go through the write-back');
   assert.match(ADMIN_PAGE, /if \(section && ADMIN_SECTION_VALUES\.has\(section\)\) return section;/, 'the section override no longer wins the first read');
-  assert.doesNotMatch(read('frontend/src/pages/AdminPage.jsx'), /row of 12 tab buttons/, 'the comment still says twelve');
-  assert.match(read('frontend/src/pages/AdminPage.jsx'), /fourteen sections today/);
+  assert.doesNotMatch(adminConsoleSource(), /row of 12 tab buttons/, 'the comment still says twelve');
+  assert.match(adminConsoleSource(), /fourteen sections today/);
   assert.equal(TABS.length, 14);
 });
 

@@ -76,6 +76,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/decks/templates',            'the pitch-deck slide templates'],
   ['frontend/src/pages/admin',                'the admin console'],
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],
+  ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],

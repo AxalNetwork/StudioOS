@@ -175,10 +175,11 @@ test('Move is drawn only when another branch exists, never on an HQ-held row', (
 test('the page composes the three in H9\'s order and keeps the directory', () => {
   const holders = PAGE.indexOf('<SuperAdminHolders');
   const team = PAGE.indexOf('<HqTeamTable');
-  const directory = PAGE.indexOf('<AdminPage');
+  // D648 — the directory is the Users console alone, not the whole Admin Console.
+  const directory = PAGE.indexOf('<UsersConsole');
   assert.ok(holders > 0 && team > holders, 'the Team table is not below the holder console');
   assert.ok(directory > team, 'the Team table replaced the directory instead of sitting above it');
-  assert.match(PAGE, /section="users"/, 'the Admin Console users panel was dropped');
+  assert.match(PAGE, /<UsersConsole onImpersonate=\{onImpersonate\} \/>/, 'the Admin Console users panel was dropped');
 });
 
 test('granting the elevation refreshes the badge rather than leaving it stale', () => {

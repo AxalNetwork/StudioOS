@@ -24,6 +24,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 import {
   IntegrationKeysPanel, GithubSyncPanel, PaymentsCatalogPanel, PromoCodesPanel,
   PROVIDER_LABEL, KEY_STATE, keyDateLine, SYNC_STATE, PROMO_STATE, promoTerms,
@@ -181,7 +182,7 @@ test('P1: a provider the label map does not know shows its key, and the map is t
   assert.match(text(html), /newco Not set/);
   // AdminPage's PROVIDER_LABELS is the Integration keys console's; the two maps
   // must name every key the same way, and name exactly the worker's list.
-  const admin = raw('frontend/src/pages/AdminPage.jsx');
+  const admin = adminConsoleSource();
   const a = admin.indexOf('const PROVIDER_LABELS = {');
   assert.ok(a > 0, 'AdminPage no longer declares PROVIDER_LABELS');
   const body = admin.slice(a, admin.indexOf('};', a));

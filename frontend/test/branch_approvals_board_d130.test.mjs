@@ -25,6 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -78,7 +79,7 @@ function code(src) {
 const PAGE = raw('frontend/src/pages/branch/BranchApprovals.jsx');
 const PAGE_CODE = code(PAGE);
 const APP = raw('frontend/src/App.jsx');
-const ADMIN_PAGE = raw('frontend/src/pages/AdminPage.jsx');
+const ADMIN_PAGE = adminConsoleSource();
 const API = raw('frontend/src/lib/api.js');
 const ROUTE = raw('cloudflare-worker/src/routes/branch_approvals.ts');
 const SOURCES = raw('cloudflare-worker/src/services/approvalSources.ts');

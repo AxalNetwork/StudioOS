@@ -32,14 +32,13 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
-import { TotpEnrolmentField } from '../src/pages/AdminPage.jsx';
+import { TotpEnrolmentField } from '../src/pages/admin/consoles/UsersConsole.jsx';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
-const ADMIN = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/AdminPage.jsx'), 'utf8'));
+const ADMIN = codeOnly(adminConsoleSource());
 
 const render = (kyc) => renderToStaticMarkup(React.createElement(TotpEnrolmentField, { kyc }));
 

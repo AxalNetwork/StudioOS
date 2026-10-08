@@ -20,10 +20,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const APP = codeOnly(raw('frontend/src/App.jsx'));
-const ADMIN_PAGE = raw('frontend/src/pages/AdminPage.jsx');
+const ADMIN_PAGE = adminConsoleSource();
 const LAB = codeOnly(raw('frontend/src/pages/admin/AdminSpinoutLab.jsx'));
 const API = codeOnly(raw('frontend/src/lib/api.js'));
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');

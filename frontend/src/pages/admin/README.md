@@ -1,6 +1,9 @@
 # pages/admin — the admin console
 
 Screens under `/admin` and `/admin/*`, plus the tabs `AdminPage.jsx` composes.
+Since D648 each of those tabs is its own component under `consoles/` (see its
+README), loading only its own data; `AdminPage.jsx` is the shell that mounts
+the chosen one.
 Everything here is gated to the `admin` role in `App.jsx`; the guard is on the
 route, not in the component.
 
