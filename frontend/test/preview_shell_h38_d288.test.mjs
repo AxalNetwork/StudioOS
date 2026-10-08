@@ -22,6 +22,7 @@ import {
 } from '../src/lib/previewShells.js';
 import { HQ_ONLY_ACTIONS } from '../src/pages/hq/HqTeamActions.jsx';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -124,5 +125,5 @@ test('View As — impersonation — keeps its name and chrome (task 404), and th
   assert.match(impersonate.name, /^Impersonate/, 'the impersonation row was renamed');
   assert.match(impersonate.where, /View As/, 'the impersonation row no longer names the View As control');
   // The control on a user's row in the directory is still "View As".
-  assert.match(read('frontend/src/pages/AdminPage.jsx'), />\s*View As\s*</, 'the directory\'s impersonation control lost its name');
+  assert.match(adminConsoleSource(), />\s*View As\s*</, 'the directory\'s impersonation control lost its name');
 });

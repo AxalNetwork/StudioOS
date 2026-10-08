@@ -48,7 +48,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS, SUPPORT_SESSION_CEILING_HOURS } from '../src/pages/hq/HqTeamActions.jsx';
 import { drawsAccountControls } from '../src/lib/accountControls.js';
-import { UserDetailModal } from '../src/pages/AdminPage.jsx';
+import { UserDetailModal } from '../src/pages/admin/consoles/UsersConsole.jsx';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
@@ -57,7 +58,7 @@ const TABLE_RAW = raw('frontend/src/pages/hq/HqTeamTable.jsx');
 const TABLE = codeOnly(TABLE_RAW);
 const ACTIONS = codeOnly(raw('frontend/src/pages/hq/HqTeamActions.jsx'));
 const CONTROLS = codeOnly(raw('frontend/src/lib/accountControls.js'));
-const ADMIN = codeOnly(raw('frontend/src/pages/AdminPage.jsx'));
+const ADMIN = codeOnly(adminConsoleSource());
 const HOLDERS = codeOnly(raw('frontend/src/pages/hq/SuperAdminHolders.jsx'));
 const WORKER_HOLDERS = codeOnly(raw('cloudflare-worker/src/routes/admin_super_admins.ts'));
 const API = codeOnly(raw('frontend/src/lib/api.js'));
@@ -485,7 +486,7 @@ test('drawsAccountControls: an admin row is the Super Admin\'s alone, and the vi
 });
 
 test('the directory draws View As and Disable only inside the one guard, on the row and in the drawer', () => {
-  assert.match(ADMIN, /import \{ drawsAccountControls \} from '\.\.\/lib\/accountControls';/);
+  assert.match(ADMIN, /import \{ drawsAccountControls \} from '(?:\.\.\/){3}lib\/accountControls';/);
 
   // The row: both controls between the guard and the fragment it opens.
   const guard = '{drawsAccountControls(u, viewer) && (';
@@ -566,7 +567,8 @@ test('the page: H20\'s order, and under the overlay nothing that reads HQ\'s dat
   const holders = PAGE.indexOf('<SuperAdminHolders');
   const table = PAGE.indexOf('<HqTeamTable');
   const actions = PAGE.indexOf('<HqTeamActions');
-  const directory = PAGE.indexOf('<AdminPage');
+  // D648 — the directory is the Users console alone, not the whole Admin Console.
+  const directory = PAGE.indexOf('<UsersConsole');
   assert.ok(holders > 0 && table > holders && actions > table && directory > actions,
     'the order is not holders → Team table → action cards → directory');
   assert.ok(PAGE.includes('<HqTeamActions viewAs={viewAs} />'), 'the cards are not told whose view this is');

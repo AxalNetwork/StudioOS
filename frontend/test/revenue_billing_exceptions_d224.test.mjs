@@ -23,10 +23,11 @@ import {
   BillingExceptions, UNAVAILABLE, NOT_RECORDED_H21, isOpenDispute, evidenceOverdue,
 } from '../src/pages/hq/RevenuePage.jsx';
 import { REFUND_REASON_MIN, refundReasonOk } from '../src/lib/refundReason.js';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(raw('frontend/src/pages/hq/RevenuePage.jsx'));
-const ADMIN = raw('frontend/src/pages/AdminPage.jsx');
+const ADMIN = adminConsoleSource();
 const WORKER = raw('cloudflare-worker/src/routes/admin_billing.ts');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TicketGithubRecovery } from '../src/pages/TicketsPage.jsx';
-import { githubSyncBadge } from '../src/pages/AdminPage.jsx';
+import { githubSyncBadge } from '../src/pages/admin/consoles/GithubSyncConsole.jsx';
 
 const render = props => renderToStaticMarkup(React.createElement(TicketGithubRecovery, {
   isAdmin: true, pending: 3, configured: true, busy: false, onRetry() {}, ...props,

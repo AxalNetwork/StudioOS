@@ -22,9 +22,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnlyJsx } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnlyJsx(read('frontend/src/pages/AdminPage.jsx'));
+const PAGE = codeOnlyJsx(adminConsoleSource());
 const API = codeOnlyJsx(read('frontend/src/lib/api.js'));
 
 test('the role tiles count the directory, never the rows on screen', () => {
@@ -49,7 +50,7 @@ test('a total that has not been read yet is Unrecorded, not zero', () => {
   // has always named; the first used to pin the whole import line, which
   // failed the day the page took a second primitive from the same module
   // (D236 imports `Unreadable` beside it) while the property still held.
-  assert.match(PAGE, /import \{[^}]*\bUnrecorded\b[^}]*\} from '\.\.\/ui'/,
+  assert.match(PAGE, /import \{[^}]*\bUnrecorded\b[^}]*\} from '(?:\.\.\/){3}ui'/,
     'the honesty primitive must be imported from ../ui');
   assert.doesNotMatch(PAGE, /\b(?:function|const|let|var|class)\s+Unrecorded\b/,
     'the honesty primitive must be imported, not re-declared');
@@ -86,7 +87,7 @@ test('the scope caption names what it searches: the territory on a branch, HQ-he
   assert.match(PAGE, /: 'Searching HQ-held accounts';/, 'off a branch the caption no longer says HQ-held accounts');
   assert.match(PAGE, /\{accountScope && \(/, 'the caption element is unconditional');
   // The same reader the territory badge uses, so the two cannot disagree.
-  assert.match(PAGE, /import \{ branchOfUser \} from '\.\.\/lib\/shellRole'/);
+  assert.match(PAGE, /import \{ branchOfUser \} from '(?:\.\.\/){3}lib\/shellRole'/);
 });
 
 test('the api method keeps its no-argument form, and the envelope stays opt-in', () => {
@@ -111,7 +112,7 @@ test('the api method keeps its no-argument form, and the envelope stays opt-in',
   // though it were a whole. That is the stronger assertion, and it is what
   // `hq_team_h9.test.mjs` also guards from the other side.
   const callers = [
-    'frontend/src/pages/AdminPage.jsx',
+    'frontend/src/pages/admin/consoles/UsersConsole.jsx',
     'frontend/src/pages/branch/BranchAccounts.jsx',
     'frontend/src/pages/hq/SuperAdminHolders.jsx',
   ];

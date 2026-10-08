@@ -11,14 +11,13 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 import {
   KEY_STATES, keyActionsFor, keyStateBadge, connectedUsersLine, removeConfirmText, SAVE_EFFECT,
 } from '../src/lib/integrationKeys.js';
 
-const PAGE = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/AdminPage.jsx'), 'utf8'));
+const PAGE = codeOnly(adminConsoleSource());
 function block(name) {
   const at = PAGE.indexOf(`function ${name}(`);
   assert.ok(at >= 0, `${name} is gone from AdminPage.jsx`);

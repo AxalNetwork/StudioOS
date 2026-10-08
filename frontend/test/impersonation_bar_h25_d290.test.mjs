@@ -23,13 +23,14 @@ import {
   storeReason, readStoredReason, clearStoredReason, whyValue, impersonationFields,
 } from '../src/lib/impersonationBar.js';
 import { NOT_RECORDED as ABSENCE_NOT_RECORDED } from '../src/lib/absence.js';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const APP = codeOnly(raw('frontend/src/App.jsx'));
 const BAR = codeOnly(raw('frontend/src/components/ImpersonationBar.jsx'));
 const LIB = codeOnly(raw('frontend/src/lib/impersonationBar.js'));
 const API = codeOnly(raw('frontend/src/lib/api.js'));
-const ADMIN_PAGE = codeOnly(raw('frontend/src/pages/AdminPage.jsx'));
+const ADMIN_PAGE = codeOnly(adminConsoleSource());
 const ADMIN_TS = codeOnly(raw('cloudflare-worker/src/routes/admin.ts'));
 const AUTH_TS = raw('cloudflare-worker/src/auth.ts');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
