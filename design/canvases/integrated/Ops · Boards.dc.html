@@ -36,11 +36,40 @@
   </sc-for>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script="" data-props="{&quot;set&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;deals&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;deals&quot;,&quot;hq&quot;,&quot;pieces&quot;,&quot;advisor&quot;,&quot;wellbeing&quot;,&quot;partner&quot;,&quot;events&quot;,&quot;account&quot;]}}">
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;set&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;deals&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;contracts&quot;,&quot;usage&quot;,&quot;deals&quot;,&quot;hq&quot;,&quot;pieces&quot;,&quot;advisor&quot;,&quot;wellbeing&quot;,&quot;partner&quot;,&quot;events&quot;,&quot;account&quot;]}}">
 class Component extends DCLogic {
   renderVals() {
     const set = this.props.set ?? 'deals';
     const SETS = {
+      contracts: [
+        { title: 'Contracts · two shells', note: 'The same page for the Super Admin (HQ shell, all six tabs) and an administrator (Admin shell, no Document types).', boards: [
+          { id: 'K1', title: 'Agreements · HQ', route: '/admin/contracts', screen: 'ctr-hq', phone: false },
+          { id: 'K2', title: 'Agreements · Admin', route: '/admin/contracts', screen: 'ctr-admin', phone: false },
+          { id: 'K3', title: 'New envelope', route: '/admin/contracts?new', screen: 'ctr-new', phone: false },
+        ] },
+        { title: 'Contracts · the other tabs', note: 'NDAs, Partner deals, Templates, Forms, and Document types (Super Admin only).', boards: [
+          { id: 'K4', title: 'NDAs', route: '/admin/contracts?tab=ndas', screen: 'ctr-ndas', phone: false },
+          { id: 'K5', title: 'Partner deals', route: '/admin/contracts?tab=partner-deals', screen: 'ctr-deals', phone: false },
+          { id: 'K6', title: 'Templates', route: '/admin/contracts?tab=templates', screen: 'ctr-templates', phone: false },
+          { id: 'K7', title: 'Forms', route: '/admin/contracts?tab=forms', screen: 'ctr-forms', phone: false },
+          { id: 'K8', title: 'Document types', route: '/admin/contracts?tab=document-types', screen: 'ctr-types', phone: false },
+        ] },
+      ],
+      usage: [
+        { title: 'Usage · allowance and runs', note: 'A member\u2019s AI allowance, the last 30 days, and where it went. The user menu is open on U1 to show the new entry.', boards: [
+          { id: 'U1', title: 'AI allowance (menu open)', route: '/account/usage', screen: 'us-allowance', phone: true },
+          { id: 'U2', title: 'Last 30 days', route: '/account/usage#days', screen: 'us-days', phone: true },
+          { id: 'U3', title: 'Where it went this month', route: '/account/usage#where', screen: 'us-where', phone: true },
+        ] },
+        { title: 'Usage · models, last run, storage', note: 'Per-model figures and rates, a receipt for the last run, and files stored across all companies.', boards: [
+          { id: 'U4', title: 'Models this month and rates', route: '/account/usage#models', screen: 'us-models', phone: true },
+          { id: 'U5', title: 'Last run', route: '/account/usage#last-run', screen: 'us-receipt', phone: true },
+          { id: 'U6', title: 'Storage', route: '/account/usage#storage', screen: 'us-storage', phone: true },
+        ] },
+        { title: 'HQ · AI allowances by plan', note: 'Super Admin only, on the HQ shell. 1440 only.', boards: [
+          { id: 'U7', title: 'Allowances by plan + held runs', route: '/admin/platform/allowances', screen: 'hq-allowances', phone: false },
+        ] },
+      ],
       deals: [
         { title: 'Deal rooms', note: 'Join and leave, the quota, invitations, and wire transfers.', boards: [
           { id: 'D1', title: 'Pipeline · join / leave', route: '/deals', screen: 'dr-pipeline', phone: false },

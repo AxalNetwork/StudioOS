@@ -651,8 +651,8 @@ folder's format:
 
 | File | What it is |
 | --- | --- |
-| `Ops · Boards.dc.html` | The board: rows of artboards at 1440 and 390, chosen by its `set` property (`events`, `account`, `partner`, `wellbeing`, `advisor`, and since 2026-10-07 `deals`, `hq` and `pieces`). Each artboard imports `Ops Page` with one `screen`. |
-| `Ops Page.dc.html` | Every screen's markup, one `sc-if` block per screen id: `evo-eligibility`, `evo-queue`, `ev-mine` and `evo-agenda` for events; `ac-*` for the Account center; `pe-*` and `pea-*` for partner earnings; `wb-*`, `wbx-*` and `wba-*` for Wellbeing; `adv-*` and `advpub-*` for the advisor's practice. Since 2026-10-07: `dr-*`, `fd-*`, `sy-close`, `ct-variants` and `st-*` for area 6, `hq-*` for area 7, and `sp-*` for area 8. |
+| `Ops · Boards.dc.html` | The board: rows of artboards at 1440 and 390, chosen by its `set` property (`events`, `account`, `partner`, `wellbeing`, `advisor`, since 2026-10-07 `deals`, `hq` and `pieces`, and since 2026-10-08 `contracts` and `usage`). Each artboard imports `Ops Page` with one `screen`. |
+| `Ops Page.dc.html` | Every screen's markup, one `sc-if` block per screen id: `evo-eligibility`, `evo-queue`, `ev-mine` and `evo-agenda` for events; `ac-*` for the Account center; `pe-*` and `pea-*` for partner earnings; `wb-*`, `wbx-*` and `wba-*` for Wellbeing; `adv-*` and `advpub-*` for the advisor's practice. Since 2026-10-07: `dr-*`, `fd-*`, `sy-close`, `ct-variants` and `st-*` for area 6, `hq-*` for area 7, and `sp-*` for area 8. Since 2026-10-08: `us-*` for Usage, `hq-allowances`, and `ctr-*` for Contracts (data entries written by S1, see `design/canvases/README.md`). |
 
 | Area | Screens | Governs | Grade | Issue |
 | --- | --- | --- | --- | --- |
