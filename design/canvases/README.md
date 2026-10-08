@@ -267,3 +267,36 @@ replaced where they sat, so none moves a number: **`integrated/` stays 83**.
   a single decode.
 - **The page loads its script by name,** as on 2026-10-06. The decode leaves
   the script as an asset uuid, which is rewritten to `ops-data.js`.
+
+**2026-10-08 (#1430, #1441), the Ops canvas took Usage and Contracts in place.**
+The owner shared two boards drawn on the Ops canvas: Usage (`PeE58rhm5i9DyuhEHCrtir`,
+frames U1 to U7) and Contracts (`AQg6bkoiNjCRxtRdPrktKg`, frames K1 to K8). Both
+shares carried a newer `Ops Page`, but **neither carried `ops-data.js`**, so every
+frame drew only its screen id. The three files were replaced where they sat:
+**`integrated/` stays 83**.
+
+| file | was | is |
+| --- | --- | --- |
+| `Ops Page` | 147 KB · eight areas | **203 KB · 15 screen blocks added** (`us-*`, `hq-allowances`, `ctr-*`) |
+| `ops-data.js` | 69 KB | **90 KB** |
+| `Ops · Boards` | 11 KB · eight sets | **14 KB · ten sets: `contracts` and `usage` added** |
+
+- **`Ops Page` is the Usage share's decode,** the newer of the two. Every
+  screen block in the committed page is still in it, checked with `diff`, and
+  its script gains three things: a generic section renderer (`sections`,
+  `gtabs`, `moved`), the Contracts head shared by the `ctr-*` screens, and
+  `us-*` screens drawn inside the Account center.
+- **One line is kept from the committed page:** the font link. The export asks
+  again for Space Grotesk 800, which the family does not have, and Google Fonts
+  fails the whole request when one weight is missing.
+- **The fifteen new data entries are S1's, not the owner's.** They follow the
+  two prompts the boards were drawn from: #1430's for Usage, and prompt 2 on
+  #1439 for Contracts. Every figure in them is a bracketed placeholder. A header
+  comment in `ops-data.js` says so. Replace them if a later share carries the
+  owner's own data file.
+- **The Account center's section list gains "Usage"** after "Billing and
+  orders", as #1430's prompt places it. That one changed line in `ops-data.js`
+  is also seen on the six `ac-*` screens.
+- **The board keeps all ten sets.** Both shares carried an older board without
+  `hq` and `pieces`. Only their `contracts` and `usage` sets were added here,
+  and `deals` stays the default.

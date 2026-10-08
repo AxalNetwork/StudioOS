@@ -273,7 +273,7 @@ screens['evo-agenda'] = {
 };
 
 /* ───────── ACCOUNT ───────── */
-const acNav = (active) => ['Profile and identity', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Following', 'Developer'].map(t => ({ t, style: 'padding:9px 12px;border-radius:8px;font-size:13px;font-weight:' + (t === active ? '600' : '500') + ';color:' + (t === active ? '#6d28d9' : '#6b6577') + ';background:' + (t === active ? '#f4f0fe' : 'transparent'), dev: t === 'Developer' }));
+const acNav = (active) => ['Profile and identity', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Following', 'Developer'].map(t => ({ t, style: 'padding:9px 12px;border-radius:8px;font-size:13px;font-weight:' + (t === active ? '600' : '500') + ';color:' + (t === active ? '#6d28d9' : '#6b6577') + ';background:' + (t === active ? '#f4f0fe' : 'transparent'), dev: t === 'Developer' }));
 const acBase = (h1, sub, active, extra) => Object.assign({ area: 'Account', route: '/account#' + active.toLowerCase().split(' ')[0], sideActive: '', role: 'member', head: { h1, sub }, vals: { acNav: acNav(active) } }, extra || {});
 screens['ac-profile'] = acBase('Profile and identity', 'Who you are on the platform, and what your public profile shows.', 'Profile and identity', {
   rail: { title: 'Bio', body: 'Draft a two-line bio from your role, company and sectors.', writes: 'Accept writes the bio field. You still save.' },
@@ -663,6 +663,264 @@ screens['sp-comarketing'] = {
     results: [{ k: 'Visits', v: '[n]' }, { k: 'Sign-ups', v: '[n]' }, { k: 'Leads', v: '[n]' }, { k: 'Conversions', v: '', nr: true }].map(r => Object.assign({ nr: false }, r)),
   },
 };
+
+/* ───────── USAGE (#1430) and CONTRACTS (#1441) ─────────
+   The owner's shares of these two boards (Usage, PeE58rhm…, and Contracts, AQg6bk…) carried the Ops Page
+   markup but not this file, so every frame drew only its screen id. S1 wrote the entries below from the two
+   prompts the boards were made from (#1430's, and prompt 2 on #1439). Every figure is a bracketed placeholder.
+   Replace them with the owner's own entries if a later share carries its ops-data.js. */
+const chip = (on, accent) => 'font-size:12px;font-weight:600;padding:5px 11px;border-radius:99px;white-space:nowrap;border:1px solid ' + (on ? (accent === 'hq' ? '#fbcfe8' : '#ddd0fb') : '#ececf1') + ';color:' + (on ? (accent === 'hq' ? '#881337' : '#6d28d9') : '#6b6577') + ';background:' + (on ? (accent === 'hq' ? '#fdf2f6' : '#f4f0fe') : '#fff');
+const track = 'height:8px;border-radius:99px;background:#f4f3f7;overflow:hidden;margin:10px 0 8px';
+const fill = (pct) => 'height:100%;width:' + pct + '%;background:#7c3aed;border-radius:99px';
+const usMenu = ['Account', 'Usage', 'Trust Center', 'Perks', 'Calendar', 'Events', 'Learning', 'Help Center', 'Plans & Pricing', 'Log Out'].map(t => ({ t, style: 'padding:8px 10px;border-radius:8px;font-size:13px;font-weight:' + (t === 'Usage' ? '600' : '500') + ';color:' + (t === 'Usage' ? '#6d28d9' : t === 'Log Out' ? '#b91c1c' : '#18181b') + ';background:' + (t === 'Usage' ? '#f4f0fe' : 'transparent') }));
+const usBase = (hash, extra) => Object.assign({
+  area: 'Account', route: '/account/usage' + (hash ? '#' + hash : ''), sideActive: '', role: 'member',
+  head: { h1: 'Usage', sub: 'What you have used across all your companies.' },
+  rail: false,
+}, extra, { vals: Object.assign({ acNav: acNav('Usage') }, extra.vals) });
+
+screens['us-allowance'] = usBase('', {
+  states: { empty: 'No AI runs yet this month.', emptyCta: 'Open Eadwyn', nr: 'Today: the plan sets no daily allowance. Runs use your top-up balance.', unread: 'Your allowance could not be read just now. The other cards still load.' },
+  vals: {
+    menuOpen: true, menu: usMenu,
+    plan: 'Included with your plan: [Founder · Growth]',
+    today: { used: '[$0.42]', of: 'of [$2.00]', reset: 'Resets at 00:00 UTC · [in 5 h 12 min]', track, fill: fill(21) },
+    month: { used: '[$6.10]', of: 'of [$40.00]', reset: 'Resets on the 1st at 00:00 UTC', track, fill: fill(15) },
+    held: { v: '[$0.05]', note: 'Held by runs in progress. Returned if a run does not finish within 5 minutes.' },
+    topup: { v: '[$10.00]', note: 'Runs use your included allowance first, then your top-up balance.' },
+    alt: [
+      { t: 'No allowance on this plan', d: 'Runs use your top-up balance.', cta: 'Add tokens', style: 'background:#fff;border:1px solid #ececf1' },
+      { t: 'Today’s allowance is used up', d: 'It resets at 00:00 UTC, [in 5 h 12 min]. Runs use your top-up balance until then.', cta: 'Add tokens', style: 'background:#fffdf5;border:1px solid #fcd34d;color:#92400e' },
+      { t: 'Top-ups not available yet', d: 'Runs use your included allowance only.', cta: '', style: 'background:#fff;border:1px solid #ececf1' },
+      { t: 'Runs paused', d: 'A run cost more than it held. New runs wait while HQ checks the charge.', cta: '', style: 'background:#fef2f2;border:1px solid #fecaca;color:#b91c1c' },
+    ].map(a => Object.assign(a, { hasCta: !!a.cta })),
+  },
+});
+screens['us-days'] = usBase('days', {
+  states: { empty: 'No AI runs in the last 30 days.', emptyCta: 'Open Eadwyn', nr: 'A day’s cost: one of its runs recorded no cost, so the bar shows the runs that did.', unread: 'The last 30 days could not be read just now.' },
+  vals: {
+    days: Array.from({ length: 30 }, (_, i) => {
+      const none = i === 6 || i === 13 || i === 20;
+      const h = none ? 2 : [38, 52, 24, 61, 45, 70, 33, 58, 41, 66][i % 10];
+      return { h: h + '%', bg: none ? '#d4d1dc' : (i === 29 ? '#7c3aed' : '#c4b5fd'), tip: none ? '[Day] · 0 runs · $0.00' : '[Day] · [n] runs · [$0.21]' };
+    }),
+    axis: ['[9 Sep]', '[16 Sep]', '[23 Sep]', '[30 Sep]', '[8 Oct]'],
+    dayNote: 'Estimated cost per day, UTC. Hover or tap a bar for its runs. A day with no runs is a real $0.00. No allowance line: the allowance may have been different on earlier days.',
+  },
+});
+screens['us-where'] = usBase('where', {
+  states: { empty: 'No AI runs yet this month.', emptyCta: 'Open Eadwyn', nr: 'No page recorded: these runs carry no page.', unread: 'Where it went could not be read just now.' },
+  vals: {
+    tabs: [{ t: 'By page', style: chip(true) }, { t: 'By task', style: chip(false) }],
+    byPage: [
+      { t: '[Validate › Interviews]', runs: '[42]', cost: '[$1.84]' },
+      { t: '[Raise › Pitch]', runs: '[31]', cost: '[$1.12]' },
+      { t: '[Build › Roadmap]', runs: '[18]', cost: '[$0.66]' },
+      { t: '[Research › Market reading]', runs: '[9]', cost: '[$0.41]' },
+      { t: 'No page recorded', runs: '[6]', cost: '[$0.0042]', nr: true },
+    ].map(r => Object.assign({ nr: false }, r, { plain: !r.nr })),
+    byTask: [
+      { t: '[Explain this page]', runs: '[38]', cost: '[$1.20]' },
+      { t: '[Draft an email]', runs: '[27]', cost: '[$1.05]' },
+      { t: '[Summarise interviews]', runs: '[21]', cost: '[$0.98]' },
+      { t: '[Transcribe a recording]', runs: '[4]', cost: '[$0.36]' },
+    ],
+    estNote: 'Estimated from the run log. Runs still in progress are not in these figures yet.',
+  },
+});
+screens['us-models'] = usBase('models', {
+  states: { empty: 'No AI runs yet this month.', emptyCta: 'Open Eadwyn', nr: 'Tokens: a cached answer, a streamed reply or a transcription recorded no count.', unread: 'Models could not be read just now.' },
+  vals: {
+    models: [
+      { name: '[Llama 3.3 70B]', id: '[@cf/meta/llama-3.3-70b-instruct-fp8-fast]', runs: '[64]', tin: '[1.2M]', tout: '[340k]', cost: '[$3.92]', fb: '[0]', cached: '[5]', nc: '[5]', hasTokens: true },
+      { name: '[Model name]', id: '[@cf/vendor/model-id]', runs: '[22]', tin: '[410k]', tout: '[96k]', cost: '[$1.31]', fb: '[3]', cached: '[0]', nc: '[2]', hasTokens: true },
+      { name: '[Transcription model]', id: '[@cf/openai/whisper]', runs: '[4]', tin: '', tout: '', cost: '[$0.36]', fb: '[0]', cached: '[0]', nc: '[4]', hasTokens: false },
+    ],
+    rates: [
+      { name: '[Llama 3.3 70B]', id: '[@cf/meta/llama-3.3-70b-instruct-fp8-fast]', pin: '[$0.29]', pout: '[$2.25]', unit: 'per million tokens', hasOut: true, retired: false },
+      { name: '[Model name]', id: '[@cf/vendor/model-id]', pin: '[$0.20]', pout: '[$0.80]', unit: 'per million tokens', hasOut: true, retired: false },
+      { name: '[Transcription model]', id: '[@cf/openai/whisper]', pin: '[$0.0005]', pout: '', unit: 'per audio minute', hasOut: false, retired: false },
+      { name: '[Older model]', id: '[@cf/vendor/older-model-id]', pin: '[$0.27]', pout: '[$0.85]', unit: 'per million tokens', hasOut: true, retired: true },
+    ],
+    ratesNote: 'Your allowance and top-up balance are charged at these rates.',
+  },
+});
+screens['us-receipt'] = usBase('last-run', {
+  states: { empty: 'No AI runs yet.', emptyCta: 'Open Eadwyn', nr: 'Tokens out: a streamed reply recorded no count.', unread: 'The last run could not be read just now.' },
+  vals: {
+    flags: [{ t: 'Fallback', style: ST.amber }, { t: 'Not cached', style: ST.grey }],
+    receipt: [
+      { k: 'When', v: '[8 Oct, 14:02 UTC]' },
+      { k: 'Task', v: '[Draft an email]', sub: 'on [Raise › Investors]' },
+      { k: 'Model', v: '[Model name]', sub: '[@cf/vendor/model-id] · answered after [Llama 3.3 70B] failed' },
+      { k: 'Tokens in', v: '[1,840]' },
+      { k: 'Tokens out', v: 'Not counted', nr: true, sub: 'A streamed reply recorded no count.' },
+      { k: 'Cost', v: '[$0.0042]' },
+    ].map(r => Object.assign({ nr: false, sub: '' }, r, { plain: !r.nr })),
+  },
+});
+screens['us-storage'] = usBase('storage', {
+  states: { empty: 'No files uploaded yet.', emptyCta: 'Open the data room', nr: 'Size: these files were stored before sizes were recorded.', unread: 'Storage could not be read just now.' },
+  vals: {
+    total: { size: '[1.2 GB]', files: 'in [148] files' },
+    places: [
+      { t: 'Data room', files: '[64]', size: '[820 MB]', nosize: '' },
+      { t: 'Diligence files', files: '[31]', size: '[210 MB]', nosize: '[3] files with no size recorded' },
+      { t: 'Research library', files: '[22]', size: '[48 MB]', nosize: '' },
+      { t: 'Message attachments', files: '[27]', size: '[96 MB]', nosize: '' },
+      { t: 'Interview recordings', files: '[4]', size: '[31 MB]', nosize: '' },
+    ].map(p => Object.assign(p, { hasNosize: !!p.nosize })),
+    storageNote: 'Other files you keep on StudioOS are not counted yet. No plan sets a storage limit.',
+  },
+});
+
+screens['hq-allowances'] = {
+  area: 'Platform', route: '/admin/platform/allowances', sideActive: 'Platform', role: 'hq',
+  head: { h1: 'AI allowances', sub: 'The daily and monthly AI allowance each plan includes, and runs held for a check.' },
+  rail: false,
+  states: { empty: 'No run is held for a check.', emptyCta: 'Back to Platform', nr: 'Set by: this plan uses the platform default, which records no editor.', unread: 'Allowances could not be read just now.' },
+  vals: {
+    plans: ['Founder · Free', 'Founder · Growth', 'Founder · Studio', 'Investor · Free', 'Investor · Professional', 'Investor · Institutional', 'Advisor', 'Partner', 'Admin', 'Other'].map((p, i) => {
+      const hq = i === 1 || i === 5;
+      return { p, daily: '[$2.00]', monthly: '[$40.00]', src: hq ? 'Set by HQ · [Name] · [12 Oct]' : 'Platform default', srcStyle: hq ? ST.violet : ST.grey };
+    }),
+    editForm: [{ k: 'Daily (US$, 0 or more)', v: '[2.00]' }, { k: 'Monthly (US$, 0 or more)', v: '[40.00]' }],
+    editConfirm: 'The change applies at once to every member on [Founder · Growth].',
+    holds: [
+      { who: '[Member name]', when: '[8 Oct, 14:02]', held: '[$0.05]', cost: '[$0.0731]' },
+      { who: '[Member name]', when: '[7 Oct, 09:40]', held: '[$0.05]', cost: '[$0.0612]' },
+    ],
+    holdNote: 'Charge and Refund each need a reason of at least 10 characters. The member is never charged more than the hold.',
+  },
+};
+
+/* Contracts: one page, six tabs for the Super Admin, five for an administrator (no Document types). */
+const ctrTabs = (hq, active) => ['Agreements', 'NDAs', 'Partner deals', 'Templates', 'Forms'].concat(hq ? ['Document types'] : []).map(t => ({ t, style: 'font-size:13px;font-weight:600;padding:9px 12px;white-space:nowrap;border-bottom:2px solid ' + (t === active ? (hq ? '#881337' : '#334155') : 'transparent') + ';color:' + (t === active ? '#18181b' : '#6b6577') }));
+const ctrCounts = [{ k: 'Total', v: '[N]' }, { k: 'Awaiting signature', v: '[n]' }, { k: 'Signed', v: '[n]' }, { k: 'Average days to sign', v: '[4.2]' }, { k: 'Signed, last 30 days', v: '[n]' }];
+const ctrBase = (hq, tab, extra) => Object.assign({
+  area: 'Contracts', route: '/admin/contracts' + (tab === 'Agreements' ? '' : '?tab=' + tab.toLowerCase().replace(/ /g, '-')), sideActive: 'Contracts', role: hq ? 'hq' : 'admin',
+  head: { h1: 'Contracts', sub: 'Every agreement the platform sends, signs or keeps, and the templates behind them.', cta: 'New envelope' },
+  rail: { title: 'Signing read', body: 'List the agreements awaiting signature for more than [7] days, oldest first, with who they wait on.', writes: 'Accept writes a note. It does not resend or void anything.' },
+}, extra, { vals: Object.assign({ ctTabs: ctrTabs(hq, tab), ctCounts: ctrCounts }, extra.vals) });
+const agreements = {
+  statusSwitch: ['All', 'Awaiting signature', 'Signed', 'Voided'].map((t, i) => ({ t, style: chip(i === 0) })),
+  agreements: [
+    { t: '[Agreement title]', type: '[Advisor agreement]', store: '[E-sign]', co: '[Company]', to: '[Recipient name]', sent: '[2 Oct]', signed: '[4 Oct]', days: '[2]', prov: 'Native', st: 'Signed', stStyle: ST.ok },
+    { t: '[Agreement title]', type: '[SAFE]', store: '[E-sign]', co: '[Company]', to: '[Recipient name]', sent: '[5 Oct]', signed: '', days: '', prov: 'DocuSign', st: 'Awaiting signature', stStyle: ST.amber, sub: 'Viewed' },
+    { t: '[Agreement title]', type: '[NDA]', store: '[Documents]', co: '[Company]', to: '[Recipient name]', sent: '[28 Sep]', signed: '[29 Sep]', days: '[1]', prov: 'Native', st: 'Signed', stStyle: ST.ok },
+    { t: '[Agreement title]', type: '[Partner agreement]', store: '[Documents]', co: '[Company]', to: '[Recipient name]', sent: '[7 Oct]', signed: '', days: '', prov: 'Native', st: 'Awaiting signature', stStyle: ST.amber },
+    { t: '[Agreement title]', type: '[Side letter]', store: '[E-sign]', co: '[Company]', to: '[Recipient name]', sent: '[20 Sep]', signed: '', days: '', prov: 'DocuSign', st: 'Voided', stStyle: ST.bad, sub: 'Declined' },
+  ].map(a => Object.assign({ sub: '' }, a, { notSigned: !a.signed, hasSub: !!a.sub })),
+  panel: {
+    t: '[Agreement title]', type: '[SAFE] · [E-sign]', st: 'Awaiting signature', stStyle: ST.amber,
+    parties: [{ k: 'Sender', v: '[Admin name] · Axal' }, { k: 'Founder', v: '[Founder name] · [Company]' }, { k: 'Investor', v: '[Investor name]' }],
+    timeline: [{ e: 'Sent', when: '[5 Oct, 10:12]' }, { e: 'Viewed', when: '[5 Oct, 16:40]' }, { e: 'Signed', when: '[6 Oct, 09:03]' }],
+    signer: { who: '[Founder name]', ip: '[203.0.113.24]' },
+    pdf: { name: '[agreement-title].pdf', sha: '[9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08]' },
+    voidNote: 'Void needs a reason, which then shows on the row.',
+  },
+};
+const ctrList = { search: 'Search title, recipient, company, template…', filters: ['Document type', 'Party', 'Provider'], sort: 'Sent, newest', count: '1–25 of [N]' };
+const ctrStates = { empty: 'No agreement matches these filters.', emptyCta: 'Clear filters', nr: 'Average days to sign: no signed agreement has both a sent and a signed date.', unread: 'Agreements could not be read just now.' };
+screens['ctr-hq'] = ctrBase(true, 'Agreements', { list: ctrList, states: ctrStates, vals: agreements });
+screens['ctr-admin'] = ctrBase(false, 'Agreements', { list: ctrList, states: ctrStates, vals: agreements });
+screens['ctr-new'] = ctrBase(true, 'Agreements', {
+  route: '/admin/contracts?new',
+  states: { empty: 'No published template. Publish one under Templates first.', emptyCta: 'Open Templates', nr: 'Recipient name: a new email was entered without one.', unread: 'Templates could not be read just now.' },
+  vals: {
+    steps: ['Template', 'Recipient', 'Fields', 'Deal', 'Provider', 'Preview and send'].map((t, i) => ({ n: String(i + 1), t, style: 'display:flex;gap:9px;align-items:center;padding:6px 8px;border-radius:7px;font-size:12.5px;font-weight:' + (i === 2 ? '600;color:#881337;background:#fdf2f6' : i < 2 ? '500;color:#18181b' : '500;color:#6b6577') })),
+    tpl: '[Template name] · v[3]',
+    recipient: { found: '[Member name] · [name@company.com]', alt: 'Or a new email, with a name' },
+    fields: [
+      { k: '[Company legal name]', v: '[Company Ltd]', req: true },
+      { k: '[Investment amount]', v: '[$250,000]', req: true },
+      { k: '[Valuation cap]', v: '', req: true, missing: true },
+      { k: '[Governing law]', v: '[Delaware]', req: false },
+    ].map(f => Object.assign({ missing: false }, f)),
+    deal: '[Deal name] · optional',
+    providers: [
+      { t: 'Native', d: 'Signed in the app.', lock: false, style: 'border:1px solid #ddd0fb;background:#f4f0fe;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:3px' },
+      { t: 'DocuSign', d: 'Studio plan.', lock: true, style: 'border:1px solid #ececf1;background:#fff;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:3px' },
+    ],
+    errs: [
+      { t: 'No published template', d: 'Publish a template under Templates first.', style: 'background:#fff;border:1px solid #ececf1' },
+      { t: 'A required field is missing', d: '[Valuation cap] is required.', style: 'background:#fffdf5;border:1px solid #fcd34d;color:#92400e' },
+      { t: 'DocuSign not available', d: 'DocuSign comes with the Studio plan. Native signing works on every plan.', style: 'background:#fff;border:1px solid #ececf1' },
+      { t: 'The send failed', d: 'Nothing was sent. Try again.', style: 'background:#fef2f2;border:1px solid #fecaca;color:#b91c1c' },
+    ],
+  },
+});
+screens['ctr-ndas'] = ctrBase(true, 'NDAs', {
+  list: { search: 'Search founder or investor…', filters: ['Status', 'Introduced by'], sort: 'Last activity', count: '1–25 of [N]' },
+  states: { empty: 'No NDA yet. One is created when a founder and an investor are introduced.', emptyCta: 'Clear filters', nr: 'Valid until: this NDA was signed without an end date.', unread: 'NDAs could not be read just now.' },
+  vals: {
+    ndas: [
+      { f: '[Founder name]', inv: '[Investor name]', intro: '[Advisor name]', st: 'Active', stStyle: ST.ok, until: '[12 Oct 2027]', last: '[2 Oct]' },
+      { f: '[Founder name]', inv: '[Investor name]', intro: 'Direct', st: 'Partially signed', stStyle: ST.amber, until: '', last: '[6 Oct]' },
+      { f: '[Founder name]', inv: '[Investor name]', intro: '[Partner name]', st: 'Pending', stStyle: ST.grey, until: '', last: '[7 Oct]' },
+      { f: '[Founder name]', inv: '[Investor name]', intro: 'Direct', st: 'Expired', stStyle: ST.grey, until: '[1 Sep 2026]', last: '[1 Sep]' },
+      { f: '[Founder name]', inv: '[Investor name]', intro: '[Advisor name]', st: 'Revoked', stStyle: ST.bad, until: '[3 Mar 2027]', last: '[20 Sep]' },
+    ].map(n => Object.assign(n, { untilNR: !n.until })),
+  },
+});
+screens['ctr-deals'] = ctrBase(true, 'Partner deals', {
+  list: { search: 'Search partners…', filters: ['Deal type', 'Status'], sort: 'Partner', count: '1–25 of [N]' },
+  states: { empty: 'No partner deal yet.', emptyCta: 'Clear filters', nr: 'Term: this deal was granted without an end date.', unread: 'Partner deals could not be read just now.' },
+  vals: {
+    deals: [
+      { p: '[Partner name]', type: 'Equity', term: '[12 months]', plans: '[Founder · Growth, Studio]', red: '[14]', st: 'Active', stStyle: ST.ok },
+      { p: '[Partner name]', type: 'Services', term: '', plans: '[Founder · Studio]', red: '[3]', st: 'Active', stStyle: ST.ok },
+      { p: '[Partner name]', type: 'Rev-share', term: '[24 months]', plans: '[Investor · Professional]', red: '[0]', st: 'Paused', stStyle: ST.amber },
+      { p: '[Partner name]', type: 'Custom', term: '[6 months]', plans: '[All plans]', red: '[22]', st: 'Ended', stStyle: ST.grey },
+    ].map(d => Object.assign(d, { termNR: !d.term })),
+  },
+});
+screens['ctr-templates'] = ctrBase(true, 'Templates', {
+  list: { search: 'Search templates…', filters: ['Document type'], sort: 'Last edited', count: '1–25 of [N]' },
+  states: { empty: 'No template yet.', emptyCta: 'New template', nr: 'Last edited by: this template was imported before editors were recorded.', unread: 'Templates could not be read just now.' },
+  vals: {
+    publish: { t: '[2] templates have unpublished changes', d: 'Publishing makes [Template name] v[4] and [Template name] v[2] the versions New envelope offers.' },
+    tpls: [
+      { name: '[Template name]', type: '[SAFE]', ver: 'v[4]', edited: '[Admin name] · [6 Oct]', used: 'Used in [18] agreements' },
+      { name: '[Template name]', type: '[NDA]', ver: 'v[2]', edited: '[Admin name] · [1 Oct]', used: 'Used in [42] agreements' },
+      { name: '[Template name]', type: '[Advisor agreement]', ver: 'v[1]', edited: '[Admin name] · [12 Sep]', used: 'Used in [5] agreements' },
+    ],
+    del: 'Delete asks for a confirmation. Agreements already sent keep their copy.',
+    versions: [
+      { v: 'v[4]', when: '[6 Oct]', who: '[Admin name]', note: '[What changed, one line]' },
+      { v: 'v[3]', when: '[22 Sep]', who: '[Admin name]', note: '[What changed, one line]' },
+      { v: 'v[2]', when: '[1 Sep]', who: '[Admin name]', note: '[What changed, one line]' },
+    ],
+  },
+});
+screens['ctr-forms'] = ctrBase(true, 'Forms', {
+  states: { empty: 'No form is available.', emptyCta: 'Back to Agreements', nr: 'Sample values: this form has none yet.', unread: 'Forms could not be read just now.' },
+  vals: {
+    forms: [
+      { t: 'SS-4, with its instructions', d: 'Application for an Employer Identification Number.' },
+      { t: 'Form 8821', d: 'Tax information authorisation.' },
+      { t: 'Statement for a faxed EIN', d: 'Sent with an SS-4 filed by fax.' },
+      { t: 'Confirmation of information', d: 'The company details the forms are filled from.' },
+    ],
+  },
+});
+screens['ctr-types'] = ctrBase(true, 'Document types', {
+  list: { search: 'Search document types…', filters: ['Layer', 'State'], sort: 'Layer', count: '1–25 of [N]' },
+  states: { empty: 'No document type matches these filters.', emptyCta: 'Clear filters', nr: 'Published by: this type went live before publishing was recorded.', unread: 'Document types could not be read just now.' },
+  vals: {
+    layers: ['GP', 'Fund', 'Portfolio', 'Compliance', 'Outside the four layers'].map((l, i) => ({ l, rows: [
+      { t: '[Document type]', st: 'Published', stStyle: ST.ok, meta: '[12 Oct] · [Admin name] · "[reason]"' },
+      { t: '[Document type]', st: i % 2 ? 'In code only' : 'Draft', stStyle: i % 2 ? ST.grey : ST.amber, meta: i % 2 ? 'no draft yet' : 'drafted [10 Oct]' },
+    ].slice(0, i === 4 ? 1 : 2) })),
+    diff: [
+      { k: 'Title', live: '[Current title]', pend: '[New title]', changed: true },
+      { k: 'Layer', live: 'Fund', pend: 'Fund', changed: false },
+      { k: 'Party roles', live: '[GP, LP]', pend: '[GP, LP, Advisor]', changed: true },
+      { k: 'Required fields', live: '[n] fields', pend: '[n] fields', changed: false },
+    ],
+    liveWarn: 'This type is published. Saving its draft changes the live type at once, for every tenant.',
+  },
+});
 
 window.OPS_DATA = { screens, shared: { ST, btn } };
 })();
