@@ -21,7 +21,17 @@ the root" until 2026-09-07; the root of `design/canvases/` holds only its
 
 ### AI allowance Worker contract (D640, #1433)
 
-The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for S09's screens, not frontend API methods added by this issue.
+The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
+
+
+### Usage page and HQ allowances (D642, #1435)
+
+`GET /api/usage/storage` (`usage.ts`, `services/storageUsage.ts`) is mounted. It reads the caller's own stored files across all their companies, whatever company the sidebar has selected. It returns `{ total_bytes, files, unknown_size_files, areas }`, one area per store: `data_room`, `diligence_files`, `research_library`, `message_attachments` and `interview_recordings` (a recording counts toward the member who owns its project). A NULL size counts as unknown, never as 0 bytes; a failed read marks only that area `recorded: false`. With D640 (`ai_budget.ts`) and D641 (`ai.ts`: `by_model`, `days`, task labels, `GET /ai/rates`), every read the two screens need is on `main`. The screens themselves wait on the U1–U7 canvas (#1430), which is not yet under `design/`, so no frontend method calls these reads yet.
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| #1430 U1–U6 (pending) | `/account/usage` | — (no page yet); `GET /api/ai-budget/me`, `GET /api/ai-budget/top-up`, `GET /api/ai/me/spend`, `GET /api/ai/rates`, `GET /api/usage/storage` | NEW |
+| #1430 U7 (pending) | `/admin/platform/allowances` | — (no page yet); `GET /api/ai-budget/caps`, `PUT /api/ai-budget/caps/:licence`, `GET /api/ai-budget/reviews`, `POST /api/ai-budget/reviews/:uid/charge\|refund` | NEW |
 
 D631 (#1389), Ops area 6:
 
