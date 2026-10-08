@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 
 const SECTIONS = [
   'sentiment', 'talc', 'demand_supply', 'sector_heat',
@@ -12,7 +13,7 @@ const AUDIENCES = ['internal', 'lp', 'founder', 'media', 'partners'];
 
 export default function PublicationNew() {
   const nav = useNavigate();
-  const { showToast } = useToast();
+  const { toast, showToast, dismissToast } = useToast();
   const [form, setForm] = useState({
     title: '',
     subtitle: '',
@@ -56,6 +57,7 @@ export default function PublicationNew() {
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-8 dark:text-gray-100">
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
       <button onClick={() => nav('/admin/publications')} className="text-sm text-gray-500 hover:text-violet-600 flex items-center gap-1 mb-4">
         <ArrowLeft className="w-4 h-4" /> Back
       </button>

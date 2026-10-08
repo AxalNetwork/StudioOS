@@ -17,6 +17,7 @@ const Twitter = ({ className, size }) => (
 );
 import { adminTeam as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { appOrigin } from '../../lib/branchHost';
 
@@ -92,7 +93,7 @@ function FocusAreasInput({ value, onChange }) {
   );
 }
 
-function MemberEditor({ initial, onClose, onSaved }) {
+function MemberEditor({ initial, onClose, onSaved, notify }) {
   useEscapeClose(onClose);
   const isNew = !initial?.id;
   const [form, setForm] = useState({ ...EMPTY, ...(initial || {}) });
@@ -100,7 +101,6 @@ function MemberEditor({ initial, onClose, onSaved }) {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef(null);
-  const { showToast } = useToast();
 
   const update = (patch) => setForm((f) => ({ ...f, ...patch }));
 
@@ -110,11 +110,11 @@ function MemberEditor({ initial, onClose, onSaved }) {
       const payload = { ...form, slug: form.slug || slugify(form.name) };
       if (isNew) {
         const created = await api.create(payload);
-        showToast({ kind: 'success', msg: `Created ${form.name}` });
+        notify?.(`Created ${form.name}`);
         onSaved({ ...payload, id: created.id });
       } else {
         await api.update(initial.id, payload);
-        showToast({ kind: 'success', msg: `Saved ${form.name}` });
+        notify?.(`Saved ${form.name}`);
         onSaved({ ...form, id: initial.id });
       }
     } catch (e) {
@@ -143,7 +143,7 @@ function MemberEditor({ initial, onClose, onSaved }) {
       const dataUri = await readFileAsDataUri(file);
       const res = await api.uploadPhoto(initial.id, dataUri);
       update({ photo_r2_key: res.photo_r2_key, has_photo: true, _photo_bust: Date.now() });
-      showToast({ kind: 'success', msg: 'Photo uploaded' });
+      notify?.('Photo uploaded');
     } catch (e2) {
       setError(e2?.message || 'Upload failed');
     } finally { setPhotoBusy(false); }
@@ -310,7 +310,7 @@ export default function AdminTeam() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {...row} = edit
   const [dragId, setDragId] = useState(null);
-  const { showToast } = useToast();
+  const { toast, showToast, dismissToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -366,6 +366,7 @@ export default function AdminTeam() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 dark:text-gray-100">
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
       <header className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -468,6 +469,7 @@ export default function AdminTeam() {
           initial={editing}
           onClose={() => setEditing(null)}
           onSaved={(saved) => { setEditing(null); load(); void saved; }}
+          notify={(msg) => showToast({ kind: 'success', msg })}
         />
       )}
     </div>

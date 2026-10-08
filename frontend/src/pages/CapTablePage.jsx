@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
+import { toastText } from '../components/ToastMessage';
 import SafeHarbourPanel from './captable/SafeHarbourPanel';
 import EquityPlanPanel from './captable/EquityPlanPanel';
 import {
@@ -449,7 +450,7 @@ export default function CapTablePage({ embedded = false }) {
         </div>
       </div>
 
-      {savedFlash && <div className="mb-3 text-sm text-emerald-700">{savedFlash}</div>}
+      {savedFlash && <div className="mb-3 text-sm text-emerald-700">{toastText(savedFlash)}</div>}
       {apiError && (
         <div className="mb-4 flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3 text-sm text-rose-700">
           <AlertCircle size={16} className="mt-0.5 shrink-0" />

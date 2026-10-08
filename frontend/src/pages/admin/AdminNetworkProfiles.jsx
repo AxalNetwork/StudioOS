@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { adminNetworkProfiles as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 const SKILL_CATALOG = [
@@ -236,66 +237,87 @@ function EditorModal({ initial, onClose, onSave, onPhoto, busy }) {
   );
 }
 
+/**
+ * #1437 — one save, with its message. `notify` is the toast hook's
+ * `{ success }`. The page used to call the toast VALUE as a function, which
+ * threw after the write succeeded: the editor stayed open and a second Save
+ * created the profile again. Resolves once the write and its message are done.
+ */
+export async function saveProfileForm({ client, editing, form, notify }) {
+  const payload = {
+    name: form.name,
+    kind: form.kind,
+    role: form.role || null,
+    company: form.company || null,
+    bio: form.bio || null,
+    linkedin_url: form.linkedin_url || null,
+    skills: form.skills || [],
+    is_active: !!form.is_active,
+  };
+  if (editing?.id) {
+    await client.update(editing.id, payload);
+    notify.success('Profile updated');
+  } else {
+    await client.create(payload);
+    notify.success('Profile created');
+  }
+}
+
+/** Which body the list draws. A failed read is "unreadable", never "No profiles yet". */
+export function listState({ loading, loadError, profiles }) {
+  if (loading) return 'loading';
+  if (loadError) return 'unreadable';
+  return profiles.length ? 'list' : 'empty';
+}
+
 export default function AdminNetworkProfiles() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [dragId, setDragId] = useState(null);
-  const { toast } = useToast();
+  // `success` and `error` are stable; `toast` (the current message) is data to
+  // draw and is never a dependency, or every message would reload the list.
+  const { toast, success, error, dismissToast } = useToast();
+  const [loadError, setLoadError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.list();
       setProfiles(Array.isArray(data?.profiles) ? data.profiles : []);
+      setLoadError('');
     } catch (e) {
-      toast(e?.message || 'Failed to load profiles', 'error');
+      setLoadError(e?.message || 'Profiles could not be read just now.');
     } finally { setLoading(false); }
-  }, [toast]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const save = useCallback(async (form) => {
     setBusy(true);
     try {
-      const payload = {
-        name: form.name,
-        kind: form.kind,
-        role: form.role || null,
-        company: form.company || null,
-        bio: form.bio || null,
-        linkedin_url: form.linkedin_url || null,
-        skills: form.skills || [],
-        is_active: !!form.is_active,
-      };
-      if (editing?.id) {
-        await api.update(editing.id, payload);
-        toast('Profile updated', 'success');
-      } else {
-        await api.create(payload);
-        toast('Profile created', 'success');
-      }
+      await saveProfileForm({ client: api, editing, form, notify: { success } });
       setEditing(null);
       await load();
     } catch (e) {
-      toast(e?.message || 'Save failed', 'error');
+      error(e?.message || 'Save failed');
     } finally { setBusy(false); }
-  }, [editing, toast, load]);
+  }, [editing, success, error, load]);
 
   const uploadPhoto = useCallback(async (dataUri) => {
     if (!editing?.id) return;
     setBusy(true);
     try {
       const r = await api.uploadPhoto(editing.id, dataUri);
-      toast('Photo uploaded', 'success');
+      success('Photo uploaded');
       setEditing((cur) => cur ? { ...cur, photo_url: `${r.photo_url}?t=${Date.now()}` } : cur);
       await load();
     } catch (e) {
-      toast(e?.message || 'Upload failed', 'error');
+      error(e?.message || 'Upload failed');
       throw e;
     } finally { setBusy(false); }
-  }, [editing, toast, load]);
+  }, [editing, success, error, load]);
 
   const remove = useCallback(async (p) => {
     if (!window.confirm(
@@ -304,17 +326,17 @@ export default function AdminNetworkProfiles() {
     )) return;
     try {
       await api.remove(p.id);
-      toast('Profile archived', 'success');
+      success('Profile archived');
       await load();
-    } catch (e) { toast(e?.message || 'Archive failed', 'error'); }
-  }, [toast, load]);
+    } catch (e) { error(e?.message || 'Archive failed'); }
+  }, [success, error, load]);
 
   const toggleActive = useCallback(async (p) => {
     try {
       await api.update(p.id, { is_active: !p.is_active });
       await load();
-    } catch (e) { toast(e?.message || 'Update failed', 'error'); }
-  }, [toast, load]);
+    } catch (e) { error(e?.message || 'Update failed'); }
+  }, [success, error, load]);
 
   const onDragStart = (id) => setDragId(id);
   const onDragOver = (e) => e.preventDefault();
@@ -329,7 +351,7 @@ export default function AdminNetworkProfiles() {
     setProfiles(ordered);
     setDragId(null);
     try { await api.reorder(ordered.map((p) => p.id)); }
-    catch (e) { toast(e?.message || 'Reorder failed', 'error'); await load(); }
+    catch (e) { error(e?.message || 'Reorder failed'); await load(); }
   };
 
   const counts = useMemo(() => {
@@ -343,6 +365,7 @@ export default function AdminNetworkProfiles() {
 
   return (
     <div className="max-w-5xl mx-auto p-6">
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -372,13 +395,22 @@ export default function AdminNetworkProfiles() {
         ].map(([label, n]) => (
           <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded p-3">
             <div className="text-xs text-zinc-500 dark:text-zinc-400">{label}</div>
-            <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{n}</div>
+            <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{loadError ? <span className="text-sm text-zinc-500 dark:text-zinc-400">Unreadable</span> : n}</div>
           </div>
         ))}
       </div>
 
-      {loading ? (
+      {listState({ loading, loadError, profiles }) === 'loading' ? (
         <div className="flex items-center justify-center py-12 text-zinc-500"><Loader2 className="w-6 h-6 animate-spin" /></div>
+      ) : listState({ loading, loadError, profiles }) === 'unreadable' ? (
+        <div data-testid="profiles-unreadable" className="text-center py-12 border-2 border-dashed border-red-300 dark:border-red-800 rounded-lg">
+          <div className="text-red-700 dark:text-red-300">Profiles could not be read just now.</div>
+          <div className="text-xs text-zinc-500 mt-1">{loadError}</div>
+          <button type="button" onClick={load}
+            className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-zinc-300 dark:border-zinc-700 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800">
+            <RefreshCw className="w-4 h-4" /> Try again
+          </button>
+        </div>
       ) : profiles.length === 0 ? (
         <div className="text-center py-12 border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg">
           <Users className="w-12 h-12 mx-auto text-zinc-400 mb-3" />

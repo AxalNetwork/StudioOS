@@ -3,6 +3,7 @@ import { Inbox, CheckCircle2, Link as LinkIcon, Send } from 'lucide-react';
 import { dd } from '../lib/api';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
+import ToastMessage from '../components/ToastMessage';
 
 // Build queue #128 — the subject-facing half of the DD request list
 // (Due_Diligence.dc.html, "FOUNDER SIDE"). This is the ONLY diligence
@@ -19,7 +20,7 @@ const STATE_META = {
 export default function DueDiligenceRequestsPage() {
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');
-  const { toast, push } = useToast();
+  const { toast, success, error: toastError, dismissToast } = useToast();
 
   const load = async () => {
     try {
@@ -75,13 +76,13 @@ export default function DueDiligenceRequestsPage() {
             onRespond={async (payload) => {
               try {
                 await dd.respondRequest(r.id, payload);
-                push('Response sent', 'success');
+                success('Response sent');
                 load();
-              } catch (e) { push(e.message || 'Failed to send response', 'error'); }
+              } catch (e) { toastError(e.message || 'Failed to send response'); }
             }} />
         ))}
       </div>
-      {toast}
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

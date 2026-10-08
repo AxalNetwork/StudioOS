@@ -4,6 +4,7 @@ import { ShieldAlert, Plus, RefreshCw, Search, ExternalLink } from 'lucide-react
 import { dd } from '../lib/api';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
+import ToastMessage from '../components/ToastMessage';
 import { useEscapeClose } from '../components/useEscapeClose';
 
 const BAND_STYLES = {
@@ -26,7 +27,7 @@ export default function AdminDueDiligencePage() {
   const [filter, setFilter] = useState({ status: '', risk_band: '', subject_type: '' });
   const [search, setSearch] = useState('');
   const [openModal, setOpenModal] = useState(false);
-  const { toast, push } = useToast();
+  const { toast, success, error, dismissToast } = useToast();
   const location = useLocation();
   // Task #83 — the same page is mounted at both /admin/due-diligence (admin) and
   // /due-diligence (investor). Derive the base so internal links stay on the
@@ -48,7 +49,7 @@ export default function AdminDueDiligencePage() {
         setCases([]);
       } else {
         reportError('AdminDueDiligencePage:list', e);
-        push(e.message || 'Failed to load cases', 'error');
+        error(e.message || 'Failed to load cases');
       }
     } finally { setLoading(false); }
   };
@@ -186,8 +187,8 @@ export default function AdminDueDiligencePage() {
         )}
       </div>
 
-      {openModal && <NewCaseModal onClose={() => setOpenModal(false)} onCreated={() => { setOpenModal(false); load(); push('Case opened', 'success'); }} />}
-      {toast}
+      {openModal && <NewCaseModal onClose={() => setOpenModal(false)} onCreated={() => { setOpenModal(false); load(); success('Case opened'); }} />}
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

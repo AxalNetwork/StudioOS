@@ -15,6 +15,7 @@ import {
 import { adminX as api } from '../../lib/api';
 import { toLocalInput, scheduledNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 const AUDIENCES = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
@@ -194,7 +195,7 @@ function XPreview({ handle, display, body, mediaPreviews }) {
 
 // ----- Tabs -------------------------------------------------------------
 
-function AccountsTab({ accounts, configOk, dailyCap, onReload, toast }) {
+function AccountsTab({ accounts, configOk, dailyCap, onReload, notify }) {
   const [showCreate, setShowCreate] = useState(false);
 
   const authorise = async (acc) => {
@@ -202,16 +203,16 @@ function AccountsTab({ accounts, configOk, dailyCap, onReload, toast }) {
       const { url } = await api.oauthStart(acc.id);
       window.location.href = url;
     } catch (e) {
-      toast(`Authorise failed: ${e?.message || e}`, 'error');
+      notify(`Authorise failed: ${e?.message || e}`, 'error');
     }
   };
   const test = async (acc) => {
     try {
       const out = await api.testAccount(acc.id);
-      toast(`Connected as @${out.me?.username}`, 'success');
+      notify(`Connected as @${out.me?.username}`, 'success');
       onReload();
     } catch (e) {
-      toast(`Test failed: ${e?.message || e}`, 'error');
+      notify(`Test failed: ${e?.message || e}`, 'error');
     }
   };
   const toggle = async (acc) => {
@@ -220,8 +221,8 @@ function AccountsTab({ accounts, configOk, dailyCap, onReload, toast }) {
   };
   const remove = async (acc) => {
     if (!confirm(`Delete @${acc.handle}? Only allowed when no sent posts attached.`)) return;
-    try { await api.removeAccount(acc.id); toast('Deleted', 'success'); onReload(); }
-    catch (e) { toast(`Delete failed: ${e?.message || e}`, 'error'); }
+    try { await api.removeAccount(acc.id); notify('Deleted', 'success'); onReload(); }
+    catch (e) { notify(`Delete failed: ${e?.message || e}`, 'error'); }
   };
 
   return (
@@ -303,7 +304,7 @@ function AccountsTab({ accounts, configOk, dailyCap, onReload, toast }) {
   );
 }
 
-function ComposeTab({ accounts, onSaved, toast }) {
+function ComposeTab({ accounts, onSaved, notify }) {
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [body, setBody] = useState('');
   const [hashtags, setHashtags] = useState('');
@@ -320,20 +321,20 @@ function ComposeTab({ accounts, onSaved, toast }) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (!IMAGE_MIME.includes(file.type)) { toast('Unsupported image type', 'error'); return; }
-    if (file.size > MAX_IMAGE_BYTES) { toast(`Image too large (max ${(MAX_IMAGE_BYTES/1024/1024).toFixed(0)}MB)`, 'error'); return; }
-    if (media.length >= MAX_MEDIA) { toast(`Max ${MAX_MEDIA} images`, 'error'); return; }
+    if (!IMAGE_MIME.includes(file.type)) { notify('Unsupported image type', 'error'); return; }
+    if (file.size > MAX_IMAGE_BYTES) { notify(`Image too large (max ${(MAX_IMAGE_BYTES/1024/1024).toFixed(0)}MB)`, 'error'); return; }
+    if (media.length >= MAX_MEDIA) { notify(`Max ${MAX_MEDIA} images`, 'error'); return; }
     const dataUri = await fileToDataUri(file);
     setMedia((m) => [...m, { dataUri, name: file.name, alt: '' }]);
   };
 
   const save = async () => {
-    if (!accountId) { toast('Pick an account', 'error'); return; }
-    if (!body.trim()) { toast('Body required', 'error'); return; }
+    if (!accountId) { notify('Pick an account', 'error'); return; }
+    if (!body.trim()) { notify('Body required', 'error'); return; }
     setBusy(true);
     try {
       const headBody = hashtags ? `${body.trim()}\n\n${hashtags.trim()}` : body.trim();
-      if (countChars(headBody) > MAX_BODY) { toast(`Head tweet exceeds ${MAX_BODY} chars`, 'error'); return; }
+      if (countChars(headBody) > MAX_BODY) { notify(`Head tweet exceeds ${MAX_BODY} chars`, 'error'); return; }
       const head = await api.createPost({ account_id: Number(accountId), body: headBody, hashtags: hashtags || null });
       // Attach media to head.
       for (const m of media) await api.addMedia(head.id, m.dataUri, m.alt);
@@ -342,15 +343,15 @@ function ComposeTab({ accounts, onSaved, toast }) {
         for (const part of threadParts) {
           const t = String(part || '').trim();
           if (!t) continue;
-          if (countChars(t) > MAX_BODY) { toast(`A thread tweet exceeds ${MAX_BODY} chars`, 'error'); break; }
+          if (countChars(t) > MAX_BODY) { notify(`A thread tweet exceeds ${MAX_BODY} chars`, 'error'); break; }
           await api.createPost({ account_id: Number(accountId), body: t, thread_continuation_of: head.id });
         }
       }
-      toast(`Draft #${head.id} saved`, 'success');
+      notify(`Draft #${head.id} saved`, 'success');
       setBody(''); setHashtags(''); setMedia([]); setThreadParts(['']); setThreadMode(false);
       onSaved();
     } catch (e) {
-      toast(`Save failed: ${e?.message || e}`, 'error');
+      notify(`Save failed: ${e?.message || e}`, 'error');
     } finally { setBusy(false); }
   };
 
@@ -470,7 +471,7 @@ function ComposeTab({ accounts, onSaved, toast }) {
   );
 }
 
-function PostsTab({ posts, accounts, onReload, toast, mode }) {
+function PostsTab({ posts, accounts, onReload, notify, mode }) {
   const [busyId, setBusyId] = useState(null);
   const [overrideFor, setOverrideFor] = useState(null);  // { id, findings }
   const [editId, setEditId] = useState(null);
@@ -480,7 +481,7 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
     setBusyId(id);
     try {
       await api.sendPost(id, override_reason ? { override_reason } : {});
-      toast('Sent', 'success');
+      notify('Sent', 'success');
       setOverrideFor(null);
       onReload();
     } catch (e) {
@@ -493,49 +494,49 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
         return;
       }
       if (e?.status === 429 || e?.code === 'daily_cap_reached') {
-        toast('Daily send cap reached for this account', 'error');
+        notify('Daily send cap reached for this account', 'error');
         onReload();
         return;
       }
-      toast(`Send failed: ${e?.message || e}`, 'error');
+      notify(`Send failed: ${e?.message || e}`, 'error');
       onReload();
     } finally { setBusyId(null); }
   };
 
   const approve = async (id) => {
-    try { await api.approvePost(id); toast('Approved', 'success'); onReload(); }
-    catch (e) { toast(`Approve failed: ${e?.message || e}`, 'error'); }
+    try { await api.approvePost(id); notify('Approved', 'success'); onReload(); }
+    catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
   };
 
   const remove = async (id) => {
     if (!confirm('Delete this draft?')) return;
-    try { await api.removePost(id); toast('Deleted', 'success'); onReload(); }
-    catch (e) { toast(`Delete failed: ${e?.message || e}`, 'error'); }
+    try { await api.removePost(id); notify('Deleted', 'success'); onReload(); }
+    catch (e) { notify(`Delete failed: ${e?.message || e}`, 'error'); }
   };
 
   const retract = async (id) => {
     const reason = prompt('Retraction reason (audit-logged):', '');
     if (reason === null) return;
-    try { await api.retractPost(id, reason); toast('Retracted on X', 'success'); onReload(); }
-    catch (e) { toast(`Retract failed: ${e?.message || e}`, 'error'); }
+    try { await api.retractPost(id, reason); notify('Retracted on X', 'success'); onReload(); }
+    catch (e) { notify(`Retract failed: ${e?.message || e}`, 'error'); }
   };
 
   const startEdit = (p) => { setEditId(p.id); setEditBody(p.body); };
   const saveEdit = async (id) => {
     try {
-      if (countChars(editBody) > MAX_BODY) { toast(`Exceeds ${MAX_BODY} chars`, 'error'); return; }
+      if (countChars(editBody) > MAX_BODY) { notify(`Exceeds ${MAX_BODY} chars`, 'error'); return; }
       await api.updatePost(id, { body: editBody });
       setEditId(null);
       onReload();
-    } catch (e) { toast(`Edit failed: ${e?.message || e}`, 'error'); }
+    } catch (e) { notify(`Edit failed: ${e?.message || e}`, 'error'); }
   };
 
   const genAlt = async (id, idx) => {
     try {
       const out = await api.generateAltText(id, idx);
-      toast(`Alt-text: ${out.alt_text.slice(0, 60)}…`, 'success');
+      notify(`Alt-text: ${out.alt_text.slice(0, 60)}…`, 'success');
       onReload();
-    } catch (e) { toast(`Alt-text failed: ${e?.message || e}`, 'error'); }
+    } catch (e) { notify(`Alt-text failed: ${e?.message || e}`, 'error'); }
   };
 
   return (
@@ -580,10 +581,10 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
                         const iso = new Date(v).toISOString();
                         try {
                           await api.schedulePost(p.id, iso);
-                          toast(`Scheduled for ${new Date(iso).toLocaleString()}`, 'success');
+                          notify(`Scheduled for ${new Date(iso).toLocaleString()}`, 'success');
                           onReload();
                         } catch (e) {
-                          toast(e?.message || 'Failed to schedule', 'error');
+                          notify(e?.message || 'Failed to schedule', 'error');
                         }
                       }}
                       className="px-2 py-1 text-xs border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 rounded flex items-center gap-1"
@@ -663,7 +664,7 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
   );
 }
 
-function AggregatorTab({ accounts, onReload, toast }) {
+function AggregatorTab({ accounts, onReload, notify }) {
   const [periodDays, setPeriodDays] = useState(7);
   const [kind, setKind] = useState('');
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
@@ -677,19 +678,19 @@ function AggregatorTab({ accounts, onReload, toast }) {
     try {
       const out = await api.previewAggregator({ period_days: periodDays, kind: kind || undefined });
       setDrafts(out.drafts || []);
-    } catch (e) { toast(`Preview failed: ${e?.message || e}`, 'error'); }
+    } catch (e) { notify(`Preview failed: ${e?.message || e}`, 'error'); }
     finally { setBusy(false); }
   };
 
   const run = async () => {
-    if (!accountId) { toast('Pick an account', 'error'); return; }
+    if (!accountId) { notify('Pick an account', 'error'); return; }
     if (!confirm(`Persist ${drafts.length || 'all'} per-audience drafts as x_posts rows for @${accounts.find(a => a.id === Number(accountId))?.handle}?`)) return;
     setBusy(true);
     try {
       const out = await api.runAggregator({ account_id: Number(accountId), period_days: periodDays });
-      toast(`Drafted ${out.drafted?.length || 0} threads`, 'success');
+      notify(`Drafted ${out.drafted?.length || 0} threads`, 'success');
       onReload();
-    } catch (e) { toast(`Run failed: ${e?.message || e}`, 'error'); }
+    } catch (e) { notify(`Run failed: ${e?.message || e}`, 'error'); }
     finally { setBusy(false); }
   };
 
@@ -814,7 +815,10 @@ function AdminXFull() { // paused feature implementation retained for quick re-e
   const [posts, setPosts] = useState([]);
   const [historyPosts, setHistoryPosts] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { toast, Toast } = useToast();
+  const { toast, success, error, dismissToast } = useToast();
+  // #1437 — the tabs report through `notify(msg, kind)`. The hook has no
+  // `Toast` and `toast` is the current message, not a function; both threw.
+  const notify = useCallback((msg, kind) => (kind === 'error' ? error(msg) : success(msg)), [success, error]);
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -822,8 +826,8 @@ function AdminXFull() { // paused feature implementation retained for quick re-e
       setAccounts(out.accounts || []);
       setConfigOk(!!out.config_ok);
       setDailyCap(Number(out.daily_cap || 20));
-    } catch (e) { toast(`Load accounts failed: ${e?.message || e}`, 'error'); }
-  }, [toast]);
+    } catch (e) { notify(`Load accounts failed: ${e?.message || e}`, 'error'); }
+  }, [notify]);
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
@@ -837,9 +841,9 @@ function AdminXFull() { // paused feature implementation retained for quick re-e
       ]);
       setPosts(d.posts || []);
       setHistoryPosts(h.posts || []);
-    } catch (e) { toast(`Load posts failed: ${e?.message || e}`, 'error'); }
+    } catch (e) { notify(`Load posts failed: ${e?.message || e}`, 'error'); }
     finally { setLoading(false); }
-  }, [toast]);
+  }, [notify]);
 
   useEffect(() => { loadAccounts(); loadPosts(); }, [loadAccounts, loadPosts]);
 
@@ -847,13 +851,13 @@ function AdminXFull() { // paused feature implementation retained for quick re-e
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     if (sp.get('x_oauth_linked')) {
-      toast(`X account #${sp.get('x_oauth_linked')} authorised`, 'success');
+      notify(`X account #${sp.get('x_oauth_linked')} authorised`, 'success');
       window.history.replaceState({}, '', window.location.pathname);
     } else if (sp.get('x_oauth_error')) {
-      toast(`OAuth failed: ${sp.get('x_oauth_error')}`, 'error');
+      notify(`OAuth failed: ${sp.get('x_oauth_error')}`, 'error');
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [toast]);
+  }, [notify]);
 
   const reload = useCallback(() => { loadAccounts(); loadPosts(); }, [loadAccounts, loadPosts]);
 
@@ -876,21 +880,21 @@ function AdminXFull() { // paused feature implementation retained for quick re-e
         </nav>
       </div>
       {tab === 'accounts' && (
-        <AccountsTab accounts={accounts} configOk={configOk} dailyCap={dailyCap} onReload={loadAccounts} toast={toast} />
+        <AccountsTab accounts={accounts} configOk={configOk} dailyCap={dailyCap} onReload={loadAccounts} notify={notify} />
       )}
       {tab === 'compose' && (
-        <ComposeTab accounts={accounts.filter((a) => a.enabled)} onSaved={loadPosts} toast={toast} />
+        <ComposeTab accounts={accounts.filter((a) => a.enabled)} onSaved={loadPosts} notify={notify} />
       )}
       {tab === 'drafts' && (
-        <PostsTab posts={posts} accounts={accounts} onReload={loadPosts} toast={toast} mode="drafts" />
+        <PostsTab posts={posts} accounts={accounts} onReload={loadPosts} notify={notify} mode="drafts" />
       )}
       {tab === 'history' && (
-        <PostsTab posts={historyPosts} accounts={accounts} onReload={loadPosts} toast={toast} mode="history" />
+        <PostsTab posts={historyPosts} accounts={accounts} onReload={loadPosts} notify={notify} mode="history" />
       )}
       {tab === 'aggregator' && (
-        <AggregatorTab accounts={accounts.filter((a) => a.enabled)} onReload={loadPosts} toast={toast} />
+        <AggregatorTab accounts={accounts.filter((a) => a.enabled)} onReload={loadPosts} notify={notify} />
       )}
-      {Toast}
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
+import { toastText } from '../components/ToastMessage';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
@@ -446,7 +447,7 @@ export default function IntegrationsPage({ embedded = false }) {
       )}
       {toast && (
         <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2">
-          <Check size={14} /> {toast}
+          <Check size={14} /> {toastText(toast)}
         </div>
       )}
       {returnFlash && (

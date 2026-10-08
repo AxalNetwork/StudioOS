@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { FileText, Plus, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import ToastMessage from '../../components/ToastMessage';
 
 const AUDIENCE_BADGE = {
   internal: 'bg-gray-200 text-gray-700',
@@ -16,7 +17,7 @@ export default function AdminPublications() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
-  const { showToast } = useToast();
+  const { toast, showToast, dismissToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,6 +33,7 @@ export default function AdminPublications() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 dark:text-gray-100">
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
       <header className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">

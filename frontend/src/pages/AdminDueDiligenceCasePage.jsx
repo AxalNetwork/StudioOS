@@ -4,6 +4,7 @@ import { ArrowLeft, Play, FileDown, Send, RefreshCw, Shield, AlertTriangle, Chec
 import { dd } from '../lib/api';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
+import ToastMessage from '../components/ToastMessage';
 import { useEscapeClose } from '../components/useEscapeClose';
 
 const SEV_STYLES = {
@@ -51,7 +52,7 @@ export default function AdminDueDiligenceCasePage() {
   const [inviteBanner, setInviteBanner] = useState(null);
   const sectionRefs = useRef({});
   const inviteConsumedRef = useRef(false);
-  const { toast, push } = useToast();
+  const { toast, success, error, dismissToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,9 +61,9 @@ export default function AdminDueDiligenceCasePage() {
       setData(r);
     } catch (e) {
       reportError('AdminDueDiligenceCasePage:get', e);
-      push(e.message || 'Failed to load case', 'error');
+      error(e.message || 'Failed to load case');
     } finally { setLoading(false); }
-  }, [uid, push]);
+  }, [uid, error]);
   useEffect(() => { load(); }, [load]);
 
   // Consume the magic-link invite jti once on first load. The backend
@@ -80,10 +81,10 @@ export default function AdminDueDiligenceCasePage() {
         next.delete('inv');
         setSearchParams(next, { replace: true });
       } catch (e) {
-        push(`Invitation invalid: ${e.message || 'expired or revoked'}`, 'error');
+        error(`Invitation invalid: ${e.message || 'expired or revoked'}`);
       }
     })();
-  }, [inv, uid, searchParams, setSearchParams, push]);
+  }, [inv, uid, searchParams, setSearchParams, error]);
 
   // Scroll & highlight the focused section once data is loaded.
   useEffect(() => {
@@ -107,8 +108,8 @@ export default function AdminDueDiligenceCasePage() {
 
   const runScan = async () => {
     setBusy(true);
-    try { await dd.scan(uid); push('Scan queued — results will appear shortly', 'success'); await load(); }
-    catch (e) { push(e.message || 'Scan failed', 'error'); }
+    try { await dd.scan(uid); success('Scan queued — results will appear shortly'); await load(); }
+    catch (e) { error(e.message || 'Scan failed'); }
     finally { setBusy(false); }
   };
 
@@ -120,18 +121,18 @@ export default function AdminDueDiligenceCasePage() {
         // Open the report in a new tab. Same-origin worker route streams
         // the file with Content-Disposition: attachment.
         window.open(r.download_url, '_blank', 'noopener,noreferrer');
-        push(`Report generated (${r.format.toUpperCase()})`, 'success');
+        success(`Report generated (${r.format.toUpperCase()})`);
       }
       await load();
-    } catch (e) { push(e.message || 'Report failed', 'error'); }
+    } catch (e) { error(e.message || 'Report failed'); }
     finally { setBusy(false); }
   };
 
   const shareWithFounder = async () => {
     if (!window.confirm('Notify the founder that the report is ready? They will not see the report contents — only that it exists.')) return;
     setBusy(true);
-    try { await dd.shareReport(uid); push('Founder notified', 'success'); }
-    catch (e) { push(e.message || 'Share failed', 'error'); }
+    try { await dd.shareReport(uid); success('Founder notified'); }
+    catch (e) { error(e.message || 'Share failed'); }
     finally { setBusy(false); }
   };
 
@@ -263,7 +264,7 @@ export default function AdminDueDiligenceCasePage() {
                 items={(data.checklist || []).filter(i => i.section_id === s.id)}
                 onUpdate={async (itemId, patch) => {
                   try { await dd.updateItem(uid, itemId, patch); await load(); }
-                  catch (e) { push(e.message || 'Checklist update failed', 'error'); throw e; }
+                  catch (e) { error(e.message || 'Checklist update failed'); throw e; }
                 }} />
               {sectionFindings.length > 0 ? (
                 <ul className="space-y-1.5 mt-2">
@@ -316,16 +317,16 @@ export default function AdminDueDiligenceCasePage() {
         <RequestsPanel requests={data.requests || []} sections={data.sections}
           onCompose={() => setComposeOpen(true)}
           onReview={async (id) => {
-            try { await dd.reviewRequest(uid, id); push('Request marked reviewed', 'success'); load(); }
-            catch (e) { push(e.message || 'Failed', 'error'); }
+            try { await dd.reviewRequest(uid, id); success('Request marked reviewed'); load(); }
+            catch (e) { error(e.message || 'Failed'); }
           }} />
       )}
 
       {composeOpen && (
         <ComposeRequestModal sections={data.sections} onClose={() => setComposeOpen(false)}
           onSave={async (payload) => {
-            try { await dd.createRequest(uid, payload); push('Request sent to the subject', 'success'); setComposeOpen(false); load(); }
-            catch (e) { push(e.message || 'Failed', 'error'); }
+            try { await dd.createRequest(uid, payload); success('Request sent to the subject'); setComposeOpen(false); load(); }
+            catch (e) { error(e.message || 'Failed'); }
           }} />
       )}
 
@@ -334,23 +335,23 @@ export default function AdminDueDiligenceCasePage() {
           attachments={data.attachments.filter(a => a.section_id === verdictModal.id)}
           onClose={() => setVerdictModal(null)}
           onSave={async (verdict, notes) => {
-            try { await dd.setVerdict(uid, verdictModal.id, verdict, notes); push('Verdict recorded', 'success'); setVerdictModal(null); load(); }
-            catch (e) { push(e.message || 'Failed', 'error'); }
+            try { await dd.setVerdict(uid, verdictModal.id, verdict, notes); success('Verdict recorded'); setVerdictModal(null); load(); }
+            catch (e) { error(e.message || 'Failed'); }
           }}
           onUploadNda={async (file) => {
-            try { await dd.uploadNda(uid, verdictModal.id, file); push('NDA uploaded', 'success'); load(); }
-            catch (e) { push(e.message || 'NDA upload failed', 'error'); throw e; }
+            try { await dd.uploadNda(uid, verdictModal.id, file); success('NDA uploaded'); load(); }
+            catch (e) { error(e.message || 'NDA upload failed'); throw e; }
           }} />
       )}
       {assignModal && (
         <AssignModal section={assignModal} onClose={() => setAssignModal(null)}
           onSave={async (userId) => {
-            try { await dd.assignSection(uid, assignModal.id, userId); push('Reviewer assigned', 'success'); setAssignModal(null); load(); }
-            catch (e) { push(e.message || 'Failed', 'error'); }
+            try { await dd.assignSection(uid, assignModal.id, userId); success('Reviewer assigned'); setAssignModal(null); load(); }
+            catch (e) { error(e.message || 'Failed'); }
           }} />
       )}
       {auditOpen && <AuditDrawer uid={uid} onClose={() => setAuditOpen(false)} />}
-      {toast}
+      <ToastMessage toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

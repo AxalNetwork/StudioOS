@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Rocket, X, PartyPopper, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from './useToast';
+import { toastText } from './ToastMessage';
 import { spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
 
@@ -197,7 +198,7 @@ export default function SpinoutLabListener() {
           aria-live="polite"
         >
           <Rocket size={16} className="mt-0.5 shrink-0" />
-          <div className="text-sm flex-1">{toast}</div>
+          <div className="text-sm flex-1">{toastText(toast)}</div>
           <button
             type="button"
             onClick={dismissToast}

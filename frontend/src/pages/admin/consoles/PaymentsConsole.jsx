@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { ChevronDown, RefreshCw, KeyRound, Plus, Package, Zap } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
+import ToastMessage from '../../../components/ToastMessage';
 import { useAuth } from '../../../hooks/useAuthSync';
 // D223 — the elevation the secret-writing consoles gate on; its own line so
 // the `branchOfUser` import D128's test pins stays exactly as it was.
@@ -390,7 +391,7 @@ export function PaymentsPanel() {
 
   return (
     <div>
-      {toast}
+      <ToastMessage toast={toast} />
 
       {/* Mode banner */}
       <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border mb-6 text-sm font-medium ${modeBadge}`}>

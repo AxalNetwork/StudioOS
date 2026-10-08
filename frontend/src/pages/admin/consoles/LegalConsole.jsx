@@ -3,6 +3,7 @@ import { reportError } from '../../../lib/log';
 import { api } from '../../../lib/api';
 import { X, FileText, Send, Download, Ban, Search, RefreshCw, Loader2, ShieldAlert } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
+import ToastMessage from '../../../components/ToastMessage';
 import { useEscapeClose } from '../../../components/useEscapeClose';
 import { Unreadable } from '../../../ui';
 import AdminTemplates from '../AdminTemplates';
@@ -1050,7 +1051,7 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
 // Task #14 — Full-screen lightbox for signed eSign documents. PDF preview
 // in an iframe + metadata/audit sidebar + "Forward to legal partner" action.
 // Only opens from the Signed sub-tab when the source is 'esign'.
-function SignedDocLightbox({ uid, onClose, onChanged }) {
+export function SignedDocLightbox({ uid, onClose, onChanged }) {
   const [doc, setDoc] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [err, setErr] = useState('');
@@ -1134,7 +1135,7 @@ function SignedDocLightbox({ uid, onClose, onChanged }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2" onClick={onClose}>
-      {toast}
+      <ToastMessage toast={toast} />
       <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[96vw] h-[96vh] overflow-hidden flex flex-col dark:bg-gray-900">
         {/* Header */}
         <div className="px-5 py-3 border-b border-gray-200 flex items-start justify-between gap-3 dark:border-gray-800 flex-shrink-0">

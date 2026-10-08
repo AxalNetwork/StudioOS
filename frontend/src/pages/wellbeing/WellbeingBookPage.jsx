@@ -124,7 +124,10 @@ function ExpertOption({ expert, labels, opening, selected, onSelect }) {
   );
 }
 
-export function ExpertColumn({ status, experts = [], labels = new Map(), slots = {}, selected, missingSelected = false, onSelect, onRetry, timeZone }) {
+/** D643 — what a member reads when no expert is listed at all. */
+export const NO_EXPERTS_LISTED = 'No wellbeing experts are listed yet.';
+
+export function ExpertColumn({ status, experts = [], directoryEmpty = false, labels = new Map(), slots = {}, selected, missingSelected = false, onSelect, onRetry, timeZone }) {
   const allClosed = status === 'ready' && experts.length > 0
     && experts.every((e) => slots[e.uid]?.status === 'ready' && !slots[e.uid].external && !(slots[e.uid].slots || []).length);
   return (
@@ -132,6 +135,9 @@ export function ExpertColumn({ status, experts = [], labels = new Map(), slots =
       <CardHead title="1 · Expert" as="h2" />
       {status === 'loading' ? <Skeleton.Text lines={5} /> : status === 'unreadable' ? (
         <Unreadable what="The expert directory" claim="This is not a sign that no expert is listed." onRetry={onRetry} />
+      ) : !experts.length && directoryEmpty ? (
+        // D643 — the directory itself is empty: say so, never fill it with a sample.
+        <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="text-experts-none-listed">{NO_EXPERTS_LISTED}</p>
       ) : !experts.length ? (
         <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="text-experts-empty">No expert matches these filters. Try clearing them.</p>
       ) : (
@@ -333,7 +339,7 @@ export default function WellbeingBookPage() {
   const [query, setQuery] = useState(EMPTY_FILTERS);
   const [goals, setGoals] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [list, setList] = useState({ status: 'loading', experts: [], filtered: null });
+  const [list, setList] = useState({ status: 'loading', experts: [], filtered: null, total: null });
   const [slots, setSlots] = useState({});
   const [selected, setSelected] = useState(() => wanted || null);
   const [chosen, setChosen] = useState(null);
@@ -374,9 +380,10 @@ export default function WellbeingBookPage() {
         status: 'ready',
         experts: Array.isArray(r?.matches) ? r.matches : [],
         filtered: Number.isFinite(r?.filtered_count) ? r.filtered_count : null,
+        total: Number.isFinite(r?.total_active) ? r.total_active : null,
       });
     } catch {
-      setList({ status: 'unreadable', experts: [], filtered: null });
+      setList({ status: 'unreadable', experts: [], filtered: null, total: null });
     }
   }, [goals, query, timeZone]);
   useEffect(() => { loadExperts(); }, [loadExperts]);
@@ -450,6 +457,7 @@ export default function WellbeingBookPage() {
         <ExpertColumn
           status={list.status}
           experts={experts}
+          directoryEmpty={list.total === 0}
           labels={labels}
           slots={slots}
           selected={selected}
