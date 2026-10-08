@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { pickDispute, EMPTY_EVIDENCE } from '../src/pages/AdminPage.jsx';
+import { pickDispute, EMPTY_EVIDENCE } from '../src/pages/admin/consoles/BillingConsole.jsx';
 import { saveProfileForm, listState } from '../src/pages/admin/AdminNetworkProfiles.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -37,7 +37,7 @@ test('picking another dispute starts its evidence empty; reselecting the same on
 });
 
 test('the dispute list sets the selection and the evidence together, through pickDispute', () => {
-  const code = codeOnly(read('../src/pages/AdminPage.jsx'));
+  const code = codeOnly(read('../src/pages/admin/consoles/BillingConsole.jsx'));
   assert.match(code, /const n = pickDispute\(selDispute, evidence, d\); setSelDispute\(n\.selDispute\); setEvidence\(n\.evidence\);/);
   assert.doesNotMatch(code, /onClick=\{\(\) => setSelDispute\(d\)\}/);
 });

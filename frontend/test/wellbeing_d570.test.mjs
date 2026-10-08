@@ -33,6 +33,7 @@ import {
 import { LibraryToolbar, ResourceTable, ResourceEditor } from '../src/pages/wellbeing/WellbeingResourceLibrary.jsx';
 import { BecomeExpert } from '../src/pages/ExpertEditorPage.jsx';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -844,7 +845,7 @@ test('the four routes are registered with guards matching the API, the old dashb
   for (const decl of ["wellbeing.get('/checkins'", "wellbeing.post('/checkins'", "wellbeing.get('/experts'", "wellbeing.post('/experts/:uid/book'"]) {
     assert.match(handler(decl), /Not available for investors/, decl);
   }
-  assert.match(read('frontend/src/pages/AdminPage.jsx'), /<Link to="\/admin\/wellbeing\/resources"/);
+  assert.match(adminConsoleSource(), /<Link to="\/admin\/wellbeing\/resources"/);
 });
 
 test('every method the screens call reaches a route wellbeing.ts declares', async () => {

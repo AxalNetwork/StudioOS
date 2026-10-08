@@ -1,0 +1,39 @@
+# pages/admin/consoles — one file per Admin Console tool
+
+`../../AdminPage.jsx` is a shell: the header, the section dropdown (its
+`?tab=` links and `admin-tab-*` hooks), and the one console it mounts. Each
+console lives here, in its own file, and reads only its own data (D648):
+
+| File | Console | Reads |
+| --- | --- | --- |
+| `UsersConsole.jsx` | Users: the account directory, role picker, support sessions, the account drawer | the users list, trust scores |
+| `PartnerProfilesConsole.jsx` | Partner Profiles and the profile review drawer | the profiles list |
+| `KycConsole.jsx` | KYC / AML queue and its review drawer | the queue, one record on Review |
+| `LegalConsole.jsx` | Legal (contracts, envelopes, signed documents) | its own contract reads |
+| `PersonasConsole.jsx` | Personas | the persona list |
+| `DirectoryConsole.jsx` | Directory | the directory partners |
+| `IntegrationKeysConsole.jsx` | Integration keys | the provider keys |
+| `GithubSyncConsole.jsx` | GitHub Sync | the sync settings |
+| `PromoCodesConsole.jsx` | Promo codes | the codes, the catalog products |
+| `PaymentsConsole.jsx` | Payments (Stripe catalog, prices, webhooks) | the catalog, Stripe config, webhooks |
+| `BillingConsole.jsx` | Billing (refunds, disputes) | disputes, on Load |
+| `WellbeingConsole.jsx` | Wellbeing experts roster | the experts |
+| `shared.jsx` | the pieces more than one console draws: `ROLE_BADGES`, `Field`, `KV`, `fmtDate`, `ConsoleUnreadable`, `CONSOLE_LOADING` | — |
+
+Spin-Out Lab and Advisors & Partners were already their own components
+(`../AdminSpinoutLab.jsx`, `../AdminNetworkProfiles.jsx`); the shell mounts
+them directly.
+
+## Rules
+
+- **A console reads its own data and nothing else.** Opening one tab must not
+  fetch another console's rows; `frontend/test/admin_consoles_d648.test.mjs`
+  renders each tab and fails on any other read.
+- **A failed read is said, not drawn as empty.** Every console draws
+  `ConsoleUnreadable` ("… could not be read", with Try again) when its read
+  fails, never the empty list.
+- **Mount a console alone where only one is needed.** HQ · Accounts mounts
+  `UsersConsole`; Contracts mounts `LegalPanel` (re-exported by `AdminPage.jsx`).
+- **Tests read the consoles through `frontend/test/_adminConsoles.mjs`**, which
+  lists every file here; a new console file is added to that list and to the
+  `COMPOSED` table in `admin_route_reachability.test.mjs`.

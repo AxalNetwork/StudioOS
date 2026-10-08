@@ -14,13 +14,16 @@ mock.module(new URL('../src/components/useToast.js', import.meta.url).href, {
   },
 });
 
-const admin = await import('../src/pages/AdminPage.jsx');
+// D648 — the panels live in their own console files.
+const { PaymentsPanel } = await import('../src/pages/admin/consoles/PaymentsConsole.jsx');
+const { BillingPanel } = await import('../src/pages/admin/consoles/BillingConsole.jsx');
+const { SignedDocLightbox } = await import('../src/pages/admin/consoles/LegalConsole.jsx');
 const { default: AdminNetworkProfiles } = await import('../src/pages/admin/AdminNetworkProfiles.jsx');
 
 const panels = {
-  PaymentsPanel: () => h(admin.PaymentsPanel),
-  BillingPanel: () => h(admin.BillingPanel),
-  SignedDocLightbox: () => h(admin.SignedDocLightbox, { uid: 'doc-1', onClose() {}, onChanged() {} }),
+  PaymentsPanel: () => h(PaymentsPanel),
+  BillingPanel: () => h(BillingPanel),
+  SignedDocLightbox: () => h(SignedDocLightbox, { uid: 'doc-1', onClose() {}, onChanged() {} }),
   AdminNetworkProfiles: () => h(AdminNetworkProfiles),
 };
 const payloads = { success: { kind: 'ok', msg: 'the success message' }, error: { kind: 'err', msg: 'the error message' } };

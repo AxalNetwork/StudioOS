@@ -20,9 +20,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import SecretWriteGate from '../src/components/SecretWriteGate.jsx';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnly(raw('frontend/src/pages/AdminPage.jsx'));
+const PAGE = codeOnly(adminConsoleSource());
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ');
 
 const gate = (holds) => renderToStaticMarkup(React.createElement(

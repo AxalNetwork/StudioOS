@@ -28,6 +28,7 @@ import {
   adjustRefusal, changeText, filterLedger, newSourceRef, pageOf, planAdjust, sourceOf, submitAdjust,
 } from '../src/lib/memberCredits.js';
 import { ROLES, rowsFor, validity } from '../src/lib/trustObligations.js';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -199,7 +200,7 @@ test('the routes are the Super Admin\'s, each has its door, and the client calls
   const app = codeOnly(read('frontend/src/App.jsx'));
   assert.match(app, /<Route path="\/admin\/accounts\/credits\/:userId" element=\{guard\(\['admin'\], hqOnly\(<MemberCreditsPage \/>\)\)\} \/>/);
   assert.match(app, /<Route path="\/admin\/security\/obligations" element=\{guard\(\['admin'\], hqOnly\(<TrustObligationsPage \/>\)\)\} \/>/);
-  const admin = codeOnly(read('frontend/src/pages/AdminPage.jsx'));
+  const admin = codeOnly(adminConsoleSource());
   assert.match(admin, /\{showCredits && \(\s*<Link to=\{`\/admin\/accounts\/credits\/\$\{u\.id\}`\}/);
   assert.match(admin, /showCredits=\{isSuperAdminUser\(viewer\)\}/);
   assert.match(codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx')), /<Link to="\/admin\/security\/obligations"/);

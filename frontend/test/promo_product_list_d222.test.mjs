@@ -11,6 +11,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { PromoProductScope } from '../src/pages/PromoProductScope.jsx';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -83,7 +84,7 @@ test('an unreadable product list renders Unreadable, and a readable empty list i
 });
 
 test('the admin promo list draws scope through PromoProductScope', () => {
-  const src = read('frontend/src/pages/AdminPage.jsx');
+  const src = adminConsoleSource();
   assert.match(src, /<PromoProductScope promo=\{p\} productName=\{productName\} \/>/);
   assert.doesNotMatch(src, /product_ids\.length === 0/);
 });

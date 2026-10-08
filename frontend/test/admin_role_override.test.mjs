@@ -38,9 +38,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { adminConsoleSource } from './_adminConsoles.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = raw('frontend/src/pages/AdminPage.jsx');
+const PAGE = adminConsoleSource();
 const src = codeOnly(PAGE);
 const api = codeOnly(raw('frontend/src/lib/api.js'));
 const route = raw('cloudflare-worker/src/routes/admin.ts');
@@ -64,7 +65,7 @@ test('only a real super admin is offered the override', () => {
   assert.match(src, /const canOverrideRole = Number\(viewer\?\.is_super_admin \?\? 0\) === 1;/,
     'the override is no longer gated on the viewer\'s own is_super_admin, or an '
     + 'absent field no longer reads as "no"');
-  assert.match(src, /^import \{ useAuth \} from '\.\.\/hooks\/useAuthSync';$/m,
+  assert.match(src, /^import \{ useAuth \} from '(?:\.\.\/){3}hooks\/useAuthSync';$/m,
     'useAuth is not imported, so there is no viewer to check');
   assert.match(src, /<RoleDropdown user=\{u\} onRoleChange=\{handleRoleChange\} canOverride=\{canOverrideRole\} \/>/,
     'the Users table no longer passes the computed flag to the picker');
