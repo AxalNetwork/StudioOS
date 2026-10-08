@@ -25,10 +25,16 @@ const HQ = read('frontend/src/pages/admin/AdminSpinoutLab.jsx');
 const WORKER = read('cloudflare-worker/src/services/section83bOperatorReview.ts');
 
 const row = (review) => renderToStaticMarkup(h(OperatorAssistRow, { review }));
+// The text between a cell's opening tag and the first `</span></div>` after it.
+// Plain string search, not a RegExp built from `id` (Semgrep 6238).
 const cell = (html, id) => {
-  const m = new RegExp(`data-testid="${id}">([\\s\\S]*?)</span></div>`).exec(html);
-  assert.ok(m, `${id} is not rendered`);
-  return m[1];
+  const open = `data-testid="${id}">`;
+  const at = html.indexOf(open);
+  assert.ok(at >= 0, `${id} is not rendered`);
+  const start = at + open.length;
+  const end = html.indexOf('</span></div>', start);
+  assert.ok(end >= 0, `${id} is not closed`);
+  return html.slice(start, end);
 };
 
 const OPERATOR = { user_id: 3, name: 'Olu Operator', assigned_at: '2026-10-01 09:00:00' };
@@ -44,8 +50,8 @@ test('nothing recorded: each value says Not recorded with its reason', () => {
 test('an operator with no review: the name, and no review or follow-up on record', () => {
   const html = row({ status: 'ready', data: { operator: OPERATOR, last_review: null, next_follow_up: null } });
   assert.equal(cell(html, 'text-83b-operator'), 'Olu Operator');
-  assert.match(cell(html, 'text-83b-last-review'), new RegExp(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
-  assert.match(cell(html, 'text-83b-next-follow-up'), new RegExp(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
+  assert.ok(cell(html, 'text-83b-last-review').includes(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
+  assert.ok(cell(html, 'text-83b-next-follow-up').includes(`title="${OPERATOR_REASONS.noReview}">Not recorded`));
 });
 
 test('an operator with a review: its outcome and date, and the next follow-up', () => {
@@ -64,7 +70,7 @@ test('an operator with a review: its outcome and date, and the next follow-up', 
     next_follow_up: null,
   } });
   assert.equal(cell(noNext, 'text-83b-last-review'), 'Record complete · Oct 6, 2026');
-  assert.match(cell(noNext, 'text-83b-next-follow-up'), new RegExp(`title="${OPERATOR_REASONS.noFollowUp}">Not recorded`));
+  assert.ok(cell(noNext, 'text-83b-next-follow-up').includes(`title="${OPERATOR_REASONS.noFollowUp}">Not recorded`));
 });
 
 test('a failed read is Unreadable on every value, and no company record says so', () => {
