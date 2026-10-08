@@ -23,6 +23,8 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { api } from '../src/lib/api.js';
 import AdminPage from '../src/pages/AdminPage.jsx';
+import { LegalPanel, TemplateUsageModal } from '../src/pages/admin/consoles/LegalConsole.jsx';
+import { renderToStaticMarkup } from 'react-dom/server';
 import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
 import PartnerProfilesConsole from '../src/pages/admin/consoles/PartnerProfilesConsole.jsx';
 import KycConsole from '../src/pages/admin/consoles/KycConsole.jsx';
@@ -61,9 +63,11 @@ function makeNode(tag) {
   };
 }
 function installDocument(search = '') {
-  const keys = ['window', 'document', 'HTMLElement', 'Element', 'Node', 'HTMLIFrameElement', 'location', 'localStorage'];
+  const keys = ['window', 'document', 'HTMLElement', 'Element', 'Node', 'HTMLIFrameElement', 'location', 'localStorage', 'addEventListener', 'removeEventListener'];
   const previous = Object.fromEntries(keys.map((k) => [k, globalThis[k]]));
   globalThis.window = globalThis;
+  globalThis.addEventListener = () => {};
+  globalThis.removeEventListener = () => {};
   const document = {
     nodeType: 9, nodeName: '#document', activeElement: null, defaultView: globalThis,
     createElement(tag) { const n = makeNode(tag); n.ownerDocument = document; return n; },
@@ -251,5 +255,39 @@ test('HQ · Accounts mounts the Users console alone, not the whole Admin Console
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/AccountsPage.jsx'), 'utf8');
   assert.match(page, /<UsersConsole onImpersonate=\{onImpersonate\} \/>/);
   assert.doesNotMatch(page, /<AdminPage\b/);
+  assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
+});
+
+
+test('D647: Contracts has a real formation-orders destination and no dead Incorporation tab', () => {
+  const markup = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(LegalPanel)));
+  assert.match(markup, /href="\/admin\/spinout-lab"/);
+  assert.match(markup, /Programs › Spin-Out Lab/);
+  assert.match(markup, /Open its Formation orders tab/);
+  assert.doesNotMatch(markup, /legal-sub-incorporation|legal-incorporation-placeholder|Incorporation packets will appear/);
+});
+
+test('D647: empty agreements and template usage point at the visible envelope action', async () => {
+  for (const [element, answers, expected] of [
+    [React.createElement(LegalPanel), {
+      adminContractStats: async () => ({ total: 0, by_type: [] }),
+      adminListContracts: async () => ({ items: [], total: 0 }),
+    }, /No contracts found\. Use New envelope to send an agreement\./],
+    [React.createElement(TemplateUsageModal, { docType: 'safe', onClose() {} }), {
+      adminContractTemplateUsage: async () => ({ items: [], stats: { total: 0, by_status: { signed: 0, sent: 0, void: 0 } } }),
+    }, /This template hasn't been used yet\. Use New envelope in Contracts to send an agreement\./],
+  ]) {
+    stubApi(answers);
+    const v = await mount(element);
+    try {
+      assert.match(v.text(), expected);
+      assert.doesNotMatch(v.text(), /Profiles tab/);
+    } finally { await v.unmount(); restoreApi(); }
+  }
+});
+
+test('D647: Contracts imports the extracted console without the Admin Console module', () => {
+  const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/ContractsPage.jsx'), 'utf8');
+  assert.match(page, /import \{ LegalPanel \} from '\.\.\/admin\/consoles\/LegalConsole'/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
 });

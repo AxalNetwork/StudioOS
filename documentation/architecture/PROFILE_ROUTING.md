@@ -170,7 +170,7 @@ it, where in their nav, and how do they get there.*
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Admin · Subsidiary | `/admin/subsidiary` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Contracts · Subsidiary | `/admin` · `/esign/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Contracts · Subsidiary | `/admin/contracts` · `/admin?tab=legal` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Contracts | UPGRADE | High |
 | GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → Approvals | UPGRADE | High |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -262,8 +262,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 102 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 43 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 103 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 42 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 36 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
