@@ -140,7 +140,7 @@ export default function FounderRaiseCapital() {
           <div className="fr-capital-crumb"><Link to={`/raise/status${query}`} data-testid="link-capital-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Capital</strong></div>
           <div className="fr-capital-title-row"><div><h1>Capital</h1><p className="fr-capital-subtitle">Full cap table, instruments, scenarios, 409A and waterfalls.</p></div></div>
           <nav className="fr-capital-zone-nav" aria-label="Raise sections">
-            <LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`} className="is-active" data-testid="link-capital-zone">Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><span className="fr-capital-zone-disabled">Liquidity unavailable</span>
+            <LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`}>Pitch</LensLink><LensLink to={`/raise/capital${query}`} className="is-active" data-testid="link-capital-zone">Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><LensLink to={`/raise/liquidity${query}`}>Liquidity</LensLink>
           </nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/capital', { value: view, onChange: setView })}

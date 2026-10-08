@@ -49,3 +49,5 @@ worker ahead of its schema.
 - **Signed and issued documents are immutable** — R2 object-lock, hash in D1.
 - **A new binding goes in BOTH tables in `wrangler.toml`** — the top level and
   `[env.production]`. `check-wrangler-binding-parity` fails otherwise.
+
+D642 (#1435): `routes/usage.ts` mounts caller-only `GET /api/usage/storage`; `services/storageUsage.ts` reads five file-metadata areas across all companies. NULL sizes and unreadable areas keep unknown totals distinct from recorded zero. See `documentation/architecture/decisions/D642.md` for ownership and the response contract.

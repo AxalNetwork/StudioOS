@@ -51,3 +51,5 @@ runs these directly against an in-process SQLite, with no request at all.
   every exception is written down in a baseline.
 - Fail closed. A rate limiter or a scope that cannot decide must deny, not
   allow — both have been fixed here after doing the opposite.
+
+D647 (#1441): `contractListQuery.ts` validates paging/search/sort and supplies literal picker searches, null-last sorting and stable union tie breaks. See `documentation/architecture/decisions/D647.md` for route/read contracts and access gates.

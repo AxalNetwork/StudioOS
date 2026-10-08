@@ -125,11 +125,14 @@ test("'super_admin' names a shell, never a permission", () => {
 });
 
 test('the HQ-only routes render the notice for an admin without the elevation', () => {
-  for (const path of ['/admin/licences', '/admin/contracts', '/admin/accounts', '/hq', '/admin/security', '/admin/hq-support']) {
+  for (const path of ['/admin/licences', '/admin/accounts', '/hq', '/admin/security', '/admin/hq-support']) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.ok(line, `${path} must be registered`);
     assert.match(line, /hqOnly\(/, `${path} must be wrapped in hqOnly — the server 403s a plain admin on every call there`);
   }
+  const contracts = APP.split('\n').find((l) => l.includes('path="/admin/contracts"'));
+  assert.match(contracts, /guard\(\['admin'\]/);
+  assert.doesNotMatch(contracts, /hqOnly\(/, 'D647: agreements and templates are available to both admin shells');
   assert.match(APP_CODE, /const hqOnly = \(component\) => \(\s*isSuperAdminUser\(user\) \? component : <SuperAdminOnlyNotice \/>/);
 });
 
