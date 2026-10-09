@@ -33,6 +33,7 @@ monthly headline uses only a target explicitly marked as the focus; the existing
 Focus card sets/clears it through the scoped targets route. Unknown focus remains
 unselected, and an unreadable target source is reported as Unreadable.
 - `RecordSessionSheet.jsx` is Validate's "Record a session" side sheet (D660), opened from each row of the interview log at `/validate/interviews`: How, With, Talking points, Consent and the two model lists of `Cycle Action.dc.html` (`action=record`). On an audio channel Start stays disabled until consent is recorded. It creates the session through `../../lib/api/interviewSessions.js`.
+- `AssistantEntry.jsx` and `assistantSession.js` (D668) are "From an AI assistant" (D665): the sheet's three steps, the starter prompt the founder copies, the badge on a session an assistant submitted, and the "Proposed by …" label on each placement. They are mounted when #1496 and #1497 are on `main`.
 - `InterviewSessionPage.jsx` is `/validate/session/:id` (D660): the start step (consent, and the Worker's 409 in its own words), the Recording View while recording, and the review step with one-tap speaker assignment, beside a rail with the models, the cost receipt and the meter.
 - `RecordingView.jsx` is the Recording View's eleven states (D660), full-screen on a phone, light by default and dark with the theme. Its ring is `../../components/discovery/RingViz.jsx` on `../../lib/ringViz.js`, and capture (live 16 kHz PCM, chunk upload, the IndexedDB queue) is `../../lib/interviewCapture.js`.
 

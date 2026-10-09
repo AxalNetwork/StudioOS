@@ -37,6 +37,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |
+| `connect/` | D668: `/connect/assistant`, where a founder approves an AI assistant (D665) for the companies they tick. Its own README holds the rules. |
 | `account/` | The Account center's sections (D568), mounted by `SettingsPage.jsx`, which is still `/account`: the section list and shared kit in `AccountCenter.jsx`, one file per canvas section, and the pure helpers in `accountCenterModel.js`, `usageModel.js` and `connectorsModel.js`. Connectors (D651) replaced the Integrations page. Documented in `scripts/check-folder-docs.mjs` and in its own README. |
 | `cycles/` | The four cycle overviews and their module pages (D661), drawn from #1469's shared read: the model, the SVG charts, the overview and the module page. Not mounted until each cycle's read lands. Start at `cycles/README.md`. |
 
