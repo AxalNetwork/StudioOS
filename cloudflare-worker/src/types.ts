@@ -1,4 +1,12 @@
 export interface Env {
+  // D666 (#1496): the StudioOS MCP server and its OAuth provider. Off unless
+  // "true"; with it off every MCP and OAuth path answers 404 and the provider
+  // is never built. OAUTH_KV holds clients, grants, tokens and parked consent
+  // requests. MCP_PUBLIC_ORIGIN is the origin the resource is named by
+  // (default https://axal.vc), so a preview Worker can be connected too.
+  MCP_SERVER_ENABLED?: string;
+  OAUTH_KV?: KVNamespace;
+  MCP_PUBLIC_ORIGIN?: string;
   // D653: stays off until owner/counsel authorize private founder round calls.
   ROUND_CALLS_ENABLED?: string;
   DB: D1Database;
