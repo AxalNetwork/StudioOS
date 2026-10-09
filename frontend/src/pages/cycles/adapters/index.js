@@ -11,6 +11,7 @@
  * gets `series: null`, so an `ok` card reads as unreadable rather than as a
  * chart this layer guessed.
  */
+import * as grow from './grow.js';
 import * as validate from './validate.js';
 
 /**
@@ -30,6 +31,7 @@ export function fnOf(map, key) {
 
 const ADAPTERS = new Map([
   ['validate', { cards: toFnMap(validate.CARDS), records: new Map(Object.entries(validate.RECORDS)), figure: validate.figure }],
+  ['grow', { cards: toFnMap(grow.CARDS), records: new Map(Object.entries(grow.RECORDS)), figure: grow.figure }],
 ]);
 
 const isSpecList = (s) => Array.isArray(s) && s.every((x) => x && typeof x === 'object' && typeof x.kind === 'string');
@@ -77,9 +79,14 @@ export function adaptOverview(cycle, data) {
 
 export function adaptModule(cycle, slug, data) {
   if (!data || typeof data !== 'object') return data;
+  // Grow says a table it could not read beside it (`records: null,
+  // records_state: 'unreadable', reason`); the page reads it on the table.
+  const records = data.records == null && data.records_state === 'unreadable'
+    ? { state: 'unreadable', reason: data.reason || 'This table could not be read.', cols: [], rows: [] }
+    : adaptRecords(cycle, slug, data.records);
   return {
     ...data,
     card: adaptCard(cycle, data.card ? { slug, ...data.card } : data.card),
-    records: adaptRecords(cycle, slug, data.records),
+    records,
   };
 }
