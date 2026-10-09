@@ -278,3 +278,33 @@ test('sparse recorded Build cards never become an unreadable chart in the D661 r
   assert.match(founders.body.card.reason, /sum to zero/);
   db.close();
 });
+
+test('Build field writes persist only within the owned project and record their actor', async () => {
+  const { db, env } = fixture();
+  db.exec(`INSERT INTO cap_table_holders(id,user_id,project_id,name) VALUES (10,1,101,'Founder One');
+    INSERT INTO entity_obligations(id,entity_id,title,status) VALUES (50,501,'Annual return','open');
+    INSERT INTO pain_groups VALUES (11,101,'Slow reporting');
+    INSERT INTO hypotheses VALUES (12,101,'Automate the close');
+    INSERT INTO mvp_features(id,project_id,title) VALUES (20,101,'Auto report');`);
+  const feature = await call(env, '/api/cycles/build/features/20?project=101', 1, 'PATCH',
+    { pain_group_id: 11, hypothesis_id: 12, is_must_have: true });
+  assert.equal(feature.status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT pain_group_id, hypothesis_id, is_must_have FROM mvp_features WHERE id = 20').get() },
+    { pain_group_id: 11, hypothesis_id: 12, is_must_have: 1 });
+  const role = await call(env, '/api/cycles/build/founders/10?project=101', 1, 'PATCH', { role: 'CEO' });
+  assert.equal(role.status, 200);
+  assert.equal(db.prepare('SELECT founder_role FROM cap_table_holders WHERE id = 10').get()?.founder_role, 'CEO');
+  const formation = await call(env, '/api/cycles/build/formation-steps?project=101', 1, 'POST',
+    { title: 'File certificate', due_date: '2026-12-01' });
+  assert.equal(formation.status, 201);
+  assert.equal(db.prepare('SELECT due_date FROM formation_steps WHERE id = ?').get(formation.body.id)?.due_date, '2026-12-01');
+  assert.equal(db.prepare("SELECT json_extract(details, '$.id') AS id FROM activity_logs WHERE action = 'build_formation_step_created'").get()?.id,
+    formation.body.id);
+  const proof = await call(env, '/api/cycles/build/obligations/50/proof?project=101', 1, 'PATCH', { proof_file_key: 'proof/annual-return' });
+  assert.equal(proof.status, 200);
+  assert.equal(db.prepare('SELECT proof_file_key FROM entity_obligations WHERE id = 50').get()?.proof_file_key, 'proof/annual-return');
+  const denied = await call(env, '/api/cycles/build/founders/10?project=202', 2, 'PATCH', { role: 'CEO' });
+  assert.equal(denied.status, 404);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE user_id = 2 AND action = 'build_founder_role_changed'").get()?.n, 0);
+  db.close();
+});
