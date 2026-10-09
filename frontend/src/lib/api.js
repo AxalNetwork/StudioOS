@@ -2682,9 +2682,10 @@ export const api = {
   deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),
   // Task #53 — viewer heartbeat for read-time tracking + founder engagement panel.
-  deckShareHeartbeat: (token, viewId, seconds) => request(
+  // D663 — `slides` is the viewer's running seconds per slide index.
+  deckShareHeartbeat: (token, viewId, seconds, slides) => request(
     `/decks/share/${encodeURIComponent(token)}/heartbeat`,
-    { method: 'POST', body: JSON.stringify({ view_id: viewId, seconds }) },
+    { method: 'POST', body: JSON.stringify(slides ? { view_id: viewId, seconds, slides } : { view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
   // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than

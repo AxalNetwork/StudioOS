@@ -43,6 +43,12 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
   `);
   db.exec(MIGRATION);
+  // D658 (#1471): the receipt read also lists the structuring lines, which
+  // live in `interview_structure_receipts`, beside 439's columns on 214/246's
+  // `validate_proposals`, as they will in production.
+  for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${m}`, import.meta.url), 'utf8'));
+  }
   db.prepare("UPDATE users SET founder_id = 100 WHERE id = 2").run();
   db.prepare("UPDATE users SET founder_id = 300 WHERE id = 3").run();
   db.prepare("UPDATE users SET founder_id = 400, role = 'exploring', spinout_lab_active = 1 WHERE id = 4").run();
