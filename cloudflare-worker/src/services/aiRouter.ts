@@ -485,7 +485,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
-    alternates: [MID_LLAMA, '@cf/deepseek-ai/deepseek-v4-flash-0731', '@cf/meta/llama-3.1-8b-instruct-fp8-fast'],
+    // DeepSeek last: Compare's "Structure again" takes the first model that is
+    // not the last run's (InterviewReview.jsx), and the 8B needs no paid plan.
+    alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
   },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
