@@ -108,7 +108,7 @@ The components are built in `frontend/src/pages/cycles/` and are not mounted yet
 
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
-| `Cycle Overview.dc.html` · `variant=full`, `new`, `states` (O1–O5) | `/validate` (D661, #1474: wired to #1487's read); `/build`, `/raise`, `/grow`: the current pages stay until each read is wired | `pages/cycles/CycleRoute.jsx` → `CycleOverview.jsx`, through `pages/cycles/adapters/`; `GET /api/cycles/:cycle/overview` (#1472, #1475, #1476, #1477) | NEW: Validate mounted; the other three waiting |
+| `Cycle Overview.dc.html` · `variant=full`, `new`, `states` (O1–O5) | `/validate` and `/raise` (D661, #1474: wired to #1487's and #1501's reads); `/build`, `/grow`: the current pages stay until each read is wired | `pages/cycles/CycleRoute.jsx` → `CycleOverview.jsx`, through `pages/cycles/adapters/`; `GET /api/cycles/:cycle/overview` (#1472, #1475, #1476, #1477) | NEW: Validate and Raise mounted; Build and Grow waiting |
 | `Cycle Overview.dc.html` · `module=0…6`; `Cycle Modules · Boards.dc.html` (MV1–MG7, 26 pages) | `/:cycle/:slug` once mounted; old module URLs redirect then | `pages/cycles/CycleModulePage.jsx`; `GET /api/cycles/:cycle/modules/:slug` | NEW: built, waiting on the reads |
 
 D631 (#1389), Ops area 6:

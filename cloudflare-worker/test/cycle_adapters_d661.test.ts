@@ -167,3 +167,106 @@ test('D661: an empty venture draws every card as empty with its action, and noth
   }
   for (const f of o.figures) assert.equal(figureValue(f), null, `${f.key} is written as a number with nothing recorded`);
 });
+
+// ---------------------------------------------------------------------------
+// Raise (#1501, D663): already in D661's shape, so it passes through untouched.
+// ---------------------------------------------------------------------------
+
+import cycleRaise from '../src/routes/cycle_raise.ts';
+import { MODULES as RAISE_WORKER_MODULES } from '../src/services/raiseCycle.ts';
+import { MODULES as PAGE_CYCLE_MODULES } from '../../frontend/src/pages/cycles/modules.js';
+import { CHART_KINDS, CARD_STATES as PAGE_STATES } from '../../frontend/src/pages/cycles/cycleModel.js';
+
+function raiseFixture() {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  for (const t of [
+    'users', 'projects', 'activity_logs', 'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens',
+    'deck_share_views', 'data_room_folders', 'data_room_files', 'data_room_access_log', 'cap_table_scenarios',
+    'raise_prospects', 'raise_rounds', 'contacts',
+  ]) db.exec(tableFromBaseline(BASELINE, t));
+  const cols = (t: string) => new Set((db.prepare(`SELECT name FROM pragma_table_info('${t}')`).all() as any[]).map((r) => r.name));
+  if (!cols('pitch_deck_share_tokens').has('revoked_at')) db.exec('ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT');
+  for (const [c, d] of [['amount', 'REAL'], ['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT']]) {
+    if (!cols('raise_prospects').has(c)) db.exec(`ALTER TABLE raise_prospects ADD COLUMN ${c} ${d}`);
+  }
+  db.exec(sqlOf('249_project_metrics.sql'));
+  db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)').run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
+  db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Acme', 1001)`);
+  return db;
+}
+
+const raiseApp = new Hono<any>();
+raiseApp.route('/api/cycles/raise', cycleRaise);
+raiseApp.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
+
+async function raiseCall(db: any, path: string) {
+  const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await raiseApp.request(`/api/cycles/raise${path}`, { headers: { Authorization: `Bearer ${token}` } },
+      { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+    return { status: res.status, body: await res.json().catch(() => null) as any };
+  } finally { [console.warn, console.error] = saved; }
+}
+
+/** Three modules given real rows, as cycle_raise_d663 seeds them. */
+function raiseSeeded() {
+  const db = raiseFixture();
+  const before = [{ holder: 'Fay', type: 'founder', shares: 8000 }, { holder: 'Option Pool', type: 'option_pool', shares: 2000 }];
+  const after = [...before, { holder: 'Seed investors', type: 'preferred', shares: 2500 }];
+  db.exec(`INSERT INTO cap_table_scenarios (owner_user_id, project_id, name, inputs_json, result_json) VALUES
+           (${FOUNDER}, ${P}, 'Main', '{}', '${JSON.stringify({ founding: before, rounds: [{ name: 'Seed', ledger: after }] })}')`);
+  db.exec(`UPDATE projects SET funding_needed = 1000000,
+             use_of_funds = '[{"label":"Product & engineering","pct":60},{"label":"GTM: sales and marketing","pct":40}]'
+           WHERE id = ${P}`);
+  db.exec(`INSERT INTO project_metrics (project_id, snapshot_date, cash_balance, net_burn) VALUES (${P}, '2026-10-01', 300000, 50000)`);
+  db.exec(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, status) VALUES ('r1', ${P}, 'Seed', 1000000, 'active')`);
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, stage, amount) VALUES ('a', ${P}, 'A', 'committed', 250000), ('b', ${P}, 'B', 'meeting', 400000), ('c', ${P}, 'C', 'contacted', 100000)`);
+  return db;
+}
+
+const isSpec = (s: any) => s && typeof s === 'object' && (CHART_KINDS as string[]).includes(s.kind);
+
+test('D661: the page lists Raise\'s modules as the Worker does', () => {
+  assert.deepEqual(PAGE_CYCLE_MODULES.raise.map((m: any) => [m.slug, m.name]), RAISE_WORKER_MODULES.map((m) => [m.slug, m.name]));
+  assert.deepEqual(PAGE_CYCLE_MODULES.validate.map((m: any) => m.slug), WORKER_MODULES.map((m) => m.slug));
+});
+
+test('D661: Raise\'s real read passes through the page untouched, and its seeded cards draw', async () => {
+  for (const db of [raiseFixture(), raiseSeeded()]) {
+    const r = await raiseCall(db, `/overview?project=${P}`);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const o = adaptOverview('raise', r.body);
+    assert.deepEqual(o.cards, r.body.cards, 'a read in D661\'s shape must pass through unchanged');
+    for (const c of o.cards) {
+      assert.ok((PAGE_STATES as string[]).includes(c.state), `${c.slug}: state ${c.state}`);
+      assert.ok(c.series == null || (Array.isArray(c.series) && c.series.every(isSpec)), `${c.slug}: series is not a list of chart specs`);
+      if (c.state === 'ok') assert.equal(cardView(c).state, 'ok', `${c.slug}: an ok card would read as ${cardView(c).state}`);
+    }
+    for (const f of o.figures) if (f.state === 'ok') assert.notEqual(figureValue(f), null, `${f.key} has a value the page cannot write`);
+  }
+  const seeded = adaptOverview('raise', (await raiseCall(raiseSeeded(), `/overview?project=${P}`)).body);
+  for (const slug of ['cap-table', 'use-of-funds', 'capital-relationships']) {
+    const c = seeded.cards.find((x: any) => x.slug === slug);
+    assert.equal(c.state, 'ok', `${slug} should be ok when seeded`);
+    assert.ok(drawableSeries(c.series).length >= 1, `${slug} draws nothing`);
+  }
+});
+
+test('D661: every Raise module page\'s records are {key,label} columns and {id,cells} rows', async () => {
+  const db = raiseSeeded();
+  for (const m of RAISE_WORKER_MODULES) {
+    const r = await raiseCall(db, `/modules/${m.slug}?project=${P}`);
+    assert.equal(r.status, 200, `${m.slug}: ${JSON.stringify(r.body)}`);
+    const d = adaptModule('raise', m.slug, r.body);
+    assert.deepEqual(d.records, r.body.records, `${m.slug}: records changed on the way through`);
+    const keys = new Set(d.records.cols.map((c: any) => c.key));
+    assert.ok(keys.size > 0 && d.records.cols.every((c: any) => typeof c.key === 'string' && typeof c.label === 'string'), `${m.slug}: columns are not {key,label}`);
+    for (const row of d.records.rows) {
+      assert.ok(row.id != null && row.cells && typeof row.cells === 'object', `${m.slug}: a row is not {id,cells}`);
+      for (const k of Object.keys(row.cells)) assert.ok(keys.has(k), `${m.slug}: a cell "${k}" has no column`);
+    }
+  }
+});

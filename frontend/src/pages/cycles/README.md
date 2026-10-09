@@ -12,6 +12,7 @@ The canvases are `design/incoming/Cycle Overview.dc.html` and its two boards.
 | `CycleOverview.jsx` | The overview: the header with its tabs and primary action, four figures, and one card per module in its five states |
 | `CycleModulePage.jsx` | A module page: the chart at full size, the records as a working table (search, filters, sort, pages, Add), a link to the module's own tool where it has one, then its further parts |
 | `CycleRoute.jsx` | The route component: picks the project (`?project_id=`, else the founder's first), reads the cycle through `frontend/src/lib/api/cycles.js`, adapts it, and draws the overview (`/validate`) or a module page (`/validate/:slug`) beside the Worker AI rail. It names each module's working tool and Add |
+| `modules.js` | Each wired cycle's modules in tab order, as its Worker read lists them; the module page's tabs come from here |
 | `adapters/` | One door from a cycle's read to the page's shape. `index.js` passes a read already in D661's shape through untouched; `validate.js` maps Validate's read (#1487), one function per module slug, the canvas's chart for each card, and its records' columns |
 
 ## Rules
@@ -20,8 +21,11 @@ The canvases are `design/incoming/Cycle Overview.dc.html` and its two boards.
   file that reads: it calls `frontend/src/lib/api/cycles.js`, whose table gains a cycle in
   the PR that wires it, because the drift test refuses a client method with
   no route.
-- **A cycle is mounted only once its read is wired.** Validate is (D661,
-  #1474). Build, Raise and Grow keep their current pages until theirs are.
+- **A cycle is mounted only once its read is wired.** Validate and Raise are
+  (D661, #1474). Build and Grow keep their current pages until theirs are.
+  Raise's read is already in D661's shape and passes through with no adapter.
+  `/raise/data-room` is the data room tool's own route, so the Data room tab
+  opens the tool itself.
 - **The page adapts; the Worker is not changed** (S1 on #1474). A read in
   D661's shape passes through. Validate's merged with its own, so
   `adapters/validate.js` maps it, and `cloudflare-worker/test/cycle_adapters_d661.test.ts`
