@@ -35,6 +35,18 @@ Both screens are built to the Usage canvas (`Ops · Boards.dc.html`, set `usage`
 | `integrated/ops-data.js` · `us-allowance`, `us-days`, `us-where`, `us-models`, `us-receipt`, `us-storage` (U1–U6) | `/account/usage` (`#days`, `#where`, `#models`, `#last-run`, `#storage`) · every signed-in role; "Usage" in the user menu, under Account | `pages/account/AccountUsage.jsx` (in `SettingsPage.jsx`, after Billing and orders); `GET /api/ai-budget/me`, `GET /api/ai-budget/top-up`, `GET /api/ai/me/spend`, `GET /api/ai/rates`, `GET /api/usage/storage` | CURRENT |
 | `integrated/ops-data.js` · `hq-allowances` (U7) | `/admin/platform/allowances` · Super Admin; on the Platform strip, linked from Platform | `pages/hq/PlatformAllowancesPage.jsx`; `GET /api/ai-budget/caps`, `PUT /api/ai-budget/caps/:licence`, `GET /api/ai-budget/reviews`, `POST /api/ai-budget/reviews/:uid/charge\|refund` | CURRENT |
 
+### Connectors page and Build's "Connect a tool" (D651, #1463)
+
+Connectors replace Integrations (D649). `/integrations` and `/account/integrations` redirect to `/account/connectors` with their query and hash, so a provider's sign-in, which still returns to `/integrations?…` (`integrations.ts`, `calendar.ts`, `linkedin.ts`), opens that connector's sheet on what happened. The page reads `/api/integrations` until #1462 (D650) lands `/api/connectors`; the fields only D650 carries read "Not recorded". `IntegrationsPage.jsx` is retired. Canvases: `Connectors Page.dc.html`, `Cycle Action.dc.html` and `Connectors · Boards.dc.html`, in S1's intake for #1461.
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| `Connectors Page.dc.html` · `yours`, `yoursEmpty`, `discover`, `discoverCat`, `menu`, `add`, `moved`, `request`, `loading`, `unreadable`, `noresults` | `/account/connectors` · every signed-in role; "Connectors" in the user menu, under Usage; after Usage in the Account center | `pages/account/AccountConnectors.jsx` (in `SettingsPage.jsx`); `GET /api/integrations/available`, `GET /api/integrations`, `GET/POST/DELETE /api/integrations/notify-me`, the calendar and LinkedIn status reads | UPGRADE: suggestions, requests, companies, feeds and "does" wait on D650 |
+| `Connectors Page.dc.html` · `sheetStripe`, `sheetHubspot`, `pre`, `signin`, `key`, `connected`, `cancelled`, `refused`, `badkey`, `overreach`, `pro` (the `connector` action of `Cycle Action.dc.html`) | the sheet over `/account/connectors` and over Build | `pages/account/ConnectorSheet.jsx`, `connectorTools.jsx`; `POST /api/integrations/connect`, `GET /oauth/:provider/start`, `POST /:uid/sync`, `GET /:uid/logs`, `PATCH /:uid/config`, `DELETE /:uid`; `/api/calendar/google`, `/api/calendar/microsoft`, `/api/linkedin` | UPGRADE: permissions in plain words, company checkboxes and `teammate` wait on D650 |
+| `Connectors Page.dc.html` · `custom` | the Add menu, disabled, shown as Pro and Coming soon | — (no MCP client in the Worker; outside the epic) | NEW |
+| `Connectors Page.dc.html` · `rail`, `railList` | the AI rail | #1464 (D652) | NEW |
+| `Cycle Action.dc.html` · `connect`: `list`, `failed`, `locked`, `loading`, `refused`, `success` | `/build`'s header, "Connect a tool" | `pages/account/ConnectToolSheet.jsx` in `pages/founder/FounderBuildDesk.jsx`; the same catalogue and sheet | UPGRADE: the `sync` view (GitHub repositories) waits on #1467 (D655) |
+
 D631 (#1389), Ops area 6:
 
 | Canvas | Live route | Component and Worker | Status |

@@ -447,6 +447,7 @@ import useInactivityTimeout from './hooks/useInactivityTimeout';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
+import { connectorsRedirect } from './pages/account/connectorsModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -620,13 +621,15 @@ function SupportRedirect() {
   );
 }
 
-// Integrations merged into Settings. Legacy /integrations (and
-// /integrations?... from OAuth callbacks / existing links) redirects into the
-// Settings "Integrations" section, preserving the query string so post-connect
-// success/error states still render on the tile that owns them.
+// D651 (#1463) — Connectors replace Integrations (D649). /integrations and
+// /account/integrations both land on /account/connectors with their query and
+// hash, because every provider's sign-in still returns to /integrations?… and
+// the Connectors section reads that query to say how the sign-in went. The
+// router state asks the section for its once-only "Integrations are now
+// Connectors" notice.
 function IntegrationsRedirect() {
   const loc = useLocation();
-  return <Navigate to={{ pathname: '/account/integrations', search: loc.search }} replace />;
+  return <Navigate to={connectorsRedirect(loc)} state={{ connectorsMoved: true }} replace />;
 }
 
 
@@ -708,6 +711,11 @@ function UserDropdown({ user, onLogout }) {
           <Link to="/account/usage" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Usage
+          </Link>
+          {/* D651 (#1463) — Connectors, under Usage, as the Connectors canvas's user menu draws it. */}
+          <Link to="/account/connectors" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Connectors
           </Link>
           <Link to="/trust" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
@@ -3324,10 +3332,11 @@ function AppInner() {
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferRedirect />)} />
       <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
-      {/* Integrations now lives inside Settings; /integrations redirects there
-          (preserving any ?query= so OAuth-return states still show). Available
-          to every authenticated profile, matching the all-roles Settings tab. */}
+      {/* D651 — Integrations are Connectors now; both old addresses redirect
+          to /account/connectors, keeping ?query= so OAuth returns still land.
+          Available to every authenticated profile, as the Account center is. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
+      <Route path="/account/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Navigate to="/referrals" replace />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><NetworkEffectsPage /></FounderWorkspaceTabs>))} />
       {/* /pipeline lives with the Partner bucket routes above — the partner

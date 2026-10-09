@@ -568,15 +568,16 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   const block = page.slice(page.indexOf('const SECTIONS = ['), page.indexOf('];', page.indexOf('const SECTIONS = [')));
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
   // D642 (#1435) — the Usage canvas's acNav puts Usage after Billing and orders.
-  assert.deepEqual(labels.slice(0, 7), ['Profile and identity', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Following', 'Developer']);
+  // D651 (#1463) — the Connectors canvas puts Connectors after Usage.
+  assert.deepEqual(labels.slice(0, 8), ['Profile and identity', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Developer']);
   assert.match(block, /\{ id: 'developer', label: 'Developer', roles: \['admin'\] \}/);
-  for (const id of ['onboarding', 'integrations', 'appearance', 'activity']) {
+  for (const id of ['onboarding', 'appearance', 'activity']) {
     assert.match(block, new RegExp(`\\{ id: '${id}', label: '[^']+', group: 'more' \\}`), `${id} is kept, under More`);
   }
-  for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage']]) {
+  for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage'], ['connectors', 'connectors'], ['integrations', 'connectors']]) {
     assert.match(page, new RegExp(`\\n  ${path.replace(/[-']/g, (c) => (c === '-' ? '\\-' : "'"))}: '${id}',`), `${path} resolves to ${id}`);
   }
-  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<DeveloperSection role={data.role} />']) {
+  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab />', '<DeveloperSection role={data.role} />']) {
     assert.ok(page.includes(mount), `${mount} is mounted`);
   }
   assert.match(page, /<ProfileTabs key=\{profileRev\}/, 'the editors below the profile cards remount after a card saves');
