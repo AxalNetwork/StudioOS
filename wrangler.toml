@@ -639,6 +639,7 @@ workers_dev = true
 [env.preview.vars]
 APP_URL           = "https://studioos-preview.workers.dev"
 ENVIRONMENT       = "preview"
+# D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.

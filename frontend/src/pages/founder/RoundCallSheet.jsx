@@ -11,6 +11,7 @@ export function CallForCapitalButton({projectId}) {
   return <div>
     {availability.error?<p role="alert">Call for Capital is unreadable. <button type="button" className={callButton} onClick={availability.retry}>Try again</button></p>:
       <button type="button" className={callButton} disabled={availability.loading||!availability.data?.enabled||!projectId} onClick={()=>setOpen(true)}>{availability.loading?'Checking availability…':availability.data?.enabled?'Call for Capital':'Call for Capital · Coming soon'}</button>}
+    {availability.data?.enabled&&projectId&&<Link className="ml-3 text-xs underline" to={'/round-calls?project_id='+projectId}>View calls</Link>}
     {open&&<RoundCallSheet projectId={projectId} onClose={()=>setOpen(false)}/>}
   </div>;
 }

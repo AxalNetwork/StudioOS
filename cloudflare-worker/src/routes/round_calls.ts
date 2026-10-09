@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth, requireHqAuthoring, requireStepUp } from '../auth';
+import { requireAuth, requireHqAuthoring, requireSuperAdmin, requireStepUp } from '../auth';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { mapError } from './_t13t14t15_helpers';
@@ -82,7 +82,7 @@ routes.get('/:uid',async c=>{
   try {
     const user=await requireAuth(c),call=await loadCall(c.env,(c.req.param('uid') || ''));
     if(user.role==='investor') return c.json(await investorPage(c.env,call,await investor(c)));
-    if(user.role==='admin') { await requireHqAuthoring(c); const page=await founderPage(c.env,call); return c.json({...page,viewer:'counsel'}); }
+    if(user.role==='admin') { await requireHqAuthoring(c); await requireSuperAdmin(c); const page=await founderPage(c.env,call); return c.json({...page,viewer:'counsel'}); }
     await owner(c,call.project_id); return c.json(await founderPage(c.env,call));
   } catch(e){return failure(c,e);}
 });
@@ -120,7 +120,7 @@ routes.put('/:uid/questions/:questionUid',async c=>{
 // Only HQ can record an actual counsel approval reference. A founder cannot
 // set these fields through the draft API. The current hash prevents stale approval.
 routes.post('/:uid/counsel-approval',async c=>{
-  try { const user=await requireHqAuthoring(c); await requireStepUp(c);
+  try { await requireHqAuthoring(c); const user=await requireSuperAdmin(c); await requireStepUp(c);
     const call=await loadCall(c.env,(c.req.param('uid') || '')),body=await input(c);
     return c.json(await recordCounsel(c.env,call,user,body.reference,body.terms_hash,body.revision));
   } catch(e){return failure(c,e);}

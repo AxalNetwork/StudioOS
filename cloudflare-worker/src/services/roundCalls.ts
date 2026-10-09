@@ -122,10 +122,10 @@ export async function saveAudience(env: Env, call: CallRow, actor: User, input: 
   if (call.state !== 'draft') throw new RoundCallError('call_read_only',409);
   const rows = await audience(env,call,input.chosen_prospect_ids,input.include_matches), at = now();
   const statements = [
-    env.DB.prepare("DELETE FROM round_call_recipients WHERE call_id=? AND EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='draft')").bind(call.id,call.id),
-    ...rows.map(row => env.DB.prepare("INSERT INTO round_call_recipients(call_id,investor_user_id,origin,match_reasons_json) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='draft')")
-      .bind(call.id,row.investor_user_id,row.origin,JSON.stringify(row.reasons),call.id)),
-    env.DB.prepare("UPDATE round_calls SET counsel_approved_hash=NULL,counsel_approved_by=NULL,counsel_approved_at=NULL,counsel_approval_reference=NULL,updated_at=?,revision=revision+1 WHERE id=? AND state='draft'").bind(at,call.id),
+    env.DB.prepare("DELETE FROM round_call_recipients WHERE call_id=? AND EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='draft' AND revision=?)").bind(call.id,call.id,call.revision),
+    ...rows.map(row => env.DB.prepare("INSERT INTO round_call_recipients(call_id,investor_user_id,origin,match_reasons_json) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='draft' AND revision=?)")
+      .bind(call.id,row.investor_user_id,row.origin,JSON.stringify(row.reasons),call.id,call.revision)),
+    env.DB.prepare("UPDATE round_calls SET counsel_approved_hash=NULL,counsel_approved_by=NULL,counsel_approved_at=NULL,counsel_approval_reference=NULL,updated_at=?,revision=revision+1 WHERE id=? AND state='draft' AND revision=?").bind(at,call.id,call.revision),
     await audit(env,actor,call.project_id,'round_call_audience_requested',{uid:call.uid,chosen:rows.filter(r=>r.origin==='chosen').length,matched:rows.filter(r=>r.origin==='match').length}),
   ];
   const result = await env.DB.batch(statements);
@@ -178,8 +178,9 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
   if(!recipient) throw new RoundCallError('call_not_found',404);
   await env.DB.prepare("UPDATE round_call_recipients SET opened_at=COALESCE(opened_at,?) WHERE id=? AND EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='sent' AND target_close>=?)").bind(now(),recipient.id,call.id,today()).run();
   const deck=call.deck_id==null?null:await env.DB.prepare('SELECT version,title,slides FROM pitch_decks WHERE id=? AND version=? AND project_id=?').bind(call.deck_id,call.deck_version,call.project_id).first();
-  const nda=call.data_room_project_uid!=null && await ndaActive(env,call.created_by,investor.id);
-  const grant=nda?await activeGrant(env,call.project_id,investor.id):null;
+  const active=call.data_room_project_uid!=null?await activeGrant(env,call.project_id,investor.id):null;
+  const nda=call.data_room_project_uid!=null && await ndaActive(env,active?.granted_by_user_id ?? call.created_by,investor.id);
+  const grant=nda?active:null;
   const questions=await env.DB.prepare('SELECT uid,question,answer,asked_at,answered_at FROM round_call_questions WHERE call_id=? AND investor_user_id=? ORDER BY asked_at,id').bind(call.id,investor.id).all();
   return { viewer:'investor',call:{uid:call.uid,name:call.name,amount_cents:call.amount_cents,instrument:call.instrument,
       terms:call.terms,minimum_cheque_cents:call.minimum_cheque_cents,target_close:call.target_close,
@@ -202,7 +203,8 @@ export async function respond(env: Env, call: CallRow, investor: User, input: Re
   if(action==='question') question=text(input.question,2000);
   if(action==='data_room') {
     if(!call.data_room_project_uid) throw new RoundCallError('data_room_not_recorded',409);
-    if(!await ndaActive(env,call.created_by,investor.id)) throw new RoundCallError('nda_required',409);
+    const grant=await activeGrant(env,call.project_id,investor.id);
+    if(!await ndaActive(env,grant?.granted_by_user_id ?? call.created_by,investor.id)) throw new RoundCallError('nda_required',409);
   }
   const at=now();
   const statements=[
