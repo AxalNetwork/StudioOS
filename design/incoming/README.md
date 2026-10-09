@@ -744,7 +744,7 @@ Every figure in them is a bracketed placeholder.
 
 Move each file to `canvases/integrated/` once its bodies are built.
 
-## Landed 2026-10-09 — the four cycles and the interview session (D656, EPIC_NO)
+## Landed 2026-10-09 — the four cycles and the interview session (D656, #1469)
 
 The owner shared seven artifacts on 2026-10-09:
 - `NyLYXDDmQBEvWcAJymQa37`: the Cycle Overview canvas;
@@ -759,14 +759,14 @@ Each was unpacked from its bundle. Every nested `Cycle Overview`, `Cycle Action`
 
 | Canvas | Screens | Routes | Grade | Issues |
 | --- | --- | --- | --- | --- |
-| `Cycle Overview.dc.html` + `pro-cycles.js` | One component for all four cycles: the overview (`full`, `new`, `states`) and each module's page (`module` 0–6) | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` | UPGRADE | TASKS_ALL |
-| `Cycle Overview · Boards.dc.html` | O1–O5 | — | — | EPIC_NO |
-| `Cycle Modules · Boards.dc.html` | MV1–MV6, MB1–MB6, MR1–MR7, MG1–MG7 | — | — | EPIC_NO |
-| `Cycle Actions · Boards.dc.html` | Each cycle's primary action as its own page, with every step and state | — | — | EPIC_NO |
-| `Cycle Action.dc.html` (updated) | Adds `action=record`: Validate's "Record a session" | Validate's header | NEW | TASK_V4_NO |
-| `Interview Session.dc.html` | `start`, `record`, `liveoff`, `text`, `review`, with the speech-to-text and structuring model rail | `/validate/session/:id` | NEW | TASK_V1_NO, TASK_V2_NO, TASK_V4_NO |
-| `Recording View.dc.html` + `ring-viz.js` | The phone recording view with its 11 states, light and dark | the same route, full-screen on a phone | NEW | TASK_V4_NO |
-| `Recording View · Boards.dc.html` | RV1–RV12 | — | — | TASK_V4_NO |
+| `Cycle Overview.dc.html` + `pro-cycles.js` | One component for all four cycles: the overview (`full`, `new`, `states`) and each module's page (`module` 0–6) | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` | UPGRADE | #1472, #1474, #1475, #1476, #1477 |
+| `Cycle Overview · Boards.dc.html` | O1–O5 | — | — | #1469 |
+| `Cycle Modules · Boards.dc.html` | MV1–MV6, MB1–MB6, MR1–MR7, MG1–MG7 | — | — | #1469 |
+| `Cycle Actions · Boards.dc.html` | Each cycle's primary action as its own page, with every step and state | — | — | #1469 |
+| `Cycle Action.dc.html` (updated) | Adds `action=record`: Validate's "Record a session" | Validate's header | NEW | #1473 |
+| `Interview Session.dc.html` | `start`, `record`, `liveoff`, `text`, `review`, with the speech-to-text and structuring model rail | `/validate/session/:id` | NEW | #1470, #1471, #1473 |
+| `Recording View.dc.html` + `ring-viz.js` | The phone recording view with its 11 states, light and dark | the same route, full-screen on a phone | NEW | #1473 |
+| `Recording View · Boards.dc.html` | RV1–RV12 | — | — | #1473 |
 | `AIRail.dc.html` (updated) | "Recommended" now reads "Default" | — | — | — |
 
 Every figure in them is a bracketed placeholder.
