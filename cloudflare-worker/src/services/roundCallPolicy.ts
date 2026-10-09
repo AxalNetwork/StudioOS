@@ -8,7 +8,7 @@ export type RoundCallTerms = {
 export function roundCallsEnabled(env: { ROUND_CALLS_ENABLED?: string }): boolean {
   return env.ROUND_CALLS_ENABLED === 'true';
 }
-export function verifiedInvestor(user: { role: string; is_active: number; kyc_status?: string }): boolean {
+export function verifiedInvestor(user: { role: string; is_active: number | boolean; kyc_status?: string | null }): boolean {
   return user.role === 'investor' && Number(user.is_active) === 1 && user.kyc_status === 'approved';
 }
 export function positiveCents(value: unknown): value is number {
