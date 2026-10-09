@@ -69,7 +69,7 @@ export async function safeCard(meta: CardMeta, read: () => Promise<Omit<Card, 's
     const body = await read();
     return { slug: meta.slug, name: meta.name, range: meta.range, caption: meta.caption, ...body };
   } catch (e) {
-    console.warn(`[cycleCards] ${meta.slug} unreadable:`, (e as Error)?.message);
+    console.warn('[cycleCards] card unreadable:', meta.slug, (e as Error)?.message);
     return {
       slug: meta.slug,
       name: meta.name,
@@ -93,7 +93,7 @@ export async function safeFigure(
     // `unit` may be refined by the read ("of 7"); the rest of the meta is fixed.
     return { key: meta.key, label: meta.label, unit: meta.unit, source: meta.source, ...body };
   } catch (e) {
-    console.warn(`[cycleCards] figure ${meta.key} unreadable:`, (e as Error)?.message);
+    console.warn('[cycleCards] figure unreadable:', meta.key, (e as Error)?.message);
     return {
       key: meta.key, label: meta.label, unit: meta.unit, source: meta.source,
       value: null, delta_30d: null, spark: [], state: 'unreadable', as_of: null,

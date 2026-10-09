@@ -92,7 +92,7 @@ cycleValidate.get('/modules/:slug', async (c) => {
   try {
     records = await RECORDS_FOR[slug](ctx, rq);
   } catch (e) {
-    console.warn(`[cycle_validate] ${slug} records unreadable:`, (e as Error)?.message);
+    console.warn('[cycle_validate] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
   return c.json({ module: { slug: mod.slug, name: mod.name }, card, records });
