@@ -36,7 +36,11 @@ export const MODULE_ORDER = Object.keys(MODULE_LABELS);
  * (its `alternates`). No route lists them yet, so they are mirrored here,
  * and `interview_review_d660.test.mjs` fails if the two lists part.
  */
-export const STRUCTURE_MODELS = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct-fp8-fast'];
+export const STRUCTURE_MODELS = [
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+  '@cf/deepseek-ai/deepseek-v4-flash-0731',
+];
 
 /** The model a second run should use, to compare against the latest run's. */
 export function nextStructureModel(read) {
@@ -87,8 +91,9 @@ export function groupByModule(read) {
 }
 
 /**
- * What a refused call means for the page. A budget refusal (D640: 503 with a
- * `budget_*` refusal) is its own state, in the budget's own words.
+ * What a refused call means for the page. A budget refusal (D640: a
+ * `budget_*` refusal, sent with 402) is its own state, in the budget's own
+ * words. The `refusal` field decides, never the status code.
  */
 export function refusalKind(err) {
   const refusal = err?.data?.refusal;

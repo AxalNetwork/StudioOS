@@ -33,6 +33,7 @@ import {
   type IntegrationRow,
   type SyncResult,
   type PushResult,
+  type PushPreview,
 } from '../registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 import { projectEnabled, scheduledConnectorEnabled } from '../companyScope';
@@ -349,7 +350,41 @@ async function pushOne(c: Context<{ Bindings: Env }>, _user: User, row: Integrat
   throw new Error('salesforce_push_requires_deal_id_or_project_id');
 }
 
-async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<PushResult> {
+/**
+ * D652: what `pushOne` would send for this payload, from the same builders
+ * (`opportunityContent`, `accountContent`) it sends from. Reads only. A
+ * custom `__c` field the org lacks is dropped on the retry
+ * (`retryStrippingCustomFields`); nothing else differs from what is listed.
+ */
+async function previewOne(env: Env, row: IntegrationRow, payload: unknown): Promise<PushPreview> {
+  const p = (payload || {}) as PushPayload;
+  if (p.deal_id) {
+    const { deal, body } = await opportunityContent(env, row, p.deal_id);
+    return {
+      target: `${deal.sf_opportunity_id ? 'Update' : 'New'} Salesforce opportunity "${deal.project_name || `StudioOS deal ${p.deal_id}`}"`,
+      fields: Object.entries(body).map(([name, value]) => ({ name, value: previewValue(value) })),
+    };
+  }
+  if (p.project_id) {
+    const { proj, accountBody, contactBody } = await accountContent(env, row, p.project_id);
+    return {
+      target: `${proj.sf_account_id ? 'Update' : 'New'} Salesforce account "${proj.name}"`,
+      fields: [
+        ...Object.entries(accountBody).map(([name, value]) => ({ name, value: previewValue(value) })),
+        ...(contactBody ? Object.entries(contactBody).map(([name, value]) => ({ name: `Contact ${name}`, value: previewValue(value) })) : []),
+      ],
+    };
+  }
+  throw new Error('salesforce_push_requires_deal_id_or_project_id');
+}
+
+function previewValue(v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'number' ? v : String(v);
+}
+
+/** The opportunity `pushDeal` sends: read once, by push and by preview alike. */
+async function opportunityContent(env: Env, row: IntegrationRow, dealId: number) {
   // Tenant isolation: deal must belong to the integration owner via project→founder.
   // Without this scope, any user with an active SF integration could push another
   // tenant's deal by guessing the ID.
@@ -378,13 +413,18 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
     status: stage,
     deal_id: String(dealId),
   };
-  let body = applyFieldMap(fieldMaps.opportunity, source);
+  const body = applyFieldMap(fieldMaps.opportunity, source);
   if (deal.sf_account_id) body.AccountId = deal.sf_account_id;
   // CloseDate is required by SF on Opportunity create; default to +30d
   // when we don't have one. Once present we never overwrite.
   if (!deal.sf_opportunity_id) {
     body.CloseDate = new Date(Date.now() + 30 * 86400 * 1000).toISOString().slice(0, 10);
   }
+  return { deal, stage, body };
+}
+
+async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<PushResult> {
+  const { deal, stage, body } = await opportunityContent(env, row, dealId);
 
   if (deal.sf_opportunity_id) {
     const res = await sfFetch(env, row, `/sobjects/Opportunity/${encodeURIComponent(deal.sf_opportunity_id)}`, {
@@ -414,7 +454,8 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
   return { summary: `Created SF Opportunity ${out.id}`, external_id: out.id, http_status: res.status };
 }
 
-async function pushProjectAccount(env: Env, row: IntegrationRow, projectId: number): Promise<PushResult> {
+/** The account (and first contact) `pushProjectAccount` sends: read once, by push and by preview alike. */
+async function accountContent(env: Env, row: IntegrationRow, projectId: number) {
   // Tenant isolation: project must belong to the integration owner via founder.user_id.
   const proj = await env.DB.prepare(
     'SELECT p.*, f.id as f_id, f.email as founder_email, f.name as founder_name, f.sf_contact_id as founder_sf_contact_id ' +
@@ -439,7 +480,23 @@ async function pushProjectAccount(env: Env, row: IntegrationRow, projectId: numb
     project_id: String(projectId),
   };
   const accountBody = applyFieldMap(fieldMaps.account, accountSource);
+  // A new contact goes with the account when the founder has an email, the
+  // project has no primary contact and the founder no Salesforce contact yet.
+  // Its AccountId is the account's, set at send time.
+  let contactBody: Record<string, unknown> | null = null;
+  if (proj.founder_email && !proj.sf_primary_contact_id && !proj.founder_sf_contact_id) {
+    const [first, ...rest] = (proj.founder_name || '').split(' ');
+    contactBody = applyFieldMap(fieldMaps.contact, {
+      email: proj.founder_email,
+      first_name: first || '',
+      last_name: rest.join(' ') || (first || 'Founder'),
+    });
+  }
+  return { proj, accountBody, contactBody };
+}
 
+async function pushProjectAccount(env: Env, row: IntegrationRow, projectId: number): Promise<PushResult> {
+  const { proj, accountBody, contactBody: newContact } = await accountContent(env, row, projectId);
   let accountId = proj.sf_account_id;
   if (accountId) {
     const res = await sfFetch(env, row, `/sobjects/Account/${encodeURIComponent(accountId)}`, {
@@ -467,15 +524,8 @@ async function pushProjectAccount(env: Env, row: IntegrationRow, projectId: numb
   // for this project. Reuse the founder's existing sf_contact_id when set.
   if (proj.founder_email && !proj.sf_primary_contact_id) {
     let contactId = proj.founder_sf_contact_id;
-    if (!contactId) {
-      const [first, ...rest] = (proj.founder_name || '').split(' ');
-      const contactSource: Record<string, unknown> = {
-        email: proj.founder_email,
-        first_name: first || '',
-        last_name: rest.join(' ') || (first || 'Founder'),
-      };
-      const contactBody = applyFieldMap(fieldMaps.contact, contactSource);
-      contactBody.AccountId = accountId;
+    if (!contactId && newContact) {
+      const contactBody = { ...newContact, AccountId: accountId };
       const cres = await sfFetch(env, row, '/sobjects/Contact', { method: 'POST', body: JSON.stringify(contactBody) });
       if (cres.ok) {
         const out = await cres.json() as { id: string };
@@ -739,6 +789,7 @@ const impl: ProviderImpl = {
   revokeGranted,
   buildAuthorizeUrl,
   push: pushOne,
+  preview: previewOne,
   sync,
   disconnect,
   action,

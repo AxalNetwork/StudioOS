@@ -41,7 +41,7 @@ import {
   writeSegment,
 } from '../services/validateWriters';
 import { budgetRefusalMessage } from '../services/aiRouter';
-import { loadSession, type SessionRow } from '../services/interviewSessions';
+import { consentBlocks, loadSession, type SessionRow } from '../services/interviewSessions';
 import {
   PLACEMENT_KINDS,
   alignRuns,
@@ -326,13 +326,43 @@ function refusedBody(refusal: string | null) {
   };
 }
 
+/**
+ * #1470's codes for a refused run: 402 for a spent budget, 400 for a model this
+ * task does not offer, 503 only when no model could be reached. The page tells
+ * them apart by `refusal`, not by the status (`InterviewReview.jsx`).
+ */
+function refusedStatus(refusal: string | null): 400 | 402 | 503 {
+  if (refusal === 'budget_user_day' || refusal === 'budget_user_month' || refusal === 'budget_review') return 402;
+  if (refusal === 'model_not_offered') return 400;
+  return 503;
+}
+
 const MODEL_RE = /^@cf\/[a-z0-9._/-]{3,100}$/i;
-const modelFrom = (v: unknown) => (typeof v === 'string' && MODEL_RE.test(v.trim()) ? v.trim() : undefined);
+/**
+ * The model the founder picked. Absent means the task's default. Given but not
+ * a Workers AI model id is refused here, before anything runs: it used to fall
+ * through as `undefined` and silently run the default.
+ */
+function modelFrom(v: unknown): { model: string | undefined } | { refused: true } {
+  if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return { model: undefined };
+  if (typeof v === 'string' && MODEL_RE.test(v.trim())) return { model: v.trim() };
+  return { refused: true };
+}
+
+/** #1470's rule, the same 409 its start, resume and live routes give: no consent, no AI over the recording. */
+function consentRefusal(session: SessionRow) {
+  const blocked = consentBlocks(session.channel, session.consent_status);
+  return blocked ? json(blocked, 409) : null;
+}
 
 structure.post('/sessions/:id/structure', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  const blocked = consentRefusal(s.session);
+  if (blocked) return blocked;
   const body = await c.req.json<{ model?: string }>().catch(() => ({} as { model?: string }));
+  const picked = modelFrom(body?.model);
+  if ('refused' in picked) return json(refusedBody('model_not_offered'), 400);
   const segments = await finalSegments(c.env, s.session.id);
   if (!segments.length) {
     return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to structure yet.' }, 409);
@@ -343,13 +373,13 @@ structure.post('/sessions/:id/structure', async (c) => {
   const runId = newRunId();
   const context = await loadStructureContext(c.env, s.session.project_id);
   const out = await structureTranscript(c.env, {
-    userId: s.user.id, model: modelFrom(body?.model), segments, context, step,
+    userId: s.user.id, model: picked.model, segments, context, step,
   });
   for (let i = 0; i < out.receipt.length; i += 1) {
     const refusedHere = !out.ok && i === out.receipt.length - 1;
     await recordStructureReceipt(c.env, s.session.id, runId, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? (out as any).refusal ?? null : null);
   }
-  if (!out.ok) return json(refusedBody(out.refusal), 503);
+  if (!out.ok) return json(refusedBody(out.refusal), refusedStatus(out.refusal));
 
   await storePlacements(c.env, {
     projectId: s.session.project_id, sessionId: s.session.id, interviewId: s.session.interview_id,
@@ -372,10 +402,15 @@ structure.post('/sessions/:id/structure', async (c) => {
 structure.get('/sessions/:id/placements', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  // `*` rather than a column list: `source` arrives with migration 447 (D667),
+  // and a row written before it reads as StudioOS's own.
   const rows = await c.env.DB.prepare(
-    `SELECT id, kind, payload_json, edited_payload_json, status, model, run_id, cite_from, cite_to, citation_json, created_at
-       FROM validate_proposals WHERE session_id = ? AND run_id IS NOT NULL ORDER BY id`,
+    `SELECT * FROM validate_proposals WHERE session_id = ? AND run_id IS NOT NULL ORDER BY id`,
   ).bind(s.session.id).all<any>();
+  // D667 — who proposed each run. An assistant's name is the one its OAuth
+  // client registered, self-declared, so the page shows it as the client's
+  // own label; StudioOS's runs say StudioOS.
+  const submittedVia = (s.session as any).submitted_via_name ?? null;
   const parse = (t: string | null) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
   const placements = (rows.results ?? []).map((r: any) => ({
     id: r.id,
@@ -388,18 +423,21 @@ structure.get('/sessions/:id/placements', async (c) => {
     can_accept: isPlacementKind(r.kind) && PLACEMENT_KINDS[r.kind as PlacementKind].writer,
     model: r.model,
     run_id: r.run_id,
+    source: r.source === 'assistant' ? 'assistant' : 'studioos',
+    submitted_via_name: r.source === 'assistant' ? submittedVia : null,
     cite: { from: r.cite_from, to: r.cite_to, quote: parse(r.citation_json)?.quote ?? null },
     created_at: r.created_at,
   }));
-  const runs: { run_id: string; model: string; placements: typeof placements }[] = [];
+  const runs: { run_id: string; model: string; source: string; submitted_via_name: string | null; placements: typeof placements }[] = [];
   for (const p of placements) {
     let run = runs.find((x) => x.run_id === p.run_id);
-    if (!run) runs.push(run = { run_id: p.run_id, model: p.model, placements: [] });
+    if (!run) runs.push(run = { run_id: p.run_id, model: p.model, source: p.source, submitted_via_name: p.submitted_via_name, placements: [] });
     run.placements.push(p);
   }
   const lastTwo = runs.slice(-2);
   return json({
     runs,
+    submitted_via_name: submittedVia,
     compare: lastTwo.length === 2
       ? { first: lastTwo[0].run_id, second: lastTwo[1].run_id, modules: alignRuns(lastTwo[0].placements, lastTwo[1].placements) }
       : null,
@@ -409,19 +447,23 @@ structure.get('/sessions/:id/placements', async (c) => {
 structure.post('/sessions/:id/ask', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  const blocked = consentRefusal(s.session);
+  if (blocked) return blocked;
   const body = await c.req.json<{ question?: string; model?: string }>().catch(() => ({} as { question?: string; model?: string }));
+  const picked = modelFrom(body?.model);
+  if ('refused' in picked) return json(refusedBody('model_not_offered'), 400);
   const question = typeof body?.question === 'string' ? body.question.trim().slice(0, 1000) : '';
   if (!question) return json({ error: 'question_required', detail: 'Ask a question.' }, 400);
   const segments = await finalSegments(c.env, s.session.id);
   if (!segments.length) {
     return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to ask about yet.' }, 409);
   }
-  const out = await askTranscript(c.env, { userId: s.user.id, model: modelFrom(body?.model), segments, question });
+  const out = await askTranscript(c.env, { userId: s.user.id, model: picked.model, segments, question });
   for (let i = 0; i < out.receipt.length; i += 1) {
     const refusedHere = !out.ok && out.reason === 'refused' && i === out.receipt.length - 1;
     await recordStructureReceipt(c.env, s.session.id, null, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? out.refusal : null);
   }
-  if (!out.ok && out.reason === 'refused') return json(refusedBody(out.refusal), 503);
+  if (!out.ok && out.reason === 'refused') return json(refusedBody(out.refusal), refusedStatus(out.refusal));
   // AN ANSWER WITH NO CITATION IS REFUSED, NOT SHOWN.
   if (!out.ok) {
     return json({ error: 'no_citation', detail: 'The transcript did not give an answer that could be tied to a passage, so none is shown.' }, 422);
