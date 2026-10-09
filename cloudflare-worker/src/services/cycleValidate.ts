@@ -22,7 +22,7 @@
  */
 import type { Env } from '../types';
 import {
-  safeCard, safeFigure, seriesState, countState, PAGE_SIZE, pageOf,
+  safeCard, safeFigure, seriesState, countState, PAGE_SIZE, pageNumber,
   type Card, type CardState, type Figure,
 } from './cycleCards';
 import {
@@ -921,7 +921,7 @@ export function recordQuery(params: { q?: unknown; filter?: unknown; sort?: unkn
     q: String(params.q ?? '').trim().slice(0, 120).toLowerCase(),
     filter: parseFilter(params.filter),
     sort: /^[a-z_]{1,32}$/.test(String(params.sort ?? '')) ? String(params.sort) : '',
-    page: pageOf(params.page),
+    page: pageNumber(params.page),
   };
 }
 

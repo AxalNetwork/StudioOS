@@ -23,6 +23,8 @@ export const MODULE_LINKS = {
   customers: ['Customers', '/grow/customers'],
   partnerships: ['Partnerships', '/grow/partnerships'],
   capital: ['Capital relationships', '/raise/capital/pipeline'],
+  // D664: a market reply is read under the market its ask links to.
+  'market-expansion': ['Market expansion', '/grow/market-expansion'],
 };
 
 const ROW = 'flex items-start justify-between gap-3 border-b border-axal-hairline py-2.5 text-[12.5px] dark:border-gray-800';

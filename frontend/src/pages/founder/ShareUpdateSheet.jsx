@@ -134,6 +134,7 @@ export function ShareUpdateView({ s, on }) {
   }
   if (step === 3) {
     const roles = ctx?.open_roles || [];
+    const markets = ctx?.markets || [];
     body = (
       <ul data-testid="share-asks">{Object.keys(ASK_LABELS).map((kind) => {
         const a = s.asks.find((x) => x.kind === kind);
@@ -147,6 +148,10 @@ export function ShareUpdateView({ s, on }) {
                 ? <select aria-label="Open role" className="mt-1 rounded border border-axal-hairline bg-white px-2 py-1 dark:border-gray-700 dark:bg-gray-950" value={a.link_ref || ''} onChange={(e) => on.askLink(kind, e.target.value || null)}>
                     <option value="">Links to no role</option>{roles.map((r) => <option key={r.id} value={String(r.id)}>{r.title}</option>)}</select>
                 : <div className="text-[11.5px] text-axal-muted">No open role in Talent yet, so a reply stays on the ask.</div>)}
+              {a && kind === 'market' && (markets.length
+                ? <select aria-label="Market" className="mt-1 rounded border border-axal-hairline bg-white px-2 py-1 dark:border-gray-700 dark:bg-gray-950" value={a.link_ref || ''} onChange={(e) => on.askLink(kind, e.target.value || null)}>
+                    <option value="">Links to no market</option>{markets.map((m) => <option key={m.id} value={String(m.id)}>{m.name}</option>)}</select>
+                : <div className="text-[11.5px] text-axal-muted">No market in Market expansion yet, so a reply stays on the ask.</div>)}
               <div className="text-[11.5px] text-axal-muted">{meta?.lands === false ? meta.reason : `Replies land in ${meta?.module || 'the module that asked'}.`}</div>
             </div>
             <span className={`${PILL} border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200`}>{kind[0].toUpperCase() + kind.slice(1)}</span>
