@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { revokeAllGrants } from './mcp/grants';
 import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
@@ -1094,6 +1095,10 @@ export function jwtMinIatFloor(): number {
 export async function bumpJwtMinIat(env: Env, userId: number): Promise<number> {
   const nowSec = jwtMinIatFloor();
   await env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE id = ?').bind(nowSec, userId).run();
+  // D666: signing out everywhere ends every AI assistant's grant too. Each
+  // tool call also refuses a grant older than this floor, so a failed revoke
+  // here still cannot leave a working connection behind.
+  await revokeAllGrants(env, userId);
   return nowSec;
 }
 
