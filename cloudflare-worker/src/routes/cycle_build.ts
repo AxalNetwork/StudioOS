@@ -56,7 +56,7 @@ async function solution(env: Env, p: Project): Promise<ModuleRead> {
   ).bind(p.id).all<any>());
   const linked = features.filter(f => f.pain_theme != null).length;
   const unlinked = features.length - linked;
-  const severity = ['high', 'medium', 'low'].map(s => risks.filter(r => r.severity === s && r.state !== 'closed').length);
+  const severity = ['high', 'medium', 'low'].map(s => risks.filter(r => r.severity === s).length);
   const series: ChartSpec[] = [];
   if (features.length) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
   if (risks.length) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
@@ -107,7 +107,7 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
        JOIN roadmap_okrs o ON o.id = m.okr_id AND o.project_id = m.project_id
       WHERE m.project_id = ? AND m.to_status = 'done' AND m.moved_at <= CURRENT_TIMESTAMP ORDER BY m.moved_at`,
   ).bind(p.id).all<any>());
-  const buckets = ['now', 'next', 'later'].map(s => items.filter(i => i.kanban_status === s).length);
+  const buckets = ['now', 'next', 'later', 'done'].map(s => items.filter(i => i.kanban_status === s).length);
   const months = new Map<string, Set<number>>();
   for (const m of moves) {
     const month = String(m.moved_at).slice(0, 7);
@@ -115,7 +115,7 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
     months.get(month)!.add(number(m.okr_id));
   }
   const trend = [...months.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const series: ChartSpec[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
+  const series: ChartSpec[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
   if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, ids]) => ids.size), labels: trend.map(([month], at) => ({ at, label: month })) });
   const thisMonth = new Date().toISOString().slice(0, 7);
   return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items recorded yet.', next('product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null)),
@@ -129,7 +129,12 @@ async function founding(env: Env, p: Project): Promise<ModuleRead> {
   // must agree; a founder's other company's schedule must never be joined.
   const holders = rows(await env.DB.prepare(
     `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares,
-            v.start_date, v.cliff_months, v.total_months, v.vested_shares
+            v.start_date, v.cliff_months, v.total_months, v.vested_shares,
+            (SELECT d.status FROM documents d
+              JOIN cofounder_agreement_parties party ON party.document_id = d.id
+             WHERE d.project_id = h.project_id AND d.template_name = 'cofounder_agreement'
+               AND party.user_id = h.user_id
+             ORDER BY d.created_at DESC, d.id DESC LIMIT 1) AS agreement_status
        FROM cap_table_holders h
        LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
       WHERE h.project_id = ? ORDER BY h.id`,
@@ -139,13 +144,14 @@ async function founding(env: Env, p: Project): Promise<ModuleRead> {
   const series: ChartSpec[] = [];
   if (equityKnown) series.push({ kind: 'stack', rows: [{ label: 'Equity', parts: founderRows.map(h => number(h.ownership_pct)) }], tones: founderRows.map((_, i) => ['v1', 'v2', 'v3', 'grey'][i % 4]), legend: founderRows.map((h, i) => ({ label: h.name, tone: ['v1', 'v2', 'v3', 'grey'][i % 4] })) });
   const withVesting = founderRows.filter(h => h.start_date && h.total_months);
-  if (withVesting.length) series.push({ kind: 'progress', items: withVesting.map(h => ({ label: h.name, pct: h.shares && h.vested_shares != null ? Math.min(100, Math.round(100 * number(h.vested_shares) / number(h.shares))) : null })) });
-  const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : 'ok';
-  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founder roles have been recorded on the cap table.' : null, next('founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
+  if (withVesting.length) series.push({ kind: 'progress', items: withVesting.map(h => ({ label: `${h.name} · ${h.cliff_months ?? 'unknown'}m cliff`, pct: h.shares && h.vested_shares != null ? Math.min(100, Math.round(100 * number(h.vested_shares) / number(h.shares))) : null })) });
+  const equityTotal = equityKnown ? founderRows.reduce((sum, h) => sum + number(h.ownership_pct), 0) : 0;
+  const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
+  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founder roles have been recorded on the cap table.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, next('founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
-    rows: founderRows.map(h => record(h.id, { founder: h.name, role: h.founder_role, equity: h.ownership_pct, vesting: h.start_date ? `${h.start_date} · ${h.total_months} months · ${h.cliff_months ?? 'unknown'} month cliff` : null, agreement: null })),
+    rows: founderRows.map(h => record(h.id, { founder: h.name, role: h.founder_role, equity: h.ownership_pct, vesting: h.start_date ? `${h.start_date} · ${h.total_months} months · ${h.cliff_months ?? 'unknown'} month cliff` : null, agreement: h.agreement_status })),
     facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null,
-      agreement_reason: 'Legal agreements are not linked to individual cap-table holders.' } };
+      agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' } };
 }
 
 async function company(env: Env, p: Project): Promise<ModuleRead> {
@@ -169,7 +175,9 @@ async function company(env: Env, p: Project): Promise<ModuleRead> {
     { label: 'Formation packet ready', date: order.packet_ready_at, done: !!order.packet_ready_at },
     { label: 'Filed with state', date: order.filed_on, done: !!order.filed_on },
   ] : [];
-  if (steps.length || labSteps.length) series.push({ kind: 'timeline', steps: [...labSteps, ...steps.map(s => ({ label: s.title, date: s.due_date, done: s.state === 'done' }))] });
+  const timelineSteps = [...labSteps, ...steps.map(s => ({ label: s.title, date: s.due_date, done: s.state === 'done' }))];
+  if (timelineSteps.length >= 2) series.push({ kind: 'timeline', steps: timelineSteps });
+  else if (timelineSteps.length === 1) series.push({ kind: 'rows', items: [{ label: timelineSteps[0].label, value: timelineSteps[0].date ?? 'Date not recorded' }] });
   if (obligations.length) series.push({ kind: 'rows', items: obligations.map(o => ({ label: o.title, value: o.due_date ?? 'Not recorded' })) });
   const combined = [
     ...labSteps.map((s, n) => record(`lab-${order.id}-${n}`, { filing: s.label, jurisdiction: order.jurisdiction_id, due: s.date, state: s.done ? 'done' : 'not recorded', proof: null })),

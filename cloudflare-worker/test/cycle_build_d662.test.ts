@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import build from '../src/routes/cycle_build.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { cardView, figureValue } from '../../frontend/src/pages/cycles/cycleModel.js';
 
 const JWT_SECRET = 'x'.repeat(64); // synthetic test fixture
 const migration = readFileSync('cloudflare-worker/sql/migrations/441_build_cycle_stores.sql', 'utf8');
@@ -26,6 +27,8 @@ function fixture() {
     CREATE TABLE okr_column_moves(id INTEGER PRIMARY KEY, project_id INTEGER, okr_id INTEGER, to_status TEXT, moved_at TEXT);
     CREATE TABLE cap_table_holders(id INTEGER PRIMARY KEY, user_id INTEGER, project_id INTEGER, name TEXT, shares REAL, ownership_pct REAL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE cap_table_vesting(id INTEGER PRIMARY KEY, user_id INTEGER, holder_id INTEGER, start_date TEXT, cliff_months INTEGER, total_months INTEGER, vested_shares REAL);
+    CREATE TABLE documents(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, template_name TEXT, created_at TEXT);
+    CREATE TABLE cofounder_agreement_parties(id INTEGER PRIMARY KEY, document_id INTEGER, user_id INTEGER);
     CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
     CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -64,6 +67,7 @@ test('missing MVP target date is not_recorded, not zero days; status transition 
   assert.equal(overview.body.figures[1].state, 'not_recorded');
   assert.equal(overview.body.figures[1].value, null);
   assert.deepEqual(overview.body.figures[0].value, [0, 1]);
+  assert.equal(figureValue(overview.body.figures[0]), '0 of 1');
   db.exec("UPDATE mvp_features SET delivery_status = 'Done' WHERE id = 11");
   assert.ok(db.prepare('SELECT done_at FROM mvp_features WHERE id = 11').get()?.done_at);
   overview = await call(env, '/api/cycles/build/overview?project=101');
@@ -83,6 +87,7 @@ test('only company-enabled connectors count; a failed system keeps the last good
   const payroll = module.body.records.rows.find((row: any) => row.id === 'payroll');
   const bank = module.body.records.rows.find((row: any) => row.id === 'bank');
   assert.equal(payroll.cells.state, 'Failing');
+  assert.equal(cardView(module.body.card).state, 'ok');
   assert.equal(payroll.cells.last_sync, '2026-10-03');
   assert.equal(bank.cells.state, 'Not connected');
   assert.equal(bank.cells.provider, null);
@@ -114,11 +119,17 @@ test('founder vesting follows both holder and user and never mixes projects', as
       (4,1,202,'Founder A on another project',100,10,'CFO');
     INSERT INTO cap_table_vesting(id,user_id,holder_id,start_date,cliff_months,total_months,vested_shares) VALUES
       (1,1,1,'2026-01-01',12,48,25), (2,2,2,'2025-01-01',6,24,75),
-      (3,2,1,'2020-01-01',1,12,100), (4,1,4,'2024-01-01',6,24,10);`);
+      (3,2,1,'2020-01-01',1,12,100), (4,1,4,'2024-01-01',6,24,10);
+    INSERT INTO documents VALUES (1,101,'generated','cofounder_agreement','2026-10-01'),
+      (2,202,'signed','cofounder_agreement','2026-10-02');
+    INSERT INTO cofounder_agreement_parties VALUES (1,1,1), (2,2,1);`);
   const one = await call(env, '/api/cycles/build/modules/founding-team?project=101');
   assert.equal(one.status, 200);
   assert.equal(one.body.records.rows.length, 1);
+  assert.equal(cardView(one.body.card).state, 'ok');
   assert.match(one.body.records.rows[0].cells.vesting, /2026-01-01/);
+  assert.match(one.body.card.series[1].items[0].label, /12m cliff/);
+  assert.equal(one.body.records.rows[0].cells.agreement, 'generated');
   assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /2020-01-01/);
   assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /2024-01-01/);
   const other = await call(env, '/api/cycles/build/modules/founding-team?project=202');
@@ -128,6 +139,7 @@ test('founder vesting follows both holder and user and never mixes projects', as
   assert.match(two.body.records.rows[0].cells.vesting, /2025-01-01/);
   const secondCompanyFounder = two.body.records.rows.find((row: any) => row.cells.founder === 'Founder A on another project');
   assert.match(secondCompanyFounder.cells.vesting, /2024-01-01/);
+  assert.equal(secondCompanyFounder.cells.agreement, 'signed');
   db.close();
 });
 
@@ -178,6 +190,7 @@ test('MVP target is marked on a real completion line and records can be searched
   assert.ok(module.body.records.filters.some((f: any) => f.key === 'state'));
   assert.ok(module.body.records.sorts.some((s: any) => s.key === '-due'));
   assert.equal(module.body.card.state, 'ok');
+  assert.equal(cardView(module.body.card).state, 'ok');
   const line = module.body.card.series[0];
   assert.equal(line.kind, 'line');
   assert.equal(line.values[line.mark], null);
@@ -199,6 +212,7 @@ test('Lab formation and IP reuse project data; obligations are scoped by project
   const module = await call(env, '/api/cycles/build/modules/company-creation?project=101');
   assert.equal(module.status, 200);
   assert.equal(module.body.card.state, 'ok');
+  assert.equal(cardView(module.body.card).state, 'ok');
   assert.equal(module.body.facts.ip.origin, 'university');
   assert.ok(module.body.records.rows.some((row: any) => row.cells.filing === 'Filed with state'));
   assert.ok(module.body.records.rows.some((row: any) => row.cells.filing === 'Annual report'));
@@ -218,6 +232,7 @@ test('solution links and founder risks share the project but not the analyst reg
   assert.equal(added.status, 201);
   const module = await call(env, '/api/cycles/build/modules/solution-design?project=101');
   assert.equal(module.body.records.rows[0].cells.pain_theme, 'Slow reporting');
+  assert.equal(cardView(module.body.card).state, 'ok');
   assert.equal(module.body.records.rows[0].cells.hypothesis, 'Automate the monthly close');
   assert.equal(module.body.facts.risks[0].title, 'Vendor outage');
   assert.equal(module.body.card.series[1].rows[0].parts[0], 1);
@@ -238,9 +253,28 @@ test('roadmap uses recorded done moves, owner, KPI and target date', async () =>
   const module = await call(env, '/api/cycles/build/modules/product-roadmap?project=101&filter=column:now');
   assert.equal(module.body.records.total, 1);
   assert.equal(module.body.records.rows[0].cells.owner, 'One');
+  assert.equal(cardView(module.body.card).state, 'ok');
   assert.equal(module.body.records.rows[0].cells.moves, 'activation');
   assert.equal(module.body.records.rows[0].cells.date, '2026-11-30');
   const overview = await call(env, '/api/cycles/build/overview?project=101');
   assert.equal(overview.body.figures[2].value, 1);
+  db.close();
+});
+
+test('sparse recorded Build cards never become an unreadable chart in the D661 renderer', async () => {
+  const { db, env } = fixture();
+  db.exec(`INSERT INTO venture_risks(project_id,title,severity,state,created_by) VALUES (101,'Closed risk','high','closed',1);
+    INSERT INTO roadmap_okrs(id,project_id,objective,kanban_status) VALUES (5,101,'Shipped before history','done');
+    INSERT INTO formation_steps(project_id,title,created_by) VALUES (101,'File certificate',1);
+    INSERT INTO cap_table_holders(id,user_id,project_id,name,shares,ownership_pct,founder_role)
+      VALUES (8,1,101,'Zero allocation',100,0,'CEO');`);
+  for (const slug of ['solution-design', 'product-roadmap', 'company-creation']) {
+    const module = await call(env, `/api/cycles/build/modules/${slug}?project=101`);
+    assert.equal(module.status, 200, slug);
+    assert.equal(cardView(module.body.card).state, 'ok', slug);
+  }
+  const founders = await call(env, '/api/cycles/build/modules/founding-team?project=101');
+  assert.equal(cardView(founders.body.card).state, 'too_little');
+  assert.match(founders.body.card.reason, /sum to zero/);
   db.close();
 });
