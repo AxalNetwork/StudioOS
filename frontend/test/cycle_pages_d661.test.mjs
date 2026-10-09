@@ -25,7 +25,7 @@ import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixt
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/validate') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
-const text = (s) => s.replace(/<title>[\s\S]*?<\/title>/g, '').replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/\s+/g, ' ');
+const text = (s) => s.replace(/<title>[\s\S]*?<\/title>/g, '').replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const kinds = (out) => [...out.matchAll(/data-chart="([a-z]+)"/g)].map((m) => m[1]);
 
 // ------------------------------------------------------------------ the rules
