@@ -105,7 +105,7 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
   const moves = rows(await env.DB.prepare(
     `SELECT m.okr_id, m.to_status, m.moved_at FROM okr_column_moves m
        JOIN roadmap_okrs o ON o.id = m.okr_id AND o.project_id = m.project_id
-      WHERE m.project_id = ? AND m.to_status = 'done' AND m.moved_at <= CURRENT_TIMESTAMP ORDER BY m.moved_at`,
+      WHERE m.project_id = ? AND m.to_status = 'done' AND datetime(m.moved_at) <= datetime('now') ORDER BY m.moved_at`,
   ).bind(p.id).all<any>());
   const buckets = ['now', 'next', 'later', 'done'].map(s => items.filter(i => i.kanban_status === s).length);
   const months = new Map<string, Set<number>>();

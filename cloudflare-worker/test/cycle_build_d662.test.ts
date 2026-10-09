@@ -245,9 +245,12 @@ test('solution links and founder risks share the project but not the analyst reg
 test('roadmap uses recorded done moves, owner, KPI and target date', async () => {
   const { db, env } = fixture();
   const month = new Date().toISOString().slice(0, 7);
-  db.exec(`INSERT INTO roadmap_okrs(id,project_id,objective,kanban_status) VALUES (1,101,'Launch beta','now'), (2,101,'Run pilots','done');
+  const today = new Date().toISOString().slice(0, 10);
+  db.exec(`INSERT INTO roadmap_okrs(id,project_id,objective,kanban_status) VALUES
+      (1,101,'Launch beta','now'), (2,101,'Run pilots','done'), (3,101,'Ship report','done');
     INSERT INTO okr_column_moves(id,project_id,okr_id,to_status,moved_at) VALUES
-      (1,101,2,'done','${month}-01 12:00:00'), (2,101,2,'done','${month}-01 13:00:00');`);
+      (1,101,2,'done','${month}-01 12:00:00'), (2,101,2,'done','${month}-01 13:00:00'),
+      (3,101,3,'done','${today}T00:00:00Z');`);
   const edited = await call(env, '/api/cycles/build/roadmap/1?project=101', 1, 'PATCH', { owner_user_id: 1, target_date: '2026-11-30', kpi_key: 'activation' });
   assert.equal(edited.status, 200);
   const module = await call(env, '/api/cycles/build/modules/product-roadmap?project=101&filter=column:now');
@@ -257,7 +260,7 @@ test('roadmap uses recorded done moves, owner, KPI and target date', async () =>
   assert.equal(module.body.records.rows[0].cells.moves, 'activation');
   assert.equal(module.body.records.rows[0].cells.date, '2026-11-30');
   const overview = await call(env, '/api/cycles/build/overview?project=101');
-  assert.equal(overview.body.figures[2].value, 1);
+  assert.equal(overview.body.figures[2].value, 2);
   db.close();
 });
 
