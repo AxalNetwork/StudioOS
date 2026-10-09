@@ -81,7 +81,9 @@ const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => 
 
 function useProject() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requested = Number(searchParams.get('project_id')) || null;
+  // The read's own links (`next.href`) say `?project=`; the page's say
+  // `?project_id=`. Either picks the venture.
+  const requested = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
   const [projectId, setProjectId] = useState(requested);
   const [status, setStatus] = useState(requested ? 'ready' : 'loading');
   useEffect(() => {
@@ -178,6 +180,7 @@ export default function CycleRoute({ cycle }) {
           onRetry={() => setReload((n) => n + 1)}
           onRetryCard={retryCard}
           action={action}
+          search={q}
         />
         <AlsoIn role="founder" row={name} />
       </>
@@ -201,6 +204,7 @@ export default function CycleRoute({ cycle }) {
         action={action}
         add={fnOf(def.add, slug)?.(q)}
         tool={fnOf(def.tools, slug)?.(q)}
+        search={q}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} onApplied={() => setReload((n) => n + 1)} />

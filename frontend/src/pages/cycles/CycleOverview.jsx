@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
-import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, safeHref, sparkDrawable } from './cycleModel';
+import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, linkSearch, safeHref, sparkDrawable } from './cycleModel';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -21,15 +21,16 @@ import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, safeHref, spark
  *   onRetry   re-read the whole overview
  *   onRetryCard(slug)  re-read one unreadable card; the others stay drawn
  *   action    { label?, href?, onClick? } — the cycle's primary action
+ *   search    `?project_id=…`, carried by the tabs and each card's link
  */
 
 const SECTION = 'text-[10px] font-extrabold uppercase tracking-[.09em]';
 const CARD = 'flex min-w-0 flex-col gap-2.5 rounded-xl border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-900';
 
-export function CycleHeader({ cycle, cards, active = null, action, title }) {
+export function CycleHeader({ cycle, cards, active = null, action, title, search = '' }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
-  const tabs = cycleTabs(meta.key, cards, active);
+  const tabs = cycleTabs(meta.key, cards, active, search);
   const current = tabs.find((t) => t.active) || tabs[0];
   const label = action?.label || meta.action;
   const href = safeHref(action?.href);
@@ -128,7 +129,7 @@ export function CardBody({ card, onRetry, charts, compact = false }) {
 }
 
 /** One module's card: its name (linking to its page), range, chart or state, caption and the one next action. */
-export function CycleCard({ cycle, card, slug, onRetry }) {
+export function CycleCard({ cycle, card, slug, onRetry, search = '' }) {
   const view = cardView(card);
   const name = card?.name || slug;
   const next = card?.next;
@@ -137,7 +138,7 @@ export function CycleCard({ cycle, card, slug, onRetry }) {
     <article className={CARD} data-testid={`cycle-card-${card?.slug || slug}`} data-state={view.state}>
       <div className="flex items-baseline justify-between gap-2.5">
         {card?.slug
-          ? <Link to={`/${cycle}/${card.slug}`} className="text-[14.5px] font-extrabold tracking-[-.01em] text-axal-ink hover:text-axal-violet-deep dark:text-gray-100">{name} ›</Link>
+          ? <Link to={`/${cycle}/${card.slug}${linkSearch(search)}`} className="text-[14.5px] font-extrabold tracking-[-.01em] text-axal-ink hover:text-axal-violet-deep dark:text-gray-100">{name} ›</Link>
           : <span className="text-[14.5px] font-extrabold text-axal-ink dark:text-gray-100">{name || 'Loading…'}</span>}
         {card?.range && <span className="whitespace-nowrap text-[11px] text-axal-faint dark:text-gray-500">{card.range}</span>}
       </div>
@@ -152,14 +153,14 @@ export function CycleCard({ cycle, card, slug, onRetry }) {
   );
 }
 
-export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = 6 }) {
+export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = 6, search = '' }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
   const cards = Array.isArray(data?.cards) ? data.cards : [];
   const figures = Array.isArray(data?.figures) ? data.figures : [];
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-overview" data-cycle={meta.key}>
-      <CycleHeader cycle={meta.key} cards={cards} action={action} />
+      <CycleHeader cycle={meta.key} cards={cards} action={action} search={search} />
       {status === 'unreadable' ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-overview-unreadable">
           <Unreadable what={`The ${meta.name} overview`} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />
@@ -175,8 +176,8 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
           )}
           <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2" data-testid="cycle-cards">
             {status === 'loading'
-              ? Array.from({ length: placeholders }, (_, i) => <CycleCard key={i} cycle={meta.key} card={null} slug="" />)
-              : cards.map((c) => <CycleCard key={c.slug} cycle={meta.key} card={c} onRetry={onRetryCard ? () => onRetryCard(c.slug) : undefined} />)}
+              ? Array.from({ length: placeholders }, (_, i) => <CycleCard key={i} cycle={meta.key} card={null} slug="" search={search} />)
+              : cards.map((c) => <CycleCard key={c.slug} cycle={meta.key} card={c} search={search} onRetry={onRetryCard ? () => onRetryCard(c.slug) : undefined} />)}
           </div>
         </>
       )}

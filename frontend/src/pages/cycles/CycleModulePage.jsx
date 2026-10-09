@@ -135,7 +135,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
 
 export default function CycleModulePage({
   cycle, slug, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, tool, children,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, tool, children, search = '',
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -148,7 +148,7 @@ export default function CycleModulePage({
   const recs = records ?? data?.records;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
-      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} />
+      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} search={search} />
       {status === 'unreadable' ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-module-unreadable">
           <Unreadable what={name} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />

@@ -251,9 +251,19 @@ export function safeHref(href) {
   return typeof href === 'string' && /^\/(?!\/)/.test(href) ? href : null;
 }
 
-/** The overview's tabs: Overview, then each card in the read's order, each with its path. */
-export function cycleTabs(cycle, cards, active = null) {
+/**
+ * The overview's tabs: Overview, then each card in the read's order, each with
+ * its path. `search` (`?project_id=7`) rides on every path, so moving between
+ * tabs keeps the venture a founder chose; anything not starting `?` is dropped.
+ */
+export function cycleTabs(cycle, cards, active = null, search = '') {
   const base = `/${cycle}`;
-  return [{ key: '', name: 'Overview', href: base, active: !active }]
-    .concat((cards || []).filter((c) => c?.slug).map((c) => ({ key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}`, active: active === c.slug })));
+  const s = linkSearch(search);
+  return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }]
+    .concat((cards || []).filter((c) => c?.slug).map((c) => ({ key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug })));
+}
+
+/** A query string a link may carry: `?…`, or nothing. */
+export function linkSearch(search) {
+  return typeof search === 'string' && /^\?[^#]*$/.test(search) && search.length > 1 ? search : '';
 }
