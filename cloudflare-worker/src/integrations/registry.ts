@@ -114,6 +114,17 @@ export interface PushResult {
   http_status?: number;
 }
 
+/**
+ * D652 — what one `push` would send, read without sending it: the record it
+ * lands on, and every field with the value it carries. Eadwyn's card shows
+ * this, the pending action stores and hashes it, and confirm rebuilds it and
+ * refuses when it no longer matches, so what the member saw is what goes out.
+ */
+export interface PushPreview {
+  target: string;
+  fields: { name: string; value: string | number | null }[];
+}
+
 export interface ProviderImpl {
   key: string;
   connect(c: Context<{ Bindings: Env }>, user: User, input: ConnectInput): Promise<ConnectResult>;
@@ -121,6 +132,12 @@ export interface ProviderImpl {
   revokeGranted?(env: Env, result: ConnectResult): Promise<void>;
   sync?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<SyncResult>;
   push?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow, payload: unknown): Promise<PushResult>;
+  /**
+   * D652: `push`'s content for this payload, built by the same function
+   * `push` builds it with, and nothing sent. Throws where `push` would refuse
+   * before sending (target missing, company not enabled).
+   */
+  preview?(env: Env, row: IntegrationRow, payload: unknown): Promise<PushPreview>;
   webhook?(c: Context<{ Bindings: Env }>, row: IntegrationRow, body: string, signature: string | null): Promise<{ summary: string }>;
   disconnect?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void>;
   /** OAuth flows: build the authorize URL the browser is redirected to. */

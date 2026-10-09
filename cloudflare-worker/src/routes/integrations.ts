@@ -52,7 +52,7 @@ const integrations = new Hono<{ Bindings: Env }>();
 
 const ALLOWED_ROLES = new Set(['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider']);
 
-function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
+export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
   if (!ALLOWED_ROLES.has((user.role || '').toLowerCase())) {
     throw new Response(JSON.stringify({ error: 'forbidden', message: 'Your role cannot manage integrations.' }), {
       status: 403,
@@ -764,6 +764,31 @@ integrations.put('/:uid/repositories', async (c) => {
 
 // ───────────────────────────────────────────────────────────────────── push
 
+/**
+ * The one company-and-project check every write to a connector passes
+ * (D650, D652): `/:uid/push` below, and Eadwyn's confirm
+ * (`routes/eadwyn.ts`) before it calls the same `impl.push`. A connection
+ * that writes project data writes only into the active company, and only
+ * when that company is switched on for it; a payload naming a project
+ * writes only into a project of an enabled company. `null` means allowed.
+ */
+export async function pushScopeRefusal(
+  c: Context<{ Bindings: Env }>,
+  user: User,
+  row: IntegrationRow,
+  payload: unknown,
+): Promise<'company_not_enabled' | 'project_not_enabled' | null> {
+  if (writesProjectData(row.provider_key)) {
+    const selectedCompany = await activeCompanyFor(c, user);
+    if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) return 'company_not_enabled';
+  }
+  if (payload && typeof payload === 'object' && 'project_id' in payload) {
+    const projectId = Number((payload as { project_id: unknown }).project_id);
+    if (!Number.isSafeInteger(projectId) || !(await projectEnabled(c.env, row.id, projectId))) return 'project_not_enabled';
+  }
+  return null;
+}
+
 integrations.post('/:uid/push', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -771,12 +796,9 @@ integrations.post('/:uid/push', async (c) => {
   const uid = c.req.param('uid');
   const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
-  if (writesProjectData(row.provider_key)) {
-    const selectedCompany = await activeCompanyFor(c, user);
-    if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) {
-      return c.json({ error: 'company_not_enabled' }, 403);
-    }
-  }
+  const payload = await c.req.json().catch(() => ({}));
+  const refusal = await pushScopeRefusal(c, user, row, payload);
+  if (refusal) return c.json({ error: refusal }, 403);
 
   const desc = getDescriptor(row.provider_key);
   if (desc && desc.tier !== 'free') ensureTier(user, desc.tier as 'growth' | 'studio');
@@ -786,13 +808,6 @@ integrations.post('/:uid/push', async (c) => {
     return c.json({ error: 'push_not_supported', message: 'This provider has no push action.' }, 422);
   }
 
-  const payload = await c.req.json().catch(() => ({}));
-  if (payload && typeof payload === 'object' && 'project_id' in payload) {
-    const projectId = Number((payload as { project_id: unknown }).project_id);
-    if (!Number.isSafeInteger(projectId) || !(await projectEnabled(c.env, row.id, projectId))) {
-      return c.json({ error: 'project_not_enabled' }, 403);
-    }
-  }
   try {
     const out = await impl.push(c, user, row, payload);
     await logEvent(c.env, {
