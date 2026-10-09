@@ -46,7 +46,17 @@ jobs:
       # still fetched from semgrep.dev at run time, so this narrows ruleset
       # drift to the engine and does not close it. Closing it needs the packs
       # vendored into the repo, which is its own decision.
-      image: semgrep/semgrep@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823  # 1.176.1
+      #
+      # PULLED FROM mirror.gcr.io, NOT DOCKER HUB. From 2026-10-09 ~20:50Z
+      # every run died at "Initialize containers": Docker Hub answered the
+      # shared runners with `toomanyrequests` (the unauthenticated pull
+      # limit), then auth.docker.io timed out. The job never reached the
+      # scan, so main and every PR went red with no repo change. Google's
+      # Docker Hub mirror serves the same image under the same digest, and
+      # a digest pins the bytes, not the registry: what runs is identical.
+      # If the mirror ever misses this digest, drop the `mirror.gcr.io/`
+      # prefix and keep the digest.
+      image: mirror.gcr.io/semgrep/semgrep@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823  # 1.176.1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run semgrep (public OSS rules)
