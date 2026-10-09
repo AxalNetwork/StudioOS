@@ -41,11 +41,11 @@ const checks={
   readiness(m){const items=readiness.map((r,i)=>({...r,ready:i>2}));
     const blocked=sheetHtml(m,{step:4,page:{...founder,readiness:items}});
     const allowed=sheetHtml(m,{step:4,page:{...founder,readiness:items},acknowledge:true});
-    assert.deepEqual([renderedText(blocked).includes('3 of 7 readiness items are missing'),button(blocked,'Send anyway').includes(' disabled='),button(allowed,'Send anyway').includes('disabled')],[true,true,false]);},
+    assert.deepEqual([renderedText(blocked).includes('3 of 7 readiness items are missing'),button(blocked,'Send anyway').includes(' disabled='),button(allowed,'Send anyway').includes(' disabled=')],[true,true,false]);},
   outcome(m){const text=renderedText(sheetHtml(m,{step:4,outcome:{recipients:4,notified:3,not_delivered:1}}));assert.match(text,/available to 4 verified recipients; 3 notified, 1 not delivered/);},
   availability(m){const disabled=render(m.sheet.RoundCallAvailability,{read:{data:{enabled:false},loading:false},projectId:1,onOpen:on.open});
     const enabled=render(m.sheet.RoundCallAvailability,{read:{data:{enabled:true},loading:false},projectId:1,onOpen:on.open});
-    assert.deepEqual([button(disabled,'Call for Capital · Coming soon').includes('disabled'),disabled.includes('href='),button(enabled,'Call for Capital').includes('disabled'),enabled.includes('/round-calls?project_id=1')],[true,false,false,true]);},
+    assert.deepEqual([button(disabled,'Call for Capital · Coming soon').includes(' disabled='),disabled.includes('href='),button(enabled,'Call for Capital').includes(' disabled='),enabled.includes('/round-calls?project_id=1')],[true,false,false,true]);},
   reads(m){const read=(state)=>render(m.parts.CallReadState,{read:{...state,retry:on.retry},children:React.createElement('p',null,'No calls are recorded')});
     assert.deepEqual([renderedText(read({loading:true})),renderedText(read({error:{code:'round_calls_disabled'}})),renderedText(read({error:{code:'unavailable'}})),renderedText(read({loading:false,error:null}))],['Loading…','Coming soon. Round calls are not enabled.','Unreadable. Try again','No calls are recorded']);},
   money(m){assert.deepEqual([m.parts.moneyCents(null),m.parts.moneyCents(0),m.parts.dollarsToCents('12.34'),m.parts.dollarsToCents('12.345'),m.parts.dollarsToCents('0'),m.parts.dollarsToCents('9007199254740992')],['Not recorded','US$0.00',1234,null,null,null]);},
