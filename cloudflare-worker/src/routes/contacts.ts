@@ -1198,7 +1198,19 @@ r.get('/raise-updates', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT * FROM raise_investor_updates WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
     ).bind(pid).all<any>();
-    return c.json({ items: rows.results || [] });
+    // D654: an update sent from Grow › Share an update is also an investor
+    // update sent, read from its own `portfolio_updates` row — never copied.
+    let shared: any[] = [];
+    try {
+      const s = await c.env.DB.prepare(
+        `SELECT u.uid, u.title, u.period, u.sent_at,
+                (SELECT COUNT(*) FROM update_recipients r WHERE r.update_id = u.id AND r.audience = 'investor') AS investors,
+                (SELECT COUNT(*) FROM update_recipients r WHERE r.update_id = u.id AND r.audience = 'investor' AND r.delivered_via IS NOT NULL) AS delivered
+           FROM portfolio_updates u WHERE u.project_id = ? AND u.sent_at IS NOT NULL ORDER BY u.sent_at DESC LIMIT 100`,
+      ).bind(pid).all<any>();
+      shared = (s.results || []).map((x: any) => ({ ...x, source: 'share_update', link: `/updates/${x.uid}` }));
+    } catch { shared = []; }
+    return c.json({ items: rows.results || [], shared_updates: shared });
   } catch (e) { return mapError(c, e); }
 });
 

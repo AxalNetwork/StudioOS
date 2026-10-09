@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeecf1;font-family:Inter,system-ui,sans-serif;color:#18181b;-webkit-font-smoothing:antialiased}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="display:flex;flex-direction:column">
+  <section style="padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 18px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.015em">Recording view · phone and desktop</span><span style="font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)">The ring is a live canvas: three pitch bands as ribbons of 32 strands, demo audio by default. White ground; the dark variant is the Theme tweak.</span></div>
+    <div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;align-items:center"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">RV1</span><span style="font:800 14px Inter,system-ui,sans-serif">Recording · speech · 390 × 844</span></div><div style="width:390px;height:844px;border:10px solid #18181b;border-radius:40px;overflow:hidden;background:#fff;position:relative"><dc-import name="Recording View" style="position:absolute;inset:0" state="speech" hint-size="370px,824px"></dc-import></div></div>
+      <div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;align-items:center"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">RV2</span><span style="font:800 14px Inter,system-ui,sans-serif">Recording · speech · 1440 × 900</span></div><div style="width:1440px;height:900px;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 14px rgba(24,24,27,.08);position:relative"><dc-import name="Recording View" style="position:absolute;inset:0" state="speech" hint-size="1440px,900px"></dc-import></div></div>
+    </div>
+  </section>
+  <section style="padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 18px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.015em">The nine states, and the drawer</span><span style="font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)">On the phone. Reduced motion draws the rings still, swelling only with loudness.</span></div>
+    <div style="display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap">
+      <sc-for list="{{ states }}" as="s" hint-placeholder-count="10">
+        <div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;align-items:center"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">{{ s.id }}</span><span style="font:800 13px Inter,system-ui,sans-serif">{{ s.title }}</span></div><div style="width:390px;height:844px;border:10px solid #18181b;border-radius:40px;overflow:hidden;background:#fff;position:relative"><dc-import name="Recording View" style="position:absolute;inset:0" state="{{ s.state }}" captions="{{ s.captions }}" hint-size="370px,824px"></dc-import></div></div>
+      </sc-for>
+    </div>
+  </section>
+  <section style="padding:44px 48px 36px;display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 18px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.015em">Minimised, after "Exit full screen"</span><span style="font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)">The normal workspace with a 64px live ring and the timer in the corner; tapping it returns to full screen.</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:10px;align-items:center"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">RV13</span><span style="font:800 14px Inter,system-ui,sans-serif">Customer research with the live ring in the corner</span></div>
+      <div style="position:relative;width:1440px;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#f8f8fa;box-shadow:0 2px 14px rgba(24,24,27,.08)">
+        <dc-import name="Cycle Overview" cycle="Validate" module="1" hint-size="1440px,1100px"></dc-import>
+        <div role="button" tabindex="0" style="position:absolute;right:300px;bottom:24px;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #ececf1;border-radius:99px;padding:6px 14px 6px 6px;box-shadow:0 8px 24px rgba(24,24,27,.12);cursor:pointer"><div style="width:64px;height:64px;position:relative"><x-import component-from-global-scope="ring-viz" from="c24ff485-cf6a-499a-81f8-9c9395934916#/ring-viz.js" mode="speech" theme="light" style="position:absolute;inset:0" hint-size="64px,64px"></x-import></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font:600 14px 'Roboto Mono',monospace;color:#18181b">[00:24:17]</span><span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#b91c1c;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:#b91c1c"></span>Recording · tap to expand</span></div></div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const S = (id, title, state, captions) => ({ id, title, state, captions: captions !== false });
+    return { states: [S('RV3', 'Recording · silence', 'silence'), S('RV4', 'Paused', 'paused'), S('RV5', 'A moment just marked', 'marked'), S('RV6', 'Offline', 'offline'), S('RV7', 'Microphone denied', 'denied'), S('RV8', 'No sound for [30] s', 'nosound'), S('RV9', 'Stopping', 'stopping'), S('RV10', 'Reduced motion', 'reduced'), S('RV11', 'Talking points open', 'drawer'), S('RV12', 'Live transcript off', 'speech', false)] };
+  }
+}
+</script>
+
+
+<div id="__claude_design_branding"><style>#__claude_design_branding{position:fixed;right:16px;bottom:16px;z-index:2147483646;display:flex;align-items:center;gap:7px;height:30px;padding:0 5px 0 10px;border-radius:999px;font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:12.5px;font-weight:400;line-height:1;letter-spacing:normal;text-transform:none;color:#141413;background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 0 0 .5px rgba(31,30,29,.14),0 2px 10px rgba(0,0,0,.09)}
+#__claude_design_branding *{box-sizing:border-box;margin:0}
+#__claude_design_branding a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+#__claude_design_branding a:hover span{text-decoration:underline}
+#__claude_design_branding svg{flex:none}
+#__claude_design_branding a svg{color:#D97757}
+#__claude_design_branding button{width:20px;height:20px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:currentColor;opacity:.55;border:0;background:none;cursor:pointer;flex:none;font:inherit;transition:opacity .14s}
+#__claude_design_branding button:hover{opacity:1;background:rgba(127,127,127,.22)}
+@media print{#__claude_design_branding{display:none}}</style><a href="https://claude.com/product/design" target="_blank" rel="noopener noreferrer"><svg width="14" height="14" viewBox="0 0 20 21" fill="none" aria-hidden="true"><path fill="currentColor" d="M9.99902 0C15.5258 0.000170936 19.999 4.50643 19.999 10.0547C19.999 11.7656 19.5863 12.9976 18.7861 13.8203C17.9924 14.6362 16.9465 14.9138 15.9854 15.0078C15.05 15.0993 14.0097 15.0262 13.2549 15.0186C12.8524 15.0145 12.5177 15.0267 12.2441 15.0703C11.9682 15.1144 11.8143 15.1813 11.7305 15.2432C11.4745 15.4322 11.3353 15.7121 11.2656 16.1602C11.2303 16.3875 11.2168 16.6362 11.209 16.9131C11.2017 17.1715 11.1986 17.4893 11.1807 17.7705C11.1469 18.2975 11.0495 19.0865 10.4199 19.5908C9.7846 20.0996 8.88652 20.1057 7.85449 19.877C7.36399 19.7682 6.88652 19.6232 6.42578 19.4453C2.66989 17.9949 0.000187748 14.3414 0 10.0547C0 4.50643 4.47223 0.000171048 9.99902 0ZM9.99902 1.60547C5.36781 1.60564 1.60547 5.38391 1.60547 10.0547C1.60566 13.6582 3.84823 16.7296 7.00391 17.9482C7.39027 18.0974 7.79085 18.2184 8.20215 18.3096C9.1375 18.5169 9.384 18.3633 9.41602 18.3379C9.4524 18.3087 9.54558 18.1915 9.5791 17.668C9.5947 17.4239 9.59473 17.1786 9.60352 16.8672C9.61179 16.5742 9.62831 16.2435 9.67969 15.9131C9.78359 15.2455 10.0474 14.4906 10.7764 13.9521C11.1479 13.6778 11.5842 13.5493 11.9912 13.4844C12.4007 13.4191 12.8434 13.4088 13.2705 13.4131C14.1753 13.4222 15.0071 13.4905 15.8291 13.4102C16.6257 13.3322 17.2249 13.1235 17.6357 12.7012C18.0401 12.2855 18.3935 11.5261 18.3936 10.0547C18.3936 5.38391 14.6302 1.60564 9.99902 1.60547ZM5.11621 9.86719C5.86386 9.91468 6.45486 10.5348 6.45508 11.2939C6.45506 12.0838 5.81519 12.7245 5.02539 12.7246C4.28481 12.7246 3.67573 12.1617 3.60254 11.4404L3.59473 11.2939L3.60156 11.1533C3.66942 10.4596 4.23282 9.91186 4.93359 9.86719H5.11621ZM14.9814 7.19141C15.729 7.23889 16.3199 7.85919 16.3203 8.61816C16.3203 9.40801 15.6804 10.0487 14.8906 10.0488C14.1501 10.0487 13.5409 9.48586 13.4678 8.76465L13.46 8.61816L13.4668 8.47754C13.5348 7.78403 14.0983 7.23618 14.7988 7.19141H14.9814ZM6.4541 4.93457C7.20161 4.9822 7.79275 5.60231 7.79297 6.36133C7.79288 7.151 7.15291 7.7917 6.36328 7.79199C5.62274 7.79199 5.01369 7.22903 4.94043 6.50781L4.93262 6.36133L4.93945 6.2207C5.00731 5.52698 5.5707 4.97922 6.27148 4.93457H6.4541ZM11.3867 3.59668C12.1343 3.64419 12.7253 4.26436 12.7256 5.02344C12.7256 5.81326 12.0857 6.45393 11.2959 6.4541C10.5553 6.4541 9.94622 5.89123 9.87305 5.16992L9.86523 5.02344L9.87207 4.88281C9.93996 4.18912 10.5033 3.64133 11.2041 3.59668H11.3867Z"></path></svg><span>Made with Claude Design</span></a><button type="button" aria-label="Dismiss" onclick="this.parentElement.remove()"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></button></div></body></html>

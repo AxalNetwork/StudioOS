@@ -401,6 +401,7 @@ const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal')
 const FounderRaiseDataRoom = lazy(() => import('./pages/founder/FounderRaiseDataRoom'));
 const FounderRaiseLiquidity = lazy(() => import('./pages/founder/FounderRaiseLiquidity'));
 const FounderGrowDesk = lazy(() => import('./pages/founder/FounderGrowDesk'));
+const SentUpdatePage = lazy(() => import('./pages/founder/SentUpdatePage'));
 const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
@@ -2970,6 +2971,8 @@ function AppInner() {
           /build/team is the Grow desk for a founder (founderGrowLanding), so
           `?tab=` alone never reached a tab (D435). */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><FounderTeamPage /></FounderWorkspaceTabs>))} />
+      {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
+      <Route path="/updates/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SentUpdatePage />)} />
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <FounderGrowDesk />)
         : <Navigate to="/grow/focus" replace />} />

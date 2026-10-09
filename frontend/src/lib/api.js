@@ -29,6 +29,7 @@ export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
 export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
+export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
 export * from './api/usage.js';
 // api-modules:end
