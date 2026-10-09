@@ -180,6 +180,9 @@ test('a provider’s sign-in return: which sheet opens, on which view, and what 
   assert.equal(oauthReturn('?google=connected').view, 'connected');
   assert.match(oauthReturn('?google=connected&warn=google_email_mismatch&google_email=a%40b.test').banner, /a@b\.test doesn't match your StudioOS email/);
   assert.match(oauthReturn('?google=error&reason=email_mismatch&google_email=a%40b.test').banner, /That Google account \(a@b\.test\) doesn't match/);
+  for (const r of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    assert.equal(oauthReturn(`?google=error&reason=${r}`).banner, '', `reason=${r} reaches no inherited method`);
+  }
   assert.deepEqual(oauthReturn('?microsoft=connected'), { key: 'microsoft', view: 'connected', reason: '', banner: '', strip: ['microsoft', 'warn', 'google_email', 'reason'] });
   assert.equal(oauthReturn('?microsoft=error&reason=timeout').view, 'refused');
   assert.equal(oauthReturn('?linkedin=error&linkedin_error=oauth_denied').view, 'cancelled');
@@ -326,6 +329,9 @@ test('sheetStripe and sheetHubspot: what it does, permissions, companies, sync, 
   assert.match(stripe, /Activity/);
   assert.match(stripe, /Data already in StudioOS stays\. The stored credentials are deleted\. Disconnect/);
   assert.doesNotMatch(stripe, /Reconnect/);
+  const freq = (f) => text(html(h(ConnectorPanel, { p: { ...byKey('stripe'), connection: { ...byKey('stripe').connection, config: { sync_frequency: f } } }, view: 'detail', setView() {}, onClose() {} })));
+  assert.match(freq('hourly'), /How often Hourly/);
+  assert.match(freq('constructor'), /How often Not recorded/, 'a settings value is looked up only among the map’s own keys');
   const hub = panel('hubspot', 'detail');
   assert.match(hub, /HubSpot by HubSpot · Needs attention/);
   assert.match(hub, /Sign-in expired\. The last good sync was \d+ days? ago\. HubSpot said: invalid_grant: token expired/);

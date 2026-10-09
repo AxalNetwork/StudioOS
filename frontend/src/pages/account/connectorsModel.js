@@ -368,7 +368,9 @@ export function oauthReturn(search) {
     }
     const reason = p.get('reason') || 'unknown';
     if (CANCELLED.has(reason)) return { key, view: 'cancelled', reason, banner: '', strip };
-    const words = key === 'google' && GOOGLE_ERRORS[reason] ? GOOGLE_ERRORS[reason](ge) : '';
+    // `reason` comes from the address: only the map's own keys are called, so
+    // `?reason=constructor` or `toString` cannot reach Object's methods.
+    const words = key === 'google' && Object.hasOwn(GOOGLE_ERRORS, reason) ? GOOGLE_ERRORS[reason](ge) : '';
     return { key, view: 'refused', reason, banner: words, strip };
   }
   const li = p.get('linkedin');

@@ -361,7 +361,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <PermissionsGroup p={p} />
         <CompaniesGroup conn={conn} />
         <Group label="Sync">
-          <Row a="How often" b={FREQ[conn.config?.sync_frequency] || <Unrecorded reason="The sync schedule is set by StudioOS until the connectors service (D650) lets you choose it.">Not recorded</Unrecorded>} />
+          <Row a="How often" b={(Object.hasOwn(FREQ, String(conn.config?.sync_frequency)) && FREQ[conn.config.sync_frequency]) || <Unrecorded reason="The sync schedule is set by StudioOS until the connectors service (D650) lets you choose it.">Not recorded</Unrecorded>} />
           <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
             action={conn.uid ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
         </Group>
