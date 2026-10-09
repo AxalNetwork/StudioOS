@@ -723,3 +723,23 @@ Match a later export to these files by the Claude Design names above.
 What was built, and what waits on the owner, is in
 `documentation/architecture/decisions/D593.md` and the `ROUTE_MAP.md` rows
 for each route.
+
+## Landed 2026-10-09 — Connectors and the cycle actions (D649, #1461)
+
+The owner shared two artifacts on 2026-10-09:
+- `La8TWdcedFRfFRhiF5wrMv`: the Connectors page;
+- `HxBPFULwiHvfag1BbxiRwa`: its board.
+
+Both were decoded with `scripts/read-canvas.mjs`. Both import the same third canvas, `Cycle Action`, which is committed as decoded from the bundle. Connectors replace Integrations, and appear in the user menu.
+
+| Canvas | Screens | Routes | Grade | Issues |
+| --- | --- | --- | --- | --- |
+| `Connectors Page.dc.html` | 26 screens: Yours, Discover, the user menu, the Add menu, the redirect, the connector sheet, the connect flow and its states, the forms, the rail, and the page states | `/account/connectors` (replacing `/account/integrations`) | UPGRADE | #1462, #1463, #1464 |
+| `Cycle Action.dc.html` | the side sheets: Build's "Connect a tool" (`connect`), Raise's "Call for Capital" (`call`), Grow's "Share an update" (`update`), and the connector sheet (`connector`) | the headers of `/build`, `/raise` and `/grow` | NEW | #1463, #1465, #1466, #1467 |
+| `Connectors · Boards.dc.html` | the board: eight rows of frames, C1 onwards | — | — | #1461 |
+
+Every figure in them is a bracketed placeholder.
+
+**"Call for Capital" is stored as `round_calls`.** `capital_calls` is already a GP's call on its LPs. It ships behind a flag until counsel answers the general-solicitation question on #1008.
+
+Move each file to `canvases/integrated/` once its bodies are built.
