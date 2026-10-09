@@ -16,6 +16,7 @@
  * Schema additions live in ensureSchema(); the ALTER TABLE pattern matches
  * routes/kyc.ts so first-request migration is idempotent and side-effect free.
  */
+import { revokeAllGrants } from '../mcp/grants';
 import { Hono, type Context } from 'hono';
 import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
@@ -692,6 +693,8 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
     ).bind(user.id),
     c.env.DB.prepare(`UPDATE users SET jwt_min_iat = ? WHERE id = ?`).bind(nowSec, user.id),
   ]);
+  // D666: the old sessions end, and so does every AI assistant's grant.
+  await revokeAllGrants(c.env, user.id);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_reenrolled_post_recovery',
                     'Fresh authenticator paired after recovery; old session signed out',
@@ -899,6 +902,8 @@ settings.post('/account/delete-request', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   await sql`UPDATE users SET deletion_requested_at = COALESCE(deletion_requested_at, datetime('now')) WHERE id = ${user.id}`;
+  // D666: an account asking to be erased keeps no AI assistant connected.
+  await revokeAllGrants(c.env, user.id);
   // D168 — OPEN THE LEDGER ROW HQ CAN LATER CLOSE. Until migration 272 there
   // was nothing to close: the column above was the whole record, HQ could
   // read it and had no way to act on it, so the only way a request ever left
