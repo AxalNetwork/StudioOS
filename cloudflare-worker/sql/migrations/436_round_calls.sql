@@ -18,6 +18,7 @@ CREATE TABLE round_calls (
   sector TEXT,
   state TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','sent','closed')),
   terms_hash TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
   counsel_approved_hash TEXT,
   counsel_approval_reference TEXT,
   counsel_approved_by INTEGER REFERENCES users(id),
