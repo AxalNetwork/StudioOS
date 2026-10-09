@@ -21,7 +21,7 @@ async function owner(c: Ctx, projectId: number) {
   return { user, project };
 }
 async function callOwner(c: Ctx) {
-  const call = await loadCall(c.env,c.req.param('uid'));
+  const call = await loadCall(c.env,(c.req.param('uid') || ''));
   const access = await owner(c,call.project_id);
   return { call, ...access };
 }
@@ -80,8 +80,9 @@ routes.post('/',async c=>{
 });
 routes.get('/:uid',async c=>{
   try {
-    const user=await requireAuth(c),call=await loadCall(c.env,c.req.param('uid'));
+    const user=await requireAuth(c),call=await loadCall(c.env,(c.req.param('uid') || ''));
     if(user.role==='investor') return c.json(await investorPage(c.env,call,await investor(c)));
+    if(user.role==='admin') { await requireHqAuthoring(c); const page=await founderPage(c.env,call); return c.json({...page,viewer:'counsel'}); }
     await owner(c,call.project_id); return c.json(await founderPage(c.env,call));
   } catch(e){return failure(c,e);}
 });
@@ -105,7 +106,7 @@ routes.post('/:uid/send',async c=>{
   catch(e){return failure(c,e);}
 });
 routes.post('/:uid/responses',async c=>{
-  try { const user=await investor(c),call=await loadCall(c.env,c.req.param('uid')); return c.json(await respond(c.env,call,user,await input(c))); }
+  try { const user=await investor(c),call=await loadCall(c.env,(c.req.param('uid') || '')); return c.json(await respond(c.env,call,user,await input(c))); }
   catch(e){return failure(c,e);}
 });
 routes.post('/:uid/manage',async c=>{
@@ -120,7 +121,7 @@ routes.put('/:uid/questions/:questionUid',async c=>{
 // set these fields through the draft API. The current hash prevents stale approval.
 routes.post('/:uid/counsel-approval',async c=>{
   try { const user=await requireHqAuthoring(c); await requireStepUp(c);
-    const call=await loadCall(c.env,c.req.param('uid')),body=await input(c);
+    const call=await loadCall(c.env,(c.req.param('uid') || '')),body=await input(c);
     return c.json(await recordCounsel(c.env,call,user,body.reference,body.terms_hash));
   } catch(e){return failure(c,e);}
 });
