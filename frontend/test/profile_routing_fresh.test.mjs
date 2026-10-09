@@ -89,7 +89,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // types, a member's credits and trust obligations by role.
   // 140 on 2026-10-09 (D654, #1466): `Grow · Share an update`, built from
   // `Cycle Action.dc.html` (`action=update`) in `design/incoming/`.
-  assert.equal(recs.length, 140);
+  // 141 the same day (D660, #1473): `Validate · Record a session`, the sheet,
+  // the Interview Session page and the Recording View.
+  assert.equal(recs.length, 141);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

@@ -1,5 +1,5 @@
 /**
- * The two writes Validate has, in one place each.
+ * The writes Validate has, in one place each.
  *
  * WHY THIS FILE EXISTS. Accepting an AI proposal has to produce a row
  * indistinguishable from one a founder typed. Two ways in mean two chances to
@@ -87,5 +87,63 @@ export async function upsertPainAlias(
                      display_phrase = excluded.display_phrase,
                      updated_at = excluded.updated_at`,
   ).bind(projectId, groupId, norm, display, now, now).run();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// D658 (#1471) — three more writes, extracted from `founder_validate.ts` so a
+// structured interview's accepted placement and the founder's own edit reach
+// the same row through the same statement. The manual routes call these too.
+// ---------------------------------------------------------------------------
+
+/**
+ * How severe ONE pain was in ONE interview, upserted on the table's own
+ * unique index `(interview_id, phrase_norm)`. `phraseNorm` is already
+ * `normPhrase`d; `severity` is already validated (`isPainSeverity`).
+ */
+export async function upsertPainSeverity(
+  env: Env,
+  interviewId: number,
+  phraseNorm: string,
+  severity: string,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity)
+     VALUES (?, ?, ?)
+     ON CONFLICT(interview_id, phrase_norm)
+     DO UPDATE SET severity = excluded.severity, updated_at = datetime('now')`,
+  ).bind(interviewId, phraseNorm, severity).run();
+}
+
+/** An interview's ICP fit: strong, partial or none, or null for not recorded. */
+export async function setInterviewIcpFit(env: Env, interviewId: number, fit: string | null): Promise<void> {
+  await env.DB.prepare(
+    "UPDATE discovery_interviews SET icp_fit = ?, updated_at = datetime('now') WHERE id = ?",
+  ).bind(fit, interviewId).run();
+}
+
+/**
+ * A hypothesis ↔ pain-group link, the unit Validate's evidence is counted
+ * from. Both ends must belong to `projectId`: without that a link could pull
+ * another venture's interviews into this venture's count. Returns false when
+ * either end is not this project's. A link that already exists is kept.
+ */
+export async function insertHypothesisLink(
+  env: Env,
+  projectId: number,
+  hypothesisId: number,
+  painGroupId: number,
+  direction: 'supports' | 'contradicts',
+): Promise<boolean> {
+  const ok = await env.DB.prepare(
+    `SELECT 1 AS ok FROM hypotheses h, pain_groups g
+      WHERE h.id = ? AND h.project_id = ? AND g.id = ? AND g.project_id = ?`,
+  ).bind(hypothesisId, projectId, painGroupId, projectId).first<{ ok: number }>();
+  if (!ok) return false;
+  await env.DB.prepare(
+    `INSERT INTO hypothesis_pain_links (hypothesis_id, pain_group_id, direction)
+     VALUES (?, ?, ?)
+     ON CONFLICT(hypothesis_id, pain_group_id, direction) DO NOTHING`,
+  ).bind(hypothesisId, painGroupId, direction).run();
   return true;
 }

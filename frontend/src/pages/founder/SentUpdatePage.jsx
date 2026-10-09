@@ -23,8 +23,9 @@ export const MODULE_LINKS = {
   customers: ['Customers', '/grow/customers'],
   partnerships: ['Partnerships', '/grow/partnerships'],
   capital: ['Capital relationships', '/raise/capital/pipeline'],
-  // D664: a market reply is read under the market its ask links to.
-  'market-expansion': ['Market expansion', '/grow/market-expansion'],
+  // D664: a market reply is read under the market its ask links to. No page
+  // is mounted at /grow/market-expansion until #1474, so it is named, not linked.
+  'market-expansion': ['Market expansion', null],
 };
 
 const ROW = 'flex items-start justify-between gap-3 border-b border-axal-hairline py-2.5 text-[12.5px] dark:border-gray-800';
@@ -96,7 +97,7 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null }) {
                 return (
                   <div key={r.uid} className={ROW}>
                     <span>{r.name || 'Someone'}: {r.message}</span>
-                    {link ? <Link className={LINK} to={link[1]}>Open in {link[0]}</Link> : <span className="text-[11.5px] text-axal-muted">{r.landed_reason}</span>}
+                    {link?.[1] ? <Link className={LINK} to={link[1]}>Open in {link[0]}</Link> : <span className="text-[11.5px] text-axal-muted">{link ? `Read under its market in ${link[0]}` : r.landed_reason}</span>}
                   </div>
                 );
               })}

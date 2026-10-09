@@ -40,7 +40,7 @@ export const NOT_RECORDED = 'Not recorded';
 /** The figures the canvas draws, in its order. */
 export const METRIC_KEYS = ['mrr', 'growth', 'customers', 'burn', 'runway'] as const;
 
-const sourceLabel = (s: string | null) => (s && s.trim() ? s.trim() : 'Entered by hand');
+const sourceLabel = (s: string | null) => (s && s.trim() ? s.trim() : 'manual');
 
 /** The latest snapshot in `rows` (sorted by date) that records `col`. */
 function latest(rows: Snapshot[], col: keyof Snapshot): Snapshot | null {

@@ -99,6 +99,32 @@ export type PainSeverity = (typeof PAIN_SEVERITIES)[number];
 export const isPainSeverity = (v: unknown): v is PainSeverity =>
   typeof v === 'string' && (PAIN_SEVERITIES as readonly string[]).includes(v);
 
+/**
+ * D659 — the three levels the cycle canvases draw: Severe, Real, Mild.
+ *
+ * NEW VALUES OF THE SAME COLUMN, NOT A NEW COLUMN. `interview_pain_severities`
+ * has held `need` and `nice` since migration 211 and no row of it is
+ * rewritten. A `need` is read as Severe and a `nice` as Mild: the two old
+ * values were the two ends of the scale, and Real is the level between them
+ * that the old form had no way to say. A founder who judged a pain with the
+ * old form keeps exactly what they said; one who judges it with the new
+ * levels can say more.
+ *
+ * The old two-count view (`need_count` / `nice_count`) keeps working over
+ * the new values: Severe and Real count as a need, Mild as a nice-to-have.
+ */
+export const PAIN_SEVERITY_LEVELS = ['severe', 'real', 'mild'] as const;
+export type PainSeverityLevel = (typeof PAIN_SEVERITY_LEVELS)[number];
+export const isPainSeverityLevel = (v: unknown): v is PainSeverityLevel =>
+  typeof v === 'string' && (PAIN_SEVERITY_LEVELS as readonly string[]).includes(v);
+
+/** A stored severity on the three-level scale, or `null` when none is recorded. */
+export function severityLevel(raw: unknown): PainSeverityLevel | null {
+  if (raw === 'need') return 'severe';
+  if (raw === 'nice') return 'mild';
+  return isPainSeverityLevel(raw) ? raw : null;
+}
+
 export type PainTheme = { theme: string; mentions: number };
 
 export type PainGroupsView = {
@@ -205,7 +231,7 @@ export async function ensurePainGroupsSchema(env: Env): Promise<void> {
   }
 }
 
-function safeParseStrings(raw: string | null | undefined): string[] {
+export function safeParseStrings(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
     const v = JSON.parse(raw);
@@ -215,16 +241,23 @@ function safeParseStrings(raw: string | null | undefined): string[] {
   }
 }
 
-export async function loadPainGroupModel(env: Env, projectId: number): Promise<PainGroupModel> {
+/**
+ * `strict` (D659): a failed read THROWS instead of reading as "no groups".
+ * The cycle overview turns a throw into that one card's `unreadable`; the
+ * existing pages keep the forgiving default, which they were written around.
+ */
+export async function loadPainGroupModel(env: Env, projectId: number, opts: { strict?: boolean } = {}): Promise<PainGroupModel> {
   await ensurePainGroupsSchema(env);
-  const groupsRes = await env.DB.prepare(
+  const groupsQ = env.DB.prepare(
     `SELECT id, project_id, title, sort_order, created_at, updated_at
        FROM pain_groups WHERE project_id = ? ORDER BY sort_order ASC, id ASC`,
-  ).bind(projectId).all<PainGroupRow>().catch(() => ({ results: [] as PainGroupRow[] }));
-  const aliasRes = await env.DB.prepare(
+  ).bind(projectId).all<PainGroupRow>();
+  const groupsRes = opts.strict ? await groupsQ : await groupsQ.catch(() => ({ results: [] as PainGroupRow[] }));
+  const aliasQ = env.DB.prepare(
     `SELECT id, project_id, group_id, phrase_norm, display_phrase
        FROM pain_group_aliases WHERE project_id = ?`,
-  ).bind(projectId).all<PainAliasRow>().catch(() => ({ results: [] as PainAliasRow[] }));
+  ).bind(projectId).all<PainAliasRow>();
+  const aliasRes = opts.strict ? await aliasQ : await aliasQ.catch(() => ({ results: [] as PainAliasRow[] }));
 
   const groups = groupsRes.results || [];
   const groupIds = new Set(groups.map((g) => g.id));
@@ -284,7 +317,7 @@ type ThemeAccum = {
   lastMentionAt: string | null;
 };
 
-function resolvePhrase(
+export function resolvePhrase(
   norm: string,
   display: string,
   model: PainGroupModel,
@@ -375,9 +408,9 @@ function analyzePains(
       // their counts. The set is of interview ids, so one interview naming the
       // same theme three ways counts once.
       if (it.id != null) {
-        const sev = sevBy.get(`${it.id}\u0000${norm}`);
-        if (sev === 'need') a.needInterviews.add(it.id);
-        else if (sev === 'nice') a.niceInterviews.add(it.id);
+        const level = severityLevel(sevBy.get(`${it.id}\u0000${norm}`));
+        if (level === 'severe' || level === 'real') a.needInterviews.add(it.id);
+        else if (level === 'mild') a.niceInterviews.add(it.id);
       }
     }
   }
@@ -515,8 +548,8 @@ export async function materializeTitleNormAliases(
 }
 
 /** Structured view for the curation UI: curated groups + ungrouped phrases. */
-export async function getPainGroupsView(env: Env, projectId: number): Promise<PainGroupsView> {
-  const model = await loadPainGroupModel(env, projectId);
+export async function getPainGroupsView(env: Env, projectId: number, opts: { strict?: boolean } = {}): Promise<PainGroupsView> {
+  const model = await loadPainGroupModel(env, projectId, opts);
   // `id` JOINED THE SELECT so severity can be attributed. It was `pains_json`
   // alone, which is the whole reason three of this zone's four chips could not
   // be built: with no interview behind a mention there is nothing to narrow by.
@@ -552,7 +585,7 @@ export async function getPainGroupsView(env: Env, projectId: number): Promise<Pa
   )
     .bind(projectId)
     .all<InterviewPains>()
-    .catch(() => ({ results: [] as InterviewPains[] }));
+    .catch((e) => { if (opts.strict) throw e; return { results: [] as InterviewPains[] }; });
 
   // SCOPED THROUGH THE INTERVIEW, because `interview_pain_severities` carries
   // no project of its own — the same join `discovery_interviews` is the owner
@@ -566,7 +599,7 @@ export async function getPainGroupsView(env: Env, projectId: number): Promise<Pa
   )
     .bind(projectId)
     .all<PainSeverityRow>()
-    .catch(() => ({ results: [] as PainSeverityRow[] }));
+    .catch((e) => { if (opts.strict) throw e; return { results: [] as PainSeverityRow[] }; });
 
   return analyzePains(res.results || [], model, projectId, sev.results || []).view;
 }

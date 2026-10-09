@@ -20,7 +20,7 @@ const RUNWAY = { key: 'runway', label: 'Runway', unit: 'months', value: null, so
 const on = new Proxy({}, { get: () => () => {} });
 const base = {
   step: 0, period: null, context: { metrics: [MRR, RUNWAY], no_metrics: false, open_roles: [{ id: 3, title: 'Engineer' }], audience: { investors: 2, team: 1, network: 4 },
-    ask_kinds: [{ kind: 'hire', module: 'Talent', lands: true }, { kind: 'market', module: 'Market expansion', lands: false, reason: 'Not recorded: there is no Market expansion store yet, so the reply stays on the ask' }] },
+    ask_kinds: [{ kind: 'hire', module: 'Talent', lands: true }, { kind: 'market', module: 'Market expansion', lands: true, reason: null }] },
   metrics: [MRR, RUNWAY], highlights: [], lowlights: [], asks: [], audience: { investors: true, team: true, network: false },
   includeMetrics: false, draftStatus: null, handWritten: false, busy: false, error: '', title: 'This month update', now: new Date('2026-10-09T00:00:00Z'),
 };
@@ -66,13 +66,16 @@ test('highlights name their source; "nothing" offers Skip this month or Write by
   assert.match(nothing.text, /Write by hand/);
 });
 
-test('asks: a hire links to an open role; a market ask says its reply stays on the ask', () => {
+test('asks: a hire links to an open role; a market ask links to a market, and with none its reply stays on the ask', () => {
   const { html, text } = sheet({ step: 3, asks: [{ kind: 'hire', text: 'A senior engineer', link_ref: '3' }, { kind: 'market', text: 'Spain', link_ref: null }] });
   assert.match(html, /<option value="3"[^>]*>Engineer<\/option>/);
   const withMarkets = sheet({ step: 3, context: { ...base.context, markets: [{ id: 9, name: 'Spain' }] }, asks: [{ kind: 'market', text: 'Spain', link_ref: '9' }] });
   assert.match(withMarkets.html, /<option value="9"[^>]*>Spain<\/option>/, 'D664: a market ask picks one of the markets');
   assert.match(text, /Replies land in Talent/);
-  assert.match(text, /no Market expansion store yet/);
+  assert.match(text, /Linked to no market, so a reply stays on the ask\./, 'no market chosen');
+  assert.doesNotMatch(text, /Replies land in Market expansion/, 'never claimed for an unlinked ask');
+  assert.match(withMarkets.text, /Replies land in Market expansion/);
+  assert.doesNotMatch(withMarkets.text, /Linked to no market/);
   for (const k of ['A hire', 'A customer introduction', 'A partner', 'A market contact', 'Capital']) assert.ok(text.includes(k), k);
 });
 
@@ -112,6 +115,10 @@ test('the sent page: replies open in their module; noreply offers Ask again; ope
   assert.match(text, /Opened 2026-11-01/);
   assert.match(text, /No Axal account for this email/);
   assert.match(text, /to 2 investors, 1 team members and 4 in the Axal network \(asks only\)/);
+  // D664: a market reply is named under Market expansion, not linked: no page is mounted there until #1474.
+  const market = page({ ...PAGE, asks: [{ ...PAGE.asks[1], replies: [{ uid: 'r2', name: 'Ana', message: 'Talk to Lucia', landed_module: 'market-expansion' }] }] });
+  assert.match(renderedText(market), /Read under its market in Market expansion/);
+  assert.doesNotMatch(market, /href="\/grow\/market-expansion"/);
   const fresh = renderedText(page({ ...PAGE, asks: [{ ...PAGE.asks[1], can_ask_again: false }] }));
   assert.doesNotMatch(fresh, /Ask again/);
 });

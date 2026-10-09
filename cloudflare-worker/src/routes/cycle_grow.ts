@@ -22,12 +22,13 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
-import { pageOf, settleCard, type Card } from '../services/cycleCards';
+import { PAGE_SIZE, pageOf } from '../services/cycleCards';
 import {
-  APPLICATION_STAGES, CARD_FNS, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION, MARKET_PARTS,
-  channelRows, checklist, growFigures, marketRows, readiness, readSnapshots, type Ctx, type GrowSlug,
+  APPLICATION_STAGES, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION, MANUAL, MARKET_PARTS,
+  channelRows, checklist, growCard, growFigures, marketRows, movementGap, readiness, readSnapshots, recentMovements, snapSource, usd,
+  type Ctx, type GrowSlug, type Obligation,
 } from '../services/growCycle';
-import { billingPeriods, readRecurring } from '../services/revenueMovements';
+import { readRecurring } from '../services/revenueMovements';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -69,28 +70,34 @@ const ctxFor = (env: Env, projectId: number): Ctx => ({
   href: (slug) => `/grow/${slug}?project=${projectId}`,
 });
 
-async function cardFor(x: Ctx, slug: GrowSlug): Promise<Card> {
-  const meta = GROW_MODULES.find((m) => m.slug === slug)!;
-  return settleCard(meta, () => CARD_FNS[slug](x));
-}
-
 // GET /overview
 r.get('/overview', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), false);
     const x = ctxFor(c.env, pid);
-    const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
+    const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => growCard(x, m.slug)))]);
     return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards });
   } catch (e) { return fail(c, e); }
 });
 
 // ── Records ─────────────────────────────────────────────────────────────────
+//
+// D661's table shape: `cols` is `[{ key, label }]` and `rows` is
+// `[{ id, cells }]`, a cell being a string, a number, null ("Not recorded") or
+// `{ text, tone?, href? }`. Search, filter and sort run on each row's raw
+// fields (`raw`), which the response leaves out.
 
 type Row = Record<string, unknown>;
-type RecordSet = { cols: string[]; rows: Row[]; parts?: Row };
+type Cell = string | number | null | { text: string; tone?: string; href?: string };
+type Col = { key: string; label: string };
+interface Rec { id: string | number; raw: Row; cells: Record<string, Cell> }
+type RecordSet = { cols: Col[]; rows: Rec[]; parts?: Row };
 
 const lower = (v: unknown) => String(v ?? '').toLowerCase();
+const money = (cents: unknown): Cell => (typeof cents === 'number' ? usd(cents) : null);
+const why = (reason: string | null): Cell => (reason ? { text: reason, tone: 'muted' } : null);
+const cols = (...pairs: Array<[string, string]>): Col[] => pairs.map(([key, label]) => ({ key, label }));
 
 async function recordsFor(x: Ctx, slug: GrowSlug): Promise<RecordSet> {
   const { env, projectId } = x;
@@ -99,41 +106,45 @@ async function recordsFor(x: Ctx, slug: GrowSlug): Promise<RecordSet> {
       `SELECT uid, body, source, theme, roadmap_item_label, status, from_name, created_at FROM product_feedback
         WHERE project_id = ? ORDER BY created_at DESC, id DESC`,
     ).bind(projectId).all<Row>();
-    return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'],
-      rows: (q.results || []).map((f) => ({ ...f, theme: f.theme ?? null, roadmap_item_label: f.roadmap_item_label ?? null })) };
+    return { cols: cols(['feedback', 'Feedback'], ['source', 'Source'], ['theme', 'Theme'], ['roadmap_item', 'Roadmap item'], ['status', 'Status']),
+      rows: (q.results || []).map((f) => ({ id: String(f.uid), raw: f,
+        cells: { feedback: f.body as string, source: f.source as string, theme: (f.theme as string) ?? null, roadmap_item: (f.roadmap_item_label as string) ?? null,
+          status: { text: String(f.status), tone: f.status === 'shipped' ? 'ok' : f.status === 'planned' ? 'v2' : 'grey' } } })) };
   }
   if (slug === 'distribution') {
-    return { cols: ['Channel', 'State', 'Spend · 30 d', 'Customers', 'CAC'],
-      rows: (await channelRows(x)).map((ch) => ({ ...ch, spend_source: ch.spend_cents == null ? null : 'manual' })) };
+    return { cols: cols(['channel', 'Channel'], ['state', 'State'], ['spend', 'Spend · this month'], ['customers', 'Customers · this month'], ['cac', 'CAC']),
+      rows: (await channelRows(x)).map((ch) => ({ id: ch.uid, raw: { ...ch, spend_source: ch.spend_cents == null ? null : MANUAL },
+        cells: { channel: ch.name, state: ch.state, spend: ch.spend_cents == null ? null : { text: `${usd(ch.spend_cents)} · ${MANUAL}` },
+          customers: ch.customers, cac: ch.cac_cents != null ? usd(ch.cac_cents) : why(ch.cac_reason) } })) };
   }
   if (slug === 'revenue-and-traction') {
     const snaps = await readSnapshots(env, projectId);
-    const kpi = (label: string, col: 'mrr' | 'paying_accounts') => {
+    const kpi = (label: string, col: 'mrr' | 'paying_accounts', fmt: (v: number) => Cell): Rec => {
       const have = snaps.filter((s) => s[col] != null);
       const last = have[have.length - 1];
-      if (!last) return { kpi: label, value: null, change_30d: null, source: null, as_of: null, reason: 'Not recorded' };
+      if (!last) return { id: label, raw: { kpi: label, value: null, source: null, as_of: null }, cells: { kpi: label, value: why('Not recorded: no metric snapshot'), change: null, source: null, as_of: null } };
       const cutoff = new Date(Date.parse(last.snapshot_date) - 30 * 86_400_000).toISOString().slice(0, 10);
       const before = [...have].reverse().find((s) => s.snapshot_date <= cutoff);
-      return { kpi: label, value: last[col], change_30d: before ? (last[col] as number) - (before[col] as number) : null,
-        source: last.source && last.source.trim() ? last.source : 'manual', as_of: last.snapshot_date, reason: null };
+      const change = before ? (last[col] as number) - (before[col] as number) : null;
+      const raw = { kpi: label, value: last[col], change_30d: change, source: snapSource(last.source), as_of: last.snapshot_date };
+      return { id: label, raw, cells: { kpi: label, value: fmt(last[col] as number), change: change == null ? null : change, source: raw.source, as_of: raw.as_of } };
     };
     const ledger = await readRecurring(env, projectId);
-    const mv = await env.DB.prepare(
-      `SELECT month, kind, amount_cents, source, as_of FROM revenue_movements WHERE project_id = ? ORDER BY month DESC`,
-    ).bind(projectId).all<{ month: string; kind: string; amount_cents: number; source: string; as_of: string }>();
-    const latest = (mv.results || [])[0]?.month ?? null;
-    const at = (kind: string) => (mv.results || []).find((m) => m.month === latest && m.kind === kind) ?? null;
-    const movementRow = (label: string, kind: 'churned' | 'expansion' | 'new') => {
-      if (billingPeriods(ledger) < 2) return { kpi: label, value: null, change_30d: null, source: null, as_of: null, reason: 'Needs 2 billings' };
-      const m = at(kind);
-      if (!m) {
-        return { kpi: label, value: null, change_30d: null, source: null, as_of: null,
-          reason: at('unsplit') ? 'Not recorded: the ledger cannot tell new from expansion for this month' : 'Not recorded' };
-      }
-      return { kpi: label, value: m.amount_cents, unit: 'usd_cents', change_30d: null, source: `Revenue ledger · ${m.source}`, as_of: m.as_of, reason: null };
+    const gap = movementGap(ledger);
+    const { months, by } = recentMovements(ledger, x.now);
+    const latest = [...months].reverse().find((m) => by.has(m)) ?? null;
+    const movementRow = (label: string, kind: 'churned' | 'expansion' | 'new'): Rec => {
+      const empty = (reason: string): Rec => ({ id: label, raw: { kpi: label, value: null, reason }, cells: { kpi: label, value: why(reason), change: null, source: null, as_of: null } });
+      if (gap) return empty(gap);
+      const d = latest ? by.get(latest)! : null;
+      const m = d?.[kind];
+      if (!m) return empty(d?.unsplit ? 'Not recorded: the ledger cannot tell new from expansion for this month' : 'Not recorded');
+      const raw = { kpi: label, value: m.amount_cents, unit: 'usd_cents', source: `Revenue ledger · ${m.source}`, as_of: m.as_of, reason: null };
+      return { id: label, raw, cells: { kpi: label, value: usd(m.amount_cents), change: null, source: raw.source, as_of: m.as_of } };
     };
-    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of'],
-      rows: [kpi('MRR', 'mrr'), kpi('Customers', 'paying_accounts'), movementRow('New MRR', 'new'), movementRow('Expansion MRR', 'expansion'), movementRow('Churn', 'churned')] };
+    return { cols: cols(['kpi', 'KPI'], ['value', 'Value'], ['change', 'Change · 30 d'], ['source', 'Source'], ['as_of', 'As of']),
+      rows: [kpi('MRR', 'mrr', (v) => `$${v.toLocaleString('en-US')}`), kpi('Customers', 'paying_accounts', (v) => v),
+        movementRow('New MRR', 'new'), movementRow('Expansion MRR', 'expansion'), movementRow('Churn', 'churned')] };
   }
   if (slug === 'team-expansion') {
     const q = await env.DB.prepare(
@@ -142,27 +153,41 @@ async function recordsFor(x: Ctx, slug: GrowSlug): Promise<RecordSet> {
               (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND a.stage = 'interview') AS in_interview
          FROM job_postings p WHERE p.project_id = ? AND p.status IN ('open', 'published', 'draft') ORDER BY p.id DESC`,
     ).bind(projectId).all<Row>();
-    return { cols: ['Role', 'Team', 'Applicants', 'In interview', 'Target start'], rows: q.results || [] };
+    return { cols: cols(['role', 'Role'], ['team', 'Team'], ['applicants', 'Applicants'], ['in_interview', 'In interview'], ['target_start', 'Target start']),
+      rows: (q.results || []).map((p) => ({ id: Number(p.id), raw: p,
+        cells: { role: p.title as string, team: (p.team as string) ?? null, applicants: Number(p.applicants), in_interview: Number(p.in_interview), target_start: (p.target_start as string) ?? null } })) };
   }
   if (slug === 'partner-network') {
     const q = await env.DB.prepare(
       `SELECT g.uid, g.name, g.type, g.stage, g.terms, (SELECT SUM(amount_cents) FROM partner_revenue r WHERE r.partner_id = g.id) AS revenue_cents
          FROM growth_partners g WHERE g.project_id = ? ORDER BY g.name COLLATE NOCASE`,
     ).bind(projectId).all<Row>();
-    return { cols: ['Partner', 'Type', 'Stage', 'Terms', 'Revenue sourced'],
-      rows: (q.results || []).map((p) => ({ ...p, revenue_cents: p.revenue_cents ?? null, revenue_source: p.revenue_cents == null ? null : 'manual' })) };
+    return { cols: cols(['partner', 'Partner'], ['type', 'Type'], ['stage', 'Stage'], ['terms', 'Terms'], ['revenue', 'Revenue sourced']),
+      rows: (q.results || []).map((p) => ({ id: String(p.uid), raw: { ...p, revenue_cents: p.revenue_cents ?? null },
+        cells: { partner: p.name as string, type: p.type as string, stage: p.stage as string, terms: (p.terms as string) ?? null,
+          revenue: p.revenue_cents == null ? null : { text: `${money(p.revenue_cents)} · ${MANUAL}` } } })) };
   }
   if (slug === 'market-expansion') {
     const rows = await marketRows(env, projectId);
     const replies = await marketReplies(env, projectId);
-    return { cols: ['Market', 'State', 'Readiness', 'Weakest part', 'Decision'],
-      rows: rows.map((m) => { const rd = readiness(m); return { ...m, readiness: rd.score, readiness_reason: rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null, weakest_part: rd.weakest, replies: replies.get(m.uid) ?? [] }; }) };
+    return { cols: cols(['market', 'Market'], ['state', 'State'], ['readiness', 'Readiness'], ['weakest_part', 'Weakest part'], ['decision', 'Decision']),
+      rows: rows.map((m) => {
+        const rd = readiness(m);
+        const reason = rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null;
+        const raw = { ...m, readiness: rd.score, readiness_reason: reason, weakest_part: rd.weakest };
+        return { id: m.uid, raw: { ...raw, replies: replies.get(m.uid) ?? [] },
+          cells: { market: m.name, state: m.state, readiness: rd.score == null ? why(reason) : `${rd.score} / 40`, weakest_part: rd.weakest, decision: m.decision } };
+      }),
+      parts: { replies: Object.fromEntries(replies) } };
   }
-  // durable-company-building
+  // durable-company-building: production's compliance_events columns.
   const ev = await env.DB.prepare(
-    `SELECT id, title, kind, due_at, owner_name, status FROM compliance_events WHERE project_id = ? ORDER BY due_at IS NULL, due_at`,
-  ).bind(projectId).all<Row>();
-  return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State'], rows: ev.results || [],
+    `SELECT id, title, event_type, due_date, owner_name, completion_status FROM compliance_events WHERE project_id = ? ORDER BY due_date`,
+  ).bind(projectId).all<Obligation>();
+  return { cols: cols(['obligation', 'Obligation'], ['kind', 'Kind'], ['due', 'Due'], ['owner', 'Owner'], ['state', 'State']),
+    rows: (ev.results || []).map((e) => ({ id: e.id, raw: { ...e, kind: e.event_type, state: e.completion_status },
+      cells: { obligation: e.title, kind: e.event_type, due: e.due_date, owner: e.owner_name ?? null,
+        state: { text: e.completion_status, tone: e.completion_status === 'completed' ? 'ok' : 'grey' } } })),
     parts: { checklist: await checklist(env, projectId) } };
 }
 
@@ -185,19 +210,24 @@ export async function marketReplies(env: Env, projectId: number): Promise<Map<st
   return out;
 }
 
-/** Search on every text field; `filter` is `field:value`; sort a field, `-` for descending. */
-export function shapeRecords(rows: Row[], q: string, filter: string, sort: string): Row[] {
+/**
+ * Search every text field; `filter` is one or more `field:value` pairs, comma
+ * separated, all of which must match; sort a field, `-` for descending.
+ */
+export function shapeRecords<T extends { raw: Row }>(rows: T[], q: string, filter: string, sort: string): T[] {
   let out = rows;
-  if (q) out = out.filter((row) => Object.values(row).some((v) => typeof v === 'string' && lower(v).includes(lower(q))));
-  if (filter.includes(':')) {
-    const [k, v] = [filter.slice(0, filter.indexOf(':')), filter.slice(filter.indexOf(':') + 1)];
-    out = out.filter((row) => lower(row[k]) === lower(v));
+  if (q) out = out.filter((row) => Object.values(row.raw).some((v) => typeof v === 'string' && lower(v).includes(lower(q))));
+  for (const part of filter.split(',')) {
+    const at = part.indexOf(':');
+    if (at <= 0) continue;
+    const k = part.slice(0, at).trim(); const v = part.slice(at + 1).trim();
+    out = out.filter((row) => lower(row.raw[k]) === lower(v));
   }
   if (sort) {
     const desc = sort.startsWith('-'); const key = desc ? sort.slice(1) : sort;
     // A missing value sorts last whichever way, never as a zero.
     out = [...out].sort((a, b) => {
-      const av = a[key]; const bv = b[key];
+      const av = a.raw[key]; const bv = b.raw[key];
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
@@ -208,23 +238,28 @@ export function shapeRecords(rows: Row[], q: string, filter: string, sort: strin
   return out;
 }
 
+const PAGE_MAX = 100;
+
 // GET /modules/:slug
 r.get('/modules/:slug', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), false);
     const meta = GROW_MODULES.find((m) => m.slug === c.req.param('slug'));
-    if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
+    if (!meta) return c.json({ detail: 'Not a Grow module', modules: GROW_MODULES.map((m) => m.slug) }, 404);
     const x = ctxFor(c.env, pid);
-    const card = await cardFor(x, meta.slug);
+    const card = await growCard(x, meta.slug);
+    const page = pageOf(c.req.query('page'));
+    const size = Math.min(PAGE_MAX, Math.max(1, Math.floor(Number(c.req.query('page_size'))) || PAGE_SIZE));
+    const module = { slug: meta.slug, name: meta.name };
     let recs: RecordSet;
     try { recs = await recordsFor(x, meta.slug); } catch (e) {
       console.error('[cycle_grow] records unreadable:', meta.slug, (e as Error).message);
-      return c.json({ module: meta.slug, card, records: null, records_state: 'unreadable', reason: `Unreadable: ${meta.source} could not be read` });
+      return c.json({ module, card, records: { state: 'unreadable', reason: `${meta.source} could not be read`, cols: [], rows: [], total: null, page, page_size: null } });
     }
-    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 120), String(c.req.query('sort') || '').slice(0, 60));
-    const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
-    return c.json({ module: meta.slug, card, records: { cols: recs.cols, ...pg }, ...(recs.parts ? { parts: recs.parts } : {}) });
+    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 240), String(c.req.query('sort') || '').slice(0, 60));
+    const rows = shaped.slice((page - 1) * size, page * size).map((row) => ({ id: row.id, cells: row.cells }));
+    return c.json({ module, card, records: { cols: recs.cols, rows, total: shaped.length, page, page_size: size }, ...(recs.parts ? { parts: recs.parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
 
@@ -261,8 +296,9 @@ const PARTNER_TYPES = ['reseller', 'integration', 'agency', 'referral', 'other']
 const PARTNER_STAGES = ['talking', 'terms', 'signed', 'ended'] as const;
 const MARKET_STATES = ['considering', 'entering', 'served', 'not_now'] as const;
 const DECISIONS = ['enter', 'not_yet', 'exit'] as const;
-const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'tax', 'other'] as const;
-const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up'] as const;
+// `compliance_events.event_type` and `completion_status`, as `routes/compliance.ts` writes them.
+const OBLIGATION_KINDS = ['annual_report', 'franchise_tax', 'registered_agent', 'board_meeting', 'other'] as const;
+const OBLIGATION_STATES = ['pending', 'completed', 'snoozed'] as const;
 
 r.post('/feedback', async (c) => {
   try {
@@ -474,36 +510,81 @@ r.patch('/markets/:uid', async (c) => {
   } catch (e) { return fail(c, e); }
 });
 
+/**
+ * Obligations are rows of `compliance_events` in production's shape
+ * (`schema_baseline.sql`, written the same way by `routes/compliance.ts`):
+ * `event_type`, `due_date` (required), `completion_status`, the entity's
+ * jurisdiction, `created_by_user_id`. Migration 443 adds only the owner.
+ */
 r.post('/obligations', async (c) => {
   try {
     const user = await requireAuth(c); const b = await body(c);
     const pid = await project(c, user, b.project, true);
     const title = str(b.title, 200);
     if (!title) throw new Refused(400, 'An obligation has a title', 'title');
-    const due = str(b.due_at, 10);
-    if (due && !DATE.test(due)) throw new Refused(400, 'due_at is YYYY-MM-DD', 'due_at');
-    const ins = await c.env.DB.prepare(
-      'INSERT INTO compliance_events (project_id, title, due_at, status, kind, owner_name, owner_user_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(pid, title, due, oneOf(b.status, OBLIGATION_STATES, 'status') ?? 'upcoming', oneOf(b.kind, OBLIGATION_KINDS, 'kind', true),
-      str(b.owner_name, 120), null, user.id).run();
-    const id = (ins as any).meta?.last_row_id;
-    await logWrite(c.env, user.id, 'grow_obligation_added', 'compliance_events', id);
+    const due = str(b.due_date, 10);
+    if (!due || !DATE.test(due)) throw new Refused(400, 'due_date is YYYY-MM-DD', 'due_date');
+    const kind = oneOf(b.event_type, OBLIGATION_KINDS, 'event_type') ?? 'other';
+    const ent = await c.env.DB.prepare(
+      'SELECT e.id, e.jurisdiction FROM projects p JOIN entities e ON e.id = p.entity_id WHERE p.id = ?',
+    ).bind(pid).first<{ id: number; jurisdiction: string | null }>().catch(() => null);
+    const owner = await ownerOf(c, pid, b.owner_user_id, b.owner_name);
+    let id: number | undefined;
+    try {
+      const ins = await c.env.DB.prepare(
+        `INSERT INTO compliance_events (project_id, entity_id, jurisdiction, event_type, title, due_date, recurrence, source,
+           owner_user_id, owner_name, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, 'one_time', 'manual', ?, ?, ?)`,
+      ).bind(pid, ent?.id ?? null, ent?.jurisdiction || 'Unspecified', kind, title, due, owner.id, owner.name, user.id).run();
+      id = (ins as any).meta?.last_row_id;
+    } catch (e) {
+      if (String((e as Error).message).toLowerCase().includes('unique')) throw new Refused(409, 'An obligation of that kind is already due that day', 'due_date');
+      throw e;
+    }
+    await logWrite(c.env, user.id, 'grow_obligation_added', 'compliance_events', id ?? '');
     return c.json({ id }, 201);
   } catch (e) { return fail(c, e); }
 });
+
+/**
+ * The owner as given: a typed name, or the user id of someone on this venture
+ * (its founder or an accepted member), named from `users`. Any other id is
+ * refused without saying whether that user exists.
+ */
+async function ownerOf(c: C, pid: number, rawId: unknown, rawName: unknown): Promise<{ id: number | null; name: string | null }> {
+  if (rawId != null && rawId !== '') {
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0) throw new Refused(400, 'owner_user_id is a user id', 'owner_user_id');
+    const u = await c.env.DB.prepare(
+      `SELECT u.id, u.name FROM users u JOIN projects p ON p.id = ?
+        WHERE u.id = ? AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+          OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.user_id = u.id AND m.status = 'accepted'))`,
+    ).bind(pid, id).first<{ id: number; name: string | null }>();
+    if (!u) throw new Refused(400, 'The owner must be someone on this venture', 'owner_user_id');
+    return { id: u.id, name: u.name ?? str(rawName, 120) };
+  }
+  return { id: null, name: str(rawName, 120) };
+}
 
 r.patch('/obligations/:id', async (c) => {
   try {
     const user = await requireAuth(c); const b = await body(c);
     const pid = await project(c, user, b.project, true);
-    const row = await owned<{ id: number; status: string; owner_name: string | null; due_at: string | null }>(c,
-      'SELECT id, status, owner_name, due_at FROM compliance_events WHERE id = ? AND project_id = ?', Number(c.req.param('id')), pid);
-    const due = b.due_at === undefined ? row.due_at : str(b.due_at, 10);
-    if (due && !DATE.test(due.slice(0, 10))) throw new Refused(400, 'due_at is YYYY-MM-DD', 'due_at');
-    await c.env.DB.prepare('UPDATE compliance_events SET status = ?, owner_name = ?, due_at = ? WHERE id = ?')
-      .bind(b.status === undefined ? row.status : oneOf(b.status, OBLIGATION_STATES, 'status', true), b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120), due, row.id).run();
+    const row = await owned<{ id: number; completion_status: string; owner_user_id: number | null; owner_name: string | null; due_date: string }>(c,
+      'SELECT id, completion_status, owner_user_id, owner_name, due_date FROM compliance_events WHERE id = ? AND project_id = ?', Number(c.req.param('id')), pid);
+    const due = b.due_date === undefined ? row.due_date : str(b.due_date, 10);
+    if (!due || !DATE.test(due)) throw new Refused(400, 'due_date is YYYY-MM-DD', 'due_date');
+    const status = b.completion_status === undefined ? row.completion_status : oneOf(b.completion_status, OBLIGATION_STATES, 'completion_status', true)!;
+    const owner = b.owner_user_id === undefined && b.owner_name === undefined
+      ? { id: row.owner_user_id, name: row.owner_name } : await ownerOf(c, pid, b.owner_user_id, b.owner_name);
+    const done = status === 'completed' && row.completion_status !== 'completed';
+    await c.env.DB.prepare(
+      `UPDATE compliance_events SET completion_status = ?, owner_user_id = ?, owner_name = ?, due_date = ?,
+         completed_at = CASE WHEN ? THEN ? WHEN ? = 'completed' THEN completed_at ELSE NULL END,
+         completed_by_user_id = CASE WHEN ? THEN ? WHEN ? = 'completed' THEN completed_by_user_id ELSE NULL END,
+         updated_at = ? WHERE id = ?`,
+    ).bind(status, owner.id, owner.name, due, done ? 1 : 0, nowIso(), status, done ? 1 : 0, user.id, status, nowIso(), row.id).run();
     await logWrite(c.env, user.id, 'grow_obligation_updated', 'compliance_events', row.id);
-    return c.json({ id: row.id });
+    return c.json({ id: row.id, completion_status: status });
   } catch (e) { return fail(c, e); }
 });
 

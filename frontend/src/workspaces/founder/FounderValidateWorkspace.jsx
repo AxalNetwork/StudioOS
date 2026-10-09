@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useLocation, useSearchParams, Link } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
@@ -9,6 +9,7 @@ import { founderZoneFilters } from '../founderZoneFilters';
 import { founderZoneActions } from '../founderZoneActions';
 import FillProposals from '../FillProposals';
 import InterviewRecording from './InterviewRecording';
+import RecordSessionSheet from '../../pages/founder/RecordSessionSheet';
 import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
@@ -132,6 +133,9 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
   // Bumped after an upload or a transcription so the row re-reads itself
   // rather than holding a stale copy of the record it just changed.
   const [localKey, setLocalKey] = useState(0);
+  // D660 — "Record a session" opens on one interview; a session hangs off it.
+  const [sessionFor, setSessionFor] = useState(null);
+  const navigate = useNavigate();
   const saveEvidence = async (id, patch) => {
     await api.updateInterviewEvidence(id, patch);
     setLocalKey((n) => n + 1);
@@ -258,6 +262,14 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                     sits behind the rail's switch, so a founder who turned that
                     off finds no control here that still runs a model.
                   */}
+                  <button
+                    type="button"
+                    data-testid={`button-record-session-${r.id}`}
+                    onClick={() => setSessionFor(r)}
+                    className="mt-2 rounded-[7px] border border-violet-200 px-[9px] py-1 text-[10.5px] font-bold text-violet-800 hover:border-violet-300 dark:border-violet-800 dark:text-violet-200"
+                  >
+                    Record a session
+                  </button>
                   <InterviewRecording
                     interview={r}
                     fillsOn={fillsOn}
@@ -287,6 +299,13 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
               );
             })}
           </ul>
+          {sessionFor && (
+            <RecordSessionSheet
+              interview={sessionFor}
+              onClose={() => setSessionFor(null)}
+              onCreated={(session) => navigate(`/validate/session/${session.id}`, { state: { interview: sessionFor } })}
+            />
+          )}
           <p className="mt-3 border-t border-axal-hairline pt-3 text-[11px] leading-relaxed text-axal-faint">
             These are the same records Discovery writes — one log, two doors. Consent to quote is a real field on
             an interview and it is three-state: yes, no, or never asked. Never-asked is counted apart from

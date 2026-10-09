@@ -306,7 +306,8 @@ test('accepting writes through the same function the manual route uses', async (
   // the manual one is `progress.ts`. What this test protects is that no caller
   // grew its own INSERT, which is checked directly below rather than inferred
   // from an import list.
-  assert.match(src, /import \{ insertHypothesis \} from '\.\/_founder_validate_writes'/);
+  // D658 added three more names to the same import; the writer is still this one.
+  assert.match(src, /import \{[^}]*\binsertHypothesis\b[^}]*\} from '\.\/_founder_validate_writes'/);
   const registry = await readFile(resolve(__dirname, '../src/services/fills/registry.ts'), 'utf8');
   assert.match(registry, /from '\.\.\/\.\.\/routes\/_founder_validate_writes'/,
     'the fills registry no longer draws its writers from the shared module');

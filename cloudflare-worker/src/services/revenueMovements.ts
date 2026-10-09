@@ -16,6 +16,9 @@
  *     apart, so that month's growth is stored as `unsplit`, and no churn is
  *     claimed for it.
  *   - Churn needs at least two billing periods; with fewer it is not recorded.
+ *   - MRR here is cash by the month it was received. An annual invoice, or a
+ *     payment that lands a month late, reads as churn then new: this ledger
+ *     cannot tell them apart, and the Revenue card's caption says so.
  *   - `source` is the weakest proof level of the rows behind the figure.
  */
 import type { Env } from '../types';
@@ -74,10 +77,12 @@ export function computeMovements(rows: LedgerRecurring[]): Movement[] {
       out.push({ month: m, kind: 'unsplit', amount_cents: Math.max(0, cur.total - prev.total), customers: 0, source, as_of });
       continue;
     }
+    // `customers` on churned counts customers lost; a contraction adds to the
+    // amount but is not a churned customer.
     let nw = 0; let nwN = 0; let ex = 0; let exN = 0; let ch = 0; let chN = 0;
     for (const [c, v] of cur.mrr) {
       const p = prev.mrr.get(c) ?? 0;
-      if (p === 0) { nw += v; nwN += 1; } else if (v > p) { ex += v - p; exN += 1; } else if (v < p) { ch += p - v; chN += 1; }
+      if (p === 0) { nw += v; nwN += 1; } else if (v > p) { ex += v - p; exN += 1; } else if (v < p) ch += p - v;
     }
     for (const [c, p] of prev.mrr) if (!cur.mrr.has(c)) { ch += p; chN += 1; }
     out.push({ month: m, kind: 'new', amount_cents: nw, customers: nwN, source, as_of });
@@ -104,7 +109,9 @@ export function cohortRetention(rows: LedgerRecurring[]): Array<{ cohort: string
     const last = sorted[sorted.length - 1];
     while (m <= last) {
       const d = months.get(m);
-      retention.push(d ? Math.round((members.filter((c) => (d.mrr.get(c) ?? 0) > 0).length / members.length) * 100) : null);
+      // A month whose rows name no customer (a Stripe charge with none) is not
+      // recorded for a cohort either: null, never 0%.
+      retention.push(d && d.mrr.size > 0 ? Math.round((members.filter((c) => (d.mrr.get(c) ?? 0) > 0).length / members.length) * 100) : null);
       const [y, mo] = m.split('-').map(Number);
       m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
     }

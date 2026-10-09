@@ -143,12 +143,12 @@ CREATE TABLE IF NOT EXISTS markets (
   CHECK (cost_score IS NULL OR length(trim(coalesce(cost_source, ''))) > 0)
 );
 
--- Durable company-building (MG7): an owner and a kind on a compliance event,
--- and a durability checklist that starts from the Lab's graduation gates.
-ALTER TABLE compliance_events ADD COLUMN kind TEXT;
+-- Durable company-building (MG7): an owner on a compliance event, and a
+-- durability checklist that starts from the Lab's graduation gates. The kind
+-- and the author are production's own `event_type` and `created_by_user_id`
+-- (schema_baseline.sql), so only the owner is added.
 ALTER TABLE compliance_events ADD COLUMN owner_user_id INTEGER REFERENCES users(id);
 ALTER TABLE compliance_events ADD COLUMN owner_name TEXT;
-ALTER TABLE compliance_events ADD COLUMN created_by INTEGER REFERENCES users(id);
 CREATE TABLE IF NOT EXISTS durability_checklist (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -158,3 +158,12 @@ CREATE TABLE IF NOT EXISTS durability_checklist (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (project_id, item_key)
 );
+
+-- Share an update (D654): replies to a market ask made before this migration
+-- were stored with "there is no Market expansion store yet", which is no longer
+-- true. Their asks named no market, so nothing says which market they meant
+-- and they are not moved (no backfill); only the stale sentence is replaced
+-- with the one a reply to an unlinked market ask gets from now on.
+UPDATE update_ask_replies
+   SET landed_reason = 'Not recorded: the ask is linked to no market, so the reply stays on the ask'
+ WHERE landed_reason = 'Not recorded: there is no Market expansion store yet, so the reply stays on the ask';
