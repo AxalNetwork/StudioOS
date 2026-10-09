@@ -10,7 +10,7 @@ import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
-import { adaptCard, adaptModule, adaptOverview, ownFn } from './adapters';
+import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import * as validateAdapter from './adapters/validate';
 
 /**
@@ -36,15 +36,15 @@ const CYCLE_DEFS = {
     // The primary action opens the interview form; a session attaches to the
     // interview it records (`RecordSessionSheet`), so the form comes first.
     action: (q) => ({ label: 'Record a session', href: `/validate/interviews?new=record${q ? `&${q.slice(1)}` : ''}` }),
-    tools: {
+    tools: toFnMap({
       'problem-discovery': (q) => ({ label: 'Curate pain themes: merge, rename, judge severity', href: `/validate/pain-map${q}` }),
       'customer-research': (q) => ({ label: 'Open the interview log: notes, recordings, evidence', href: `/validate/interviews${q}` }),
       'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
       experiments: (q) => ({ label: 'Open the hypothesis board and the verdict', href: `/validate/hypotheses${q}` }),
-    },
-    add: {
+    }),
+    add: toFnMap({
       'customer-research': (q) => ({ text: 'Record a session', href: `/validate/interviews?new=record${q ? `&${q.slice(1)}` : ''}` }),
-    },
+    }),
     // The AI fill bands the Validate desk carried, on the module they fill.
     fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
   },
@@ -171,8 +171,8 @@ export default function CycleRoute({ cycle }) {
         query={query}
         onQuery={setQuery}
         action={action}
-        add={ownFn(def.add, slug)?.(q)}
-        tool={ownFn(def.tools, slug)?.(q)}
+        add={fnOf(def.add, slug)?.(q)}
+        tool={fnOf(def.tools, slug)?.(q)}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} onApplied={() => setReload((n) => n + 1)} />

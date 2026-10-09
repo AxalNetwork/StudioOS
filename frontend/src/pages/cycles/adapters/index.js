@@ -13,21 +13,24 @@
  */
 import * as validate from './validate.js';
 
-const ADAPTERS = { validate };
-
 /**
- * A map's OWN entry, and only if it is a function. A slug comes from a read
- * or a URL, so a slug such as `constructor` must not reach an inherited
- * method of Object.prototype; anything else reads as "no adapter".
+ * NAME → FUNCTION TABLES ARE MAPS. A slug comes from a read or a URL, and a
+ * plain object looked up by it would reach Object.prototype's own methods
+ * (`constructor`, `toString`, …). A Map has no inherited entries, so such a
+ * slug finds nothing and reads as "no adapter". CodeQL's
+ * js/unvalidated-dynamic-method-call is what this answers.
  */
-export function ownFn(map, key) {
-  if (!map || typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(map, key)) return null;
-  const fn = map[key];
+export const toFnMap = (obj) => new Map(Object.entries(obj || {}).filter(([, v]) => typeof v === 'function'));
+
+/** The function a Map holds under `key`, or null. Anything but a Map gives null. */
+export function fnOf(map, key) {
+  const fn = map instanceof Map ? map.get(key) : undefined;
   return typeof fn === 'function' ? fn : null;
 }
 
-/** A map's own entry, or null; for the per-cycle tables themselves. */
-const own = (map, key) => (map && typeof key === 'string' && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : null);
+const ADAPTERS = new Map([
+  ['validate', { cards: toFnMap(validate.CARDS), records: new Map(Object.entries(validate.RECORDS)), figure: validate.figure }],
+]);
 
 const isSpecList = (s) => Array.isArray(s) && s.every((x) => x && typeof x === 'object' && typeof x.kind === 'string');
 const isColList = (c) => Array.isArray(c) && c.every((x) => x && typeof x === 'object' && typeof x.key === 'string');
@@ -35,19 +38,19 @@ const isColList = (c) => Array.isArray(c) && c.every((x) => x && typeof x === 'o
 export function adaptCard(cycle, card) {
   if (!card || typeof card !== 'object') return card;
   if (card.series == null || isSpecList(card.series)) return card;
-  const fn = ownFn(own(ADAPTERS, cycle)?.CARDS, card.slug);
+  const fn = fnOf(ADAPTERS.get(cycle)?.cards, card.slug);
   return { ...card, series: fn ? fn(card.series) : null };
 }
 
 export function adaptFigure(cycle, fig) {
-  const fn = ownFn(own(ADAPTERS, cycle), 'figure');
-  return fn ? fn(fig) : fig;
+  const fn = ADAPTERS.get(cycle)?.figure;
+  return typeof fn === 'function' ? fn(fig) : fig;
 }
 
 export function adaptRecords(cycle, slug, records) {
   if (!records || typeof records !== 'object') return records;
   if (isColList(records.cols)) return records;
-  const def = own(own(ADAPTERS, cycle)?.RECORDS, slug);
+  const def = ADAPTERS.get(cycle)?.records.get(slug) ?? null;
   const labels = Array.isArray(records.cols) ? records.cols : [];
   if (!def) return { ...records, cols: [], rows: [] };
   // The read lists its labels in the canvas's order; the adapter names the
