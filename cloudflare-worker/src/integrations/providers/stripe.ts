@@ -37,6 +37,7 @@
  */
 import type { Context } from 'hono';
 import { callbackBase } from '../../util/url';
+import { projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -275,7 +276,9 @@ async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, sta
 async function resolveProjectId(env: Env, row: IntegrationRow): Promise<number | null> {
   const cfg = row.config_json ? safeJson<Record<string, unknown>>(row.config_json, {}) : {};
   const explicit = Number(cfg.project_id);
-  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  if (Number.isSafeInteger(explicit) && explicit > 0) {
+    return await projectEnabled(env, row.id, explicit) ? explicit : null;
+  }
   try {
     // Integrations are keyed by `user_id`, but `projects` has NO owner_user_id
     // column — it is keyed by `founder_id` (see schema.sql). The old query hit
@@ -286,9 +289,10 @@ async function resolveProjectId(env: Env, row: IntegrationRow): Promise<number |
     const owned = await env.DB.prepare(
       `SELECT p.id FROM projects p
          JOIN users u ON u.founder_id = p.founder_id
-        WHERE u.id = ? AND p.deleted_at IS NULL
+         JOIN integration_companies ic ON ic.company_id = p.company_id
+        WHERE u.id = ? AND p.deleted_at IS NULL AND ic.integration_id = ? AND ic.enabled = 1
         LIMIT 2`,
-    ).bind(row.user_id).all<{ id: number }>();
+    ).bind(row.user_id, row.id).all<{ id: number }>();
     const rows = owned.results || [];
     if (rows.length === 1) return rows[0].id;
   } catch (e) {
@@ -538,6 +542,11 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
   if (stripeUserId) await deauthorize(c.env, stripeUserId);
 }
 
+async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
+  const account = typeof result.credentials.stripe_user_id === 'string' ? result.credentials.stripe_user_id : '';
+  if (account) await deauthorize(env, account);
+}
+
 function validateConfig(
   patch: Record<string, unknown>, _existing: Record<string, unknown>,
 ): { ok: true; patch: Record<string, unknown> } | { ok: false; error: string } {
@@ -567,6 +576,7 @@ async function postConnect(c: Context<{ Bindings: Env }>, user: User, row: Integ
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
   connect,
+  revokeGranted,
   buildAuthorizeUrl,
   sync,
   webhook,
@@ -585,6 +595,7 @@ export async function syncStripeForUser(env: Env, userId: number, projectId: num
     "SELECT * FROM integrations WHERE provider_key = 'stripe' AND user_id = ? AND status = 'active' LIMIT 1",
   ).bind(userId).first<IntegrationRow>();
   if (!row) return { ok: false, imported: 0, detail: 'not_connected' };
+  if (!(await projectEnabled(env, row.id, projectId))) return { ok: false, imported: 0, detail: 'company_not_enabled' };
   const creds = await decryptCredentials(env, row.uid, row.credentials_enc);
   if (!creds?.access_token) return { ok: false, imported: 0, detail: 'credentials_missing' };
   try {
@@ -692,6 +703,7 @@ export async function syncAllStripeIntegrations(env: Env): Promise<{ scanned: nu
     return { scanned: 0, ok: 0, failed: 0 };
   }
   for (const row of (rows.results || [])) {
+    if (!(await scheduledConnectorEnabled(env, row))) continue;
     scanned++;
     try {
       const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;

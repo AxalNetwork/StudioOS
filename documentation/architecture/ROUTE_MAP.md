@@ -19,6 +19,21 @@ the root" until 2026-09-07; the root of `design/canvases/` holds only its
 
 ## Status taxonomy
 
+### Connectors Worker contract (D650, #1462)
+
+`/api/connectors` and the temporary `/api/integrations` alias mount the same
+`integrations.ts` router. `GET /available` returns the registry's category,
+verified status, pulls, sends, feeds and permissions; Google Calendar and
+Microsoft 365 read their existing calendar connections. `GET /` lists the
+caller's connections with their enabled company IDs. `PUT /:uid/companies`
+changes those links; `GET /:key` reports a teammate's connection by name only.
+Credentials and personal Calendly, Carta and calendar records remain owned by
+their connecting user; company links control writes into project-backed data.
+`GET /suggestions` reads empty module stores, `POST /requests` records a tool
+request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
+and pages activity. Every company ID supplied by a request is checked against
+`user_company_links` before use.
+
 ### AI allowance Worker contract (D640, #1433)
 
 The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
