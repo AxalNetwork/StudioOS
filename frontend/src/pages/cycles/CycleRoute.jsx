@@ -10,7 +10,7 @@ import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
-import { adaptCard, adaptModule, adaptOverview } from './adapters';
+import { adaptCard, adaptModule, adaptOverview, ownFn } from './adapters';
 import { cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 
@@ -101,7 +101,7 @@ function useProject() {
 
 export default function CycleRoute({ cycle }) {
   const { slug } = useParams();
-  const def = CYCLE_DEFS[cycle];
+  const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
   const { projectId, status: projectStatus } = useProject();
   const name = cycleOf(cycle)?.name || 'Validate';
   const [fillsOn] = useAssistMode(name);
@@ -184,7 +184,7 @@ export default function CycleRoute({ cycle }) {
     );
   } else {
     const recs = module?.records;
-    const fillKind = def.fills?.[slug];
+    const fillKind = def.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
     body = (
       <CycleModulePage
         cycle={cycle}
@@ -199,8 +199,8 @@ export default function CycleRoute({ cycle }) {
         query={query}
         onQuery={setQuery}
         action={action}
-        add={def.add?.[slug]?.(q)}
-        tool={def.tools?.[slug]?.(q)}
+        add={ownFn(def.add, slug)?.(q)}
+        tool={ownFn(def.tools, slug)?.(q)}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} onApplied={() => setReload((n) => n + 1)} />

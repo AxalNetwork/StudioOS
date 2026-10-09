@@ -23,7 +23,7 @@ import { SignJWT } from 'jose';
 
 import cycleValidate from '../src/routes/cycle_validate.ts';
 import { MODULES as WORKER_MODULES, daysBefore } from '../src/services/cycleValidate.ts';
-import { adaptModule, adaptOverview } from '../../frontend/src/pages/cycles/adapters/index.js';
+import { adaptCard, adaptModule, adaptOverview, adaptRecords, ownFn } from '../../frontend/src/pages/cycles/adapters/index.js';
 import { MODULES as PAGE_MODULES, CARDS, RECORDS } from '../../frontend/src/pages/cycles/adapters/validate.js';
 import { drawableSeries, cardView, figureValue } from '../../frontend/src/pages/cycles/cycleModel.js';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -270,3 +270,16 @@ test('D661: every Raise module page\'s records are {key,label} columns and {id,c
     }
   }
 });
+
+test('D661: a slug from a read or a URL reaches only the adapter\'s own functions, never an inherited one', () => {
+  for (const slug of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+    const c = adaptCard('validate', { slug, state: 'ok', series: { themes: [{ theme: 'x', mentions: 3 }] } });
+    assert.equal(c.series, null, `${slug}: an inherited method was called as a card adapter`);
+    assert.deepEqual(adaptRecords('validate', slug, { cols: ['A'], rows: [{ a: 1 }] }).rows, [], `${slug}: an inherited value was used as a records adapter`);
+    assert.equal(ownFn({ a: () => 1 }, slug), null, `${slug}: ownFn returned an inherited value`);
+  }
+  assert.equal(adaptCard('constructor', { slug: 'x', state: 'ok', series: { a: 1 } }).series, null, 'an inherited cycle name reached an adapter');
+  assert.equal(typeof ownFn({ a: () => 1 }, 'a'), 'function');
+  assert.equal(ownFn({ a: 1 }, 'a'), null, 'a non-function is not callable');
+});
+
