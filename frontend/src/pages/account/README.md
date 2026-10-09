@@ -12,10 +12,15 @@ live here, one file each:
 | `AccountDevices.jsx` | The devices registered for push, under Notifications |
 | `AccountBilling.jsx` | Billing and orders: the plan line and the orders list |
 | `AccountUsage.jsx` | Usage (D642): the AI allowance, the last 30 days, where it went, models and rates, the last run, and storage (U1–U6) |
+| `AccountConnectors.jsx` | Connectors (D651): Yours, Discover, the Add menu, the request form and the page states; reads a provider's sign-in return from the address |
+| `ConnectorSheet.jsx` | The connector sheet and the connect flow, and `useConnectors`, the catalogue read every connectors surface shares |
+| `ConnectToolSheet.jsx` | Build's "Connect a tool" sheet (D651), opened from `../founder/FounderBuildDesk.jsx` |
+| `connectorTools.jsx` | The provider tools the sheet opens, moved from the retired Integrations page: the LinkedIn import, HubSpot's pipeline and Salesforce's mapping |
 | `AccountFollowing.jsx` | Following |
 | `AccountDeveloper.jsx` | Developer, for the one role its routes answer |
 | `accountCenterModel.js` | The pure helpers the D568 sections share |
 | `usageModel.js` | The Usage section's pure arithmetic and words: amounts, token counts, bytes, and every "Not recorded" rule |
+| `connectorsModel.js` | The Connectors rules: categories, status words, search and pages, Discover's sections, the redirect, a sign-in's return, the connect flow's states and Build's groups |
 
 ## Rules
 
@@ -27,3 +32,6 @@ live here, one file each:
 - **Usage belongs to the member.** No read in `AccountUsage.jsx` takes a
   company, so switching company in the sidebar changes nothing on that page.
   `frontend/test/usage_page_d642.test.mjs` holds that.
+- **A connector belongs to the member.** No read in the connectors files takes
+  a company. A field only D650's `/api/connectors` carries reads "Not recorded"
+  until it arrives; `frontend/test/connectors_page_d651.test.mjs` holds both.

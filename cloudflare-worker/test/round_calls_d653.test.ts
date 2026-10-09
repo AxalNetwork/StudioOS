@@ -83,7 +83,9 @@ const checks:Record<string,(m:any)=>Promise<void>>={
   async ownership(m){const f=await fixture();const statuses=[];
     for(const who of [1,2,9])statuses.push((await request(f,m.routes,'/context?project_id=1',who)).status);
     statuses.push((await request(f,m.routes,'/context?project_id=1',1,'GET',undefined,{}, {'X-Company-Id':'11'})).status);
-    assert.deepEqual(statuses,[200,404,403,404]);},
+    f.db.exec('UPDATE users SET founder_id=NULL WHERE id=1; UPDATE projects SET founder_id=NULL WHERE id=1');
+    statuses.push((await request(f,m.routes,'/context?project_id=1',1)).status);
+    assert.deepEqual(statuses,[200,404,403,404,404]);},
   async counselRole(m){const f=await fixture('draft');
     assert.deepEqual([(await request(f,m.routes,'/call',9)).status,(await request(f,m.routes,'/call',3)).body.viewer],[403,'counsel']);},
   async send(m){const f=await fixture('draft');const r=await request(f,m.routes,'/call/send',1,'POST',{acknowledge_missing:true});
@@ -143,6 +145,20 @@ const checks:Record<string,(m:any)=>Promise<void>>={
     let failed=false;try{await m.service.replyToLinkedCall(f.env,ask,f.investor,'Question from the update','reply');}catch{failed=true;}
     assert.deepEqual([failed,count(f.db,'update_ask_replies'),count(f.db,'round_call_questions'),count(f.db,'raise_prospects')],[true,0,0,0]);},
 
+  async delivered(m){const f=await fixture('draft');
+    f.db.exec('DELETE FROM round_call_recipients WHERE investor_user_id<>4');
+    const call=await m.service.loadCall(f.env,'call');
+    await m.service.recordCounsel(f.env,call,f.actor,'Counsel approval fixture',call.terms_hash,call.revision);
+    const approved=await m.service.loadCall(f.env,'call');
+    const sent=await m.service.sendCall(f.env,approved,f.actor,false);
+    let duplicate=false;try{await m.service.sendCall(f.env,await m.service.loadCall(f.env,'call'),f.actor,false);}catch{duplicate=true;}
+    assert.deepEqual([sent.state,sent.recipients,sent.notified,sent.not_delivered,count(f.db,'notifications_inbox'),duplicate],['sent',1,1,0,1,true]);},
+  async wired(m){const f=await fixture();
+    f.db.exec("INSERT INTO contacts(id,uid,project_id,audience,name,email) VALUES(10,'contact',1,'investor','Ivy','ivy@example.test'); INSERT INTO raise_prospects(uid,project_id,contact_id,email,stage,amount,commit_status) VALUES('prospect',1,10,'ivy@example.test','committed',7000,'wired')");
+    await m.service.respond(f.env,await m.service.loadCall(f.env,'call'),f.investor,{action:'commit',amount_cents:250000});
+    const row=f.db.prepare('SELECT amount,commit_status FROM raise_prospects').get()!;
+    assert.deepEqual([row.amount,row.commit_status,count(f.db,'contacts'),count(f.db,'raise_prospects')],[7000,'wired',1,1]);},
+
 };
 for(const [name,check] of Object.entries(checks))test('D653 real request/write: '+name,()=>check(actual));
 
@@ -155,12 +171,16 @@ async function altered(path:string,old:string,replacement:string,index:number) {
   let js=stripTypeScriptTypes(source,{mode:'strip'});
   const req=createRequire(pathToFileURL(resolve(path)));
   js=js.replace(/from (['"])([^'"]+)\1/g,(_m,q,spec)=>{
+    if(spec.startsWith('data:'))return 'from '+q+spec+q;
     let target;if(spec.startsWith('.')){target=resolve(dirname(path),spec);if(!existsSync(target))target+='.ts';}else target=req.resolve(spec);
     return 'from '+q+pathToFileURL(target).href+q;
   });
-  return import('data:text/javascript;base64,'+Buffer.from(js+'\n// d653-'+index).toString('base64'));
+  const url='data:text/javascript;base64,'+Buffer.from(js+'\n// d653-'+index).toString('base64');
+  return {module:await import(url),url};
 }
 const probes=[
+  ['wired','contacts',"COALESCE(commit_status,'') NOT IN ('signed','wired')","1=1"],
+  ['delivered','service',"if(id!=null) notified++;","if(false) notified++;"],
   ['updateLink','updateRoutes',"const callUid=kind==='capital'?await openCallForUpdate(c.env,u.project_id):null;","const callUid=null;"],
   ['updateFlag','service',"if(!roundCallsEnabled(env)) return null;",""],
   ['updatePrivacy','service',"if(audienceName==='network')return {...ask,link_ref:null};",""],
@@ -172,6 +192,7 @@ const probes=[
   ['access','routes',"return c.json(await investorPage(c.env,call,await investor(c)))","return c.json(await investorPage(c.env,call,user))"],
   ['responseAccess','routes',"if(!verifiedInvestor(user)) throw new RoundCallError('verified_investor_required',403);",""],
   ['ownership','routes',"project.founder_id !== user.founder_id","false"],
+  ['ownership','routes',"user.founder_id == null || ",""],
   ['ownership','routes',"!projectInActiveCompany(companyId,project)","false"],
   ['counselRole','routes',"await requireSuperAdmin(c); const page","const page"],
   ['send','service',"if (!counselApproved(call))","if (false)"],
@@ -183,8 +204,10 @@ const probes=[
   ['invalidation','service',"counsel_approved_hash=NULL, counsel_approval_reference=NULL, counsel_approved_by=NULL, counsel_approved_at=NULL, updated_at=?","updated_at=?"],
 ];
 for(const [index,[name,kind,old,replacement]]of probes.entries())test('D653 request mutation/restoration '+index+': '+name,async()=>{
-  const path=kind==='routes'?'cloudflare-worker/src/routes/round_calls.ts':kind==='updateRoutes'?'cloudflare-worker/src/routes/portfolio_updates.ts':'cloudflare-worker/src/services/roundCalls.ts';
-  const mutant=await altered(path,old,replacement,index);
-  await assert.rejects(()=>checks[name]({...actual,[kind]:kind==='service'?mutant:mutant.default}),assert.AssertionError);
+  const path=kind==='routes'?'cloudflare-worker/src/routes/round_calls.ts':kind==='updateRoutes'?'cloudflare-worker/src/routes/portfolio_updates.ts':kind==='contacts'?'cloudflare-worker/src/routes/contacts.ts':'cloudflare-worker/src/services/roundCalls.ts';
+  let mutant=await altered(path,old,replacement,index);
+  let target=kind;
+  if(kind==='contacts'){mutant=await altered('cloudflare-worker/src/services/roundCalls.ts',"from '../routes/contacts'","from '"+mutant.url+"'",index+1000);target='service';}
+  await assert.rejects(()=>checks[name]({...actual,[target]:target==='service'?mutant.module:mutant.module.default}),assert.AssertionError);
   await checks[name](actual);
 });

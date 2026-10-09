@@ -17,6 +17,7 @@ write a bordered white box with a title, it already exists here.
 | `railModels.js` | The editorial half of the rail's model menu: each model's display name, sentence and tags. Which models exist, their rates and which one is the default all come from `/api/ai/pricing`. |
 | `railInheritance.js` | Whether a page is a workspace root (the rail offers the model menu) or a zone under one (the rail shows the workspace's model as inherited), worked out from role and URL (D402). |
 | `Honesty.jsx` | `Unrecorded` (the store holds no value) and `Unreadable` (the read failed, with a retry). |
+| `EadwynComposer.jsx` | D652: the rail's "Ask Eadwyn" composer, under the read-back block. A stored conversation, its "+" menu ("Add a file", "Connectors ›" with a switch per connection), answers with their source line, and the Send/Cancel card for a write Eadwyn proposed. |
 | `RailFrame.jsx` | The one frame a `WorkerRail` sits in (D556): docked right, full height, seam, ground and inset, collapsing through `--fwr-track`. Every host that does not draw the founder desks' frame in its own stylesheet passes its rail here; `WorkspaceShell` does too. |
 | `workerRail.css` | Styles for `WorkerRail`, scoped to `.fwr`, and for `RailFrame`, scoped to `.fwr-frame`. |
 | `assistCost.js` | Spend accounting for the rail. |

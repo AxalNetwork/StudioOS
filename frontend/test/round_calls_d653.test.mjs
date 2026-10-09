@@ -1,7 +1,7 @@
 /** D653: real React views and isolated behavioral mutation/restoration probes. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -37,7 +37,7 @@ const checks={
   materials(m){const text=renderedText(sheetHtml(m,{step:1}));assert.deepEqual([text.includes('no pitch deck version exists'),text.includes('No data room yet'),text.includes('Create a data room')],[true,true,true]);},
   audience(m){const text=renderedText(sheetHtml(m,{step:2,matches:{matched:0,match_reasons:[]}}));assert.deepEqual([text.includes('No matching investors yet'),text.includes('Names appear only once an investor responds'),text.includes('No verified investor from this venture')],[true,true,true]);},
   preview(m){const text=renderedText(sheetHtml(m,{step:3,page:{...founder,readiness,call:{...call,deck_version:null,data_room_project_uid:null},progress:{...founder.progress,received:4}}}));assert.deepEqual([text.includes('no version linked'),text.includes('no room linked'),text.includes('4 verified recipients')],[true,true,true]);},
-  counsel(m){const html=sheetHtml(m,{step:4,acknowledge:true,page:{...founder,counsel_approved:false,readiness}});assert.deepEqual([button(html,'Send the call').includes('disabled'),renderedText(html).includes('Counsel has not approved the terms yet')],[true,true]);},
+  counsel(m){const html=sheetHtml(m,{step:4,acknowledge:true,page:{...founder,counsel_approved:false,readiness}});assert.deepEqual([button(html,'Send the call').includes(' disabled='),renderedText(html).includes('Counsel has not approved the terms yet')],[true,true]);},
   readiness(m){const items=readiness.map((r,i)=>({...r,ready:i>2}));
     const blocked=sheetHtml(m,{step:4,page:{...founder,readiness:items}});
     const allowed=sheetHtml(m,{step:4,page:{...founder,readiness:items},acknowledge:true});
@@ -60,7 +60,7 @@ const checks={
     assert.deepEqual([invalid.includes('href="/research/diligence/private"'),renderedText(invalid).includes('Request the NDA'),valid.includes('href="/research/diligence/private"')],[false,true,true]);},
   deck(m){const missing=render(m.page.RecordedCallDeck,{deck:null}),bad=render(m.page.RecordedCallDeck,{deck:{slides:'invalid'}}),
       recorded=render(m.page.RecordedCallDeck,{deck:{title:'Actual deck',version:2,slides:JSON.stringify([{title:'Actual evidence',traction:{mrr:0}}])}});
-    assert.deepEqual([renderedText(missing).includes('Not recorded'),renderedText(bad).includes('Unreadable'),renderedText(recorded).includes('Actual evidence'),renderedText(recorded).includes('0')],[true,true,true,true]);},
+    assert.deepEqual([renderedText(missing).includes('no linked deck version could be read'),renderedText(bad).includes('Unreadable'),renderedText(recorded).includes('Actual evidence'),renderedText(recorded).includes('0')],[true,true,true,true]);},
   update(m){const html=render(m.SentUpdateView,{data:{title:'Actual update',sent_at:'2098-01-01',audience:'investor',asks:[{uid:'ask',kind:'capital',text:'Join',link_ref:'call'}]}});
     const off=render(m.SentUpdateView,{data:{title:'Actual update',asks:[{uid:'ask',kind:'capital',text:'Join',link_ref:null,link_reason:'Coming soon. Round calls are not enabled.'}]}});
     assert.deepEqual([html.includes('href="/round-calls/call"'),renderedText(off).includes('Coming soon'),off.includes('href="/round-calls/')],[true,true,false]);},
@@ -75,7 +75,7 @@ async function altered(path,old,replacement,index) {
   const {code}=await transformWithOxc(source,resolve(path),{jsx:{runtime:'automatic'}});
   const req=createRequire(pathToFileURL(resolve(path)));
   const js=code.replace(/from (['"])([^'"]+)\1/g,(_m,q,spec)=>{
-    let target;if(spec.startsWith('.')){target=resolve(dirname(path),spec);if(!existsSync(target)){target=['.jsx','.js','.ts','.tsx'].map(ext=>target+ext).find(existsSync);if(!target)throw Error('Missing dependency '+spec);}}else target=req.resolve(spec);
+    let target;if(spec.startsWith('.')){target=resolve(dirname(path),spec);if(existsSync(target)&&statSync(target).isDirectory())target=['.jsx','.js','.ts','.tsx'].map(ext=>resolve(target,'index'+ext)).find(existsSync);else if(!existsSync(target))target=['.jsx','.js','.ts','.tsx'].map(ext=>target+ext).find(existsSync);if(!target)throw Error('Missing dependency '+spec);}else target=req.resolve(spec);
     return 'from '+q+pathToFileURL(target).href+q;
   });
   return import('data:text/javascript;base64,'+Buffer.from(js+'\n// d653-render-'+index).toString('base64'));

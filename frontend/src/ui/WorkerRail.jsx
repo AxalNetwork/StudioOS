@@ -11,6 +11,7 @@ import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, pageMonthLine, splitByPage } from './assistCost';
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY } from './railModels';
+import EadwynComposer from './EadwynComposer';
 import { Unreadable } from './Honesty';
 import { railInheritance } from './railInheritance';
 import { ACCENT } from '../workspaces/shellConfig';
@@ -1042,6 +1043,17 @@ export default function WorkerRail({
             {run.state === 'failed' && <p className="fwr-absent">{run.note}</p>}
           </section>
         )}
+
+        {/* D652 (#1464) — the composer: a conversation, its connector
+            switches, and the Send/Cancel card. It runs on the same model the
+            block above shows, and its runs are counted the same way, so the
+            spend below is re-read after each one. */}
+        <EadwynComposer
+          workspace={workspace}
+          model={activeModel || undefined}
+          page={pagePath || undefined}
+          onRan={() => { reload(); budgetReading.reload(); }}
+        />
 
         {unavailable.length > 0 && (
           <section className="fwr-block fwr-muted">

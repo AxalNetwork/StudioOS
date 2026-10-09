@@ -18,7 +18,7 @@ export interface CallRow extends RoundCallTerms {
   created_by: number; created_at: string; updated_at: string; sent_at: string | null; closed_at: string | null;
 }
 export interface ProjectFacts {
-  id: number; uid: string; name: string; founder_id: number; company_id: number | null;
+  id: number; uid: string; name: string; founder_id: number | null; company_id: number | null;
   sector: string | null; stage: string; description: string | null;
   problem_statement: string | null; solution: string | null; use_of_funds: string | null;
   traction_summary: string | null; revenue: number | null; mrr: number | null; users_count: number | null;

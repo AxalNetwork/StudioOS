@@ -44,6 +44,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/monitoring    → monitoring.ts
 /api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
+/api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650)
+/api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/liquidity     → liquidity.ts
@@ -65,6 +67,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
+/api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
 ```

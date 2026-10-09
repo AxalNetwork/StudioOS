@@ -82,6 +82,9 @@ function freshDb() {
       last_error TEXT,
       updated_at TEXT
     );
+    CREATE TABLE projects (id INTEGER PRIMARY KEY, company_id INTEGER, deleted_at TEXT);
+    CREATE TABLE user_company_links (user_id INTEGER, company_id INTEGER);
+    CREATE TABLE integration_companies (integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE project_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
       snapshot_date TEXT NOT NULL, mrr REAL, arr REAL, cac REAL, ltv REAL,
@@ -97,6 +100,8 @@ function freshDb() {
       inputs_json TEXT,
       updated_at TEXT
     );
+    INSERT INTO projects(id, company_id) VALUES (7, 10);
+    INSERT INTO user_company_links(user_id, company_id) VALUES (42, 10);
   `);
   return db;
 }
@@ -110,6 +115,8 @@ async function seedStripeIntegration(env: any, db: InstanceType<typeof DatabaseS
   db.prepare(
     'INSERT INTO integrations (uid, user_id, provider_key, status, credentials_enc) VALUES (?, ?, ?, ?, ?)',
   ).run(UID, USER_ID, 'stripe', 'active', enc);
+  db.prepare('INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (?, ?, 1)')
+    .run(Number(db.prepare('SELECT id FROM integrations WHERE uid = ?').get(UID)?.id), 10);
 }
 
 // ── Stripe REST API stub over global fetch ──────────────────────────────────

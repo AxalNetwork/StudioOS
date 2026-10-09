@@ -17,10 +17,11 @@ async function owner(c: Ctx, projectId: number) {
   if (user.role !== 'founder' && !(user.role === 'exploring' && Number(user.spinout_lab_active) === 1)) throw new RoundCallError('founder_required',403);
   const project = await projectFacts(c.env,projectId);
   const companyId = await resolveActiveCompany(c.env,user,c.req.header(ACTIVE_COMPANY_HEADER));
-  if (project.founder_id !== user.founder_id || !projectInActiveCompany(companyId,project)) throw new RoundCallError('project_not_found',404);
+  if (user.founder_id == null || project.founder_id !== user.founder_id || !projectInActiveCompany(companyId,project)) throw new RoundCallError('project_not_found',404);
   return { user, project };
 }
 async function callOwner(c: Ctx) {
+  await requireAuth(c);
   const call = await loadCall(c.env,(c.req.param('uid') || ''));
   const access = await owner(c,call.project_id);
   return { call, ...access };

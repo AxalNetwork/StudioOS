@@ -134,7 +134,11 @@ test('a charge becomes one verified entry, net of refunds, dated by Stripe, with
     { customer: 'cus_Alpha1', amount_cents: 7500, currency: 'usd', revenue_type: 'one_time', received_on: '2026-09-15', source: 'stripe', source_ref: 'ch_2', verification: 'verified', notes: null },
     { customer: STRIPE_NO_CUSTOMER, amount_cents: 1200, currency: 'usd', revenue_type: 'one_time', received_on: '2026-09-01', source: 'stripe', source_ref: 'ch_5', verification: 'verified', notes: null },
   ]);
-  const everything = JSON.stringify(db.prepare('SELECT * FROM revenue_entries').all());
+  // The random columns (`uid`, `import_batch`) and the timestamps are left out:
+  // they carry no Stripe data, and a random hex uid contains '4242' often enough
+  // to fail this test about once in a few hundred runs. Every other column is checked.
+  const everything = JSON.stringify(db.prepare('SELECT * FROM revenue_entries').all()
+    .map(({ uid, import_batch, created_at, updated_at, ...rest }) => rest));
   for (const pii of ['Ada', 'Lovelace', 'ada@example.test', 'Analytical', '4242', 'visa']) {
     assert.ok(!everything.includes(pii), `personal data stored: ${pii}`);
   }

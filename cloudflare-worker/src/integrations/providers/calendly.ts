@@ -31,6 +31,7 @@
 import type { Context } from 'hono';
 import { callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
+import { scheduledConnectorEnabled } from '../companyScope';
 import {
   registerProvider,
   type ProviderImpl,
@@ -292,6 +293,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Extend
   let refreshToken: string | undefined;
   let expiresAt: number | undefined;
   let authMethod: 'oauth' | 'pat';
+  let grantedScopes: string[] = [];
 
   if (input.oauth_code) {
     const tok = await exchangeCode(c.env, input.oauth_code);
@@ -299,6 +301,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Extend
     refreshToken = tok.refresh_token;
     expiresAt = Date.now() + tok.expires_in * 1000;
     authMethod = 'oauth';
+    grantedScopes = tok.scope ? tok.scope.split(/[\s,]+/).filter(Boolean) : [];
   } else if (input.api_key) {
     // PAT path: validate against /users/me and reject anything else.
     accessToken = String(input.api_key).trim();
@@ -332,7 +335,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Extend
 
   return {
     credentials,
-    scopes: ['default'],
+    scopes: grantedScopes,
     external_account_id: me.resource.uri,
     external_account_name: me.resource.name || me.resource.email,
     capabilities: ['Embed scheduling', 'Pull bookings', 'Cancellation sync'],
@@ -715,6 +718,7 @@ export async function syncAllCalendlyIntegrations(env: Env): Promise<{ scanned: 
     return { scanned: 0, ok: 0, failed: 0 };
   }
   for (const row of (rows.results || [])) {
+    if (!(await scheduledConnectorEnabled(env, row))) continue;
     scanned++;
     try {
       const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;
