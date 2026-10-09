@@ -12,6 +12,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | File | Why it matters |
 | --- | --- |
 | `profileEvidenceBlend.ts` | D592's bounded skill-level blend and audited default-off settings read; snapshot versions name the switch state. Only the Super Admin writes through `profile_evidence_blend.ts`; the owner activates it after the synthetic comparison. |
+| `interviewStructuring.ts` | D658: an interview transcript turned into Validate placements. Seven kinds with a schema each, the rule that a placement without a cited span is dropped, splitting a long transcript without cutting it, Ask's citation check, and Compare's alignment by module. |
 | `tenancyScope.ts` | **The one place row-level scoping is decided.** Returns composable SQL clauses (`esignEnvelopeScope`, `fundGpScope`, `lpMembershipScope`) and fails closed — an actor it cannot identify gets `NO_ROWS`, not everything. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |

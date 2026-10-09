@@ -65,6 +65,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
+/api/founder/validate → founder_validate_structure.ts (a structured interview's placements: accept, edit then accept, discard; D658)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
 ```
