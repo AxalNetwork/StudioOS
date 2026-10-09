@@ -62,7 +62,7 @@ export function matchReasons(call: RoundCallTerms, profile: InvestorThesis, proj
     || list(profile.anti_thesis_stages_json).includes(stage)) return [];
   const minimum = call.minimum_cheque_cents / 100;
   if (profile.ticket_min_usd == null || profile.ticket_max_usd == null
-    || minimum < profile.ticket_min_usd || minimum > profile.ticket_max_usd) return [];
+    || call.amount_cents / 100 < profile.ticket_min_usd || minimum > profile.ticket_max_usd) return [];
   const words = new Set((projectText.toLowerCase().match(/[a-z0-9]{3,}/g) || []));
   if (!list(profile.thesis_keywords_json).some(word => words.has(word))) return [];
   return ['Stage fits ' + call.stage, 'Sector fits ' + call.sector, 'Cheque range fits', 'Recorded thesis fits the venture'];
