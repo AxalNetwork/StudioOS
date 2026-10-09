@@ -372,10 +372,15 @@ structure.post('/sessions/:id/structure', async (c) => {
 structure.get('/sessions/:id/placements', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  // `*` rather than a column list: `source` arrives with migration 447 (D667),
+  // and a row written before it reads as StudioOS's own.
   const rows = await c.env.DB.prepare(
-    `SELECT id, kind, payload_json, edited_payload_json, status, model, run_id, cite_from, cite_to, citation_json, created_at
-       FROM validate_proposals WHERE session_id = ? AND run_id IS NOT NULL ORDER BY id`,
+    `SELECT * FROM validate_proposals WHERE session_id = ? AND run_id IS NOT NULL ORDER BY id`,
   ).bind(s.session.id).all<any>();
+  // D667 — who proposed each run. An assistant's name is the one its OAuth
+  // client registered, self-declared, so the page shows it as the client's
+  // own label; StudioOS's runs say StudioOS.
+  const submittedVia = (s.session as any).submitted_via_name ?? null;
   const parse = (t: string | null) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
   const placements = (rows.results ?? []).map((r: any) => ({
     id: r.id,
@@ -388,18 +393,21 @@ structure.get('/sessions/:id/placements', async (c) => {
     can_accept: isPlacementKind(r.kind) && PLACEMENT_KINDS[r.kind as PlacementKind].writer,
     model: r.model,
     run_id: r.run_id,
+    source: r.source === 'assistant' ? 'assistant' : 'studioos',
+    submitted_via_name: r.source === 'assistant' ? submittedVia : null,
     cite: { from: r.cite_from, to: r.cite_to, quote: parse(r.citation_json)?.quote ?? null },
     created_at: r.created_at,
   }));
-  const runs: { run_id: string; model: string; placements: typeof placements }[] = [];
+  const runs: { run_id: string; model: string; source: string; submitted_via_name: string | null; placements: typeof placements }[] = [];
   for (const p of placements) {
     let run = runs.find((x) => x.run_id === p.run_id);
-    if (!run) runs.push(run = { run_id: p.run_id, model: p.model, placements: [] });
+    if (!run) runs.push(run = { run_id: p.run_id, model: p.model, source: p.source, submitted_via_name: p.submitted_via_name, placements: [] });
     run.placements.push(p);
   }
   const lastTwo = runs.slice(-2);
   return json({
     runs,
+    submitted_via_name: submittedVia,
     compare: lastTwo.length === 2
       ? { first: lastTwo[0].run_id, second: lastTwo[1].run_id, modules: alignRuns(lastTwo[0].placements, lastTwo[1].placements) }
       : null,

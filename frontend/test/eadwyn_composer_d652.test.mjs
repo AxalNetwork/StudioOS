@@ -6,8 +6,9 @@
  *   · a connector that needs attention is greyed, says why, and its switch is
  *     disabled; a switch is on only when the conversation turned it on;
  *   · an answer that used a connector names it and its freshness;
- *   · a proposed write is a card with Send and Cancel, showing the exact
- *     payload; once decided the buttons are gone;
+ *   · a proposed write is a card with Send and Cancel, showing the record
+ *     and every field the Worker resolved, with the model's line labelled
+ *     as Eadwyn's words; once decided the buttons are gone;
  *   · confirm sends no body, so the Worker sends what it stored.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/eadwyn_composer_d652.test.mjs
@@ -86,22 +87,38 @@ test('the connector list says when it could not be read, and when there is nothi
 });
 
 const ACTION = {
-  uid: 'a'.repeat(32), connector: 'hubspot', connector_name: 'HubSpot', target: 'Company #5',
-  summary: 'Company · Mine', payload: { project_id: 5 }, status: 'pending', result_summary: null,
+  uid: 'a'.repeat(32), connector: 'hubspot', connector_name: 'HubSpot', target: 'New HubSpot company "Mine"',
+  summary: 'Totally different name, safe to send', payload: { project_id: 5 }, status: 'pending', result_summary: null,
+  content: {
+    target: 'New HubSpot company "Mine"',
+    fields: [{ name: 'name', value: 'Mine' }, { name: 'industry', value: 'Climate' }, { name: 'description', value: null }],
+  },
 };
 
-test('a pending action is a card with Send and Cancel and the exact payload', () => {
+test('a pending action is a card with Send and Cancel and every field Send sends', () => {
   const html = renderToStaticMarkup(h(ActionCard, { action: ACTION, onSend: noop, onCancel: noop }));
   assert.match(html, />Ready to send to HubSpot</);
-  assert.match(html, />Company #5 · Company · Mine</);
-  assert.match(html, /data-testid="text-eadwyn-action-payload">\{&quot;project_id&quot;:5\}</, 'the card does not show the payload Send would send');
+  assert.match(html, /data-testid="text-eadwyn-action-target">New HubSpot company &quot;Mine&quot;</);
+  assert.match(html, /<dt>name<\/dt><dd>Mine<\/dd>.*<dt>industry<\/dt><dd>Climate<\/dd>.*<dt>description<\/dt><dd>\(empty\)<\/dd>/s,
+    'the card does not list each field Send would send');
+  // The model's line is never presented as what is sent.
+  assert.match(html, /data-testid="text-eadwyn-action-summary">Eadwyn’s words: Totally different name, safe to send</);
+  assert.ok(html.indexOf('Eadwyn’s words') > html.indexOf('<dt>name</dt>'), 'the model\'s words come before what is sent');
   assert.match(html, /data-testid="button-eadwyn-send"/);
+  assert.doesNotMatch(html, /data-testid="button-eadwyn-send"[^>]*disabled/);
   assert.match(html, /data-testid="button-eadwyn-cancel"/);
 });
 
+test('a card stored before content existed says so, and its Send is off', () => {
+  const html = renderToStaticMarkup(h(ActionCard, { action: { ...ACTION, content: null }, onSend: noop, onCancel: noop }));
+  assert.match(html, /data-testid="text-eadwyn-action-legacy"/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*data-testid="button-eadwyn-send"/);
+});
+
 test('a decided action has no buttons and says what happened', () => {
-  for (const [status, words] of [['sent', /Sent to HubSpot\./], ['cancelled', /Cancelled\. Nothing was sent\./], ['failed', /Not sent/], ['expired', /expired before it was sent/]]) {
-    const html = renderToStaticMarkup(h(ActionCard, { action: { ...ACTION, status }, onSend: noop, onCancel: noop }));
+  for (const [status, words] of [['sent', /Sent to HubSpot\./], ['cancelled', /Cancelled\. Nothing was sent\./], ['failed', /Not sent/], ['failed', /not known whether this arrived/], ['expired', /expired before it was sent/]]) {
+    const result_summary = String(words).includes('not known') ? 'The send stopped part-way, so it is not known whether this arrived.' : null;
+    const html = renderToStaticMarkup(h(ActionCard, { action: { ...ACTION, status, result_summary }, onSend: noop, onCancel: noop }));
     assert.doesNotMatch(html, /button-eadwyn-send|button-eadwyn-cancel/, `a ${status} action can still be sent or cancelled`);
     assert.match(html, words);
   }

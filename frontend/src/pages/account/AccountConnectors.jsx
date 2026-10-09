@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../lib/api';
+import { connectorsApi } from '../../lib/api/connectors';
 import { Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, ConnectorPanel, Group, Sheet, openingView, useConnectors } from './ConnectorSheet';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, discoverChips,
-  discoverSections, doesLabel, feedsLabel, lastSyncLabel, oauthReturn, pageOf, stripReturn, yoursRows,
+  discoverSections, doesLabel, feedsLabel, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursRows,
 } from './connectorsModel';
 
 /**
@@ -21,7 +22,9 @@ import {
  * provider's sign-in still returns to `/integrations?…`; this section reads
  * that query, opens the connector's sheet on what happened, and strips it.
  *
- * A CONNECTOR BELONGS TO THE MEMBER. Nothing here reads the active company.
+ * A CONNECTOR BELONGS TO THE MEMBER, and serves the companies its sheet
+ * ticks. Two reads are the active company's: "Suggested for you" (its empty
+ * modules) and the teammate notice in the connect flow.
  */
 
 const TONE_CLS = 'rounded-axal-sm border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -42,7 +45,8 @@ function NR({ reason, children = 'Not recorded' }) {
   return <Unrecorded reason={reason}>{children}</Unrecorded>;
 }
 
-const D650 = 'Arrives with the connectors service (D650).';
+const NOT_IN_REGISTRY = 'This connector is not in the connector registry, which is where this is described.';
+const NO_COMPANIES = 'Your companies could not be read.';
 
 /** The once-only notice: shown on the first arrival from an old address, then remembered. */
 function useMovedNotice(location) {
@@ -74,9 +78,9 @@ export function YoursTable({ rows, onOpen }) {
             </span>
           </span>
           <span className="hidden text-axal-muted md:block dark:text-gray-400">{p.category || <NR />}</span>
-          <span className="hidden text-axal-muted md:block dark:text-gray-400">{doesLabel(p) || <NR reason={D650} />}</span>
-          <span className="hidden truncate text-axal-ink md:block dark:text-gray-300">{feedsLabel(p) || <NR reason={D650} />}</span>
-          <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{companiesLabel(p.connection) || <NR reason={D650} />}</span>
+          <span className="hidden text-axal-muted md:block dark:text-gray-400">{doesLabel(p) || <NR reason={NOT_IN_REGISTRY} />}</span>
+          <span className="hidden truncate text-axal-ink md:block dark:text-gray-300">{feedsLabel(p) || <NR reason={NOT_IN_REGISTRY} />}</span>
+          <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{p.connection?.first_party ? 'You' : companiesLabel(p.connection) || <NR reason={NO_COMPANIES} />}</span>
           <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{lastSyncLabel(p.connection)}</span>
           <span className="flex flex-col items-start gap-0.5">
             <Pill tone={status.tone}>{status.label}</Pill>
@@ -148,12 +152,35 @@ function TelegramCard() {
   );
 }
 
+/**
+ * "Request a connector": stored by `POST /requests` against the active
+ * company, where the studio reads it. Both fields are required, as the
+ * Worker requires them.
+ */
 export function RequestSheet({ onClose, tool: initial = '' }) {
   const [tool, setTool] = useState(initial);
   const [use, setUse] = useState('');
+  const [state, setState] = useState({ busy: false, sent: false, error: '' });
+  const ready = tool.trim().length > 0 && tool.trim().length <= 120 && use.trim().length > 0 && use.trim().length <= 1000;
+  const send = async () => {
+    setState({ busy: true, sent: false, error: '' });
+    try {
+      await connectorsApi.sendRequest(tool.trim(), use.trim());
+      setState({ busy: false, sent: true, error: '' });
+    } catch (e) {
+      setState({
+        busy: false, sent: false,
+        error: e?.code === 'active_company_required'
+          ? 'Choose a company in the sidebar first: a request is kept for a company.'
+          : (e?.message || 'The request could not be sent.'),
+      });
+    }
+  };
   return (
     <Sheet eyebrow="Connector" title="Request a connector" sub="Tell us which tool you need." onClose={onClose} data-testid="connector-sheet-request"
-      footer={<><button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button><button type="button" className={BTN.primary} disabled title="Requests are stored once the connectors service (D650) adds its route.">Send request</button></>}>
+      footer={state.sent
+        ? <button type="button" className={BTN.primary} onClick={onClose}>Done</button>
+        : <><button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button><button type="button" className={BTN.primary} disabled={!ready || state.busy} onClick={send} data-testid="button-send-request">{state.busy ? 'Sending…' : 'Send request'}</button></>}>
       <Group label="Request">
         <div className="space-y-1 px-3 py-2">
           <label htmlFor="request-tool" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Tool name</label>
@@ -164,7 +191,8 @@ export function RequestSheet({ onClose, tool: initial = '' }) {
           <textarea id="request-use" rows={3} className={INPUT} value={use} onChange={(e) => setUse(e.target.value)} />
         </div>
       </Group>
-      <Banner tone="neutral" data-testid="request-not-stored">Requests are not stored yet: the route that keeps them arrives with the connectors service (D650). Nothing is sent from this form until then.</Banner>
+      {state.sent && <Banner tone="ok" data-testid="request-sent">Requested. The studio reads every request; nothing is promised about when a connector ships.</Banner>}
+      {state.error && <Banner tone="danger" data-testid="request-error">{state.error}</Banner>}
     </Sheet>
   );
 }
@@ -228,18 +256,22 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
 
   const rows = useMemo(() => yoursRows(data.catalogue, { q, filter, sort }), [data.catalogue, q, filter, sort]);
   const paged = pageOf(rows, page);
-  const sections = useMemo(() => discoverSections(data.catalogue, chip, { q }), [data.catalogue, chip, q]);
+  const sections = useMemo(() => discoverSections(data.catalogue, chip, { q, suggestions: data.suggestions ?? null }), [data.catalogue, chip, q, data.suggestions]);
   const chips = useMemo(() => discoverChips(data.catalogue), [data.catalogue]);
   const anyConnected = data.catalogue.some((p) => p.connection);
-  const anyMatch = data.catalogue.some((p) => !q.trim() || [p.display_name, p.by, p.category, p.description].some((v) => String(v || '').toLowerCase().includes(q.trim().toLowerCase())));
-  const sheetP = sheet && (data.catalogue.find((p) => p.key === sheet.key) || (data.status !== 'loading' ? { key: sheet.key, display_name: sheet.key, by: sheet.key, capabilities: [], connection: null } : null));
+  // One search rule (`matchesQuery`) for the lists and for "No connector
+  // called…": on Yours the question is your connectors, on Discover the catalogue.
+  const anyMatch = data.catalogue.some((p) => (tab === 'yours' ? !!p.connection : true) && matchesQuery(p, q));
+  // A sign-in's return opens a sheet only for a connector the catalogue holds:
+  // a crafted link naming anything else opens nothing.
+  const sheetP = sheet && (data.catalogue.find((p) => p.key === sheet.key) || null);
 
   const open = (p) => setSheet({ key: p.key, view: openingView(p), ret: {} });
   const notify = async (p, join) => {
     setWaitBusy(true); setWaitError('');
     try {
-      if (join) await api.integrationsWaitlistJoin({ provider_key: p.key });
-      else await api.integrationsWaitlistLeave(p.key);
+      if (join) await connectorsApi.notifyMe(p.key);
+      else await connectorsApi.stopNotify(p.key);
       data.reload();
     } catch (e) { setWaitError(e?.message || 'That could not be saved.'); }
     finally { setWaitBusy(false); }
@@ -248,13 +280,19 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   let content;
   if (data.status === 'loading' && !data.catalogue.length) {
     content = <div className={`${TONE_CLS} p-6 text-[13px] text-axal-muted dark:text-gray-400`} data-testid="connectors-loading">Loading connectors…</div>;
+  } else if (data.status === 'forbidden') {
+    content = (
+      <div className={`${TONE_CLS} p-4 text-[13px] text-axal-ink dark:text-gray-200`} data-testid="connectors-forbidden">
+        {data.message || 'Your role cannot manage connectors.'}
+      </div>
+    );
   } else if (data.status === 'unreadable') {
     content = (
       <div className="rounded-axal-sm border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="connectors-unreadable">
         <Unreadable what="The catalogue" claim="This is not a claim that you have no connectors." onRetry={data.reload} />
       </div>
     );
-  } else if (q.trim() && !anyMatch) {
+  } else if (q.trim() && !anyMatch && !(tab === 'yours' && data.itemsFailed)) {
     content = (
       <div className={`${TONE_CLS} p-5 text-[13px] text-axal-ink dark:text-gray-200`} data-testid="connectors-noresults">
         No connector called &lsquo;{q.trim()}&rsquo;. <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(q.trim())}>Request it.</button>
@@ -301,11 +339,11 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
           <section key={s.title} className="flex flex-col gap-2.5" data-testid={`connectors-section-${s.title}`}>
             <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">{s.title} {Array.isArray(s.cards) && <span className="font-mono text-[12px] font-medium text-axal-muted dark:text-gray-400">{s.cards.length}</span>}</h3>
             {s.cards === null && (
-              <div className={`${TONE_CLS} p-4 text-[13px]`}>
-                <NR reason={D650} /> <span className="text-axal-muted dark:text-gray-400">· Suggestions come from your modules that have no data yet, and arrive with the connectors service.</span>
+              <div className={`${TONE_CLS} p-4 text-[13px]`} data-testid="connectors-suggestions-none">
+                <NR reason={data.suggestionsNote || 'Suggestions could not be read.'} /> <span className="text-axal-muted dark:text-gray-400">· {data.suggestionsNote || 'Suggestions could not be read.'}</span>
               </div>
             )}
-            {Array.isArray(s.cards) && !s.cards.length && <p className="text-[13px] text-axal-muted dark:text-gray-400">No connector here yet.</p>}
+            {Array.isArray(s.cards) && !s.cards.length && <p className="text-[13px] text-axal-muted dark:text-gray-400">{s.title === 'Suggested for you' ? 'Nothing to suggest: every module a connector could feed already has data.' : 'No connector here yet.'}</p>}
             {Array.isArray(s.cards) && s.cards.length > 0 && (
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {s.cards.map((p) => <ConnectorCard key={p.key} p={p} onOpen={open} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} />)}

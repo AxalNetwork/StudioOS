@@ -43,8 +43,8 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
   if (!conn) {
     return c.json({
       error: 'crunchbase_not_connected',
-      message: 'Connect Crunchbase from Settings → Integrations to enable enrichment.',
-      connect_path: '/account/integrations',
+      message: 'Connect Crunchbase from Account → Connectors to enable enrichment.',
+      connect_path: '/account/connectors',
     }, 412);
   }
   try {
@@ -57,7 +57,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
       return c.json({
         error: 'crunchbase_rate_limited',
         // Verbatim banner copy expected by the UI — keep in sync with the
-        // amber banner in IntegrationsPage + the slide-over.
+        // Connectors sheet's attention banner (D651).
         message: 'Crunchbase daily limit reached — try again tomorrow.',
         reset_hint: e.resetHint || null,
         reset_epoch: resetEpoch,
@@ -69,11 +69,11 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
       // Returned as 412 (not 401) so the SPA's global session-expiry
       // handler doesn't force-logout the user on a domain credential
       // failure — the UI distinguishes via the error code and prompts
-      // the user to reconnect from Settings → Integrations.
+      // the user to reconnect from Account → Connectors.
       return c.json({
         error: 'crunchbase_unauthorized',
-        message: 'Crunchbase rejected the stored API key — reconnect from Settings → Integrations.',
-        connect_path: '/account/integrations',
+        message: 'Crunchbase rejected the stored API key — reconnect from Account → Connectors.',
+        connect_path: '/account/connectors',
       }, 412);
     }
     return refuse(c, 502, { code: 'crunchbase_failed', message: 'Crunchbase could not be read just now. Try again in a moment.', raw: e });

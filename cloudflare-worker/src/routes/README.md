@@ -88,8 +88,6 @@ counterpart. Calls hit the worker as 404. The frontend touches some of these,
 so re-implementing them on the worker (or accepting the broken UI affordance)
 is a follow-up:
 
-- `integrations.py` — `/api/integrations/*` (used by `IntegrationsPage`
-  webhook config). No worker file exists.
 - `pipeline_votes.py` — `/api/pipeline/vote*`, `/api/pipeline/votes*` (used by
   the deal-card voting widget). The worker `pipeline.ts` only handles
   `/active`, `/projects/*`, `/ws/*` — voting endpoints are missing.
@@ -151,5 +149,14 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 `documentation/architecture/decisions/D663.md`.
 
 D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.
+
+D667 (#1497): the assistant interview tools are service functions in
+`../services/assistantInterviews.ts`, registered on #1496's MCP server, not
+routes of their own. Two routes here changed:
+- `founder_validate_structure.ts`'s `GET /sessions/:id/placements` now gives
+  each placement and run a `source` (`assistant` or `studioos`) and the
+  assistant's `submitted_via_name`.
+- Deleting a session (`founder_validate_sessions.ts`) now deletes its pending
+  proposals. See `documentation/architecture/decisions/D667.md`.
 
 D666: `mcp_consent.ts` mounts `/api/mcp/consent` and `/api/connectors/assistants` (the latter before the connector router). They are the SPA's half of connecting an AI assistant: read, approve or deny a parked authorization request (single-use, ten minutes), list the caller's grants and revoke one. The MCP server and its OAuth endpoints are not routers here: `../index.ts`'s `fetch` sends `/api/mcp`, `/api/oauth/*` and the two `/.well-known/oauth-*` paths to `../mcp/oauth.ts` first. Everything is 404 with `MCP_SERVER_ENABLED` off.

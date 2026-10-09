@@ -105,24 +105,41 @@ export function ConnectorList({ connectors, enabled, onToggle, busy = false, err
 /** The card for a write Eadwyn proposed. Send and Cancel only while it is pending. */
 export function ActionCard({ action, onSend, onCancel, busy = false }) {
   const name = action.connector_name || action.connector;
-  const payload = JSON.stringify(action.payload);
+  // `content` is what Send sends, as the Worker resolved it: the record and
+  // every field with its value. A card from before content was stored has
+  // none, and its Send is refused; it says so instead of showing a payload.
+  const content = action.content;
   const done = {
     sent: `Sent to ${name}.${action.result_summary ? ` ${action.result_summary}` : ''}`,
     cancelled: 'Cancelled. Nothing was sent.',
-    failed: `Not sent: ${action.result_summary || 'the connector refused it.'}`,
+    failed: action.result_summary || 'Not sent: the connector refused it.',
     expired: 'This expired before it was sent. Ask again for a fresh one.',
     sending: 'Sending…',
   }[action.status];
   return (
     <div className={`ead-action is-${action.status}`} data-testid={`eadwyn-action-${action.uid}`}>
       <span className="ead-action-title">{action.status === 'pending' ? `Ready to send to ${name}` : name}</span>
-      <span className="ead-action-what">
-        {action.target}{action.summary ? ` · ${action.summary}` : ''}
-      </span>
-      <code className="ead-action-payload" data-testid="text-eadwyn-action-payload">{payload}</code>
+      <span className="ead-action-what" data-testid="text-eadwyn-action-target">{action.target}</span>
+      {content ? (
+        <dl className="ead-action-fields" data-testid="list-eadwyn-action-fields">
+          {content.fields.map((f) => (
+            <div key={f.name} className="ead-action-field">
+              <dt>{f.name}</dt>
+              <dd>{f.value === null || f.value === '' ? '(empty)' : String(f.value)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <span className="ead-action-legacy" data-testid="text-eadwyn-action-legacy">
+          This card was made before Eadwyn showed what it sends. Ask again for one you can send.
+        </span>
+      )}
+      {action.summary ? (
+        <span className="ead-action-said" data-testid="text-eadwyn-action-summary">Eadwyn’s words: {action.summary}</span>
+      ) : null}
       {action.status === 'pending' ? (
         <div className="ead-action-buttons">
-          <button type="button" className="ead-send" disabled={busy} onClick={() => onSend(action.uid)} data-testid="button-eadwyn-send">Send</button>
+          <button type="button" className="ead-send" disabled={busy || !content} onClick={() => onSend(action.uid)} data-testid="button-eadwyn-send">Send</button>
           <button type="button" className="ead-cancel" disabled={busy} onClick={() => onCancel(action.uid)} data-testid="button-eadwyn-cancel">Cancel</button>
         </div>
       ) : (

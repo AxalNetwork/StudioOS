@@ -31,6 +31,20 @@ export const MODULE_LABELS = {
 
 export const MODULE_ORDER = Object.keys(MODULE_LABELS);
 
+/**
+ * The models `structure_interview` offers, as `aiRouter.ts` lists them
+ * (its `alternates`). No route lists them yet, so they are mirrored here,
+ * and `interview_review_d660.test.mjs` fails if the two lists part.
+ */
+export const STRUCTURE_MODELS = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct-fp8-fast'];
+
+/** The model a second run should use, to compare against the latest run's. */
+export function nextStructureModel(read) {
+  const runs = read?.runs || [];
+  const last = runs[runs.length - 1]?.model;
+  return STRUCTURE_MODELS.find((m) => m !== last) || STRUCTURE_MODELS[0];
+}
+
 const SEVERITY = { severe: 'Severe', real: 'Real', mild: 'Mild' };
 const FIT = { strong: 'Strong fit', partial: 'Partial fit', none: 'Not a fit' };
 const DEMAND = { need_to_have: 'Need to have', would_pay: 'Would pay', loi: 'Letter of intent', pre_sale: 'Pre-sale' };
@@ -154,11 +168,16 @@ export function PlacementsPanel({ read, running, runError, errors = {}, busyId, 
 }
 
 /** Two runs side by side, by module. Needs two runs; says so otherwise. */
-export function ComparePanel({ read }) {
+export function ComparePanel({ read, onRestructure, busy }) {
   const cmp = read?.compare;
-  if (!cmp) return <p data-testid="compare-none" className="text-[13px] text-axal-faint">Structure again with a second model to compare the two.</p>;
+  const again = onRestructure && (read?.runs || []).length > 0 && (
+    <button type="button" data-testid="button-restructure" disabled={busy} onClick={() => onRestructure(nextStructureModel(read))}
+      className={`${BTN} mt-2 border border-gray-200 dark:border-gray-700`}>Structure again with {nextStructureModel(read)}</button>
+  );
+  if (!cmp) return <div data-testid="compare-none" className="text-[13px] text-axal-faint"><p>Structure again with a second model to compare the two.</p>{again}</div>;
   const model = (id) => read.runs.find((r) => r.run_id === id)?.model || 'Model not recorded';
   return (
+    <>
     <table data-testid="compare" className="w-full table-fixed text-[12px]">
       <thead><tr><th className="w-1/4 text-left">Module</th><th className="text-left">{model(cmp.first)}</th><th className="text-left">{model(cmp.second)}</th></tr></thead>
       <tbody>
@@ -172,6 +191,8 @@ export function ComparePanel({ read }) {
         ))}
       </tbody>
     </table>
+    {again}
+    </>
   );
 }
 
@@ -234,7 +255,7 @@ export default function InterviewReview({ theme = 'light', read, running, runErr
       <div className="grid gap-6 bg-white p-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 md:grid-cols-[1fr_280px]">
         <div className="space-y-6">
           <PlacementsPanel read={read} running={running} runError={runError} errors={errors} busyId={busyId} onAccept={onAccept} onDiscard={onDiscard} onStructure={onStructure} />
-          <section><h2 className="mb-2 text-[14px] font-bold">Compare models</h2><ComparePanel read={read} /></section>
+          <section><h2 className="mb-2 text-[14px] font-bold">Compare models</h2><ComparePanel read={read} busy={running} onRestructure={onStructure} /></section>
           <section><h2 className="mb-2 text-[14px] font-bold">Ask the transcript</h2><AskPanel result={ask.result} error={ask.error} busy={ask.busy} onAsk={onAsk} /></section>
         </div>
         <aside><h2 className="mb-2 text-[11px] font-bold uppercase text-axal-faint">Structuring receipt</h2><StructureReceipt items={receiptItems} /></aside>

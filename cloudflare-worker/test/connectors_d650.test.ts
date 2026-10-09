@@ -253,3 +253,16 @@ test('activity log search is literal and paged newest first', async () => {
   assert.equal(wildcard.body.total, 0);
   db.close();
 });
+
+test('D651: GET /waitlist reaches the waitlist, not the per-provider read registered before it', async () => {
+  const { db, env } = fixture();
+  db.exec("INSERT INTO integration_waitlist (user_id, provider_key) VALUES (1, 'notion')");
+  for (const base of ['/api/connectors', '/api/integrations']) {
+    const r = await call(env, 'GET', `${base}/waitlist`);
+    assert.equal(r.status, 200, `${base}/waitlist`);
+    assert.deepEqual(r.body.items.map((i: any) => i.provider_key), ['notion']);
+  }
+  // The per-provider read still answers for a real key, and still refuses an unknown one.
+  assert.equal((await call(env, 'GET', '/api/connectors/hubspot')).status, 200);
+  assert.equal((await call(env, 'GET', '/api/connectors/not_a_provider')).status, 404);
+});
