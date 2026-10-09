@@ -88,7 +88,7 @@ const mutations = [
   ['match', '!list(profile.thesis_keywords_json).some(word => words.has(word))', 'false'],
   ['privacy', "row.origin === 'chosen' || row.responded_at != null", 'true'],
   ...['name','amount_cents','instrument','terms','minimum_cheque_cents','target_close','deck_id','deck_version','data_room_project_uid','stage','sector']
-    .map(key => ['hash', 't.' + key + ',', "'removed',"]),
+    .map(key => ['hash', 't.' + key, "'removed',"]),
 ];
 for (const [index, [check, old, replacement]] of mutations.entries()) {
   test('D653 mutation/restoration ' + index + ': ' + check, async () => {
