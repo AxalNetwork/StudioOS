@@ -11,15 +11,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;family=Roboto+Mono:wght@500&amp;display=swap" rel="stylesheet">
   <style>body{margin:0}a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}.ca{container-type:inline-size}@container (max-width:520px){.ca-g2,.ca-g3{grid-template-columns:minmax(0,1fr)!important}.ca-steps{flex-wrap:nowrap!important;overflow-x:auto}}</style>
 </helmet>
-<div class="ca" style="position:absolute;inset:0;background:#fff;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;display:flex;flex-direction:column;overflow:auto;{{ frame }}">
+<div class="ca" style="{{ root }}">
   <sc-if value="{{ phone }}" hint-placeholder-val="{{ false }}"><span style="width:36px;height:4px;border-radius:99px;background:#ececf1;align-self:center;margin-top:8px;flex:none"></span></sc-if>
-  <div style="padding:16px 20px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex:none">
-    <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:10px;font-weight:700;color:#6b6577;text-transform:uppercase;letter-spacing:.1em">{{ cycle }}</span><span style="font-weight:700;font-size:18px;letter-spacing:-.02em">{{ title }}</span><span style="font-size:12.5px;color:#6b6577;line-height:1.45">{{ sub }}</span></div>
-    <span style="width:30px;height:30px;border-radius:50%;border:1px solid #ececf1;display:grid;place-items:center;color:#6b6577;flex:none;font-size:15px">×</span>
-  </div>
-  <sc-if value="{{ hasSteps }}" hint-placeholder-val="{{ false }}"><div class="ca-steps" style="display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid #ececf1;flex:none"><sc-for list="{{ steps }}" as="s" hint-placeholder-count="5"><span style="{{ s.style }}">{{ s.t }}</span></sc-for></div></sc-if>
-  <sc-if value="{{ banner }}" hint-placeholder-val="{{ false }}"><div style="{{ bannerStyle }}">{{ banner }}</div></sc-if>
-  <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;flex:1">
+  <sc-if value="{{ isSheet }}" hint-placeholder-val="{{ true }}"><div style="padding:16px 20px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex:none">
+    <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><sc-if value="{{ isPage }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:#6d28d9;margin-bottom:4px">‹ {{ cycle }}</span></sc-if><sc-if value="{{ isSheet }}" hint-placeholder-val="{{ true }}"><span style="font-size:10px;font-weight:700;color:#6b6577;text-transform:uppercase;letter-spacing:.1em">{{ cycle }}</span></sc-if><span style="font-weight:700;font-size:18px;letter-spacing:-.02em">{{ title }}</span><span style="font-size:12.5px;color:#6b6577;line-height:1.45">{{ sub }}</span></div>
+    <sc-if value="{{ isSheet }}" hint-placeholder-val="{{ true }}"><span style="width:30px;height:30px;border-radius:50%;border:1px solid #ececf1;display:grid;place-items:center;color:#6b6577;flex:none;font-size:15px">×</span></sc-if>
+  </div></sc-if>
+  <sc-if value="{{ hasSteps }}" hint-placeholder-val="{{ false }}"><div class="ca-steps" style="{{ sx.steps }}"><sc-for list="{{ steps }}" as="s" hint-placeholder-count="5"><span style="{{ s.style }}">{{ s.t }}</span></sc-for></div></sc-if>
+  <sc-if value="{{ banner }}" hint-placeholder-val="{{ false }}"><div style="{{ bannerStyle }};{{ sx.banner }}">{{ banner }}</div></sc-if>
+  <div style="{{ sx.body }}">
     <sc-if value="{{ hasList }}" hint-placeholder-val="{{ false }}">
       <div style="border:1px solid #ececf1;border-radius:9px;padding:9px 12px;font-size:13px;color:#a1a1aa">{{ search }}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ filters }}" as="f" hint-placeholder-count="3"><span style="{{ f.style }}">{{ f.t }}</span></sc-for><span style="margin-left:auto;font-size:12px;color:#6b6577">Sort: {{ sort }} ▾</span></div>
@@ -28,7 +28,7 @@
     <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
       <div style="display:flex;flex-direction:column;gap:6px">
         <sc-if value="{{ g.label }}" hint-placeholder-val="{{ true }}"><span style="font-size:10px;font-weight:700;color:#6b6577;text-transform:uppercase;letter-spacing:.1em">{{ g.label }}</span></sc-if>
-        <div style="border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+        <div style="border:1px solid #ececf1;border-radius:12px;overflow:hidden;background:#fff">
           <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
             <div style="padding:11px 14px;border-bottom:1px solid #f4f3f7;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
               <div style="display:flex;flex-direction:column;gap:3px;min-width:0;flex:1"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-weight:700;font-size:13.5px">{{ r.a }}</span><sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pillStyle }}">{{ r.pill }}</span></sc-if></span><sc-if value="{{ r.b }}" hint-placeholder-val="{{ true }}"><span style="font-size:12px;line-height:1.45;color:{{ r.bc }}">{{ r.b }}</span></sc-if></div>
@@ -41,7 +41,7 @@
     <sc-if value="{{ bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="font-weight:700">{{ bar.label }}</span><span style="font-family:'Roboto Mono',monospace">{{ bar.value }}</span></div><div style="height:8px;border-radius:99px;background:#f4f3f7"><div style="height:8px;border-radius:99px;background:#7c3aed;width:{{ bar.pct }}"></div></div></div></sc-if>
     <sc-if value="{{ note }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.5;color:#6b6577">{{ note }}</span></sc-if>
   </div>
-  <sc-if value="{{ hasFoot }}" hint-placeholder-val="{{ true }}"><div style="padding:14px 20px;border-top:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:8px;flex:none;flex-wrap:wrap"><span style="font-size:12px;color:#6b6577">{{ footNote }}</span><div style="display:flex;gap:8px"><sc-if value="{{ back }}" hint-placeholder-val="{{ false }}"><span style="{{ btnGhost }}">{{ back }}</span></sc-if><span style="{{ nextStyle }}">{{ next }}</span></div></div></sc-if>
+  <sc-if value="{{ hasFoot }}" hint-placeholder-val="{{ true }}"><div style="{{ sx.foot }}"><span style="font-size:12px;color:#6b6577">{{ footNote }}</span><div style="display:flex;gap:8px"><sc-if value="{{ back }}" hint-placeholder-val="{{ false }}"><span style="{{ btnGhost }}">{{ back }}</span></sc-if><span style="{{ nextStyle }}">{{ next }}</span></div></div></sc-if>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:480,&quot;height&quot;:820},&quot;action&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;connect&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;connect&quot;,&quot;call&quot;,&quot;update&quot;]},&quot;view&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;list&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;phone&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
@@ -103,6 +103,15 @@ class Component extends DCLogic {
       if (view === 'preview') o.groups = [G('Preview · [October] update', [R('[Venture] · [October]', 'MRR [$38,400] · Growth [+6%] · Customers [86] · Burn [$62,000]'), R('Highlights', '[2] · Lowlights [1]'), R('Asks', '[5] · each with a reply button')])], o.note = 'It also appears in Raise › Capital relationships as an investor update sent.';
       if (view === 'page' || view === 'noreply') Object.assign(o, { title: 'Update · [October]', sub: 'Sent [1 Nov] to [n] investors, [n] team members and the Axal network (asks only)', hasSteps: false, hasList: true, search: 'Search replies…', filters: [chip('All', true), chip('Replies'), chip('Opened')], sort: 'Latest', count: '1–25 of [N]', groups: [G('Replies to asks', [R('A hire · [Role]', '[Name] proposed a candidate · [2 Nov]', 'Candidate', P.ok, 'Open in Team expansion', B.link), R('A customer introduction', '[Name] offered an intro to [Company] · [2 Nov]', 'Lead', P.ok, 'Open in Distribution', B.link), view === 'noreply' ? R('A market contact', 'No replies after [14] days.', 'No replies', P.amb, 'Ask again', B.primary) : R('A market contact', '[Name] knows someone in [market]', 'Contact', P.ok, 'Open in Market expansion', B.link)]), G('Opened', [R('[Investor]', 'Opened [1 Nov] · replied', 'Replied', P.ok), R('[Team member]', 'Opened [1 Nov]', 'Opened', P.grey)])], hasFoot: false, note: 'Each reply became an item in the module that asked.' });
     }
+    if (action === 'record') {
+      const ch = (t, d, on) => R(t, d, on ? 'Selected' : '', on ? P.vio : '');
+      Object.assign(o, { cycle: 'Validate', title: 'Record a session', sub: 'Choose how the conversation happens. Eadwyn transcribes it and proposes findings for you to review.', groups: [
+        G('How', [ch('In person', 'Record on this device; the phone sits on the table.', true), ch('Video call', 'Join with Zoom, Google Meet or Teams.'), ch('Phone call', 'Record a call from this device.'), ch('Text chat', 'Paste or import a written conversation.'), ch('Upload a file', 'Audio, video or a transcript you already have.')]),
+        G('With', [R('[Interviewee] · [Company]', 'From Customer research', '', '', 'Change', B.link)]),
+        G('Talking points', [R('[Hypothesis]', 'In the current sprint', 'Selected', P.vio), R('[Hypothesis]', 'In the current sprint', 'Selected', P.vio)]),
+        G('Consent', [view === 'noconsent' ? R('Recording consent', 'Not recorded · ask before you start', 'Not recorded', P.nr, 'Record consent', B.primary) : R('Recording consent', 'Given · [12 Oct]', 'Given', P.ok)]) ],
+        next: 'Start recording', nextStyle: view === 'noconsent' ? B.off : B.primary, back: 'Cancel', footNote: view === 'noconsent' ? 'Start unlocks once consent is recorded.' : 'Transcribe with [Whisper Large v3 Turbo]' });
+    }
     if (action === 'connector') {
       const steps3 = (i) => stepper(['What it uses', 'Sign in', 'Connected'], i);
       const S = { cycle: 'Connector', hasSteps: false, back: '', footNote: '' };
@@ -124,7 +133,10 @@ class Component extends DCLogic {
       };
       Object.assign(o, S, V[view] || V.stripe);
     }
-    return Object.assign(o, { phone, btnGhost: B.ghost, frame: phone ? 'border-radius:18px 18px 0 0' : '' });
+    const page = !!this.props.page;
+    const sx = page ? { steps: 'display:flex;gap:6px;flex-wrap:wrap', banner: 'margin:0', body: 'display:flex;flex-direction:column;gap:14px', foot: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px' } : { steps: 'display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid #ececf1;flex:none', banner: '', body: 'padding:16px 20px;display:flex;flex-direction:column;gap:12px;flex:1', foot: 'padding:14px 20px;border-top:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:8px;flex:none;flex-wrap:wrap' };
+    const root = page ? "position:relative;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;display:flex;flex-direction:column;gap:14px" : "position:absolute;inset:0;background:#fff;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;display:flex;flex-direction:column;overflow:auto;" + (phone ? 'border-radius:18px 18px 0 0' : '');
+    return Object.assign(o, { phone: phone && !page, btnGhost: B.ghost, root, sx, isPage: page, isSheet: !page });
   }
 }
 </script>
