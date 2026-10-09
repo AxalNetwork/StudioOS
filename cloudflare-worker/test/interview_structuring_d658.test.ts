@@ -607,3 +607,73 @@ test('a text-chat transcript with no end times still gives stable, citable spans
   assert.deepEqual(toSegments([{ start_ms: 0, end_ms: 5000, speaker_label: 'A', text: 'x' }, { start_ms: 3000, end_ms: 8000, speaker_label: 'B', text: 'y' }])
     .map((x) => [x.start, x.end]), [[0, 5000], [3000, 8000]]);
 });
+
+// ── #1471's closing PR (S1, 22:40Z): consent, an unrecognised model, codes ──
+
+test('consent: structure and ask refuse a recorded session the interviewee declined or never agreed to', async () => {
+  for (const consent of ['declined', 'not_recorded']) {
+    const w = withSession(world(() => ({ response: REPLY })));
+    w.db.prepare('UPDATE interview_sessions SET consent_status = ? WHERE id = 5').run(consent);
+    for (const [path, body] of [['/sessions/5/structure', undefined], ['/sessions/5/ask', { question: 'How do they reconcile?' }]] as const) {
+      const r = await call(w.env, structure, 'POST', path, body);
+      assert.equal(r.status, 409, `${path} ran over a ${consent} session`);
+      assert.equal(r.json.error, 'consent_not_recorded');
+    }
+    assert.deepEqual(w.calls, [], `a model ran over a ${consent} session`);
+    assert.equal(rowsOf(w.db, 'validate_proposals', 'id').length, 0, 'a placement was stored without consent');
+    assert.equal(rowsOf(w.db, 'interview_structure_receipts', 'id').length, 0, 'a receipt row was written without consent');
+  }
+});
+
+test('consent: a typed transcript has no recording to consent to, so it is structured', async () => {
+  const w = withSession(world(() => ({ response: REPLY })));
+  w.db.prepare("UPDATE interview_sessions SET channel = 'text', consent_status = 'not_recorded' WHERE id = 5").run();
+  assert.equal((await call(w.env, structure, 'POST', '/sessions/5/structure')).status, 201);
+});
+
+test('a model that is given but not recognised is refused with 400 and nothing runs', async () => {
+  for (const model of ['deepseek-v4-flash', 42, { id: '@cf/x' }]) {
+    const w = withSession(world(() => ({ response: REPLY })));
+    const s = await call(w.env, structure, 'POST', '/sessions/5/structure', { model });
+    assert.equal(s.status, 400, `structure ran with model ${JSON.stringify(model)}`);
+    assert.equal(s.json.refusal, 'model_not_offered');
+    const a = await call(w.env, structure, 'POST', '/sessions/5/ask', { question: 'x', model });
+    assert.equal(a.status, 400);
+    assert.deepEqual(w.calls, [], 'the default model ran in place of an unrecognised one');
+    assert.equal(rowsOf(w.db, 'interview_structure_receipts', 'id').length, 0);
+  }
+  // Absent, null or blank is the default, not a refusal.
+  const w = withSession(world(() => ({ response: REPLY })));
+  assert.equal((await call(w.env, structure, 'POST', '/sessions/5/structure', { model: '' })).status, 201);
+  assert.deepEqual(w.calls, [MID]);
+});
+
+test('a listed @cf/ model the task does not offer is 400; DeepSeek V4 Flash is offered and named on the receipt', async () => {
+  const w = withSession(world(() => ({ response: REPLY })));
+  const no = await call(w.env, structure, 'POST', '/sessions/5/structure', { model: '@cf/meta/llama-3.2-3b-instruct' });
+  assert.equal(no.status, 400);
+  assert.equal(no.json.refusal, 'model_not_offered');
+  const ds = await call(w.env, structure, 'POST', '/sessions/5/structure', { model: '@cf/deepseek-ai/deepseek-v4-flash-0731' });
+  assert.equal(ds.status, 201, JSON.stringify(ds.json));
+  assert.equal(w.calls.at(-1), '@cf/deepseek-ai/deepseek-v4-flash-0731');
+  const line = rowsOf(w.db, 'interview_structure_receipts', 'model, outcome, cost_microusd').at(-1);
+  assert.equal(line.model, '@cf/deepseek-ai/deepseek-v4-flash-0731');
+  assert.equal(line.outcome, 'ok');
+});
+
+test('a spent budget is 402, for structure and for ask', async () => {
+  const w = withSession(world(() => ({ response: REPLY })));
+  w.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',1000000,0,1)").run();
+  const s = await call(w.env, structure, 'POST', '/sessions/5/structure');
+  assert.equal(s.status, 402, JSON.stringify(s.json));
+  assert.equal(s.json.refusal, 'budget_user_month');
+  const a = await call(w.env, structure, 'POST', '/sessions/5/ask', { question: 'x' });
+  assert.equal(a.status, 402);
+  assert.deepEqual(w.calls, []);
+});
+
+test('ask: no model reachable is 503, as it is for structure', async () => {
+  const w = withSession(world(() => { throw new Error('down'); }));
+  const a = await call(w.env, structure, 'POST', '/sessions/5/ask', { question: 'x' });
+  assert.equal(a.status, 503);
+});
