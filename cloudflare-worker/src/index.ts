@@ -17,6 +17,8 @@
  * the legacy in-worker routes mounted here as the source of truth.
  */
 
+import { isMcpPath, routeMcp } from './mcp/oauth';
+import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, JobMessage } from './types';
@@ -1117,6 +1119,10 @@ app.route('/api/matches', matches);
 app.route('/api/consultations', consultations);
 app.route('/api/settings', settings);
 // D650: the old path and the canonical connector path share this router.
+// D666: an AI assistant's grants (#1496). Mounted before the connector
+// router so `/api/connectors/assistants` never reaches its `/:key` routes.
+app.route('/api/connectors/assistants', assistantGrants);
+app.route('/api/mcp/consent', mcpConsent);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
@@ -1538,6 +1544,10 @@ export default {
     // and the stale-chunk recovery (main.jsx) reload onto the current build
     // instead of blanking.
     const { pathname } = new URL(request.url);
+    // D666 (#1496): the MCP server and its OAuth endpoints, before anything
+    // else. With MCP_SERVER_ENABLED off each of these paths answers 404 and
+    // the provider is never built; every other path goes on exactly as before.
+    if (isMcpPath(pathname)) return routeMcp(request, env, ctx);
     if (request.method === 'GET' && env.ASSETS) {
       if (pathname.startsWith('/assets/')) {
         const assetRes = await env.ASSETS.fetch(request);

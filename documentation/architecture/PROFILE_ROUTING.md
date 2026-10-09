@@ -71,7 +71,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Founder Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | RESKIN | High |
 | Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Pages · Founder Research | `/research/ask` · `/research/library` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Pages · Founder Validate | `/validate` · `/validate/{interviews` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | CURRENT | Low |
+| Pages · Founder Validate | `/validate` · `/validate/:module` · `/validate/{interviews` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | CURRENT | Low |
 | Pages · Fund dossier | `/research/funds/:uid` · `/research/funds` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Pages · Market reading | `/research/markets/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |

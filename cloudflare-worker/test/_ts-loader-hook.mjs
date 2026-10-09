@@ -1,7 +1,18 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+// `cloudflare:workers` exists only inside workerd. Libraries that import it
+// for a base class (D666: @cloudflare/workers-oauth-provider checks whether a
+// handler `extends WorkerEntrypoint`) get empty classes here, which is all
+// such a check needs. Nothing in a test runs a real entrypoint.
+const CLOUDFLARE_WORKERS = 'data:text/javascript,' + encodeURIComponent(
+  'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx = ctx; this.env = env; } }\n'
+  + 'export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } }\n'
+  + 'export class RpcTarget {}\nexport class WorkflowEntrypoint {}\nexport const env = {};\n',
+);
+
 export async function resolve(specifier, context, nextResolve) {
+  if (specifier === 'cloudflare:workers') return { url: CLOUDFLARE_WORKERS, shortCircuit: true };
   if (specifier.startsWith('./') || specifier.startsWith('../')) {
     try {
       const parentURL = context.parentURL ? new URL(specifier, context.parentURL) : null;
