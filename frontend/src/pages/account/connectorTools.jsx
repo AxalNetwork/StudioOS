@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, X } from 'lucide-react';
-import { api } from '../../lib/api';
+import { connectorsApi } from '../../lib/api/connectors';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import { parseLinkedInCsv } from '../../lib/linkedinCsv';
 
@@ -161,7 +161,7 @@ export function HubspotConfigModal({ integration, onClose, onSaved }) {
     let alive = true;
     (async () => {
       try {
-        const res = await api.integrationsAction(integration.uid, 'list_pipelines');
+        const res = await connectorsApi.action(integration.uid, 'list_pipelines');
         if (!alive) return;
         setPipelines(res?.result?.pipelines || []);
       } catch (e) {
@@ -188,7 +188,7 @@ export function HubspotConfigModal({ integration, onClose, onSaved }) {
     setSaving(true);
     setError('');
     try {
-      await api.integrationsPatchConfig(integration.uid, {
+      await connectorsApi.patchConfig(integration.uid, {
         pipeline_id: pipelineId,
         pipeline_label: selected?.label || pipelineId,
         dealstage_map: stageMap,
@@ -291,8 +291,8 @@ export function SalesforceConfigModal({ integration, onClose, onSaved }) {
     (async () => {
       try {
         const [stagesRes, fieldsRes] = await Promise.all([
-          api.integrationsAction(integration.uid, 'list_stages').catch(() => null),
-          api.integrationsAction(integration.uid, 'list_field_map').catch(() => null),
+          connectorsApi.action(integration.uid, 'list_stages').catch(() => null),
+          connectorsApi.action(integration.uid, 'list_field_map').catch(() => null),
         ]);
         if (!alive) return;
         setStages(stagesRes?.result?.stages || []);
@@ -325,7 +325,7 @@ export function SalesforceConfigModal({ integration, onClose, onSaved }) {
     try {
       const patch = { stage_map: stageMap };
       if (fieldMap) patch.field_map = fieldMap;
-      await api.integrationsPatchConfig(integration.uid, patch);
+      await connectorsApi.patchConfig(integration.uid, patch);
       onSaved?.();
     } catch (e) {
       setError(e.message || 'Save failed');

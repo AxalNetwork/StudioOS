@@ -81,6 +81,20 @@ test('the budget refusal (D640) is its own state, in the budget\'s words, wherev
   assert.equal(refusalKind({ status: 503, data: { refusal: 'model_not_offered' } }), 'error');
 });
 
+test('each refusal the Worker sends, at #1470\'s status codes, is classified by its refusal and not its status', () => {
+  // Structure and Ask answer 402 for a spent budget, 400 for a model not
+  // offered and 503 when no model is reached (#1471). The page reads `refusal`.
+  const cases = [
+    [402, 'budget_user_day', 'budget'], [402, 'budget_user_month', 'budget'], [402, 'budget_review', 'budget'],
+    [400, 'model_not_offered', 'error'], [503, 'all_models_failed', 'error'], [503, null, 'error'],
+    // The old 503 for a budget still reads as a budget: the status never decided.
+    [503, 'budget_user_day', 'budget'],
+  ];
+  for (const [status, refusal, kind] of cases) {
+    assert.equal(refusalKind({ status, data: { ok: false, refusal } }), kind, `${status} ${refusal} read as the wrong kind`);
+  }
+});
+
 test('compare lays two runs side by side by module, naming each model; one run asks for a second', () => {
   const out = html(React.createElement(ComparePanel, { read: F.PLACEMENTS_TWO_RUNS }));
   const t = renderedText(out);

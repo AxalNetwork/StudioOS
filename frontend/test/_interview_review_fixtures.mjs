@@ -75,7 +75,7 @@ export const ASK_NO_CITATION_ERROR = {
 };
 
 export const BUDGET_ERROR = {
-  status: 503, code: null,
+  status: 402, code: null,
   message: 'You have used today’s AI allowance. It resets at midnight UTC.',
   data: { ok: false, refusal: 'budget_user_day', message: 'You have used today’s AI allowance. It resets at midnight UTC.' },
 };
