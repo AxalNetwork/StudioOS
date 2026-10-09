@@ -18,3 +18,8 @@
 # credential. The next commit uses the shared unit-test literal instead, so no
 # later commit carries this one. Scoped to the one finding, as D334's entry is.
 89a2c0c4e2688dfa936957274df2c715232accb0:cloudflare-worker/test/support_category_sla_store_d482.test.ts:generic-api-key:35
+# D657 (#1470): not a secret. `{ duplicate: true, key: existing.r2_key }` returns
+# the R2 object path of an uploaded audio chunk; the generic-api-key rule reads
+# `key:` beside a long identifier. The next commit renames the field to
+# `objectPath`, so no later commit carries it. Scoped to the one finding.
+e68e99682469eac1afc768ef22f41e99614845be:cloudflare-worker/src/services/interviewSessions.ts:generic-api-key:128

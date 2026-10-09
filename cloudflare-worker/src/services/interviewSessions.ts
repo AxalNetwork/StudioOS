@@ -121,25 +121,25 @@ export function chunkKey(ownerUserId: number, sessionUid: string, seq: number, e
  */
 export async function putChunk(
   env: Env, session: SessionRow, ownerUserId: number, seq: number, mime: string, bytes: ArrayBuffer, startMs: number | null,
-): Promise<{ duplicate: boolean; key: string }> {
+): Promise<{ duplicate: boolean; objectPath: string }> {
   const existing = await env.DB.prepare(
     'SELECT r2_key FROM interview_session_chunks WHERE session_id = ? AND seq = ?',
   ).bind(session.id, seq).first<{ r2_key: string }>();
-  if (existing) return { duplicate: true, key: existing.r2_key };
-  const key = chunkKey(ownerUserId, session.uid, seq, CHUNK_MIME[mime]);
-  await env.FILES!.put(key, bytes, {
+  if (existing) return { duplicate: true, objectPath: existing.r2_key };
+  const objectPath = chunkKey(ownerUserId, session.uid, seq, CHUNK_MIME[mime]);
+  await env.FILES!.put(objectPath, bytes, {
     httpMetadata: { contentType: mime },
     customMetadata: { session_id: String(session.id), seq: String(seq), owner_user_id: String(ownerUserId) },
   });
   const ins = await env.DB.prepare(
     `INSERT OR IGNORE INTO interview_session_chunks (session_id, seq, r2_key, mime, size_bytes, start_ms)
      VALUES (?, ?, ?, ?, ?, ?)`,
-  ).bind(session.id, seq, key, mime, bytes.byteLength, startMs).run();
-  if (Number(ins.meta?.changes || 0) === 0) return { duplicate: true, key };
+  ).bind(session.id, seq, objectPath, mime, bytes.byteLength, startMs).run();
+  if (Number(ins.meta?.changes || 0) === 0) return { duplicate: true, objectPath };
   await env.DB.prepare(
     `UPDATE interview_sessions SET audio_bytes = audio_bytes + ?, updated_at = datetime('now') WHERE id = ?`,
   ).bind(bytes.byteLength, session.id).run();
-  return { duplicate: false, key };
+  return { duplicate: false, objectPath };
 }
 
 export interface ChunkRow { seq: number; r2_key: string; mime: string; size_bytes: number; start_ms: number | null }
