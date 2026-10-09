@@ -164,6 +164,7 @@ test('request and suggestions are company-scoped; request list is Super Admin on
 test('OAuth overreach and generic settings are validated before persistence', () => {
   const desc = getDescriptor('hubspot')!;
   assert.equal(hasScopeOverreach(desc, ['oauth', 'crm.objects.deals.read']), false);
+  assert.equal(hasScopeOverreach(desc, []), false);
   assert.equal(hasScopeOverreach(desc, ['oauth', 'admin.accounts.write']), true);
   assert.equal(validateConnectorSettings('slack', { sync_frequency: 'daily', send_modes: { 'Slack channel': 'ask' } }).ok, true);
   assert.equal(validateConnectorSettings('slack', { sync_frequency: 'sometimes' }).ok, false);

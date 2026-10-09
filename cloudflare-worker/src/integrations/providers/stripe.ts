@@ -235,7 +235,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
     refresh_token: tok.refresh_token,
     stripe_user_id: tok.stripe_user_id,
     livemode: !!tok.livemode,
-    scope: tok.scope || 'read_only',
+    scope: tok.scope || null,
     token_type: 'Bearer',
   } as CredentialBlob;
   const displayName = account.business_profile?.name
@@ -244,7 +244,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
     || account.id;
   return {
     credentials,
-    scopes: [tok.scope || 'read_only'],
+    scopes: tok.scope ? [tok.scope] : [],
     external_account_id: tok.stripe_user_id,
     external_account_name: displayName,
     capabilities: ['Pull MRR/ARR', 'Customer count', 'Churn analytics', 'Webhook deltas'],
