@@ -260,12 +260,23 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
 
 // ------------------------------------------------------------------ not mounted yet
 
-test('NOTHING IS MOUNTED YET: each cycle keeps its current page until its read lands', () => {
+test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: Validate is; Build, Raise and Grow keep their desks', () => {
   const app = read('frontend/src/App.jsx');
-  assert.doesNotMatch(app, /pages\/cycles\//, 'App.jsx imports no cycle page');
+  const cyclesApi = read('frontend/src/lib/api/cycles.js');
+  // The one route component, mounted per cycle by a literal name.
+  const mounted = [...app.matchAll(/<CycleRoute cycle="([a-z]+)" \/>/g)].map((m) => m[1]);
+  const wired = [...cyclesApi.matchAll(/^ {2}([a-z]+): \{$/gm)].map((m) => m[1]);
+  assert.deepEqual([...new Set(mounted)].sort(), ['validate'], 'only Validate is mounted');
+  for (const c of new Set(mounted)) assert.ok(wired.includes(c), `${c} is mounted with no read in lib/api/cycles.js`);
+  assert.match(app, /<Route path="\/validate\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="validate" \/>\)\} \/>/, 'Validate has its module pages');
   assert.match(app, /<Route path="\/build" element=\{founderBuildLanding/, '/build keeps its desk');
-  assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'no client method before its route is on main');
-  for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx']) {
-    assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);
+  // The four zone pages stay mounted: each module page links to the one that
+  // edits it until canvases for Add and a record's edit view exist.
+  for (const zone of ['interviews', 'pain-map', 'hypotheses', 'verdict']) {
+    assert.match(app, new RegExp(`<Route path="/validate/${zone}" element=\\{guard\\([^)]*\\), <FounderValidateWorkspace />\\)\\} />`), `/validate/${zone} lost its working tool`);
+  }
+  assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'the cycle client lives in lib/api/cycles.js, not api.js');
+  for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx', 'adapters/index.js', 'adapters/validate.js']) {
+    assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|from '\.\.\/\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);
   }
 });

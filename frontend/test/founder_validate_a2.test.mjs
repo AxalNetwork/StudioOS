@@ -19,7 +19,10 @@ test('founder active role owns the A2 Validate landing page', () => {
   assert.match(route, /: <Navigate to=\{`\/validate\$\{location\.search\}`\} replace \/>/,
     'a founder on the bare path is not redirected to /validate with the query kept');
   assert.ok(!route.includes('<FounderValidatePage />'), '/build/discovery is a second address for the desk again');
-  assert.match(app, /<Route path="\/validate" element=\{founderValidateLanding\s*\? guard\([^)]*\), <FounderValidatePage \/>\)/);
+  // D661 (#1474): a founder's /validate is the cycle overview now, drawn from
+  // #1487's read; this desk is no longer mounted there or anywhere.
+  assert.match(app, /<Route path="\/validate" element=\{founderValidateLanding\s*\? guard\([^)]*\), <CycleRoute cycle="validate" \/>\)/);
+  assert.ok(!app.includes('<FounderValidatePage />'), 'the A2 desk is mounted again beside the cycle overview');
 });
 
 test('A2 renders every requested evidence surface', () => {
