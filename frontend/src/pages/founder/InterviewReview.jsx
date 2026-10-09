@@ -87,8 +87,9 @@ export function groupByModule(read) {
 }
 
 /**
- * What a refused call means for the page. A budget refusal (D640: 503 with a
- * `budget_*` refusal) is its own state, in the budget's own words.
+ * What a refused call means for the page. A budget refusal (D640: a
+ * `budget_*` refusal, sent with 402) is its own state, in the budget's own
+ * words. The `refusal` field decides, never the status code.
  */
 export function refusalKind(err) {
   const refusal = err?.data?.refusal;
