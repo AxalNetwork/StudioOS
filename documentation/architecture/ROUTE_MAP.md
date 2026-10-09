@@ -66,6 +66,13 @@ Connectors replace Integrations (D649). `/integrations` and `/account/integratio
 
 The components are built in `frontend/src/pages/cycles/` and are not mounted yet: each cycle keeps its current page until its read from #1469 (D656) is on `main`. D661 gives the shape D656 left open for `Card.series` and the records.
 
+D662 (#1475) adds the authenticated Worker Build read at `/api/cycles/build`:
+`/overview` returns four figures and six independently computed cards;
+`/modules/:slug` returns a chart and searched, filtered, sorted, paged records.
+Migration 441 supplies the missing Build fields, the founder risk register,
+formation steps, and company-enabled core-system mappings. The D661 SPA
+components remain unmounted until the cycle route integration is scheduled.
+
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
 | `Cycle Overview.dc.html` · `variant=full`, `new`, `states` (O1–O5) | `/validate`, `/build`, `/raise`, `/grow`: the current pages stay until each read lands | `pages/cycles/CycleOverview.jsx`; `GET /api/cycles/:cycle/overview` (#1472, #1475, #1476, #1477) | NEW: built, waiting on the reads |

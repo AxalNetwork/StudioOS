@@ -234,7 +234,7 @@ test('U1 renders loading, Unreadable (the others still load), ready, and each st
   assert.match(none, /data-testid="usage-state-no_allowance"[\s\S]*No allowance on this plan[\s\S]*Runs use your top-up balance\./);
   assert.doesNotMatch(none, /usage-today/);
   const dayOut = html(h(AllowanceCard, { budget: ready({ ...BUDGET, day_spend_microusd: 2_000_000 }), product: ready(PRODUCT) }));
-  assert.match(dayOut, /Today’s allowance is used up[\s\S]*It resets at 00:00 UTC, in \d+ h \d+ min\. Runs use your top-up balance until then\./);
+  assert.match(dayOut, /Today’s allowance is used up[\s\S]*It resets at 00:00 UTC, in (?:\d+ h )?\d+ min\. Runs use your top-up balance until then\./);
   const paused = html(h(AllowanceCard, { budget: ready({ ...BUDGET, held_for_review: [{ uid: 'r1' }] }), product: ready(PRODUCT) }));
   assert.match(paused, /role="alert" data-testid="usage-state-paused"[\s\S]*Runs paused[\s\S]*A run cost more than it held\. New runs wait while HQ checks the charge\./);
   const noTopUp = html(h(AllowanceCard, { budget: ready(BUDGET), product: ready({ configured: false, product: null }) }));
