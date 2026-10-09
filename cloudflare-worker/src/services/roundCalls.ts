@@ -13,7 +13,7 @@ export class RoundCallError extends Error {
 }
 export interface CallRow extends RoundCallTerms {
   id: number; uid: string; project_id: number; company_id: number | null; round_id: number | null;
-  state: string; terms_hash: string; counsel_approved_hash: string | null;
+  state: string; revision: number; terms_hash: string; counsel_approved_hash: string | null;
   counsel_approval_reference: string | null; counsel_approved_by: number | null; counsel_approved_at: string | null;
   created_by: number; created_at: string; updated_at: string; sent_at: string | null; closed_at: string | null;
 }
@@ -88,8 +88,8 @@ export async function saveDraft(env: Env, project: ProjectFacts, actor: User, in
   const hash = await termsHash(t), at = now(), uid = existing?.uid || crypto.randomUUID();
   const round = await env.DB.prepare("SELECT id FROM raise_rounds WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1").bind(project.id).first<{ id: number }>();
   const statement = existing
-    ? env.DB.prepare("UPDATE round_calls SET name=?, amount_cents=?, instrument=?, terms=?, minimum_cheque_cents=?, target_close=?, deck_id=?, deck_version=?, data_room_project_uid=?, stage=?, sector=?, terms_hash=?, counsel_approved_hash=NULL, counsel_approval_reference=NULL, counsel_approved_by=NULL, counsel_approved_at=NULL, updated_at=? WHERE uid=? AND state='draft' AND updated_at=?")
-      .bind(t.name,t.amount_cents,t.instrument,t.terms,t.minimum_cheque_cents,t.target_close,t.deck_id,t.deck_version,t.data_room_project_uid,t.stage,t.sector,hash,at,uid,existing.updated_at)
+    ? env.DB.prepare("UPDATE round_calls SET name=?, amount_cents=?, instrument=?, terms=?, minimum_cheque_cents=?, target_close=?, deck_id=?, deck_version=?, data_room_project_uid=?, stage=?, sector=?, terms_hash=?, counsel_approved_hash=NULL, counsel_approval_reference=NULL, counsel_approved_by=NULL, counsel_approved_at=NULL, updated_at=?,revision=revision+1 WHERE uid=? AND state='draft' AND revision=?")
+      .bind(t.name,t.amount_cents,t.instrument,t.terms,t.minimum_cheque_cents,t.target_close,t.deck_id,t.deck_version,t.data_room_project_uid,t.stage,t.sector,hash,at,uid,existing.revision)
     : env.DB.prepare('INSERT INTO round_calls(uid,project_id,company_id,round_id,name,amount_cents,instrument,terms,minimum_cheque_cents,target_close,deck_id,deck_version,data_room_project_uid,stage,sector,terms_hash,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .bind(uid,project.id,project.company_id,round?.id ?? null,t.name,t.amount_cents,t.instrument,t.terms,t.minimum_cheque_cents,t.target_close,t.deck_id,t.deck_version,t.data_room_project_uid,t.stage,t.sector,hash,actor.id,at,at);
   const result = await env.DB.batch([statement, await audit(env,actor,project.id,'round_call_draft_requested',{uid,terms_hash:hash})]);
@@ -125,7 +125,7 @@ export async function saveAudience(env: Env, call: CallRow, actor: User, input: 
     env.DB.prepare("DELETE FROM round_call_recipients WHERE call_id=? AND EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='draft')").bind(call.id,call.id),
     ...rows.map(row => env.DB.prepare("INSERT INTO round_call_recipients(call_id,investor_user_id,origin,match_reasons_json) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='draft')")
       .bind(call.id,row.investor_user_id,row.origin,JSON.stringify(row.reasons),call.id)),
-    env.DB.prepare("UPDATE round_calls SET counsel_approved_hash=NULL,counsel_approved_by=NULL,counsel_approved_at=NULL,counsel_approval_reference=NULL,updated_at=? WHERE id=? AND state='draft'").bind(at,call.id),
+    env.DB.prepare("UPDATE round_calls SET counsel_approved_hash=NULL,counsel_approved_by=NULL,counsel_approved_at=NULL,counsel_approval_reference=NULL,updated_at=?,revision=revision+1 WHERE id=? AND state='draft'").bind(at,call.id),
     await audit(env,actor,call.project_id,'round_call_audience_requested',{uid:call.uid,chosen:rows.filter(r=>r.origin==='chosen').length,matched:rows.filter(r=>r.origin==='match').length}),
   ];
   const result = await env.DB.batch(statements);
@@ -157,7 +157,7 @@ export async function sendCall(env: Env, call: CallRow, actor: User, acknowledge
   if (recipients.some(r=>r.role!=='investor'||r.is_active!==1||r.kyc_status!=='approved')) throw new RoundCallError('audience_verification_changed',409);
   const at=now();
   const result=await env.DB.batch([
-    env.DB.prepare("UPDATE round_calls SET state='sent',sent_at=?,updated_at=? WHERE id=? AND state='draft' AND terms_hash=? AND counsel_approved_hash=terms_hash AND counsel_approved_by IS NOT NULL AND counsel_approved_at IS NOT NULL AND counsel_approval_reference IS NOT NULL AND target_close>=? AND NOT EXISTS(SELECT 1 FROM round_call_recipients r JOIN users u ON u.id=r.investor_user_id WHERE r.call_id=round_calls.id AND (u.role<>'investor' OR u.is_active<>1 OR u.kyc_status IS NULL OR u.kyc_status<>'approved'))").bind(at,at,call.id,call.terms_hash,today()),
+    env.DB.prepare("UPDATE round_calls SET state='sent',sent_at=?,updated_at=?,revision=revision+1 WHERE id=? AND state='draft' AND terms_hash=? AND revision=? AND counsel_approved_hash=terms_hash AND counsel_approved_by IS NOT NULL AND counsel_approved_at IS NOT NULL AND counsel_approval_reference IS NOT NULL AND target_close>=? AND NOT EXISTS(SELECT 1 FROM round_call_recipients r JOIN users u ON u.id=r.investor_user_id WHERE r.call_id=round_calls.id AND (u.role<>'investor' OR u.is_active<>1 OR u.kyc_status IS NULL OR u.kyc_status<>'approved'))").bind(at,at,call.id,call.terms_hash,call.revision,today()),
     await audit(env,actor,call.project_id,'round_call_send_requested',{uid:call.uid,terms_hash:call.terms_hash,acknowledged_missing:missing.map(item=>item.key)}),
   ]);
   if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('call_changed',409);
@@ -186,7 +186,7 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
       deck_version:call.deck_version,state:call.state,sent_at:call.sent_at},
     deck,recipient,questions:questions.results||[],read_only:!writableCall(call,today()),
     data_room:{recorded:call.data_room_project_uid!=null,nda_signed:!!nda,has_grant:!!grant,
-      path:grant?'/data-room/shared/'+call.data_room_project_uid:null} };
+      path:grant?'/research/diligence/'+encodeURIComponent(grant.uid):null} };
 }
 export async function respond(env: Env, call: CallRow, investor: User, input: Record<string, unknown>) {
   if(!writableCall(call,today())) throw new RoundCallError('call_read_only',409);
@@ -215,14 +215,14 @@ export async function respond(env: Env, call: CallRow, investor: User, input: Re
   if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('call_read_only_or_verification_changed',409);
   return {ok:true,pipeline_recorded:true};
 }
-export async function recordCounsel(env:Env,call:CallRow,actor:User,reference:unknown,expectedHash:unknown) {
+export async function recordCounsel(env:Env,call:CallRow,actor:User,reference:unknown,expectedHash:unknown,expectedRevision:unknown) {
   if(call.state!=='draft') throw new RoundCallError('call_read_only',409);
-  if(expectedHash!==call.terms_hash) throw new RoundCallError('terms_changed',409);
+  if(expectedHash!==call.terms_hash||expectedRevision!==call.revision) throw new RoundCallError('terms_changed',409);
   const ref=text(reference,2000);
   if(ref.length<10) throw new RoundCallError('counsel_reference_required');
   const at=now();
   const result=await env.DB.batch([
-    env.DB.prepare("UPDATE round_calls SET counsel_approved_hash=terms_hash,counsel_approved_by=?,counsel_approved_at=?,counsel_approval_reference=?,updated_at=? WHERE id=? AND state='draft' AND terms_hash=? AND updated_at=?").bind(actor.id,at,ref,at,call.id,call.terms_hash,call.updated_at),
+    env.DB.prepare("UPDATE round_calls SET counsel_approved_hash=terms_hash,counsel_approved_by=?,counsel_approved_at=?,counsel_approval_reference=?,updated_at=? WHERE id=? AND state='draft' AND terms_hash=? AND revision=?").bind(actor.id,at,ref,at,call.id,call.terms_hash,call.revision),
     await audit(env,actor,call.project_id,'round_call_counsel_record_requested',{uid:call.uid,terms_hash:call.terms_hash,reference:ref}),
   ]);
   if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('terms_changed',409);
@@ -232,13 +232,13 @@ export async function manageCall(env:Env,call:CallRow,actor:User,input:Record<st
   if(!writableCall(call,today())) throw new RoundCallError('call_read_only',409);
   const at=now();
   if(input.action==='close') {
-    const result=await env.DB.batch([env.DB.prepare("UPDATE round_calls SET state='closed',closed_at=?,updated_at=? WHERE id=? AND state='sent' AND updated_at=?").bind(at,at,call.id,call.updated_at),
+    const result=await env.DB.batch([env.DB.prepare("UPDATE round_calls SET state='closed',closed_at=?,updated_at=?,revision=revision+1 WHERE id=? AND state='sent' AND revision=?").bind(at,at,call.id,call.revision),
       await audit(env,actor,call.project_id,'round_call_close_requested',{uid:call.uid})]);
     if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('call_changed',409);
   } else if(input.action==='extend') {
     if(!validClose(input.target_close)||input.target_close<=call.target_close) throw new RoundCallError('invalid_extension');
     const hash=await termsHash({...call,target_close:input.target_close});
-    const result=await env.DB.batch([env.DB.prepare("UPDATE round_calls SET target_close=?,terms_hash=?,counsel_approved_hash=NULL,counsel_approved_by=NULL,counsel_approved_at=NULL,counsel_approval_reference=NULL,updated_at=? WHERE id=? AND state='sent' AND updated_at=?").bind(input.target_close,hash,at,call.id,call.updated_at),
+    const result=await env.DB.batch([env.DB.prepare("UPDATE round_calls SET target_close=?,terms_hash=?,counsel_approved_hash=NULL,counsel_approved_by=NULL,counsel_approved_at=NULL,counsel_approval_reference=NULL,updated_at=?,revision=revision+1 WHERE id=? AND state='sent' AND revision=?").bind(input.target_close,hash,at,call.id,call.revision),
       await audit(env,actor,call.project_id,'round_call_extend_requested',{uid:call.uid,target_close:input.target_close})]);
     if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('call_changed',409);
   } else throw new RoundCallError('invalid_action');
