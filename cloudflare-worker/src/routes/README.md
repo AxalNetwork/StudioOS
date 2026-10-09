@@ -151,3 +151,12 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 `documentation/architecture/decisions/D663.md`.
 
 D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.
+
+D667 (#1497): the assistant interview tools are service functions in
+`../services/assistantInterviews.ts`, registered on #1496's MCP server, not
+routes of their own. Two routes here changed:
+- `founder_validate_structure.ts`'s `GET /sessions/:id/placements` now gives
+  each placement and run a `source` (`assistant` or `studioos`) and the
+  assistant's `submitted_via_name`.
+- Deleting a session (`founder_validate_sessions.ts`) now deletes its pending
+  proposals. See `documentation/architecture/decisions/D667.md`.
