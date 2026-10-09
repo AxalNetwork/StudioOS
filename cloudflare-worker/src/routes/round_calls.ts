@@ -122,7 +122,7 @@ routes.put('/:uid/questions/:questionUid',async c=>{
 routes.post('/:uid/counsel-approval',async c=>{
   try { const user=await requireHqAuthoring(c); await requireStepUp(c);
     const call=await loadCall(c.env,(c.req.param('uid') || '')),body=await input(c);
-    return c.json(await recordCounsel(c.env,call,user,body.reference,body.terms_hash));
+    return c.json(await recordCounsel(c.env,call,user,body.reference,body.terms_hash,body.revision));
   } catch(e){return failure(c,e);}
 });
 export default routes;
