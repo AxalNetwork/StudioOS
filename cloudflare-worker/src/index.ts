@@ -110,6 +110,7 @@ import esign from './routes/esign';
 import trust from './routes/trust';
 import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
 import integrations from './routes/integrations';
+import eadwynRoutes from './routes/eadwyn';
 // Task #2 — HubSpot provider. Side-effect import: the module's top-level
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
 // layer in routes/integrations.ts can dispatch to it.
@@ -1106,6 +1107,8 @@ app.route('/api/settings', settings);
 // D650: the old path and the canonical connector path share this router.
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
+// D652 — the Worker AI rail's conversations and their connectors (#1464).
+app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);

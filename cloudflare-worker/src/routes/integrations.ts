@@ -70,7 +70,7 @@ function newUid(): string {
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function logEvent(
+export async function logEvent(
   env: Env,
   opts: {
     integration_id: number;
