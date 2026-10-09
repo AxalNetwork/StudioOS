@@ -33,6 +33,7 @@ import {
   type Segment,
 } from '../src/services/interviewStructuring.ts';
 import sessionsApp from '../src/routes/founder_validate_sessions.ts';
+import cycleValidate from '../src/routes/cycle_validate.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { STRUCTURE_RECEIPTS_SQL } from './_structure_receipts_schema.mjs';
 
@@ -414,6 +415,47 @@ test('two runs are aligned by module, each side keeping its own lines', () => {
     { module: 'problem_discovery', first: [a[1]], second: [b[0], b[1]] },
     { module: 'market_intelligence', first: [], second: [b[2]] },
   ]);
+});
+
+test('segment, demand signal and competitor: an accepted placement writes the row the hand-entry form writes (S1 on #1471)', async () => {
+  // Two fresh worlds: one accepts placements, one types the same facts into
+  // #1472's manual routes. Compared without the columns that say WHERE a row
+  // came from (ids, times, source, the session) — those differ by design.
+  const strip = (rows: any[], drop: string[]) => rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !drop.includes(k))));
+  const ANALYSIS = `INSERT INTO competitor_analyses (id, project_id, user_id, inputs_json, status, created_at, updated_at)
+                    VALUES ('an-1', ${PROJECT}, ${ME}, '{}', 'ready', datetime('now'), datetime('now'))`;
+
+  const a = withSession(world());
+  a.db.prepare(ANALYSIS).run();
+  await seed(a.env, [
+    { kind: 'segment', payload: { name: 'Finance leads' }, cite: { from: 4000, to: 12000 } },
+    { kind: 'demand_signal', payload: { signal: 'would_pay', detail: 'Would pay tomorrow' }, cite: { from: 20000, to: 26000 } },
+    { kind: 'competitor_mention', payload: { name: 'Ledgerly', context: 'Too expensive' }, cite: { from: 12000, to: 20000 } },
+  ]);
+  for (const { id } of rowsOf(a.db, 'validate_proposals', 'id')) {
+    const r = await call(a.env, structure, 'POST', `/placements/${id}/accept`);
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+  }
+
+  const b = world();
+  b.db.prepare(ANALYSIS).run();
+  const q = `?project=${PROJECT}`;
+  const seg = await call(b.env, cycleValidate, 'POST', `/segments${q}`, { name: 'Finance leads' });
+  assert.equal(seg.status, 201, JSON.stringify(seg.json));
+  assert.equal((await call(b.env, cycleValidate, 'PUT', `/interviews/101/segment${q}`, { segment_id: seg.json.id })).status, 200);
+  assert.equal((await call(b.env, cycleValidate, 'POST', `/demand-signals${q}`,
+    { kind: 'would_pay', interview_id: 101, note: 'Would pay tomorrow', status: 'to_confirm' })).status, 201);
+  assert.equal((await call(b.env, cycleValidate, 'POST', `/competitor-mentions${q}`,
+    { name: 'Ledgerly', detail: 'Too expensive', signal_type: 'mention' })).status, 201);
+
+  const time = ['id', 'created_at', 'updated_at'];
+  const same = (sql: string, drop: string[], what: string) =>
+    assert.deepEqual(strip(a.db.prepare(sql).all(), [...time, ...drop]), strip(b.db.prepare(sql).all(), [...time, ...drop]), what);
+  same('SELECT * FROM customer_segments', ['source', 'source_ref'], 'an accepted segment is not the row the form writes');
+  same('SELECT id, segment_id IS NOT NULL AS placed FROM discovery_interviews WHERE id = 101', [], 'the interview was not placed in its segment the same way');
+  same('SELECT * FROM demand_signals', ['source_kind', 'session_id'], 'an accepted demand signal is not the row the form writes');
+  same('SELECT name, category, summary FROM competitor_candidates', [], 'an accepted competitor is not the row the form adds');
+  same('SELECT analysis_id, signal_type, label, detail, project_id, source_url FROM competitor_signals', [], 'an accepted mention is not the signal the form writes');
 });
 
 test('an accepted severity is stored as the canvas\'s own word, and an evidence link keeps its strength', async () => {
