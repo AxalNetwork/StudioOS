@@ -15,6 +15,11 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jl
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
+import {
+  ASK_KINDS, ASK_MODULE, LineError, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
+  draftLines, landReply, noMetrics, payloadFor, periodFacts,
+  type Audience, type AskKind, type Snapshot,
+} from '../services/updateShare';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -214,6 +219,351 @@ r.post('/:uid/submit', async (c) => {
       c.executionCtx.waitUntil(notifyProjectFollowers(c.env, fresh.project_id, fresh));
     }
     return c.json(await dto(c.env, fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── D654 (#1466): Grow › Share an update ────────────────────────────────────
+// The same `portfolio_updates` row, with the period, metrics, highlights,
+// asks and audience the "Share an update" sheet records (migration 437).
+// Every request value is bound; the founder must own the project.
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+async function ownedProject(c: any, user: User, projectId: number): Promise<number | null> {
+  if (!Number.isInteger(projectId)) return null;
+  const founderId = await projectFounderId(c.env, projectId);
+  if (founderId === undefined) return null;
+  if (!isAdmin(user) && !(isFounder(user) && canAccessFounderResource(user, founderId))) return null;
+  return projectId;
+}
+
+/** The period's snapshots from Revenue and traction, and the ones before it. */
+async function periodSnapshots(env: Env, projectId: number, start: string, end: string) {
+  try {
+    const [inPeriod, before] = await Promise.all([
+      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date <= ? ORDER BY snapshot_date`)
+        .bind(projectId, start, end).all<Snapshot>(),
+      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date < ? ORDER BY snapshot_date DESC LIMIT 40`)
+        .bind(projectId, start).all<Snapshot>(),
+    ]);
+    return { inPeriod: inPeriod.results || [], before: before.results || [] };
+  } catch {
+    // No metrics store on this database yet: no figure is recorded.
+    return { inPeriod: [], before: [] };
+  }
+}
+
+async function openRoles(env: Env, projectId: number) {
+  try {
+    const r = await env.DB.prepare(
+      `SELECT id, title, created_at FROM job_postings WHERE project_id = ? AND status IN ('open', 'published') ORDER BY id DESC LIMIT 20`,
+    ).bind(projectId).all<{ id: number; title: string; created_at: string | null }>();
+    return r.results || [];
+  } catch { return []; }
+}
+
+/** Who each audience is: investors from the Raise pipeline, the team, the project's followers. */
+async function audienceMembers(env: Env, projectId: number, authorId: number) {
+  const investors: Array<{ user_id: number | null; email: string; label: string }> = [];
+  try {
+    const r = await env.DB.prepare(
+      `SELECT p.name, LOWER(p.email) AS email, u.id AS user_id
+         FROM raise_prospects p LEFT JOIN users u ON LOWER(u.email) = LOWER(p.email)
+        WHERE p.project_id = ? AND TRIM(COALESCE(p.email, '')) <> '' AND COALESCE(p.stage, '') <> 'passed'`,
+    ).bind(projectId).all<{ name: string | null; email: string; user_id: number | null }>();
+    for (const x of r.results || []) investors.push({ user_id: x.user_id, email: x.email, label: x.name || x.email });
+  } catch { /* no pipeline yet: no investor */ }
+  const team: number[] = [];
+  try {
+    const r = await env.DB.prepare(
+      `SELECT user_id FROM project_members WHERE project_id = ? AND status = 'accepted' AND user_id <> ?`,
+    ).bind(projectId, authorId).all<{ user_id: number }>();
+    for (const x of r.results || []) team.push(x.user_id);
+  } catch { /* no members table */ }
+  const network: number[] = [];
+  try {
+    await ensureFollowsSchema(env);
+    const r = await env.DB.prepare(
+      `SELECT follower_user_id AS user_id FROM follows WHERE entity_type = 'project' AND entity_id = ? AND follower_user_id <> ?`,
+    ).bind(projectId, authorId).all<{ user_id: number }>();
+    for (const x of r.results || []) network.push(x.user_id);
+  } catch { /* no follows table */ }
+  return { investors, team, network };
+}
+
+type ShareRow = UpdateRow & {
+  period_start: string | null; period_end: string | null; metrics_json: string | null;
+  highlights_json: string | null; lowlights_json: string | null; audience_json: string | null;
+  network_includes_metrics: number; sent_at: string | null;
+};
+
+async function asksOf(env: Env, updateId: number) {
+  const asks = await env.DB.prepare(`SELECT * FROM update_asks WHERE update_id = ? ORDER BY id`).bind(updateId).all<any>();
+  return asks.results || [];
+}
+
+function shareShape(u: ShareRow, asks: any[]) {
+  return {
+    title: u.title, period_start: u.period_start, period_end: u.period_end,
+    metrics: jload(u.metrics_json, []), highlights: jload(u.highlights_json, []), lowlights: jload(u.lowlights_json, []),
+    asks: asks.map((a) => ({ uid: a.uid, kind: a.kind, text: a.text, module: ASK_MODULE[a.kind as AskKind]?.label ?? null, link_ref: a.link_ref })),
+    network_includes_metrics: !!u.network_includes_metrics,
+  };
+}
+
+// GET /api/portfolio-updates/share/context?project_id&period_start&period_end
+// The sheet's metrics step and audience counts, from stored data only.
+r.get('/share/context', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await ownedProject(c, user, Number(c.req.query('project_id')));
+    if (pid == null) return c.json({ detail: 'Forbidden' }, 403);
+    const start = String(c.req.query('period_start') || '');
+    const end = String(c.req.query('period_end') || '');
+    if (!DAY.test(start) || !DAY.test(end) || start > end) return c.json({ detail: 'period_start and period_end are YYYY-MM-DD, start first', field: 'period' }, 400);
+    const snaps = await periodSnapshots(c.env, pid, start, end);
+    const metrics = buildMetrics(snaps.inPeriod, snaps.before);
+    const members = await audienceMembers(c.env, pid, user.id);
+    return c.json({
+      metrics, no_metrics: noMetrics(metrics),
+      open_roles: (await openRoles(c.env, pid)).map((x) => ({ id: x.id, title: x.title })),
+      audience: { investors: members.investors.length, team: members.team.length, network: members.network.length },
+      ask_kinds: ASK_KINDS.map((k) => ({ kind: k, module: ASK_MODULE[k].label, lands: !!ASK_MODULE[k].lands, reason: ASK_MODULE[k].reason })),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/portfolio-updates/share/draft-lines — Eadwyn drafts the highlights
+// and lowlights from the period's stored data; every line cites its source.
+r.post('/share/draft-lines', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const body = await c.req.json().catch(() => ({} as any));
+    const pid = await ownedProject(c, user, Number(body.project_id));
+    if (pid == null) return c.json({ detail: 'Forbidden' }, 403);
+    const start = String(body.period_start || ''); const end = String(body.period_end || '');
+    if (!DAY.test(start) || !DAY.test(end) || start > end) return c.json({ detail: 'period_start and period_end are YYYY-MM-DD, start first', field: 'period' }, 400);
+    const snaps = await periodSnapshots(c.env, pid, start, end);
+    const metrics = buildMetrics(snaps.inPeriod, snaps.before);
+    const roles = (await openRoles(c.env, pid)).map((x) => ({ title: x.title, opened: x.created_at ? x.created_at.slice(0, 10) : null }));
+    let contacts: number | null = null;
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM contacts WHERE project_id = ? AND audience = 'customer' AND substr(created_at, 1, 10) BETWEEN ? AND ?`,
+      ).bind(pid, start, end).first<{ n: number }>();
+      contacts = Number(row?.n ?? 0);
+    } catch { contacts = null; }
+    return c.json(await draftLines(c.env, user.id, periodFacts(metrics, roles, contacts)));
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/portfolio-updates/:uid/share — the author saves the sheet's steps on a draft.
+r.put('/:uid/share', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
+    if (!u) return c.json({ detail: 'Not found' }, 404);
+    if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    if (u.sent_at) return c.json({ detail: 'This update was sent and is read-only' }, 409);
+    const body = await c.req.json().catch(() => ({} as any));
+    const start = body.period_start == null ? u.period_start : String(body.period_start);
+    const end = body.period_end == null ? u.period_end : String(body.period_end);
+    if ((start && !DAY.test(start)) || (end && !DAY.test(end)) || (start && end && start > end)) {
+      return c.json({ detail: 'period_start and period_end are YYYY-MM-DD, start first', field: 'period' }, 400);
+    }
+    let highlights; let lowlights;
+    try {
+      highlights = body.highlights === undefined ? jload(u.highlights_json, []) : cleanLines(body.highlights, 'Highlight');
+      lowlights = body.lowlights === undefined ? jload(u.lowlights_json, []) : cleanLines(body.lowlights, 'Lowlight');
+    } catch (e) {
+      if (e instanceof LineError) return c.json({ detail: e.sentence, field: 'lines' }, 400);
+      throw e;
+    }
+    const metrics = body.metrics === undefined ? jload(u.metrics_json, []) : cleanMetrics(body.metrics);
+    const audience = body.audience === undefined ? jload(u.audience_json, cleanAudience({})) : cleanAudience(body.audience);
+    const incl = body.network_includes_metrics === undefined ? u.network_includes_metrics : (body.network_includes_metrics === true ? 1 : 0);
+    if (body.asks !== undefined) {
+      if (!Array.isArray(body.asks)) return c.json({ detail: 'asks must be a list', field: 'asks' }, 400);
+      const roles = new Set((await openRoles(c.env, u.project_id)).map((x) => String(x.id)));
+      const asks: Array<{ kind: AskKind; text: string; link_ref: string | null }> = [];
+      for (const a of body.asks.slice(0, 10)) {
+        const kind = String(a?.kind) as AskKind;
+        const text = typeof a?.text === 'string' ? a.text.trim().slice(0, 300) : '';
+        if (!ASK_KINDS.includes(kind)) return c.json({ detail: `An ask's kind is one of ${ASK_KINDS.join(', ')}`, field: 'asks' }, 400);
+        if (!text) return c.json({ detail: 'Every ask says what it asks for', field: 'asks' }, 400);
+        const link = a?.link_ref == null ? null : String(a.link_ref);
+        // A hire links to one of this company's open roles, or to none.
+        if (kind === 'hire' && link != null && !roles.has(link)) return c.json({ detail: 'A hire links to one of your open roles', field: 'asks' }, 400);
+        asks.push({ kind, text, link_ref: kind === 'hire' ? link : null });
+      }
+      await c.env.DB.prepare('DELETE FROM update_asks WHERE update_id = ?').bind(u.id).run();
+      for (const a of asks) {
+        await c.env.DB.prepare(
+          'INSERT INTO update_asks (uid, update_id, kind, text, link_module, link_ref) VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(newUid(), u.id, a.kind, a.text, ASK_MODULE[a.kind].module, a.link_ref).run();
+      }
+    }
+    await c.env.DB.prepare(
+      `UPDATE portfolio_updates SET period_start = ?, period_end = ?, period = ?, metrics_json = ?, highlights_json = ?,
+         lowlights_json = ?, audience_json = ?, network_includes_metrics = ?, updated_at = ? WHERE id = ?`,
+    ).bind(start, end, start ? start.slice(0, 7) : u.period, JSON.stringify(metrics), JSON.stringify(highlights),
+      JSON.stringify(lowlights), JSON.stringify(audience), incl, nowIso(), u.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind(u.id).first<ShareRow>();
+    return c.json({ uid: fresh!.uid, ...shareShape(fresh!, await asksOf(c.env, u.id)), audience_choice: audience });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/portfolio-updates/:uid/send — the author sends it, once, through
+// the notification path (which mails people by their preferences). A pipeline
+// investor with no Axal account is recorded as not delivered, never as sent.
+r.post('/:uid/send', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
+    if (!u) return c.json({ detail: 'Not found' }, 404);
+    if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    if (u.sent_at) return c.json({ detail: 'This update was already sent' }, 409);
+    const choice = cleanAudience(jload(u.audience_json, {}));
+    const members = await audienceMembers(c.env, u.project_id, u.author_user_id);
+    const proj = await c.env.DB.prepare('SELECT uid, name FROM projects WHERE id = ?').bind(u.project_id).first<{ uid: string; name: string }>();
+    const seen = new Set<number>();
+    const rows: Array<{ audience: Audience; user_id: number | null; email: string | null; label: string | null }> = [];
+    if (choice.investors) for (const i of members.investors) {
+      if (i.user_id != null) { if (seen.has(i.user_id)) continue; seen.add(i.user_id); }
+      rows.push({ audience: 'investor', user_id: i.user_id, email: i.email, label: i.label });
+    }
+    if (choice.team) for (const id of members.team) { if (!seen.has(id)) { seen.add(id); rows.push({ audience: 'team', user_id: id, email: null, label: null }); } }
+    if (choice.network) for (const id of members.network) { if (!seen.has(id)) { seen.add(id); rows.push({ audience: 'network', user_id: id, email: null, label: null }); } }
+    const sentAt = nowIso();
+    let delivered = 0;
+    for (const rcp of rows) {
+      let via: string | null = null; let reason: string | null = null;
+      if (rcp.user_id != null) {
+        const id = await notify(c.env, {
+          userId: rcp.user_id, type: 'followed_entity_news',
+          title: `${proj?.name ?? 'A company'} shared an update`,
+          body: rcp.audience === 'network' ? 'Asks for the Axal network' : (u.title || null),
+          link: `/updates/${u.uid}`,
+          payload: { update_uid: u.uid, audience: rcp.audience },
+          category: 'proactive_nudges',
+        });
+        if (id != null) { via = 'notification'; delivered += 1; }
+        else reason = 'Not delivered: their notification settings or the inbox refused it';
+      } else {
+        reason = 'No Axal account for this email, so it was not sent';
+      }
+      await c.env.DB.prepare(
+        `INSERT INTO update_recipients (update_id, audience, user_id, email, label, delivered_via, not_delivered_reason) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(u.id, rcp.audience, rcp.user_id, rcp.email, rcp.label, via, reason).run();
+    }
+    await c.env.DB.prepare(
+      `UPDATE portfolio_updates SET status = 'submitted', submitted_at = COALESCE(submitted_at, ?), sent_at = ?, updated_at = ? WHERE id = ?`,
+    ).bind(sentAt, sentAt, sentAt, u.id).run();
+    return c.json({ uid: u.uid, sent_at: sentAt, recipients: rows.length, delivered, not_delivered: rows.length - delivered });
+  } catch (e) { return mapError(c, e); }
+});
+
+async function recipientOf(env: Env, updateId: number, userId: number) {
+  return env.DB.prepare('SELECT * FROM update_recipients WHERE update_id = ? AND user_id = ? ORDER BY id LIMIT 1')
+    .bind(updateId, userId).first<any>();
+}
+
+// GET /api/portfolio-updates/:uid/page — the sent update. The author sees the
+// replies to each ask and who opened it; a recipient sees what their audience
+// may read, and opening it records the open.
+r.get('/:uid/page', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
+    if (!u || !u.sent_at) return c.json({ detail: 'Not found' }, 404);
+    const asks = await asksOf(c.env, u.id);
+    const shape = shareShape(u, asks);
+    const isAuthor = u.author_user_id === user.id || isAdmin(user);
+    if (!isAuthor) {
+      const rcp = await recipientOf(c.env, u.id, user.id);
+      if (!rcp) return c.json({ detail: 'Forbidden' }, 403);
+      if (!rcp.opened_at) await c.env.DB.prepare('UPDATE update_recipients SET opened_at = ? WHERE id = ?').bind(nowIso(), rcp.id).run();
+      return c.json({ uid: u.uid, sent_at: u.sent_at, ...payloadFor(rcp.audience as Audience, shape) });
+    }
+    const replies = await c.env.DB.prepare(
+      `SELECT r.*, a.uid AS ask_uid FROM update_ask_replies r JOIN update_asks a ON a.id = r.ask_id WHERE a.update_id = ? ORDER BY r.id DESC`,
+    ).bind(u.id).all<any>();
+    const recipients = await c.env.DB.prepare(
+      'SELECT audience, user_id, label, delivered_via, not_delivered_reason, opened_at FROM update_recipients WHERE update_id = ? ORDER BY id',
+    ).bind(u.id).all<any>();
+    const byAsk = new Map<string, any[]>();
+    for (const x of replies.results || []) byAsk.set(x.ask_uid, [...(byAsk.get(x.ask_uid) || []), x]);
+    const count = (a: Audience) => (recipients.results || []).filter((x: any) => x.audience === a).length;
+    return c.json({
+      uid: u.uid, sent_at: u.sent_at, ...shape,
+      highlights: shape.highlights, lowlights: shape.lowlights,
+      asks: shape.asks.map((a) => {
+        const rs = byAsk.get(a.uid) || [];
+        const raw = asks.find((x) => x.uid === a.uid);
+        return {
+          ...a,
+          replies: rs.map((x) => ({ uid: x.uid, name: x.name, message: x.message, created_at: x.created_at,
+            landed_module: x.landed_module, landed_reason: x.landed_reason })),
+          can_ask_again: canAskAgain(u.sent_at, rs.length, raw?.asked_again_at ?? null),
+        };
+      }),
+      recipients: recipients.results || [],
+      sent_to: { investors: count('investor'), team: count('team'), network: count('network') },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/portfolio-updates/asks/:askUid/replies — a recipient answers an
+// ask; the reply becomes an item in the module that asked.
+r.post('/asks/:askUid/replies', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const ask = await c.env.DB.prepare(
+      `SELECT a.*, u.uid AS update_uid, u.project_id, u.sent_at, u.author_user_id FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id WHERE a.uid = ?`,
+    ).bind(c.req.param('askUid')).first<any>();
+    if (!ask || !ask.sent_at) return c.json({ detail: 'Not found' }, 404);
+    if (!(await recipientOf(c.env, ask.update_id, user.id))) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    const message = typeof body.message === 'string' ? body.message.trim().slice(0, 4000) : '';
+    if (!message) return c.json({ detail: 'A reply says something', field: 'message' }, 400);
+    const email = typeof body.email === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email.trim()) ? body.email.trim() : (user.email || null);
+    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 200) : (user.name || null);
+    const landed = await landReply(c.env, ask.project_id, { kind: ask.kind, link_ref: ask.link_ref, text: ask.text },
+      { name, email, message, userId: user.id });
+    const uid = newUid();
+    await c.env.DB.prepare(
+      `INSERT INTO update_ask_replies (uid, ask_id, replier_user_id, name, email, message, landed_module, landed_ref, landed_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(uid, ask.id, user.id, name, email, message, landed.module, landed.ref, landed.reason).run();
+    c.executionCtx.waitUntil(notify(c.env, {
+      userId: ask.author_user_id, type: 'followed_entity_news', title: 'A reply to your update',
+      body: ask.text, link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges',
+    }).then(() => undefined).catch(() => undefined));
+    return c.json({ uid, landed_module: landed.module, landed_reason: landed.reason }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/portfolio-updates/asks/:askUid/ask-again — the author re-asks an ask
+// that had no reply after ASK_AGAIN_DAYS.
+r.post('/asks/:askUid/ask-again', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const ask = await c.env.DB.prepare(
+      `SELECT a.*, u.uid AS update_uid, u.sent_at, u.author_user_id FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id WHERE a.uid = ?`,
+    ).bind(c.req.param('askUid')).first<any>();
+    if (!ask || !ask.sent_at) return c.json({ detail: 'Not found' }, 404);
+    if (ask.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const n = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM update_ask_replies WHERE ask_id = ?').bind(ask.id).first<{ n: number }>();
+    if (!canAskAgain(ask.sent_at, Number(n?.n ?? 0), ask.asked_again_at)) {
+      return c.json({ detail: 'An ask can be asked again once it has had no reply for 14 days' }, 409);
+    }
+    const rcps = await c.env.DB.prepare('SELECT user_id FROM update_recipients WHERE update_id = ? AND user_id IS NOT NULL').bind(ask.update_id).all<{ user_id: number }>();
+    for (const x of rcps.results || []) {
+      await notify(c.env, { userId: x.user_id, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
+        link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges' });
+    }
+    await c.env.DB.prepare('UPDATE update_asks SET asked_again_at = ? WHERE id = ?').bind(nowIso(), ask.id).run();
+    return c.json({ uid: ask.uid, asked_again: (rcps.results || []).length });
   } catch (e) { return mapError(c, e); }
 });
 

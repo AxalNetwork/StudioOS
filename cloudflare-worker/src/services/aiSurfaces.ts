@@ -50,6 +50,8 @@ export const AI_SURFACE = {
   onboardingChat: '/onboarding/chat',
   /** HQ · Publications — the drafted headline summary (`/api/admin/publications/draft`). */
   adminPublications: '/admin/publications',
+  /** Grow · Share an update — Eadwyn's draft of the highlights and lowlights (D654, `/api/portfolio-updates/share/draft-lines`). */
+  growUpdate: '/grow/update',
 } as const;
 
 export type AiSurface = (typeof AI_SURFACE)[keyof typeof AI_SURFACE];

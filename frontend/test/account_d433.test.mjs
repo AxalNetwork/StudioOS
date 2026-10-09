@@ -186,7 +186,8 @@ test('Roles & access records the one role and says what has no store', () => {
 });
 
 test('the API-keys card is drawn in either state of the flag, and reads "Not recorded" with the reason', () => {
-  const i = slice(CODE, 'function IntegrationsTab()', 'function BillingTab(');
+  // D651 — the card moved with its tab: Integrations became Connectors.
+  const i = slice(CODE, 'function ConnectorsTab()', 'function BillingTab(');
   assert.doesNotMatch(i, /apiKeysEnabled &&|No keys yet/);
   assert.doesNotMatch(i, /&&\s*<Card title="API keys"/, 'the card is behind a flag again');
   assert.match(i, /^\s*<Card title="API keys"/m, 'the card is drawn unconditionally');

@@ -31,15 +31,17 @@ test('registry lists Carta and DocuSign as beta (Connect), not coming_soon', () 
   assert.match(ds, /auth_type:\s*'oauth2'/);
 });
 
-test('Integrations connect modal has a Crunchbase user_key field', () => {
-  const src = readFileSync(resolve(root, 'frontend/src/pages/IntegrationsPage.jsx'), 'utf8');
-  assert.match(src, /data-testid=\{provider\.key === 'crunchbase' \? 'crunchbase-user-key'/);
+// D651 (#1463) — the connect form moved from the retired IntegrationsPage.jsx
+// into the Connectors sheet's `key` and `pre` views.
+test('the Connectors sheet has a Crunchbase user_key field', () => {
+  const src = readFileSync(resolve(root, 'frontend/src/pages/account/ConnectorSheet.jsx'), 'utf8');
+  assert.match(src, /data-testid=\{p\.key === 'crunchbase' \? 'crunchbase-user-key'/);
   assert.match(src, /Crunchbase Basic user key/);
   assert.match(src, /Daily Basic quota is 200 calls/);
 });
 
-test('DocuSign connect modal sends demo=0|1 and has an account picker', () => {
-  const src = readFileSync(resolve(root, 'frontend/src/pages/IntegrationsPage.jsx'), 'utf8');
+test('the Connectors sheet sends DocuSign demo=0|1 and has an account picker', () => {
+  const src = readFileSync(resolve(root, 'frontend/src/pages/account/ConnectorSheet.jsx'), 'utf8');
   assert.match(src, /data-testid="docusign-env-picker"/);
   assert.match(src, /params\.demo = dsDemo \? '1' : '0'/);
 });

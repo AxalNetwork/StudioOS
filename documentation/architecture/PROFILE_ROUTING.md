@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 139 canonical canvases at `design/canvases/`, listed
-181 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 140 canonical canvases at `design/canvases/`, listed
+183 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 64 canvases
+## Founder — 65 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -54,6 +54,7 @@ it, where in their nav, and how do they get there.*
 | Founder Workspaces Canvas | `/validate` · `/build` · `/raise` · `/grow` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Validate | UPGRADE | High |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Grow · Share an update | `/grow` · `/updates/:uid` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | NEW | Low |
 | Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Raise | OUT OF SCOPE | High |
 | Legal & Capital Engine | `/legal-capital` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
@@ -118,7 +119,7 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Signals | `/signals` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 
-## LP / Investor — 25 canvases
+## LP / Investor — 26 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -128,6 +129,7 @@ it, where in their nav, and how do they get there.*
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Explore the Spin-Out Lab | `/spinout-lab` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | CURRENT | High |
+| Grow · Share an update | `/grow` · `/updates/:uid` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Investor LP Canvas | `/studio` · `/deals` · `/portfolio` · `/funds` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page | Sidebar → Headerless → Portfolio | UPGRADE | High |
@@ -264,7 +266,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 103 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 42 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 36 | Not routed. Proposed route only. |
+| Low | 38 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
