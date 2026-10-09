@@ -71,7 +71,7 @@ function seedAsk(f:any) {
 }
 const checks:Record<string,(m:any)=>Promise<void>>={
   async flag(m){const f=await fixture();const results=[];
-    for(const path of ['/context?project_id=1','/call','/call/responses'])results.push((await request(f,m.routes,path,4,path.endsWith('responses')?'POST':'GET',{action:'question',question:'Private?'},{ROUND_CALLS_ENABLED:undefined})).status);
+    for(const path of ['/context?project_id=1','/call','/call/responses'])results.push((await request(f,m.routes,path,4,path.endsWith('responses')?'POST':'GET',path.endsWith('responses')?{action:'question',question:'Private?'}:undefined,{ROUND_CALLS_ENABLED:undefined})).status);
     const availability=await request(f,m.routes,'/availability',1,'GET',undefined,{ROUND_CALLS_ENABLED:'false'});
     assert.deepEqual([results,availability.body.enabled,count(f.db,'contacts')],[[503,503,503],false,0]);},
   async access(m){const f=await fixture();const statuses=[];

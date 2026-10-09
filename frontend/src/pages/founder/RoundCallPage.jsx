@@ -77,7 +77,7 @@ export function RoundCallPageView({state:s,on}) {
     {d.viewer==='investor'&&<>
       <RecordedCallDeck deck={d.deck}/>
       <section className="space-y-2"><h2 className="font-semibold">Data room</h2>
-        {!d.data_room.recorded?<p>Not recorded · no data room is linked to this call.</p>:d.data_room.path?<Link className="underline" to={d.data_room.path}>Open the NDA-gated data room</Link>:!d.data_room.nda_signed?<><p>A signed NDA is required first. The data room is not exposed here.</p>{!d.read_only&&<button type="button" className={callButton} disabled={s.busy} onClick={on.requestNda}>Request the NDA</button>}</>:<p>NDA signed. The founder must grant access before files can be read.</p>}
+        {!d.data_room.recorded?<p>Not recorded · no data room is linked to this call.</p>:d.data_room.path&&d.data_room.nda_signed&&d.data_room.has_grant?<Link className="underline" to={d.data_room.path}>Open the NDA-gated data room</Link>:!d.data_room.nda_signed?<><p>A signed NDA is required first. The data room is not exposed here.</p>{!d.read_only&&<button type="button" className={callButton} disabled={s.busy} onClick={on.requestNda}>Request the NDA</button>}</>:<p>NDA signed. The founder must grant access before files can be read.</p>}
         {d.data_room.recorded&&d.data_room.nda_signed&&!d.read_only&&<button type="button" className={callButton} disabled={s.busy} onClick={on.requestRoom}>Request data-room access</button>}
       </section>
       {!d.read_only&&<section className="space-y-3"><p>A commitment is an indicative expression of interest, not a payment or a signed investment.</p>
