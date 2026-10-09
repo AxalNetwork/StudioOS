@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeecf1;font-family:Inter,system-ui,sans-serif;color:#18181b;-webkit-font-smoothing:antialiased}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="display:flex;flex-direction:column">
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+    <section style="padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 18px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.015em">{{ r.title }}</span><span style="font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)">{{ r.note }}</span></div>
+      <div style="display:flex;gap:40px;align-items:flex-start">
+        <sc-for list="{{ r.boards }}" as="b" hint-placeholder-count="4">
+          <div style="display:flex;flex-direction:column;gap:10px;flex:none">
+            <div style="display:flex;gap:10px;align-items:center"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</span><span style="font:800 13px Inter,system-ui,sans-serif">{{ b.title }}</span></div>
+            <div style="{{ b.frame }}"><dc-import name="Connectors Page" screen="{{ b.screen }}" phone="{{ b.phone }}" hint-size="100%,100%"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = 'position:relative;width:1440px;height:900px;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#f4f3f7;box-shadow:0 2px 14px rgba(24,24,27,.08)';
+    const M = 'position:relative;width:390px;height:844px;border:10px solid #18181b;border-radius:40px;overflow:hidden;background:#f4f3f7';
+    let n = 0;
+    const B = (title, screen, phone) => ({ id: 'C' + (++n), title, screen, phone: !!phone, frame: phone ? M : D });
+    return { rows: [
+      { title: 'Where it lives', note: 'The user menu gains Connectors under Usage; the page is a section of the Account center. Old /account/integrations lands here with one line.', boards: [B('User menu open', 'menu'), B('Moved from Integrations', 'moved'), B('Add ▾ menu', 'add')] },
+      { title: 'Yours', note: 'A table of connected tools: category, what it does, what it feeds, which companies, last sync, status. One needs attention.', boards: [B('Yours · [6] connectors', 'yours'), B('Yours · empty', 'yoursEmpty'), B('Phone · Yours', 'yours', true)] },
+      { title: 'Discover', note: 'Category chips, Suggested for you with reasons, Top connectors, Coming soon. A check badge marks connectors built and verified by Axal.', boards: [B('Discover', 'discover'), B('Discover · CRM', 'discoverCat'), B('Phone · Discover', 'discover', true)] },
+      { title: 'The connector sheet', note: 'What it pulls in and sends out, permissions in plain words, companies, sync, activity, and Disconnect with what happens.', boards: [B('Stripe · Connected', 'sheetStripe'), B('HubSpot · Needs attention', 'sheetHubspot'), B('Phone · Stripe sheet', 'sheetStripe', true)] },
+      { title: 'Connecting', note: 'Pre-screen, the tool\u2019s own sign-in or an API key, then Connected with the first sync and the modules that gained data.', boards: [B('1 · Pre-screen', 'pre'), B('2 · Sign-in (external window)', 'signin'), B('2 · API key', 'key'), B('3 · Connected', 'connected')] },
+      { title: 'Connecting · states', note: 'Cancelled, refused, invalid key, a sign-in asking for more than StudioOS uses, a Pro connector on Free, a teammate\u2019s existing connection.', boards: [B('Sign-in cancelled', 'cancelled'), B('Access refused', 'refused'), B('Key not valid', 'badkey'), B('Asks for too much', 'overreach'), B('Pro on Free', 'pro'), B('Teammate already connected', 'teammate')] },
+      { title: 'Connectors in Eadwyn', note: 'The composer\u2019s + menu, the Connectors list with a switch per conversation, a source named on each answer, and nothing sent without Send.', boards: [B('Rail · + menu', 'rail'), B('Rail · Connectors list', 'railList'), B('Phone · rail menu', 'railList', true)] },
+      { title: 'Forms and states', note: 'Add a custom connector (Pro), request a connector, loading, unreadable, no results.', boards: [B('Add a custom connector', 'custom'), B('Request a connector', 'request'), B('Loading', 'loading'), B('Unreadable', 'unreadable'), B('No results', 'noresults')] },
+    ] };
+  }
+}
+</script>
+</body></html>

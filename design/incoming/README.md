@@ -723,3 +723,54 @@ Match a later export to these files by the Claude Design names above.
 What was built, and what waits on the owner, is in
 `documentation/architecture/decisions/D593.md` and the `ROUTE_MAP.md` rows
 for each route.
+
+## Landed 2026-10-09 — Connectors and the cycle actions (D649, #1461)
+
+The owner shared two artifacts on 2026-10-09:
+- `La8TWdcedFRfFRhiF5wrMv`: the Connectors page;
+- `HxBPFULwiHvfag1BbxiRwa`: its board.
+
+Both were decoded with `scripts/read-canvas.mjs`. Both import the same third canvas, `Cycle Action`, which is committed as decoded from the bundle. Connectors replace Integrations, and appear in the user menu.
+
+| Canvas | Screens | Routes | Grade | Issues |
+| --- | --- | --- | --- | --- |
+| `Connectors Page.dc.html` | 26 screens: Yours, Discover, the user menu, the Add menu, the redirect, the connector sheet, the connect flow and its states, the forms, the rail, and the page states | `/account/connectors` (replacing `/account/integrations`) | UPGRADE | #1462, #1463, #1464 |
+| `Cycle Action.dc.html` | the side sheets: Build's "Connect a tool" (`connect`), Raise's "Call for Capital" (`call`), Grow's "Share an update" (`update`), and the connector sheet (`connector`) | the headers of `/build`, `/raise` and `/grow` | NEW | #1463, #1465, #1466, #1467 |
+| `Connectors · Boards.dc.html` | the board: eight rows of frames, C1 onwards | — | — | #1461 |
+
+Every figure in them is a bracketed placeholder.
+
+**"Call for Capital" is stored as `round_calls`.** `capital_calls` is already a GP's call on its LPs. It ships behind a flag until counsel answers the general-solicitation question on #1008.
+
+Move each file to `canvases/integrated/` once its bodies are built.
+
+## Landed 2026-10-09 — the four cycles and the interview session (D656, #1469)
+
+The owner shared seven artifacts on 2026-10-09:
+- `NyLYXDDmQBEvWcAJymQa37`: the Cycle Overview canvas;
+- `Fxui55FyoHTWvTDi1iXysL`: the overview board;
+- `1X7wXqoDBNe3uWn8UusEGn`: the module board;
+- `LXcVAvZXP2NGQnNxKVQya7`: the cycle actions board;
+- `RazxF7VUNpr5S1k78A7xDT`: the Recording View;
+- `3xHppg2QRN4HD78fR2VmW1`: its board;
+- `Er5G9JWKahz5Mpz6VzUf9Z`: the Interview Session.
+
+Each was unpacked from its bundle. Every nested `Cycle Overview`, `Cycle Action` and `AIRail` copy was byte-identical, so each is committed once. `pro-cycles.js` and `ring-viz.js` are the two data and drawing scripts the canvases load by name.
+
+| Canvas | Screens | Routes | Grade | Issues |
+| --- | --- | --- | --- | --- |
+| `Cycle Overview.dc.html` + `pro-cycles.js` | One component for all four cycles: the overview (`full`, `new`, `states`) and each module's page (`module` 0–6) | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` | UPGRADE | #1472, #1474, #1475, #1476, #1477 |
+| `Cycle Overview · Boards.dc.html` | O1–O5 | — | — | #1469 |
+| `Cycle Modules · Boards.dc.html` | MV1–MV6, MB1–MB6, MR1–MR7, MG1–MG7 | — | — | #1469 |
+| `Cycle Actions · Boards.dc.html` | Each cycle's primary action as its own page, with every step and state | — | — | #1469 |
+| `Cycle Action.dc.html` (updated) | Adds `action=record`: Validate's "Record a session" | Validate's header | NEW | #1473 |
+| `Interview Session.dc.html` | `start`, `record`, `liveoff`, `text`, `review`, with the speech-to-text and structuring model rail | `/validate/session/:id` | NEW | #1470, #1471, #1473 |
+| `Recording View.dc.html` + `ring-viz.js` | The phone recording view with its 11 states, light and dark | the same route, full-screen on a phone | NEW | #1473 |
+| `Recording View · Boards.dc.html` | RV1–RV12 | — | — | #1473 |
+| `AIRail.dc.html` (updated) | "Recommended" now reads "Default" | — | — | — |
+
+Every figure in them is a bracketed placeholder.
+
+The speech-to-text and structuring models named in the rail are Cloudflare Workers AI models. Their prices come from the Workers AI catalogue, never from the canvas.
+
+Move each file to `canvases/integrated/` once its bodies are built.
