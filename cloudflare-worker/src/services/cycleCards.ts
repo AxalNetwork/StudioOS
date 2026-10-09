@@ -69,7 +69,7 @@ export async function settleCard(meta: { slug: string; name: string; range: stri
     const c = await compute();
     return { slug: meta.slug, name: meta.name, caption: c.caption ?? meta.caption, ...c, range: c.range ?? meta.range };
   } catch (e) {
-    console.error(`[cycleCards] ${meta.slug} unreadable:`, (e as Error).message);
+    console.error('[cycleCards] card unreadable:', meta.slug, (e as Error).message);
     return {
       slug: meta.slug, name: meta.name, state: 'unreadable', range: meta.range, caption: meta.caption,
       series: null, next: null, reason: `Unreadable: ${meta.source} could not be read`,

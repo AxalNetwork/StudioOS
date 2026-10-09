@@ -141,7 +141,7 @@ async function companyOf(env: Env, projectId: number): Promise<number | null> {
 export async function growFigures(x: Ctx): Promise<Figure[]> {
   const settle = async (key: string, label: string, unit: string, f: () => Promise<Figure>): Promise<Figure> => {
     try { return await f(); } catch (e) {
-      console.error(`[growCycle] figure ${key} unreadable:`, (e as Error).message);
+      console.error('[growCycle] figure unreadable:', key, (e as Error).message);
       return { ...notRecordedFigure(key, label, unit, `Unreadable: ${label} could not be read`), state: 'unreadable' };
     }
   };

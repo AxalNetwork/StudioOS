@@ -219,7 +219,7 @@ r.get('/modules/:slug', async (c) => {
     const card = await cardFor(x, meta.slug);
     let recs: RecordSet;
     try { recs = await recordsFor(x, meta.slug); } catch (e) {
-      console.error(`[cycle_grow] ${meta.slug} records unreadable:`, (e as Error).message);
+      console.error('[cycle_grow] records unreadable:', meta.slug, (e as Error).message);
       return c.json({ module: meta.slug, card, records: null, records_state: 'unreadable', reason: `Unreadable: ${meta.source} could not be read` });
     }
     const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 120), String(c.req.query('sort') || '').slice(0, 60));
