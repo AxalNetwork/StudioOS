@@ -11,6 +11,7 @@ runs these directly against an in-process SQLite, with no request at all.
 
 | File | Why it matters |
 | --- | --- |
+| `roundCallPolicy.ts` | D653's default-off flag, verification, terms approval, recorded readiness, strict matching and pre-response identity projection. |
 | `profileEvidenceBlend.ts` | D592's bounded skill-level blend and audited default-off settings read; snapshot versions name the switch state. Only the Super Admin writes through `profile_evidence_blend.ts`; the owner activates it after the synthetic comparison. |
 | `tenancyScope.ts` | **The one place row-level scoping is decided.** Returns composable SQL clauses (`esignEnvelopeScope`, `fundGpScope`, `lpMembershipScope`) and fails closed — an actor it cannot identify gets `NO_ROWS`, not everything. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
