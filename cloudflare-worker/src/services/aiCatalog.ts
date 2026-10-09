@@ -67,6 +67,7 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/baai/bge-base-en-v1.5': 'BGE Base EN v1.5 (embeddings)',
   '@cf/openai/whisper': 'Whisper',
   '@cf/openai/whisper-large-v3-turbo': 'Whisper Large v3 Turbo',
+  '@cf/deepgram/nova-3': 'Nova-3',
 };
 
 /**

@@ -62,6 +62,15 @@ Connectors replace Integrations (D649). `/integrations` and `/account/integratio
 | `Connectors Page.dc.html` · `rail`, `railList` | the AI rail | #1464 (D652) | NEW |
 | `Cycle Action.dc.html` · `connect`: `list`, `failed`, `locked`, `loading`, `refused`, `success` | `/build`'s header, "Connect a tool" | `pages/account/ConnectToolSheet.jsx` in `pages/founder/FounderBuildDesk.jsx`; the same catalogue and sheet | UPGRADE: the `sync` view (GitHub repositories) waits on #1467 (D655) |
 
+### Cycle overviews and module pages (D661, #1474)
+
+The components are built in `frontend/src/pages/cycles/` and are not mounted yet: each cycle keeps its current page until its read from #1469 (D656) is on `main`. D661 gives the shape D656 left open for `Card.series` and the records.
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| `Cycle Overview.dc.html` · `variant=full`, `new`, `states` (O1–O5) | `/validate`, `/build`, `/raise`, `/grow`: the current pages stay until each read lands | `pages/cycles/CycleOverview.jsx`; `GET /api/cycles/:cycle/overview` (#1472, #1475, #1476, #1477) | NEW: built, waiting on the reads |
+| `Cycle Overview.dc.html` · `module=0…6`; `Cycle Modules · Boards.dc.html` (MV1–MG7, 26 pages) | `/:cycle/:slug` once mounted; old module URLs redirect then | `pages/cycles/CycleModulePage.jsx`; `GET /api/cycles/:cycle/modules/:slug` | NEW: built, waiting on the reads |
+
 D631 (#1389), Ops area 6:
 
 | Canvas | Live route | Component and Worker | Status |
@@ -79,6 +88,18 @@ D631 (#1389), Ops area 6:
 | `DEFERRED` | Persona hub canvas. Held until `/studio`'s future iteration. |
 
 ---
+
+
+### Interview sessions Worker contract (D657, #1470)
+
+`founder_validate_sessions.ts` is mounted on `/api/founder/validate` beside `founder_validate.ts` (migration 438). A session hangs off a `discovery_interviews` row, so a Spin-Out Lab venture's interviews get it unchanged. Every route but the model list is gated on `canWrite`.
+- `GET /sessions/models` lists the live and final speech-to-text models, priced from the router's own tables, with their tags.
+- `POST /interviews/:id/sessions` opens a session (channel, consent to record, models). `GET /interviews/:id/sessions` lists them, and `GET /sessions/:id` returns segments, marks and chunks.
+- `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`.
+- `PUT /sessions/:id/chunks/:seq` stores one audio chunk, idempotent by sequence number. `POST /sessions/:id/marks` marks a moment.
+- `GET /sessions/:id/live` is the WebSocket for the live transcript (Nova-3 or Flux). It is 409 `live_off` when live is off.
+- `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.
+- `GET /sessions/:id/receipt` returns each job's cost and the budget left. `DELETE /sessions/:id` deletes the session, its R2 audio, and writes an audit row.
 
 ## Founder / admin / advisor / partner — part 1 (29 canvases)
 

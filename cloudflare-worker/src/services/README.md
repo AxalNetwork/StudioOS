@@ -73,3 +73,14 @@ only its card unreadable) and paging. `growCycle.ts` computes the Grow figures
 and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
+
+D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
+- `interviewSessions.ts` holds the rules:
+  - consent to record before an audio channel starts;
+  - chunks stored once per sequence number;
+  - the duration measured on the Worker's clock;
+  - the final transcript replacing the live draft and copied to `discovery_interviews.transcript`;
+  - deletion that removes the R2 audio and writes an audit row.
+- `sttFormats.ts` has, for each speech-to-text model, its request and response shapes and its live events, plus the speaker labels.
+- `sttModels.ts` lists the models the rail offers, priced from `aiRouter`'s own tables.
+- `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed.

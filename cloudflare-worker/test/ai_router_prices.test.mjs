@@ -283,11 +283,14 @@ test('no alternate is a model the price table cannot price', async () => {
   // choice the rail offers and then cannot put a rate beside — and the rail
   // drops a model it cannot price, so the menu would silently lose an entry
   // rather than fail.
+  // An audio task is priced by the minute (D657 gave `transcribe` a menu), so
+  // its alternates are read against the per-minute table.
   const src = await source();
   const prices = pricesFrom(src);
+  const audio = audioPricesFrom(src);
   for (const [task, list] of alternatesByTask(src)) {
     for (const model of list) {
-      assert.ok(prices.has(model), `${task} offers ${model}, which has no price row`);
+      assert.ok(prices.has(model) || audio.has(model), `${task} offers ${model}, which has no price row`);
     }
   }
 });
