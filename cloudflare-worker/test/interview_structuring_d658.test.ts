@@ -35,7 +35,6 @@ import {
 import sessionsApp from '../src/routes/founder_validate_sessions.ts';
 import cycleValidate from '../src/routes/cycle_validate.ts';
 import { tableFromBaseline } from './_baseline.mjs';
-import { STRUCTURE_RECEIPTS_SQL } from './_structure_receipts_schema.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 import structure, { storePlacements, loadStructureContext } from '../src/routes/founder_validate_structure.ts';
@@ -81,10 +80,9 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
-    '440_validate_cycle_stores.sql']) {
+    '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql']) {
     db.exec(mig(m));
   }
-  db.exec(STRUCTURE_RECEIPTS_SQL);
   db.exec(`
     INSERT INTO hypotheses (id, project_id, code, claim) VALUES (31, ${PROJECT}, 'H1', 'Finance leads reconcile by hand');
     INSERT INTO pain_groups (id, project_id, title) VALUES (41, ${PROJECT}, 'Manual reconciliation'), (42, ${PROJECT}, 'Cost');
