@@ -40,7 +40,7 @@ const checks: Record<string, (p: any) => Promise<void> | void> = {
     assert.equal(p.readiness({ ...terms, data_room_project_uid: null }, {}).find((item: any) => item.key === 'data_room').ready, false); },
   match(p) { assert.equal(p.matchReasons(terms, thesis, 'Energy storage').length, 4);
     for (const change of [{ sectors_json: '["Finance"]' }, { stages_json: '["Series A"]' },
-      { thesis_keywords_json: '["unrelated"]' }, { ticket_min_usd: 30000 }, { ticket_max_usd: 20000 },
+      { thesis_keywords_json: '["unrelated"]' }, { ticket_min_usd: 2000000 }, { ticket_max_usd: 20000 },
       { ticket_min_usd: null }, { anti_thesis_sectors_json: '["Climate"]' }, { anti_thesis_stages_json: '["Seed"]' }])
       assert.deepEqual(p.matchReasons(terms, { ...thesis, ...change }, 'Energy storage'), []);
     assert.deepEqual(p.matchReasons({ ...terms, sector: null }, thesis, 'Energy'), []); },
@@ -81,7 +81,7 @@ const mutations = [
   ['readiness', 'call.data_room_project_uid != null', 'true'],
   ['match', '!list(profile.sectors_json).includes(sector)', 'false'],
   ['match', '!list(profile.stages_json).includes(stage)', 'false'],
-  ['match', 'minimum < profile.ticket_min_usd', 'false'],
+  ['match', 'call.amount_cents / 100 < profile.ticket_min_usd', 'false'],
   ['match', 'minimum > profile.ticket_max_usd', 'false'],
   ['match', 'list(profile.anti_thesis_sectors_json).includes(sector)', 'false'],
   ['match', 'list(profile.anti_thesis_stages_json).includes(stage)', 'false'],
