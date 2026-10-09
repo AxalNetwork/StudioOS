@@ -765,8 +765,8 @@ Each was unpacked from its bundle. Every nested `Cycle Overview`, `Cycle Action`
 | `Cycle Actions · Boards.dc.html` | Each cycle's primary action as its own page, with every step and state | — | — | #1469 |
 | `Cycle Action.dc.html` (updated) | Adds `action=record`: Validate's "Record a session" | Validate's header | NEW | #1473 |
 | `Interview Session.dc.html` | `start`, `record`, `liveoff`, `text`, `review`, with the speech-to-text and structuring model rail | `/validate/session/:id` | NEW | #1470, #1471, #1473 |
-| `Recording View.dc.html` + `ring-viz.js` | The phone recording view with its 11 states, light and dark | the same route, full-screen on a phone | NEW | #1473 |
-| `Recording View · Boards.dc.html` | RV1–RV12 | — | — | #1473 |
+| `Recording View.dc.html` + `ring-viz.js` | The phone recording view with its 11 states, light and dark. **Moved to `canvases/integrated/` by D660.** | the same route, full-screen on a phone | NEW | #1473 |
+| `Recording View · Boards.dc.html` | RV1–RV12. **Moved to `canvases/integrated/` by D660.** | — | — | #1473 |
 | `AIRail.dc.html` (updated) | "Recommended" now reads "Default" | — | — | — |
 
 Every figure in them is a bracketed placeholder.
