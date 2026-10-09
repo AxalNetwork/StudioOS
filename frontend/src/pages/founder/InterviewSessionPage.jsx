@@ -5,6 +5,7 @@ import { createCapture, indexedDbQueue } from '../../lib/interviewCapture';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView, { recordingState } from './RecordingView';
 import { ModelList, AUDIO } from './RecordSessionSheet';
+import InterviewReview from './InterviewReview';
 
 /**
  * Validate › an interview session (D660, #1473), at `/validate/session/:id`, to
@@ -125,6 +126,65 @@ export function SessionRail({ session, models, receipt }) {
         ) : <p className="text-axal-faint">{receipt === null ? 'Unreadable' : 'Reading…'}</p>}
       </section>
     </aside>
+  );
+}
+
+/**
+ * The review step's calls (D658, #1494), as functions over a state setter so
+ * a test can drive them with a fake API. Each failure is kept as the thrown
+ * error, so `InterviewReview` can tell a budget refusal from a writer's
+ * refusal from a citation refusal by the Worker's own fields.
+ */
+export function makeReviewActions({ api, sessionId, set, onSpent }) {
+  const reload = async () => {
+    try { const read = await api.placements(sessionId); set((st) => ({ ...st, read })); } catch { set((st) => ({ ...st, read: null })); }
+  };
+  return {
+    reload,
+    async structure(model) {
+      set((st) => ({ ...st, running: true, runError: null }));
+      try { await api.structure(sessionId, model); await reload(); } catch (e) { set((st) => ({ ...st, runError: e })); }
+      set((st) => ({ ...st, running: false }));
+      onSpent?.();
+    },
+    async accept(id, payload) {
+      set((st) => ({ ...st, busyId: id, errors: { ...st.errors, [id]: null } }));
+      try { await api.accept(id, payload); await reload(); } catch (e) { set((st) => ({ ...st, errors: { ...st.errors, [id]: e } })); }
+      set((st) => ({ ...st, busyId: null }));
+    },
+    async discard(id) {
+      set((st) => ({ ...st, busyId: id, errors: { ...st.errors, [id]: null } }));
+      try { await api.discard(id); await reload(); } catch (e) { set((st) => ({ ...st, errors: { ...st.errors, [id]: e } })); }
+      set((st) => ({ ...st, busyId: null }));
+    },
+    async ask(question) {
+      set((st) => ({ ...st, ask: { busy: true, result: null, error: null } }));
+      try {
+        const result = await api.ask(sessionId, question);
+        set((st) => ({ ...st, ask: { busy: false, result, error: null } }));
+      } catch (e) {
+        set((st) => ({ ...st, ask: { busy: false, result: null, error: e } }));
+      }
+      onSpent?.();
+    },
+  };
+}
+
+export const REVIEW_INITIAL = { read: undefined, running: false, runError: null, errors: {}, busyId: null, ask: {} };
+
+/** The review step, mounted: reads the placements and wires each action. */
+export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent }) {
+  const [st, setSt] = useState(REVIEW_INITIAL);
+  const actions = React.useMemo(() => makeReviewActions({ api, sessionId, set: setSt, onSpent }), [api, sessionId, onSpent]);
+  useEffect(() => { actions.reload(); }, [actions]);
+  if (st.read === undefined) return <p className="text-[13px] text-axal-faint">Reading the placements…</p>;
+  if (st.read === null) return <p role="alert" className="text-[13px] text-red-700 dark:text-red-400">Unreadable: the placements could not be read.</p>;
+  return (
+    <InterviewReview
+      theme={theme} read={st.read} running={st.running} runError={st.runError} errors={st.errors} busyId={st.busyId}
+      onAccept={actions.accept} onDiscard={actions.discard} onStructure={actions.structure}
+      ask={st.ask} onAsk={actions.ask} receiptItems={receiptItems}
+    />
   );
 }
 
@@ -293,6 +353,12 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
               <button type="button" onClick={async () => { try { await api.transcribe(session.id, session.final_model); } catch (e) { setError(e?.message); } load(); loadReceipt(); }} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white">Transcribe</button>
             )}
             <TranscriptReview segments={segments} intervieweeName={intervieweeName} onAssign={assign} />
+            {['transcribed', 'structured', 'reviewed'].includes(session.status) && (
+              <section data-testid="session-review" className="space-y-2">
+                <h2 className="text-[16px] font-bold">Review</h2>
+                <ReviewStep api={api} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
+              </section>
+            )}
             {marks.length > 0 && (
               <ul className="text-[12px] text-axal-muted">{marks.map((m) => <li key={m.id}>Marked at {Math.floor(m.offset_ms / 60000)}:{String(Math.floor((m.offset_ms % 60000) / 1000)).padStart(2, '0')}{m.label ? ` · ${m.label}` : ''}</li>)}</ul>
             )}

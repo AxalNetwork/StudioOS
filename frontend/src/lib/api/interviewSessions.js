@@ -14,6 +14,12 @@
 //   setSpeaker       PATCH  /sessions/:id/segments/:segId
 //   sessionReceipt   GET    /sessions/:id/receipt
 //   deleteSession    DELETE /sessions/:id
+// D658 (#1494), the review step:
+//   placements       GET    /sessions/:id/placements    every run's placements, and compare
+//   structure        POST   /sessions/:id/structure     { model? } → a new run
+//   askTranscript    POST   /sessions/:id/ask           { question } → an answer with cites, or 422 no_citation
+//   acceptPlacement  POST   /placements/:id/accept      { payload? } (an edit, then accept)
+//   discardPlacement POST   /placements/:id/discard
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -59,4 +65,15 @@ export const interviewSessionsApi = {
   }),
   receipt: (id) => request(`${P}/sessions/${enc(id)}/receipt`),
   remove: (id) => request(`${P}/sessions/${enc(id)}`, { method: 'DELETE' }),
+  placements: (id) => request(`${P}/sessions/${enc(id)}/placements`),
+  structure: (id, model) => request(`${P}/sessions/${enc(id)}/structure`, {
+    method: 'POST', body: JSON.stringify(model ? { model } : {}),
+  }),
+  ask: (id, question) => request(`${P}/sessions/${enc(id)}/ask`, {
+    method: 'POST', body: JSON.stringify({ question }),
+  }),
+  accept: (placementId, payload) => request(`${P}/placements/${enc(placementId)}/accept`, {
+    method: 'POST', body: JSON.stringify(payload ? { payload } : {}),
+  }),
+  discard: (placementId) => request(`${P}/placements/${enc(placementId)}/discard`, { method: 'POST' }),
 };
