@@ -525,13 +525,13 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
   const local = row.external_account_id
     ? await env.DB.prepare(
         `SELECT id, envelope_uuid, status FROM esign_envelopes
-          WHERE provider = 'docusign' AND user_id = ?
+          WHERE provider = 'docusign' AND created_by = ?
             AND docusign_envelope_id = ?
             AND (docusign_account_id IS NULL OR docusign_account_id = ?)`,
       ).bind(row.user_id, dsEnvelopeId, row.external_account_id).first<{ id: number; envelope_uuid: string; status: string }>()
     : await env.DB.prepare(
         `SELECT id, envelope_uuid, status FROM esign_envelopes
-          WHERE provider = 'docusign' AND user_id = ? AND docusign_envelope_id = ?`,
+          WHERE provider = 'docusign' AND created_by = ? AND docusign_envelope_id = ?`,
       ).bind(row.user_id, dsEnvelopeId).first<{ id: number; envelope_uuid: string; status: string }>();
   if (!local) return { status: 'unknown', updated: false };
   const res = await dsFetch(env, row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}`);
@@ -742,7 +742,7 @@ async function syncIntegration(env: Env, row: IntegrationRow): Promise<{ summary
   }
   const inflight = await env.DB.prepare(
     `SELECT docusign_envelope_id FROM esign_envelopes
-      WHERE provider = 'docusign' AND user_id = ?
+      WHERE provider = 'docusign' AND created_by = ?
         AND docusign_envelope_id IS NOT NULL
         AND docusign_account_id = ?
         AND status IN ('sent','partially_signed')

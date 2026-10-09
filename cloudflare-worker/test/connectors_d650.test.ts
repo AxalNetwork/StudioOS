@@ -125,6 +125,25 @@ test('personal connectors continue syncing for their owner with no enabled compa
   db.close();
 });
 
+test('DocuSign reconciliation follows the sender, even when the recipient is another connected user', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE esign_envelopes(id INTEGER PRIMARY KEY, envelope_uuid TEXT, user_id INTEGER, created_by INTEGER,
+    provider TEXT, docusign_envelope_id TEXT, docusign_account_id TEXT, status TEXT);
+    INSERT INTO esign_envelopes VALUES (1, 'from-first', 2, 1, 'docusign', 'remote-1', 'shared-account', 'sent'),
+      (2, 'from-second', 1, 2, 'docusign', 'remote-2', 'shared-account', 'sent');`);
+  const source = readFileSync('cloudflare-worker/src/integrations/providers/docusign.ts', 'utf8');
+  const lookups = [...source.matchAll(/`(SELECT id, envelope_uuid, status FROM esign_envelopes[\s\S]*?)`/g)].map((match) => match[1]);
+  assert.equal(lookups.length, 2);
+  assert.equal(db.prepare(lookups[0]).get(1, 'remote-1', 'shared-account')?.envelope_uuid, 'from-first');
+  assert.equal(db.prepare(lookups[0]).get(1, 'remote-2', 'shared-account'), undefined);
+  assert.equal(db.prepare(lookups[1]).get(1, 'remote-1')?.envelope_uuid, 'from-first');
+  assert.equal(db.prepare(lookups[1]).get(1, 'remote-2'), undefined);
+  const sweep = source.match(/`(SELECT docusign_envelope_id FROM esign_envelopes[\s\S]*?)`/);
+  assert.ok(sweep);
+  assert.deepEqual(db.prepare(sweep[1]).all(1, 'shared-account').map((row) => ({ ...row })), [{ docusign_envelope_id: 'remote-1' }]);
+  db.close();
+});
+
 test('request and suggestions are company-scoped; request list is Super Admin only', async () => {
   const { db, env } = fixture();
   const requested = await call(env, 'POST', '/api/connectors/requests', { tool: 'Tool X', use: 'Customer records' });
@@ -155,6 +174,21 @@ test('OAuth overreach and generic settings are validated before persistence', ()
   assert.equal(scheduledSyncDue('{"sync_frequency":"manual"}', null), false);
   assert.equal(scheduledSyncDue('{"sync_frequency":"hourly"}', '2026-10-09 12:00:00', Date.parse('2026-10-09T12:30:00Z')), false);
   assert.equal(scheduledSyncDue('{"sync_frequency":"hourly"}', '2026-10-09 12:00:00', Date.parse('2026-10-09T13:01:00Z')), true);
+});
+
+test('sync frequency and send modes persist on the owner connection only', async () => {
+  const { db, env } = fixture();
+  db.exec("INSERT INTO integrations(id, uid, user_id, provider_key, auth_type, config_json) VALUES (11, 'settings-own', 1, 'hubspot', 'oauth2', '{}')");
+  const changed = await call(env, 'PATCH', '/api/connectors/settings-own/config', {
+    sync_frequency: 'daily', send_modes: { 'HubSpot deal': 'ask' },
+  });
+  assert.equal(changed.status, 200);
+  assert.deepEqual(JSON.parse(db.prepare('SELECT config_json FROM integrations WHERE id = 11').get()?.config_json as string), {
+    sync_frequency: 'daily', send_modes: { 'HubSpot deal': 'ask' },
+  });
+  assert.equal((await call(env, 'PATCH', '/api/connectors/settings-own/config', { sync_frequency: 'sometimes' })).status, 400);
+  assert.equal((await call(env, 'PATCH', '/api/connectors/settings-own/config', { sync_frequency: 'manual' }, 10, 2)).status, 404);
+  db.close();
 });
 
 test('Free cannot connect a studio-tier provider; overreach is logged without saving a connection', async () => {
