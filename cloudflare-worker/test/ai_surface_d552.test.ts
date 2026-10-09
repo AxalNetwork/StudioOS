@@ -182,6 +182,8 @@ const FORWARDED: Record<string, string[]> = {
 /** Every call site's fixed name, by file — the table D552.md lists. */
 const EXPECTED: Record<string, string[]> = {
   'routes/founder_validate.ts': ['AI_SURFACE.validate', 'AI_SURFACE.validateInterviews'],
+  // D657 — a session's final transcript, on the same page as the interview log.
+  'routes/founder_validate_sessions.ts': ['AI_SURFACE.validateInterviews'],
   'routes/research.ts': ['AI_SURFACE.researchAsk'],
   'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'],
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],

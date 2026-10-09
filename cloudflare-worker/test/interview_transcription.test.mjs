@@ -167,7 +167,7 @@ test('the advisor mic is metered now, and calls no model directly', async () => 
   assert.match(handler, /refusal: r\.refusal/);
 });
 
-test('transcribe offers no model choice, and says why', async () => {
+test('transcribe offers the D657 choice, falls back only to the default, and is never cached', async () => {
   const src = await router();
   const body = src.slice(src.indexOf('export const ROUTE'));
   const entries = [...body.matchAll(/^ {2}([a-z_]+):\s*\{/gm)];
@@ -175,12 +175,19 @@ test('transcribe offers no model choice, and says why', async () => {
   assert.ok(i >= 0, 'transcribe is not a ROUTE entry');
   const to = i + 1 < entries.length ? entries[i + 1].index : body.length;
   const entry = body.slice(entries[i].index, to);
-  // Two models at one price with no meaningful difference is a control that
-  // cannot change anything — D13's own objection to the original menu.
-  assert.doesNotMatch(entry, /alternates/, 'transcribe offers a choice between equals');
-  assert.doesNotMatch(entry, /fallbackChain/,
-    'a fallback between two models at one price doubles the bill for a clip that fails twice');
+  // D657 (#1470): the owner asked for a choice — Turbo by default, Nova-3
+  // batch for speaker labels, the base Whisper for the lowest price. Whisper
+  // Tiny EN has no published price, and an unpriced model bills as zero.
+  assert.match(entry, /alternates: \['@cf\/openai\/whisper-large-v3-turbo', '@cf\/deepgram\/nova-3', '@cf\/openai\/whisper'\]/);
+  assert.doesNotMatch(entry, /tiny/i, 'an unpriced model is offered');
+  // The fallback goes one way, to the default; the router filters out the
+  // model that just failed, so Turbo never retries itself.
+  assert.match(entry, /fallbackChain: \['@cf\/openai\/whisper-large-v3-turbo'\]/);
   assert.match(entry, /isAudio: true/);
   assert.doesNotMatch(entry, /cacheTtlSec/,
     'a cached transcription would return one clip\'s words for another');
+  const { audio } = await costFn();
+  for (const m of ['@cf/openai/whisper-large-v3-turbo', '@cf/deepgram/nova-3', '@cf/openai/whisper']) {
+    assert.ok(audio[m] > 0, `${m} is offered with no per-minute price`);
+  }
 });
