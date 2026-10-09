@@ -20,6 +20,7 @@ export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReports.js';
 export * from './api/helpCenter.js';
+export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/memberCredits.js';

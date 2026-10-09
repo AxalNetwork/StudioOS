@@ -1,0 +1,62 @@
+// D660 (#1473) — the pages of "Record a session", on D657's Worker routes
+// (routes/founder_validate_sessions.ts, migration 438), under
+// /api/founder/validate.
+//   sessionModels    GET    /sessions/models            live and final models, each priced
+//   createSession    POST   /interviews/:id/sessions    channel, consent, models
+//   listSessions     GET    /interviews/:id/sessions
+//   getSession       GET    /sessions/:id               session, segments, marks, chunks
+//   setConsent       PATCH  /sessions/:id/consent
+//   sessionAction    POST   /sessions/:id/{start,pause,resume,stop}
+//   uploadChunk      PUT    /sessions/:id/chunks/:seq   one audio chunk; a repeat is `duplicate`
+//   markMoment       POST   /sessions/:id/marks
+//   liveSocketUrl    GET    /sessions/:id/live          WebSocket, linear16 at 16 kHz
+//   transcribe       POST   /sessions/:id/transcribe
+//   setSpeaker       PATCH  /sessions/:id/segments/:segId
+//   sessionReceipt   GET    /sessions/:id/receipt
+//   deleteSession    DELETE /sessions/:id
+import { request } from '../api.js';
+
+const enc = encodeURIComponent;
+const P = '/founder/validate';
+const ACTIONS = new Set(['start', 'pause', 'resume', 'stop']);
+
+export const interviewSessionsApi = {
+  models: () => request(`${P}/sessions/models`),
+  create: (interviewId, data) => request(`${P}/interviews/${enc(interviewId)}/sessions`, {
+    method: 'POST', body: JSON.stringify(data),
+  }),
+  list: (interviewId) => request(`${P}/interviews/${enc(interviewId)}/sessions`),
+  get: (id) => request(`${P}/sessions/${enc(id)}`),
+  setConsent: (id, status, method) => request(`${P}/sessions/${enc(id)}/consent`, {
+    method: 'PATCH', body: JSON.stringify({ status, method }),
+  }),
+  action: (id, action) => {
+    if (!ACTIONS.has(action)) throw new Error(`Unknown session action: ${action}`);
+    return request(`${P}/sessions/${enc(id)}/${action}`, { method: 'POST' });
+  },
+  uploadChunk: (id, seq, blob, startMs) => request(`${P}/sessions/${enc(id)}/chunks/${enc(seq)}`, {
+    method: 'PUT',
+    body: blob,
+    headers: {
+      'Content-Type': (blob && blob.type) || 'audio/webm',
+      ...(Number.isSafeInteger(startMs) && startMs >= 0 ? { 'x-chunk-start-ms': String(startMs) } : {}),
+    },
+  }),
+  mark: (id, offsetMs, label) => request(`${P}/sessions/${enc(id)}/marks`, {
+    method: 'POST', body: JSON.stringify({ offset_ms: offsetMs, label }),
+  }),
+  /** The live socket's address. A browser WebSocket carries the auth cookie. */
+  liveUrl: (id, loc = (typeof window !== 'undefined' ? window.location : null)) => {
+    const proto = loc && loc.protocol === 'http:' ? 'ws:' : 'wss:';
+    const host = loc ? loc.host : '';
+    return `${proto}//${host}/api${P}/sessions/${enc(id)}/live`;
+  },
+  transcribe: (id, model) => request(`${P}/sessions/${enc(id)}/transcribe`, {
+    method: 'POST', body: JSON.stringify(model ? { model } : {}),
+  }),
+  setSpeaker: (id, segmentId, speakerLabel) => request(`${P}/sessions/${enc(id)}/segments/${enc(segmentId)}`, {
+    method: 'PATCH', body: JSON.stringify({ speaker_label: speakerLabel }),
+  }),
+  receipt: (id) => request(`${P}/sessions/${enc(id)}/receipt`),
+  remove: (id) => request(`${P}/sessions/${enc(id)}`, { method: 'DELETE' }),
+};

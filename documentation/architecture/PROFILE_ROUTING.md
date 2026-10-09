@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 140 canonical canvases at `design/canvases/`, listed
-183 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 141 canonical canvases at `design/canvases/`, listed
+185 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 65 canvases
+## Founder — 66 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -96,6 +96,7 @@ it, where in their nav, and how do they get there.*
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Validate · Record a session | `/validate/interviews` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
 
 ## Advisor — 17 canvases
 
@@ -167,7 +168,7 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Subsidiary Admin — 11 canvases
+## Subsidiary Admin — 12 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -182,6 +183,7 @@ it, where in their nav, and how do they get there.*
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| Validate · Record a session | `/validate/interviews` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
 ## Super Admin — 9 canvases
 
@@ -266,7 +268,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 103 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 42 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 38 | Not routed. Proposed route only. |
+| Low | 40 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
