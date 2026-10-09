@@ -59,3 +59,10 @@ D647: `contractPublication.ts` reads migration 434's approved template snapshots
 prepares validated documents from those snapshots, and publishes with an actor
 audit in one batch. It never infers publication from draft activity or bootstraps
 migration 434 at runtime.
+
+D654: `updateShare.ts` holds Grow › Share an update's rules for `../routes/portfolio_updates.ts`:
+metrics from `project_metrics` with source and date (a missing one is null, never 0),
+highlights and lowlights that must name a source, Eadwyn's draft through `aiRouter`
+(`AI_SURFACE.growUpdate`) that keeps only lines citing a stored fact, what each audience
+may read (the network: asks only unless metrics are included), and where a reply to
+each kind of ask lands.

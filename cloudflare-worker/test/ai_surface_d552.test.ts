@@ -188,6 +188,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
+  'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/advisor/rerank.ts': ['AI_SURFACE.studio'],
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],

@@ -35,7 +35,7 @@
       <div style="{{ m.rowStyle }}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
           <span style="{{ m.nameStyle }}">{{ m.name }}</span>
-          <sc-if value="{{ m.recommended }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span></sc-if>
+          <sc-if value="{{ m.recommended }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:3px;padding:2px 5px;flex:none">DEFAULT</span></sc-if>
           <sc-if value="{{ m.priceInline }}"><span style="font-size:10px;color:#615c6e;font-variant-numeric:tabular-nums;flex:none">{{ m.priceInline }}</span></sc-if>
         </div>
         <sc-if value="{{ m.recommended }}">
