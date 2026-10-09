@@ -58,3 +58,11 @@ D647: `contractPublication.ts` reads migration 434's approved template snapshots
 prepares validated documents from those snapshots, and publishes with an actor
 audit in one batch. It never infers publication from draft activity or bootstraps
 migration 434 at runtime.
+
+D659 (#1472): `cycleCards.ts` is the shape every cycle read returns: `Figure`,
+`Card`, the five states, and `safeCard` / `safeFigure`, which turn a thrown
+source into that one card's `unreadable`. Build, Raise and Grow import it.
+`cycleValidate.ts` computes Validate's figures, cards and records from records
+at read time and stores nothing. `validateWriters.ts` has one writer per
+migration 440 record. The manual routes and #1471's interview accept path both
+call it, and each writer records its actor.

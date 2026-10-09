@@ -35,6 +35,24 @@ Both screens are built to the Usage canvas (`Ops · Boards.dc.html`, set `usage`
 | `integrated/ops-data.js` · `us-allowance`, `us-days`, `us-where`, `us-models`, `us-receipt`, `us-storage` (U1–U6) | `/account/usage` (`#days`, `#where`, `#models`, `#last-run`, `#storage`) · every signed-in role; "Usage" in the user menu, under Account | `pages/account/AccountUsage.jsx` (in `SettingsPage.jsx`, after Billing and orders); `GET /api/ai-budget/me`, `GET /api/ai-budget/top-up`, `GET /api/ai/me/spend`, `GET /api/ai/rates`, `GET /api/usage/storage` | CURRENT |
 | `integrated/ops-data.js` · `hq-allowances` (U7) | `/admin/platform/allowances` · Super Admin; on the Platform strip, linked from Platform | `pages/hq/PlatformAllowancesPage.jsx`; `GET /api/ai-budget/caps`, `PUT /api/ai-budget/caps/:licence`, `GET /api/ai-budget/reviews`, `POST /api/ai-budget/reviews/:uid/charge\|refund` | CURRENT |
 
+### Validate cycle Worker read (D659, #1472)
+
+`cycle_validate.ts`, mounted at `/api/cycles/validate`, is the Worker half of
+the Validate cycle in `Cycle Overview.dc.html` (cycle Validate; O1, O1n, O5)
+and `Cycle Modules · Boards.dc.html` (MV1–MV6). `GET /overview?project=`
+returns #1469's four figures (interviews this month, pain themes, hypotheses
+supported, waitlist sign-ups) and six cards. `GET /modules/:slug?project=`
+returns one card and its records table. The slugs are `problem-discovery`,
+`customer-research`, `ideal-customer-profile`, `market-intelligence`,
+`demand-signals` and `experiments`. The SPA pages that draw them are #1474's
+(S07), so these are routes for those screens, not screens of their own.
+The Spin-Out Lab market page already reads `GET /market-readiness` and
+writes `PUT /market-marks/:item` and `POST|DELETE /market-sources`. The other
+writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
+`/waitlist-target`, `/competitor-mentions`, `/hypotheses/:id/plan`,
+`/evidence-links/:id/strength`) call the same writers as #1471's interview
+accept path. See `decisions/D659.md`.
+
 D631 (#1389), Ops area 6:
 
 | Canvas | Live route | Component and Worker | Status |
