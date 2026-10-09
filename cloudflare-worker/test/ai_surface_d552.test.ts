@@ -192,7 +192,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
-  'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews'], // D658
+  'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask
   'services/advisor/rerank.ts': ['AI_SURFACE.studio'],
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],
   'routes/advisor.ts': ['AI_SURFACE.studio', 'AI_SURFACE.studio', 'AI_SURFACE.studio'],

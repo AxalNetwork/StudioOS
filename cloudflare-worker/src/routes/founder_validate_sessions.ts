@@ -427,10 +427,19 @@ sessions.patch('/sessions/:id/segments/:segmentId', async (c) => {
 sessions.get('/sessions/:id/receipt', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  // D658 — the language-model lines (Structured, Re-structured, Asked) live in
+  // `interview_structure_receipts` (439), because this table's CHECK admits
+  // only speech-to-text kinds. One list, in time order: `kind` is the step.
   const rows = await c.env.DB.prepare(
     `SELECT kind, model, requested_model, fallback_used, audio_minutes, cost_microusd, outcome, refusal, created_at
-       FROM interview_session_receipts WHERE session_id = ? ORDER BY created_at, id`,
-  ).bind(s.session.id).all();
+       FROM (
+         SELECT kind, model, requested_model, fallback_used, audio_minutes, cost_microusd, outcome, refusal, created_at, id, 0 AS src
+           FROM interview_session_receipts WHERE session_id = ?
+         UNION ALL
+         SELECT step, model, requested_model, fallback_used, 0, cost_microusd, outcome, refusal, created_at, id, 1
+           FROM interview_structure_receipts WHERE session_id = ?
+       ) ORDER BY created_at, src, id`,
+  ).bind(s.session.id, s.session.id).all();
   let budget: Record<string, unknown> | null = null;
   let budgetError: string | null = null;
   try {

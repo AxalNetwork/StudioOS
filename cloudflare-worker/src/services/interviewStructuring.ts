@@ -6,9 +6,9 @@
  * What this file decides, as pure functions the routes call:
  *
  *   · THE KINDS. Seven placements, each with a payload schema, a key for
- *     merging duplicates, and whether a module writer exists yet. A kind
- *     whose writer has not merged stays proposed-only (`writer: false`) and
- *     the review read says so.
+ *     merging duplicates, and whether a module writer exists. A kind with
+ *     no store stays proposed-only (`writer: false`: market facts) and the
+ *     review read says so.
  *   · THE CITATION RULE. A placement must name the span it came from, as
  *     `cite: { from, to }` in milliseconds, inside the transcript it was
  *     given and overlapping at least one segment. One that does not is
@@ -19,11 +19,9 @@
  *   · ASK. An answer must cite at least one span of the transcript; one that
  *     cites nothing is refused rather than shown.
  *
- * Severity is three-level here (Severe, Real, Mild), as the canvas draws it.
- * Until #1472 (D659) gives `interview_pain_severities` a third level, accept
- * stores it on the two-level scale the Lab and founder Validate already share
- * (`painGroups.ts`): Severe and Real are a `need`, Mild a `nice`. The proposal
- * keeps the three-level word.
+ * Severity is three-level (Severe, Real, Mild), as the canvas draws it and as
+ * `interview_pain_severities` stores it since #1472 (D659): accept writes the
+ * level itself.
  */
 import type { Env } from '../types';
 import { run as aiRun } from './aiRouter';
@@ -78,11 +76,6 @@ export const EVIDENCE_DIRECTIONS = ['supports', 'refutes'] as const;
 /** The Lab has no Anecdote / Pattern / Measured scale; this is the canvas's. */
 export const EVIDENCE_STRENGTHS = ['anecdote', 'pattern', 'measured'] as const;
 
-/** Severe and Real are a need, Mild is nice-to-have, on today's two-level store. */
-export function storedSeverity(level: (typeof PAIN_SEVERITY_LEVELS)[number]): 'need' | 'nice' {
-  return level === 'mild' ? 'nice' : 'need';
-}
-
 interface KindSpec {
   /** Normalise the payload, or null to drop the placement. */
   parse(p: Record<string, unknown>, ctx: StructureContext): Record<string, unknown> | null;
@@ -117,7 +110,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   },
   segment: {
     module: 'ideal_customer_profile',
-    writer: false, // #1472 (D659): customer_segments and its writer
+    writer: true, // writeSegment + assignInterviewSegment (D659)
     parse: (p) => {
       const name = str(p.name, 80);
       return name ? { name } : null;
@@ -126,7 +119,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   },
   demand_signal: {
     module: 'demand_signals',
-    writer: false, // #1472 (D659): demand_signals and its writer
+    writer: true, // writeDemandSignal, arriving to_confirm (D659)
     parse: (p) => {
       const signal = oneOf(p.signal, DEMAND_SIGNALS);
       const detail = p.detail == null ? null : str(p.detail, 200);
@@ -153,7 +146,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   },
   competitor_mention: {
     module: 'market_intelligence',
-    writer: false, // #1472 (D659): tracked competitors with a project and a source
+    writer: true, // writeCompetitorMention, on the project's competitor list (D659)
     parse: (p) => {
       const name = str(p.name, 120);
       return name ? { name, context: str(p.context, 200) } : null;
@@ -451,4 +444,91 @@ export function alignRuns<T extends { kind: string }>(
     first: first.filter((p) => moduleOf(p) === module),
     second: second.filter((p) => moduleOf(p) === module),
   }));
+}
+
+/** A `final` segment as #1470 (migration 438) stores it. */
+export interface SegmentRow {
+  start_ms: number | null;
+  end_ms: number | null;
+  speaker_label: string | null;
+  text: string;
+}
+
+/**
+ * #1470's final segments as the spans this file cites, in order.
+ *
+ * Audio sessions carry both offsets. Text chat and manual entry carry a start
+ * (the message's time) or nothing, and no end. So, deterministically: a
+ * missing end is the next segment's start (or the start + 1 ms for the last);
+ * a missing start is the previous end, or the segment's position × 1000 ms.
+ * The same rows always give the same spans, so a stored `cite_from`/`cite_to`
+ * keeps pointing at the passage it quoted.
+ */
+export function toSegments(rows: readonly SegmentRow[]): Segment[] {
+  const out: Segment[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = rows[i];
+    const text = String(r.text || '').trim();
+    if (!text) continue;
+    const prevEnd = out.length ? out[out.length - 1].end : 0;
+    // A recorded start is kept as recorded, even where two speakers overlap.
+    const start = Number.isSafeInteger(r.start_ms) && (r.start_ms as number) >= 0 ? (r.start_ms as number) : Math.max(prevEnd, i * 1000);
+    const nextStart = rows.slice(i + 1).map((n) => n.start_ms).find((n) => Number.isSafeInteger(n));
+    let end = Number.isSafeInteger(r.end_ms) ? (r.end_ms as number)
+      : (typeof nextStart === 'number' && nextStart > start ? nextStart : start + 1000);
+    if (end <= start) end = start + 1;
+    out.push({ start, end, speaker: r.speaker_label || null, text });
+  }
+  return out;
+}
+
+export type AskOutcome =
+  | { ok: true; answer: string; cites: { from: number; to: number; quote: string }[]; receipt: ReceiptLine[] }
+  | { ok: false; refusal: string | null; reason: 'refused' | 'no_citation'; receipt: ReceiptLine[] };
+
+/**
+ * ASK over a whole transcript. A long one is asked part by part (never cut);
+ * each part's answer is kept only if it cites a span of that part, and the
+ * kept answers are joined in order. Nothing kept → refused, `no_citation`.
+ */
+export async function askTranscript(
+  env: Env,
+  opts: { userId: number; model?: string; segments: readonly Segment[]; question: string; maxChars?: number },
+): Promise<AskOutcome> {
+  const parts = chunkSegments(opts.segments, opts.maxChars ?? 24000);
+  const receipt: ReceiptLine[] = [];
+  const answers: string[] = [];
+  const cites: { from: number; to: number; quote: string }[] = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const r = await aiRun(env, {
+      task: 'structure_interview',
+      userId: opts.userId,
+      model: opts.model,
+      surface: AI_SURFACE.validateInterviews,
+      systemPrompt: ASK_PROMPT,
+      messages: [{
+        role: 'user',
+        content: `${parts.length > 1 ? `Part ${i + 1} of ${parts.length} of the transcript` : 'Transcript'}:\n${transcriptLines(parts[i])}\n\nQuestion: ${opts.question}`,
+      }],
+      maxTokens: 500,
+      temperature: 0.1,
+    });
+    receipt.push({
+      step: 'asked',
+      model: r.usage.model,
+      requested_model: opts.model ?? null,
+      fallback_used: !!r.usage.fallback_used,
+      est_cost_usd: r.usage.est_cost_usd || 0,
+      prompt_tokens: r.usage.prompt_tokens || 0,
+      completion_tokens: r.usage.completion_tokens || 0,
+    });
+    if (!r.ok) return { ok: false, refusal: r.refusal ?? null, reason: 'refused', receipt };
+    const checked = checkAnswer(r.output || '', parts[i]);
+    if (checked.ok) {
+      answers.push(checked.answer);
+      cites.push(...checked.cites);
+    }
+  }
+  if (!cites.length) return { ok: false, refusal: null, reason: 'no_citation', receipt };
+  return { ok: true, answer: answers.join(' '), cites, receipt };
 }
