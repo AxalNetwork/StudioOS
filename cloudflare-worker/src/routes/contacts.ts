@@ -1571,3 +1571,31 @@ r.post('/:uid/promote', async (c) => {
 });
 
 export default r;
+
+// D653: statements execute in the SAME atomic batch as the recipient response.
+// The response timestamp is the claim; every statement also rechecks the call
+// and investor. No new CRM is introduced and retries reuse existing entries.
+export function roundCallPipelineStatements(env: Env, opts: {
+  callId: number; projectId: number; investorId: number; name: string; email: string;
+  at: string; commitmentCents: number | null;
+}): D1PreparedStatement[] {
+  const email = opts.email.toLowerCase();
+  const guard = "EXISTS(SELECT 1 FROM round_call_recipients rr JOIN round_calls rc ON rc.id=rr.call_id JOIN users ru ON ru.id=rr.investor_user_id WHERE rr.call_id=? AND rr.investor_user_id=? AND rr.last_response_at=? AND rc.state='sent' AND rc.target_close>=? AND ru.role='investor' AND ru.is_active=1 AND ru.kyc_status='approved')";
+  const claim = [opts.callId, opts.investorId, opts.at, opts.at.slice(0,10)];
+  // New stores use cents; the canonical Raise pipeline stores dollar amounts.
+  const amount = opts.commitmentCents == null ? null : opts.commitmentCents / 100;
+  return [
+    env.DB.prepare("INSERT INTO raise_rounds(uid,project_id,name,target_amount,close_date,status,created_at,updated_at) SELECT ?,project_id,name,amount_cents/100.0,target_close,'active',?,? FROM round_calls WHERE id=? AND NOT EXISTS(SELECT 1 FROM raise_rounds WHERE project_id=? AND status='active') AND " + guard)
+      .bind(newUid(),opts.at,opts.at,opts.callId,opts.projectId,...claim),
+    env.DB.prepare("UPDATE round_calls SET round_id=(SELECT id FROM raise_rounds WHERE project_id=? AND status='active' ORDER BY id DESC LIMIT 1) WHERE id=? AND round_id IS NULL AND " + guard)
+      .bind(opts.projectId,opts.callId,...claim),
+    env.DB.prepare("INSERT INTO contacts(uid,project_id,audience,routed_to,name,email,source,status,last_activity_at,created_at,updated_at) SELECT ?,?,'investor','raise',?,?,'round_call','qualified',?,?,? WHERE NOT EXISTS(SELECT 1 FROM contacts WHERE project_id=? AND LOWER(email)=? AND audience='investor') AND " + guard)
+      .bind(newUid(),opts.projectId,opts.name,email,opts.at,opts.at,opts.at,opts.projectId,email,...claim),
+    env.DB.prepare("INSERT INTO raise_prospects(uid,project_id,contact_id,name,email,stage,created_at,updated_at) SELECT ?,?,id,?,?,'contacted',?,? FROM contacts WHERE project_id=? AND LOWER(email)=? AND audience='investor' AND NOT EXISTS(SELECT 1 FROM raise_prospects WHERE project_id=? AND LOWER(email)=?) AND " + guard + " ORDER BY id LIMIT 1")
+      .bind(newUid(),opts.projectId,opts.name,email,opts.at,opts.at,opts.projectId,email,opts.projectId,email,...claim),
+    env.DB.prepare("UPDATE raise_prospects SET contact_id=COALESCE(contact_id,(SELECT id FROM contacts WHERE project_id=? AND LOWER(email)=? AND audience='investor' ORDER BY id LIMIT 1)),stage=CASE WHEN ? IS NOT NULL THEN 'committed' WHEN stage='to_contact' THEN 'contacted' ELSE stage END,amount=CASE WHEN ? IS NOT NULL AND COALESCE(commit_status,'') NOT IN ('signed','wired') THEN ? ELSE amount END,commit_status=CASE WHEN ? IS NOT NULL AND COALESCE(commit_status,'') NOT IN ('signed','wired') THEN 'soft_circled' ELSE commit_status END,updated_at=? WHERE project_id=? AND LOWER(email)=? AND " + guard)
+      .bind(opts.projectId,email,amount,amount,amount,amount,opts.at,opts.projectId,email,...claim),
+    env.DB.prepare("UPDATE contacts SET last_activity_at=?,updated_at=? WHERE project_id=? AND LOWER(email)=? AND audience='investor' AND " + guard)
+      .bind(opts.at,opts.at,opts.projectId,email,...claim),
+  ];
+}
