@@ -21,6 +21,8 @@ live here, one file each:
 | `accountCenterModel.js` | The pure helpers the D568 sections share |
 | `usageModel.js` | The Usage section's pure arithmetic and words: amounts, token counts, bytes, and every "Not recorded" rule |
 | `connectorsModel.js` | The Connectors rules: categories, status words, search and pages, Discover's sections, the redirect, a sign-in's return, the connect flow's states and Build's groups |
+| `AssistantsGroup.jsx` | D668: Connectors' "AI assistants" group, with a setup card per assistant around the one StudioOS server URL, and the grants list with Revoke. Not mounted until #1496's routes are on `main` |
+| `assistantSetup.js` | D668: the server URL, each assistant's setup steps with the vendor page they were written from, and the grant row's words |
 
 ## Rules
 
