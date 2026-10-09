@@ -42,6 +42,9 @@ import {
 } from '../integrations/secrets';
 import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
 import { refuse } from '../util/refusal';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
+import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -67,7 +70,7 @@ function newUid(): string {
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function logEvent(
+export async function logEvent(
   env: Env,
   opts: {
     integration_id: number;
@@ -106,15 +109,13 @@ async function logEvent(
   }
 }
 
-async function loadRow(env: Env, uid: string, userId: number, isAdmin: boolean): Promise<IntegrationRow | null> {
-  const stmt = isAdmin
-    ? env.DB.prepare('SELECT * FROM integrations WHERE uid = ?').bind(uid)
-    : env.DB.prepare('SELECT * FROM integrations WHERE uid = ? AND user_id = ?').bind(uid, userId);
-  const row = await stmt.first<IntegrationRow>();
+async function loadRow(env: Env, uid: string, userId: number): Promise<IntegrationRow | null> {
+  const row = await env.DB.prepare('SELECT * FROM integrations WHERE uid = ? AND user_id = ?')
+    .bind(uid, userId).first<IntegrationRow>();
   return row || null;
 }
 
-function rowToPublic(row: IntegrationRow, credPreview: string | null) {
+function rowToPublic(row: IntegrationRow, credPreview: string | null, companyIds: number[] = []) {
   const desc = getDescriptor(row.provider_key);
   return {
     uid: row.uid,
@@ -134,6 +135,7 @@ function rowToPublic(row: IntegrationRow, credPreview: string | null) {
     last_error: row.last_error,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    company_ids: companyIds,
   };
 }
 
@@ -178,12 +180,15 @@ integrations.get('/available', async (c) => {
   // the marketplace into a 500. Empty set just means nothing is shown
   // as "Update" instead of "Connect" until the table is ready.
   let connectedSet = new Set<string>();
+  let connectionsReadable = true;
+  const unreadableSources: string[] = [];
   try {
     const rows = await c.env.DB.prepare(
       "SELECT provider_key FROM integrations WHERE user_id = ? AND status = 'active'",
     ).bind(user.id).all<{ provider_key: string }>();
     connectedSet = new Set((rows.results || []).map(r => r.provider_key));
   } catch (e) {
+    connectionsReadable = false;
     const msg = (e as Error).message || 'select_failed';
     console.warn('[integrations] /available connectedSet lookup failed:', msg);
     // Best-effort log to integration_logs so ops can see the read-path
@@ -195,6 +200,13 @@ integrations.get('/available', async (c) => {
       ).bind(user.id, msg.slice(0, 500)).run();
     } catch { /* logs table may not exist either */ }
   }
+  try {
+    // These are calendar.ts's existing tokens; no duplicate connector row.
+    if (await c.env.DB.prepare('SELECT 1 AS connected FROM google_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('google_calendar');
+  } catch { unreadableSources.push('google_calendar'); }
+  try {
+    if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
+  } catch { unreadableSources.push('microsoft_365'); }
   const providers = REGISTRY.map(p => {
     const pub = publicDescriptor(p);
     const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
@@ -207,14 +219,16 @@ integrations.get('/available', async (c) => {
       required_tier: p.tier,
       icon_key: p.icon ?? null,
       locked_for_user: lockedForUser,
-      already_connected: connectedSet.has(p.key),
+      already_connected: p.key === 'google_calendar' || p.key === 'microsoft_365'
+        ? unreadableSources.includes(p.key) ? null : connectedSet.has(p.key)
+        : connectionsReadable ? connectedSet.has(p.key) : null,
       // Legacy aliases — DO NOT remove until FE consumers migrate.
       tier_locked: lockedForUser,
     };
   });
   // Task #8 (AN) spec wants the catalogue under `items`. We also return
   // `providers` for back-compat with the frontend until it migrates.
-  return c.json({ ok: true, items: providers, providers });
+  return c.json({ ok: true, items: providers, providers, unreadable_sources: unreadableSources });
 });
 
 // ───────────────────────────────────────────────────────────────────── list mine
@@ -224,7 +238,6 @@ const listMine = async (c: Context<{ Bindings: Env }>) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
   const sql = getSQL(c.env);
-  const isAdmin = (user.role || '').toLowerCase() === 'admin';
   // Defensive read — Task #8 (AN): a fresh D1 where ensureIntegrationsSchema
   // failed (e.g. transient lock, migration race) must NOT 5xx the page.
   // Fall back to an empty list and best-effort log to integration_logs so
@@ -232,10 +245,7 @@ const listMine = async (c: Context<{ Bindings: Env }>) => {
   // static REGISTRY, so the user can recover by retrying.
   let rows: IntegrationRow[] = [];
   try {
-    rows = (isAdmin
-      ? await sql`SELECT * FROM integrations ORDER BY datetime(created_at) DESC`
-      : await sql`SELECT * FROM integrations WHERE user_id = ${user.id} ORDER BY datetime(created_at) DESC`
-    ) as IntegrationRow[];
+    rows = await sql`SELECT * FROM integrations WHERE user_id = ${user.id} ORDER BY datetime(created_at) DESC` as IntegrationRow[];
   } catch (e) {
     const msg = (e as Error).message || 'select_failed';
     console.warn('[integrations] listMine select failed:', msg);
@@ -246,7 +256,7 @@ const listMine = async (c: Context<{ Bindings: Env }>) => {
       ).bind(user.id, msg.slice(0, 500)).run();
     } catch { /* logs table may not exist either */ }
     await sql.end();
-    return c.json({ ok: true, items: [], degraded: true });
+    return c.json({ error: 'connections_unreadable', message: 'Connected tools could not be read.' }, 503);
   }
   // Decrypt only enough to render a 4-char preview; bulk-decrypt is fine
   // because each row's blob is small and the page lists are short.
@@ -264,12 +274,118 @@ const listMine = async (c: Context<{ Bindings: Env }>) => {
     } catch (e) {
       console.warn('[integrations] decrypt preview failed for', r.uid, (e as Error).message);
     }
-    return rowToPublic(r, preview);
+    const companyIds = await enabledCompanyIds(c.env, r.id);
+    return rowToPublic(r, preview, companyIds);
   }));
   return c.json({ ok: true, items });
 };
 integrations.get('', listMine);
 integrations.get('/', listMine);
+
+integrations.get('/suggestions', async (c) => {
+  const user = await requireAuth(c);
+  const companyId = await activeCompanyFor(c, user);
+  if (!companyId) return c.json({ error: 'active_company_required' }, 400);
+  try {
+    const projects = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM projects WHERE company_id = ? AND deleted_at IS NULL',
+    ).bind(companyId).first<{ n: number }>();
+    if (!projects?.n) return c.json({ ok: true, items: [] });
+    const metrics = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM project_metrics pm JOIN projects p ON p.id = pm.project_id ' +
+      'WHERE p.company_id = ? AND p.deleted_at IS NULL',
+    ).bind(companyId).first<{ n: number }>();
+    const interviews = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM discovery_interviews di JOIN projects p ON p.id = di.project_id ' +
+      'WHERE p.company_id = ? AND p.deleted_at IS NULL',
+    ).bind(companyId).first<{ n: number }>();
+    const items = [];
+    if (metrics?.n === 0) items.push({ provider_key: 'stripe', module: 'revenue_and_traction', reason: 'Revenue and traction has no recorded metrics yet.' });
+    if (interviews?.n === 0) items.push({ provider_key: 'calendly', module: 'customer_research', reason: 'Customer research has no recorded interviews yet.' });
+    return c.json({ ok: true, items });
+  } catch {
+    return c.json({ error: 'suggestions_unreadable', message: 'The module data could not be read.' }, 503);
+  }
+});
+
+integrations.post('/requests', async (c) => {
+  const user = await requireAuth(c);
+  const companyId = await activeCompanyFor(c, user);
+  if (!companyId) return c.json({ error: 'active_company_required' }, 400);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const tool = typeof body.tool === 'string' ? body.tool.trim() : '';
+  const intendedUse = typeof body.use === 'string' ? body.use.trim() : '';
+  if (!tool || !intendedUse || tool.length > 120 || intendedUse.length > 1000) {
+    return c.json({ error: 'invalid_request' }, 400);
+  }
+  const actor = await hashEmail(user.email);
+  const written = await c.env.DB.batch([
+    c.env.DB.prepare(
+      'INSERT INTO connector_requests (user_id, company_id, tool, intended_use) VALUES (?, ?, ?, ?)',
+    ).bind(user.id, companyId, tool, intendedUse),
+    c.env.DB.prepare('INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)')
+      .bind(user.id, actor, 'connector_requested', JSON.stringify({ company_id: companyId, tool })),
+  ]);
+  return c.json({ ok: true, id: written[0].meta.last_row_id }, 201);
+});
+
+integrations.get('/requests', async (c) => {
+  const user = await requireAuth(c);
+  const superAdmin = await c.env.DB.prepare('SELECT 1 AS allowed FROM super_admins WHERE user_id = ?')
+    .bind(user.id).first();
+  if (!superAdmin) return c.json({ error: 'forbidden' }, 403);
+  const page = Math.max(1, Math.min(10000, Number.parseInt(c.req.query('page') || '1', 10) || 1));
+  const rows = await c.env.DB.prepare(
+    'SELECT id, user_id, company_id, tool, intended_use AS use, created_at FROM connector_requests ' +
+    'ORDER BY created_at DESC, id DESC LIMIT 50 OFFSET ?',
+  ).bind((page - 1) * 50).all();
+  return c.json({ ok: true, items: rows.results || [], page, page_size: 50 });
+});
+
+integrations.get('/:key', async (c) => {
+  const user = await requireAuth(c);
+  const key = c.req.param('key');
+  if (!getDescriptor(key)) return c.json({ error: 'unknown_provider' }, 404);
+  if (!writesProjectData(key)) return c.json({ ok: true, provider_key: key, teammate: null });
+  const companyId = await activeCompanyFor(c, user);
+  if (!companyId) return c.json({ error: 'active_company_required' }, 400);
+  const teammate = await c.env.DB.prepare(
+    "SELECT u.name FROM integrations i JOIN integration_companies ic ON ic.integration_id = i.id " +
+    "JOIN users u ON u.id = i.user_id JOIN user_company_links ucl ON ucl.user_id = u.id AND ucl.company_id = ic.company_id " +
+    "WHERE i.provider_key = ? AND i.status = 'active' AND ic.company_id = ? AND ic.enabled = 1 " +
+    'AND i.user_id != ? ORDER BY i.id LIMIT 1',
+  ).bind(key, companyId, user.id).first<{ name: string | null }>();
+  return c.json({ ok: true, provider_key: key, teammate: teammate ? { name: teammate.name } : null });
+});
+
+integrations.put('/:uid/companies', async (c) => {
+  const user = await requireAuth(c);
+  const row = await loadRow(c.env, c.req.param('uid'), user.id);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  if (!Array.isArray(body.company_ids) || body.company_ids.length > 100 ||
+      body.company_ids.some((id) => !Number.isSafeInteger(id) || Number(id) <= 0)) {
+    return c.json({ error: 'invalid_company_ids' }, 400);
+  }
+  const ids = [...new Set(body.company_ids as number[])];
+  for (const id of ids) {
+    const member = await c.env.DB.prepare(
+      'SELECT 1 AS allowed FROM user_company_links WHERE user_id = ? AND company_id = ?',
+    ).bind(user.id, id).first();
+    if (!member) return c.json({ error: 'company_not_linked' }, 403);
+  }
+  const actor = await hashEmail(user.email);
+  await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE integration_companies SET enabled = 0 WHERE integration_id = ?').bind(row.id),
+    ...ids.map((id) => c.env.DB.prepare(
+      'INSERT INTO integration_companies (integration_id, company_id, enabled) VALUES (?, ?, 1) ' +
+      'ON CONFLICT(integration_id, company_id) DO UPDATE SET enabled = 1',
+    ).bind(row.id, id)),
+    c.env.DB.prepare('INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)')
+      .bind(user.id, actor, 'connector_company_scope_changed', JSON.stringify({ integration_id: row.id, company_ids: ids })),
+  ]);
+  return c.json({ ok: true, company_ids: await enabledCompanyIds(c.env, row.id) });
+});
 
 // ───────────────────────────────────────────────────────────────────── connect
 
@@ -295,6 +411,8 @@ integrations.post('/connect', async (c) => {
 
   const desc = getDescriptor(key);
   if (!desc) return c.json({ error: 'unknown_provider', provider_key: key }, 404);
+  const activeCompanyId = await activeCompanyFor(c, user);
+  if (!activeCompanyId && writesProjectData(key)) return c.json({ error: 'active_company_required' }, 400);
 
   if (desc.status === 'coming_soon') {
     // Spec contract (Task #8 / AN): 503 + coming_soon + provider-scoped
@@ -335,6 +453,15 @@ integrations.post('/connect', async (c) => {
     });
   } catch (e) {
     return refuse(c, 400, { code: 'connect_failed', message: 'The connection could not be made. Check the credentials and try again.', raw: e, audience: 'owner' });
+  }
+  if (desc.auth_type === 'oauth2' && hasScopeOverreach(desc, result.scopes || [])) {
+    try { await impl.revokeGranted?.(c.env, result); } catch { /* refusal still wins */ }
+    await logEvent(c.env, {
+      integration_id: 0, user_id: user.id, provider_key: key,
+      direction: 'internal', event_type: 'overreach', status: 'error',
+      response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
+    });
+    return c.json({ error: 'scope_overreach', message: 'The provider granted permissions beyond those requested. The connection was refused.' }, 403);
   }
 
   // Upsert. Insert with random uid, encrypt against that uid; on conflict
@@ -396,8 +523,14 @@ integrations.post('/connect', async (c) => {
     ).run();
   }
 
-  const row = await loadRow(c.env, uid, user.id, false);
+  const row = await loadRow(c.env, uid, user.id);
   if (row) {
+    if (activeCompanyId) {
+    await c.env.DB.prepare(
+      'INSERT INTO integration_companies (integration_id, company_id, enabled) VALUES (?, ?, 1) ' +
+      'ON CONFLICT(integration_id, company_id) DO UPDATE SET enabled = 1',
+    ).bind(row.id, activeCompanyId).run();
+    }
     await logEvent(c.env, {
       integration_id: row.id, user_id: user.id, provider_key: key,
       direction: 'outbound', event_type: existing ? 'reconnect' : 'connect', status: 'ok',
@@ -428,7 +561,7 @@ integrations.post('/connect', async (c) => {
   }
 
   await sql.end();
-  return c.json({ ok: true, item: row ? rowToPublic(row, previewApiKey(result.credentials as CredentialBlob)) : null });
+  return c.json({ ok: true, item: row ? rowToPublic(row, previewApiKey(result.credentials as CredentialBlob), await enabledCompanyIds(c.env, row.id)) : null });
 });
 
 // ───────────────────────────────────────────────────────────────────── disconnect
@@ -438,8 +571,7 @@ integrations.delete('/:uid', async (c) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
   const uid = c.req.param('uid');
-  const isAdmin = (user.role || '').toLowerCase() === 'admin';
-  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
 
   const impl = getProviderImpl(row.provider_key);
@@ -448,6 +580,7 @@ integrations.delete('/:uid', async (c) => {
     catch (e) { console.warn('[integrations] provider disconnect threw:', (e as Error).message); }
   }
 
+  await c.env.DB.prepare('DELETE FROM integration_companies WHERE integration_id = ?').bind(row.id).run();
   await c.env.DB.prepare('DELETE FROM integrations WHERE id = ?').bind(row.id).run();
   await logEvent(c.env, {
     integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
@@ -464,9 +597,14 @@ integrations.post('/:uid/sync', async (c) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
   const uid = c.req.param('uid');
-  const isAdmin = (user.role || '').toLowerCase() === 'admin';
-  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (writesProjectData(row.provider_key)) {
+    const selectedCompany = await activeCompanyFor(c, user);
+    if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) {
+      return c.json({ error: 'company_not_enabled' }, 403);
+    }
+  }
 
   const desc = getDescriptor(row.provider_key);
   if (desc && desc.tier !== 'free') ensureTier(user, desc.tier as 'growth' | 'studio');
@@ -503,9 +641,14 @@ integrations.post('/:uid/push', async (c) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
   const uid = c.req.param('uid');
-  const isAdmin = (user.role || '').toLowerCase() === 'admin';
-  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (writesProjectData(row.provider_key)) {
+    const selectedCompany = await activeCompanyFor(c, user);
+    if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) {
+      return c.json({ error: 'company_not_enabled' }, 403);
+    }
+  }
 
   const desc = getDescriptor(row.provider_key);
   if (desc && desc.tier !== 'free') ensureTier(user, desc.tier as 'growth' | 'studio');
@@ -516,6 +659,12 @@ integrations.post('/:uid/push', async (c) => {
   }
 
   const payload = await c.req.json().catch(() => ({}));
+  if (payload && typeof payload === 'object' && 'project_id' in payload) {
+    const projectId = Number((payload as { project_id: unknown }).project_id);
+    if (!Number.isSafeInteger(projectId) || !(await projectEnabled(c.env, row.id, projectId))) {
+      return c.json({ error: 'project_not_enabled' }, 403);
+    }
+  }
   try {
     const out = await impl.push(c, user, row, payload);
     await logEvent(c.env, {
@@ -548,8 +697,7 @@ async function actionHandler(c: Context<{ Bindings: Env }>) {
   ensureRole(c, user);
   const uid = c.req.param('uid') || '';
   const name = c.req.param('name') || '';
-  const isAdmin = (user.role || '').toLowerCase() === 'admin';
-  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
 
   const desc = getDescriptor(row.provider_key);
@@ -587,22 +735,29 @@ integrations.patch('/:uid/config', async (c) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
   const uid = c.req.param('uid') || '';
-  const isAdmin = (user.role || '').toLowerCase() === 'admin';
-  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
   const rawPatch = await c.req.json().catch(() => ({}));
   if (!rawPatch || typeof rawPatch !== 'object' || Array.isArray(rawPatch)) {
     return c.json({ error: 'invalid_config' }, 400);
   }
   const existing = safeJson<Record<string, unknown>>(row.config_json, {});
-  let patch = rawPatch as Record<string, unknown>;
+  const checked = validateConnectorSettings(row.provider_key, rawPatch as Record<string, unknown>);
+  if (!checked.ok) return c.json({ error: checked.error }, 400);
+  let patch = checked.providerPatch;
   const impl = getProviderImpl(row.provider_key);
   if (impl?.validateConfig) {
     const v = impl.validateConfig(patch, existing);
     if (!v.ok) return c.json({ error: 'invalid_config', message: v.error }, 400);
     patch = v.patch;
   }
-  const merged = { ...existing, ...patch };
+  if ('project_id' in patch) {
+    const projectId = Number(patch.project_id);
+    if (!Number.isSafeInteger(projectId) || !(await projectEnabled(c.env, row.id, projectId))) {
+      return c.json({ error: 'project_not_enabled' }, 403);
+    }
+  }
+  const merged = { ...existing, ...checked.settings, ...patch };
   await c.env.DB.prepare(
     'UPDATE integrations SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
   ).bind(JSON.stringify(merged), row.id).run();
@@ -622,15 +777,24 @@ integrations.get('/:uid/logs', async (c) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
   const uid = c.req.param('uid');
-  const isAdmin = (user.role || '').toLowerCase() === 'admin';
-  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
 
-  const limit = Math.max(1, Math.min(500, Number(c.req.query('limit') || 100)));
+  const page = Math.max(1, Math.min(10000, Number.parseInt(c.req.query('page') || '1', 10) || 1));
+  const limit = Math.max(1, Math.min(100, Number.parseInt(c.req.query('limit') || '50', 10) || 50));
+  const q = (c.req.query('q') || '').trim().slice(0, 100).toLowerCase();
+  const total = await c.env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM integration_logs WHERE integration_id = ? AND ' +
+    '(? = \'\' OR instr(lower(coalesce(event_type, \'\')), ?) > 0 OR instr(lower(coalesce(request_summary, \'\')), ?) > 0 ' +
+    'OR instr(lower(coalesce(response_summary, \'\')), ?) > 0)',
+  ).bind(row.id, q, q, q, q).first<{ n: number }>();
   const rows = await c.env.DB.prepare(
     'SELECT id, direction, event_type, status, http_status, request_summary, response_summary, external_id, payload_json, created_at ' +
-    'FROM integration_logs WHERE integration_id = ? ORDER BY datetime(created_at) DESC LIMIT ?',
-  ).bind(row.id, limit).all();
+    'FROM integration_logs WHERE integration_id = ? AND ' +
+    '(? = \'\' OR instr(lower(coalesce(event_type, \'\')), ?) > 0 OR instr(lower(coalesce(request_summary, \'\')), ?) > 0 ' +
+    'OR instr(lower(coalesce(response_summary, \'\')), ?) > 0) ' +
+    'ORDER BY datetime(created_at) DESC, id DESC LIMIT ? OFFSET ?',
+  ).bind(row.id, q, q, q, q, limit, (page - 1) * limit).all();
   interface LogRow {
     id: number;
     direction: string;
@@ -655,7 +819,7 @@ integrations.get('/:uid/logs', async (c) => {
     payload: safeJson(r.payload_json, null),
     created_at: r.created_at,
   }));
-  return c.json({ ok: true, items });
+  return c.json({ ok: true, items, total: total?.n ?? 0, page, page_size: limit });
 });
 
 // ───────────────────────────────────────────────────────────────────── webhook
@@ -723,6 +887,12 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
       });
       return c.json({ error: 'invalid_signature' }, 401);
     }
+  }
+
+  const syncSetting = safeJson<Record<string, unknown>>(row.config_json, {}).sync_frequency;
+  if ((syncSetting && syncSetting !== 'live') ||
+      (writesProjectData(provider) && (await enabledCompanyIds(c.env, row.id)).length === 0)) {
+    return c.json({ ok: true, skipped: 'company_or_sync_disabled' });
   }
 
   const impl = getProviderImpl(provider);
@@ -902,6 +1072,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
   const provider = c.req.param('provider').toLowerCase();
   const desc = getDescriptor(provider);
   if (!desc || desc.auth_type !== 'oauth2') return c.json({ error: 'oauth_not_supported' }, 404);
+  const selectedCompany = await activeCompanyFor(c, user);
+  if (!selectedCompany && writesProjectData(provider)) return c.json({ error: 'active_company_required' }, 400);
   if (desc.tier !== 'free' && !userMeetsTier(user, desc.tier as 'growth' | 'studio')) {
     return c.json(tierUpsell(desc.tier as 'growth' | 'studio'), 402);
   }
@@ -921,7 +1093,7 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // Salesforce uses `sandbox=1` to pick test.salesforce.com vs login; the
   // callback recovers it from state.extra and passes through to connect()
   // so we never trust the query string at callback time.
-  const extra: Record<string, unknown> = { challenge: pkce.challenge };
+  const extra: Record<string, unknown> = { challenge: pkce.challenge, company_id: selectedCompany };
   if (provider === 'salesforce') {
     const sb = c.req.query('sandbox');
     extra.is_sandbox = sb === '1' || sb === 'true';
@@ -983,6 +1155,11 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   if (!consumed) {
     return c.json({ error: 'invalid_or_expired_state' }, 400);
   }
+  const selectedCompany = Number(consumed.extra.company_id);
+  const linked = Number.isSafeInteger(selectedCompany) && selectedCompany > 0 &&
+    await c.env.DB.prepare('SELECT 1 AS allowed FROM user_company_links WHERE user_id = ? AND company_id = ?')
+      .bind(user.id, selectedCompany).first();
+  if (!linked && writesProjectData(provider)) return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=company_not_linked`);
   const impl = getProviderImpl(provider);
   if (!impl) {
     return c.redirect(`/integrations?oauth=rolling_out&provider=${encodeURIComponent(provider)}`);
@@ -993,6 +1170,15 @@ integrations.get('/oauth/:provider/callback', async (c) => {
       oauth_state: state,
       config: { pkce_verifier: consumed.pkce_verifier ?? undefined, ...consumed.extra },
     });
+    if (hasScopeOverreach(desc, result.scopes || [])) {
+      try { await impl.revokeGranted?.(c.env, result); } catch { /* refusal still wins */ }
+      await logEvent(c.env, {
+        integration_id: 0, user_id: user.id, provider_key: provider,
+        direction: 'internal', event_type: 'overreach', status: 'error',
+        response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
+      });
+      return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`);
+    }
     const sql = getSQL(c.env);
     try {
       const existing = await c.env.DB.prepare(
@@ -1026,8 +1212,14 @@ integrations.get('/oauth/:provider/callback', async (c) => {
           result.external_account_id ?? null, result.external_account_name ?? null,
         ).run();
       }
-      const row = await loadRow(c.env, uid, user.id, false);
+      const row = await loadRow(c.env, uid, user.id);
       if (row) {
+        if (linked) {
+        await c.env.DB.prepare(
+          'INSERT INTO integration_companies (integration_id, company_id, enabled) VALUES (?, ?, 1) ' +
+          'ON CONFLICT(integration_id, company_id) DO UPDATE SET enabled = 1',
+        ).bind(row.id, selectedCompany).run();
+        }
         await logEvent(c.env, {
           integration_id: row.id, user_id: user.id, provider_key: provider,
           direction: 'inbound', event_type: 'oauth_callback', status: 'ok',

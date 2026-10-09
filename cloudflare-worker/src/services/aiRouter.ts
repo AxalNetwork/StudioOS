@@ -26,6 +26,7 @@
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import * as aiBudget from './aiBudget';
+import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,6 +101,9 @@ export interface RunOptions {
   // Workers AI takes `{ audio: number[] }` for Whisper, which shares nothing
   // with the chat shape.
   audio?: Uint8Array;
+  // The clip's content type, for a model that decodes a container itself
+  // (Nova-3 takes `{ body, contentType }`). Ignored by the Whisper models.
+  audioMime?: string;
   // A model the CALLER picked, validated against `ROUTE[task].alternates`.
   // Absent means "whatever the route says", which is every internal caller.
   // A model not on that list is REFUSED, never quietly swapped for the
@@ -143,6 +147,8 @@ export interface RunResult {
   output?: string;             // assistant text or stringified JSON for tool_call
   embedding?: number[];        // populated for task='embed'
   stream?: ReadableStream;     // populated only when opts.stream === true
+  // A speech-to-text run's passages, language and speaker labels (D657).
+  transcript?: SttTranscript;
   refusal?: RefusalReason;
   error?: string;
   usage: UsageMeta;
@@ -250,6 +256,20 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
 export const PRICE_USD_PER_AUDIO_MINUTE: Record<string, number> = {
   '@cf/openai/whisper': 0.0005,
   '@cf/openai/whisper-large-v3-turbo': 0.0005,
+  // D657 — Nova-3 over plain HTTP (batch). Its WebSocket rate is different and
+  // lives in the table below. Read from Cloudflare's pricing page, 2026-10-09.
+  '@cf/deepgram/nova-3': 0.0052,
+};
+
+/**
+ * Live speech-to-text over a WebSocket is billed at its own rate, per minute
+ * of audio streamed. A separate table because one model (Nova-3) has both a
+ * batch and a WebSocket price, and Flux is WebSocket only.
+ * Read from Cloudflare's Workers AI pricing page on 2026-10-09.
+ */
+export const PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET: Record<string, number> = {
+  '@cf/deepgram/nova-3': 0.0092,
+  '@cf/deepgram/flux': 0.0077,
 };
 
 /**
@@ -357,15 +377,23 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // Speech to text. The one task in this table billed by the MINUTE, which is
   // why `PRICE_USD_PER_AUDIO_MINUTE` exists — see the note above it.
   //
-  // No fallback chain and no alternates. `whisper-large-v3-turbo` is faster and
-  // more accurate at the same $0.0005/minute, so it is the primary; the base
-  // `whisper` stays priced because `routes/advisor.ts`'s composer mic has been
-  // calling it directly for as long as that feature has existed, and those runs
-  // still have to cost what they cost. Falling back between them on a failure
-  // would double the bill for a clip that is going to fail twice, and offering
-  // a CHOICE between two models at one price and no meaningful difference is a
-  // control that cannot change anything — D13's own objection.
-  transcribe: { provider: 'workers-ai', model: '@cf/openai/whisper-large-v3-turbo', isAudio: true },
+  // D657 OFFERS A CHOICE, and it is no longer a choice between equals: the
+  // owner asked for one (#1470). Whisper Large v3 Turbo is the default; Nova-3
+  // batch costs ten times more and returns speaker labels; the base Whisper is
+  // the cheapest and plainest. Whisper Tiny EN is not offered: Cloudflare
+  // publishes no price for it, and a model with no price row bills as zero.
+  //
+  // The fallback goes one way only, to the default. A founder who picked Nova-3
+  // and hit a failure gets Turbo's words, and the session's receipt says so;
+  // the chain is filtered of the model that just failed, so Turbo never retries
+  // itself and a clip that fails on the default is billed once.
+  transcribe: {
+    provider: 'workers-ai',
+    model: '@cf/openai/whisper-large-v3-turbo',
+    fallbackChain: ['@cf/openai/whisper-large-v3-turbo'],
+    alternates: ['@cf/openai/whisper-large-v3-turbo', '@cf/deepgram/nova-3', '@cf/openai/whisper'],
+    isAudio: true,
+  },
   validate_tag_pains: {
     provider: 'workers-ai',
     model: MID_LLAMA,
@@ -712,6 +740,7 @@ interface ProviderResult {
   output?: string;
   embedding?: number[];
   stream?: ReadableStream;
+  transcript?: SttTranscript;
   prompt_tokens?: number;
   completion_tokens?: number;
   error?: string;
@@ -801,11 +830,12 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       // See `MAX_RECORDING_BYTES` in `routes/founder_validate.ts`.
       const bytes = opts.audio;
       if (!bytes || !bytes.byteLength) return { ok: false, status: 400, error: 'no audio' };
-      const out = await ai.run(model, { audio: Array.from(bytes) }, gatewayOpt) as { text?: string };
+      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || ''), gatewayOpt);
       // Silence and non-speech transcribe to an empty string. That is an
       // answer, not a failure: the clip contained no words, and reporting it
       // as an error would have the caller retry and pay again.
-      return { ok: true, output: String(out?.text ?? '').trim(), prompt_tokens: 0, completion_tokens: 0 };
+      const transcript = parseAudioOutput(model, out);
+      return { ok: true, output: transcript.text, transcript, prompt_tokens: 0, completion_tokens: 0 };
     }
     if (isEmbed) {
       const text = opts.text ?? defaultContentBlob(opts);
@@ -891,6 +921,17 @@ function withTimeout(p: Promise<ProviderResult>, ms: number): Promise<ProviderRe
 // ---------------------------------------------------------------------------
 // Public: run()
 // ---------------------------------------------------------------------------
+/**
+ * The D640 budget's own words for a refusal. One function, so a run refused
+ * here, a live stream refused mid-way and a session's transcription refused up
+ * front all say the same thing (D657).
+ */
+export function budgetRefusalMessage(refusal: string): string {
+  return refusal === 'budget_review'
+    ? 'An AI run is held for review. New runs can start after it is settled.'
+    : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.';
+}
+
 export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   const route = ROUTE[opts.task];
   const startedAt = Date.now();
@@ -1028,9 +1069,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env,opts.userId,usage,held.refusal,opts.surface);
-        return {ok:false,refusal:held.refusal,error:held.refusal==='budget_review'
-          ? 'An AI run is held for review. New runs can start after it is settled.'
-          : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.',usage};
+        return {ok:false,refusal:held.refusal,error:budgetRefusalMessage(held.refusal),usage};
       }
       reservation = held.reservation;
     } catch {
@@ -1190,6 +1229,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     output: attempt.output,
     embedding: attempt.embedding,
     stream: attempt.stream,
+    transcript: attempt.transcript,
     usage,
   };
 }
