@@ -21,6 +21,15 @@ import { bindingKey } from '../util/schemaBootstrap';
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 export type AuthType = 'api_key' | 'oauth2' | 'webhook';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs';
+export interface ConnectorMetadata {
+  category: ConnectorCategory;
+  verified: boolean;
+  pulls: Array<{ what: string; module: string }>;
+  sends: Array<{ what: string; target: string; default_mode: 'auto' | 'ask' }>;
+  feeds: string[];
+  permissions: string[];
+}
 
 export interface ProviderDescriptor {
   key: string;                           // url-safe; primary key
@@ -108,6 +117,8 @@ export interface PushResult {
 export interface ProviderImpl {
   key: string;
   connect(c: Context<{ Bindings: Env }>, user: User, input: ConnectInput): Promise<ConnectResult>;
+  /** Revoke a rejected OAuth grant before any connection row is saved. */
+  revokeGranted?(env: Env, result: ConnectResult): Promise<void>;
   sync?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<SyncResult>;
   push?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow, payload: unknown): Promise<PushResult>;
   webhook?(c: Context<{ Bindings: Env }>, row: IntegrationRow, body: string, signature: string | null): Promise<{ summary: string }>;
@@ -184,7 +195,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     capabilities: ['Push deals', 'Pull contacts', 'Two-way sync'],
     docs_url: 'https://developers.hubspot.com/docs/api/overview',
     icon: 'Building2',
-    oauth_scopes: ['crm.objects.deals.read', 'crm.objects.deals.write', 'crm.objects.contacts.read'],
+    oauth_scopes: ['oauth', 'crm.objects.deals.read', 'crm.objects.deals.write', 'crm.objects.contacts.read', 'crm.objects.contacts.write', 'crm.objects.companies.read', 'crm.objects.companies.write', 'crm.schemas.deals.read'],
     // Task #17 — HubSpot Public-App OAuth requires app marketplace
     // publication on non-test portals; until that lands, customers can
     // connect via a HubSpot Private App access token (long-lived bearer,
@@ -205,7 +216,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     capabilities: ['Embed scheduling', 'Pull bookings', 'Cancellation sync', 'Personal Access Token'],
     docs_url: 'https://developer.calendly.com/api-docs',
     icon: 'Calendar',
-    oauth_scopes: ['default'],
+    oauth_scopes: ['default', 'user'],
     supports_pat: true,
   },
   {
@@ -320,7 +331,45 @@ export const REGISTRY: ProviderDescriptor[] = [
     docs_url: 'https://api-docs.affinity.co/',
     icon: 'Network',
   },
+  {
+    key: 'google_calendar', display_name: 'Google Calendar', integration_type: 'scheduling',
+    description: 'Calendar events and interview slots from your existing Google Calendar connection.',
+    status: 'live', tier: 'free', auth_type: 'oauth2', capabilities: ['Calendar events'],
+    docs_url: null, icon: 'Calendar', oauth_scopes: [
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'openid',
+    ],
+  },
+  {
+    key: 'microsoft_365', display_name: 'Microsoft 365', integration_type: 'scheduling',
+    description: 'Calendar events and interview slots from your existing Microsoft 365 connection.',
+    status: 'live', tier: 'free', auth_type: 'oauth2', capabilities: ['Calendar events'],
+    docs_url: null, icon: 'Calendar', oauth_scopes: [
+      'openid', 'profile', 'email', 'offline_access', 'Calendars.ReadWrite', 'User.Read',
+    ],
+  },
 ];
+
+// A catalogue entry describes only behaviour that the shipping provider has.
+// Calendar connections are read from calendar.ts; they do not create a second
+// integrations row or a second OAuth flow.
+export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
+  hubspot: { category: 'CRM', verified: true, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },
+  calendly: { category: 'Calendar', verified: true, pulls: [{ what: 'Booked meetings', module: 'customer_research' }], sends: [], feeds: ['customer_research'], permissions: ['Read your Calendly calendar through its default grant.', 'Read your Calendly profile and scheduled events.'] },
+  salesforce: { category: 'CRM', verified: false, pulls: [{ what: 'Opportunity stages', module: 'capital_relationships' }], sends: [{ what: 'New account', target: 'Salesforce account', default_mode: 'ask' }, { what: 'Deal stage change', target: 'Salesforce deal', default_mode: 'auto' }], feeds: ['capital_relationships'], permissions: ['Read and update Salesforce records.', 'Maintain the connection when you are away.', 'Read your Salesforce account identity.'] },
+  carta: { category: 'Cap table', verified: false, pulls: [{ what: 'Holders, securities and vesting', module: 'founding_team' }], sends: [], feeds: ['founding_team'], permissions: ['Read your Carta cap table.', 'Read Carta stakeholders.', 'Read Carta securities.'] },
+  slack: { category: 'Messaging', verified: true, pulls: [], sends: [{ what: 'Alerts', target: 'Slack channel', default_mode: 'ask' }], feeds: [], permissions: ['Post to the Slack channel you select.'] },
+  docusign: { category: 'Signing', verified: false, pulls: [{ what: 'Envelope status', module: 'company_creation' }], sends: [{ what: 'Documents for signature', target: 'DocuSign', default_mode: 'ask' }], feeds: ['company_creation'], permissions: ['Send and read signature envelopes.', 'Keep the DocuSign connection active.'] },
+  crunchbase: { category: 'Data', verified: false, pulls: [{ what: 'Company data', module: 'market_intelligence' }], sends: [], feeds: ['market_intelligence'], permissions: ['Read company profiles with your Crunchbase key.'] },
+  stripe: { category: 'Payments', verified: true, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
+  affinity: { category: 'CRM', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read relationship data from your Affinity account.'] },
+  google_calendar: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read Gmail messages linked to invitations.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
+  microsoft_365: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
+};
 
 const REGISTRY_BY_KEY: Map<string, ProviderDescriptor> = new Map(
   REGISTRY.map(p => [p.key, p]),
@@ -414,5 +463,7 @@ export function publicDescriptor(p: ProviderDescriptor) {
     icon: p.icon ?? null,
     supports_pat: !!p.supports_pat,
     has_implementation: PROVIDER_IMPLS.has(p.key),
+    ...CONNECTOR_METADATA[p.key],
+    connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens' : 'integrations',
   };
 }

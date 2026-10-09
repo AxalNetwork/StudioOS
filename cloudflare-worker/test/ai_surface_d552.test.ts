@@ -175,6 +175,7 @@ const NO_PAGE: Record<string, string> = {
  */
 const FORWARDED: Record<string, string[]> = {
   'routes/ai.ts': ['page'],                     // the rail's own app path (D404)
+  'routes/eadwyn.ts': ['page'],                 // the rail's composer, the same app path (D652)
   'routes/research.ts': ['page'],               // the zone draft's app path (D404, D510)
   'services/advisor/guardrails.ts': ['surface'], // classifyInput's required parameter
 };
