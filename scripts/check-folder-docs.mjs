@@ -78,6 +78,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],
   ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
+  ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],

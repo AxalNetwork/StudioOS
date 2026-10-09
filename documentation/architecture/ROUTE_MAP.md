@@ -62,6 +62,15 @@ Connectors replace Integrations (D649). `/integrations` and `/account/integratio
 | `Connectors Page.dc.html` · `rail`, `railList` | the AI rail | #1464 (D652) | NEW |
 | `Cycle Action.dc.html` · `connect`: `list`, `failed`, `locked`, `loading`, `refused`, `success` | `/build`'s header, "Connect a tool" | `pages/account/ConnectToolSheet.jsx` in `pages/founder/FounderBuildDesk.jsx`; the same catalogue and sheet | UPGRADE: the `sync` view (GitHub repositories) waits on #1467 (D655) |
 
+### Cycle overviews and module pages (D661, #1474)
+
+The components are built in `frontend/src/pages/cycles/` and are not mounted yet: each cycle keeps its current page until its read from #1469 (D656) is on `main`. D661 gives the shape D656 left open for `Card.series` and the records.
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| `Cycle Overview.dc.html` · `variant=full`, `new`, `states` (O1–O5) | `/validate`, `/build`, `/raise`, `/grow`: the current pages stay until each read lands | `pages/cycles/CycleOverview.jsx`; `GET /api/cycles/:cycle/overview` (#1472, #1475, #1476, #1477) | NEW: built, waiting on the reads |
+| `Cycle Overview.dc.html` · `module=0…6`; `Cycle Modules · Boards.dc.html` (MV1–MG7, 26 pages) | `/:cycle/:slug` once mounted; old module URLs redirect then | `pages/cycles/CycleModulePage.jsx`; `GET /api/cycles/:cycle/modules/:slug` | NEW: built, waiting on the reads |
+
 D631 (#1389), Ops area 6:
 
 | Canvas | Live route | Component and Worker | Status |
