@@ -136,3 +136,5 @@ migration 440's records go through `../services/validateWriters.ts`. Reading
 follows the founder board's `canReadBoard` rule and writing follows
 `canWrite`. A card whose store fails is `unreadable` on its own. See
 `documentation/architecture/decisions/D659.md`.
+
+D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.

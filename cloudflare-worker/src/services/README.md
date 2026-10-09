@@ -93,3 +93,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `sttFormats.ts` has, for each speech-to-text model, its request and response shapes and its live events, plus the speaker labels.
 - `sttModels.ts` lists the models the rail offers, priced from `aiRouter`'s own tables.
 - `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed.
+
+### Founder round calls (D653)
+
+`roundCalls.ts` orchestrates private founder calls, counsel fingerprints, recipient entitlements, notification outcomes and atomic Raise pipeline responses. `roundCallPolicy.ts` contains flag, verification, readiness, matching and identity policies. The GP capital-call domain is separate. See [D653](../../../documentation/architecture/decisions/D653.md).

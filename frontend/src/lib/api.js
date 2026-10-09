@@ -30,6 +30,7 @@ export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
+export * from './api/roundCalls.js';
 export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';

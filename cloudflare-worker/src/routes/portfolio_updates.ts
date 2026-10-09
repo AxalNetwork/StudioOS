@@ -21,6 +21,8 @@ import {
   type Audience, type AskKind, type Snapshot,
 } from '../services/updateShare';
 
+import { openCallForUpdate, updateAskLinks, replyToLinkedCall, RoundCallError } from '../services/roundCalls';
+
 const r = new Hono<{ Bindings: Env }>();
 
 // Task #66 — when a portfolio update goes live, notify everyone following
@@ -314,7 +316,7 @@ function shareShape(u: ShareRow, asks: any[]) {
   return {
     title: u.title, period_start: u.period_start, period_end: u.period_end,
     metrics: jload(u.metrics_json, []), highlights: jload(u.highlights_json, []), lowlights: jload(u.lowlights_json, []),
-    asks: asks.map((a) => ({ uid: a.uid, kind: a.kind, text: a.text, module: ASK_MODULE[a.kind as AskKind]?.label ?? null, link_ref: a.link_ref })),
+    asks: asks.map((a) => ({ uid: a.uid, kind: a.kind, text: a.text, module: ASK_MODULE[a.kind as AskKind]?.label ?? null, link_ref: a.link_ref, link_reason: a.link_reason })),
     network_includes_metrics: !!u.network_includes_metrics,
   };
 }
@@ -406,7 +408,8 @@ r.put('/:uid/share', async (c) => {
         if (kind === 'hire' && link != null && !roles.has(link)) return c.json({ detail: 'A hire links to one of your open roles', field: 'asks' }, 400);
         // A market contact links to one of this company's markets (D664), or to none.
         if (kind === 'market' && link != null && !markets.has(link)) return c.json({ detail: 'A market ask links to one of your markets', field: 'asks' }, 400);
-        asks.push({ kind, text, link_ref: kind === 'hire' || kind === 'market' ? link : null });
+        const callUid=kind==='capital'?await openCallForUpdate(c.env,u.project_id):null;
+        asks.push({ kind, text, link_ref: kind === 'hire' || kind === 'market' ? link : callUid });
       }
       await c.env.DB.prepare('DELETE FROM update_asks WHERE update_id = ?').bind(u.id).run();
       for (const a of asks) {
@@ -489,13 +492,13 @@ r.get('/:uid/page', async (c) => {
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
     if (!u || !u.sent_at) return c.json({ detail: 'Not found' }, 404);
     const asks = await asksOf(c.env, u.id);
-    const shape = shareShape(u, asks);
+    const shape = shareShape(u, await updateAskLinks(c.env,asks,user,u.author_user_id===user.id));
     const isAuthor = u.author_user_id === user.id || isAdmin(user);
     if (!isAuthor) {
       const rcp = await recipientOf(c.env, u.id, user.id);
       if (!rcp) return c.json({ detail: 'Forbidden' }, 403);
       if (!rcp.opened_at) await c.env.DB.prepare('UPDATE update_recipients SET opened_at = ? WHERE id = ?').bind(nowIso(), rcp.id).run();
-      return c.json({ uid: u.uid, sent_at: u.sent_at, ...payloadFor(rcp.audience as Audience, shape) });
+      return c.json({ uid: u.uid, sent_at: u.sent_at, ...payloadFor(rcp.audience as Audience, {...shape,asks:await updateAskLinks(c.env,shape.asks,user,false,rcp.audience)}) });
     }
     const replies = await c.env.DB.prepare(
       `SELECT r.*, a.uid AS ask_uid FROM update_ask_replies r JOIN update_asks a ON a.id = r.ask_id WHERE a.update_id = ? ORDER BY r.id DESC`,
@@ -540,10 +543,10 @@ r.post('/asks/:askUid/replies', async (c) => {
     if (!message) return c.json({ detail: 'A reply says something', field: 'message' }, 400);
     const email = typeof body.email === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email.trim()) ? body.email.trim() : (user.email || null);
     const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 200) : (user.name || null);
-    const landed = await landReply(c.env, ask.project_id, { kind: ask.kind, link_ref: ask.link_ref, text: ask.text },
-      { name, email, message, userId: user.id });
     const uid = newUid();
-    await c.env.DB.prepare(
+    const callReply=await replyToLinkedCall(c.env,ask,user,message,uid);
+    const landed=callReply?{module:'round_call',ref:ask.link_ref,reason:null}:await landReply(c.env,ask.project_id,{kind:ask.kind,link_ref:ask.link_ref,text:ask.text},{name,email,message,userId:user.id});
+    if(!callReply)await c.env.DB.prepare(
       `INSERT INTO update_ask_replies (uid, ask_id, replier_user_id, name, email, message, landed_module, landed_ref, landed_reason)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(uid, ask.id, user.id, name, email, message, landed.module, landed.ref, landed.reason).run();
@@ -552,7 +555,7 @@ r.post('/asks/:askUid/replies', async (c) => {
       body: ask.text, link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges',
     }).then(() => undefined).catch(() => undefined));
     return c.json({ uid, landed_module: landed.module, landed_reason: landed.reason }, 201);
-  } catch (e) { return mapError(c, e); }
+  } catch (e) { if(e instanceof RoundCallError)return c.json({error:e.code,code:e.code},e.status); return mapError(c, e); }
 });
 
 // POST /api/portfolio-updates/asks/:askUid/ask-again — the author re-asks an ask

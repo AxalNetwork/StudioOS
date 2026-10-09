@@ -743,3 +743,16 @@ published-template picker and preview/send version/body check. History and
 signed-PDF endpoints expose safe projections and the exact PDF fingerprint.
 The legacy Legal deep link redirects with a moved notice. Formation orders are
 reached through the existing Spin-Out Lab page. Canvas reference: #1456 K1–K8.
+
+D653 (#1465): Raise’s Call for Capital header opens the five-step Extensions pause responses until renewed approval; deck-content hashes cover mutable slides.
+`RoundCallSheet`; `/round-calls?project_id=…` lists owned calls and
+`/round-calls/:uid` is private. The Worker `round_calls.ts` mounts
+`/api/round-calls`: availability/context/list, draft create/update, audience
+preview/update, send, responses, questions, manage and counsel-approval.
+Founder ownership and active company, verified investor recipient entitlement,
+and HQ/Super Admin counsel review are enforced server-side. Production flag
+ROUND_CALLS_ENABLED stays false. Deck versions and NDA/grant data-room materials
+remain references. Share an update’s capital asks link to the latest open call;
+network recipients see the ask text only. Eligible replies appear as native call
+questions and atomic Raise pipeline entries; other update replies remain on the
+source ask and appear in the founder’s question list with that source link.

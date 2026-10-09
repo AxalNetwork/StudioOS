@@ -1,4 +1,6 @@
 export interface Env {
+  // D653: stays off until owner/counsel authorize private founder round calls.
+  ROUND_CALLS_ENABLED?: string;
   DB: D1Database;
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
