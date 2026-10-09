@@ -125,3 +125,12 @@ canonical Super Admin only. Migration 434 records explicit published template sn
 preview/send routes verify the same version and body fingerprint, and history
 and signed-PDF routes project safe fields and hash the actual PDF bytes. The
 new desk opts into recorded send-event dates with `recorded=true`.
+
+D659 (#1472): `cycle_validate.ts` is mounted at `/api/cycles/validate` in
+`index.ts`. It serves #1469's shared cycle read for Validate. `GET /overview`
+returns four figures and six cards, and `GET /modules/:slug` returns one card
+plus its records (search, filters, sort, pages). The manual writes for
+migration 440's records go through `../services/validateWriters.ts`. Reading
+follows the founder board's `canReadBoard` rule and writing follows
+`canWrite`. A card whose store fails is `unreadable` on its own. See
+`documentation/architecture/decisions/D659.md`.

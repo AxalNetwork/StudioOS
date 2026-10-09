@@ -62,6 +62,24 @@ Connectors replace Integrations (D649). `/integrations` and `/account/integratio
 | `Connectors Page.dc.html` · `rail`, `railList` | the AI rail | #1464 (D652) | NEW |
 | `Cycle Action.dc.html` · `connect`: `list`, `failed`, `locked`, `loading`, `refused`, `success` | `/build`'s header, "Connect a tool" | `pages/account/ConnectToolSheet.jsx` in `pages/founder/FounderBuildDesk.jsx`; the same catalogue and sheet | UPGRADE: the `sync` view (GitHub repositories) waits on #1467 (D655) |
 
+### Validate cycle Worker read (D659, #1472)
+
+`cycle_validate.ts`, mounted at `/api/cycles/validate`, is the Worker half of
+the Validate cycle in `Cycle Overview.dc.html` (cycle Validate; O1, O1n, O5)
+and `Cycle Modules · Boards.dc.html` (MV1–MV6). `GET /overview?project=`
+returns #1469's four figures (interviews this month, pain themes, hypotheses
+supported, waitlist sign-ups) and six cards. `GET /modules/:slug?project=`
+returns one card and its records table. The slugs are `problem-discovery`,
+`customer-research`, `ideal-customer-profile`, `market-intelligence`,
+`demand-signals` and `experiments`. The SPA pages that draw them are #1474's
+(S07), so these are routes for those screens, not screens of their own.
+The Spin-Out Lab market page already reads `GET /market-readiness` and
+writes `PUT /market-marks/:item` and `POST|DELETE /market-sources`. The other
+writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
+`/waitlist-target`, `/competitor-mentions`, `/hypotheses/:id/plan`,
+`/evidence-links/:id/strength`) call the same writers as #1471's interview
+accept path. See `decisions/D659.md`.
+
 ### Cycle overviews and module pages (D661, #1474)
 
 The components are built in `frontend/src/pages/cycles/` and are not mounted yet: each cycle keeps its current page until its read from #1469 (D656) is on `main`. D661 gives the shape D656 left open for `Card.series` and the records.
