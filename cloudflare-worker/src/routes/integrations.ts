@@ -45,6 +45,8 @@ import { refuse } from '../util/refusal';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
 import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
+import { fedCounts } from '../integrations/fed';
+import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, readProgress } from '../integrations/providers/github';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -632,6 +634,128 @@ integrations.post('/:uid/sync', async (c) => {
     });
     return refuse(c, 502, { code: 'sync_failed', message: 'The sync did not complete. Check the connection and try again.', raw: msg, audience: 'owner' });
   }
+});
+
+// ─────────────────────────────────────────────── D655: progress, fed, repositories
+
+/** The current or last sync's progress: a percentage and what it is reading. */
+integrations.get('/:uid/sync-status', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const row = await loadRow(c.env, c.req.param('uid'), user.id);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  const p = await readProgress(c.env, row.uid);
+  return c.json({
+    ok: true,
+    state: p?.state ?? 'idle',
+    pct: p ? p.pct : null,
+    reading: p?.reading ?? null,
+    updated_at: p?.updated_at ?? null,
+    last_synced_at: row.last_synced_at,
+    last_error: row.status === 'error' ? 'The last sync did not complete.' : null,
+  });
+});
+
+/** "Now fed by": items delivered per module. Every connector answers. */
+integrations.get('/:uid/fed', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const row = await loadRow(c.env, c.req.param('uid'), user.id);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  try {
+    return c.json({ ok: true, provider_key: row.provider_key, modules: await fedCounts(c.env, row.id, row.provider_key) });
+  } catch {
+    return c.json({ error: 'fed_unreadable', message: 'Unreadable: what this connector delivered could not be read.' }, 503);
+  }
+});
+
+async function githubScope(c: Context<{ Bindings: Env }>) {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const row = await loadRow(c.env, c.req.param('uid') || '', user.id);
+  if (!row) return { refusal: c.json({ error: 'not_found' }, 404) };
+  if (row.provider_key !== 'github') return { refusal: c.json({ error: 'repositories_not_supported' }, 422) };
+  const selectedCompany = await activeCompanyFor(c, user);
+  if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) {
+    return { refusal: c.json({ error: 'company_not_enabled' }, 403) };
+  }
+  return { user, row };
+}
+
+/** The repositories the member's installations reach, and the chosen ones. */
+integrations.get('/:uid/repositories', async (c) => {
+  const s = await githubScope(c);
+  if ('refusal' in s) return s.refusal;
+  try {
+    const token = await accessToken(c.env, s.row);
+    const granted = await grantedPermissions(token);
+    const cfg = safeJson<Record<string, unknown>>(s.row.config_json, {});
+    return c.json({
+      ok: true,
+      available: await accessibleRepositories(token, granted.installations),
+      selected: Array.isArray(cfg.repositories) ? cfg.repositories : [],
+      project_id: cfg.project_id ?? null,
+    });
+  } catch (e) {
+    return refuse(c, 502, { code: 'repositories_unreadable', message: 'GitHub did not list the repositories. Check the connection and try again.', raw: e, audience: 'owner' });
+  }
+});
+
+/**
+ * Choose the repositories to sync, and the project they feed. The grant is
+ * read again first: if GitHub now grants anything beyond the registry's
+ * read-only list (a write, say), the choice is refused and nothing is saved.
+ */
+integrations.put('/:uid/repositories', async (c) => {
+  const s = await githubScope(c);
+  if ('refusal' in s) return s.refusal;
+  const body = await c.req.json().catch(() => ({})) as { repositories?: unknown; project_id?: unknown };
+  const projectId = Number(body.project_id);
+  if (!Number.isSafeInteger(projectId) || !(await projectEnabled(c.env, s.row.id, projectId))) {
+    return c.json({ error: 'project_not_enabled' }, 403);
+  }
+  let token: string, granted: { scopes: string[]; installations: number[] };
+  try {
+    token = await accessToken(c.env, s.row);
+    granted = await grantedPermissions(token);
+  } catch (e) {
+    return refuse(c, 502, { code: 'grant_unreadable', message: 'GitHub did not say what it grants. Nothing was saved.', raw: e, audience: 'owner' });
+  }
+  const desc = getDescriptor('github');
+  if (!desc || hasScopeOverreach(desc, granted.scopes)) {
+    await logEvent(c.env, {
+      integration_id: s.row.id, user_id: s.user.id, provider_key: 'github',
+      direction: 'internal', event_type: 'overreach', status: 'error',
+      response_summary: 'GitHub grants more than read access; repositories were not saved.',
+      payload: { granted: granted.scopes },
+    });
+    return c.json({
+      error: 'write_scope_refused',
+      message: 'GitHub grants this connection more than read access. Change the StudioOS app to read-only in GitHub, then choose again.',
+      granted: granted.scopes,
+    }, 403);
+  }
+  let available;
+  try {
+    available = await accessibleRepositories(token, granted.installations);
+  } catch (e) {
+    return refuse(c, 502, { code: 'repositories_unreadable', message: 'GitHub did not list the repositories. Nothing was saved.', raw: e, audience: 'owner' });
+  }
+  const choice = checkChoice(body.repositories, available);
+  if (!choice.ok) return c.json(choice, 400);
+  const merged = { ...safeJson<Record<string, unknown>>(s.row.config_json, {}), repositories: choice.repositories, project_id: projectId, installations: granted.installations };
+  await c.env.DB.prepare('UPDATE integrations SET config_json = ?, scopes_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .bind(JSON.stringify(merged), JSON.stringify(granted.scopes), s.row.id).run();
+  await logEvent(c.env, {
+    integration_id: s.row.id, user_id: s.user.id, provider_key: 'github',
+    direction: 'internal', event_type: 'repositories_chosen', status: 'ok',
+    response_summary: `${choice.repositories.length} repositories chosen.`,
+    payload: { repositories: choice.repositories, project_id: projectId },
+  });
+  return c.json({ ok: true, repositories: choice.repositories, project_id: projectId });
 });
 
 // ───────────────────────────────────────────────────────────────────── push

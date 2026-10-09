@@ -40,11 +40,27 @@ import {
   type LedgerRow,
 } from '../services/revenueLedger';
 import { listLedgerChargesForUser } from '../integrations/providers/stripe';
+import { recomputeRevenueMovements } from '../services/revenueMovements';
 
 type Project = { id: number; name: string | null; founder_id: number | null; company_id: number | null };
 type Ctx = Context<{ Bindings: Env }>;
 
 const revenue = new Hono<{ Bindings: Env }>();
+
+// D664: after any write that changed the ledger (an entry, a CSV import, the
+// Stripe import, an edit or a delete), rewrite the project's revenue movements
+// (new, expansion, churned) from it. A failure here is logged and never fails
+// the write; the next ledger write rewrites them again.
+const afterLedgerWrite = async (c: Context<{ Bindings: Env }>, next: () => Promise<void>) => {
+  await next();
+  if (c.req.method === 'GET' || c.res.status >= 300) return;
+  const pid = Number(c.req.param('projectId'));
+  if (!Number.isInteger(pid)) return;
+  try { await recomputeRevenueMovements(c.env, pid); }
+  catch (e) { console.error('[revenue] movements not rewritten:', (e as Error).message); }
+};
+revenue.use('/projects/:projectId/entries', afterLedgerWrite);
+revenue.use('/projects/:projectId/entries/*', afterLedgerWrite);
 
 const isPrivileged = (role: User['role']) => role === 'admin' || role === 'partner';
 

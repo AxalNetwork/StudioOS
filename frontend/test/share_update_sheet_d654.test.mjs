@@ -69,6 +69,8 @@ test('highlights name their source; "nothing" offers Skip this month or Write by
 test('asks: a hire links to an open role; a market ask says its reply stays on the ask', () => {
   const { html, text } = sheet({ step: 3, asks: [{ kind: 'hire', text: 'A senior engineer', link_ref: '3' }, { kind: 'market', text: 'Spain', link_ref: null }] });
   assert.match(html, /<option value="3"[^>]*>Engineer<\/option>/);
+  const withMarkets = sheet({ step: 3, context: { ...base.context, markets: [{ id: 9, name: 'Spain' }] }, asks: [{ kind: 'market', text: 'Spain', link_ref: '9' }] });
+  assert.match(withMarkets.html, /<option value="9"[^>]*>Spain<\/option>/, 'D664: a market ask picks one of the markets');
   assert.match(text, /Replies land in Talent/);
   assert.match(text, /no Market expansion store yet/);
   for (const k of ['A hire', 'A customer introduction', 'A partner', 'A market contact', 'Capital']) assert.ok(text.includes(k), k);

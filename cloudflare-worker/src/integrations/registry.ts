@@ -332,6 +332,24 @@ export const REGISTRY: ProviderDescriptor[] = [
     icon: 'Network',
   },
   {
+    key: 'github',
+    display_name: 'GitHub',
+    integration_type: 'data_feed',
+    description: 'Read issues, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only.',
+    // D655 (#1467). A GitHub App, not an OAuth App: an OAuth App's only
+    // private-repository scope (`repo`) also grants write, so read-only is
+    // possible only with an App's fine-grained permissions. These four are
+    // the App's permissions; the callback reads what each installation
+    // actually grants and refuses anything beyond them (a write is refused).
+    status: 'beta',
+    tier: 'free',
+    auth_type: 'oauth2',
+    capabilities: ['Read issues', 'Read pull requests', 'Read releases', 'Choose repositories'],
+    docs_url: 'https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app',
+    icon: 'Github',
+    oauth_scopes: ['issues:read', 'pull_requests:read', 'contents:read', 'metadata:read'],
+  },
+  {
     key: 'google_calendar', display_name: 'Google Calendar', integration_type: 'scheduling',
     description: 'Calendar events and interview slots from your existing Google Calendar connection.',
     status: 'live', tier: 'free', auth_type: 'oauth2', capabilities: ['Calendar events'],
@@ -367,6 +385,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   crunchbase: { category: 'Data', verified: false, pulls: [{ what: 'Company data', module: 'market_intelligence' }], sends: [], feeds: ['market_intelligence'], permissions: ['Read company profiles with your Crunchbase key.'] },
   stripe: { category: 'Payments', verified: true, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   affinity: { category: 'CRM', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read relationship data from your Affinity account.'] },
+  github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Releases', module: 'product_roadmap' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases in the repositories you choose.', 'Read repository names and visibility.'] },
   google_calendar: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read Gmail messages linked to invitations.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   microsoft_365: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };

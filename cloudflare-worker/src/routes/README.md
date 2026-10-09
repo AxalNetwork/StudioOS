@@ -35,6 +35,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/portfolio-support → portfolio_support.ts  (the IP3 value-add ledger, D70)
 /api/founder/validate → founder_validate.ts, founder_validate_sessions.ts  (D657's interview sessions: /interviews/:id/sessions, /sessions/*)
 /api/portfolio-updates → portfolio_updates.ts  (founder updates; D654's Share an update: /share/*, /:uid/share|send|page, /asks/:uid/*)
+/api/cycles/grow   → cycle_grow.ts  (D664: the Grow overview, module reads and store writes; its shared card types live in the services folder as cycleCards)
 /api/users         → users.ts
 /api/market-intel  → market_intel.ts
 /api/market-intel-public → market_intel_public.ts
@@ -47,6 +48,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650)
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
+                                         (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/liquidity     → liquidity.ts
@@ -134,3 +136,5 @@ migration 440's records go through `../services/validateWriters.ts`. Reading
 follows the founder board's `canReadBoard` rule and writing follows
 `canWrite`. A card whose store fails is `unreadable` on its own. See
 `documentation/architecture/decisions/D659.md`.
+
+D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.

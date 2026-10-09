@@ -134,6 +134,8 @@ import { crunchbaseFetch as _registerCrunchbase } from './integrations/providers
 void _registerCrunchbase;
 // Task #6 (DG) — Stripe provider. Side-effect import so registerProvider() runs at boot.
 import './integrations/providers/stripe';
+// D655 (#1467) — GitHub: read-only issues, pull requests and releases from chosen repositories.
+import './integrations/providers/github';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -160,6 +162,7 @@ import usage from './routes/usage';
 import researchOverview from './routes/research_overview';
 import researchMarkets from './routes/research_markets';
 import researchSectors from './routes/research_sectors';
+import cycleGrow from './routes/cycle_grow';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -334,6 +337,7 @@ import portfolioUpdates from './routes/portfolio_updates';
 import portfolioSupport from './routes/portfolio_support';
 import positions from './routes/positions';
 import contacts from './routes/contacts';
+import roundCalls from './routes/round_calls';
 import track from './routes/track';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -999,6 +1003,7 @@ app.route('/api/positions', positions);
 // Contacts — unified inbound relationship hub (founder CRM). Role-gated
 // in-route (founder/admin); no paywall prefix so it's core-available.
 app.route('/api/contacts', contacts);
+app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);
 app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-performance', fundPerformance);
@@ -1042,6 +1047,8 @@ app.route('/api/research/overview', researchOverview);
 // services/researchTaxonomy.ts. Paths do not overlap research.ts's.
 app.route('/api/research', researchMarkets);
 app.route('/api/research', researchSectors);
+// D664 (#1477): the Grow cycle's overview, module reads and store writes.
+app.route('/api/cycles/grow', cycleGrow);
 app.route('/api/research', research);
 // D642 — usage is keyed on the caller, across all their companies.
 app.route('/api/usage', usage);

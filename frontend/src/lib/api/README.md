@@ -58,3 +58,5 @@ D659 (#1472): `cycleValidate.js` calls `/api/cycles/validate`: the overview,
 one module's card and records, the Lab market page's three stored checks, and
 the manual writes for migration 440's records. Every call names the project
 with `?project=`.
+
+D653: `roundCalls.js` calls the mounted `/api/round-calls` domain for availability, real planner context, draft/audience, counsel review, send, responses and management. It uses the shared authenticated request client and has no public-token transport.

@@ -242,6 +242,21 @@ async function testCarta(id: string, secret: string): Promise<ProviderTestResult
       : `Carta rejected credentials (${err || res.status}).` };
 }
 
+async function testGithub(id: string, secret: string): Promise<ProviderTestResult> {
+  const body = new URLSearchParams({ client_id: id, client_secret: secret, code: 'axal-probe-invalid-code' });
+  const res = await safeFetch('https://github.com/login/oauth/access_token', {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body,
+  });
+  if (!res) return { ok: false, reachable: false, detail: 'Network/timeout reaching github.com' };
+  const j = await parseJsonSafe(res);
+  const err = (j?.error || '').toLowerCase();
+  // GitHub answers an invalid code with `bad_verification_code` once the
+  // client pair is accepted, and `incorrect_client_credentials` otherwise.
+  const ok = err === 'bad_verification_code';
+  return { ok, reachable: true, http_status: res.status, provider_error: err || null,
+    detail: ok ? 'GitHub accepted the client credentials.' : `GitHub rejected credentials (${err || res.status}).` };
+}
+
 // ─── New providers (API key) ────────────────────────────────────────────────
 
 async function testCrunchbase(_id: string, secret: string): Promise<ProviderTestResult> {
@@ -343,6 +358,7 @@ export async function testOauthCreds(
     case 'calendly':   return testCalendly(cred.id, cred.secret);
     case 'stripe':     return testStripe(cred.id, cred.secret);
     case 'carta':      return testCarta(cred.id, cred.secret);
+    case 'github':     return testGithub(cred.id, cred.secret);
     case 'crunchbase': return testCrunchbase(cred.id, cred.secret);
     case 'affinity':   return testAffinity(cred.id, cred.secret);
     case 'telegram':   return testTelegram(cred.id, cred.secret);

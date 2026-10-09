@@ -27,6 +27,7 @@ import type { Env } from '../types';
 // statement is independent); we swallow per-table errors so a missing or
 // renamed optional table on one install doesn't abort the cascade.
 const CHILD_TABLES = [
+  'round_calls', // D653: recipients and questions cascade before the project is removed.
   'score_snapshots', 'documents', 'deal_memos', 'deals',
   'capital_calls', 'tickets', 'discovery_interviews', 'roadmap_okrs',
   'fund_reserve_allocations', 'financial_models',
