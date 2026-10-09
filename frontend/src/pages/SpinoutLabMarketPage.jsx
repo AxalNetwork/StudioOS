@@ -42,6 +42,7 @@ import {
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import { api, spinoutLab } from '../lib/api';
+import { cycleValidateApi } from '../lib/api/cycleValidate';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
@@ -345,8 +346,9 @@ export default function SpinoutLabMarketPage() {
   const [anim, setAnim] = useState(null); // {tam,sam,som} in dollars while the recalc tween runs
   const animRef = useRef(null);
   const finishRef = useRef({ tween: false, saved: false });
-  // Readiness checklist flags with no backend signal — set when the founder
-  // completes the action this session (spec F).
+  // Readiness checklist flags the founder sets by doing the thing (spec F).
+  // Stored since D659 (`market_readiness_marks`): they used to live in this
+  // state alone, so a reload un-ticked them.
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [posDone, setPosDone] = useState(false);
   const [assumptionsReviewed, setAssumptionsReviewed] = useState(false);
@@ -357,7 +359,8 @@ export default function SpinoutLabMarketPage() {
   const [compForm, setCompForm] = useState({ name: '', cat: 'Indirect', share: '', note: '', stage: 'Seed' });
   const [compBusy, setCompBusy] = useState(false);
   const [compError, setCompError] = useState('');
-  // Founder-added sources (spec D) — local-only; no backend endpoint exists.
+  // Founder-added sources (spec D) — stored since D659 (`market_sources`). A
+  // row with no `id` is one whose save failed, and says so.
   const [founderSources, setFounderSources] = useState([]);
   const [srcAdding, setSrcAdding] = useState(false);
   const [srcForm, setSrcForm] = useState({ title: '', type: 'Report' });
@@ -418,7 +421,22 @@ export default function SpinoutLabMarketPage() {
           // the three saved figures and none of the reasoning behind them.
           p ? api.getMarketAssumptions(p.id).catch(() => null) : Promise.resolve(null),
         ]);
+        // D659 — the three checks this page used to hold in state alone. A
+        // failed read leaves them unticked, which is what the page showed
+        // before they were stored; it never ticks one it could not read.
+        const readiness = p ? await cycleValidateApi.marketReadiness(p.id).catch((e) => {
+          reportError('SpinoutLabMarketPage:readiness', e);
+          return null;
+        }) : null;
         if (!alive) return;
+        if (readiness) {
+          setPosDone(Boolean(readiness.positioning_map));
+          setAssumptionsReviewed(Boolean(readiness.assumptions_reviewed));
+          setFounderSources((readiness.sources || []).map((r) => ({
+            id: r.id, title: r.title, type: r.kind,
+            date: new Date(String(r.created_at).replace(' ', 'T') + (String(r.created_at).includes('Z') ? '' : 'Z')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+          })));
+        }
         setCompass(cp);
         setLens(fl);
         setSources(src);
@@ -544,6 +562,10 @@ export default function SpinoutLabMarketPage() {
       finishRef.current.saved = true;
       if (finishRef.current.tween) setAnim(null);
       setAssumptionsReviewed(true);
+      if (project?.id) {
+        cycleValidateApi.setMarketMark(project.id, 'assumptions_reviewed', true)
+          .catch((e) => reportError('SpinoutLabMarketPage:mark-assumptions', e));
+      }
       // THE DRAWER STAYS OPEN WHEN THE ASSUMPTIONS DID NOT LAND, because
       // `saveError` is drawn inside it: closing would file the one message that
       // says what was lost behind a panel nobody has a reason to reopen, which is
@@ -626,19 +648,37 @@ export default function SpinoutLabMarketPage() {
   };
 
   // ---- Sources (spec D) ----
-  const confirmAddSource = () => {
+  const confirmAddSource = async () => {
     const title = srcForm.title.trim();
     if (!title) {
       // Design behavior: empty title cancels silently.
       setSrcAdding(false);
       return;
     }
-    setFounderSources((prev) => [
-      ...prev,
-      { title, type: srcForm.type, date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) },
-    ]);
+    const row = { title, type: srcForm.type, date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) };
     setSrcForm({ title: '', type: 'Report' });
     setSrcAdding(false);
+    // Saved first; a row whose save failed stays on screen, marked unsaved.
+    const saved = project?.id
+      ? await cycleValidateApi.addMarketSource(project.id, { title, kind: srcForm.type }).catch((e) => {
+        reportError('SpinoutLabMarketPage:source-add', e);
+        return null;
+      })
+      : null;
+    setFounderSources((prev) => [...prev, { ...row, id: saved?.id ?? null }]);
+  };
+
+  const removeSource = async (i) => {
+    const row = founderSources[i];
+    if (row?.id != null && project?.id) {
+      try {
+        await cycleValidateApi.removeMarketSource(project.id, row.id);
+      } catch (e) {
+        reportError('SpinoutLabMarketPage:source-remove', e);
+        return;
+      }
+    }
+    setFounderSources((prev) => prev.filter((_, idx) => idx !== i));
   };
 
   const derived = useMemo(() => {
@@ -1156,15 +1196,15 @@ export default function SpinoutLabMarketPage() {
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{s.title}</span>
                           <span className={`text-[9.5px] font-bold rounded-full px-1.5 py-0.5 ${SRC_TYPE_CHIP[s.type] || SRC_TYPE_CHIP.Manual}`}>{s.type === 'Manual' ? 'Manual entry' : s.type}</span>
                         </div>
-                        {/* Founder sources have no backend endpoint yet — page-local, and honest about it. */}
+                        {/* Stored since D659; a row whose save failed says so. */}
                         <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-0.5">
-                          Added {s.date} · <span className="text-amber-700 dark:text-amber-400 font-semibold">not saved yet</span>
+                          Added {s.date}{s.id == null && <> · <span className="text-amber-700 dark:text-amber-400 font-semibold">not saved yet</span></>}
                         </div>
                       </div>
                       <button
                         type="button"
                         title="Remove"
-                        onClick={() => setFounderSources((prev) => prev.filter((_, idx) => idx !== i))}
+                        onClick={() => removeSource(i)}
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-sm leading-none px-1"
                       >
                         ×
@@ -1331,7 +1371,13 @@ export default function SpinoutLabMarketPage() {
                     <Link
                       to="/raise/pitch/positioning"
                       data-testid="link-positioning"
-                      onClick={() => setPosDone(true)}
+                      onClick={() => {
+                        setPosDone(true);
+                        if (project?.id) {
+                          cycleValidateApi.setMarketMark(project.id, 'positioning_map', true)
+                            .catch((e) => reportError('SpinoutLabMarketPage:mark-positioning', e));
+                        }
+                      }}
                       className="inline-flex h-8 items-center gap-1.5 px-3.5 rounded-lg border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 text-[11.5px] font-semibold"
                     >
                       Generate positioning <ArrowRight size={13} />

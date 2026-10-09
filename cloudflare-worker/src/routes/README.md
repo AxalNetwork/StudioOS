@@ -69,6 +69,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
+/api/founder/validate → founder_validate_structure.ts (a structured interview's placements: accept, edit then accept, discard; D658)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -125,3 +126,12 @@ canonical Super Admin only. Migration 434 records explicit published template sn
 preview/send routes verify the same version and body fingerprint, and history
 and signed-PDF routes project safe fields and hash the actual PDF bytes. The
 new desk opts into recorded send-event dates with `recorded=true`.
+
+D659 (#1472): `cycle_validate.ts` is mounted at `/api/cycles/validate` in
+`index.ts`. It serves #1469's shared cycle read for Validate. `GET /overview`
+returns four figures and six cards, and `GET /modules/:slug` returns one card
+plus its records (search, filters, sort, pages). The manual writes for
+migration 440's records go through `../services/validateWriters.ts`. Reading
+follows the founder board's `canReadBoard` rule and writing follows
+`canWrite`. A card whose store fails is `unreadable` on its own. See
+`documentation/architecture/decisions/D659.md`.

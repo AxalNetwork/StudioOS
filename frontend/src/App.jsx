@@ -77,6 +77,8 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 // guard test all read that one file, so a row can never advertise a door the
 // router does not open.
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
+// D660 (#1473) — one interview session: record, live transcript, review.
+const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const FundCatalogProfile = lazy(() => import('./pages/research/FundCatalogProfile'));
@@ -2496,6 +2498,7 @@ function AppInner() {
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/session/:id" element={guard(labRoles(['admin', 'founder']), <InterviewSessionPage />)} />
 
       {/* ── Research · one path, four zone lists ─────────────────────────────
           Shared like /network already is: the route role-branches its element

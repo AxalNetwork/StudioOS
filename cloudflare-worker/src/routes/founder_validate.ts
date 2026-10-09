@@ -27,7 +27,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import {
   loadPainGroupModel, normPhrase, getPainGroupsView,
-  isPainSeverity, PAIN_SEVERITIES,
+  isPainSeverity, PAIN_SEVERITIES, isPainSeverityLevel, PAIN_SEVERITY_LEVELS,
 } from '../services/painGroups';
 import { csvResponse, stamp } from '../services/csv';
 import {
@@ -48,7 +48,7 @@ import {
 // registry entry calls it now, and this file's own alias write lives in
 // `progress.ts`. Both callers still go through the one writer, which is the
 // point; only the caller moved.
-import { insertHypothesis } from './_founder_validate_writes';
+import { insertHypothesis, insertHypothesisLink, setInterviewIcpFit, upsertPainSeverity } from './_founder_validate_writes';
 import { FILL_KINDS, fillKind } from '../services/fills/registry';
 import { ensureFillProvenanceSchema, recordFill } from '../services/fills/provenance';
 // `PROPOSAL_KINDS`, `TASK_FOR_KIND`, `TAG_PROMPT`, `DRAFT_PROMPT` and the two
@@ -389,16 +389,11 @@ founderValidate.post('/hypotheses/:id/links', async (c) => {
 
   // The pain group must belong to the SAME project. Without this a link could
   // pull another venture's interviews into this venture's evidence count.
-  const group = await c.env.DB.prepare(
-    'SELECT id FROM pain_groups WHERE id = ? AND project_id = ?',
-  ).bind(groupId, owner.project_id).first<{ id: number }>();
-  if (!group) return notFound('Pain group');
-
-  await c.env.DB.prepare(
-    `INSERT INTO hypothesis_pain_links (hypothesis_id, pain_group_id, direction)
-     VALUES (?, ?, ?)
-     ON CONFLICT(hypothesis_id, pain_group_id, direction) DO NOTHING`,
-  ).bind(id, groupId, direction).run();
+  // `insertHypothesisLink` checks both ends; an accepted D658 placement
+  // writes through the same function.
+  if (!await insertHypothesisLink(c.env, Number(owner.project_id), id, groupId, direction as 'supports' | 'contradicts')) {
+    return notFound('Pain group');
+  }
   return json({ ok: true }, 201);
 });
 
@@ -562,9 +557,7 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
   if ('icp_fit' in b) {
     const v = b.icp_fit == null ? null : String(b.icp_fit);
     if (v !== null && !ICP_VALUES.has(v)) return json({ detail: 'icp_fit must be strong, partial or none' }, 400);
-    await c.env.DB.prepare(
-      "UPDATE discovery_interviews SET icp_fit = ?, updated_at = datetime('now') WHERE id = ?",
-    ).bind(v, id).run();
+    await setInterviewIcpFit(c.env, id, v);
   }
   if ('quote_consent' in b) {
     // Three states, and the third is the reason this column is nullable:
@@ -632,19 +625,16 @@ founderValidate.put('/interviews/:id/pain-severity', async (c) => {
     return json({ ok: true, severity: null });
   }
 
-  if (!isPainSeverity(b.severity)) {
-    return json({ detail: `severity must be ${PAIN_SEVERITIES.join(' or ')}, or null to clear` }, 400);
+  // The three levels (D659) are accepted beside the two the form has always
+  // sent; `severityLevel` reads both on one scale.
+  if (!isPainSeverity(b.severity) && !isPainSeverityLevel(b.severity)) {
+    return json({ detail: `severity must be ${[...PAIN_SEVERITIES, ...PAIN_SEVERITY_LEVELS].join(', ')}, or null to clear` }, 400);
   }
 
   // UPSERT ON THE TABLE'S OWN UNIQUE INDEX. Two tabs judging the same pain must
   // not leave two rows — the view would then count one interview twice, and the
   // `need_count` it reports is a count of interviews.
-  await c.env.DB.prepare(
-    `INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity)
-     VALUES (?, ?, ?)
-     ON CONFLICT(interview_id, phrase_norm)
-     DO UPDATE SET severity = excluded.severity, updated_at = datetime('now')`,
-  ).bind(id, norm, b.severity).run();
+  await upsertPainSeverity(c.env, id, norm, b.severity);
   return json({ ok: true, severity: b.severity });
 });
 
