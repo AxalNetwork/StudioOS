@@ -66,6 +66,17 @@ Connectors replace Integrations (D649). `/integrations` and `/account/integratio
 | `Connectors Page.dc.html` · `rail`, `railList` | the AI rail | #1464 (D652) | NEW |
 | `Cycle Action.dc.html` · `connect`: `list`, `failed`, `locked`, `loading`, `refused`, `success` | `/build`'s header, "Connect a tool" | `pages/account/ConnectToolSheet.jsx` in `pages/founder/FounderBuildDesk.jsx`; the same catalogue and sheet | UPGRADE: the `sync` view (GitHub repositories) waits on #1467 (D655) |
 
+### Interviews from an AI assistant (D667, #1497)
+
+The interview tools of the StudioOS MCP connector (D665) are
+`submit_interview`, `propose_placements` and `structure_with_studioos`, in
+`services/assistantInterviews.ts`. They are registered on #1496's
+`/api/mcp` server, behind `MCP_SERVER_ENABLED`, so no SPA route is new.
+What they write is reviewed on the Interview Session page's review step
+(#1473), which reads `GET /api/founder/validate/sessions/:id/placements`.
+That read now labels each run's `source` (`assistant` or `studioos`) and the
+assistant's `submitted_via_name`. See `decisions/D667.md`.
+
 ### Validate cycle Worker read (D659, #1472)
 
 `cycle_validate.ts`, mounted at `/api/cycles/validate`, is the Worker half of

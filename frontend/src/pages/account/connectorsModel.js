@@ -4,13 +4,13 @@
  * where a return from a provider's sign-in lands. No React and no fetch, so
  * every rule here is held by `frontend/test/connectors_page_d651.test.mjs`.
  *
- * TODAY THE PAGE READS `/api/integrations`. D650 (#1462) moves the routes to
- * `/api/connectors` and adds the fields the canvas draws beside each row:
- * `category`, `verified`, `pulls`, `sends`, `feeds`, `permissions`, the
- * companies a connection serves, suggestions and requests. Every reader below
- * takes D650's field first and, while it is absent, says "Not recorded" rather
- * than inventing one. The only field derived meanwhile is the category, from
- * the registry's own `integration_type`.
+ * THE PAGE READS `/api/connectors` (D650, through `lib/api/connectors.js`).
+ * The registry carries the fields the canvas draws beside each row:
+ * `category`, `verified`, `pulls`, `sends`, `feeds` and `permissions`; a
+ * connection carries the `company_ids` it serves. The three first-party
+ * connectors (Google, Microsoft, LinkedIn) are not in the registry, so a field
+ * they do not carry still says "Not recorded" rather than inventing one. Their
+ * category is the one field filled in here.
  */
 
 export const PAGE_SIZE = 10;
@@ -58,6 +58,23 @@ export const FIRST_PARTY = [
 
 const FIRST_PARTY_EMAIL = { google: 'google_email', microsoft: 'microsoft_email', linkedin: 'linkedin_email' };
 
+/**
+ * A registry connection with the companies it can serve: every company the
+ * member belongs to, each marked by whether the connection's `company_ids`
+ * holds it. When the member's companies could not be read (`companies` is
+ * null), the connection carries none and the page says "Not recorded".
+ */
+export function withCompanies(conn, companies) {
+  if (!conn || !Array.isArray(companies) || !Array.isArray(conn.company_ids)) return conn;
+  const on = new Set(conn.company_ids.map(Number));
+  return {
+    ...conn,
+    companies: companies
+      .filter((c) => Number.isSafeInteger(Number(c?.id)))
+      .map((c) => ({ company_id: Number(c.id), name: c.company_name || c.name || null, enabled: on.has(Number(c.id)) })),
+  };
+}
+
 /** A first-party status read, as a connection row; null when not connected. */
 export function firstPartyConnection(key, status) {
   if (!status || !status.connected) return null;
@@ -81,9 +98,9 @@ export function firstPartyConnection(key, status) {
  * null. A first-party connector whose status could not be read, or that is
  * not configured on this deployment, is still listed but cannot be connected.
  */
-export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {} } = {}) {
+export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, companies = null } = {}) {
   const byKey = new Map();
-  for (const it of items || []) if (it && !byKey.has(it.provider_key)) byKey.set(it.provider_key, it);
+  for (const it of items || []) if (it && !byKey.has(it.provider_key)) byKey.set(it.provider_key, withCompanies(it, companies));
   const joined = new Set((waitlist || []).map((w) => w.provider_key));
   const out = [];
   const seen = new Set();
@@ -142,7 +159,7 @@ export function connectionStatus(conn, p, { syncing = false } = {}) {
   return { label: 'Connected', tone: 'ok', why: '' };
 }
 
-/** "Pulls in", "Sends out" or "Both", from D650's `pulls` and `sends`; null until then. */
+/** "Pulls in", "Sends out" or "Both", from the registry's `pulls` and `sends`; null when it carries neither. */
 export function doesLabel(p) {
   if (!Array.isArray(p?.pulls) && !Array.isArray(p?.sends)) return null;
   const pulls = (p.pulls || []).length > 0;
@@ -158,18 +175,20 @@ function humanKey(k) {
   return s ? s[0].toUpperCase() + s.slice(1) : '';
 }
 
-/** The modules a connector fills, from D650's `feeds`; null until then. */
+/** The modules a connector fills, from the registry's `feeds`; null when it names none. */
 export function feedsLabel(p) {
   if (!Array.isArray(p?.feeds) || !p.feeds.length) return null;
   return p.feeds.map((f) => (typeof f === 'string' ? humanKey(f) : f?.label || humanKey(f?.key))).filter(Boolean).join(', ') || null;
 }
 
-/** "All" or "2 of 3", from D650's per-company scope; null until then. */
+/** "All", "2 of 3" or "None", from the connection's per-company scope; null when it is not known. */
 export function companiesLabel(conn) {
   const list = conn?.companies;
   if (!Array.isArray(list)) return null;
+  if (!list.length) return 'No company';
   const on = list.filter((c) => c.enabled !== false).length;
-  if (list.length && on === list.length) return 'All';
+  if (on === list.length) return 'All';
+  if (on === 0) return 'None';
   return `${on} of ${list.length}`;
 }
 
@@ -210,12 +229,22 @@ export const YOURS_SORTS = [
 
 const STATUS_RANK = { 'Needs attention': 0, Syncing: 1, Connected: 2, Beta: 2, Paused: 3 };
 
-function matches(p, q) {
+/**
+ * Whether a connector answers a search: its name, maker, category,
+ * description, capabilities, what it pulls and sends, and the modules it
+ * feeds. One rule for every list and for the "No connector called…" check,
+ * so a query never finds a card while the page says it found nothing.
+ */
+export function matchesQuery(p, q) {
   const needle = String(q || '').trim().toLowerCase();
   if (!needle) return true;
-  return [p.display_name, p.by, p.category, p.description, ...(p.capabilities || [])]
-    .some((v) => String(v || '').toLowerCase().includes(needle));
+  return [
+    p.display_name, p.by, p.category, p.description, ...(p.capabilities || []),
+    ...(p.pulls || []).map((x) => x?.what), ...(p.sends || []).map((x) => x?.what),
+    feedsLabel(p),
+  ].some((v) => String(v || '').toLowerCase().includes(needle));
 }
+const matches = matchesQuery;
 
 /** The member's connectors, searched, filtered and sorted. */
 export function yoursRows(catalogue, { q = '', filter = 'all', sort = 'name', syncing = {} } = {}) {
@@ -280,15 +309,19 @@ export function cardPill(p) {
 /**
  * Discover's sections for the chosen chip. "All" draws Top connectors (those
  * that can be connected) and Coming soon; a category draws its own connectors.
- * "Suggested for you" is D650's `/suggestions` read, handed in as
- * `suggestions` (null until that route exists).
+ * "Suggested for you" is the `/suggestions` read for the active company,
+ * handed in as `suggestions` (null when it could not be read). Each item
+ * names its connector by `provider_key`.
  */
 export function discoverSections(catalogue, chip = 'All', { q = '', suggestions = null } = {}) {
   const list = (catalogue || []).filter((p) => matches(p, q));
   if (chip === SUGGESTED) {
     if (!Array.isArray(suggestions)) return [{ title: SUGGESTED, cards: null }];
     const keyed = new Map(list.map((p) => [p.key, p]));
-    const cards = suggestions.map((s) => keyed.get(s.key) && { ...keyed.get(s.key), why: s.reason || '' }).filter(Boolean);
+    const cards = suggestions.map((s) => {
+      const p = keyed.get(s?.provider_key || s?.key);
+      return p && { ...p, why: s.reason || '' };
+    }).filter(Boolean);
     return [{ title: SUGGESTED, cards }];
   }
   if (chip !== 'All') {
@@ -341,12 +374,19 @@ const GOOGLE_ERRORS = {
  *   ?google=connected | ?microsoft=connected | ?linkedin=connected → connected
  *   ?google=error&reason=…  | ?microsoft=error&reason=… | ?linkedin=error&linkedin_error=… → cancelled or refused
  */
+const WORD = /^[a-z0-9_]+$/;
+/** A query value the page may print: a lowercase code word, else nothing (a link-maker's sentence never reaches the sheet). */
+export function codeWord(v) {
+  const s = String(v || '');
+  return WORD.test(s) ? s : '';
+}
+
 export function oauthReturn(search) {
   const p = new URLSearchParams(search || '');
   const oauth = p.get('oauth');
   if (oauth) {
-    const key = (p.get('provider') || '').toLowerCase();
-    const reason = p.get('reason') || '';
+    const key = codeWord((p.get('provider') || '').toLowerCase());
+    const reason = codeWord(p.get('reason'));
     const strip = ['oauth', 'provider', 'reason'];
     if (!key) return null;
     if (oauth === 'ok') return { key, view: 'connected', reason: '', banner: '', strip };
@@ -359,14 +399,15 @@ export function oauthReturn(search) {
     const v = p.get(key);
     if (!v) continue;
     const strip = [key, 'warn', 'google_email', 'reason'];
-    const ge = p.get('google_email') || '';
+    // The Google address is printed in the banner, so only an address-shaped value is.
+    const ge = /^[^\s<>"'`]{1,254}@[^\s<>"'`]{1,254}$/.test(p.get('google_email') || '') ? p.get('google_email') : '';
     if (v === 'connected') {
       const banner = p.get('warn') === 'google_email_mismatch'
         ? `Connected, but the Google account${ge ? ` ${ge}` : ''} doesn't match your StudioOS email, so "Continue with Google" sign-in was not linked.`
         : '';
       return { key, view: 'connected', reason: '', banner, strip };
     }
-    const reason = p.get('reason') || 'unknown';
+    const reason = codeWord(p.get('reason')) || 'unknown';
     if (CANCELLED.has(reason)) return { key, view: 'cancelled', reason, banner: '', strip };
     // `reason` comes from the address: only the map's own keys are called, so
     // `?reason=constructor` or `toString` cannot reach Object's methods.
@@ -377,7 +418,7 @@ export function oauthReturn(search) {
   if (li) {
     const strip = ['linkedin', 'linkedin_error'];
     if (li === 'connected') return { key: 'linkedin', view: 'connected', reason: '', banner: '', strip };
-    const reason = p.get('linkedin_error') || 'unknown';
+    const reason = codeWord(p.get('linkedin_error')) || 'unknown';
     if (CANCELLED.has(reason)) return { key: 'linkedin', view: 'cancelled', reason, banner: '', strip };
     return { key: 'linkedin', view: 'refused', reason, banner: '', strip };
   }
@@ -412,8 +453,7 @@ export function authKind(p) {
 /**
  * The view a failed connect lands on. 402 is the plan refusing it (`pro`); a
  * key the provider rejected is `badkey`; anything else is `refused`. The
- * overreach case arrives as the sign-in's return (`oauthReturn`), never here;
- * the teammate case waits on D650's per-provider read.
+ * overreach case arrives as the sign-in's return (`oauthReturn`), never here.
  */
 export function connectFailure(e, p) {
   const code = e?.code || '';

@@ -83,10 +83,10 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
   ],
   existingFounder: [
     { key: 'ef.persona',    label: 'Complete persona chatbot',           route: '/onboarding/persona',         autoDetect: true },
-    // /integrations is partner/investor-only; founders manage connectors
-    // via Settings → Integrations.
-    { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: '/account/integrations',      autoDetect: true },
-    { key: 'ef.plaid',      label: 'Connect Plaid (verify cash)',        route: '/account/integrations',      autoDetect: true },
+    // Connectors live at /account/connectors (D651); the old /integrations
+    // addresses only redirect there.
+    { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: '/account/connectors',        autoDetect: true },
+    { key: 'ef.plaid',      label: 'Connect Plaid (verify cash)',        route: '/account/connectors',      autoDetect: true },
     { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
     { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },
     { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/spinout-lab/83b',            autoDetect: true },
@@ -104,7 +104,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'inv.kyc',       label: 'Complete KYC + Accreditation',       route: '/kyc',                        autoDetect: true },
     { key: 'inv.nda',       label: 'Sign Investor NDA with Axal',        route: '/trust',                      autoDetect: true },
     { key: 'inv.thesis',    label: 'Save your thesis + watchlist',       route: '/watchlist',                  autoDetect: true },
-    { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: '/integrations',            autoDetect: true },
+    { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: '/account/connectors',    autoDetect: true },
     // 'inv.review' (Review 3 matched founders) and 'inv.intro' (Request your
     // first intro) both sent the investor to /matches, which was removed with
     // the AI Matching Engine. Nothing writes the deal-flow scores the first
@@ -140,8 +140,8 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'op.intro',      label: 'Make first qualified intro',         route: '/pipeline',                   autoDetect: true },
     { key: 'op.notifs',     label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
-  // Advisors are NOT allowed on /onboarding/persona, /trust, or
-  // /integrations per App.jsx guards — advisor onboarding stays inside
+  // Advisors are NOT allowed on /onboarding/persona or /trust per App.jsx
+  // guards, and no advisor step points at Connectors — advisor onboarding stays inside
   // Settings + Office Hours.
   advisor: [
     { key: 'mt.persona',    label: 'Complete profiling chatbot',         route: '/account/profile',           autoDetect: true },

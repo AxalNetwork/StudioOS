@@ -19,6 +19,11 @@
  *
  * Everything is the caller's own: every read is `WHERE user_id = ?`, and a
  * uid that is someone else's answers 404, the same as one that does not exist.
+ *
+ * A conversation belongs to the company that was active when it started. A
+ * run, and a Send, happen only while that company is still the member's
+ * active one (`company_changed` otherwise), and every reader re-reads the
+ * member's link to it.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -36,16 +41,19 @@ import {
   getDescriptor,
   getProviderImpl,
   type IntegrationRow,
+  type PushPreview,
 } from '../integrations/registry';
-import { logEvent } from './integrations';
+import { ensureRole, logEvent, pushScopeRefusal } from './integrations';
+import { CONNECTOR_READERS } from '../services/eadwynReaders';
 import {
-  CONNECTOR_READERS,
   SEND_TARGETS,
+  actionEnvelope,
   attentionReason,
-  canonicalPayload,
+  canonicalContent,
   isExpired,
   normaliseConnectorKeys,
   parseConnectorKeys,
+  parseEnvelope,
   parseModelReply,
   payloadHash,
   readableConnectors,
@@ -61,6 +69,8 @@ const UID_RE = /^[0-9a-f]{32}$/;
 const MAX_QUESTION = 2000;
 const MAX_FILE_TEXT = 8000;
 const HISTORY_TURNS = 10;
+/** A row still `sending` this long after its claim stopped part-way; see `releaseStranded`. */
+const STRANDED_MINUTES = 10;
 
 function newUid(): string {
   const buf = crypto.getRandomValues(new Uint8Array(16));
@@ -115,15 +125,23 @@ function publicConversation(row: ConversationRow) {
   };
 }
 
-/** What the card shows. `payload` is the stored bytes, parsed: what Send sends. */
+/**
+ * What the card shows. `content` is what Send sends, as the provider's
+ * preview resolved it: the record and every field with its value. `payload`
+ * is the push payload itself. `summary` is the model's line, which the card
+ * labels as Eadwyn's words. A row stored before content existed has
+ * `content: null` and cannot be sent (confirm answers `content_changed`).
+ */
 function publicAction(row: ActionRow) {
+  const envelope = parseEnvelope(row.payload_json);
   return {
     uid: row.uid,
     connector: row.provider_key,
     connector_name: getDescriptor(row.provider_key)?.display_name || row.provider_key,
     target: row.target_label,
     summary: row.summary,
-    payload: safeJson<Record<string, unknown>>(row.payload_json, {}),
+    content: envelope?.content ?? null,
+    payload: envelope?.send ?? safeJson<Record<string, unknown>>(row.payload_json, {}),
     status: row.status,
     result_summary: row.result_summary,
     created_at: row.created_at,
@@ -184,10 +202,29 @@ eadwyn.post('/conversations', async (c) => {
   return c.json({ conversation: row ? publicConversation(row) : null }, 201);
 });
 
+/**
+ * The way out of `sending`. Confirm claims a row (`sending`, with the claim's
+ * time in `decided_at`) before it calls the provider and settles it after. A
+ * Worker that dies between the two leaves the row claimed for good, so a row
+ * still `sending` STRANDED_MINUTES after its claim is closed as `failed`, with
+ * the one thing known about it: nobody knows whether it arrived. It is never
+ * re-sent: that could send twice.
+ */
+async function releaseStranded(env: Env, conversationId: number): Promise<void> {
+  await env.DB.prepare(
+    'UPDATE eadwyn_pending_actions SET status = \'failed\', result_summary = ?, decided_at = CURRENT_TIMESTAMP ' +
+    'WHERE conversation_id = ? AND status = \'sending\' AND (decided_at IS NULL OR decided_at < datetime(\'now\', ?))',
+  ).bind(
+    'The send stopped part-way, so it is not known whether this arrived. Check the connected account before asking again.',
+    conversationId, `-${STRANDED_MINUTES} minutes`,
+  ).run();
+}
+
 eadwyn.get('/conversations/:uid', async (c) => {
   const user = await requireAuth(c);
   const conv = await loadConversation(c.env, c.req.param('uid'), user.id);
   if (!conv) return c.json({ error: 'not_found' }, 404);
+  await releaseStranded(c.env, conv.id);
   const [messages, actions] = await Promise.all([
     c.env.DB.prepare('SELECT id, role, content, sources_json, action_uid, created_at FROM eadwyn_messages WHERE conversation_id = ? ORDER BY id')
       .bind(conv.id).all<{ id: number; role: string; content: string; sources_json: string; action_uid: string | null; created_at: string }>(),
@@ -288,6 +325,13 @@ export async function readForRun(
   return { readable, reads };
 }
 
+function companyChanged(c: Context<{ Bindings: Env }>) {
+  return refuse(c, 409, {
+    code: 'company_changed',
+    message: 'This conversation belongs to a company that is not your active one now. Switch back to it, or start a new conversation.',
+  });
+}
+
 /** The target must be the member's to write and in the conversation's company. */
 async function targetAllowed(env: Env, user: User, companyId: number | null, p: SendProposal): Promise<boolean> {
   const project = p.field === 'project_id'
@@ -300,6 +344,18 @@ async function targetAllowed(env: Env, user: User, companyId: number | null, p: 
   return canAccessProject(env, user, project, { write: true });
 }
 
+/** The provider's preview of this proposal's push, or null when it cannot say. */
+async function previewFor(env: Env, row: IntegrationRow, p: SendProposal): Promise<PushPreview | null> {
+  const preview = getProviderImpl(row.provider_key)?.preview;
+  if (!preview) return null;
+  try {
+    return await preview(env, row, { [p.field]: p.target_id });
+  } catch (e) {
+    console.warn('[eadwyn] preview refused', row.provider_key, (e as Error).message);
+    return null;
+  }
+}
+
 eadwyn.post('/conversations/:uid/ask', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -310,6 +366,9 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
     .catch(() => null);
   const question = String(body?.question || '').trim().slice(0, MAX_QUESTION);
   if (!question) return c.json({ error: 'question is required' }, 400);
+  // Membership, re-read on every run: the active company is resolved against
+  // the member's company links now, not when the conversation started.
+  if ((await activeCompanyFor(c, user)) !== conv.company_id) return companyChanged(c);
   const model = String(body?.model || '').trim().slice(0, 120) || undefined;
   const page = typeof body?.page === 'string' ? body.page.slice(0, 200) : undefined;
   const fileName = String(body?.file?.name || '').trim().slice(0, 120);
@@ -329,7 +388,7 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
   ).bind(conv.id, HISTORY_TURNS).all<{ role: 'user' | 'assistant'; content: string }>();
   const turns = (history.results ?? []).reverse();
 
-  const sendable = readable.filter((r) => SEND_TARGETS[r.provider_key] && getProviderImpl(r.provider_key)?.push);
+  const sendable = readable.filter((r) => SEND_TARGETS[r.provider_key] && getProviderImpl(r.provider_key)?.push && getProviderImpl(r.provider_key)?.preview);
   const context = [
     reads.length
       ? `Connector data:\n${reads.map((r) => `[${r.source.name}]\n${r.facts.map((f) => `- ${f}`).join('\n')}`).join('\n\n')}`
@@ -372,17 +431,22 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
   // provider's `push` is not reachable from this handler.
   let action: ActionRow | null = null;
   const proposal = validateSend(reply.send, sendable.map((s) => s.provider_key));
-  if (proposal && await targetAllowed(c.env, user, conv.company_id, proposal)) {
-    const integration = sendable.find((s) => s.provider_key === proposal.connector)!;
-    const payloadJson = canonicalPayload(proposal);
-    const label = SEND_TARGETS[proposal.connector].find((t) => t.field === proposal.field)!.label;
+  const integration = proposal ? sendable.find((s) => s.provider_key === proposal.connector) : undefined;
+  // RULE 3: the content is resolved now, by the provider's own builder, and
+  // stored with the payload. A target the provider cannot preview (gone, or
+  // in a company switched off for it) gives no card.
+  const content = proposal && integration && await targetAllowed(c.env, user, conv.company_id, proposal)
+    ? await previewFor(c.env, integration, proposal)
+    : null;
+  if (proposal && integration && content) {
+    const payloadJson = actionEnvelope(proposal, content);
     const actionUid = newUid();
     await c.env.DB.prepare(
       'INSERT INTO eadwyn_pending_actions (uid, conversation_id, user_id, company_id, integration_id, provider_key, target_label, summary, payload_json, payload_hash) ' +
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).bind(
       actionUid, conv.id, user.id, conv.company_id, integration.id, proposal.connector,
-      `${label} #${proposal.target_id}`, proposal.summary, payloadJson, await payloadHash(payloadJson),
+      content.target.slice(0, 200), proposal.summary, payloadJson, await payloadHash(payloadJson),
     ).run();
     action = await loadAction(c.env, actionUid, user.id);
   }
@@ -421,14 +485,28 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
  * POST /actions/:uid/confirm — the member's Send, and the ONLY place a
  * connector is written from a conversation.
  *
- * The request body is never read. What is sent is the stored `payload_json`,
- * re-hashed against `payload_hash` first, so the bytes that go out are the
- * bytes the card showed. The row is claimed (`pending` → `sending`) in one
- * conditional UPDATE, so a double click sends once.
+ * The request body is never read. Before anything is sent, in this order:
+ *   - the row is the member's, still `pending`, under a day old;
+ *   - its stored envelope re-hashes to `payload_hash` (`action_changed`), and
+ *     has content (a row from before content was stored has none);
+ *   - the connection is still active, the provider can push and preview;
+ *   - the conversation's company is still the member's active one
+ *     (`company_changed`);
+ *   - the same company-and-project guard `/api/integrations/:uid/push` runs
+ *     (`pushScopeRefusal`: `company_not_enabled`, `project_not_enabled`);
+ *   - the target is still the member's to write, in that company
+ *     (`target_not_allowed`): `targetAllowed`, run again, not trusted from
+ *     the proposal;
+ *   - the provider's preview, rebuilt now, is byte-for-byte the content the
+ *     card showed (`content_changed`).
+ * Then the row is claimed (`pending` → `sending`, under a day old) in one
+ * conditional UPDATE, so a double click sends once, and only then is `push`
+ * called with the stored payload.
  */
 eadwyn.post('/actions/:uid/confirm', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
+  ensureRole(c, user);
   const action = await loadAction(c.env, c.req.param('uid'), user.id);
   if (!action) return c.json({ error: 'not_found' }, 404);
   if (action.status !== 'pending') {
@@ -442,6 +520,8 @@ eadwyn.post('/actions/:uid/confirm', async (c) => {
   if (await payloadHash(action.payload_json) !== action.payload_hash) {
     return refuse(c, 409, { code: 'action_changed', message: 'This action changed after it was shown, so it was not sent.' });
   }
+  const envelope = parseEnvelope(action.payload_json);
+  if (!envelope) return contentChanged(c);
 
   const row = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ? AND user_id = ?')
     .bind(action.integration_id, user.id).first<IntegrationRow>();
@@ -451,36 +531,44 @@ eadwyn.post('/actions/:uid/confirm', async (c) => {
   const desc = getDescriptor(row.provider_key);
   if (desc && desc.tier !== 'free') ensureTier(user, desc.tier as 'growth' | 'studio');
   const impl = getProviderImpl(row.provider_key);
-  if (!impl?.push) {
+  if (!impl?.push || !impl.preview) {
     return refuse(c, 422, { code: 'push_not_supported', message: 'This connector cannot receive updates.' });
   }
 
+  if ((await activeCompanyFor(c, user)) !== action.company_id) return companyChanged(c);
+  const scope = await pushScopeRefusal(c, user, row, envelope.send);
+  if (scope) {
+    return refuse(c, 403, {
+      code: scope,
+      message: scope === 'company_not_enabled'
+        ? 'This connector is switched off for your active company, so nothing was sent.'
+        : 'That project is not in a company this connector is switched on for, so nothing was sent.',
+    });
+  }
+  const proposal = validateSend({ connector: row.provider_key, payload: envelope.send }, [row.provider_key]);
+  if (!proposal || !(await targetAllowed(c.env, user, action.company_id, proposal))) {
+    return refuse(c, 403, { code: 'target_not_allowed', message: 'That record is no longer yours to update in this company, so nothing was sent.' });
+  }
+  const now = await previewFor(c.env, row, proposal);
+  if (!now || canonicalContent(now) !== canonicalContent(envelope.content)) return contentChanged(c);
+
   const claim = await c.env.DB.prepare(
-    'UPDATE eadwyn_pending_actions SET status = \'sending\' WHERE id = ? AND status = \'pending\'',
+    'UPDATE eadwyn_pending_actions SET status = \'sending\', decided_at = CURRENT_TIMESTAMP ' +
+    'WHERE id = ? AND status = \'pending\' AND created_at > datetime(\'now\', \'-1 day\')',
   ).bind(action.id).run();
   if (!claim.meta?.changes) {
-    return refuse(c, 409, { code: 'action_not_pending', message: 'This action was already sent or cancelled.' });
+    return refuse(c, 409, { code: 'action_not_pending', message: 'This action was already sent, cancelled, or is more than a day old.' });
   }
 
-  const payload = JSON.parse(action.payload_json);
+  const payload = envelope.send;
+  let out;
   try {
-    const out = await impl.push(c as Context<{ Bindings: Env }>, user, row, payload);
-    await c.env.DB.prepare(
-      'UPDATE eadwyn_pending_actions SET status = \'sent\', result_summary = ?, decided_at = CURRENT_TIMESTAMP WHERE id = ?',
-    ).bind(String(out.summary || '').slice(0, 500), action.id).run();
-    await logEvent(c.env, {
-      integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
-      direction: 'outbound', event_type: 'eadwyn_send', status: 'ok',
-      http_status: out.http_status, request_summary: `Sent from Eadwyn: ${action.target_label}`,
-      response_summary: out.summary, external_id: out.external_id ?? null, payload,
-    });
-    const done = await loadAction(c.env, action.uid, user.id);
-    return c.json({ ok: true, action: done ? publicAction(done) : null });
+    out = await impl.push(c as Context<{ Bindings: Env }>, user, row, payload);
   } catch (e) {
     const msg = (e as Error).message || 'push failed';
     await c.env.DB.prepare(
       'UPDATE eadwyn_pending_actions SET status = \'failed\', result_summary = ?, decided_at = CURRENT_TIMESTAMP WHERE id = ?',
-    ).bind('The connector refused the update.', action.id).run();
+    ).bind('Not sent: the connector refused the update.', action.id).run();
     await logEvent(c.env, {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
       direction: 'outbound', event_type: 'eadwyn_send', status: 'error',
@@ -488,7 +576,28 @@ eadwyn.post('/actions/:uid/confirm', async (c) => {
     });
     return refuse(c, 502, { code: 'push_failed', message: 'The update could not be sent to the connected account. Check the connection and try again.', raw: msg, audience: 'owner' });
   }
+  // The push happened. Nothing below may record it as failed: a write that
+  // throws here leaves the row `sending`, which `releaseStranded` closes as
+  // "not known", never as "not sent".
+  await c.env.DB.prepare(
+    'UPDATE eadwyn_pending_actions SET status = \'sent\', result_summary = ?, decided_at = CURRENT_TIMESTAMP WHERE id = ?',
+  ).bind(String(out.summary || '').slice(0, 500), action.id).run();
+  await logEvent(c.env, {
+    integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
+    direction: 'outbound', event_type: 'eadwyn_send', status: 'ok',
+    http_status: out.http_status, request_summary: `Sent from Eadwyn: ${action.target_label}`,
+    response_summary: out.summary, external_id: out.external_id ?? null, payload,
+  });
+  const done = await loadAction(c.env, action.uid, user.id);
+  return c.json({ ok: true, action: done ? publicAction(done) : null });
 });
+
+function contentChanged(c: Context<{ Bindings: Env }>) {
+  return refuse(c, 409, {
+    code: 'content_changed',
+    message: 'What this would send is no longer what the card showed, so nothing was sent. Ask again for a fresh card.',
+  });
+}
 
 /** POST /actions/:uid/cancel — the member's Cancel. Nothing is sent; the row and the log say so. */
 eadwyn.post('/actions/:uid/cancel', async (c) => {
@@ -506,7 +615,7 @@ eadwyn.post('/actions/:uid/cancel', async (c) => {
     integration_id: action.integration_id, user_id: user.id, provider_key: action.provider_key,
     direction: 'internal', event_type: 'eadwyn_cancel', status: 'ok',
     request_summary: `Cancelled in Eadwyn: ${action.target_label}`,
-    payload: safeJson<Record<string, unknown>>(action.payload_json, {}),
+    payload: parseEnvelope(action.payload_json)?.send ?? safeJson<Record<string, unknown>>(action.payload_json, {}),
   });
   const done = await loadAction(c.env, action.uid, user.id);
   return c.json({ ok: true, action: done ? publicAction(done) : null });

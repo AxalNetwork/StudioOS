@@ -236,6 +236,13 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   // and dearer to answer, the trade the SMALL_LLAMA comment below describes.
   // Rate from the same reading of Cloudflare's table (2026-09-06).
   '@cf/meta/llama-3.1-8b-instruct-fp8-fast':  { in: 0.045, out: 0.384 },
+  // D658 — the third structure_interview model. Cloudflare's model page and
+  // Workers AI pricing table, read 2026-10-09: $0.44 in, $1.32 out per 1M.
+  // Cached input ($0.014) has no column here, so it bills at the full input
+  // rate: an over-count, the safe direction for the D640 budget. "Paid access
+  // required": refused on a free plan, the fallback answers and the receipt
+  // says so.
+  '@cf/deepseek-ai/deepseek-v4-flash-0731':   { in: 0.44,  out: 1.32 },
   '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.660, out: 1.000 },
   '@cf/baai/bge-base-en-v1.5':                { in: 0.05,  out: 0.00 },
 };
@@ -478,7 +485,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
-    alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast'],
+    // DeepSeek last: Compare's "Structure again" takes the first model that is
+    // not the last run's (InterviewReview.jsx), and the 8B needs no paid plan.
+    alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
   },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
