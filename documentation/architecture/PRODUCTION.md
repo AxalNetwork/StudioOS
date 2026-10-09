@@ -124,6 +124,7 @@ It's not part of the production deploy path.
 
 ### Cloudflare Worker (optional, per feature)
 - [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.
+- [ ] `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` – the GitHub connector (D655): the StudioOS GitHub App's client, with read-only issues, pull requests, contents and metadata permissions. Also settable in Admin → Integration Keys.
 - [ ] `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` – outbound email.
 - [ ] `STRIPE_ATLAS_API_KEY`, `STRIPE_WEBHOOK_SECRET` – spin-out incorporation.
 - [ ] `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` – KYC.
