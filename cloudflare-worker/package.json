@@ -12,13 +12,17 @@
     "lint": "npm run lint:no-console && tsc --noEmit"
   },
   "dependencies": {
+    "@cfworker/json-schema": "4.1.1",
+    "@cloudflare/workers-oauth-provider": "1.2.3",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@simplewebauthn/server": "^14.0.3",
     "hono": "^4.13.11",
     "jose": "^6.2.12",
     "mimetext": "^3.0.28",
     "otpauth": "^9.5.2",
     "pdf-lib": "^1.17.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260929.1",

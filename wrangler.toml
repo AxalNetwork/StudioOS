@@ -115,7 +115,7 @@ not_found_handling = "single-page-application"
 # URL, and the one every `location.replace('/login')` uses — and sends
 # `/login/` to `/login` once.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]
+run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -169,6 +169,10 @@ BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
+# D666 (#1496): the StudioOS MCP server and its OAuth endpoints. Off until
+# the owner turns it on after S1's review (#1495). Off also while OAUTH_KV
+# is not bound, whatever this says.
+MCP_SERVER_ENABLED = "false"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
 # `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
@@ -224,6 +228,15 @@ id      = "8dc26ed83d154d0ebbfcbc51f592d67c"
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
 id      = "be811f14b6f342be961b8daa4513fb5b"
+
+# D666 (#1496): OAUTH_KV holds the MCP server's OAuth clients, grants, tokens
+# and parked consent requests. NOT BOUND YET: the owner creates the namespace
+# (`npx wrangler kv namespace create OAUTH_KV`), pastes its id here and
+# uncomments the block, in all three places. Until then the Worker treats the
+# MCP server as off. OAUTH_KV-PENDING
+# [[kv_namespaces]]
+# binding = "OAUTH_KV"
+# id      = "<owner-provided>"
 
 # ---------- Workers AI ----------
 [ai]
@@ -484,6 +497,10 @@ BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
+# D666 (#1496): the StudioOS MCP server and its OAuth endpoints. Off until
+# the owner turns it on after S1's review (#1495). Off also while OAUTH_KV
+# is not bound, whatever this says.
+MCP_SERVER_ENABLED = "false"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
 # branchOps health returns it so HQ can persist licence_deployments.last_version.
@@ -518,6 +535,15 @@ id      = "8dc26ed83d154d0ebbfcbc51f592d67c"
 [[env.production.kv_namespaces]]
 binding = "RATE_LIMITS"
 id      = "be811f14b6f342be961b8daa4513fb5b"
+
+# D666 (#1496): OAUTH_KV holds the MCP server's OAuth clients, grants, tokens
+# and parked consent requests. NOT BOUND YET: the owner creates the namespace
+# (`npx wrangler kv namespace create OAUTH_KV`), pastes its id here and
+# uncomments the block, in all three places. Until then the Worker treats the
+# MCP server as off. OAUTH_KV-PENDING
+# [[env.production.kv_namespaces]]
+# binding = "OAUTH_KV"
+# id      = "<owner-provided>"
 
 [env.production.ai]
 binding = "AI"
@@ -588,7 +614,7 @@ not_found_handling = "single-page-application"
 # production deploy that kept the default would 307 `/login` back to
 # `/login/` — the URL Safari crashes on.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]
+run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get
@@ -641,6 +667,10 @@ APP_URL           = "https://studioos-preview.workers.dev"
 ENVIRONMENT       = "preview"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
+# D666 (#1496): the StudioOS MCP server and its OAuth endpoints. Off until
+# the owner turns it on after S1's review (#1495). Off also while OAUTH_KV
+# is not bound, whatever this says.
+MCP_SERVER_ENABLED = "false"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
 # `advisor-ongoing-preview`) created in the dashboard. Defaults to the
@@ -663,6 +693,15 @@ id      = "REPLACE_WITH_PREVIEW_KV_TOKENS_ID"
 [[env.preview.kv_namespaces]]
 binding = "RATE_LIMITS"
 id      = "REPLACE_WITH_PREVIEW_KV_RATE_LIMITS_ID"
+
+# D666 (#1496): OAUTH_KV holds the MCP server's OAuth clients, grants, tokens
+# and parked consent requests. NOT BOUND YET: the owner creates the namespace
+# (`npx wrangler kv namespace create OAUTH_KV`), pastes its id here and
+# uncomments the block, in all three places. Until then the Worker treats the
+# MCP server as off. OAUTH_KV-PENDING
+# [[env.preview.kv_namespaces]]
+# binding = "OAUTH_KV"
+# id      = "<owner-provided>"
 
 [env.preview.ai]
 binding = "AI"

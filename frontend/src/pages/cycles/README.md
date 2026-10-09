@@ -11,14 +11,26 @@ The canvases are `design/incoming/Cycle Overview.dc.html` and its two boards.
 | `CycleCharts.jsx` | One SVG component per chart kind in the canvas (`hbar`, `vbars`, `vstack`, `funnel`, `stack`, `line`, `timeline`, `tiles`, `dots`, `rows`, `progress`, `big`, `heat`, `bands`), the legend and the sparkline. No chart library, and no HTML strings |
 | `CycleOverview.jsx` | The overview: the header with its tabs and primary action, four figures, and one card per module in its five states |
 | `CycleModulePage.jsx` | A module page: the chart at full size, the records as a working table (search, filters, sort, pages, Add), a link to the module's own tool where it has one, then its further parts |
+| `CycleRoute.jsx` | The route component: picks the project (`?project_id=`, or the read's own `?project=`, else the founder's first) and hands it to every tab and card link, reads the cycle through `frontend/src/lib/api/cycles.js`, adapts it, and draws the overview (`/validate`) or a module page (`/validate/:slug`) beside the Worker AI rail. It names each module's working tool and Add |
+| `adapters/` | One door from a cycle's read to the page's shape. `index.js` passes a read already in D661's shape through untouched; `validate.js` maps Validate's read (#1487), one function per module slug, the canvas's chart for each card, and its records' columns |
 
 ## Rules
 
-- **The components read nothing themselves.** A cycle is wired by handing its
-  read in. Its API module under `lib/api/` arrives with the first cycle whose read is on
-  `main`, because the drift test refuses a client method with no route.
-- **Nothing here is mounted until that cycle's read lands.** Until then the
-  cycle keeps its current page, and its old module URLs are not redirected.
+- **The components read nothing themselves.** `CycleRoute.jsx` is the one
+  file that reads: it calls `frontend/src/lib/api/cycles.js`, whose table gains a cycle in
+  the PR that wires it, because the drift test refuses a client method with
+  no route.
+- **A cycle is mounted only once its read is wired.** Validate is (D661,
+  #1474). Build, Raise and Grow keep their current pages until theirs are.
+- **The page adapts; the Worker is not changed** (S1 on #1474). A read in
+  D661's shape passes through. Validate's merged with its own, so
+  `adapters/validate.js` maps it, and `cloudflare-worker/test/cycle_adapters_d661.test.ts`
+  runs the Worker's real output through it: every `ok` card must draw, and
+  every column must have a value source.
+- **A module's working tool stays where it is.** No canvas yet draws Add
+  forms, a record's edit view, or Validate's curation, so a module page links
+  to the zone page that edits it (`/validate/interviews`, `/pain-map`,
+  `/hypotheses`, `/build/competitors`). Add is drawn only where it opens a form.
 - **The overview draws no module list, no status pill and no Pro strip.** The
   cards are the modules.
 - **A card fails alone.** An `unreadable` card names its source and offers its

@@ -371,8 +371,14 @@ test('Company Settings is the pinned footer only, never a nav row', () => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 // label → [root, the component the root must render for a founder]
+// The file that component lives in. A cycle overview (D661) is one route
+// component for every cycle, so it lives in pages/cycles, not pages/founder.
+const deskFile = (desk) => (desk.startsWith('CycleRoute')
+  ? 'frontend/src/pages/cycles/CycleRoute.jsx'
+  : `frontend/src/pages/founder/${desk}.jsx`);
 const WORKSPACES = {
-  Validate: ['/validate', 'FounderValidatePage'],
+  // D661 (#1474): Validate's root is the cycle overview, wired to #1487's read.
+  Validate: ['/validate', 'CycleRoute cycle="validate"'],
   Build: ['/build', 'FounderBuildDesk'],
   Raise: ['/raise', 'FounderRaiseDesk'],
   Grow: ['/grow', 'FounderGrowDesk'],
@@ -457,7 +463,7 @@ test('the Worker AI rail is one component, and every founder workspace has it', 
   // AssistLayout with a surface eadwynConfig does not define, which renders
   // nothing at all — "it looks blank, probably not connected to anything".
   for (const [label, [, desk]] of Object.entries(WORKSPACES)) {
-    const src = codeOnly(read(`frontend/src/pages/founder/${desk}.jsx`));
+    const src = codeOnly(read(deskFile(desk)));
     assert.match(src, new RegExp(`<WorkerRail[\\s\\S]*?workspace="${label}"`),
       `${desk} must mount the shared rail`);
   }

@@ -1,8 +1,8 @@
 /**
  * D661 (#1474) — the cycle overview and module page components, against
  * fixtures shaped exactly like #1469's shared read (D656): the card states,
- * the chart specs, the figures, the records table, and that nothing is
- * mounted on a live route yet.
+ * the chart specs, the figures, the records table, the links that keep a
+ * chosen venture, and which cycles are mounted.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/cycle_pages_d661.test.mjs
  */
@@ -112,6 +112,29 @@ test('the module read query, the count, the pages, the cells and the links a rea
   for (const bad of ['//evil.test', 'https://evil.test', 'javascript:alert(1)', 'validate', null]) assert.equal(safeHref(bad), null, String(bad));
   assert.deepEqual(cycleTabs('build', [{ slug: 'founding-team', name: 'Founding team' }], 'founding-team').map((t) => [t.name, t.href, t.active]),
     [['Overview', '/build', false], ['Founding team', '/build/founding-team', true]]);
+});
+
+test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module page keep `?project_id=`', () => {
+  assert.deepEqual(cycleTabs('grow', [{ slug: 'distribution', name: 'Distribution' }], null, '?project_id=7').map((t) => t.href),
+    ['/grow?project_id=7', '/grow/distribution?project_id=7']);
+  for (const bad of ['project_id=7', '//evil.test', '?', null, 7]) {
+    assert.deepEqual(cycleTabs('grow', [{ slug: 'distribution' }], null, bad).map((t) => t.href), ['/grow', '/grow/distribution'], String(bad));
+  }
+  const over = html(h(CycleOverview, { cycle: 'validate', data: OVERVIEWS.validate, search: '?project_id=7' }));
+  // The tabs, and each card's title link (its name and ›). A card's own
+  // `next.href` is the read's link and is left as it came.
+  const navOf = (out) => [...out.matchAll(/data-testid="cycle-tabs"[\s\S]*?<\/nav>/g)][0][0];
+  const own = [
+    ...[...navOf(over).matchAll(/href="([^"]+)"/g)].map((m) => m[1]),
+    ...[...over.matchAll(/href="([^"]+)"[^>]*>[^<]* ›</g)].map((m) => m[1]),
+  ];
+  assert.equal(own.length, 1 + MODULES.validate.length * 2, 'the tabs and every card title');
+  for (const l of own) assert.match(l, /\?project_id=7$/, l);
+  const mod = html(h(CycleModulePage, { cycle: 'validate', slug: slugOf(MODULES.validate[0]), cards: OVERVIEWS.validate.cards, data: { card: OVERVIEWS.validate.cards[0] }, search: '?project_id=7' }));
+  for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
+  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 2, 'the overview and the module page are handed the venture');
 });
 
 // ------------------------------------------------------------------ the screens
@@ -260,12 +283,23 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
 
 // ------------------------------------------------------------------ not mounted yet
 
-test('NOTHING IS MOUNTED YET: each cycle keeps its current page until its read lands', () => {
+test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: Validate is; Build, Raise and Grow keep their desks', () => {
   const app = read('frontend/src/App.jsx');
-  assert.doesNotMatch(app, /pages\/cycles\//, 'App.jsx imports no cycle page');
+  const cyclesApi = read('frontend/src/lib/api/cycles.js');
+  // The one route component, mounted per cycle by a literal name.
+  const mounted = [...app.matchAll(/<CycleRoute cycle="([a-z]+)" \/>/g)].map((m) => m[1]);
+  const wired = [...cyclesApi.matchAll(/^ {2}([a-z]+): \{$/gm)].map((m) => m[1]);
+  assert.deepEqual([...new Set(mounted)].sort(), ['validate'], 'only Validate is mounted');
+  for (const c of new Set(mounted)) assert.ok(wired.includes(c), `${c} is mounted with no read in lib/api/cycles.js`);
+  assert.match(app, /<Route path="\/validate\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="validate" \/>\)\} \/>/, 'Validate has its module pages');
   assert.match(app, /<Route path="\/build" element=\{founderBuildLanding/, '/build keeps its desk');
-  assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'no client method before its route is on main');
-  for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx']) {
-    assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);
+  // The four zone pages stay mounted: each module page links to the one that
+  // edits it until canvases for Add and a record's edit view exist.
+  for (const zone of ['interviews', 'pain-map', 'hypotheses', 'verdict']) {
+    assert.match(app, new RegExp(`<Route path="/validate/${zone}" element=\\{guard\\([^)]*\\), <FounderValidateWorkspace />\\)\\} />`), `/validate/${zone} lost its working tool`);
+  }
+  assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'the cycle client lives in lib/api/cycles.js, not api.js');
+  for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx', 'adapters/index.js', 'adapters/validate.js']) {
+    assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|from '\.\.\/\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);
   }
 });
