@@ -88,8 +88,6 @@ counterpart. Calls hit the worker as 404. The frontend touches some of these,
 so re-implementing them on the worker (or accepting the broken UI affordance)
 is a follow-up:
 
-- `integrations.py` — `/api/integrations/*` (used by `IntegrationsPage`
-  webhook config). No worker file exists.
 - `pipeline_votes.py` — `/api/pipeline/vote*`, `/api/pipeline/votes*` (used by
   the deal-card voting widget). The worker `pipeline.ts` only handles
   `/active`, `/projects/*`, `/ws/*` — voting endpoints are missing.

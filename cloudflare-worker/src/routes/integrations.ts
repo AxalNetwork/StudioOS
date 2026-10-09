@@ -344,9 +344,13 @@ integrations.get('/requests', async (c) => {
   return c.json({ ok: true, items: rows.results || [], page, page_size: 50 });
 });
 
-integrations.get('/:key', async (c) => {
-  const user = await requireAuth(c);
+integrations.get('/:key', async (c, next) => {
   const key = c.req.param('key');
+  // Hono runs matching handlers in registration order, so this one-segment
+  // read would answer `GET /waitlist` (registered further down) with
+  // unknown_provider. Hand that path on (D651).
+  if (key === 'waitlist') return next();
+  const user = await requireAuth(c);
   if (!getDescriptor(key)) return c.json({ error: 'unknown_provider' }, 404);
   if (!writesProjectData(key)) return c.json({ ok: true, provider_key: key, teammate: null });
   const companyId = await activeCompanyFor(c, user);
