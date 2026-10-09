@@ -134,6 +134,8 @@ import { crunchbaseFetch as _registerCrunchbase } from './integrations/providers
 void _registerCrunchbase;
 // Task #6 (DG) — Stripe provider. Side-effect import so registerProvider() runs at boot.
 import './integrations/providers/stripe';
+// D655 (#1467) — GitHub: read-only issues, pull requests and releases from chosen repositories.
+import './integrations/providers/github';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';

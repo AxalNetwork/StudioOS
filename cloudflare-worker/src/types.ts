@@ -199,6 +199,9 @@ export interface Env {
   // Shared secret used to verify inbound GitHub webhook deliveries
   // (X-Hub-Signature-256). Set via the admin GitHub panel or wrangler.
   GITHUB_WEBHOOK_SECRET?: string;
+  // D655 — the StudioOS GitHub App user-authorization client (Connectors).
+  GITHUB_APP_CLIENT_ID?: string;
+  GITHUB_APP_CLIENT_SECRET?: string;
   // D542 — GitHub logins whose bounty labels the webhook acts on (services/bugBounties.ts).
   BOUNTY_GRANTERS?: string;
   PERSONA_API_KEY?: string;
