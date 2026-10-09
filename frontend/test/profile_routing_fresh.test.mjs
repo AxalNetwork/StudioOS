@@ -87,7 +87,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // card page's three sections are built to.
   // 139 on 2026-10-07 (D633, #1391): Ops Page HQ tools Q1–Q3, the document
   // types, a member's credits and trust obligations by role.
-  assert.equal(recs.length, 139);
+  // 140 on 2026-10-09 (D654, #1466): `Grow · Share an update`, built from
+  // `Cycle Action.dc.html` (`action=update`) in `design/incoming/`.
+  assert.equal(recs.length, 140);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

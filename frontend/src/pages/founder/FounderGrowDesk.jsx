@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BriefcaseBusiness, ChevronRight, CircleDot, Handshake, Rocket, Sparkles, Target, Users } from 'lucide-react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, jobs as jobsApi } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
 import { COUNT_KEYS, PCT_KEYS, metricLabel, readTarget } from '../../lib/metricTargets';
@@ -12,6 +12,7 @@ import { zonePillClass } from './deskZoneNav';
 import './founderGrowDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
 import AlsoIn from '../../workspaces/AlsoIn';
+import ShareUpdateSheet from './ShareUpdateSheet';
 
 // Seven labels, seven routes — A5's `anchG`, in its order. This was a
 // seven-deep ternary chain ending in an `<a href="#a5-…">` fallback that no
@@ -116,6 +117,8 @@ export default function FounderGrowDesk() {
   const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
+  const [sharing, setSharing] = useState(false);
+  const navigate = useNavigate();
   const [fillsOn] = useAssistMode('Grow');
   // The cost before a run (D424), read only while the two bands are drawn.
   const ai = useAiSpend({ enabled: fillsOn && Boolean(projectId) });
@@ -219,12 +222,14 @@ export default function FounderGrowDesk() {
   const query = projectId ? `?project_id=${projectId}` : '';
   const state = { founderGrowSeed: { projects, projectId, records } };
   return <main className="a5-grow" data-testid="founder-grow-desk"><div className="a5-grow-canvas"><div className="a5-grow-main">
-     <header className="a5-grow-hero"><div><h1>Get customers, people, reach</h1><p>One metric owns the month. Everything below is a lever on it.</p></div>
+     <header className="a5-grow-hero"><div><h1>Get customers, people, reach</h1><p>One metric owns the month. Everything below is a lever on it.</p>
+       <button type="button" data-testid="button-share-update" className="mt-2 rounded-lg bg-violet-700 px-3 py-2 text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600" disabled={!projectId} onClick={() => setSharing(true)}>Share an update</button></div>
      <nav aria-label="Grow desk sections">{SECTIONS.map(([label, slug]) => <LensNavLink data-testid={`link-grow-anchor-${slug}`} to={`/grow/${slug}${query}`} key={label} className={zonePillClass}>{label}</LensNavLink>)}</nav>
     </header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-grow" type="button" onClick={() => setReload((count) => count + 1)}>Retry</button></div>}
     <GrowSections data={data} project={project} loading={loading} query={query} state={state} projectId={projectId} fillsOn={fillsOn} ai={ai} />
     <AlsoIn role="founder" row="Grow" />
+    {sharing && projectId && <ShareUpdateSheet projectId={projectId} onClose={() => setSharing(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />}
   </div><WorkerRail
     workspace="Grow"
     className="a5-rail"
