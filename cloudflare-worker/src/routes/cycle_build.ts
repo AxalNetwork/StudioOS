@@ -3,7 +3,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
-import { pageRows, unreadableCard, type Card, type ChartSpec, type Figure, type RecordRow, type Records } from '../services/cycleCards';
+import type { Card } from '../services/cycleCards';
+import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 
 const app = new Hono<{ Bindings: Env }>();
 const MODULES = [
@@ -16,7 +17,7 @@ const MODULES = [
 ] as const;
 type Slug = typeof MODULES[number][0];
 type Project = { id: number; founder_id: number | null; company_id: number | null; entity_id: number | null; mvp_target_date: string | null; incorporation_meta: string | null; cofounder_decision_meta: string | null; spinout_ip_meta: string | null };
-type ModuleRead = { card: Card; cols: Records['cols']; rows: RecordRow[]; facts?: Record<string, unknown>; add?: Records['add'] };
+type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; facts?: Record<string, unknown>; add?: BuildRecords['add'] };
 type Query = { q?: string; filter?: string; sort?: string; page?: string };
 
 function number(v: unknown): number { return Number(v ?? 0); }
@@ -29,11 +30,11 @@ function card(slug: Slug, state: Card['state'], series: ChartSpec[], range = 'No
 function next(slug: Slug, text: string | null): Card['next'] {
   return text ? { text, href: `/build/${slug}` } : null;
 }
-function figure(key: string, label: string, value: Figure['value'], unit: string | null, source: string, state: Figure['state'], reason: string | null = null): Figure {
+function figure(key: string, label: string, value: BuildFigure['value'], unit: string, source: string, state: BuildFigure['state'], reason: string | null = null): BuildFigure {
   return { key, label, value, unit, delta_30d: null, spark: [], source, as_of: null, state, reason };
 }
-function unreadableFigure(key: string, label: string, source: string): Figure {
-  return figure(key, label, null, null, source, 'unreadable', `${source} is unreadable.`);
+function unreadableFigure(key: string, label: string, source: string): BuildFigure {
+  return figure(key, label, null, 'count', source, 'unreadable', `${source} is unreadable.`);
 }
 function dateOnly(raw: unknown): Date | null {
   if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
@@ -138,7 +139,7 @@ async function founding(env: Env, p: Project): Promise<ModuleRead> {
   const series: ChartSpec[] = [];
   if (equityKnown) series.push({ kind: 'stack', rows: [{ label: 'Equity', parts: founderRows.map(h => number(h.ownership_pct)) }], tones: founderRows.map((_, i) => ['v1', 'v2', 'v3', 'grey'][i % 4]), legend: founderRows.map((h, i) => ({ label: h.name, tone: ['v1', 'v2', 'v3', 'grey'][i % 4] })) });
   const withVesting = founderRows.filter(h => h.start_date && h.total_months);
-  if (withVesting.length) series.push({ kind: 'progress', items: withVesting.map(h => ({ label: h.name, pct: h.shares ? Math.min(100, Math.round(100 * number(h.vested_shares) / number(h.shares))) : 0 })) });
+  if (withVesting.length) series.push({ kind: 'progress', items: withVesting.map(h => ({ label: h.name, pct: h.shares && h.vested_shares != null ? Math.min(100, Math.round(100 * number(h.vested_shares) / number(h.shares))) : null })) });
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : 'ok';
   return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founder roles have been recorded on the cap table.' : null, next('founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
@@ -224,7 +225,7 @@ async function safeRead(slug: Slug, env: Env, project: Project): Promise<ModuleR
   catch (error) {
     console.error(`[cycle_build] ${MODULES.find(m => m[0] === slug)![2]} read failed`, error);
     const spec = MODULES.find(m => m[0] === slug)!;
-    return { card: unreadableCard(slug, spec[1], spec[2], spec[3]), cols: [], rows: [] };
+    return { card: unreadableBuildCard(slug, spec[1], spec[2], spec[3]), cols: [], rows: [] };
   }
 }
 
@@ -250,7 +251,7 @@ app.get('/overview', async c => {
   const rBad = roadmap.card.state === 'unreadable';
   const sBad = systems.card.state === 'unreadable';
   const must = pBad ? unreadableFigure('must_haves_done', 'Must-haves done', 'mvp_features')
-    : number(pFacts?.total) === 0 ? figure('must_haves_done', 'Must-haves done', null, null, 'mvp_features', 'not_recorded', 'No must-haves marked.')
+    : number(pFacts?.total) === 0 ? figure('must_haves_done', 'Must-haves done', null, 'of', 'mvp_features', 'not_recorded', 'No must-haves marked.')
       : figure('must_haves_done', 'Must-haves done', [number(pFacts?.done), number(pFacts?.total)], 'of', 'mvp_features', 'ok');
   const target = dateOnly(pFacts?.target_date);
   const today = new Date();
@@ -260,7 +261,7 @@ app.get('/overview', async c => {
   const shipped = rBad ? unreadableFigure('roadmap_shipped', 'Roadmap shipped this month', 'okr_column_moves')
     : figure('roadmap_shipped', 'Roadmap shipped this month', number(rFacts?.shipped_this_month), 'items', 'okr_column_moves', 'ok');
   const connected = sBad ? unreadableFigure('systems_connected', 'Systems connected', 'integration_companies')
-    : project.company_id == null ? figure('systems_connected', 'Systems connected', null, null, 'integration_companies', 'not_recorded', 'The project has no company scope.')
+    : project.company_id == null ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'The project has no company scope.')
       : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
   return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards: results.map(r => r.card) });
 });
@@ -278,7 +279,7 @@ app.get('/modules/:slug', async c => {
     .slice(0, 100).map(value => ({ value, label: value }));
   const filters = result.cols.length ? [{ key: filterKey, label: filterLabel, options }] : [];
   const sorts = result.cols.flatMap(col => [{ key: col.key, label: col.label }, { key: `-${col.key}`, label: `${col.label} descending` }]);
-  return c.json({ module: slug, card: result.card, records: { cols: result.cols, ...pageRows(result.rows, query), filters, sorts,
+  return c.json({ module: slug, card: result.card, records: { cols: result.cols, ...pageBuildRows(result.rows, query), filters, sorts,
     ...(result.add ? { add: result.add } : {}) }, ...(result.facts ? { facts: result.facts } : {}) });
 });
 
@@ -312,6 +313,10 @@ function dateValue(v: unknown): string | null | false {
 function audit(env: Env, projectId: number, userId: number, action: string, rowId: number | string) {
   return env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)')
     .bind(projectId, userId, action, JSON.stringify({ id: rowId }), `user:${userId}`);
+}
+function auditInserted(env: Env, projectId: number, userId: number, action: string) {
+  return env.DB.prepare("INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, json_object('id', last_insert_rowid()), ?)")
+    .bind(projectId, userId, action, `user:${userId}`);
 }
 
 app.patch('/project/target', async c => {
@@ -400,11 +405,12 @@ app.post('/risks', async c => {
     const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(ctx.project.company_id, ownerId).first();
     if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
   }
-  const result = await c.env.DB.prepare(
-    'INSERT INTO venture_risks (project_id, title, severity, owner_user_id, mitigation, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-  ).bind(ctx.project.id, title, severity, ownerId, mitigation, ctx.user.id).run();
+  const [result] = await c.env.DB.batch([
+    c.env.DB.prepare('INSERT INTO venture_risks (project_id, title, severity, owner_user_id, mitigation, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(ctx.project.id, title, severity, ownerId, mitigation, ctx.user.id),
+    auditInserted(c.env, ctx.project.id, ctx.user.id, 'build_risk_created'),
+  ]);
   const id = Number(result.meta.last_row_id);
-  await audit(c.env, ctx.project.id, ctx.user.id, 'build_risk_created', id).run();
   return c.json({ id }, 201);
 });
 
@@ -466,10 +472,12 @@ app.post('/formation-steps', async c => {
   const body = await jsonBody(c);
   const title = text(body?.title); const due = dateValue(body?.due_date);
   if (!title || due === false) return c.json({ detail: 'Valid title and due date required' }, 400);
-  const result = await c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, created_by) VALUES (?, ?, ?, ?)')
-    .bind(ctx.project.id, title, due, ctx.user.id).run();
+  const [result] = await c.env.DB.batch([
+    c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, created_by) VALUES (?, ?, ?, ?)')
+      .bind(ctx.project.id, title, due, ctx.user.id),
+    auditInserted(c.env, ctx.project.id, ctx.user.id, 'build_formation_step_created'),
+  ]);
   const id = Number(result.meta.last_row_id);
-  await audit(c.env, ctx.project.id, ctx.user.id, 'build_formation_step_created', id).run();
   return c.json({ id }, 201);
 });
 

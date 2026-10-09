@@ -13,13 +13,16 @@ export * from './api/adminLearning.js';
 export * from './api/aiBudget.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
+export * from './api/connectors.js';
 export * from './api/contracts.js';
 export * from './api/creditRules.js';
+export * from './api/cycleValidate.js';
 export * from './api/eadwyn.js';
 export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReports.js';
 export * from './api/helpCenter.js';
+export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/memberCredits.js';
@@ -28,6 +31,7 @@ export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';
 export * from './api/researchSectors.js';
+export * from './api/roundCalls.js';
 export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
@@ -625,7 +629,9 @@ export async function request(path, options = {}) {
       // Task #6 — when the worker returns 402 `{error:'tier_required'}`, fan
       // out a custom event so PaywallModal opens automatically. Anything that
       // catches the throw afterwards still gets the structured error object.
-      if (res.status === 402 && typeof window !== 'undefined') {
+      // `inlinePaywall` (D651): the caller draws the plan's refusal itself, so
+      // the modal is not opened on top of it.
+      if (res.status === 402 && !options.inlinePaywall && typeof window !== 'undefined') {
         const tierPayload = (err && (err.required ? err : (err.error === 'tier_required' ? err : null))) || null;
         if (tierPayload && tierPayload.required) {
           try {
@@ -2563,7 +2569,6 @@ export const api = {
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
 
-  integrationsAvailable: () => request('/integrations/available'),
   // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires
   // an active Crunchbase integration on the calling user's account.
   crunchbaseSearch: (q, limit = 10) =>
@@ -2573,33 +2578,10 @@ export const api = {
   crunchbaseCompetitors: (projectId, limit = 10) =>
     request(`/crunchbase/projects/${projectId}/competitors?limit=${limit}`),
 
+  // The connectors themselves are read and written through `connectorsApi`
+  // (`./api/connectors.js`, D651). This one remains for the pages outside
+  // Connectors that list a member's connections.
   integrationsList: () => request('/integrations'),
-  integrationsConnect: (data) => request('/integrations/connect', { method: 'POST', body: JSON.stringify(data) }),
-  integrationsDisconnect: (uid) => request(`/integrations/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-  integrationsSync: (uid) => request(`/integrations/${encodeURIComponent(uid)}/sync`, { method: 'POST' }),
-  integrationsPush: (uid, data) => request(`/integrations/${encodeURIComponent(uid)}/push`, { method: 'POST', body: JSON.stringify(data) }),
-  integrationsLogs: (uid, params = {}) => {
-    const q = new URLSearchParams(Object.entries(params).filter(([_, v]) => v != null && v !== '')).toString();
-    return request(`/integrations/${encodeURIComponent(uid)}/logs${q ? `?${q}` : ''}`);
-  },
-  // Task #1 (Integrations Foundation) — waitlist / notify-me + OAuth helpers.
-  integrationsWaitlist: () => request('/integrations/waitlist'),
-  // POST /notify-me is the preferred public surface; /waitlist is the admin/list view.
-  integrationsWaitlistJoin: (data) => request('/integrations/notify-me', { method: 'POST', body: JSON.stringify(data) }),
-  integrationsWaitlistLeave: (provider) => request(`/integrations/notify-me/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
-  integrationsOauthStart: (provider, params = {}) => {
-    const q = new URLSearchParams(Object.entries(params).filter(([_, v]) => v != null && v !== '')).toString();
-    return request(`/integrations/oauth/${encodeURIComponent(provider)}/start${q ? `?${q}` : ''}`);
-  },
-  // Task #2 — HubSpot pipeline picker + arbitrary provider actions.
-  integrationsAction: (uid, name, body) => request(
-    `/integrations/${encodeURIComponent(uid)}/action/${encodeURIComponent(name)}`,
-    body ? { method: 'POST', body: JSON.stringify(body) } : { method: 'GET' },
-  ),
-  integrationsPatchConfig: (uid, patch) => request(
-    `/integrations/${encodeURIComponent(uid)}/config`,
-    { method: 'PATCH', body: JSON.stringify(patch) },
-  ),
 
   searchSemantic: (q, type, limit = 10, grouped = false) => {
     const params = new URLSearchParams({ q });
@@ -2678,9 +2660,10 @@ export const api = {
   deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),
   // Task #53 — viewer heartbeat for read-time tracking + founder engagement panel.
-  deckShareHeartbeat: (token, viewId, seconds) => request(
+  // D663 — `slides` is the viewer's running seconds per slide index.
+  deckShareHeartbeat: (token, viewId, seconds, slides) => request(
     `/decks/share/${encodeURIComponent(token)}/heartbeat`,
-    { method: 'POST', body: JSON.stringify({ view_id: viewId, seconds }) },
+    { method: 'POST', body: JSON.stringify(slides ? { view_id: viewId, seconds, slides } : { view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
   // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than

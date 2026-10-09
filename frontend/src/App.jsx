@@ -77,6 +77,8 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 // guard test all read that one file, so a row can never advertise a door the
 // router does not open.
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
+// D660 (#1473) — one interview session: record, live transcript, review.
+const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const FundCatalogProfile = lazy(() => import('./pages/research/FundCatalogProfile'));
@@ -402,6 +404,8 @@ const FounderRaiseDataRoom = lazy(() => import('./pages/founder/FounderRaiseData
 const FounderRaiseLiquidity = lazy(() => import('./pages/founder/FounderRaiseLiquidity'));
 const FounderGrowDesk = lazy(() => import('./pages/founder/FounderGrowDesk'));
 const SentUpdatePage = lazy(() => import('./pages/founder/SentUpdatePage'));
+const RoundCallPage = lazy(() => import('./pages/founder/RoundCallPage'));
+const RoundCallIndex = lazy(() => import('./pages/founder/RoundCallPage').then(module => ({ default: module.RoundCallIndex })));
 const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
@@ -2496,6 +2500,7 @@ function AppInner() {
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/session/:id" element={guard(labRoles(['admin', 'founder']), <InterviewSessionPage />)} />
 
       {/* ── Research · one path, four zone lists ─────────────────────────────
           Shared like /network already is: the route role-branches its element
@@ -2980,6 +2985,8 @@ function AppInner() {
           `?tab=` alone never reached a tab (D435). */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><FounderTeamPage /></FounderWorkspaceTabs>))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
+      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], <RoundCallIndex />)} />
+      <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], <RoundCallPage />)} />
       <Route path="/updates/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SentUpdatePage />)} />
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <FounderGrowDesk />)

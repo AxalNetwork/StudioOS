@@ -30,6 +30,7 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 
 const decks = new Hono<{ Bindings: Env }>();
 
@@ -925,6 +926,11 @@ decks.post('/share/:token/heartbeat', async (c) => {
         WHERE id = ? AND deck_id = ? AND read_seconds < ?`
     ).bind(seconds, viewId, parseInt(m[1]), seconds).run();
   } catch {}
+  // D663 — seconds on each slide, as the viewer's running totals. Each is
+  // capped so a view's slides never add up to more than its read time.
+  for (const [slide, slideSeconds] of slideTotals(body?.slides)) {
+    try { await recordSlideSeconds(c.env, viewId, parseInt(m[1]), slide, slideSeconds); } catch {}
+  }
   return c.json({ ok: true });
 });
 

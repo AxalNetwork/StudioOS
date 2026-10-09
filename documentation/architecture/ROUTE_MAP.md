@@ -34,6 +34,10 @@ request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against
 `user_company_links` before use.
 
+### GitHub connector and "now fed by" (D655, #1467)
+
+The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.
+
 ### AI allowance Worker contract (D640, #1433)
 
 The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
@@ -61,6 +65,53 @@ Connectors replace Integrations (D649). `/integrations` and `/account/integratio
 | `Connectors Page.dc.html` · `custom` | the Add menu, disabled, shown as Pro and Coming soon | — (no MCP client in the Worker; outside the epic) | NEW |
 | `Connectors Page.dc.html` · `rail`, `railList` | the AI rail | #1464 (D652) | NEW |
 | `Cycle Action.dc.html` · `connect`: `list`, `failed`, `locked`, `loading`, `refused`, `success` | `/build`'s header, "Connect a tool" | `pages/account/ConnectToolSheet.jsx` in `pages/founder/FounderBuildDesk.jsx`; the same catalogue and sheet | UPGRADE: the `sync` view (GitHub repositories) waits on #1467 (D655) |
+
+### Interviews from an AI assistant (D667, #1497)
+
+The interview tools of the StudioOS MCP connector (D665) are
+`submit_interview`, `propose_placements` and `structure_with_studioos`, in
+`services/assistantInterviews.ts`. They are registered on #1496's
+`/api/mcp` server, behind `MCP_SERVER_ENABLED`, so no SPA route is new.
+What they write is reviewed on the Interview Session page's review step
+(#1473), which reads `GET /api/founder/validate/sessions/:id/placements`.
+That read now labels each run's `source` (`assistant` or `studioos`) and the
+assistant's `submitted_via_name`. See `decisions/D667.md`.
+
+### Validate cycle Worker read (D659, #1472)
+
+`cycle_validate.ts`, mounted at `/api/cycles/validate`, is the Worker half of
+the Validate cycle in `Cycle Overview.dc.html` (cycle Validate; O1, O1n, O5)
+and `Cycle Modules · Boards.dc.html` (MV1–MV6). `GET /overview?project=`
+returns #1469's four figures (interviews this month, pain themes, hypotheses
+supported, waitlist sign-ups) and six cards. `GET /modules/:slug?project=`
+returns one card and its records table. The slugs are `problem-discovery`,
+`customer-research`, `ideal-customer-profile`, `market-intelligence`,
+`demand-signals` and `experiments`. The SPA pages that draw them are #1474's
+(S07), so these are routes for those screens, not screens of their own.
+The Spin-Out Lab market page already reads `GET /market-readiness` and
+writes `PUT /market-marks/:item` and `POST|DELETE /market-sources`. The other
+writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
+`/waitlist-target`, `/competitor-mentions`, `/hypotheses/:id/plan`,
+`/evidence-links/:id/strength`) call the same writers as #1471's interview
+accept path. See `decisions/D659.md`.
+
+### Raise cycle Worker read (D663, #1476)
+
+`cycle_raise.ts`, mounted at `/api/cycles/raise`, is the Worker half of the
+Raise cycle in `Cycle Overview.dc.html` (cycle Raise, O3) and
+`Cycle Modules · Boards.dc.html` (MR1–MR7). `GET /overview?project=` returns
+four figures (readiness score out of 100, committed against the target,
+investors in conversation, months of runway) and seven cards.
+`GET /modules/:slug?project=` returns one card and its records table. The
+slugs are `fundraising-readiness`, `investor-narrative`, `pitch-deck`,
+`data-room`, `cap-table`, `use-of-funds` and `capital-relationships`. The
+writes are `PUT /readiness/:key`, `POST /readiness/rescore`,
+`POST /narrative-versions`, `PUT /data-room/files/:id/checklist` and
+`PUT /prospects/:id/next-step`. Only the venture and admins reach it. The
+pipeline, cap table, data room and pitch tools keep their own pages; the
+module pages summarise them and link there. The deck share viewer's heartbeat
+now sends seconds per slide, which closes the "no per-slide dwell" gap noted
+for Pitch below. See `decisions/D663.md`.
 
 ### Cycle overviews and module pages (D661, #1474)
 
@@ -238,8 +289,9 @@ does not fill it.
 | Office Hours | founder (Spin-Out Lab) | `/spinout-lab/office-hours` (existing — do not move) | `/spinout-lab/office-hours` → `SpinoutLabOfficeHoursPage` | `advisors.ts`, `partner_office_hours.ts`, `consultations.ts`, `calendar.ts`, `spinout_lab.ts`, `partners.ts` | OUT OF SCOPE | This is the Lab's Week-3 tool page, not a platform-wide surface ("Unlocked · Wk 3", "Week 4 starts soon", open Incorporate blocker). `SpinoutLabOfficeHoursPage.jsx` implements it faithfully and cites this canvas by line number in its header comments ("Office Hours.dc.html L283-285", "design L286", "Design objective list (L328)"), wired to real partner directory + bookings + week state. Judgement call: "Office Hours" is not on the brief's literal OUT-OF-SCOPE enumeration, but it is a Spin-Out Lab canvas and the Lab is live and plugged. If you prefer, CURRENT is the alternative — either way, nothing to build. (`/office-hours` is the separate **advisor-side** availability manager, `OfficeHoursPage`, guarded `admin/advisor`.) |
 | Pages · Advisor Cohorts | advisor | `/cohorts/{founders,guidance,this-week,calendar,outcomes}` | all five zones live — `/guidance` since migration 212, `/calendar` since it joined the two halves it said nothing joined (D392 corrects this cell, which still said both stated their gap). D393: the zones carry the canvas's archetypes (WORK BOARD / FEED / COLLECTION / FEED / COLLECTION); Founders draws C1's week lanes from `/weeks` (company and the guidance-queue flag not recorded); Calendar has C4's four chips and a client-side .ics export. Admin grant at `/admin/advisor-cohorts` | `advisors.ts` (`/me/cohort`, `/me/cohort/:id/founders`, `/me/cohort/:id/weeks`, `/admin/cohort-assignments*`); reads `cohort_cycles`, `week_windows`, `company_week_status` and the public `spinout_lab.ts` cohort/graduates endpoints | PARTIAL | UPDATE 2026-09-02: migration 206 added `advisor_cohort_assignments`, the join whose absence this row and all five zone cards used to describe. **The assignment is the authorisation** — the founders and weeks reads refuse without an active row AND an advisor role, checked at read time so a demoted advisor loses access with no admin action. An admin grants it from `/admin/advisor-cohorts`, a new advisor-owned page: the natural home, `AdminSpinoutLab.jsx`, is Lab-owned, and the split matches the backend, which put these endpoints under `/api/advisors/admin/` rather than `/api/admin/cohort/`. **No Lab table, route or page is edited** — the bucket reads the Lab and writes nothing back. Still unmodelled: a guidance store, per-advisor weekly obligations, the cohort/paid-work calendar collision, and per-founder stage or live signal. Outcomes shows the program-wide view because the public Lab endpoints are company-level and anonymous, and says so rather than implying "my batch". |
 | Pages · Founder Build | founder | `/build`, `/build/board`, `/build/roadmap`, `/build/kpi` | `FounderBuildDesk`, `FounderBuildBoard`, `FounderBuildRoadmap`, `FounderBuildKPI` | `pipeline.ts`, `founder_board.ts`, `progress.ts` | UPGRADE | D548 (#1141): Review counts and cards read the stored `review` status with the same anatomy as other tasks. Movement history remains Not recorded (D510). The legacy execution URLs keep their existing editor/redirect behavior. |
-| Pages · Founder Grow | founder | `/grow`, `/grow/focus` and the six other Grow zones | `FounderGrowDesk`, `FounderGrowFocus` and existing zone pages | `progress.ts` (metric targets/snapshots), existing customer, team, brand and launch routes | UPGRADE | D548 (#1141), migration 384: an explicit nullable focus on a metric target, at most one per project, with actor-recorded set/clear writes. The desk and Focus panel display that target or No focus metric chosen with a picker; failed reads say Unreadable. No experiment effects or card movements are inferred. |
+| Pages · Founder Grow | founder | `/grow`, `/grow/focus` and the six other Grow zones | `FounderGrowDesk`, `FounderGrowFocus` and existing zone pages | `progress.ts` (metric targets/snapshots), existing customer, team, brand and launch routes | UPGRADE | D548 (#1141), migration 384: an explicit nullable focus on a metric target, at most one per project, with actor-recorded set/clear writes. The desk and Focus panel display that target or No focus metric chosen with a picker; failed reads say Unreadable. No experiment effects or card movements are inferred. **D664 (#1477, migration 443):** the Grow cycle's shared read, `cycle_grow.ts` `GET /api/cycles/grow/overview` (four figures, seven cards) and `GET /api/cycles/grow/modules/:slug` (the card and its records), plus the store writes behind them; the overview and module pages themselves are #1474's. |
 | Grow · Share an update | founder (author); investor, team, Axal network (recipients) | `/grow` (header button) → the sheet; `/updates/:uid` | `ShareUpdateSheet`, `SentUpdatePage` | `portfolio_updates.ts`: `GET /share/context`, `POST /share/draft-lines`, `PUT /:uid/share`, `POST /:uid/send`, `GET /:uid/page`, `POST /asks/:askUid/replies`, `POST /asks/:askUid/ask-again`; `contacts.ts` `GET /raise-updates` (`shared_updates`) | NEW | D654 (#1466), migration 437, canvas `Cycle Action.dc.html` (`action=update`). One `portfolio_updates` row: metrics from Revenue and traction with source and date (missing = Not recorded); highlights and lowlights each cite a source (Eadwyn drafts them from stored facts); typed asks linked to a module item; investors and team get the full update, the network the asks only unless metrics are included; replies land in Talent (candidate), Customers / Partnerships / Capital (contact); a market reply stays on the ask (no store). Sent through notifications; an investor with no account is recorded as not delivered. |
+| Validate · Record a session | founder, admin | `/validate/interviews` (a row's "Record a session") → the sheet; `/validate/session/:id` (full-screen on a phone) | `RecordSessionSheet`, `InterviewSessionPage`, `RecordingView` | `founder_validate_sessions.ts` (D657): `GET /sessions/models`, `POST /interviews/:id/sessions`, `GET /sessions/:id`, `PATCH /sessions/:id/consent`, `POST /sessions/:id/{start,pause,resume,stop}`, `PUT /sessions/:id/chunks/:seq`, `POST /sessions/:id/marks`, `GET /sessions/:id/live` (WebSocket), `POST /sessions/:id/transcribe`, `PATCH /sessions/:id/segments/:segId`, `GET /sessions/:id/receipt` | NEW | D660 (#1473), no migration, canvases `Cycle Action.dc.html` (`action=record`), `Interview Session.dc.html`, `Recording View.dc.html` + boards. Start is disabled without consent and the Worker's 409 is shown in its words; hiding the live transcript closes the socket; chunks queue in IndexedDB offline; the receipt and meter are the Worker's, Unreadable when the budget cannot be read. The review step (D660 parts 2–3) reads `GET /sessions/:id/placements` and calls `POST /sessions/:id/structure`, `POST /sessions/:id/ask` and `POST /placements/:id/accept|discard` (D658). |
 | Pages · Founder Network | founder | `/advisor/network/{relationships,introductions,organizations}` (existing) | those three routes now redirect to `/network` (D10) | `contacts.ts`, `introductions.ts`, `partnernet.ts` | RESKIN | Same dead/mock wiring as the Network row above. Detail-layer additions specific to this canvas: a **relationship book with strength, notes, reminders and an explicit going-cold flag**; an **introductions ledger** recording every ask and offer, who carried it and how it ended — including the ones that quietly died; **organizations treated as a lens over the book** rather than a second address book. **CORRECTION 2026-08-29 — this row was stale and said the opposite of the code.** `AdvisorNetworkWorkspace` and `AdvisorResearchWorkspace` no longer exist: the mock stack was DELETED under DECISIONS.md D10, and `/advisor/network{,/introductions,/relationships,/organizations}` and `/advisor/research{,/market}` now `<Navigate>` onto the working surfaces (`/network`, `/market-intel` — the latter making ~32 live calls). `frontend/test/network_consolidated.test.mjs` fails the build if the dead files reappear or a redirect is removed. Read as written, this row would have sent someone to re-wire a component that was deliberately removed. The detail-layer ideas below (relationship strength and going-cold flags, an introductions ledger recording the asks that quietly died, organizations as a lens rather than a second address book) are still unbuilt and still worth building — but against `/network`, not against a workspace that is gone. |
 | Pages · Founder Raise | founder | `/raise/pitch`, `/raise/capital`, `/raise/legal-engine`, `/liquidity` (existing; a founder there is redirected to `/raise/liquidity?mode=workspace`, D563) | `PitchWorkspacePage`, `CapitalWorkspacePage`, `LegalEnginePage`, `LiquidityPage` | `decks.ts`, `deck_share_actions.ts`, `captable.ts`, `financials.ts`, `contacts.ts` (raise-prospects/closes/pro-rata), `legal.ts`, `legalcap.ts`, `esign.ts`, `compliance.ts`, `liquidity.ts`, `files.ts`, `dd.ts` | UPGRADE | Six zones; two have no live route. **Status** (`/raise/status`) is a raise war-room — every blocker with what it holds up, investor list by stage, pace-vs-close timeline — nothing like it ships. **Data room** (`/raise/data-room`) is a founder-side **permission matrix** (artifact × investor, grant state, view analytics, stage gap analysis); **UPDATE 2026-09-07:** `GET /deals/:id/data-room` is still the only export bundle, but the page is no longer only that. `/raise/data-room` mounts `AdvisorGrantSection` (`DataRoomPage.jsx:257`), a real per-scope grant control writing through `/api/advisor-grants` over migration 218 — a founder names an advisor and ticks which of three scopes they may read. That is the permission matrix this row asked for, for advisors rather than for investors. See D50 and D55. **Pitch** adds per-investor share analytics incl. which slide people stop on (`/decks/:id/engagement` gives per-token views + read_seconds only, no per-slide dwell). **Capital** adds scenario modelling, the 409A record and an exit waterfall. **Legal** adds an agreement library + signature archive. |
 | Pages · Founder Research | founder | `/research/{ask,markets,companies,funds,library}` | `/research/ask` → `ResearchWorkspace` → `AskZone`; `/research/library` → `LibraryZone` | `research.ts` owned Ask/Library routes (migrations 213, 221, 385); `/research/collections*` → `research_collections.ts` (385); current Markets/Companies/Funds directory routes | CURRENT | D549: Ask keeps saved/discarded disposition and an optional what-you-did note through the existing answer PATCH; Discarded filters the caller’s whole history. New citations freeze an owned Library document UID after a D1 ownership check; old citations remain plain text. Library uploads accept Report, Primary and Legal, reads/edits title, kind and nullable source year (Not recorded when absent), and counts Primary from its kind. Owned named collections list/create/rename/delete and add/remove owned documents; collection filters and the bound New collection op are live. Shared client files stay read-only, outside collections and outside Ask’s namespace. Empty and Unreadable states are distinct. Cited in deck draws nothing; Clear history remains refused. A source year alone does not establish stale status; the Stale chip remains disabled with that reason. No per-document Q&A count or cached-cost fixture is invented. |
@@ -727,3 +779,16 @@ published-template picker and preview/send version/body check. History and
 signed-PDF endpoints expose safe projections and the exact PDF fingerprint.
 The legacy Legal deep link redirects with a moved notice. Formation orders are
 reached through the existing Spin-Out Lab page. Canvas reference: #1456 K1–K8.
+
+D653 (#1465): Raise’s Call for Capital header opens the five-step Extensions pause responses until renewed approval; deck-content hashes cover mutable slides.
+`RoundCallSheet`; `/round-calls?project_id=…` lists owned calls and
+`/round-calls/:uid` is private. The Worker `round_calls.ts` mounts
+`/api/round-calls`: availability/context/list, draft create/update, audience
+preview/update, send, responses, questions, manage and counsel-approval.
+Founder ownership and active company, verified investor recipient entitlement,
+and HQ/Super Admin counsel review are enforced server-side. Production flag
+ROUND_CALLS_ENABLED stays false. Deck versions and NDA/grant data-room materials
+remain references. Share an update’s capital asks link to the latest open call;
+network recipients see the ask text only. Eligible replies appear as native call
+questions and atomic Raise pipeline entries; other update replies remain on the
+source ask and appear in the founder’s question list with that source link.

@@ -24,6 +24,7 @@ call runs at boot.
 - Task #7 — `docusign.ts`
 - Task #8 — `crunchbase.ts`
 - Task #9 — `affinity.ts`
+- D655 (#1467) — `github.ts`: a GitHub App's read-only user authorization; issues to Product roadmap, pull requests to Prototype / MVP, releases recorded with no store. Its first ledger writer (`connector_fed_items`, migration 445).
 
 ## Credential handling
 

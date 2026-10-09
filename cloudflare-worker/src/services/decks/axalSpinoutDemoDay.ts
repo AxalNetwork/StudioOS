@@ -299,6 +299,11 @@ export type SpinoutDemoDayData = {
     founder_name: string; contact_email: string;
     presented_on: string;
     week: number; days_remaining: number; lab_active: boolean;
+    /**
+     * D663 — in the Lab now or once (a start date on record). Only a member
+     * has a programme day; see `programmeHolds` in spinoutDeckData.ts.
+     */
+    lab_member?: boolean;
     is_sample: boolean;
   };
   cover: {
@@ -537,6 +542,13 @@ type OKRRow = {
 };
 type MilestoneRow = { milestone_key: string; week: number; completed_at: string };
 type AdvisorAnswerRow = { question_id: string; raw_value: string | null; created_at: string };
+
+/**
+ * D663 (#1476) — in the Lab now, or once (a start date is on record). Only a
+ * member has a programme day; a founder who never joined has neither flag.
+ */
+export const isLabMember = (u: { spinout_lab_active?: number | null; spinout_lab_started_at?: string | null }): boolean =>
+  Number(u.spinout_lab_active ?? 0) === 1 || !!u.spinout_lab_started_at;
 
 const daysRemaining = (startedAt: string | null | undefined): number => {
   if (!startedAt) return 28;
@@ -1280,6 +1292,7 @@ export async function fillAxalSpinoutDemoDay(
       founder_name: founderName, contact_email: contactEmail,
       presented_on: presentedOn,
       week, days_remaining: remaining, lab_active: labActive,
+      lab_member: isLabMember(u),
       is_sample: false,
     },
 

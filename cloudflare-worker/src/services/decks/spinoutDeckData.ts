@@ -159,6 +159,14 @@ export interface SpinoutDeckBundle {
   gapSections?: Array<string | null>;
   draft: boolean;
   programDay: number;
+  /**
+   * D663 (#1476) — whether the programme clock alone holds this deck in draft.
+   * True only for a Lab member who is not yet at Day 28. A founder outside the
+   * Lab has no programme day, so the clock never holds their deck: it is a
+   * draft only while it has gaps. The override layer recomputes `draft` from
+   * this and the surviving gaps.
+   */
+  programmeHolds: boolean;
   /** Task #55 — flat dotted-key field map for the editor's hydrate() contract. */
   fields: Record<string, string>;
 }
@@ -348,7 +356,14 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   const m = src.meta;
   const remaining = clamp(Number(m.days_remaining ?? PROGRAM_DAYS), 0, PROGRAM_DAYS);
   const programDay = clamp(PROGRAM_DAYS - remaining, 0, PROGRAM_DAYS);
-  const labStatus = `Day ${programDay} / ${PROGRAM_DAYS}`;
+  // D663 (#1476) — THE PROGRAMME DAY COUNTS ONLY FOR A LAB MEMBER. A founder
+  // outside the Lab has no start date, `daysRemaining(null)` reads 28, and the
+  // programme day came out 0 — so `programDay < 28` marked every such deck
+  // DRAFT forever and printed "Day 0 / 28" on its cover. A source that does
+  // not say (older callers, fixtures) is treated as a member, as before.
+  const inLab = m.lab_member ?? (m.lab_active !== false);
+  const programmeHolds = inLab && programDay < PROGRAM_DAYS;
+  const labStatus = inLab ? `Day ${programDay} / ${PROGRAM_DAYS}` : 'Not in the Lab';
 
   const projectName = has(m.project_name) ? m.project_name : 'Company';
   const sector = has(m.sector) ? m.sector : DASH;
@@ -389,7 +404,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
 
   const cover: SpinoutDeckData['cover'] = {
     company: projectName.toUpperCase(),
-    eyebrowRight: `DEMO DAY · ${labStatus}`,
+    eyebrowRight: inLab ? `DEMO DAY · ${labStatus}` : 'DEMO DAY',
     thesis,
     signalLabel: 'VALIDATION SIGNAL · 28-DAY SPRINT',
     signalCaption: 'Cumulative discovery interviews',
@@ -940,9 +955,9 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     brand, cover, problem, solution, productDemo, market, competitive, traction, roadmap, team, captable, ask, deal, validation,
   };
 
-  const draft = programDay < PROGRAM_DAYS || gaps.length > 0;
+  const draft = programmeHolds || gaps.length > 0;
   const fields = flattenSpinoutDeckData(data);
-  return { data, notes: NOTES, gaps, gapFields, gapSections, draft, programDay, fields };
+  return { data, notes: NOTES, gaps, gapFields, gapSections, draft, programDay, programmeHolds, fields };
 }
 
 /* ============================================================================

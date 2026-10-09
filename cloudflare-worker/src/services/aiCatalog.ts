@@ -42,6 +42,7 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   market_sizing_inputs: 'Propose market sizing inputs',
   competitor_scan: 'Find competitors',
   research_ask: 'Answer from your documents',
+  structure_interview: 'Structure an interview',
 };
 
 /**
@@ -61,8 +62,10 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/meta/llama-guard-3-8b': 'Llama Guard 3 8B',
   '@cf/meta/llama-3.1-8b-instruct': 'Llama 3.1 8B Instruct',
   '@cf/meta/llama-3.1-8b-instruct-fp8': 'Llama 3.1 8B Instruct (FP8)',
+  '@cf/meta/llama-3.1-8b-instruct-fp8-fast': 'Llama 3.1 8B Instruct (FP8, fast)',
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast': 'Llama 3.3 70B Instruct (FP8, fast)',
   '@cf/meta/llama-3.2-3b-instruct': 'Llama 3.2 3B Instruct',
+  '@cf/deepseek-ai/deepseek-v4-flash-0731': 'DeepSeek V4 Flash',
   '@cf/qwen/qwen2.5-coder-32b-instruct': 'Qwen 2.5 Coder 32B Instruct',
   '@cf/baai/bge-base-en-v1.5': 'BGE Base EN v1.5 (embeddings)',
   '@cf/openai/whisper': 'Whisper',

@@ -12,6 +12,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | File | Why it matters |
 | --- | --- |
 | `profileEvidenceBlend.ts` | D592's bounded skill-level blend and audited default-off settings read; snapshot versions name the switch state. Only the Super Admin writes through `profile_evidence_blend.ts`; the owner activates it after the synthetic comparison. |
+| `interviewStructuring.ts` | D658: an interview transcript turned into Validate placements. Seven kinds with a schema each, the rule that a placement without a cited span is dropped, splitting a long transcript without cutting it, Ask's citation check, and Compare's alignment by module. |
 | `eadwynConnectors.ts` | D652's three rules for connectors in an Eadwyn conversation: the read gate (`readableConnectors`: switched on AND active), the sends a run may only propose (`validateSend`, `SEND_TARGETS`), and the one serialisation and SHA-256 of a payload, so confirm sends what was shown. |
 | `tenancyScope.ts` | **The one place row-level scoping is decided.** Returns composable SQL clauses (`esignEnvelopeScope`, `fundGpScope`, `lpMembershipScope`) and fails closed — an actor it cannot identify gets `NO_ROWS`, not everything. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
@@ -46,8 +47,9 @@ runs these directly against an in-process SQLite, with no request at all.
 
 ## Rules
 
-`cycleCards.ts` defines the D656/D661 Figure, Card and records shapes, card
-failure isolation, and bounded search/filter/sort/paging for cycle module reads.
+`cycleCards.ts` defines the D656 Figure and Card shapes, card failure isolation,
+and shared paging. `buildCycleRecords.ts` holds D662's D661-shaped record table,
+chart specs and bounded search/filter/sort/paging for the Build modules.
 
 - No `Context`, no `Response`. If you need one, the code belongs in `routes/`.
 - Never build SQL by interpolation. `check-sql-prepare` fails the build on a
@@ -70,6 +72,28 @@ highlights and lowlights that must name a source, Eadwyn's draft through `aiRout
 may read (the network: asks only unless metrics are included), and where a reply to
 each kind of ask lands.
 
+D659 (#1472): `cycleCards.ts` is the shape every cycle read returns: `Figure`,
+`Card`, the five states, and `safeCard` / `safeFigure`, which turn a thrown
+source into that one card's `unreadable`. Build, Raise and Grow import it.
+`cycleValidate.ts` computes Validate's figures, cards and records from records
+at read time and stores nothing. `validateWriters.ts` has one writer per
+migration 440 record. The manual routes and #1471's interview accept path both
+call it, and each writer records its actor.
+
+D664: `cycleCards.ts` holds the read every cycle shares (D656, #1469): the card
+states, the `Figure`/`Card`/`Records` types, `settleCard` (a failing source makes
+only its card unreadable) and paging. `growCycle.ts` computes the Grow figures
+and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
+revenue ledger into new, expansion and churned by month (only when customers can
+be told apart; churn needs two billings) and rewrites `revenue_movements`.
+
+D663: `raiseCycle.ts` computes the Raise figures, seven cards and records for
+`../routes/cycle_raise.ts`, including the computed readiness checks, the
+diligence checklist and the narrative consistency check (fixed patterns, no
+model). `raiseWriters.ts` has one writer per migration 442 record.
+`deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
+they never add up to more than the view's read time.
+
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:
   - consent to record before an audio channel starts;
@@ -80,3 +104,15 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `sttFormats.ts` has, for each speech-to-text model, its request and response shapes and its live events, plus the speaker labels.
 - `sttModels.ts` lists the models the rail offers, priced from `aiRouter`'s own tables.
 - `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed.
+
+### Founder round calls (D653)
+
+`roundCalls.ts` orchestrates private founder calls, counsel fingerprints, recipient entitlements, notification outcomes and atomic Raise pipeline responses. `roundCallPolicy.ts` contains flag, verification, readiness, matching and identity policies. The GP capital-call domain is separate. See [D653](../../../documentation/architecture/decisions/D653.md).
+
+D667 (#1497): `assistantInterviews.ts` holds `submit_interview`,
+`propose_placements` and `structure_with_studioos` for #1496's MCP server.
+Each takes the grant, re-checks the company and the founder's right to write,
+and throws a `ToolError` with the issue's status. Consent `given` comes first,
+and a placement's quote must be verbatim in the stored transcript. Nothing is
+accepted on the founder's behalf. `interviewSessions.ts`'s `deleteSession`
+now takes the session's pending proposals with it.

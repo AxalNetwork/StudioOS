@@ -38,7 +38,7 @@
 import type { Env } from '../../types';
 import type { SpinoutDeckBundle, SpinoutDeckData } from './spinoutDeckData';
 import { flattenSpinoutDeckData } from './spinoutDeckData';
-import { bindingKey } from '../../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../../util/schemaBootstrap';
 
 /**
  * The narrative fields a founder may override at deck level, as dotted paths
@@ -165,7 +165,8 @@ function setPath(root: Record<string, any>, path: string, value: string): boolea
  * hydrate() contract sees the overridden text, drops any gap whose field is now
  * overridden, and recomputes `draft` from the surviving gaps. `programDay` is
  * untouched: a manual edit does not move the founder through the program, so a
- * Day-16 deck stays DRAFT no matter how much copy is overridden.
+ * Lab member's Day-16 deck stays DRAFT no matter how much copy is overridden.
+ * A founder outside the Lab has no programme clock (D663, `programmeHolds`).
  */
 export function applySpinoutOverrides(
   bundle: SpinoutDeckBundle,
@@ -209,7 +210,7 @@ export function applySpinoutOverrides(
     gaps,
     gapFields: nextGapFields,
     gapSections: nextGapSections,
-    draft: bundle.programDay < 28 || gaps.length > 0,
+    draft: (bundle.programmeHolds ?? bundle.programDay < 28) || gaps.length > 0,
     overrides: applied,
     overriddenKeys: Object.keys(applied).sort(),
   };
@@ -228,20 +229,29 @@ export function applySpinoutOverrides(
 const OVERRIDES_READY = new WeakMap<object, boolean>();
 export async function ensureSpinoutDeckOverridesSchema(env: Env): Promise<void> {
   if (OVERRIDES_READY.get(bindingKey(env))) return;
-  await env.DB.exec(
+  // Migration 442 (D663) added the narrative-version columns and moved the
+  // unique key to (project_id, field_key, version). A database migrated before
+  // 442 gets the columns here, and loses the two-column key that would refuse
+  // a second version of the same field.
+  await runSchemaBootstrap(env, [
     'CREATE TABLE IF NOT EXISTS spinout_deck_overrides (' +
       'id INTEGER PRIMARY KEY AUTOINCREMENT, ' +
       'project_id INTEGER NOT NULL, ' +
       'field_key TEXT NOT NULL, ' +
       'value TEXT NOT NULL, ' +
       'updated_by INTEGER, ' +
-      "updated_at TEXT NOT NULL DEFAULT (datetime('now'))" +
+      "updated_at TEXT NOT NULL DEFAULT (datetime('now')), " +
+      'version INTEGER NOT NULL DEFAULT 0, ' +
+      'investor_type TEXT, ' +
+      'deck_version INTEGER' +
       ')',
-  );
-  await env.DB.exec(
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_spinout_deck_overrides_project_key ' +
-      'ON spinout_deck_overrides(project_id, field_key)',
-  );
+    'ALTER TABLE spinout_deck_overrides ADD COLUMN version INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE spinout_deck_overrides ADD COLUMN investor_type TEXT',
+    'ALTER TABLE spinout_deck_overrides ADD COLUMN deck_version INTEGER',
+    'DROP INDEX IF EXISTS idx_spinout_deck_overrides_project_key',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_spinout_deck_overrides_project_key_version ' +
+      'ON spinout_deck_overrides(project_id, field_key, version)',
+  ]);
   OVERRIDES_READY.set(bindingKey(env), true);
 }
 
@@ -253,7 +263,7 @@ export async function loadSpinoutDeckOverrides(
   try {
     await ensureSpinoutDeckOverridesSchema(env);
     const res = await env.DB
-      .prepare('SELECT field_key, value FROM spinout_deck_overrides WHERE project_id = ?')
+      .prepare('SELECT field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version = 0')
       .bind(projectId)
       .all();
     const out: SpinoutDeckOverrides = {};
@@ -294,16 +304,16 @@ export async function saveSpinoutDeckOverrides(
 
   for (const key of cleared) {
     await env.DB
-      .prepare('DELETE FROM spinout_deck_overrides WHERE project_id = ? AND field_key = ?')
+      .prepare('DELETE FROM spinout_deck_overrides WHERE project_id = ? AND field_key = ? AND version = 0')
       .bind(projectId, key)
       .run();
   }
   for (const [key, value] of Object.entries(overrides)) {
     await env.DB
       .prepare(
-        'INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at) ' +
-          "VALUES (?, ?, ?, ?, datetime('now')) " +
-          'ON CONFLICT(project_id, field_key) DO UPDATE SET ' +
+        'INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version) ' +
+          "VALUES (?, ?, ?, ?, datetime('now'), 0) " +
+          'ON CONFLICT(project_id, field_key, version) DO UPDATE SET ' +
           "value = excluded.value, updated_by = excluded.updated_by, updated_at = datetime('now')",
       )
       .bind(projectId, key, value, userId)

@@ -227,6 +227,9 @@ test('a highlight with no source is refused, and nothing is saved', async () => 
   assert.equal((await call(db, FOUNDER, 'PUT', `/${uid}/share`, { asks: [{ kind: 'investor', text: 'x' }] })).status, 400);
   const badAsk = await call(db, FOUNDER, 'PUT', `/${uid}/share`, { asks: [{ kind: 'hire', text: 'x', link_ref: '999' }] });
   assert.equal(badAsk.status, 400, 'a hire links to one of the company\'s own open roles');
+  const badMarket = await call(db, FOUNDER, 'PUT', `/${uid}/share`, { asks: [{ kind: 'market', text: 'Spain', link_ref: '5' }] });
+  assert.equal(badMarket.status, 400, 'D664: a market ask links to one of the company\'s own markets');
+  assert.equal((await call(db, FOUNDER, 'PUT', `/${uid}/share`, { asks: [{ kind: 'market', text: 'Spain' }] })).status, 200, 'or to none');
 });
 
 test('a network recipient never receives the metrics unless the founder included them', async () => {
@@ -270,7 +273,7 @@ test('send records each recipient; an investor with no account is not delivered,
   assert.deepEqual(page.body.sent_to, { investors: 2, team: 1, network: 1 });
 });
 
-test('a reply reaches its module: a hire becomes a candidate, a customer a contact; a market reply stays with its reason', async () => {
+test('a reply reaches its module: a hire becomes a candidate, a customer a contact; a market reply with no market link stays with its reason', async () => {
   const db = await fixture();
   const { uid } = await draftAndSend(db, {});
   const page = await call(db, FOUNDER, 'GET', `/${uid}/page`);
@@ -286,7 +289,7 @@ test('a reply reaches its module: a hire becomes a candidate, a customer a conta
   assert.deepEqual([contact.audience, contact.email, contact.source], ['customer', 'buyer@acme.example', 'update_ask']);
   const market = await call(db, TEAM, 'POST', `/asks/${ask('market')}/replies`, { message: 'Ana in Madrid' });
   assert.equal(market.body.landed_module, null);
-  assert.match(market.body.landed_reason, /no Market expansion store/);
+  assert.match(market.body.landed_reason, /linked to no market/, 'D664: an ask linked to no market keeps its reply');
   assert.equal((await call(db, STRANGER, 'POST', `/asks/${ask('hire')}/replies`, { message: 'x' })).status, 403, 'only a recipient replies');
   const after = await call(db, FOUNDER, 'GET', `/${uid}/page`);
   assert.equal(after.body.asks.find((a: any) => a.kind === 'hire').replies.length, 1);

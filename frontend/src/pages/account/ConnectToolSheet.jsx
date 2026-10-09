@@ -14,9 +14,9 @@ import { TIER_LABEL, TOOL_FILTERS, attentionReason, feedsLabel, lastSyncLabel, t
  * A provider's sign-in still returns to `/integrations`, which lands on the
  * Connectors page; the Worker's callback chooses that address (D651).
  *
- * The canvas's `sync` view (choosing GitHub repositories) waits for the
- * GitHub connector (#1467, D655); until then GitHub is listed as the Worker
- * reports it.
+ * The canvas's `sync` view (choosing GitHub repositories) is not built here
+ * yet. Its routes (`/:uid/repositories`, D655) are on main; GitHub is listed
+ * as the Worker reports it meanwhile.
  */
 
 const STATE = {

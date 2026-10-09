@@ -138,6 +138,10 @@ const PUBLISHED = {
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.293, out: 2.253 },
   '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.660, out: 1.000 },
   '@cf/meta/llama-3.2-3b-instruct':           { in: 0.051, out: 0.335 },
+  // D658: quoted in aiRouter.ts's SMALL_LLAMA note from the same reading.
+  '@cf/meta/llama-3.1-8b-instruct-fp8-fast':  { in: 0.045, out: 0.384 },
+  // D658: Cloudflare's model page and pricing table, read 2026-10-09.
+  '@cf/deepseek-ai/deepseek-v4-flash-0731':   { in: 0.44,  out: 1.32 },
 };
 
 test('every model the router routes to has a price', async () => {

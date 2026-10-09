@@ -110,19 +110,39 @@ test('one failing source makes only its own card unreadable', async () => {
 test('founder vesting follows both holder and user and never mixes projects', async () => {
   const { db, env } = fixture();
   db.exec(`INSERT INTO cap_table_holders(id,user_id,project_id,name,shares,ownership_pct,founder_role) VALUES
-      (1,1,101,'Founder A',100,60,'CEO'), (2,2,202,'Founder B',100,40,'CTO');
+      (1,1,101,'Founder A',100,60,'CEO'), (2,2,202,'Founder B',100,40,'CTO'),
+      (4,1,202,'Founder A on another project',100,10,'CFO');
     INSERT INTO cap_table_vesting(id,user_id,holder_id,start_date,cliff_months,total_months,vested_shares) VALUES
-      (1,1,1,'2026-01-01',12,48,25), (2,2,2,'2025-01-01',6,24,75), (3,2,1,'2020-01-01',1,12,100);`);
+      (1,1,1,'2026-01-01',12,48,25), (2,2,2,'2025-01-01',6,24,75),
+      (3,2,1,'2020-01-01',1,12,100), (4,1,4,'2024-01-01',6,24,10);`);
   const one = await call(env, '/api/cycles/build/modules/founding-team?project=101');
   assert.equal(one.status, 200);
   assert.equal(one.body.records.rows.length, 1);
   assert.match(one.body.records.rows[0].cells.vesting, /2026-01-01/);
   assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /2020-01-01/);
+  assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /2024-01-01/);
   const other = await call(env, '/api/cycles/build/modules/founding-team?project=202');
   assert.equal(other.status, 403);
   const two = await call(env, '/api/cycles/build/modules/founding-team?project=202', 2);
   assert.equal(two.body.records.rows[0].cells.founder, 'Founder B');
   assert.match(two.body.records.rows[0].cells.vesting, /2025-01-01/);
+  const secondCompanyFounder = two.body.records.rows.find((row: any) => row.cells.founder === 'Founder A on another project');
+  assert.match(secondCompanyFounder.cells.vesting, /2024-01-01/);
+  db.close();
+});
+
+test('unknown vested shares remain unrecorded and created risks have an atomic audit', async () => {
+  const { db, env } = fixture();
+  db.exec(`INSERT INTO cap_table_holders(id,user_id,project_id,name,shares,ownership_pct,founder_role)
+    VALUES (7,1,101,'Founder C',100,100,'CEO');
+    INSERT INTO cap_table_vesting(id,user_id,holder_id,start_date,cliff_months,total_months)
+    VALUES (7,1,7,'2026-01-01',12,48);`);
+  const founders = await call(env, '/api/cycles/build/modules/founding-team?project=101');
+  assert.equal(founders.body.card.series[1].items[0].pct, null);
+  db.exec("CREATE TRIGGER reject_risk_audit BEFORE INSERT ON activity_logs WHEN NEW.action = 'build_risk_created' BEGIN SELECT RAISE(ABORT, 'audit failure'); END");
+  const failed = await call(env, '/api/cycles/build/risks?project=101', 1, 'POST', { title: 'Rollback risk', severity: 'low' });
+  assert.equal(failed.status, 500);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM venture_risks').get()?.n, 0);
   db.close();
 });
 

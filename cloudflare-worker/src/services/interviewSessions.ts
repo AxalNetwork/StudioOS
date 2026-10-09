@@ -230,6 +230,12 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
             (SELECT COALESCE(SUM(cost_microusd), 0) FROM interview_session_receipts WHERE session_id = ?) AS cost_microusd`,
   ).bind(session.id, session.id, session.id).first<{ segments: number; marks: number; cost_microusd: number }>();
   await env.DB.batch([
+    // D667 — the session's PENDING proposals go with it, whoever proposed
+    // them (StudioOS or an assistant): each carries a quote of a transcript
+    // that is being deleted. A decided proposal stays, as the record of what
+    // the founder accepted or discarded, but its quote is cleared.
+    env.DB.prepare(`DELETE FROM validate_proposals WHERE session_id = ? AND status = 'pending'`).bind(session.id),
+    env.DB.prepare('UPDATE validate_proposals SET citation_json = NULL WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_transcript_segments WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_session_marks WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_session_receipts WHERE session_id = ?').bind(session.id),

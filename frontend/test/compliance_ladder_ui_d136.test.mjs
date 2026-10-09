@@ -292,7 +292,8 @@ test('a 423 announces itself wherever it is met', () => {
     'the notice riding in the 423 body is thrown away, so the bar has nothing to name');
   // The two branches this one was modelled on must still work — a listener
   // inserted in the wrong place could return or throw early.
-  assert.match(API, /res\.status === 402 && typeof window !== 'undefined'/,
+  // D651 lets a caller that draws the plan's refusal itself opt out (`inlinePaywall`).
+  assert.match(API, /res\.status === 402 && !options\.inlinePaywall && typeof window !== 'undefined'/,
     'the tier-required branch was disturbed');
   assert.match(API, /err\.code === 'step_up_required'/, 'the step-up branch was disturbed');
   // And the structured error still reaches every caller's own catch. BOUNDED:

@@ -36,6 +36,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/portfolio-support → portfolio_support.ts  (the IP3 value-add ledger, D70)
 /api/founder/validate → founder_validate.ts, founder_validate_sessions.ts  (D657's interview sessions: /interviews/:id/sessions, /sessions/*)
 /api/portfolio-updates → portfolio_updates.ts  (founder updates; D654's Share an update: /share/*, /:uid/share|send|page, /asks/:uid/*)
+/api/cycles/grow   → cycle_grow.ts  (D664: the Grow overview, module reads and store writes; its shared card types live in the services folder as cycleCards)
+/api/cycles/raise  → cycle_raise.ts  (D663: the Raise overview, module reads and the readiness, narrative, checklist and next-step writes)
 /api/users         → users.ts
 /api/market-intel  → market_intel.ts
 /api/market-intel-public → market_intel_public.ts
@@ -48,6 +50,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650)
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
+                                         (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/liquidity     → liquidity.ts
@@ -69,6 +72,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
+/api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -85,8 +89,6 @@ counterpart. Calls hit the worker as 404. The frontend touches some of these,
 so re-implementing them on the worker (or accepting the broken UI affordance)
 is a follow-up:
 
-- `integrations.py` — `/api/integrations/*` (used by `IntegrationsPage`
-  webhook config). No worker file exists.
 - `pipeline_votes.py` — `/api/pipeline/vote*`, `/api/pipeline/votes*` (used by
   the deal-card voting widget). The worker `pipeline.ts` only handles
   `/active`, `/projects/*`, `/ws/*` — voting endpoints are missing.
@@ -125,3 +127,35 @@ canonical Super Admin only. Migration 434 records explicit published template sn
 preview/send routes verify the same version and body fingerprint, and history
 and signed-PDF routes project safe fields and hash the actual PDF bytes. The
 new desk opts into recorded send-event dates with `recorded=true`.
+
+D659 (#1472): `cycle_validate.ts` is mounted at `/api/cycles/validate` in
+`index.ts`. It serves #1469's shared cycle read for Validate. `GET /overview`
+returns four figures and six cards, and `GET /modules/:slug` returns one card
+plus its records (search, filters, sort, pages). The manual writes for
+migration 440's records go through `../services/validateWriters.ts`. Reading
+follows the founder board's `canReadBoard` rule and writing follows
+`canWrite`. A card whose store fails is `unreadable` on its own. See
+`documentation/architecture/decisions/D659.md`.
+
+D663 (#1476): `cycle_raise.ts` is mounted at `/api/cycles/raise` in
+`index.ts`. `GET /overview` returns the four Raise figures and seven cards,
+and `GET /modules/:slug` returns one card plus its records. The reads are
+`../services/raiseCycle.ts`; the five writes (a readiness score, the computed
+rescore, a narrative version, a data-room file's checklist item, a prospect's
+next step and warm path) are `../services/raiseWriters.ts`, each recording its
+actor. Reading and writing both follow `canWrite`: the cards carry the cap
+table, the investor pipeline and who opened the data room. `decks.ts`'s share
+heartbeat also takes `slides`, the viewer's seconds per slide, stored through
+`../services/deckSlideDwell.ts`. See
+`documentation/architecture/decisions/D663.md`.
+
+D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.
+
+D667 (#1497): the assistant interview tools are service functions in
+`../services/assistantInterviews.ts`, registered on #1496's MCP server, not
+routes of their own. Two routes here changed:
+- `founder_validate_structure.ts`'s `GET /sessions/:id/placements` now gives
+  each placement and run a `source` (`assistant` or `studioos`) and the
+  assistant's `submitted_via_name`.
+- Deleting a session (`founder_validate_sessions.ts`) now deletes its pending
+  proposals. See `documentation/architecture/decisions/D667.md`.

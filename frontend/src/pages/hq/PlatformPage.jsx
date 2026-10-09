@@ -466,6 +466,7 @@ export const PROVIDER_LABEL = {
   calendly: 'Calendly',
   stripe: 'Stripe',
   carta: 'Carta',
+  github: 'GitHub',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',
