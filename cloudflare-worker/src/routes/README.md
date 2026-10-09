@@ -158,3 +158,5 @@ routes of their own. Two routes here changed:
   assistant's `submitted_via_name`.
 - Deleting a session (`founder_validate_sessions.ts`) now deletes its pending
   proposals. See `documentation/architecture/decisions/D667.md`.
+
+D666: `mcp_consent.ts` mounts `/api/mcp/consent` and `/api/connectors/assistants` (the latter before the connector router). They are the SPA's half of connecting an AI assistant: read, approve or deny a parked authorization request (single-use, ten minutes), list the caller's grants and revoke one. The MCP server and its OAuth endpoints are not routers here: `../index.ts`'s `fetch` sends `/api/mcp`, `/api/oauth/*` and the two `/.well-known/oauth-*` paths to `../mcp/oauth.ts` first. Everything is 404 with `MCP_SERVER_ENABLED` off.
