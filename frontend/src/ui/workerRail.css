@@ -555,3 +555,82 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 }
 
 .dark .fwr-frame-rail { border-left-color: #1f2937; background: #111827; }
+
+/*
+ * D652 (#1464) — the composer (ui/EadwynComposer.jsx), from the canvas's
+ * `rail` and `railList` screens: answers on a soft ground with their source
+ * line in the accent, the "Ready to send" card, the "+" menu and its switches.
+ * Colours come from the rail's own properties, so the dark rules above apply.
+ */
+.fwr .ead-thread { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.fwr .ead-msg p { margin: 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; }
+.fwr .ead-msg-user { align-self: flex-end; max-width: 90%; padding: 7px 10px; border: 1px solid var(--fwr-line); border-radius: 12px; }
+.fwr .ead-msg-assistant { padding: 9px 11px; border-radius: 12px; background: var(--fwr-accent-soft); }
+.fwr .ead-source { display: block; margin-top: 4px; font-size: 11px; color: var(--fwr-accent); }
+.fwr .ead-action {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 9px 11px;
+  border: 1px solid var(--fwr-accent); border-radius: 12px; background: var(--fwr-paper);
+}
+.fwr .ead-action-title { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--fwr-accent); }
+.fwr .ead-action-what { font-size: 12.5px; }
+.fwr .ead-action-payload { font-size: 11px; color: var(--fwr-muted); overflow-wrap: anywhere; }
+.fwr .ead-action-buttons { display: flex; gap: 6px; }
+.fwr .ead-send, .fwr .ead-cancel {
+  font: inherit; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+}
+.fwr .ead-send { border: 1px solid var(--fwr-accent); background: var(--fwr-accent); color: #fff; }
+.fwr .ead-cancel { border: 1px solid var(--fwr-line); background: var(--fwr-paper); color: var(--fwr-ink); }
+.fwr .ead-send:disabled, .fwr .ead-cancel:disabled { opacity: .55; cursor: not-allowed; }
+.fwr .ead-action-done { font-size: 12px; color: var(--fwr-muted); }
+.fwr .ead-thread-tools { display: flex; gap: 12px; flex-wrap: wrap; }
+.fwr .ead-link { font: inherit; font-size: 11px; color: var(--fwr-accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.fwr .ead-compose { position: relative; margin-top: 6px; }
+.fwr .ead-compose-row { display: flex; gap: 6px; align-items: flex-end; }
+.fwr .ead-plus {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent);
+  font: inherit; font-weight: 800;
+}
+.fwr .ead-input {
+  flex: 1; min-width: 0; resize: vertical; font: inherit; font-size: 12.5px; color: var(--fwr-ink);
+  padding: 6px 9px; border: 1px solid var(--fwr-line); border-radius: 10px; background: var(--fwr-paper);
+}
+.fwr .ead-plus:focus-visible, .fwr .ead-input:focus-visible, .fwr .ead-switch:focus-visible,
+.fwr .ead-send:focus-visible, .fwr .ead-cancel:focus-visible, .fwr .ead-menu-item:focus-visible {
+  outline: 2px solid var(--fwr-accent); outline-offset: 2px;
+}
+.fwr .ead-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 3;
+  display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--fwr-line); border-radius: 12px;
+  background: var(--fwr-paper); box-shadow: 0 12px 30px rgba(24, 24, 27, .14);
+}
+.fwr .ead-menu-item {
+  font: inherit; font-size: 13px; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--fwr-ink); cursor: pointer;
+}
+.fwr .ead-menu-sub { display: flex; justify-content: space-between; background: var(--fwr-accent-soft); }
+.fwr .ead-list-head { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; font-size: 12px; font-weight: 600; }
+.fwr .ead-list-head a { color: var(--fwr-accent); }
+.fwr .ead-conn { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; }
+.fwr .ead-conn.is-blocked { opacity: .5; }
+.fwr .ead-conn-name { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 13px; font-weight: 600; }
+.fwr .ead-conn-text { display: flex; flex-direction: column; min-width: 0; }
+.fwr .ead-conn-why { font-size: 11px; font-weight: 400; color: #92400e; }
+.fwr .ead-conn-icon {
+  flex: none; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+  font-size: 10px; font-weight: 800; background: var(--fwr-accent-soft); color: var(--fwr-accent);
+}
+.fwr .ead-switch {
+  position: relative; flex: none; width: 32px; height: 18px; border-radius: 99px; border: 0; padding: 0;
+  background: #d4d1dc; cursor: pointer;
+}
+.fwr .ead-switch.is-on { background: var(--fwr-accent); }
+.fwr .ead-switch:disabled { cursor: not-allowed; }
+.fwr .ead-knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .12s; }
+.fwr .ead-switch.is-on .ead-knob { left: 16px; }
+.fwr .ead-file { display: inline-flex; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 11.5px; color: var(--fwr-muted); }
+.fwr .ead-note { margin: 6px 0 0; font-size: 11px; color: var(--fwr-muted); }
+.dark .fwr .ead-conn-why { color: #fbbf24; }
+.dark .fwr .ead-switch { background: #4a4655; }
+.dark .fwr .ead-switch.is-on { background: var(--fwr-accent); }
+.dark .fwr .ead-send { color: #1a1822; }

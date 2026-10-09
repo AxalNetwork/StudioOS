@@ -110,6 +110,7 @@ import esign from './routes/esign';
 import trust from './routes/trust';
 import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
 import integrations from './routes/integrations';
+import eadwynRoutes from './routes/eadwyn';
 // Task #2 — HubSpot provider. Side-effect import: the module's top-level
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
 // layer in routes/integrations.ts can dispatch to it.
@@ -249,6 +250,7 @@ import partnerOffers from './routes/partner_offers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
+import founderValidateSessions from './routes/founder_validate_sessions';
 // The operating cadence (#176 FB4) — rituals, the runs that archive them, and
 // the templates they are conducted from. Migration 250.
 import founderCadence from './routes/founder_cadence';
@@ -1104,7 +1106,11 @@ app.route('/api/assessment', assessmentRoutes);
 app.route('/api/matches', matches);
 app.route('/api/consultations', consultations);
 app.route('/api/settings', settings);
+// D650: the old path and the canonical connector path share this router.
+app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
+// D652 — the Worker AI rail's conversations and their connectors (#1464).
+app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
@@ -1245,6 +1251,8 @@ app.route('/api/partner/offers', partnerOffers);
 // recurring update. Health is derived over five of those tables at read time
 // and is never stored.
 app.route('/api/partner/delivery', partnerDelivery);
+// D657 — interview sessions: recording, live and final speech-to-text.
+app.route('/api/founder/validate', founderValidateSessions);
 app.route('/api/founder/validate', founderValidate);
 // D659 (#1472) — the Validate cycle's shared read (#1469's contract: four
 // figures, six cards, a records table per module) and the manual writes for

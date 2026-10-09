@@ -16,6 +16,7 @@ export * from './api/companyEin.js';
 export * from './api/contracts.js';
 export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
+export * from './api/eadwyn.js';
 export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReports.js';

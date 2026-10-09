@@ -12,6 +12,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | File | Why it matters |
 | --- | --- |
 | `profileEvidenceBlend.ts` | D592's bounded skill-level blend and audited default-off settings read; snapshot versions name the switch state. Only the Super Admin writes through `profile_evidence_blend.ts`; the owner activates it after the synthetic comparison. |
+| `eadwynConnectors.ts` | D652's three rules for connectors in an Eadwyn conversation: the read gate (`readableConnectors`: switched on AND active), the sends a run may only propose (`validateSend`, `SEND_TARGETS`), and the one serialisation and SHA-256 of a payload, so confirm sends what was shown. |
 | `tenancyScope.ts` | **The one place row-level scoping is decided.** Returns composable SQL clauses (`esignEnvelopeScope`, `fundGpScope`, `lpMembershipScope`) and fails closed — an actor it cannot identify gets `NO_ROWS`, not everything. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
@@ -73,3 +74,14 @@ source into that one card's `unreadable`. Build, Raise and Grow import it.
 at read time and stores nothing. `validateWriters.ts` has one writer per
 migration 440 record. The manual routes and #1471's interview accept path both
 call it, and each writer records its actor.
+
+D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
+- `interviewSessions.ts` holds the rules:
+  - consent to record before an audio channel starts;
+  - chunks stored once per sequence number;
+  - the duration measured on the Worker's clock;
+  - the final transcript replacing the live draft and copied to `discovery_interviews.transcript`;
+  - deletion that removes the R2 audio and writes an audit row.
+- `sttFormats.ts` has, for each speech-to-text model, its request and response shapes and its live events, plus the speaker labels.
+- `sttModels.ts` lists the models the rail offers, priced from `aiRouter`'s own tables.
+- `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed.
