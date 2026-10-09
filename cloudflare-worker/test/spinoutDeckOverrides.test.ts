@@ -176,3 +176,17 @@ test('no overrides is an exact identity transform', () => {
   assert.equal(out.draft, base.draft);
   assert.deepEqual(out.overriddenKeys, []);
 });
+
+// D663 (#1476) — once the overrides answer every gap, a founder outside the Lab
+// gets a final deck; a Lab member before Day 28 still does not.
+test('D663: overrides that retire the last gap make a non-member deck final, never a mid-programme member deck', () => {
+  const base = mapToSpinoutDeckData(withTagline(''));
+  const one = { ...base, gaps: ['Cover: add a one-line thesis.'], gapFields: ['cover.thesis'], gapSections: ['cover'] };
+  const outside = applySpinoutOverrides({ ...one, programDay: 0, programmeHolds: false }, { 'cover.thesis': 'A written thesis.' });
+  assert.equal(outside.gaps.length, 0);
+  assert.equal(outside.draft, false, 'no gaps and no programme clock: final');
+  const member = applySpinoutOverrides({ ...one, programDay: 16, programmeHolds: true }, { 'cover.thesis': 'A written thesis.' });
+  assert.equal(member.draft, true, 'a Day-16 member stays in draft whatever is overridden');
+  const legacy = applySpinoutOverrides({ ...one, programDay: 16, programmeHolds: undefined as unknown as boolean }, { 'cover.thesis': 'x' });
+  assert.equal(legacy.draft, true, 'a bundle without the flag keeps the programme-day rule');
+});
