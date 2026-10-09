@@ -165,7 +165,8 @@ function setPath(root: Record<string, any>, path: string, value: string): boolea
  * hydrate() contract sees the overridden text, drops any gap whose field is now
  * overridden, and recomputes `draft` from the surviving gaps. `programDay` is
  * untouched: a manual edit does not move the founder through the program, so a
- * Day-16 deck stays DRAFT no matter how much copy is overridden.
+ * Lab member's Day-16 deck stays DRAFT no matter how much copy is overridden.
+ * A founder outside the Lab has no programme clock (D663, `programmeHolds`).
  */
 export function applySpinoutOverrides(
   bundle: SpinoutDeckBundle,
@@ -209,7 +210,7 @@ export function applySpinoutOverrides(
     gaps,
     gapFields: nextGapFields,
     gapSections: nextGapSections,
-    draft: bundle.programDay < 28 || gaps.length > 0,
+    draft: (bundle.programmeHolds ?? bundle.programDay < 28) || gaps.length > 0,
     overrides: applied,
     overriddenKeys: Object.keys(applied).sort(),
   };

@@ -27,7 +27,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import {
   loadPainGroupModel, normPhrase, getPainGroupsView,
-  isPainSeverity, PAIN_SEVERITIES,
+  isPainSeverity, PAIN_SEVERITIES, isPainSeverityLevel, PAIN_SEVERITY_LEVELS,
 } from '../services/painGroups';
 import { csvResponse, stamp } from '../services/csv';
 import {
@@ -625,8 +625,10 @@ founderValidate.put('/interviews/:id/pain-severity', async (c) => {
     return json({ ok: true, severity: null });
   }
 
-  if (!isPainSeverity(b.severity)) {
-    return json({ detail: `severity must be ${PAIN_SEVERITIES.join(' or ')}, or null to clear` }, 400);
+  // The three levels (D659) are accepted beside the two the form has always
+  // sent; `severityLevel` reads both on one scale.
+  if (!isPainSeverity(b.severity) && !isPainSeverityLevel(b.severity)) {
+    return json({ detail: `severity must be ${[...PAIN_SEVERITIES, ...PAIN_SEVERITY_LEVELS].join(', ')}, or null to clear` }, 400);
   }
 
   // UPSERT ON THE TABLE'S OWN UNIQUE INDEX. Two tabs judging the same pain must

@@ -39,7 +39,7 @@ export async function ensureCompetitorSchema(env: Env): Promise<void> {
       "CREATE INDEX IF NOT EXISTS idx_competitor_sources_analysis ON competitor_sources (analysis_id)",
     );
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS competitor_signals (id TEXT PRIMARY KEY, analysis_id TEXT NOT NULL REFERENCES competitor_analyses(id) ON DELETE CASCADE, candidate_id TEXT, signal_type TEXT NOT NULL, label TEXT, detail TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS competitor_signals (id TEXT PRIMARY KEY, analysis_id TEXT NOT NULL REFERENCES competitor_analyses(id) ON DELETE CASCADE, candidate_id TEXT, signal_type TEXT NOT NULL, label TEXT, detail TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), project_id INTEGER, source_url TEXT, source_kind TEXT, observed_on TEXT)",
     );
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_competitor_signals_analysis ON competitor_signals (analysis_id)",

@@ -69,6 +69,7 @@ import { weekStartOf, weekWindows, type MoveRow } from '../services/okrWeeks';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse, refusalBody } from '../util/refusal';
+import { WAITLIST_TARGET_KEY } from '../services/validateWriters';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -2233,9 +2234,12 @@ progress.get('/metrics/:projectId/targets', async (c) => {
   let items: ReturnType<typeof serializeTarget>[] = [];
   try {
     const rows = await c.env.DB.prepare(
+      // The waitlist bar (D659) shares the table, and is read by the Validate
+      // cycle against sign-ups, not against a snapshot: it is not a target this
+      // view, its editor or its snapshot comparison can read.
       `SELECT id, project_id, metric_key, target_value, direction, label, is_focus, updated_at
-         FROM metric_targets WHERE project_id = ? ORDER BY metric_key`,
-    ).bind(projectId).all<MetricTargetRow>();
+         FROM metric_targets WHERE project_id = ? AND metric_key <> ? ORDER BY metric_key`,
+    ).bind(projectId, WAITLIST_TARGET_KEY).all<MetricTargetRow>();
     items = (rows.results || []).map(serializeTarget);
   } catch (e) {
     console.error('[progress] targets GET:', (e as Error).message);

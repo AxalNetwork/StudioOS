@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import { mapToSpinoutDeckData, flattenSpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
 import type { SpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
 import type { SpinoutDemoDayData } from '../src/services/decks/axalSpinoutDemoDay.ts';
+import { isLabMember } from '../src/services/decks/axalSpinoutDemoDay.ts';
 import { SPINOUT_OVERRIDABLE_KEYS } from '../src/services/decks/spinoutDeckOverrides.ts';
 
 const SLIDE_KEYS = [
@@ -786,4 +787,46 @@ test('Day-16 partial raises the two new gaps (competitive + traction)', () => {
   assert.ok(tracIdx >= 0, 'a partial project gaps the traction slide');
   assert.equal(gapSections![compIdx], 'competitive', 'filed under the competitive slide');
   assert.equal(gapSections![tracIdx], 'traction', 'filed under the traction slide');
+});
+
+/* ============================================================================
+ *  D663 (#1476) — a founder outside the Lab is never held in DRAFT by the
+ *  programme clock. They have no start date, `daysRemaining(null)` reads 28,
+ *  and the programme day came out 0: every such deck was DRAFT forever.
+ * ========================================================================== */
+
+const outsideLab = () => {
+  const src = makeFullSrc();
+  src.meta = { ...src.meta, days_remaining: 28, lab_active: false, lab_member: false };
+  return src;
+};
+
+test('D663: a founder with no Lab start date is not held in draft by the programme clock', () => {
+  const b = mapToSpinoutDeckData(outsideLab());
+  assert.equal(b.programDay, 0, 'no start date reads as day 0');
+  assert.equal(b.programmeHolds, false, 'the clock does not hold a non-member');
+  assert.equal(b.draft, b.gaps.length > 0, 'a non-member deck is a draft only while it has gaps');
+  assert.equal(b.data.cover.eyebrowRight, 'DEMO DAY', 'no programme day on the cover');
+  assert.deepEqual(b.data.cover.meta.find(([k]) => k === 'LAB STATUS'), ['LAB STATUS', 'Not in the Lab']);
+});
+
+test('D663: a Lab member before Day 28 is still held, and a former member keeps the clock', () => {
+  const member = mapToSpinoutDeckData({ ...makeFullSrc(), meta: { ...makeFullSrc().meta, days_remaining: 12, lab_member: true } });
+  assert.equal(member.programmeHolds, true);
+  assert.equal(member.draft, true);
+  assert.equal(member.data.cover.eyebrowRight, 'DEMO DAY · Day 16 / 28');
+  const former = mapToSpinoutDeckData({ ...makeFullSrc(), meta: { ...makeFullSrc().meta, days_remaining: 5, lab_active: false, lab_member: true } });
+  assert.equal(former.programmeHolds, true, 'a start date on record keeps the programme day');
+  const done = mapToSpinoutDeckData(makeFullSrc());
+  assert.equal(done.programmeHolds, false, 'a member at Day 28 is not held');
+  // A source that does not say whether the founder is a member keeps the old rule.
+  const legacy = mapToSpinoutDeckData({ ...makeFullSrc(), meta: { ...makeFullSrc().meta, days_remaining: 12, lab_member: undefined } });
+  assert.equal(legacy.programmeHolds, true);
+});
+
+test('D663: isLabMember reads the active flag or a start date, and nothing else', () => {
+  assert.equal(isLabMember({ spinout_lab_active: 1, spinout_lab_started_at: null }), true);
+  assert.equal(isLabMember({ spinout_lab_active: 0, spinout_lab_started_at: '2026-08-01 09:00:00' }), true);
+  assert.equal(isLabMember({ spinout_lab_active: 0, spinout_lab_started_at: null }), false);
+  assert.equal(isLabMember({}), false);
 });

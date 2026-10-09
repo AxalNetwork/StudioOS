@@ -68,6 +68,14 @@ highlights and lowlights that must name a source, Eadwyn's draft through `aiRout
 may read (the network: asks only unless metrics are included), and where a reply to
 each kind of ask lands.
 
+D659 (#1472): `cycleCards.ts` is the shape every cycle read returns: `Figure`,
+`Card`, the five states, and `safeCard` / `safeFigure`, which turn a thrown
+source into that one card's `unreadable`. Build, Raise and Grow import it.
+`cycleValidate.ts` computes Validate's figures, cards and records from records
+at read time and stores nothing. `validateWriters.ts` has one writer per
+migration 440 record. The manual routes and #1471's interview accept path both
+call it, and each writer records its actor.
+
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:
   - consent to record before an audio channel starts;

@@ -4,7 +4,7 @@
 // unit-testable WITHOUT a React harness (the repo has no component test runner)
 // and so the UI cannot drift back to deriving "ready" from gaps alone.
 //
-// The export marks a file as DRAFT when `programDay < 28` OR there are gaps
+// The export marks a file as DRAFT when a Lab member is before Day 28 OR there are gaps
 // (see cloudflare-worker/src/services/decks/spinoutDeckData.ts). The panel MUST
 // honor the same `draft` flag — a deck with zero gaps can still be a draft while
 // the founder is mid-program. Returns one of:
