@@ -1,17 +1,23 @@
-/**
- * D652 (#1464) — the three tables behind an Eadwyn conversation, as the
- * migration will create them. HELD HERE UNTIL S1 GIVES THE MIGRATION NUMBER:
- * a CREATE in src/ that no migration declares fails
- * runtime_schema_declared_d235, and the Worker never creates these tables
- * itself. When the number comes, this text moves verbatim into
- * `cloudflare-worker/sql/migrations/<n>_eadwyn_conversations.sql` and the
- * tests read that file instead.
- *
- * Retention: a conversation is kept until the member deletes it, and goes
- * with the account (`ON DELETE CASCADE` from `users`). Its messages and
- * pending actions go with it.
- */
-export const EADWYN_SCHEMA_SQL = `
+-- 444 — the Worker AI rail's conversations and their connectors (D652, #1464).
+--
+-- eadwyn_conversations    one conversation in the rail: its member, the
+--                         company active when it started, the workspace, a
+--                         title from its first question, and the connector
+--                         switches it turned on (connectors_json, '[]' by
+--                         default: every switch starts off).
+-- eadwyn_messages         each turn. An answer keeps the connectors it read
+--                         and their freshness (sources_json) and the action
+--                         it proposed, if any.
+-- eadwyn_pending_actions  a write Eadwyn proposed: the connection, the
+--                         target, the exact payload and its SHA-256. Only the
+--                         member's confirm sends it (routes/eadwyn.ts), and a
+--                         pending action older than 24 hours is refused.
+--
+-- Retention: kept until the member deletes the conversation, and deleted with
+-- the account (ON DELETE CASCADE from users); messages and actions go with
+-- their conversation.
+--
+-- Additive: CREATE TABLE / INDEX IF NOT EXISTS only. No BEGIN/COMMIT.
 CREATE TABLE IF NOT EXISTS eadwyn_conversations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
@@ -58,4 +64,3 @@ CREATE TABLE IF NOT EXISTS eadwyn_pending_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_eadwyn_pending_actions_conversation
   ON eadwyn_pending_actions(conversation_id, id);
-`;

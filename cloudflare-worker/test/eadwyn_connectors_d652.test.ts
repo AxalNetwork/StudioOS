@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { createJWT } from '../src/auth.ts';
 import { registerProvider } from '../src/integrations/registry.ts';
-import { EADWYN_SCHEMA_SQL } from './_eadwyn_schema.mjs';
+// The tables exactly as migration 444 creates them: the test reads the file.
+const EADWYN_SCHEMA_SQL = readFileSync(new URL('../sql/migrations/444_eadwyn_conversations.sql', import.meta.url), 'utf8');
 import {
   readableConnectors,
   validateSend,
@@ -52,7 +53,7 @@ registerProvider({
 /**
  * A real SQLite database: the AI budget fixture (users 1..100, the router's
  * tables), plus sessions, projects, deals, the integrations tables and the
- * three D652 tables from the same text the migration carries.
+ * three D652 tables from migration 444 itself.
  */
 function world(opts: { reply?: string } = {}) {
   const { DB, db } = aiBudgetFixture();
