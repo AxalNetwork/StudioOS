@@ -76,6 +76,13 @@ at read time and stores nothing. `validateWriters.ts` has one writer per
 migration 440 record. The manual routes and #1471's interview accept path both
 call it, and each writer records its actor.
 
+D664: `cycleCards.ts` holds the read every cycle shares (D656, #1469): the card
+states, the `Figure`/`Card`/`Records` types, `settleCard` (a failing source makes
+only its card unreadable) and paging. `growCycle.ts` computes the Grow figures
+and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
+revenue ledger into new, expansion and churned by month (only when customers can
+be told apart; churn needs two billings) and rewrites `revenue_movements`.
+
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:
   - consent to record before an audio channel starts;

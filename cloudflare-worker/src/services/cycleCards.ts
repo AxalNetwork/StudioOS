@@ -1,11 +1,15 @@
 /**
- * D656 / D659 — the shape every cycle's overview and module read returns, and
- * the five states a card or a figure may be in.
+ * D656 (#1469) — the read every cycle shares, its types and its card states.
  *
- * ONE FILE FOR THE FOUR CYCLES. Validate (#1472) created it; Build, Raise and
- * Grow (#1475–#1477) import it. A second copy of `CardState` in a sibling
- * route would be a second answer to "what does `too_little` mean", and the SPA
- * (#1474) draws one card component over all four.
+ * Validate (D659, #1472) and Grow (D664, #1477) each reached this file before
+ * the other had merged. This is the union of the two, and every other cycle
+ * (`routes/cycle_<cycle>.ts`) imports it rather than keeping a copy. Contract,
+ * from #1469:
+ *
+ *   GET /api/cycles/:cycle/overview?project=:pid
+ *     → { cycle, question, figures: [Figure ×4], cards: [Card ×6 or ×7] }
+ *   GET /api/cycles/:cycle/modules/:slug?project=:pid&q=&filter=&sort=&page=
+ *     → { module, card: Card, records: { cols, rows, total, page, page_size } }
  *
  * THE FIVE STATES, and what each one promises the screen:
  *
@@ -17,18 +21,23 @@
  *   not_recorded  the source does not hold this value. `reason` says why.
  *                 The value is `null`, never 0.
  *   unreadable    the source failed. `reason` names the source. Only this
- *                 card is affected: `safeCard` catches per card.
+ *                 card is affected: `safeCard` and `settleCard` catch per card.
+ *
+ * `next` is the one action a card proposes, computed from its records.
  */
 
 export const CARD_STATES = ['ok', 'empty', 'too_little', 'not_recorded', 'unreadable'] as const;
 export type CardState = (typeof CARD_STATES)[number];
 
-/** Fewer points than this draws no line (#1469: "fewer than three points"). */
-export const MIN_SERIES_POINTS = 3;
+/** Fewer points than this is `too_little` (#1469: "fewer than three points"). */
+export const MIN_POINTS = 3;
+/** The same threshold, under the name Validate's read uses. */
+export const MIN_SERIES_POINTS = MIN_POINTS;
 
-export type Next = { text: string; href: string } | null;
+export interface CardNext { text: string; href: string }
+export type Next = CardNext | null;
 
-export type Figure = {
+export interface Figure {
   key: string;
   label: string;
   /** `null` whenever the state is not `ok`. Never 0 for "missing". */
@@ -38,12 +47,12 @@ export type Figure = {
   delta_30d: number | null;
   spark: number[];
   state: CardState;
-  source: string;
+  source: string | null;
   as_of: string | null;
   reason?: string | null;
-};
+}
 
-export type Card = {
+export interface Card {
   slug: string;
   name: string;
   state: CardState;
@@ -52,17 +61,27 @@ export type Card = {
   series: unknown;
   next: Next;
   reason: string | null;
-};
+  source?: string | null;
+  as_of?: string | null;
+}
+
+export interface Records {
+  cols: string[]; rows: Array<Record<string, unknown>>; total: number; page: number; page_size: number;
+}
 
 export type CardMeta = { slug: string; name: string; range: string; caption: string; source: string };
+
+// ---------------------------------------------------------------------------
+// One card at a time
+// ---------------------------------------------------------------------------
 
 /**
  * Run one card's read, and turn a thrown source into that card's `unreadable`.
  *
- * THE OVERVIEW MUST NOT FAIL AS A WHOLE because one store did. Six modules
- * read six different stores; a missing column on one of them is the
- * competitor card's problem, not the interview card's. So every card is
- * computed through this wrapper and the route awaits all of them.
+ * THE OVERVIEW MUST NOT FAIL AS A WHOLE because one store did. A missing
+ * column on the competitor store is the competitor card's problem, not the
+ * interview card's. So every card is computed through a wrapper and the route
+ * awaits all of them. The error's own text is logged, never returned.
  */
 export async function safeCard(meta: CardMeta, read: () => Promise<Omit<Card, 'slug' | 'name' | 'range' | 'caption'>>): Promise<Card> {
   try {
@@ -83,7 +102,25 @@ export async function safeCard(meta: CardMeta, read: () => Promise<Omit<Card, 's
   }
 }
 
-/** The same for a figure: a failed source is `unreadable` with its value null. */
+/**
+ * Grow's wrapper: the same rule, and the card may refine its own range and
+ * caption. Its reason reads "Unreadable: <source> could not be read".
+ */
+export async function settleCard(meta: CardMeta,
+  compute: () => Promise<Omit<Card, 'slug' | 'name' | 'caption'> & { caption?: string }>): Promise<Card> {
+  try {
+    const c = await compute();
+    return { slug: meta.slug, name: meta.name, caption: c.caption ?? meta.caption, ...c, range: c.range ?? meta.range };
+  } catch (e) {
+    console.error('[cycleCards] card unreadable:', meta.slug, (e as Error).message);
+    return {
+      slug: meta.slug, name: meta.name, state: 'unreadable', range: meta.range, caption: meta.caption,
+      series: null, next: null, reason: `Unreadable: ${meta.source} could not be read`,
+    };
+  }
+}
+
+/** The same for a figure: a failed source is `unreadable`, with its value null. */
 export async function safeFigure(
   meta: { key: string; label: string; unit: string; source: string },
   read: () => Promise<Omit<Figure, 'key' | 'label' | 'unit' | 'source'> & { unit?: string }>,
@@ -102,17 +139,34 @@ export async function safeFigure(
   }
 }
 
+/** A figure nothing records: null, never 0. */
+export function notRecordedFigure(key: string, label: string, unit: string, reason: string): Figure {
+  return { key, label, value: null, unit, delta_30d: null, spark: [], state: 'not_recorded', source: null, as_of: null, reason };
+}
+
+/** A recorded figure: `too_little` when its sparkline has fewer than three points (the figure still shows). */
+export function figure(f: Omit<Figure, 'state'>): Figure {
+  return { ...f, state: f.spark.length < MIN_POINTS ? 'too_little' : 'ok' };
+}
+
+// ---------------------------------------------------------------------------
+// States from counts
+// ---------------------------------------------------------------------------
+
 /**
- * The state a series earns by its length alone: `empty` with nothing in it,
- * `too_little` under `MIN_SERIES_POINTS`, else `ok`. A series of buckets that
- * are all zero is `empty` — a row of zero-height bars is not a chart of
- * anything.
+ * The state a series earns by its recorded points: `empty` with none,
+ * `too_little` under `MIN_POINTS`, else `ok`.
+ *
+ * Takes either the number of recorded points (Grow) or the series itself
+ * (Validate). A series counts only its finite, positive points, because a
+ * row of zero-height bars is not a chart of anything.
  */
-export function seriesState(points: number[]): CardState {
-  const recorded = points.filter((p) => Number.isFinite(p) && p > 0).length;
-  if (recorded === 0) return 'empty';
-  if (recorded < MIN_SERIES_POINTS) return 'too_little';
-  return 'ok';
+export function seriesState(points: number | number[]): CardState {
+  const n = Array.isArray(points)
+    ? points.filter((p) => Number.isFinite(p) && p > 0).length
+    : points;
+  if (n <= 0) return 'empty';
+  return n < MIN_POINTS ? 'too_little' : 'ok';
 }
 
 /**
@@ -120,15 +174,30 @@ export function seriesState(points: number[]): CardState {
  * minimum, else `ok`. For cards whose chart is one bar or one segment per
  * record (themes, segments, hypotheses) rather than a line over time.
  */
-export function countState(n: number, min: number = MIN_SERIES_POINTS): CardState {
+export function countState(n: number, min: number = MIN_POINTS): CardState {
   if (n <= 0) return 'empty';
   if (n < min) return 'too_little';
   return 'ok';
 }
 
-/** Pagination a module read accepts, clamped. */
+// ---------------------------------------------------------------------------
+// Pages
+// ---------------------------------------------------------------------------
+
+/** The house page size. */
 export const PAGE_SIZE = 25;
-export function pageOf(raw: unknown): number {
+
+/** A requested page number, clamped to 1 … 10 000. */
+export function pageNumber(raw: unknown): number {
   const n = Math.floor(Number(raw));
   return Number.isFinite(n) && n >= 1 ? Math.min(n, 10_000) : 1;
+}
+
+/** Page a list the house way: 25 by default, 100 at most. */
+export function pageOf<T>(rows: T[], pageRaw: unknown, sizeRaw: unknown = PAGE_SIZE): { rows: T[]; total: number; page: number; page_size: number } {
+  const size = Math.min(100, Math.max(1, Number.parseInt(String(sizeRaw), 10) || PAGE_SIZE));
+  const total = rows.length;
+  const pages = Math.max(1, Math.ceil(total / size));
+  const page = Math.min(pages, Math.max(1, Number.parseInt(String(pageRaw), 10) || 1));
+  return { rows: rows.slice((page - 1) * size, page * size), total, page, page_size: size };
 }

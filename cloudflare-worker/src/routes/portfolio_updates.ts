@@ -262,6 +262,14 @@ async function openRoles(env: Env, projectId: number) {
   } catch { return []; }
 }
 
+/** The company's markets (D664, migration 443); none on a database without them. */
+async function projectMarkets(env: Env, projectId: number) {
+  try {
+    const r = await env.DB.prepare('SELECT id, name FROM markets WHERE project_id = ? ORDER BY name COLLATE NOCASE').bind(projectId).all<{ id: number; name: string }>();
+    return r.results || [];
+  } catch { return []; }
+}
+
 /** Who each audience is: investors from the Raise pipeline, the team, the project's followers. */
 async function audienceMembers(env: Env, projectId: number, authorId: number) {
   const investors: Array<{ user_id: number | null; email: string; label: string }> = [];
@@ -327,6 +335,7 @@ r.get('/share/context', async (c) => {
     return c.json({
       metrics, no_metrics: noMetrics(metrics),
       open_roles: (await openRoles(c.env, pid)).map((x) => ({ id: x.id, title: x.title })),
+      markets: await projectMarkets(c.env, pid),
       audience: { investors: members.investors.length, team: members.team.length, network: members.network.length },
       ask_kinds: ASK_KINDS.map((k) => ({ kind: k, module: ASK_MODULE[k].label, lands: !!ASK_MODULE[k].lands, reason: ASK_MODULE[k].reason })),
     });
@@ -385,6 +394,7 @@ r.put('/:uid/share', async (c) => {
     if (body.asks !== undefined) {
       if (!Array.isArray(body.asks)) return c.json({ detail: 'asks must be a list', field: 'asks' }, 400);
       const roles = new Set((await openRoles(c.env, u.project_id)).map((x) => String(x.id)));
+      const markets = new Set((await projectMarkets(c.env, u.project_id)).map((x) => String(x.id)));
       const asks: Array<{ kind: AskKind; text: string; link_ref: string | null }> = [];
       for (const a of body.asks.slice(0, 10)) {
         const kind = String(a?.kind) as AskKind;
@@ -394,7 +404,9 @@ r.put('/:uid/share', async (c) => {
         const link = a?.link_ref == null ? null : String(a.link_ref);
         // A hire links to one of this company's open roles, or to none.
         if (kind === 'hire' && link != null && !roles.has(link)) return c.json({ detail: 'A hire links to one of your open roles', field: 'asks' }, 400);
-        asks.push({ kind, text, link_ref: kind === 'hire' ? link : null });
+        // A market contact links to one of this company's markets (D664), or to none.
+        if (kind === 'market' && link != null && !markets.has(link)) return c.json({ detail: 'A market ask links to one of your markets', field: 'asks' }, 400);
+        asks.push({ kind, text, link_ref: kind === 'hire' || kind === 'market' ? link : null });
       }
       await c.env.DB.prepare('DELETE FROM update_asks WHERE update_id = ?').bind(u.id).run();
       for (const a of asks) {

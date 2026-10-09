@@ -32,6 +32,8 @@ const STATEMENTS: string[] = [
      status           TEXT NOT NULL DEFAULT 'draft',
      admin_published  INTEGER NOT NULL DEFAULT 0,
      review_notes     TEXT,
+     team             TEXT,
+     target_start     TEXT,
      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
      updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
    )`,
@@ -55,6 +57,10 @@ const STATEMENTS: string[] = [
      resume_key     TEXT,
      resume_name    TEXT,
      status         TEXT NOT NULL DEFAULT 'submitted',
+     stage          TEXT NOT NULL DEFAULT 'applied'
+                    CHECK (stage IN ('applied', 'screen', 'interview', 'offer', 'hired', 'declined')),
+     stage_changed_at TEXT,
+     stage_changed_by INTEGER REFERENCES users(id),
      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
      updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
      UNIQUE (posting_id, email)
@@ -65,6 +71,14 @@ const STATEMENTS: string[] = [
      ON job_applications (user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_job_applications_email
      ON job_applications (email)`,
+  // D664 (migration 443): a team and target start on a role, a moving stage on
+  // an application. On an older dev database these fail as duplicates once
+  // applied, which the loop below treats as already done.
+  `ALTER TABLE job_postings ADD COLUMN team TEXT`,
+  `ALTER TABLE job_postings ADD COLUMN target_start TEXT`,
+  `ALTER TABLE job_applications ADD COLUMN stage TEXT NOT NULL DEFAULT 'applied' CHECK (stage IN ('applied', 'screen', 'interview', 'offer', 'hired', 'declined'))`,
+  `ALTER TABLE job_applications ADD COLUMN stage_changed_at TEXT`,
+  `ALTER TABLE job_applications ADD COLUMN stage_changed_by INTEGER REFERENCES users(id)`,
 ];
 
 export async function ensureJobBoardSchema(env: Env): Promise<boolean> {

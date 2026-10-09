@@ -210,8 +210,9 @@ export const ASK_MODULE: Record<AskKind, { module: string; label: string; lands:
   hire: { module: 'talent', label: 'Talent', lands: 'job_applications', reason: null },
   customer: { module: 'customers', label: 'Customers', lands: 'contacts', reason: null },
   partner: { module: 'partnerships', label: 'Partnerships', lands: 'contacts', reason: null },
-  market: { module: 'market', label: 'Market expansion', lands: null,
-    reason: 'Not recorded: there is no Market expansion store yet, so the reply stays on the ask' },
+  // D664 (#1477, answer A1 on #1466): once `markets` exists (migration 443), a
+  // market ask links to one market and its replies are read under it.
+  market: { module: 'market-expansion', label: 'Market expansion', lands: 'markets', reason: null },
   capital: { module: 'capital', label: 'Capital relationships', lands: 'contacts', reason: null },
 };
 
@@ -260,12 +261,23 @@ export interface LandedIn { module: string | null; ref: string | null; reason: s
  *   customer → a customer contact (`ingestContact`);
  *   partner  → a partner contact;
  *   capital  → an investor contact (Raise reads `investor` contacts);
- *   market   → no store yet: kept on the ask, with the reason.
+ *   market   → the market the ask links to (`markets`, migration 443); the
+ *              reply stays on the ask and the market reads it, never copied.
+ *              An ask linked to no market keeps the reply, with the reason.
  */
 export async function landReply(env: Env, projectId: number, ask: { kind: AskKind; link_ref: string | null; text: string },
   reply: { name: string | null; email: string | null; message: string; userId: number | null }): Promise<LandedIn> {
   const m = ASK_MODULE[ask.kind];
   if (!m.lands) return { module: null, ref: null, reason: m.reason };
+  if (ask.kind === 'market') {
+    const marketId = ask.link_ref == null ? NaN : Number(ask.link_ref);
+    const market = Number.isInteger(marketId) && marketId > 0
+      ? await env.DB.prepare('SELECT uid FROM markets WHERE id = ? AND project_id = ?').bind(marketId, projectId).first<{ uid: string }>()
+      : null;
+    return market
+      ? { module: m.module, ref: market.uid, reason: null }
+      : { module: null, ref: null, reason: `${NOT_RECORDED}: the ask is linked to no market, so the reply stays on the ask` };
+  }
   if (!reply.email) return { module: null, ref: null, reason: `${NOT_RECORDED}: the reply gave no email, so it stays on the ask` };
   if (ask.kind === 'hire') {
     const postingId = Number(ask.link_ref);

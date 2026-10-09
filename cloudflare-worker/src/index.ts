@@ -160,6 +160,7 @@ import usage from './routes/usage';
 import researchOverview from './routes/research_overview';
 import researchMarkets from './routes/research_markets';
 import researchSectors from './routes/research_sectors';
+import cycleGrow from './routes/cycle_grow';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -1042,6 +1043,8 @@ app.route('/api/research/overview', researchOverview);
 // services/researchTaxonomy.ts. Paths do not overlap research.ts's.
 app.route('/api/research', researchMarkets);
 app.route('/api/research', researchSectors);
+// D664 (#1477): the Grow cycle's overview, module reads and store writes.
+app.route('/api/cycles/grow', cycleGrow);
 app.route('/api/research', research);
 // D642 — usage is keyed on the caller, across all their companies.
 app.route('/api/usage', usage);
