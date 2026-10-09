@@ -32,6 +32,7 @@ import {
   type IntegrationRow,
   type SyncResult,
   type PushResult,
+  type PushPreview,
 } from '../registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 import { loadDealstageMap, studioStageToHubspot, hubspotStageToStudio, type StudioStage } from '../mappings/hubspot_stages';
@@ -343,7 +344,37 @@ async function pushOne(c: Context<{ Bindings: Env }>, _user: User, row: Integrat
   throw new Error('hubspot_push_requires_deal_id_or_project_id');
 }
 
-async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<PushResult> {
+/**
+ * D652: what `pushOne` would send for this payload, from the same builders
+ * (`dealContent`, `companyContent`) it sends from. Reads only.
+ */
+async function previewOne(env: Env, row: IntegrationRow, payload: unknown): Promise<PushPreview> {
+  const p = (payload || {}) as PushPayload;
+  if (p.deal_id) {
+    const { deal, properties, associations } = await dealContent(env, row, p.deal_id);
+    return {
+      target: `${deal.hubspot_deal_id ? 'Update' : 'New'} HubSpot deal "${properties.dealname}"`,
+      fields: [
+        ...Object.entries(properties).map(([name, value]) => ({ name, value })),
+        ...(associations ? [{ name: 'associated company', value: deal.hubspot_company_id }] : []),
+      ],
+    };
+  }
+  if (p.project_id) {
+    const { proj, companyProps, contact } = await companyContent(env, row, p.project_id);
+    return {
+      target: `${proj.hubspot_company_id ? 'Update' : 'New'} HubSpot company "${proj.name}"`,
+      fields: [
+        ...Object.entries(companyProps).map(([name, value]) => ({ name, value })),
+        ...(contact ? Object.entries(contact).map(([name, value]) => ({ name: `contact ${name}`, value })) : []),
+      ],
+    };
+  }
+  throw new Error('hubspot_push_requires_deal_id_or_project_id');
+}
+
+/** The deal `pushDeal` sends: read once, by push and by preview alike. */
+async function dealContent(env: Env, row: IntegrationRow, dealId: number) {
   const deal = await env.DB.prepare(
     'SELECT d.*, p.name as project_name, p.hubspot_company_id ' +
     'FROM deals d LEFT JOIN projects p ON p.id = d.project_id WHERE d.id = ?',
@@ -364,6 +395,14 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
     amount: deal.amount ?? null,
     axal_deal_id: String(dealId),
   };
+  const associations = deal.hubspot_company_id
+    ? [{ to: { id: deal.hubspot_company_id }, types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 5 }] }]
+    : undefined;
+  return { deal, dealstage, properties, associations: deal.hubspot_deal_id ? undefined : associations };
+}
+
+async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<PushResult> {
+  const { deal, dealstage, properties, associations } = await dealContent(env, row, dealId);
 
   // Upsert: if we already have a hubspot_deal_id, PATCH; else POST.
   if (deal.hubspot_deal_id) {
@@ -378,9 +417,6 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
     return { summary: `Updated HubSpot deal ${deal.hubspot_deal_id} → ${dealstage}`, external_id: deal.hubspot_deal_id, http_status: res.status };
   }
 
-  const associations = deal.hubspot_company_id
-    ? [{ to: { id: deal.hubspot_company_id }, types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 5 }] }]
-    : undefined;
   const res = await hsFetch(env, row, '/crm/v3/objects/deals', {
     method: 'POST',
     body: JSON.stringify({ properties, ...(associations ? { associations } : {}) }),
@@ -394,7 +430,8 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
   return { summary: `Created HubSpot deal ${out.id}`, external_id: out.id, http_status: res.status };
 }
 
-async function pushProjectCompany(env: Env, row: IntegrationRow, projectId: number): Promise<PushResult> {
+/** The company (and first contact) `pushProjectCompany` sends: read once, by push and by preview alike. */
+async function companyContent(env: Env, row: IntegrationRow, projectId: number) {
   const proj = await env.DB.prepare(
     'SELECT p.*, f.email as founder_email, f.name as founder_name ' +
     'FROM projects p LEFT JOIN founders f ON f.id = p.founder_id WHERE p.id = ?',
@@ -412,6 +449,18 @@ async function pushProjectCompany(env: Env, row: IntegrationRow, projectId: numb
     industry: proj.sector,
     axal_project_id: String(projectId),
   };
+  // A first contact goes with the company when the founder has an email and
+  // the project has none yet.
+  let contact: { email: string; firstname: string; lastname: string } | null = null;
+  if (proj.founder_email && !proj.hubspot_primary_contact_id) {
+    const [first, ...rest] = String(proj.founder_name || '').trim().split(/\s+/);
+    contact = { email: proj.founder_email, firstname: first || '', lastname: rest.join(' ') || '' };
+  }
+  return { proj, companyProps, contact };
+}
+
+async function pushProjectCompany(env: Env, row: IntegrationRow, projectId: number): Promise<PushResult> {
+  const { proj, companyProps, contact } = await companyContent(env, row, projectId);
   let companyId = proj.hubspot_company_id;
   if (companyId) {
     const res = await hsFetch(env, row, `/crm/v3/objects/companies/${encodeURIComponent(companyId)}`, {
@@ -437,16 +486,11 @@ async function pushProjectCompany(env: Env, row: IntegrationRow, projectId: numb
   }
 
   // Create primary contact if we have a founder email and none yet.
-  if (proj.founder_email && !proj.hubspot_primary_contact_id) {
-    const [first, ...rest] = String(proj.founder_name || '').trim().split(/\s+/);
+  if (contact) {
     const contactRes = await hsFetch(env, row, '/crm/v3/objects/contacts', {
       method: 'POST',
       body: JSON.stringify({
-        properties: {
-          email: proj.founder_email,
-          firstname: first || '',
-          lastname: rest.join(' ') || '',
-        },
+        properties: contact,
         associations: [{
           to: { id: companyId },
           types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }],
@@ -740,6 +784,7 @@ const impl: ProviderImpl = {
   revokeGranted,
   buildAuthorizeUrl,
   push: pushOne,
+  preview: previewOne,
   sync,
   webhook,
   disconnect,

@@ -12,12 +12,15 @@
  *      proposal, validated by `validateSend` and stored as a pending action.
  *      Nothing in this file, and nothing in the ask handler, calls a
  *      provider's `push`. Only the member's confirm does.
- *   3. THE PAYLOAD SHOWN IS THE PAYLOAD SENT. `canonicalPayload` fixes the
- *      bytes once, `payloadHash` seals them, and confirm re-hashes the stored
- *      bytes before it sends them. The request body of confirm is never read.
+ *   3. WHAT THE CARD SHOWS IS WHAT GOES OUT. A pending action stores one
+ *      envelope (`actionEnvelope`): the push payload, and the content the
+ *      provider's `preview` resolved from it (the record's name, every field
+ *      and its value). `payloadHash` seals the envelope; confirm re-hashes it,
+ *      rebuilds the content and refuses with `content_changed` when the two
+ *      differ. The request body of confirm is never read.
  */
 import type { Env, User } from '../types';
-import type { IntegrationRow } from '../integrations/registry';
+import type { IntegrationRow, PushPreview } from '../integrations/registry';
 import { getDescriptor } from '../integrations/registry';
 
 /** A connector key exactly as the registry spells it. */
@@ -81,12 +84,7 @@ export function readableConnectors<R extends Pick<IntegrationRow, 'provider_key'
     if (attentionReason(row) !== '') continue;
     if (!byKey.has(row.provider_key)) byKey.set(row.provider_key, row);
   }
-  const out: R[] = [];
-  for (const key of enabledKeys) {
-    const row = byKey.get(key);
-    if (row) out.push(row);
-  }
-  return out;
+  return enabledKeys.map((key) => byKey.get(key)).filter((row): row is R => row !== undefined);
 }
 
 /** What one read gives the run. `as_of` is when the data was last fetched. */
@@ -102,14 +100,7 @@ export type ConnectorReader = (
   companyId: number | null,
 ) => Promise<ConnectorRead>;
 
-/**
- * The read-only functions a run can call, one per provider. Empty until the
- * company scope of #1462 (D650) is on main: a read must only see the active
- * company's data, and a connection does not yet say which company it serves.
- * The gate above, the source line and the receipt work today; a provider
- * joins this map when its read can honour that scope.
- */
-export const CONNECTOR_READERS: Record<string, ConnectorReader> = {};
+// The readers themselves are `CONNECTOR_READERS` in `services/eadwynReaders.ts`.
 
 /** A source line under an answer: "From Stripe · [12 min ago]". */
 export interface ConnectorSource {
@@ -173,6 +164,35 @@ export function validateSend(raw: unknown, readableKeys: readonly string[]): Sen
 /** RULE 3. The one serialisation of a payload: stored, shown, hashed and sent. */
 export function canonicalPayload(p: Pick<SendProposal, 'field' | 'target_id'>): string {
   return JSON.stringify({ [p.field]: p.target_id });
+}
+
+/** The content a card shows, in one serialisation: the target, then each field in the provider's order. */
+export function canonicalContent(p: PushPreview): string {
+  return JSON.stringify({
+    target: String(p.target),
+    fields: p.fields.map((f) => ({ name: String(f.name), value: f.value ?? null })),
+  });
+}
+
+/**
+ * The bytes a pending action stores and hashes: what `push` is given, and the
+ * content the member is shown. `send` is `canonicalPayload`'s object.
+ */
+export function actionEnvelope(p: Pick<SendProposal, 'field' | 'target_id'>, content: PushPreview): string {
+  return `{"send":${canonicalPayload(p)},"content":${canonicalContent(content)}}`;
+}
+
+/** Read a stored envelope back. A row stored before envelopes (a bare payload) has no content: `null`. */
+export function parseEnvelope(json: string | null | undefined): { send: Record<string, number>; content: PushPreview } | null {
+  try {
+    const v = JSON.parse(json || '') as { send?: unknown; content?: unknown };
+    const send = v?.send, content = v?.content as PushPreview | undefined;
+    if (!send || typeof send !== 'object' || Array.isArray(send)) return null;
+    if (!content || typeof content.target !== 'string' || !Array.isArray(content.fields)) return null;
+    return { send: send as Record<string, number>, content };
+  } catch {
+    return null;
+  }
 }
 
 export async function payloadHash(payloadJson: string): Promise<string> {
