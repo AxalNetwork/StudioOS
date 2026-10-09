@@ -1585,15 +1585,15 @@ r.post('/:uid/promote', async (c) => {
 export default r;
 
 // D653: statements execute in the SAME atomic batch as the recipient response.
-// The response timestamp is the claim; every statement also rechecks the call
+// A unique response nonce is the claim; every statement also rechecks the call
 // and investor. No new CRM is introduced and retries reuse existing entries.
 export function roundCallPipelineStatements(env: Env, opts: {
   callId: number; projectId: number; investorId: number; name: string; email: string;
-  at: string; commitmentCents: number | null;
+  at: string; claim: string; commitmentCents: number | null;
 }): D1PreparedStatement[] {
   const email = opts.email.toLowerCase();
-  const guard = "EXISTS(SELECT 1 FROM round_call_recipients rr JOIN round_calls rc ON rc.id=rr.call_id JOIN users ru ON ru.id=rr.investor_user_id WHERE rr.call_id=? AND rr.investor_user_id=? AND rr.last_response_at=? AND rc.state='sent' AND rc.target_close>=? AND ru.role='investor' AND ru.is_active=1 AND ru.kyc_status='approved')";
-  const claim = [opts.callId, opts.investorId, opts.at, opts.at.slice(0,10)];
+  const guard = "EXISTS(SELECT 1 FROM round_call_recipients rr JOIN round_calls rc ON rc.id=rr.call_id JOIN users ru ON ru.id=rr.investor_user_id WHERE rr.call_id=? AND rr.investor_user_id=? AND rr.response_claim=? AND rc.state='sent' AND rc.target_close>=? AND ru.role='investor' AND ru.is_active=1 AND ru.kyc_status='approved')";
+  const claim = [opts.callId, opts.investorId, opts.claim, opts.at.slice(0,10)];
   // New stores use cents; the canonical Raise pipeline stores dollar amounts.
   const amount = opts.commitmentCents == null ? null : opts.commitmentCents / 100;
   return [

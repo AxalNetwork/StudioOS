@@ -83,8 +83,8 @@ routes.get('/:uid',async c=>{
   try {
     const user=await requireAuth(c),call=await loadCall(c.env,(c.req.param('uid') || ''));
     if(user.role==='investor') return c.json(await investorPage(c.env,call,await investor(c)));
-    if(user.role==='admin') { await requireHqAuthoring(c); await requireSuperAdmin(c); const page=await founderPage(c.env,call); return c.json({...page,viewer:'counsel'}); }
-    await owner(c,call.project_id); return c.json(await founderPage(c.env,call));
+    if(user.role==='admin') { await requireHqAuthoring(c); await requireSuperAdmin(c); const page=await founderPage(c.env,call,user); return c.json({...page,viewer:'counsel'}); }
+    await owner(c,call.project_id); return c.json(await founderPage(c.env,call,user));
   } catch(e){return failure(c,e);}
 });
 routes.put('/:uid',async c=>{

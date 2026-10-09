@@ -31,7 +31,7 @@ export default function RoundCallPage() {
     requestRoom:()=>perform(()=>roundCallsApi.respond(uid,{action:'data_room'}),'Data-room request recorded. The founder must still grant access.'),
     requestNda:()=>perform(()=>roundCallsApi.respond(uid,{action:'question',question:'Please send the NDA for this round’s data room.'}),'NDA request sent to the founder’s question list.'),
     answer:key=>perform(()=>roundCallsApi.answer(uid,key,answers[key]),'Answer recorded.'),
-    extend:()=>perform(()=>roundCallsApi.manage(uid,{action:'extend',target_close:target}),'Target close extended. Previous counsel approval was cleared.'),
+    extend:()=>perform(()=>roundCallsApi.manage(uid,{action:'extend',target_close:target}),'Target close extended. Responses are paused until counsel approves the extended terms.'),
     close:()=>perform(()=>roundCallsApi.manage(uid,{action:'close'}),'Call closed. It is now read-only.'),
     counsel:()=>perform(()=>roundCallsApi.counsel(uid,{reference,terms_hash:read.data.call.terms_hash,revision:read.data.call.revision}),'Counsel’s approval reference recorded for this version.'),
     edit:()=>setShowSheet(true),
@@ -47,6 +47,7 @@ function slideLines(value,depth=0) {
   return [];
 }
 export function RecordedCallDeck({deck}) {
+  if(deck?.unreadable)return <p>Unreadable · the deck changed after approval. The founder must restore the approved deck or open a new call.</p>;
   if(!deck)return <p>Not recorded · no linked deck version could be read.</p>;
   let slides;
   try{slides=typeof deck.slides==='string'?JSON.parse(deck.slides):deck.slides;}catch{return <p>Unreadable · the recorded deck could not be decoded.</p>;}
@@ -59,19 +60,19 @@ export function RoundCallPageView({state:s,on}) {
   const rows=d.recipients?.slice(s.recipientPage*25,s.recipientPage*25+25)||[];
   return <div className="space-y-4">
     <header><p className="text-xs text-axal-muted">Raise</p><h1 className="text-2xl font-bold">Call for Capital · {c.name}</h1><p>{c.instrument} · {moneyCents(c.amount_cents)} · closes {callDate(c.target_close)}</p></header>
-    {d.read_only&&<p role="status">This call is closed. It is read-only. Commitments remain indicative; no payment or security issuance is recorded here.</p>}
+    {d.read_only&&<p role="status">{c.state==='awaiting_counsel'?'Responses are paused until counsel approves the extended terms. This call is read-only.':'This call is closed or expired. It is read-only.'} Commitments remain indicative; no payment or security issuance is recorded here.</p>}
     <section className="rounded-xl border border-axal-hairline p-4"><h2 className="font-semibold">Terms</h2><p className="whitespace-pre-wrap">{c.terms}</p><p>Minimum cheque {moneyCents(c.minimum_cheque_cents)}</p></section>
     {(founder||counsel)&&<>
       <p>{d.counsel_approved?'Counsel approval recorded for these terms.':'Counsel has not approved the current terms. Send remains locked.'}</p>
       {c.state==='draft'&&founder&&<button type="button" className={callButton} disabled={s.busy} onClick={on.edit}>Continue draft</button>}
-      {c.state==='draft'&&counsel&&<section><h2 className="font-semibold">Record counsel’s approval</h2><p>Record an actual counsel approval reference for the terms shown above. A fresh strong-factor sign-in is required.</p><label className="block">Counsel approval reference<textarea className={callInput} maxLength={2000} value={s.reference} onChange={e=>on.reference(e.target.value)}/></label><button type="button" className={callButton} disabled={s.busy||s.reference.trim().length<10} onClick={on.counsel}>Record approved terms</button></section>}
+      {['draft','awaiting_counsel'].includes(c.state)&&counsel&&<section><h2 className="font-semibold">Record counsel’s approval</h2><p>Record an actual counsel approval reference for the terms shown above. A fresh strong-factor sign-in is required.</p><label className="block">Counsel approval reference<textarea className={callInput} maxLength={2000} value={s.reference} onChange={e=>on.reference(e.target.value)}/></label><button type="button" className={callButton} disabled={s.busy||s.reference.trim().length<10} onClick={on.counsel}>Record approved terms</button></section>}
       <section className="rounded-xl border border-axal-hairline p-4"><h2 className="font-semibold">Indicative commitments · {moneyCents(d.progress.committed_cents)} of {moneyCents(d.progress.target_cents)}</h2><progress className="w-full" value={Math.min(d.progress.committed_cents,d.progress.target_cents)} max={d.progress.target_cents}/>
         <p>{d.progress.received} recipients · {d.progress.opened} opened · {d.progress.data_room_requests} data-room requests · {d.progress.commitments} commitments</p></section>
       <section className="overflow-x-auto rounded-xl border border-axal-hairline"><table className="w-full text-left text-sm"><thead><tr><th>Investor</th><th>Opened</th><th>Data room</th><th>Commitment</th></tr></thead><tbody>{rows.map((r,index)=><tr key={r.investor_user_id||'match-'+index}><td>{r.name?r.name+' · '+r.email:'Matching investor · identity private until a response'}</td><td>{r.opened_at?callDate(r.opened_at):'No open recorded'}</td><td>{r.data_room_requested_at?callDate(r.data_room_requested_at):'No request recorded'}</td><td>{r.commitment_cents==null?'No commitment recorded':moneyCents(r.commitment_cents)}</td></tr>)}</tbody></table>
         {!d.recipients.length&&<p>No recipients are recorded yet.</p>}<div className="flex justify-between gap-2 p-3 text-xs"><span>{d.recipients.length?s.recipientPage*25+1:0}–{Math.min((s.recipientPage+1)*25,d.recipients.length)} of {d.recipients.length}</span><button type="button" className={callButton} disabled={s.recipientPage===0} onClick={()=>on.page(s.recipientPage-1)}>Previous</button><button type="button" className={callButton} disabled={(s.recipientPage+1)*25>=d.recipients.length} onClick={()=>on.page(s.recipientPage+1)}>Next</button></div>
       </section>
-      {founder&&c.state==='sent'&&!d.read_only&&<section className="space-y-2"><label className="block">Extend the date<input type="date" className={callInput} value={s.target} onChange={e=>on.target(e.target.value)}/></label><button type="button" className={callButton} disabled={s.busy||!s.target} onClick={on.extend}>Extend the date</button><button type="button" className={callButton} disabled={s.busy} onClick={on.close}>Close the call</button></section>}
-      {founder&&d.read_only&&<button type="button" className={callButton} onClick={on.edit}>Open a new call</button>}
+      {founder&&['sent','awaiting_counsel'].includes(c.state)&&<section className="space-y-2">{c.state==='sent'&&<><label className="block">Extend the date<input type="date" className={callInput} value={s.target} onChange={e=>on.target(e.target.value)}/></label><button type="button" className={callButton} disabled={s.busy||!s.target} onClick={on.extend}>Extend the date</button></>}<button type="button" className={callButton} disabled={s.busy} onClick={on.close}>Close the call</button></section>}
+      {founder&&d.read_only&&c.state!=='awaiting_counsel'&&<button type="button" className={callButton} onClick={on.edit}>Open a new call</button>}
       {founder&&c.data_room_project_uid&&<Link className="underline" to={'/raise/data-room?project_id='+c.project_id}>Review data-room grants and NDA access</Link>}
     </>}
     {d.viewer==='investor'&&<>

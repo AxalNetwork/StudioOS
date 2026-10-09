@@ -39,6 +39,8 @@ async function loadRouter() {
     .replace(/^import type[^;]+;\s*$/m, '')
     .replace(BRANCH_IMPORT, '')
     .replace(/^import \* as aiBudget from '\.\/aiBudget';\s*$/m, '')
+    // D657 — the speech-to-text shapes, passed in as the real module below.
+    .replace(/^import \{ audioInputFor, parseAudioOutput, type SttTranscript \} from '\.\/sttFormats';\s*$/m, '')
     .replace(/^export\s+(const|let|function|async\s+function|class|interface|type|enum)\b/gm, '$1')
     .replace(/^export\s+\{[^}]*\};?\s*$/gm, '');
   const unresolved = stripped.match(/^import\s[^;]*;/m);
@@ -48,7 +50,8 @@ async function loadRouter() {
   // Re-export the public surface via an IIFE wrapper.
   const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };`;
   const aiBudget = await import('../src/services/aiBudget.ts');
-  return new Function('branchOf','aiBudget', wrapped)(branchOf,aiBudget);
+  const stt = await import('../src/services/sttFormats.ts');
+  return new Function('branchOf','aiBudget','audioInputFor','parseAudioOutput', wrapped)(branchOf,aiBudget,stt.audioInputFor,stt.parseAudioOutput);
 }
 
 // --------------------------------------------------------------------------

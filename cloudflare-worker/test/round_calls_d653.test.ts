@@ -11,7 +11,8 @@ import { SignJWT } from 'jose';
 import routes from '../src/routes/round_calls.ts';
 import updateRoutes from '../src/routes/portfolio_updates.ts';
 import * as service from '../src/services/roundCalls.ts';
-import { termsHash } from '../src/services/roundCallPolicy.ts';
+import { termsHash, deckContentHash } from '../src/services/roundCallPolicy.ts';
+import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -20,15 +21,15 @@ const SECRET='fixture-only-d653-01234567890123456789';
 const baseline=readFileSync('cloudflare-worker/sql/schema_baseline.sql','utf8');
 const terms={name:'Energy seed',amount_cents:10000000,instrument:'safe',terms:'Recorded round terms',minimum_cheque_cents:100000,
   target_close:'2099-01-15',deck_id:1,deck_version:2,data_room_project_uid:'energy',stage:'seed',sector:'climate'};
-async function fixture(state='sent') {
+async function fixture(state='sent',migration=readFileSync('cloudflare-worker/sql/migrations/436_round_calls.sql','utf8')) {
   const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false});
-  for(const table of ['users','founders','super_admins','user_sessions','user_company_links','projects','raise_rounds','raise_prospects',
+  for(const table of ['entities','users','founders','super_admins','user_sessions','user_company_links','projects','raise_rounds','raise_prospects',
     'contacts','activity_logs','pitch_decks','cap_table_scenarios','investor_profiles','data_room_files','data_room_folders',
     'data_room_grants','pairwise_ndas','notifications_inbox','user_settings','push_subscriptions',
     'mi_pro_subscriptions','user_recovery_state','portfolio_updates','job_postings']) {
     db.exec(tableFromBaseline(baseline,table));
   }
-  db.exec(readFileSync('cloudflare-worker/sql/migrations/436_round_calls.sql','utf8'));
+  db.exec(migration);
   db.exec(readFileSync('cloudflare-worker/sql/migrations/437_share_an_update.sql','utf8'));
   db.exec("INSERT INTO founders(id,name,email) VALUES(1,'Owner','owner@example.test'),(2,'Other','other@example.test')");
   const user=db.prepare('INSERT INTO users(id,name,email,role,founder_id,kyc_status,is_active) VALUES(?,?,?,?,?,?,?)');
@@ -40,12 +41,14 @@ async function fixture(state='sent') {
   db.exec("INSERT INTO super_admins(user_id) VALUES(3); INSERT INTO projects(id,uid,name,founder_id,company_id,sector,stage,description,use_of_funds,revenue) VALUES(1,'energy','Energy',1,10,'climate','seed','energy storage','Product',0)");
   db.exec("INSERT INTO user_company_links(uid,user_id,company_id) VALUES('company-10',1,10),('company-11',1,11)");
   db.exec("INSERT INTO pitch_decks(id,project_id,version,title,slides) VALUES(1,1,2,'Energy deck','[]'); INSERT INTO data_room_folders(uid,project_id,name) VALUES('folder',1,'Diligence')");
-  const hash=await termsHash(terms);
+  const deckHash=await deckContentHash('[]');
+  const hash=await termsHash({...terms,deck_content_hash:deckHash});
   db.prepare('INSERT INTO round_calls(id,uid,project_id,company_id,name,amount_cents,instrument,terms,minimum_cheque_cents,target_close,deck_id,deck_version,data_room_project_uid,stage,sector,state,terms_hash,created_by) VALUES(1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run('call',1,10,terms.name,terms.amount_cents,terms.instrument,terms.terms,terms.minimum_cheque_cents,terms.target_close,1,2,'energy','seed','climate',state,hash,1);
+  db.prepare('UPDATE round_calls SET deck_content_hash=? WHERE id=1').run(deckHash);
   for(const id of [4,5,6,8])db.prepare("INSERT INTO round_call_recipients(call_id,investor_user_id,origin,match_reasons_json) VALUES(1,?,'match','[\"Stage fits seed\"]')").run(id);
   const env:any={DB:d1Over(db),JWT_SECRET:SECRET,ENVIRONMENT:'production',ROUND_CALLS_ENABLED:'true'};
-  return {db,env,actor:db.prepare('SELECT * FROM users WHERE id=1').get() as any,investor:db.prepare('SELECT * FROM users WHERE id=4').get() as any};
+  return {db,env,counsel:db.prepare('SELECT * FROM users WHERE id=3').get() as any,other:db.prepare('SELECT * FROM users WHERE id=2').get() as any,plain:db.prepare('SELECT * FROM users WHERE id=9').get() as any,actor:db.prepare('SELECT * FROM users WHERE id=1').get() as any,investor:db.prepare('SELECT * FROM users WHERE id=4').get() as any};
 }
 async function request(f:any,router:any,path:string,who:number|null=1,method='GET',body?:unknown,extraEnv={},extraHeaders={}) {
   const app=new Hono<any>();app.route('/round-calls',router);
@@ -57,7 +60,8 @@ async function request(f:any,router:any,path:string,who:number|null=1,method='GE
   return {status:res.status,body:await res.json() as any};
 }
 const count=(db:any,table:string)=>Number(db.prepare('SELECT COUNT(*) AS n FROM '+table).get().n);
-const actual={routes,service,updateRoutes};
+const actual={routes,service,updateRoutes,migration:readFileSync('cloudflare-worker/sql/migrations/436_round_calls.sql','utf8'),wrangler:readFileSync('wrangler.toml','utf8')};
+const statusOf=async(action:()=>Promise<unknown>)=>{try{await action();return 200;}catch(e:any){return e.status||500;}};
 async function updateRequest(f:any,router:any,path:string,who=1,method='GET',body?:unknown) {
   const app=new Hono<any>();app.route('/portfolio-updates',router);
   const headers:any={Authorization:'Bearer '+await new SignJWT({user_id:who}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET))};
@@ -73,27 +77,33 @@ const checks:Record<string,(m:any)=>Promise<void>>={
   async flag(m){const f=await fixture();const results=[];
     for(const path of ['/context?project_id=1','/call','/call/responses'])results.push((await request(f,m.routes,path,4,path.endsWith('responses')?'POST':'GET',path.endsWith('responses')?{action:'question',question:'Private?'}:undefined,{ROUND_CALLS_ENABLED:undefined})).status);
     const availability=await request(f,m.routes,'/availability',1,'GET',undefined,{ROUND_CALLS_ENABLED:'false'});
-    assert.deepEqual([results,availability.body.enabled,count(f.db,'contacts')],[[503,503,503],false,0]);},
+    const disabled=await statusOf(()=>m.service.loadCall({...f.env,ROUND_CALLS_ENABLED:'false'},'call'));
+    assert.deepEqual([results,availability.body.enabled,count(f.db,'contacts'),disabled],[[503,503,503],false,0,503]);},
   async access(m){const f=await fixture();const statuses=[];
     for(const who of [4,5,6,7,8,null])statuses.push((await request(f,m.routes,'/call',who)).status);
-    assert.deepEqual(statuses,[200,403,404,404,401,401]);},
+    const direct=[];for(const id of [4,5,6,7,8])direct.push(await statusOf(()=>m.service.investorPage(f.env,f.db.prepare('SELECT * FROM round_calls').get(),f.db.prepare('SELECT * FROM users WHERE id=?').get(id))));
+    assert.deepEqual([statuses,direct],[[200,403,404,404,401,401],[200,403,403,404,403]]);},
   async responseAccess(m){const f=await fixture();const statuses=[];
     for(const who of [5,6,7])statuses.push((await request(f,m.routes,'/call/responses',who,'POST',{action:'question',question:'Can I read?'})).status);
-    assert.deepEqual([statuses,count(f.db,'contacts'),count(f.db,'round_call_questions')],[[403,403,404],0,0]);},
+    const denied=await statusOf(()=>m.service.respond(f.env,f.db.prepare('SELECT * FROM round_calls').get(),f.db.prepare('SELECT * FROM users WHERE id=5').get(),{action:'question',question:'Denied'}));
+    assert.deepEqual([statuses,denied,count(f.db,'contacts'),count(f.db,'round_call_questions'),count(f.db,'activity_logs')],[[403,403,404],403,0,0,0]);},
   async ownership(m){const f=await fixture();const statuses=[];
     for(const who of [1,2,9])statuses.push((await request(f,m.routes,'/context?project_id=1',who)).status);
     statuses.push((await request(f,m.routes,'/context?project_id=1',1,'GET',undefined,{}, {'X-Company-Id':'11'})).status);
+    const wrong=await statusOf(()=>m.service.founderPage(f.env,f.db.prepare('SELECT * FROM round_calls').get(),f.other));
     f.db.exec('UPDATE users SET founder_id=NULL WHERE id=1; UPDATE projects SET founder_id=NULL WHERE id=1');
     statuses.push((await request(f,m.routes,'/context?project_id=1',1)).status);
-    assert.deepEqual(statuses,[200,404,403,404,404]);},
+    const orphan=await statusOf(()=>m.service.founderPage(f.env,f.db.prepare('SELECT * FROM round_calls').get(),f.actor));
+    assert.deepEqual([statuses,wrong,orphan],[[200,404,403,404,404],404,404]);},
   async counselRole(m){const f=await fixture('draft');
-    assert.deepEqual([(await request(f,m.routes,'/call',9)).status,(await request(f,m.routes,'/call',3)).body.viewer],[403,'counsel']);},
+    const direct=await statusOf(()=>m.service.founderPage(f.env,f.db.prepare('SELECT * FROM round_calls').get(),f.plain));
+    assert.deepEqual([(await request(f,m.routes,'/call',9)).status,(await request(f,m.routes,'/call',3)).body.viewer,direct],[403,'counsel',403]);},
   async send(m){const f=await fixture('draft');const r=await request(f,m.routes,'/call/send',1,'POST',{acknowledge_missing:true});
     assert.deepEqual([r.status,r.body.code,f.db.prepare('SELECT state FROM round_calls').get()!.state,count(f.db,'notifications_inbox')],[409,'counsel_approval_required','draft',0]);},
   async privacy(m){const f=await fixture();await request(f,m.routes,'/call',4);
-    const before=await m.service.founderPage(f.env,await m.service.loadCall(f.env,'call'));
+    const before=await m.service.founderPage(f.env,await m.service.loadCall(f.env,'call'),f.actor);
     await m.service.respond(f.env,await m.service.loadCall(f.env,'call'),f.investor,{action:'question',question:'What is the use of funds?'});
-    const after=await m.service.founderPage(f.env,await m.service.loadCall(f.env,'call'));
+    const after=await m.service.founderPage(f.env,await m.service.loadCall(f.env,'call'),f.actor);
     const b=before.recipients[0],a=after.recipients[0];
     assert.deepEqual([!!b.opened_at,Object.hasOwn(b,'name'),Object.hasOwn(b,'email'),Object.hasOwn(b,'investor_user_id'),a.name,a.email],[true,false,false,false,'Ivy','ivy@example.test']);},
   async pipeline(m){const f=await fixture();const call=await m.service.loadCall(f.env,'call');
@@ -118,10 +128,10 @@ const checks:Record<string,(m:any)=>Promise<void>>={
     const revoked=await m.service.investorPage(f.env,call,f.investor);
     assert.deepEqual([blocked.data_room.path,granted.data_room.path,revoked.data_room.path],[null,'/research/diligence/grant',null]);},
   async invalidation(m){const f=await fixture('draft');const call=await m.service.loadCall(f.env,'call');
-    await m.service.recordCounsel(f.env,call,f.actor,'Counsel approval fixture',call.terms_hash,call.revision);
+    await m.service.recordCounsel(f.env,call,f.counsel,'Counsel approval fixture',call.terms_hash,call.revision);
     const approved=await m.service.loadCall(f.env,'call');
     const edited=await m.service.saveDraft(f.env,await m.service.projectFacts(f.env,1),f.actor,{...terms,terms:'Changed terms'},approved);
-    let stale=false;try{await m.service.recordCounsel(f.env,edited,f.actor,'Counsel approval fixture',approved.terms_hash,approved.revision);}catch{stale=true;}
+    let stale=false;try{await m.service.recordCounsel(f.env,edited,f.counsel,'Counsel approval fixture',approved.terms_hash,approved.revision);}catch{stale=true;}
     assert.deepEqual([edited.counsel_approved_hash,edited.revision>approved.revision,stale],[null,true,true]);},
   async updateLink(m){const f=await fixture();f.db.exec("INSERT INTO portfolio_updates(id,uid,project_id,author_user_id,title,status) VALUES(1,'update',1,1,'Round update','draft')");
     const body={asks:[{kind:'capital',text:'Join this round',link_ref:'forged'}]};
@@ -139,7 +149,7 @@ const checks:Record<string,(m:any)=>Promise<void>>={
     assert.deepEqual(refs,['call','call',null,null,null,null]);},
   async updateReply(m){const f=await fixture();const ask=seedAsk(f);
     const landed=await m.service.replyToLinkedCall(f.env,ask,f.investor,'Question from the update','reply');
-    const page=await m.service.founderPage(f.env,await m.service.loadCall(f.env,'call'));
+    const page=await m.service.founderPage(f.env,await m.service.loadCall(f.env,'call'),f.actor);
     assert.deepEqual([landed,count(f.db,'update_ask_replies'),count(f.db,'round_call_questions'),count(f.db,'raise_prospects'),page.questions.map((q:any)=>q.question),page.recipients[0].name],[true,1,1,1,['Question from the update'],'Ivy']);},
   async updateRollback(m){const f=await fixture();const ask=seedAsk(f);f.db.exec('DROP TABLE activity_logs');
     let failed=false;try{await m.service.replyToLinkedCall(f.env,ask,f.investor,'Question from the update','reply');}catch{failed=true;}
@@ -148,7 +158,7 @@ const checks:Record<string,(m:any)=>Promise<void>>={
   async delivered(m){const f=await fixture('draft');
     f.db.exec('DELETE FROM round_call_recipients WHERE investor_user_id<>4');
     const call=await m.service.loadCall(f.env,'call');
-    await m.service.recordCounsel(f.env,call,f.actor,'Counsel approval fixture',call.terms_hash,call.revision);
+    await m.service.recordCounsel(f.env,call,f.counsel,'Counsel approval fixture',call.terms_hash,call.revision);
     const approved=await m.service.loadCall(f.env,'call');
     const sent=await m.service.sendCall(f.env,approved,f.actor,false);
     let duplicate=false;try{await m.service.sendCall(f.env,await m.service.loadCall(f.env,'call'),f.actor,false);}catch{duplicate=true;}
@@ -158,6 +168,35 @@ const checks:Record<string,(m:any)=>Promise<void>>={
     await m.service.respond(f.env,await m.service.loadCall(f.env,'call'),f.investor,{action:'commit',amount_cents:250000});
     const row=f.db.prepare('SELECT amount,commit_status FROM raise_prospects').get()!;
     assert.deepEqual([row.amount,row.commit_status,count(f.db,'contacts'),count(f.db,'raise_prospects')],[7000,'wired',1,1]);},
+
+  async selfApproval(m){const f=await fixture('draft');const call=await m.service.loadCall(f.env,'call');
+    const status=await statusOf(()=>m.service.recordCounsel(f.env,call,f.actor,'Counsel approval fixture',call.terms_hash,call.revision));
+    assert.deepEqual([status,f.db.prepare('SELECT counsel_approved_hash FROM round_calls').get()!.counsel_approved_hash,count(f.db,'activity_logs')],[403,null,0]);},
+  async extension(m){const f=await fixture();f.db.exec("UPDATE round_calls SET target_close='2020-01-01'");
+    const extended=await m.service.manageCall(f.env,await m.service.loadCall(f.env,'call'),f.actor,{action:'extend',target_close:'2099-02-01'});
+    const paused=await statusOf(()=>m.service.respond(f.env,extended,f.investor,{action:'question',question:'Paused?'}));
+    const renewed=await statusOf(()=>m.service.recordCounsel(f.env,extended,f.counsel,'Counsel renewed approval',extended.terms_hash,extended.revision));
+    const resumed=await m.service.loadCall(f.env,'call');
+    const response=await statusOf(()=>m.service.respond(f.env,resumed,f.investor,{action:'question',question:'Resumed'}));
+    assert.deepEqual([extended.state,extended.counsel_approved_hash,paused,renewed,resumed.state,response,count(f.db,'notifications_inbox')],['awaiting_counsel',null,409,200,'sent',200,0]);},
+  async deckApproval(m){const f=await fixture('draft');f.db.exec('DELETE FROM round_call_recipients WHERE investor_user_id<>4');
+    const call=await m.service.loadCall(f.env,'call');await m.service.recordCounsel(f.env,call,f.counsel,'Counsel approval fixture',call.terms_hash,call.revision);
+    f.db.exec(`UPDATE pitch_decks SET slides='[{"title":"Changed after approval"}]'`);
+    const approved=await m.service.loadCall(f.env,'call');
+    const status=await statusOf(()=>m.service.sendCall(f.env,approved,f.actor,false));
+    assert.deepEqual([status,f.db.prepare('SELECT state FROM round_calls').get()!.state,count(f.db,'notifications_inbox')],[409,'draft',0]);},
+  async responseRace(m){const f=await fixture();const call=await m.service.loadCall(f.env,'call');
+    await m.service.respond(f.env,call,f.investor,{action:'question',question:'First response'});
+    f.db.exec('DELETE FROM activity_logs; DELETE FROM round_call_questions');
+    const real=f.env.DB.batch.bind(f.env.DB);f.env.DB.batch=async(statements:any[])=>{f.db.exec("UPDATE round_calls SET state='closed'");return real(statements);};
+    const status=await statusOf(()=>m.service.respond(f.env,call,f.investor,{action:'question',question:'Rejected race'}));
+    assert.deepEqual([status,count(f.db,'activity_logs'),count(f.db,'round_call_questions')],[409,0,0]);},
+  async purge(m){const f=await fixture('sent',m.migration);
+    f.db.exec("INSERT INTO round_call_questions(uid,call_id,investor_user_id,question) VALUES('purge-q',1,4,'Private'); UPDATE round_calls SET deck_id=NULL; DELETE FROM pitch_decks; DELETE FROM data_room_folders; PRAGMA foreign_keys=ON");
+    const ok=await statusOf(()=>hardDeleteProject(f.env,1));
+    assert.deepEqual([ok,count(f.db,'projects'),count(f.db,'round_calls'),count(f.db,'round_call_recipients'),count(f.db,'round_call_questions')],[200,0,0,0,0]);},
+  async productionFlag(m){const vars=(section:string)=>m.wrangler.split('['+section+']')[1]?.split(/\n\[/)[0];
+    assert.deepEqual(['vars','env.production.vars'].map(section=>/ROUND_CALLS_ENABLED\s*=\s*"([^"]+)"/.exec(vars(section)||'')?.[1]),['false','false']);},
 
 };
 for(const [name,check] of Object.entries(checks))test('D653 real request/write: '+name,()=>check(actual));
@@ -179,31 +218,37 @@ async function altered(path:string,old:string,replacement:string,index:number) {
   return {module:await import(url),url};
 }
 const probes=[
+  ['selfApproval','service',"expectedRevision:unknown) {\n  await counselActor(env,actor,call.project_id);", "expectedRevision:unknown) {"],
+  ['extension','service',"SET state='awaiting_counsel',target_close", "SET state='sent',target_close"],
+  ['deckApproval','service',"if(!deck||await deckContentHash(deck.slides)!==call.deck_content_hash)", "if(false)"],
+  ['responseRace','service',"AND response_claim=?)", "AND ? IS NOT NULL)"],
+  ['purge','migration',"REFERENCES round_calls(id) ON DELETE CASCADE", "REFERENCES round_calls(id)"],
+  ['productionFlag','wrangler','ROUND_CALLS_ENABLED = "false"','ROUND_CALLS_ENABLED = "true"'],
   ['wired','contacts',"COALESCE(commit_status,'') NOT IN ('signed','wired')","1=1"],
   ['delivered','service',"if(id!=null) notified++;","if(false) notified++;"],
   ['updateLink','updateRoutes',"const callUid=kind==='capital'?await openCallForUpdate(c.env,u.project_id):null;","const callUid=null;"],
   ['updateFlag','service',"if(!roundCallsEnabled(env)) return null;",""],
   ['updatePrivacy','service',"if(audienceName==='network')return {...ask,link_ref:null};",""],
   ['updatePrivacy','service',"verifiedInvestor(user)?1:0","1"],
-  ['updateReply','service',"await respond(env,row,user,{action:'question',question:message},[source]);","await source.run();"],
-  ['updateRollback','service',"statements.push(...extraStatements);","await env.DB.batch(extraStatements);"],
+  ['updateReply','service',"await respond(env,row,user,{action:'question',question:message},claim=>[source(claim)]);","await source(crypto.randomUUID()).run();"],
+  ['updateRollback','service',"statements.push(...extraStatements(claim));","await env.DB.batch(extraStatements(claim));"],
 
-  ['flag','routes',"if(!roundCallsEnabled(c.env)) return","if(false) return"],
-  ['access','routes',"return c.json(await investorPage(c.env,call,await investor(c)))","return c.json(await investorPage(c.env,call,user))"],
-  ['responseAccess','routes',"if(!verifiedInvestor(user)) throw new RoundCallError('verified_investor_required',403);",""],
-  ['ownership','routes',"project.founder_id !== user.founder_id","false"],
-  ['ownership','routes',"user.founder_id == null || ",""],
+  ['flag','service',"if(!roundCallsEnabled(env)) throw","if(false) throw"],
+  ['access','service',"if(!current||!verifiedInvestor(current))","if(false)"],
+  ['responseAccess','service',"if(!current||!verifiedInvestor(current))","if(false)"],
+  ['ownership','service',"current.founder_id==null||current.founder_id!==project.founder_id","false"],
   ['ownership','routes',"!projectInActiveCompany(companyId,project)","false"],
-  ['counselRole','routes',"await requireSuperAdmin(c); const page","const page"],
+  ['counselRole','service',"JOIN super_admins s ON s.user_id=u.id",""],
   ['send','service',"if (!counselApproved(call))","if (false)"],
   ['privacy','service',"const recipients = (rows.results || []).map(founderRecipient);","const recipients = (rows.results || []).map(row=>({...founderRecipient(row),name:row.name,email:row.email,investor_user_id:row.investor_user_id}));"],
-  ['pipeline','service',"...roundCallPipelineStatements(env,{callId:call.id,projectId:call.project_id,investorId:investor.id,name:investor.name,email:investor.email,at,commitmentCents:cents}),",""],
-  ['rollback','service',"statements.push(await audit(env,investor,call.project_id,'round_call_response_requested',{uid:call.uid,action}));",""],
+  ['pipeline','service',"...roundCallPipelineStatements(env,{callId:call.id,projectId:call.project_id,investorId:investor.id,name:investor.name,email:investor.email,at,claim,commitmentCents:cents}),",""],
+  ['rollback','service',"statements.push(await responseAudit(env,investor,call,action,claim));",""],
   ['closed','service',"read_only:!writableCall(call,today())","read_only:false"],
   ['nda','service',"active?.granted_by_user_id ?? call.created_by","call.created_by"],
   ['invalidation','service',"counsel_approved_hash=NULL, counsel_approval_reference=NULL, counsel_approved_by=NULL, counsel_approved_at=NULL, updated_at=?","updated_at=?"],
 ];
 for(const [index,[name,kind,old,replacement]]of probes.entries())test('D653 request mutation/restoration '+index+': '+name,async()=>{
+  if(kind==='migration'||kind==='wrangler'){if(!actual[kind].includes(old))throw Error('Stale configuration mutation: '+old);await assert.rejects(()=>checks[name]({...actual,[kind]:actual[kind].replaceAll(old,replacement)}),assert.AssertionError);await checks[name](actual);return;}
   const path=kind==='routes'?'cloudflare-worker/src/routes/round_calls.ts':kind==='updateRoutes'?'cloudflare-worker/src/routes/portfolio_updates.ts':kind==='contacts'?'cloudflare-worker/src/routes/contacts.ts':'cloudflare-worker/src/services/roundCalls.ts';
   let mutant=await altered(path,old,replacement,index);
   let target=kind;

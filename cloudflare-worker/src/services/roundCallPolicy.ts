@@ -2,7 +2,7 @@
 export type RoundCallTerms = {
   name: string; amount_cents: number; instrument: string; terms: string;
   minimum_cheque_cents: number; target_close: string;
-  deck_id: number | null; deck_version: number | null;
+  deck_id: number | null; deck_version: number | null; deck_content_hash?: string | null;
   data_room_project_uid: string | null; stage: string | null; sector: string | null;
 };
 export function roundCallsEnabled(env: { ROUND_CALLS_ENABLED?: string }): boolean {
@@ -29,8 +29,13 @@ export function counselApproved(call: { terms_hash: string; counsel_approved_has
 export async function termsHash(t: RoundCallTerms): Promise<string> {
   const canonical = JSON.stringify([t.name, t.amount_cents, t.instrument, t.terms,
     t.minimum_cheque_cents, t.target_close, t.deck_id, t.deck_version,
-    t.data_room_project_uid, t.stage, t.sector]);
+    t.data_room_project_uid, t.stage, t.sector, t.deck_content_hash ?? null]);
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+  return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
+}
+/** Hash the stored bytes: deck editors may update slides without changing version. */
+export async function deckContentHash(slides: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(slides));
   return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
 }
 export function readiness(call: RoundCallTerms, project: { use_of_funds?: string | null; traction_summary?: string | null; revenue?: number | null; mrr?: number | null; users_count?: number | null }) {

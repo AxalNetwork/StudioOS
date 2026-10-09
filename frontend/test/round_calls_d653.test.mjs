@@ -41,7 +41,7 @@ const checks={
   readiness(m){const items=readiness.map((r,i)=>({...r,ready:i>2}));
     const blocked=sheetHtml(m,{step:4,page:{...founder,readiness:items}});
     const allowed=sheetHtml(m,{step:4,page:{...founder,readiness:items},acknowledge:true});
-    assert.deepEqual([renderedText(blocked).includes('3 of 7 readiness items are missing'),button(blocked,'Send anyway').includes('disabled'),button(allowed,'Send anyway').includes('disabled')],[true,true,false]);},
+    assert.deepEqual([renderedText(blocked).includes('3 of 7 readiness items are missing'),button(blocked,'Send anyway').includes(' disabled='),button(allowed,'Send anyway').includes('disabled')],[true,true,false]);},
   outcome(m){const text=renderedText(sheetHtml(m,{step:4,outcome:{recipients:4,notified:3,not_delivered:1}}));assert.match(text,/available to 4 verified recipients; 3 notified, 1 not delivered/);},
   availability(m){const disabled=render(m.sheet.RoundCallAvailability,{read:{data:{enabled:false},loading:false},projectId:1,onOpen:on.open});
     const enabled=render(m.sheet.RoundCallAvailability,{read:{data:{enabled:true},loading:false},projectId:1,onOpen:on.open});
@@ -52,9 +52,13 @@ const checks={
   recipients(m){const recipients=[{origin:'match',opened_at:'2098-01-01',commitment_cents:null},{origin:'match',name:'Real responder',email:'real@example.test',commitment_cents:0}];
     const text=renderedText(pageHtml(m,{...founder,recipients}));
     assert.deepEqual([text.includes('identity private until a response'),text.includes('Real responder · real@example.test'),text.includes('No commitment recorded'),text.includes('No recipients are recorded yet')],[true,true,true,false]);},
-  closed(m){const text=renderedText(pageHtml(m,{...investor,read_only:true}));
-    const owner=renderedText(pageHtml(m,{...founder,read_only:true,questions:[{uid:'q',question:'A question'}]}));
+  closed(m){const text=renderedText(pageHtml(m,{...investor,call:{...call,state:'closed'},read_only:true}));
+    const owner=renderedText(pageHtml(m,{...founder,call:{...call,state:'closed'},read_only:true,questions:[{uid:'q',question:'A question'}]}));
     assert.deepEqual([text.includes('read-only'),text.includes('Commit with an amount'),text.includes('Ask a question'),owner.includes('Extend the date'),owner.includes('Close the call'),owner.includes('Answer in place')],[true,false,false,false,false,false]);},
+  waiting(m){const c={...call,state:'awaiting_counsel'},readonly={...investor,call:c,read_only:true};
+    const text=renderedText(pageHtml(m,readonly)),hq=renderedText(pageHtml(m,{...founder,call:c,viewer:'counsel',read_only:true,counsel_approved:false},{reference:'Counsel renewed approval'}));
+    assert.deepEqual([text.includes('paused until counsel'),text.includes('Commit with an amount'),hq.includes('Record approved terms')],[true,false,true]);},
+  changedDeck(m){const text=renderedText(render(m.page.RecordedCallDeck,{deck:{unreadable:true}}));assert.deepEqual([text.includes('deck changed after approval'),text.includes('restore the approved deck')],[true,true]);},
   nda(m){const invalid=pageHtml(m,{...investor,data_room:{recorded:true,nda_signed:false,has_grant:true,path:'/research/diligence/private'}});
     const valid=pageHtml(m,{...investor,data_room:{recorded:true,nda_signed:true,has_grant:true,path:'/research/diligence/private'}});
     assert.deepEqual([invalid.includes('href="/research/diligence/private"'),renderedText(invalid).includes('Request the NDA'),valid.includes('href="/research/diligence/private"')],[false,true,true]);},
@@ -81,6 +85,8 @@ async function altered(path,old,replacement,index) {
   return import('data:text/javascript;base64,'+Buffer.from(js+'\n// d653-render-'+index).toString('base64'));
 }
 const probes=[
+  ['waiting','page',"['draft','awaiting_counsel'].includes(c.state)","c.state==='draft'"],
+  ['changedDeck','page',"if(deck?.unreadable)return", "if(false)return"],
   ['steps','sheet',"'Round','Materials','Audience','Preview','Send'","'Round','Audience','Materials','Preview','Send'"],
   ['seed','sheet',"priced?.investment!=null?String(priced.investment)","priced?.investment!=null?'0'"],
   ['seed','sheet',"round?.target_amount!=null?String(round.target_amount)","round?.target_amount!=null?'0'"],
@@ -100,7 +106,7 @@ const probes=[
   ['money','parts',"cents>0","cents>=0"],
   ['recipients','page',"identity private until a response","identity shared"],
   ['closed','page',"!d.read_only&&<section className=\"space-y-3\"","true&&<section className=\"space-y-3\""],
-  ['closed','page',"founder&&c.state==='sent'&&!d.read_only","founder&&c.state==='sent'"],
+  ['closed','page',"['sent','awaiting_counsel'].includes(c.state)","true"],
   ['nda','page',"d.data_room.path&&d.data_room.nda_signed&&d.data_room.has_grant","d.data_room.path"],
   ['deck','page',"no linked deck version could be read","deck available"],
   ['deck','page',"Unreadable · the recorded deck could not be decoded.","Deck ready."],

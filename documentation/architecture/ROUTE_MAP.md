@@ -80,6 +80,18 @@ D631 (#1389), Ops area 6:
 
 ---
 
+
+### Interview sessions Worker contract (D657, #1470)
+
+`founder_validate_sessions.ts` is mounted on `/api/founder/validate` beside `founder_validate.ts` (migration 438). A session hangs off a `discovery_interviews` row, so a Spin-Out Lab venture's interviews get it unchanged. Every route but the model list is gated on `canWrite`.
+- `GET /sessions/models` lists the live and final speech-to-text models, priced from the router's own tables, with their tags.
+- `POST /interviews/:id/sessions` opens a session (channel, consent to record, models). `GET /interviews/:id/sessions` lists them, and `GET /sessions/:id` returns segments, marks and chunks.
+- `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`.
+- `PUT /sessions/:id/chunks/:seq` stores one audio chunk, idempotent by sequence number. `POST /sessions/:id/marks` marks a moment.
+- `GET /sessions/:id/live` is the WebSocket for the live transcript (Nova-3 or Flux). It is 409 `live_off` when live is off.
+- `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.
+- `GET /sessions/:id/receipt` returns each job's cost and the budget left. `DELETE /sessions/:id` deletes the session, its R2 audio, and writes an audit row.
+
 ## Founder / admin / advisor / partner — part 1 (29 canvases)
 
 | Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |
@@ -700,7 +712,7 @@ signed-PDF endpoints expose safe projections and the exact PDF fingerprint.
 The legacy Legal deep link redirects with a moved notice. Formation orders are
 reached through the existing Spin-Out Lab page. Canvas reference: #1456 K1–K8.
 
-D653 (#1465): Raise’s Call for Capital header opens the five-step
+D653 (#1465): Raise’s Call for Capital header opens the five-step Extensions pause responses until renewed approval; deck-content hashes cover mutable slides.
 `RoundCallSheet`; `/round-calls?project_id=…` lists owned calls and
 `/round-calls/:uid` is private. The Worker `round_calls.ts` mounts
 `/api/round-calls`: availability/context/list, draft create/update, audience
