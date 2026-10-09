@@ -1,7 +1,7 @@
 /** D653: mounted requests and real atomic writes over the canonical SQLite schema. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { stripTypeScriptTypes, createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { resolve, dirname } from 'node:path';
@@ -25,10 +25,13 @@ async function fixture(state='sent',migration=readFileSync('cloudflare-worker/sq
   const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false});
   for(const table of ['entities','users','founders','super_admins','user_sessions','user_company_links','projects','raise_rounds','raise_prospects',
     'contacts','activity_logs','pitch_decks','cap_table_scenarios','investor_profiles','data_room_files','data_room_folders',
-    'data_room_grants','pairwise_ndas','notifications_inbox','user_settings','push_subscriptions',
-    'mi_pro_subscriptions','user_recovery_state','portfolio_updates','job_postings']) {
+    'data_room_grants','pairwise_ndas','notifications_inbox','user_settings',
+    'mi_pro_subscriptions','portfolio_updates','job_postings']) {
     db.exec(tableFromBaseline(baseline,table));
   }
+  // Not in the baseline: these two come from their own migrations (302, 277).
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/302_push_subscriptions.sql','utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/277_user_recovery_state.sql','utf8'));
   db.exec(migration);
   db.exec(readFileSync('cloudflare-worker/sql/migrations/437_share_an_update.sql','utf8'));
   db.exec("INSERT INTO founders(id,name,email) VALUES(1,'Owner','owner@example.test'),(2,'Other','other@example.test')");
@@ -110,8 +113,9 @@ const checks:Record<string,(m:any)=>Promise<void>>={
     await m.service.respond(f.env,call,f.investor,{action:'commit',amount_cents:250000});
     await m.service.respond(f.env,call,f.investor,{action:'commit',amount_cents:300000});
     await m.service.respond(f.env,call,f.investor,{action:'question',question:'A real question'});
-    const row=f.db.prepare('SELECT amount,commit_status,contact_id FROM raise_prospects').get()!;
-    assert.deepEqual([count(f.db,'contacts'),count(f.db,'raise_rounds'),count(f.db,'raise_prospects'),count(f.db,'round_call_questions'),row.amount,row.commit_status,!!row.contact_id],[1,1,1,1,3000,'soft_circled',true]);},
+    const row=f.db.prepare('SELECT amount,commit_status,contact_id FROM raise_prospects').get() as any;
+    assert.ok(row,'a commitment wrote no prospect');
+    assert.deepEqual([count(f.db,'contacts'),count(f.db,'raise_rounds'),count(f.db,'raise_prospects'),count(f.db,'round_call_questions'),row.amount,row.commit_status,!!row.contact_id],[1,1,1,1,3000,'soft',true]);},
   async rollback(m){const f=await fixture();f.db.exec('DROP TABLE activity_logs');
     let failed=false;try{await m.service.respond(f.env,await m.service.loadCall(f.env,'call'),f.investor,{action:'question',question:'Must roll back'});}catch{failed=true;}
     assert.deepEqual([failed,count(f.db,'contacts'),count(f.db,'raise_prospects'),count(f.db,'round_call_questions'),f.db.prepare('SELECT responded_at FROM round_call_recipients WHERE investor_user_id=4').get()!.responded_at],[true,0,0,0,null]);},
@@ -151,7 +155,10 @@ const checks:Record<string,(m:any)=>Promise<void>>={
     const landed=await m.service.replyToLinkedCall(f.env,ask,f.investor,'Question from the update','reply');
     const page=await m.service.founderPage(f.env,await m.service.loadCall(f.env,'call'),f.actor);
     assert.deepEqual([landed,count(f.db,'update_ask_replies'),count(f.db,'round_call_questions'),count(f.db,'raise_prospects'),page.questions.map((q:any)=>q.question),page.recipients[0].name],[true,1,1,1,['Question from the update'],'Ivy']);},
-  async updateRollback(m){const f=await fixture();const ask=seedAsk(f);f.db.exec('DROP TABLE activity_logs');
+  async updateRollback(m){const ok=await fixture();const okAsk=seedAsk(ok);
+    assert.equal(await m.service.replyToLinkedCall(ok.env,okAsk,ok.investor,'Question from the update','reply'),true);
+    assert.equal(count(ok.db,'update_ask_replies'),1,'a reply to a linked ask lands with the question, in the same batch');
+    const f=await fixture();const ask=seedAsk(f);f.db.exec('DROP TABLE activity_logs');
     let failed=false;try{await m.service.replyToLinkedCall(f.env,ask,f.investor,'Question from the update','reply');}catch{failed=true;}
     assert.deepEqual([failed,count(f.db,'update_ask_replies'),count(f.db,'round_call_questions'),count(f.db,'raise_prospects')],[true,0,0,0]);},
 
@@ -211,7 +218,7 @@ async function altered(path:string,old:string,replacement:string,index:number) {
   const req=createRequire(pathToFileURL(resolve(path)));
   js=js.replace(/from (['"])([^'"]+)\1/g,(_m,q,spec)=>{
     if(spec.startsWith('data:'))return 'from '+q+spec+q;
-    let target;if(spec.startsWith('.')){target=resolve(dirname(path),spec);if(!existsSync(target))target+='.ts';}else target=req.resolve(spec);
+    let target;if(spec.startsWith('.')){target=resolve(dirname(path),spec);if(!existsSync(target)||(statSync(target).isDirectory()&&existsSync(target+'.ts')))target+='.ts';else if(statSync(target).isDirectory())target=resolve(target,'index.ts');}else{try{target=req.resolve(spec);}catch{return _m;}}
     return 'from '+q+pathToFileURL(target).href+q;
   });
   const url='data:text/javascript;base64,'+Buffer.from(js+'\n// d653-'+index).toString('base64');
@@ -253,6 +260,14 @@ for(const [index,[name,kind,old,replacement]]of probes.entries())test('D653 requ
   let mutant=await altered(path,old,replacement,index);
   let target=kind;
   if(kind==='contacts'){mutant=await altered('cloudflare-worker/src/services/roundCalls.ts',"from '../routes/contacts'","from '"+mutant.url+"'",index+1000);target='service';}
-  await assert.rejects(()=>checks[name]({...actual,[target]:target==='service'?mutant.module:mutant.module.default}),assert.AssertionError);
+  let wired:any={[target]:target==='service'?mutant.module:mutant.module.default};
+  // A changed service must reach the checks that go through the routes too,
+  // so the routes are rebuilt over the mutant rather than the real service.
+  if(target==='service'){
+    const svc="from '../services/roundCalls'";
+    wired.routes=(await altered('cloudflare-worker/src/routes/round_calls.ts',svc,"from '"+mutant.url+"'",index+2000)).module.default;
+    wired.updateRoutes=(await altered('cloudflare-worker/src/routes/portfolio_updates.ts',svc,"from '"+mutant.url+"'",index+3000)).module.default;
+  }
+  await assert.rejects(()=>checks[name]({...actual,...wired}),assert.AssertionError);
   await checks[name](actual);
 });
