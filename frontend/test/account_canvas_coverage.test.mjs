@@ -67,7 +67,8 @@ test('every canvas nav entry with a section has one, under its own id', () => {
     onboarding: 'Onboarding',
     'security-privacy': 'Security',
     notifications: 'Notifications',
-    integrations: 'Integrations',
+    // D651 (#1463) — the canvas's Integrations are Connectors now (D649).
+    connectors: 'Integrations, now Connectors',
     billing: 'Billing',
     appearance: 'Appearance',
     activity: 'Activity',

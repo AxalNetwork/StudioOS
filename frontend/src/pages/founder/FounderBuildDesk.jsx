@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, Route, Target } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -12,6 +12,11 @@ import { zonePillClass } from './deskZoneNav';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import './founderBuildDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
+
+// D651 (#1463) — Build's primary action, "Connect a tool", opens the same
+// connector sheet as /account/connectors. Lazy, so the connect flow's code
+// loads only when a founder opens it.
+const ConnectToolSheet = lazy(() => import('../account/ConnectToolSheet'));
 
 /**
  * Five labels, five routes, IN THE ARTBOARD'S ORDER.
@@ -129,6 +134,7 @@ export default function FounderBuildDesk() {
   // because that is how the Command Palette's "Create startup" entry addressed
   // /projects and a <Navigate> redirect cannot carry a query string.
   const [creating, setCreating] = useState(() => searchParams.get('new') === '1');
+  const [connecting, setConnecting] = useState(false);
   // AND IT HAS TO FOLLOW THE PARAM, not just seed from it. `?new=1` used to be
   // read once, at mount, which is enough for the twelve links that arrive here
   // from another route — but not for the Command Palette, which can be opened
@@ -233,8 +239,10 @@ export default function FounderBuildDesk() {
           <div className="build-hero-line">
             <div><h1>Operate the company this week</h1><p>Commitments first. Everything else on this page exists to serve the seven days in front of you.</p></div>
             <div className="build-actions">
+              <button type="button" data-testid="button-connect-a-tool" className="build-open" onClick={() => setConnecting(true)}>Connect a tool</button>
               <Link data-testid="link-open-execution-workspace" className="build-open" to={executionLink} state={navigationState}>Open this week <ArrowUpRight size={14} /></Link>
             </div>
+            {connecting && <Suspense fallback={null}><ConnectToolSheet onClose={() => setConnecting(false)} /></Suspense>}
           </div>
           <CreateStartupForm
             open={creating}

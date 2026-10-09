@@ -75,9 +75,9 @@ test('the connector list: switches follow the conversation, a connector needing 
   assert.doesNotMatch(switchOf(html, 'stripe'), /disabled/);
 });
 
-test('/account/connectors opens a page today: the Integrations tab, until #1463 builds Connectors', () => {
+test('/account/connectors is the Connectors section D651 built', () => {
   const settings = codeOnly(read('frontend/src/pages/SettingsPage.jsx'));
-  assert.match(settings, /\n\s*connectors: 'integrations',/);
+  assert.match(settings, /\n\s*connectors: 'connectors',/);
 });
 
 test('the connector list says when it could not be read, and when there is nothing yet', () => {

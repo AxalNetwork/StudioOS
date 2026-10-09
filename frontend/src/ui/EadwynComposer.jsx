@@ -64,7 +64,7 @@ export function ConnectorList({ connectors, enabled, onToggle, busy = false, err
   return (
     <div className="ead-list" data-testid="eadwyn-connector-list">
       <div className="ead-list-head">
-        <RouteLink to={`${CONNECTORS_PAGE}?tab=discover`} data-testid="link-eadwyn-browse-connectors">Browse connectors</RouteLink>
+        <RouteLink to={CONNECTORS_PAGE} data-testid="link-eadwyn-browse-connectors">Browse connectors</RouteLink>
         <RouteLink to={CONNECTORS_PAGE} data-testid="link-eadwyn-manage-connectors">Manage connectors</RouteLink>
       </div>
       {error && <p className="ead-note">{error}</p>}

@@ -25,6 +25,7 @@ import { PushDevices, SessionsCard } from './account/AccountDevices';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/AccountUsage';
+import ConnectorsSection from './account/AccountConnectors';
 import DeveloperSection from './account/AccountDeveloper';
 import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
@@ -33,10 +34,6 @@ import ColleagueSeatsPanel from './ColleagueSeatsPanel';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
-// Task — the full Integrations marketplace is embedded into the Settings
-// Integrations section; lazy so its provider/OAuth deps stay out of the
-// settings chunk (mirrors the ReferralsPage embed above).
-const IntegrationsPage = lazy(() => import('./IntegrationsPage'));
 import AuthorCard from '../components/AuthorCard';
 // Task #11 — shared first-time optional TOTP enrolment wizard (also used on
 // the email-verification page).
@@ -226,11 +223,13 @@ const SECTIONS = [
   { id: 'billing', label: 'Billing and orders' },
   // D642 (#1435) — Usage, after Billing and orders, as the Usage canvas draws it.
   { id: 'usage', label: 'Usage' },
+  // D651 (#1463) — Connectors replace Integrations (D649), after Usage, as the
+  // Connectors canvas draws the list. Integrations left "More" with it.
+  { id: 'connectors', label: 'Connectors' },
   { id: 'following', label: 'Following' },
   // `GET /settings/developer` answers 403 to every role but admin.
   { id: 'developer', label: 'Developer', roles: ['admin'] },
   { id: 'onboarding', label: 'Onboarding', group: 'more' },
-  { id: 'integrations', label: 'Integrations', group: 'more' },
   { id: 'appearance', label: 'Appearance', group: 'more' },
   { id: 'activity', label: 'Activity Log', group: 'more' },
 ];
@@ -248,10 +247,10 @@ const PATH_TO_SECTION = {
   security: 'security-privacy',
   privacy: 'security-privacy',
   'security-privacy': 'security-privacy',
-  integrations: 'integrations',
-  // D652 — the rail's "Browse" and "Manage connectors" open /account/connectors
-  // (D649). Until #1463 builds that page, it is the Integrations tab.
-  connectors: 'integrations',
+  // D651 — the old name still resolves; App.jsx redirects it first, with
+  // the once-only "Integrations are now Connectors" notice.
+  integrations: 'connectors',
+  connectors: 'connectors',
   billing: 'billing',
   appearance: 'appearance',
   // D568 — the two new sections, the canvas's own anchors for the renamed
@@ -503,7 +502,7 @@ export default function SettingsPage() {
           {safeActive === 'usage' && <UsageSection role={role} />}
           {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
-          {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab />}
+          {safeActive === 'connectors' && <ConnectorsTab />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
           {safeActive === 'activity' && (
@@ -3150,7 +3149,7 @@ function NotificationsSection({ data }) {
         {renderTable(NOTIFICATION_EVENTS)}
         {!slackConnected && (
           <p className="mt-2 text-[11.5px] text-axal-muted dark:text-gray-400">
-            Slack joins this table once it is connected in <a href="/account/integrations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Integrations</a>.
+            Slack joins this table once it is connected in <a href="/account/connectors" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Connectors</a>.
           </p>
         )}
         <div className="mt-2"><Outcome outcome={outcome} /></div>
@@ -4513,11 +4512,10 @@ function MarketIntelContributionCard({ flash }) {
   );
 }
 
-function IntegrationsTab() {
-  // Task — the full Integrations marketplace now lives here (embedded), so it
-  // supersedes the old thin "Connected accounts" summary. We still fetch the
-  // integration settings for the API-keys card's server flag; the marketplace
-  // owns its own connected-account state.
+function ConnectorsTab() {
+  // D651 (#1463) — the Connectors section (AccountConnectors.jsx) replaces the
+  // embedded Integrations marketplace. We still fetch the integration settings
+  // for the API-keys card's server flag; the section owns its own reads.
   //
   // D433 — THE API-KEYS CARD IS DRAWN, AND SAYS WHAT IT LACKS. The canvas
   // draws scoped tokens with Create and Revoke; the platform has no key store,
@@ -4537,9 +4535,7 @@ function IntegrationsTab() {
 
   return (
     <>
-      <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
-        <IntegrationsPage embedded />
-      </Suspense>
+      <ConnectorsSection />
       <Card title="API keys"
         description="Scoped tokens for programmatic access.">
         <div data-testid="api-keys-card" className="text-sm text-gray-500 dark:text-gray-400">

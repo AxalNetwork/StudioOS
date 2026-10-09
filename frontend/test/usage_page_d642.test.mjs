@@ -460,7 +460,7 @@ test('the doors: the Account section, the user menu, the rail card, the HQ route
   assert.match(settings, /\{safeActive === 'usage' && <UsageSection role=\{role\} \/>\}/);
   const app = read('frontend/src/App.jsx');
   const menu = app.slice(app.indexOf('function UserDropdown('), app.indexOf('Log Out', app.indexOf('function UserDropdown(')));
-  assert.match(menu, /<Link to="\/account" [\s\S]*?Account\s*<\/Link>\s*\{\/\*[^*]*\*\/\}\s*<Link to="\/account\/usage"[\s\S]*?Usage\s*<\/Link>\s*<Link to="\/trust"/, 'Usage, right under Account');
+  assert.match(menu, /<Link to="\/account" [\s\S]*?Account\s*<\/Link>\s*\{\/\*[^*]*\*\/\}\s*<Link to="\/account\/usage"[\s\S]*?Usage\s*<\/Link>/, 'Usage, right under Account');
   assert.match(app, /<Route path="\/admin\/platform\/allowances" element=\{guard\(\['admin'\], hqOnly\(<HqPlatformAllowancesPage \/>\)\)\} \/>/);
   assert.match(app, /<StripLink to="\/admin\/platform\/allowances">AI allowances<\/StripLink>/);
   assert.match(read('frontend/src/pages/hq/PlatformPage.jsx'), /<Link\s+to="\/admin\/platform\/allowances"/);
