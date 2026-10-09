@@ -294,7 +294,13 @@ test('discover and discoverCat: chips, sections, corners, the Notify-me state an
   assert.match(crm, /CRM 3/);
   assert.doesNotMatch(crm, /Stripe/);
   const sug = text(html(h(ConnectorsView, { data: ready(), initialTab: 'discover', initialChip: 'Suggested for you' })));
-  assert.match(sug, /Not recorded · Suggestions come from your modules that have no data yet/);
+  assert.match(sug, /Not recorded · Suggestions could not be read\./, 'no suggestion is invented when the read fails');
+  const none = text(html(h(ConnectorsView, { data: { ...ready(), suggestions: null, suggestionsNote: 'Choose a company in the sidebar to see what its empty modules could be fed by.' }, initialTab: 'discover', initialChip: 'Suggested for you' })));
+  assert.match(none, /Not recorded · Choose a company in the sidebar/);
+  const got = html(h(ConnectorsView, { data: { ...ready(), suggestions: [{ provider_key: 'calendly', module: 'customer_research', reason: 'Customer research has no recorded interviews yet.' }] }, initialTab: 'discover', initialChip: 'Suggested for you' }));
+  assert.match(got, /data-testid="connector-card-calendly"/);
+  assert.match(text(got), /Suggested for you 1 .*Customer research has no recorded interviews yet\./);
+  assert.match(text(html(h(ConnectorsView, { data: { ...ready(), suggestions: [] }, initialTab: 'discover', initialChip: 'Suggested for you' }))), /Nothing to suggest/);
 });
 
 test('moved: the notice shows on an arrival from Integrations, and not otherwise', () => {
@@ -312,8 +318,8 @@ test('add and request: the Add menu’s three entries, custom shown as Pro and C
   const req = html(h(RequestSheet, { onClose() {}, tool: 'Notion' }));
   assert.match(text(req), /Request a connector Tell us which tool you need\. .*Tool name .*What you would use it for/);
   assert.match(req, /value="Notion"/);
-  assert.match(req, /disabled="" title="Requests are stored once the connectors service \(D650\) adds its route\.">Send request/);
-  assert.match(text(req), /Requests are not stored yet/);
+  assert.match(req, /disabled="" data-testid="button-send-request">Send request/, 'Send waits for both fields');
+  assert.doesNotMatch(text(req), /not stored/);
 });
 
 const panel = (key, view, extra = {}) => text(html(h(ConnectorPanel, { p: byKey(key), view, setView() {}, onClose() {}, ...extra })));
@@ -323,8 +329,8 @@ test('sheetStripe and sheetHubspot: what it does, permissions, companies, sync, 
   assert.match(stripe, /Stripe by Stripe · Connected/);
   assert.match(stripe, /What it does Stripe cap one Stripe cap two Which modules it fills Not recorded/);
   assert.match(stripe, /Permissions Not recorded in plain words The provider's own sign-in screen lists what it grants\./);
-  assert.match(stripe, /Companies Not recorded This connection belongs to your account\./);
-  assert.match(stripe, /Sync How often Not recorded Last sync \d+ (min|h) ago|Sync How often Not recorded Last sync \d+ days? ago/);
+  assert.match(stripe, /Companies Not recorded Now fed by Stripe/, 'companies unread: not recorded, never a guess');
+  assert.match(stripe, /Sync How often Live \(the default\) Last sync \d+ (min|h) ago|Sync How often Live \(the default\) Last sync \d+ days? ago/);
   assert.match(stripe, /Sync now/);
   assert.match(stripe, /Activity/);
   assert.match(stripe, /Data already in StudioOS stays\. The stored credentials are deleted\. Disconnect/);
@@ -348,7 +354,7 @@ test('the connect flow’s views: pre, signin, key, connected, and each state', 
   assert.match(pre, /Connect Calendly Before you sign in, here is what StudioOS will do\./);
   assert.match(pre, /1 · What it uses 2 · Sign in 3 · Connected/);
   assert.match(pre, /What it does Calendly cap one/);
-  assert.match(pre, /It will serve Your account Which companies: not recorded/);
+  assert.match(pre, /It will serve Your active company Once connected, choose the other companies it feeds from its sheet\./);
   assert.match(pre, /Use a personal access token instead/);
   assert.match(pre, /Cancel Continue to Calendly/);
   assert.match(panel('crunchbase', 'pre'), /1 · What it uses 2 · Key 3 · Connected[\s\S]*Cancel Continue\s*$/);
@@ -359,9 +365,11 @@ test('the connect flow’s views: pre, signin, key, connected, and each state', 
   assert.match(text(key), /Stored encrypted\. StudioOS never shows it again\. Where to find it/);
   assert.match(text(panel('hubspot', 'key')), /Replace the token for HubSpot/, 'a connected HubSpot replaces its token');
   const connected = panel('stripe', 'connected');
-  assert.match(connected, /Stripe is connected .*3 · Connected Now fed by Stripe Not recorded The first sync runs in the background\..*Done/);
-  const fed = text(html(h(ConnectorPanel, { p: { ...byKey('stripe'), feeds: ['revenue_traction', 'customers'] }, view: 'connected', setView() {}, onClose() {} })));
-  assert.match(fed, /Now fed by Stripe Revenue traction Customers Done/, 'D650’s feeds are listed when present');
+  assert.match(connected, /Stripe is connected .*3 · Connected Now fed by Stripe .*Done/, 'a connection with a uid reads what it delivered');
+  const noUid = { ...byKey('stripe'), connection: null };
+  assert.match(text(html(h(ConnectorPanel, { p: noUid, view: 'connected', setView() {}, onClose() {} }))), /Now fed by Stripe Not recorded The first sync runs in the background\./);
+  const fed = text(html(h(ConnectorPanel, { p: { ...noUid, feeds: ['revenue_traction', 'customers'] }, view: 'connected', setView() {}, onClose() {} })));
+  assert.match(fed, /Now fed by Stripe Revenue traction Customers Done/, 'the registry’s feeds are listed before the first read');
   assert.match(panel('google', 'connected', { ret: { banner: 'Connected, but not linked.' } }), /Connected, but not linked\./);
   assert.match(panel('stripe', 'cancelled'), /The sign-in was cancelled\. Nothing was connected\. .*Close Try again/);
   assert.match(panel('stripe', 'refused'), /Stripe refused access\. Ask your Stripe admin to allow Axal StudioOS, or try again\./);

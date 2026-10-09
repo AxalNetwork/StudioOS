@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ExternalLink, X } from 'lucide-react';
 import { api } from '../../lib/api';
+import { connectorsApi } from '../../lib/api/connectors';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import { safeWriteJSON } from '../../lib/storage';
 import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
@@ -20,27 +21,44 @@ import {
  * `overreach`, `pro`, `request`). The Connectors page and Build's "Connect a
  * tool" open the same panel, so a connector connects one way from either.
  *
- * Every write goes through the `/api/integrations` methods the retired
- * Integrations page used, or through the first-party calendar and LinkedIn
- * routes for those three connectors.
+ * Every registry read and write goes through `/api/connectors`
+ * (`lib/api/connectors.js`, D650); the three first-party connectors keep
+ * their own calendar and LinkedIn routes.
  */
 
-/** The read every connectors surface shares: catalogue, connections, waitlist and the first-party three. */
+/**
+ * Why "Suggested for you" shows nothing: the suggestions are the active
+ * company's, so a member with no company chosen has none to read.
+ */
+export function suggestionsNote(e) {
+  if (e?.status === 400 || e?.code === 'active_company_required') return 'Choose a company in the sidebar to see what its empty modules could be fed by.';
+  return 'Suggestions could not be read.';
+}
+
+/**
+ * The read every connectors surface shares: catalogue, connections, waitlist,
+ * the first-party three, the member's companies and the active company's
+ * suggestions. A 403 on the catalogue is the Worker refusing this role, and
+ * reads as `forbidden` with the Worker's own sentence: retrying cannot help.
+ */
 export function useConnectors() {
-  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false });
+  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
     setState((s) => (s.status === 'ready' ? s : { ...s, status: 'loading' }));
     const soft = (p) => p.then((v) => v, () => null);
+    const settle = (p) => p.then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }));
     Promise.all([
-      api.integrationsAvailable(),
-      soft(api.integrationsList()),
-      soft(api.integrationsWaitlist()),
+      connectorsApi.available(),
+      soft(connectorsApi.list()),
+      soft(connectorsApi.waitlist()),
       soft(api.googleCalStatus()),
       soft(api.microsoftCalStatus()),
       soft(api.linkedinStatus()),
-    ]).then(([av, mine, wl, google, microsoft, linkedin]) => {
+      soft(api.listMyCompanies()),
+      settle(connectorsApi.suggestions()),
+    ]).then(([av, mine, wl, google, microsoft, linkedin, companies, sug]) => {
       if (!live) return;
       setState({
         status: 'ready',
@@ -50,22 +68,27 @@ export function useConnectors() {
         itemsFailed: !mine,
         waitlist: wl?.items || [],
         firstParty: { google, microsoft, linkedin },
+        companies: Array.isArray(companies) ? companies : null,
+        suggestions: sug.ok ? (sug.v?.items || []) : null,
+        suggestionsNote: sug.ok ? '' : suggestionsNote(sug.e),
       });
     }, (e) => {
-      if (live) setState((s) => ({ ...s, status: 'unreadable', message: e?.message || '' }));
+      if (live) setState((s) => ({ ...s, status: e?.status === 403 ? 'forbidden' : 'unreadable', message: e?.message || '' }));
     });
     return () => { live = false; };
   }, [attempt]);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const catalogue = state.status === 'ready'
-    ? buildCatalogue({ providers: state.providers, items: state.items || [], waitlist: state.waitlist, firstParty: state.firstParty })
+    ? buildCatalogue({ providers: state.providers, items: state.items || [], waitlist: state.waitlist, firstParty: state.firstParty, companies: state.companies })
     : [];
   return { ...state, catalogue, reload };
 }
 
 /** A side sheet, 480px from the right and the full width on a phone. */
-export function Sheet({ eyebrow, title, sub, onClose, children, footer, 'data-testid': testId }) {
-  useEscapeClose(onClose);
+export function Sheet({ eyebrow, title, sub, onClose, children, footer, escapeCloses = true, 'data-testid': testId }) {
+  // A dialog opened inside the sheet takes Escape for itself: one key press
+  // closes one layer, not the dialog and the sheet together.
+  useEscapeClose(escapeCloses ? onClose : null);
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title} data-testid={testId}>
       <button type="button" aria-label="Close" className="absolute inset-0 h-full w-full cursor-default bg-black/30" onClick={onClose} />
@@ -131,16 +154,16 @@ export function Steps({ names, at }) {
   );
 }
 
-const NR_REGISTRY = 'The connector registry does not say this yet; it arrives with the connectors service (D650).';
+const NR_REGISTRY = 'This connector is not in the connector registry, which is where what it does is described.';
 
-/** What a connector pulls in and sends out, from D650's `pulls`/`sends`; its capabilities meanwhile. */
+/** What a connector pulls in and sends out, from the registry's `pulls`/`sends`; its capabilities otherwise. */
 function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' }) {
   if (Array.isArray(p.pulls) || Array.isArray(p.sends)) {
     return (
       <>
         <Group label={read}>
           {(p.pulls || []).length
-            ? p.pulls.map((x) => <Row key={x.what} a={x.what} b={x.module ? `→ ${x.module}` : null} />)
+            ? p.pulls.map((x) => <Row key={x.what} a={x.what} b={x.module ? `→ ${feedsLabel({ feeds: [x.module] })}` : null} />)
             : <Row a="Nothing" b={`${p.display_name} only sends out.`} />}
         </Group>
         <Group label={write}>
@@ -172,29 +195,95 @@ function PermissionsGroup({ p }) {
   );
 }
 
-function CompaniesGroup({ conn }) {
+/**
+ * The companies a connection feeds. Ticking one sends the whole new set to
+ * `PUT /:uid/companies`; the Worker checks each is the member's own and
+ * answers with the set it stored, which is what the boxes then show.
+ */
+export function CompaniesGroup({ conn, onChanged }) {
   const label = companiesLabel(conn);
+  const [ids, setIds] = useState(() => (Array.isArray(conn?.companies) ? conn.companies.filter((c) => c.enabled).map((c) => c.company_id) : []));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  if (conn?.first_party) {
+    return <Group label="Companies"><Row a="Your account" b={`${conn.provider_key === 'linkedin' ? 'LinkedIn' : 'This calendar'} connects to you, not to a company.`} /></Group>;
+  }
+  const toggle = async (id, on) => {
+    const next = on ? [...new Set([...ids, id])] : ids.filter((x) => x !== id);
+    setSaving(true); setError('');
+    try {
+      const r = await connectorsApi.setCompanies(conn.uid, next);
+      setIds(Array.isArray(r?.company_ids) ? r.company_ids.map(Number) : next);
+      onChanged?.();
+    } catch (e) {
+      setError(e?.message || 'The companies could not be saved.');
+    } finally { setSaving(false); }
+  };
   return (
     <Group label="Companies">
       {label === null
-        ? <Row a={<Unrecorded reason="Per-company scope arrives with the connectors service (D650).">Not recorded</Unrecorded>} b="This connection belongs to your account. Choosing which companies it serves is not built yet." />
-        : conn.companies.map((c) => (
-          <label key={c.company_id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13px]">
-            <span className="font-semibold text-axal-ink dark:text-gray-100">{c.name || `Company ${c.company_id}`}</span>
-            <input type="checkbox" checked={c.enabled !== false} disabled readOnly title="Changing the companies waits on its route." />
-          </label>
-        ))}
+        ? <Row a={<Unrecorded reason="Your companies could not be read, so which of them this connection feeds is not shown.">Not recorded</Unrecorded>} />
+        : !conn.companies.length
+          ? <Row a="No company" b="You belong to no company, so this connection feeds only your own account." />
+          : conn.companies.map((c) => (
+            <label key={c.company_id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13px]">
+              <span className="font-semibold text-axal-ink dark:text-gray-100">{c.name || `Company ${c.company_id}`}</span>
+              <input type="checkbox" checked={ids.includes(c.company_id)} disabled={saving} onChange={(e) => toggle(c.company_id, e.target.checked)}
+                aria-label={`${conn.display_name || 'This connection'} feeds ${c.name || `company ${c.company_id}`}`} data-testid={`connector-company-${c.company_id}`} />
+            </label>
+          ))}
+      {error && <Row a={<span role="alert" className="text-red-700 dark:text-red-300">{error}</span>} />}
+    </Group>
+  );
+}
+
+/**
+ * What a connection has delivered to each module it feeds, from
+ * `GET /:uid/fed`. A connector that does not record its deliveries says so,
+ * per module, in the Worker's words.
+ */
+export function FedGroup({ conn, name }) {
+  const [state, setState] = useState({ status: 'loading', modules: [], message: '' });
+  const uid = conn?.uid;
+  useEffect(() => {
+    if (!uid) return undefined;
+    let live = true;
+    connectorsApi.fed(uid).then(
+      (r) => { if (live) setState({ status: 'ready', modules: r?.modules || [], message: '' }); },
+      (e) => { if (live) setState({ status: 'unreadable', modules: [], message: e?.message || '' }); },
+    );
+    return () => { live = false; };
+  }, [uid]);
+  if (!uid) return null;
+  return (
+    <Group label={`Now fed by ${name}`}>
+      {state.status === 'loading' && <div className="px-3 py-2"><LoadingRows lines={2} /></div>}
+      {state.status === 'unreadable' && <div className="px-3 py-2"><Unreadable what="What it delivered" claim="This is not a claim that nothing arrived." /></div>}
+      {state.status === 'ready' && !state.modules.length && <Row a="No module" b={`${name} feeds no StudioOS module.`} />}
+      {state.status === 'ready' && state.modules.map((m) => (
+        <Row key={m.module} a={m.label || m.module}
+          b={m.count == null ? <Unrecorded reason={m.reason || 'Not recorded'}>Not recorded</Unrecorded> : m.reason || null}
+          pill={m.count == null ? null : <Pill tone={m.count ? 'ok' : 'neutral'}>{`${m.count} ${m.count === 1 ? 'item' : 'items'}`}</Pill>} />
+      ))}
     </Group>
   );
 }
 
 const FREQ = { live: 'Live', hourly: 'Hourly', daily: 'Daily', manual: 'Manual' };
 
+/** How often a connection syncs. A registry connection with none chosen syncs on every run, which is `live`. */
+function syncFrequencyLabel(conn) {
+  const f = conn?.config?.sync_frequency;
+  if (Object.hasOwn(FREQ, String(f))) return FREQ[f];
+  if (conn?.uid && f == null) return 'Live (the default)';
+  return <Unrecorded reason={conn?.first_party ? 'This connection syncs on its own route\'s schedule, which StudioOS does not record.' : 'The stored setting is not one StudioOS knows.'}>Not recorded</Unrecorded>;
+}
+
 function ActivityGroup({ conn }) {
   const [state, setState] = useState({ status: 'loading', items: [], message: '', limit: 10 });
   const read = useCallback((limit) => {
     setState((s) => ({ ...s, status: 'loading', limit }));
-    api.integrationsLogs(conn.uid, { limit }).then(
+    connectorsApi.logs(conn.uid, { limit }).then(
       (r) => setState({ status: 'ready', items: r?.items || [], message: '', limit }),
       (e) => setState({ status: 'unreadable', items: [], message: e?.message || '', limit }),
     );
@@ -240,11 +329,15 @@ async function disconnect(p) {
   if (p.key === 'google') return api.googleCalDisconnect();
   if (p.key === 'microsoft') return api.microsoftCalDisconnect();
   if (p.key === 'linkedin') return api.linkedinDisconnect();
-  return api.integrationsDisconnect(p.connection.uid);
+  return connectorsApi.disconnect(p.connection.uid);
 }
 
+/**
+ * The key field's label. Crunchbase checks every key it is given with a live
+ * search and refuses a blank one, so replacing it always takes a new key.
+ */
 function keyLabel(p, updating) {
-  if (p.key === 'crunchbase') return updating ? 'New Crunchbase user key (leave blank to keep the current one)' : 'Crunchbase user key';
+  if (p.key === 'crunchbase') return updating ? 'New Crunchbase user key' : 'Crunchbase user key';
   if (p.key === 'hubspot') return 'Private App access token';
   if (p.auth_type === 'oauth2') return 'Personal access token';
   return updating ? 'New API key (leave blank to keep the current one)' : 'API key';
@@ -273,6 +366,17 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const [sfSandbox, setSfSandbox] = useState(false);
   const [dsDemo, setDsDemo] = useState(true);
   const [tool, setTool] = useState(null);
+  // A teammate who already connected this provider for the active company
+  // (`GET /:key`): read once, when the flow starts on a registry connector.
+  const [teammate, setTeammate] = useState(null);
+  const [ownChosen, setOwnChosen] = useState(false);
+  const askTeammate = view === 'pre' && !conn && !p.first_party && !!p.key;
+  useEffect(() => {
+    if (!askTeammate) return undefined;
+    let live = true;
+    connectorsApi.teammate(p.key).then((r) => { if (live) setTeammate(r?.teammate || null); }, () => { if (live) setTeammate(null); });
+    return () => { live = false; };
+  }, [askTeammate, p.key]);
   const updating = !!conn && view === 'key';
   const name = p.display_name;
   const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' ? 'Key' : 'Sign in', 'Connected'];
@@ -291,7 +395,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
         // Always demo=0|1: a missing query makes the Worker default to demo.
         if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
-        const r = await api.integrationsOauthStart(p.key, params);
+        const r = await connectorsApi.oauthStart(p.key, params);
         url = r?.authorize_url;
       }
       if (!url) throw Object.assign(new Error(`${name} did not return a sign-in address.`), { status: 0 });
@@ -312,7 +416,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     }
     setBusy(true);
     try {
-      await api.integrationsConnect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: webhookSecret || undefined, config });
+      await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: webhookSecret || undefined, config });
       setApiKey(''); setWebhookSecret('');
       setView('connected');
       onChanged?.();
@@ -324,7 +428,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 
   const syncNow = async () => {
     setSyncing(true); setSyncNote('');
-    try { await api.integrationsSync(conn.uid); setSyncNote('Synced.'); onChanged?.(); }
+    try { await connectorsApi.sync(conn.uid); setSyncNote('Synced.'); onChanged?.(); }
     catch (e) { setSyncNote(e?.message || 'The sync failed.'); }
     finally { setSyncing(false); }
   };
@@ -359,9 +463,10 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       <>
         <UsesGroups p={p} />
         <PermissionsGroup p={p} />
-        <CompaniesGroup conn={conn} />
+        <CompaniesGroup conn={conn} onChanged={onChanged} />
+        <FedGroup conn={conn} name={name} />
         <Group label="Sync">
-          <Row a="How often" b={(Object.hasOwn(FREQ, String(conn.config?.sync_frequency)) && FREQ[conn.config.sync_frequency]) || <Unrecorded reason="The sync schedule is set by StudioOS until the connectors service (D650) lets you choose it.">Not recorded</Unrecorded>} />
+          <Row a="How often" b={syncFrequencyLabel(conn)} />
           <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
             action={conn.uid ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
         </Group>
@@ -398,6 +503,16 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     banner = <Banner tone="neutral" data-testid="connector-pro">{name} is part of the {TIER_LABEL[p.tier] || 'paid'} plan.{message ? ` ${message}` : ''}</Banner>;
     body = <UsesGroups p={p} />;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={onClose}>See plans</Link></>;
+  } else if (view === 'pre' && teammate && !ownChosen) {
+    title = `Connect ${name}`;
+    banner = <Banner tone="neutral" data-testid="connector-teammate">{teammate.name || 'A teammate'} already connected {name} for your active company. Use theirs, or connect your own.</Banner>;
+    footer = (
+      <>
+        {backBtn}
+        <button type="button" className={BTN.ghost} onClick={() => setOwnChosen(true)} data-testid="button-connect-own">Connect my own</button>
+        <button type="button" className={BTN.primary} onClick={onClose} data-testid="button-use-theirs">Use theirs</button>
+      </>
+    );
   } else if (view === 'pre') {
     title = `Connect ${name}`;
     sub = 'Before you sign in, here is what StudioOS will do.';
@@ -406,7 +521,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <Steps names={keySteps} at={0} />
         <UsesGroups p={p} read="It will read" write="It will write" />
         <Group label="It will serve">
-          <Row a="Your account" b={<Unrecorded reason="Per-company scope arrives with the connectors service (D650).">Which companies: not recorded</Unrecorded>} />
+          <Row a={p.first_party ? 'Your account' : 'Your active company'} b={p.first_party ? 'It connects to you, not to a company.' : 'Once connected, choose the other companies it feeds from its sheet.'} />
         </Group>
         {p.key === 'salesforce' && (
           <Group label="Org type">
@@ -457,7 +572,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <div className="mx-5 mt-4 space-y-1">
           <label htmlFor="connector-key" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">{keyLabel(p, updating)}</label>
           <input id="connector-key" type="password" autoComplete="off" className={INPUT} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-            placeholder={conn?.api_key_preview ? `Ends ${conn.api_key_preview}` : ''} required={!updating}
+            placeholder={conn?.api_key_preview ? `Ends ${conn.api_key_preview}` : ''} required={!updating || p.key === 'crunchbase'}
             data-testid={p.key === 'crunchbase' ? 'crunchbase-user-key' : 'connector-key'} />
           <p className="text-[11.5px] text-axal-muted dark:text-gray-400">
             Stored encrypted. StudioOS never shows it again.
@@ -496,11 +611,15 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     body = (
       <>
         <Steps names={keySteps} at={2} />
-        <Group label={`Now fed by ${name}`}>
-          {feeds
-            ? feeds.split(', ').map((f) => <Row key={f} a={f} />)
-            : <Row a={<Unrecorded reason="What each connector fills, and how much arrived, is counted once the connectors service (D650, D655) reports it.">Not recorded</Unrecorded>} b="The first sync runs in the background. Its items appear in the modules it fills." />}
-        </Group>
+        {conn?.uid
+          ? <FedGroup conn={conn} name={name} />
+          : (
+            <Group label={`Now fed by ${name}`}>
+              {feeds
+                ? feeds.split(', ').map((f) => <Row key={f} a={f} />)
+                : <Row a={<Unrecorded reason={NR_REGISTRY}>Not recorded</Unrecorded>} b="The first sync runs in the background. Its items appear in the modules it fills." />}
+            </Group>
+          )}
       </>
     );
     footer = <button type="button" className={BTN.primary} onClick={() => { onChanged?.(); onClose?.(); }} data-testid="button-connected-done">Done</button>;
@@ -523,7 +642,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   }
 
   return (
-    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} data-testid={`connector-sheet-${view}`}>
+    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} escapeCloses={!tool} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
       {banner}
       {body}
       {tool === 'hubspot' && <HubspotConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}
