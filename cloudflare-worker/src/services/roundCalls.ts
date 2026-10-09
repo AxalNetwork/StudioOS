@@ -176,7 +176,7 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
   if(call.state==='draft') throw new RoundCallError('call_not_found',404);
   const recipient=await env.DB.prepare('SELECT id,commitment_cents,data_room_requested_at FROM round_call_recipients WHERE call_id=? AND investor_user_id=?').bind(call.id,investor.id).first<{id:number;commitment_cents:number|null;data_room_requested_at:string|null}>();
   if(!recipient) throw new RoundCallError('call_not_found',404);
-  await env.DB.prepare('UPDATE round_call_recipients SET opened_at=COALESCE(opened_at,?) WHERE id=?').bind(now(),recipient.id).run();
+  await env.DB.prepare("UPDATE round_call_recipients SET opened_at=COALESCE(opened_at,?) WHERE id=? AND EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='sent' AND target_close>=?)").bind(now(),recipient.id,call.id,today()).run();
   const deck=call.deck_id==null?null:await env.DB.prepare('SELECT version,title,slides FROM pitch_decks WHERE id=? AND version=? AND project_id=?').bind(call.deck_id,call.deck_version,call.project_id).first();
   const nda=call.data_room_project_uid!=null && await ndaActive(env,call.created_by,investor.id);
   const grant=nda?await activeGrant(env,call.project_id,investor.id):null;
@@ -209,7 +209,7 @@ export async function respond(env: Env, call: CallRow, investor: User, input: Re
     env.DB.prepare("UPDATE round_call_recipients SET responded_at=COALESCE(responded_at,?),last_response_at=?,commitment_cents=CASE WHEN ?='commit' THEN ? ELSE commitment_cents END,data_room_requested_at=CASE WHEN ?='data_room' THEN COALESCE(data_room_requested_at,?) ELSE data_room_requested_at END WHERE id=? AND EXISTS(SELECT 1 FROM round_calls WHERE id=? AND state='sent' AND target_close>=?) AND EXISTS(SELECT 1 FROM users WHERE id=? AND role='investor' AND is_active=1 AND kyc_status='approved')").bind(at,at,action,cents,action,at,recipient.id,call.id,today(),investor.id),
     ...roundCallPipelineStatements(env,{callId:call.id,projectId:call.project_id,investorId:investor.id,name:investor.name,email:investor.email,at,commitmentCents:cents}),
   ];
-  if(question) statements.push(env.DB.prepare('INSERT INTO round_call_questions(uid,call_id,investor_user_id,question,asked_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM round_call_recipients WHERE id=? AND last_response_at=?)').bind(crypto.randomUUID(),call.id,investor.id,question,at,recipient.id,at));
+  if(question) statements.push(env.DB.prepare('INSERT INTO round_call_questions(uid,call_id,investor_user_id,question,asked_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM round_call_recipients r JOIN round_calls c ON c.id=r.call_id WHERE r.id=? AND r.last_response_at=? AND c.state='sent' AND c.target_close>=?)").bind(crypto.randomUUID(),call.id,investor.id,question,at,recipient.id,at,today()));
   statements.push(await audit(env,investor,call.project_id,'round_call_response_requested',{uid:call.uid,action}));
   const result=await env.DB.batch(statements);
   if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('call_read_only_or_verification_changed',409);
