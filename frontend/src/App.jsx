@@ -388,7 +388,8 @@ const PartnerWorkspaceTabs = lazy(() => import('./pages/partner/PartnerWorkspace
 // see FounderWorkspaceTabs.jsx.
 const FounderWorkspaceTabs = lazy(() => import('./pages/founder/FounderWorkspaceTabs'));
 const FounderWorkspacePage = lazy(() => import('./pages/founder/FounderWorkspacePage'));
-const FounderValidatePage = lazy(() => import('./pages/founder/FounderValidatePage'));
+// D661 (#1474): the cycle overview and module pages, wired to each cycle's read.
+const CycleRoute = lazy(() => import('./pages/cycles/CycleRoute'));
 const FounderBuildDesk = lazy(() => import('./pages/founder/FounderBuildDesk'));
 const FounderBuildBoard = lazy(() => import('./pages/founder/FounderBuildBoard'));
 const FounderBuildThisWeek = lazy(() => import('./pages/founder/FounderBuildThisWeek'));
@@ -2493,9 +2494,15 @@ function AppInner() {
           two routes are doors onto one log, not a fork of it. Hypotheses and
           Verdict have no store yet and say so rather than 404-ing behind a
           sidebar row that promises a page. */}
+      {/* D661 (#1474): a founder's /validate is the cycle overview from
+          #1487's read, and /validate/<module> its six module pages. The four
+          zone pages below stay as the modules' working tools: each module
+          page links to the one that edits it, until canvases for Add and a
+          record's edit view exist. `?mode=workspace` still opens the editor. */}
       <Route path="/validate" element={founderValidateLanding
-        ? guard(labRoles(['admin', 'founder']), <FounderValidatePage />)
+        ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)
         : <Navigate to="/validate/interviews" replace />} />
+      <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
