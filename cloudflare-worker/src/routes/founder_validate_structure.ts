@@ -2,13 +2,20 @@
  * D658 (#1471) — a structured interview's placements: stored, and decided one
  * at a time. Mounted beside `founder_validate.ts` at /api/founder/validate.
  *
- *   POST /placements/:id/accept    accept, or edit then accept ({ payload })
- *   POST /placements/:id/discard   discard; nothing is written anywhere
+ *   POST /sessions/:id/structure    one structuring run over the session's
+ *                                   final transcript ({ model? }); a second
+ *                                   run is Compare's re-structure
+ *   GET  /sessions/:id/placements   every run's placements, and the last two
+ *                                   runs aligned by module
+ *   POST /sessions/:id/ask          a question answered from the transcript,
+ *                                   every answer citing its passage
+ *   POST /placements/:id/accept     accept, or edit then accept ({ payload })
+ *   POST /placements/:id/discard    discard; nothing is written anywhere
  *
- * The session routes that CREATE placements (`/sessions/:id/structure`,
- * `/sessions/:id/ask` and the review read) read #1470's transcript segments,
- * and follow once that table is on main. `storePlacements` below is what they
- * will call.
+ * Every model call reserves and settles the D640 budget inside `aiRouter.run`
+ * and leaves one line in `interview_structure_receipts`, which
+ * `GET /sessions/:id/receipt` (founder_validate_sessions.ts) reads beside the
+ * speech-to-text lines.
  *
  * ONE ROW, ONE WRITER. A placement is a `validate_proposals` row (migration
  * 439) with a `run_id`. Accept claims it with the store's own idiom,
@@ -25,12 +32,20 @@ import { requireAuth } from '../auth';
 import { canWrite } from './_founder_validate_helpers';
 import { insertHypothesisLink, setInterviewIcpFit, upsertPainSeverity } from './_founder_validate_writes';
 import { normPhrase } from '../services/painGroups';
+import { budgetRefusalMessage } from '../services/aiRouter';
+import { loadSession, type SessionRow } from '../services/interviewSessions';
 import {
   PLACEMENT_KINDS,
+  alignRuns,
+  askTranscript,
   isPlacementKind,
   storedSeverity,
+  structureTranscript,
+  toSegments,
   type Placement,
   type PlacementKind,
+  type ReceiptLine,
+  type SegmentRow,
   type StructureContext,
 } from '../services/interviewStructuring';
 
@@ -206,6 +221,163 @@ structure.post('/placements/:id/discard', async (c) => {
   ).bind(user.id, row.id).run();
   if (!res.meta?.changes) return json({ error: 'not_pending', detail: 'This placement was already decided.' }, 409);
   return json({ ok: true, id: row.id });
+});
+
+// ---------------------------------------------------------------------------
+// Sessions: structure, compare, ask
+// ---------------------------------------------------------------------------
+
+/** The session and the caller, gated on `canWrite` like every session route. */
+async function scopeSession(c: any): Promise<{ user: User; session: SessionRow } | Response> {
+  const session = await loadSession(c.env, Number(c.req.param('id')));
+  const user = (await requireAuth(c)) as User;
+  if (!session) return json({ detail: 'Session not found' }, 404);
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(session.project_id).first() as { id: number; founder_id: number | null } | null;
+  if (!project) return json({ detail: 'Project not found' }, 404);
+  if (!canWrite(project, user)) return json({ detail: 'Forbidden' }, 403);
+  return { user, session };
+}
+
+async function finalSegments(env: Env, sessionId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
+      WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id`,
+  ).bind(sessionId).all<SegmentRow>();
+  return toSegments(rows.results ?? []);
+}
+
+function newRunId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+const micro = (usd: number) => Math.max(0, Math.round((usd || 0) * 1_000_000));
+
+/** One receipt row per model call, refused or not. */
+export async function recordStructureReceipt(
+  env: Env, sessionId: number, runId: string | null, line: ReceiptLine, outcome: 'ok' | 'refused', refusal: string | null = null,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO interview_structure_receipts
+       (session_id, run_id, step, model, requested_model, fallback_used, prompt_tokens, completion_tokens, cost_microusd, outcome, refusal)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(sessionId, runId, line.step, line.model, line.requested_model, line.fallback_used ? 1 : 0,
+    line.prompt_tokens, line.completion_tokens, micro(line.est_cost_usd), outcome, refusal).run();
+}
+
+function refusedBody(refusal: string | null) {
+  return {
+    ok: false,
+    refusal,
+    message: refusal === 'budget_user_day' || refusal === 'budget_user_month' || refusal === 'budget_review'
+      ? budgetRefusalMessage(refusal)
+      : refusal === 'model_not_offered'
+        ? 'That model is not offered for structuring. Nothing was run.'
+        : 'The model could not be reached. Nothing was stored.',
+  };
+}
+
+const MODEL_RE = /^@cf\/[a-z0-9._/-]{3,100}$/i;
+const modelFrom = (v: unknown) => (typeof v === 'string' && MODEL_RE.test(v.trim()) ? v.trim() : undefined);
+
+structure.post('/sessions/:id/structure', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const body = await c.req.json<{ model?: string }>().catch(() => ({} as { model?: string }));
+  const segments = await finalSegments(c.env, s.session.id);
+  if (!segments.length) {
+    return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to structure yet.' }, 409);
+  }
+  const prior = await c.env.DB.prepare('SELECT COUNT(DISTINCT run_id) AS n FROM validate_proposals WHERE session_id = ?')
+    .bind(s.session.id).first<{ n: number }>();
+  const step = Number(prior?.n || 0) > 0 ? 're_structured' : 'structured';
+  const runId = newRunId();
+  const context = await loadStructureContext(c.env, s.session.project_id);
+  const out = await structureTranscript(c.env, {
+    userId: s.user.id, model: modelFrom(body?.model), segments, context, step,
+  });
+  for (let i = 0; i < out.receipt.length; i += 1) {
+    const refusedHere = !out.ok && i === out.receipt.length - 1;
+    await recordStructureReceipt(c.env, s.session.id, runId, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? (out as any).refusal ?? null : null);
+  }
+  if (!out.ok) return json(refusedBody(out.refusal), 503);
+
+  await storePlacements(c.env, {
+    projectId: s.session.project_id, sessionId: s.session.id, interviewId: s.session.interview_id,
+    runId, userId: s.user.id, model: out.receipt[out.receipt.length - 1]?.model || '', placements: out.placements,
+  });
+  await c.env.DB.prepare(
+    "UPDATE interview_sessions SET status = 'structured', updated_at = datetime('now') WHERE id = ? AND status = 'transcribed'",
+  ).bind(s.session.id).run();
+  return json({
+    ok: true,
+    run_id: runId,
+    step,
+    stored: out.placements.length,
+    dropped: out.dropped,
+    parts: out.parts,
+    receipt: out.receipt,
+  }, 201);
+});
+
+structure.get('/sessions/:id/placements', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const rows = await c.env.DB.prepare(
+    `SELECT id, kind, payload_json, edited_payload_json, status, model, run_id, cite_from, cite_to, citation_json, created_at
+       FROM validate_proposals WHERE session_id = ? AND run_id IS NOT NULL ORDER BY id`,
+  ).bind(s.session.id).all<any>();
+  const parse = (t: string | null) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
+  const placements = (rows.results ?? []).map((r: any) => ({
+    id: r.id,
+    kind: r.kind,
+    module: isPlacementKind(r.kind) ? PLACEMENT_KINDS[r.kind as PlacementKind].module : 'other',
+    payload: parse(r.payload_json),
+    edited_payload: parse(r.edited_payload_json),
+    status: r.status,
+    // Proposed-only kinds say so here, so the page can say so too.
+    can_accept: isPlacementKind(r.kind) && PLACEMENT_KINDS[r.kind as PlacementKind].writer,
+    model: r.model,
+    run_id: r.run_id,
+    cite: { from: r.cite_from, to: r.cite_to, quote: parse(r.citation_json)?.quote ?? null },
+    created_at: r.created_at,
+  }));
+  const runs: { run_id: string; model: string; placements: typeof placements }[] = [];
+  for (const p of placements) {
+    let run = runs.find((x) => x.run_id === p.run_id);
+    if (!run) runs.push(run = { run_id: p.run_id, model: p.model, placements: [] });
+    run.placements.push(p);
+  }
+  const lastTwo = runs.slice(-2);
+  return json({
+    runs,
+    compare: lastTwo.length === 2
+      ? { first: lastTwo[0].run_id, second: lastTwo[1].run_id, modules: alignRuns(lastTwo[0].placements, lastTwo[1].placements) }
+      : null,
+  });
+});
+
+structure.post('/sessions/:id/ask', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const body = await c.req.json<{ question?: string; model?: string }>().catch(() => ({} as { question?: string; model?: string }));
+  const question = typeof body?.question === 'string' ? body.question.trim().slice(0, 1000) : '';
+  if (!question) return json({ error: 'question_required', detail: 'Ask a question.' }, 400);
+  const segments = await finalSegments(c.env, s.session.id);
+  if (!segments.length) {
+    return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to ask about yet.' }, 409);
+  }
+  const out = await askTranscript(c.env, { userId: s.user.id, model: modelFrom(body?.model), segments, question });
+  for (let i = 0; i < out.receipt.length; i += 1) {
+    const refusedHere = !out.ok && out.reason === 'refused' && i === out.receipt.length - 1;
+    await recordStructureReceipt(c.env, s.session.id, null, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? out.refusal : null);
+  }
+  if (!out.ok && out.reason === 'refused') return json(refusedBody(out.refusal), 503);
+  // AN ANSWER WITH NO CITATION IS REFUSED, NOT SHOWN.
+  if (!out.ok) {
+    return json({ error: 'no_citation', detail: 'The transcript did not give an answer that could be tied to a passage, so none is shown.' }, 422);
+  }
+  return json({ ok: true, answer: out.answer, cites: out.cites, receipt: out.receipt });
 });
 
 export default structure;

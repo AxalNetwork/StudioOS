@@ -452,3 +452,90 @@ export function alignRuns<T extends { kind: string }>(
     second: second.filter((p) => moduleOf(p) === module),
   }));
 }
+
+/** A `final` segment as #1470 (migration 438) stores it. */
+export interface SegmentRow {
+  start_ms: number | null;
+  end_ms: number | null;
+  speaker_label: string | null;
+  text: string;
+}
+
+/**
+ * #1470's final segments as the spans this file cites, in order.
+ *
+ * Audio sessions carry both offsets. Text chat and manual entry carry a start
+ * (the message's time) or nothing, and no end. So, deterministically: a
+ * missing end is the next segment's start (or the start + 1 ms for the last);
+ * a missing start is the previous end, or the segment's position × 1000 ms.
+ * The same rows always give the same spans, so a stored `cite_from`/`cite_to`
+ * keeps pointing at the passage it quoted.
+ */
+export function toSegments(rows: readonly SegmentRow[]): Segment[] {
+  const out: Segment[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = rows[i];
+    const text = String(r.text || '').trim();
+    if (!text) continue;
+    const prevEnd = out.length ? out[out.length - 1].end : 0;
+    // A recorded start is kept as recorded, even where two speakers overlap.
+    const start = Number.isSafeInteger(r.start_ms) && (r.start_ms as number) >= 0 ? (r.start_ms as number) : Math.max(prevEnd, i * 1000);
+    const nextStart = rows.slice(i + 1).map((n) => n.start_ms).find((n) => Number.isSafeInteger(n));
+    let end = Number.isSafeInteger(r.end_ms) ? (r.end_ms as number)
+      : (typeof nextStart === 'number' && nextStart > start ? nextStart : start + 1000);
+    if (end <= start) end = start + 1;
+    out.push({ start, end, speaker: r.speaker_label || null, text });
+  }
+  return out;
+}
+
+export type AskOutcome =
+  | { ok: true; answer: string; cites: { from: number; to: number; quote: string }[]; receipt: ReceiptLine[] }
+  | { ok: false; refusal: string | null; reason: 'refused' | 'no_citation'; receipt: ReceiptLine[] };
+
+/**
+ * ASK over a whole transcript. A long one is asked part by part (never cut);
+ * each part's answer is kept only if it cites a span of that part, and the
+ * kept answers are joined in order. Nothing kept → refused, `no_citation`.
+ */
+export async function askTranscript(
+  env: Env,
+  opts: { userId: number; model?: string; segments: readonly Segment[]; question: string; maxChars?: number },
+): Promise<AskOutcome> {
+  const parts = chunkSegments(opts.segments, opts.maxChars ?? 24000);
+  const receipt: ReceiptLine[] = [];
+  const answers: string[] = [];
+  const cites: { from: number; to: number; quote: string }[] = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const r = await aiRun(env, {
+      task: 'structure_interview',
+      userId: opts.userId,
+      model: opts.model,
+      surface: AI_SURFACE.validateInterviews,
+      systemPrompt: ASK_PROMPT,
+      messages: [{
+        role: 'user',
+        content: `${parts.length > 1 ? `Part ${i + 1} of ${parts.length} of the transcript` : 'Transcript'}:\n${transcriptLines(parts[i])}\n\nQuestion: ${opts.question}`,
+      }],
+      maxTokens: 500,
+      temperature: 0.1,
+    });
+    receipt.push({
+      step: 'asked',
+      model: r.usage.model,
+      requested_model: opts.model ?? null,
+      fallback_used: !!r.usage.fallback_used,
+      est_cost_usd: r.usage.est_cost_usd || 0,
+      prompt_tokens: r.usage.prompt_tokens || 0,
+      completion_tokens: r.usage.completion_tokens || 0,
+    });
+    if (!r.ok) return { ok: false, refusal: r.refusal ?? null, reason: 'refused', receipt };
+    const checked = checkAnswer(r.output || '', parts[i]);
+    if (checked.ok) {
+      answers.push(checked.answer);
+      cites.push(...checked.cites);
+    }
+  }
+  if (!cites.length) return { ok: false, refusal: null, reason: 'no_citation', receipt };
+  return { ok: true, answer: answers.join(' '), cites, receipt };
+}
