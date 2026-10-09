@@ -75,10 +75,13 @@ practice here for some time.) The comment says which release the SHA is,
 the SHA says what actually runs.
 
 **Container images under `container:` follow the same rule, by digest plus
-a trailing `# <version>` comment** — `semgrep/semgrep@sha256:34ab619b… #
+a trailing `# <version>` comment** — `mirror.gcr.io/semgrep/semgrep@sha256:34ab619b… #
 1.176.1`. A moving tag is a floating ref: `:latest` is banned here for the
 same reason `@main` is, and it had already changed a Semgrep finding count
-with no repo change twice before it was pinned (D170).
+with no repo change twice before it was pinned (D170). The registry may
+change and the digest may not: Semgrep's image is pulled through
+`mirror.gcr.io` because Docker Hub rate-limited the shared runners
+(GOTCHAS.md, "Static analysis").
 
 Do NOT use floating refs like `@main`, `:latest`, or unreleased majors
 (e.g. `@v5` for `actions/checkout` doesn't exist as of 2026-05-21).
