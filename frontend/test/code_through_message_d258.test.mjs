@@ -474,24 +474,6 @@ const ALLOWED = [
   },
   {
     rule: 'hand-built',
-    file: 'pages/IntegrationsPage.jsx',
-    phrase: 'Could not start Google connect.',
-    why: 'a 200 answer that carries no redirect URL; request() only reads refusals',
-  },
-  {
-    rule: 'hand-built',
-    file: 'pages/IntegrationsPage.jsx',
-    phrase: 'Could not start LinkedIn connect.',
-    why: 'a 200 answer that carries no authorize URL; request() only reads refusals',
-  },
-  {
-    rule: 'hand-built',
-    file: 'pages/IntegrationsPage.jsx',
-    phrase: 'Could not start Microsoft connect.',
-    why: 'a 200 answer that carries no redirect URL; request() only reads refusals',
-  },
-  {
-    rule: 'hand-built',
     file: 'pages/ApiBridgePage.jsx',
     phrase: 'err.detail || "Request failed"',
     why: 'inside the bridge code sample the page shows developers — text, not code this app runs',

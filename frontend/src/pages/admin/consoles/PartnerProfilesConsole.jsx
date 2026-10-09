@@ -472,7 +472,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 <span className="font-semibold text-gray-700 dark:text-gray-300">Send via DocuSign</span>
                 <span className="ml-auto text-gray-500">
                   {docusignReason === 'checking' ? 'Checking…'
-                    : docusignReason === 'not_connected' ? <>Not connected — <a href="/integrations" className="underline">connect DocuSign</a></>
+                    : docusignReason === 'not_connected' ? <>Not connected — <a href="/account/connectors" className="underline">connect DocuSign</a></>
                     : 'Unavailable'}
                 </span>
               </div>
