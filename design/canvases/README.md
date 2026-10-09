@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 83 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 85 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -105,6 +105,13 @@ Nothing left another folder. The board sits beside `Studio · Archetype
 preview` and does not replace it: its artboards are its own. The export left
 out the script the component loads its sample data from (D619 names it), so
 the component opens with its sections empty.
+
+**2026-10-09 (D660), two canvases graduated from `incoming/`.** The Recording
+View and its board (RV1–RV12) are built at `/validate/session/:id` (#1473), so
+`Recording View.dc.html`, `Recording View · Boards.dc.html` and the
+`ring-viz.js` drawing script they load moved to `integrated/`: `integrated/`
+went **83 → 85**. `Interview Session.dc.html` stays in `incoming/` until
+#1471 builds its structuring rail.
 
 **The `107` in the title is the first audit's corpus, not today's total.** It
 is `54 + 26 + 27` — the sum as it stood when `integrated/` read 54. The three

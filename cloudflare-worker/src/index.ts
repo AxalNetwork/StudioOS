@@ -250,6 +250,7 @@ import partnerOffers from './routes/partner_offers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
+import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
 // The operating cadence (#176 FB4) — rituals, the runs that archive them, and
 // the templates they are conducted from. Migration 250.
@@ -1258,6 +1259,8 @@ app.route('/api/founder/validate', founderValidate);
 // figures, six cards, a records table per module) and the manual writes for
 // migration 440's records. Same two predicates as the founder board.
 app.route('/api/cycles/validate', cycleValidate);
+// D658 (#1471) — a structured interview's placements, decided one at a time.
+app.route('/api/founder/validate', founderValidateStructure);
 // `/build/cadence`'s store. Read by whoever may read the interviews; written by
 // the venture's own and admins — the same two predicates Validate uses, imported
 // rather than re-derived.
