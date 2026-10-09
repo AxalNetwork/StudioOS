@@ -26,6 +26,7 @@ export type ManagedProviderKey =
   | 'calendly'
   | 'stripe'
   | 'carta'
+  | 'github'
   | 'crunchbase'
   | 'affinity'
   | 'telegram'
@@ -40,6 +41,7 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'calendly',
   'stripe',
   'carta',
+  'github',
   'crunchbase',
   'affinity',
   'telegram',
@@ -67,6 +69,8 @@ export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret:
   calendly:   { id: 'CALENDLY_CLIENT_ID',      secret: 'CALENDLY_CLIENT_SECRET' },
   stripe:     { id: 'STRIPE_CONNECT_CLIENT_ID', secret: 'STRIPE_SECRET_KEY' },
   carta:      { id: 'CARTA_CLIENT_ID',         secret: 'CARTA_CLIENT_SECRET' },
+  // D655 — the StudioOS GitHub App's user-authorization client (read-only permissions).
+  github:     { id: 'GITHUB_APP_CLIENT_ID',    secret: 'GITHUB_APP_CLIENT_SECRET' },
   // API-key providers (single secret + a non-secret account identifier).
   // The "id" slot stores the public account label (user key id, team
   // subdomain, bot username) so the UI can show "configured for

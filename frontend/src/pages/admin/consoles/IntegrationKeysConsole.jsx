@@ -34,6 +34,7 @@ const PROVIDER_LABELS = {
   calendly: 'Calendly',
   stripe: 'Stripe',
   carta: 'Carta',
+  github: 'GitHub',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',

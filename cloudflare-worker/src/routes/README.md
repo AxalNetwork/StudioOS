@@ -48,6 +48,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650)
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
+                                         (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/liquidity     → liquidity.ts
