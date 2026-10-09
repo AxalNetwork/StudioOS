@@ -22,9 +22,9 @@
  * `WHERE id = ? AND status = 'pending'`, then writes through the module's own
  * writer in `_founder_validate_writes.ts` — the function the manual route
  * calls — so an accepted placement and a hand-typed value are the same row.
- * A kind whose writer has not merged (#1472's segment, demand signal and
- * competitor; market facts) is refused with `writer_not_available` and stays
- * proposed.
+ * Segment, demand signal and competitor accept through #1472's (D659)
+ * writers in `services/validateWriters.ts`; a market fact has no store and
+ * is refused with `writer_not_available`, staying proposed.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -32,6 +32,14 @@ import { requireAuth } from '../auth';
 import { canWrite } from './_founder_validate_helpers';
 import { insertHypothesisLink, setInterviewIcpFit, upsertPainSeverity } from './_founder_validate_writes';
 import { normPhrase } from '../services/painGroups';
+import {
+  WriterError,
+  assignInterviewSegment,
+  setEvidenceStrength,
+  writeCompetitorMention,
+  writeDemandSignal,
+  writeSegment,
+} from '../services/validateWriters';
 import { budgetRefusalMessage } from '../services/aiRouter';
 import { loadSession, type SessionRow } from '../services/interviewSessions';
 import {
@@ -39,7 +47,6 @@ import {
   alignRuns,
   askTranscript,
   isPlacementKind,
-  storedSeverity,
   structureTranscript,
   toSegments,
   type Placement,
@@ -63,6 +70,7 @@ interface PlacementRow {
   status: string;
   run_id: string | null;
   target_ref: string | null;
+  session_id: number | null;
 }
 
 /** The interview a placement is about, from its `target_ref` ("interview:<id>"). */
@@ -117,7 +125,7 @@ export async function storePlacements(
 async function loadPlacement(env: Env, id: number): Promise<PlacementRow | null> {
   if (!Number.isInteger(id) || id <= 0) return null;
   return (await env.DB.prepare(
-    `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref
+    `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id
        FROM validate_proposals WHERE id = ? AND run_id IS NOT NULL`,
   ).bind(id).first<PlacementRow>()) || null;
 }
@@ -136,29 +144,67 @@ async function authorise(c: any, row: PlacementRow): Promise<User | Response> {
  * `not_this_project` when the row it names is not the placement's project's,
  * which puts the placement back to pending.
  */
-async function applyPlacement(env: Env, row: PlacementRow, kind: PlacementKind, payload: Record<string, unknown>): Promise<void> {
-  if (kind === 'pain_severity' || kind === 'icp_fit') {
-    const interviewId = interviewOf(row.target_ref);
+async function applyPlacement(
+  env: Env, user: User, row: PlacementRow, kind: PlacementKind, payload: Record<string, unknown>,
+): Promise<void> {
+  const interviewId = interviewOf(row.target_ref);
+  // Every kind below but evidence is about the placement's own interview, so
+  // the interview must be this project's: a placement cannot write into
+  // another venture's rows.
+  const ownInterview = async () => {
     const owner = interviewId
       ? await env.DB.prepare('SELECT project_id FROM discovery_interviews WHERE id = ?').bind(interviewId).first<{ project_id: number }>()
       : null;
     if (!owner || Number(owner.project_id) !== Number(row.project_id)) throw new Error('not_this_project');
-    if (kind === 'pain_severity') {
-      await upsertPainSeverity(env, interviewId!, normPhrase(String(payload.phrase)), storedSeverity(payload.severity as 'severe' | 'real' | 'mild'));
-    } else {
-      await setInterviewIcpFit(env, interviewId!, String(payload.fit));
+    return interviewId!;
+  };
+  const sessionId = row.session_id ?? null;
+  switch (kind) {
+    case 'pain_severity':
+      // The three-level word itself (D659 widened the column's values).
+      await upsertPainSeverity(env, await ownInterview(), normPhrase(String(payload.phrase)), String(payload.severity));
+      return;
+    case 'icp_fit':
+      await setInterviewIcpFit(env, await ownInterview(), String(payload.fit));
+      return;
+    case 'evidence': {
+      const direction = payload.direction === 'refutes' ? 'contradicts' : 'supports';
+      const ok = await insertHypothesisLink(
+        env, row.project_id, Number(payload.hypothesis_id), Number(payload.pain_group_id), direction,
+      );
+      if (!ok) throw new Error('not_this_project');
+      const link = await env.DB.prepare(
+        'SELECT id FROM hypothesis_pain_links WHERE hypothesis_id = ? AND pain_group_id = ? AND direction = ?',
+      ).bind(Number(payload.hypothesis_id), Number(payload.pain_group_id), direction).first<{ id: number }>();
+      if (link) await setEvidenceStrength(env, { projectId: row.project_id, userId: user.id, linkId: Number(link.id), strength: payload.strength });
+      return;
     }
-    return;
+    case 'segment': {
+      const iv = await ownInterview();
+      const seg = await writeSegment(env, {
+        projectId: row.project_id, userId: user.id, name: payload.name, source: 'interview',
+        sourceRef: sessionId ? `session:${sessionId}` : `interview:${iv}`,
+      });
+      await assignInterviewSegment(env, { projectId: row.project_id, userId: user.id, interviewId: iv, segmentId: seg.id });
+      return;
+    }
+    case 'demand_signal':
+      // Arrives `to_confirm`, as D659's writer sets it for a non-manual
+      // source: a proposal is not counted until the founder confirms it.
+      await writeDemandSignal(env, {
+        projectId: row.project_id, userId: user.id, kind: payload.signal, note: payload.detail ?? null,
+        source_kind: sessionId ? 'session' : 'interview', interview_id: await ownInterview(), session_id: sessionId,
+      });
+      return;
+    case 'competitor_mention':
+      await writeCompetitorMention(env, {
+        projectId: row.project_id, userId: user.id, name: payload.name, detail: payload.context ?? null,
+        signal_type: 'mention', source_kind: sessionId ? 'session' : 'interview',
+      });
+      return;
+    default:
+      throw new Error('writer_not_available');
   }
-  if (kind === 'evidence') {
-    const ok = await insertHypothesisLink(
-      env, row.project_id, Number(payload.hypothesis_id), Number(payload.pain_group_id),
-      payload.direction === 'refutes' ? 'contradicts' : 'supports',
-    );
-    if (!ok) throw new Error('not_this_project');
-    return;
-  }
-  throw new Error('writer_not_available');
 }
 
 structure.post('/placements/:id/accept', async (c) => {
@@ -197,11 +243,14 @@ structure.post('/placements/:id/accept', async (c) => {
   if (!claim.meta?.changes) return json({ error: 'not_pending', detail: 'This placement was already decided.' }, 409);
 
   try {
-    await applyPlacement(c.env, row, kind, payload);
+    await applyPlacement(c.env, user, row, kind, payload);
   } catch (e) {
     await c.env.DB.prepare(
       `UPDATE validate_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL, edited_payload_json = NULL WHERE id = ?`,
     ).bind(row.id).run();
+    // A module writer's own refusal (D659), e.g. no competitor list yet,
+    // travels with its status and sentence; the placement stays proposed.
+    if (e instanceof WriterError) return json({ error: 'writer_refused', detail: e.sentence }, e.status);
     const msg = (e as Error).message;
     if (msg === 'not_this_project') return json({ error: 'not_this_project', detail: 'The row this names is no longer on this project.' }, 409);
     console.error('[validate/placements] accept failed', msg);

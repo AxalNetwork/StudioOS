@@ -7,8 +7,9 @@
  *   · a discarded placement writes nothing;
  *   · the receipt names the fallback model when the first choice fails;
  *   · an answer with no citation is refused.
- * Plus: a long transcript is split and merged, never cut; a kind whose writer
- * has not merged stays proposed; an edit is validated as strictly as the
+ * Plus: a long transcript is split and merged, never cut; segment, demand
+ * signal and competitor accept through #1472's writers; a market fact stays
+ * proposed; an edit is validated as strictly as the
  * model's own payload; a Lab venture's member accepts into the same rows the
  * Lab reads.
  *
@@ -27,12 +28,15 @@ import {
   structureTranscript,
   checkAnswer,
   alignRuns,
-  storedSeverity,
   segmentsInSpan,
   toSegments,
   type Segment,
 } from '../src/services/interviewStructuring.ts';
 import sessionsApp from '../src/routes/founder_validate_sessions.ts';
+import { tableFromBaseline } from './_baseline.mjs';
+import { STRUCTURE_RECEIPTS_SQL } from './_structure_receipts_schema.mjs';
+
+const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 import structure, { storePlacements, loadStructureContext } from '../src/routes/founder_validate_structure.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
 
@@ -70,10 +74,16 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
       (101, ${PROJECT}, 'A'), (102, ${PROJECT}, 'B'), (201, ${LAB_PROJECT}, 'Lab interviewee');
     ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
   `);
+  // The tables #1472's writers reach that this fixture does not hand-build,
+  // from the baseline as D659's own test takes them, then 440 over them.
+  for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
+    'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
-    '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql']) {
+    '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
+    '440_validate_cycle_stores.sql']) {
     db.exec(mig(m));
   }
+  db.exec(STRUCTURE_RECEIPTS_SQL);
   db.exec(`
     INSERT INTO hypotheses (id, project_id, code, claim) VALUES (31, ${PROJECT}, 'H1', 'Finance leads reconcile by hand');
     INSERT INTO pain_groups (id, project_id, title) VALUES (41, ${PROJECT}, 'Manual reconciliation'), (42, ${PROJECT}, 'Cost');
@@ -225,7 +235,7 @@ test('accepted pain severity, ICP fit and evidence write the same rows the manua
   }
 
   // The same three facts typed by hand, on interview 102 and a second link.
-  assert.equal((await call(env, founderValidate, 'PUT', '/interviews/102/pain-severity', { phrase: 'Reconcile by hand', severity: storedSeverity('real') })).status, 200);
+  assert.equal((await call(env, founderValidate, 'PUT', '/interviews/102/pain-severity', { phrase: 'Reconcile by hand', severity: 'real' })).status, 200);
   assert.equal((await call(env, founderValidate, 'PATCH', '/interviews/102/evidence', { icp_fit: 'partial' })).status, 200);
   db.prepare('DELETE FROM hypothesis_pain_links').run();
   assert.equal((await call(env, founderValidate, 'POST', '/hypotheses/31/links', { direction: 'supports', pain_group_id: 41 })).status, 201);
@@ -313,20 +323,52 @@ test('a discarded placement writes nothing to any module', async () => {
 
 // ── proposed-only kinds, ownership, the Lab ─────────────────────────────────
 
-test('a kind whose writer has not merged stays proposed and says so', async () => {
-  const { env, db } = world();
-  await seed(env, [
+test('a market fact has no store: it stays proposed, and the review read says so', async () => {
+  const w = withSession(world());
+  await seed(w.env, [{ kind: 'market_fact', payload: { fact: 'Ledgerly costs too much', source: 'the interviewee' }, cite: { from: 12000, to: 20000 } }]);
+  const id = rowsOf(w.db, 'validate_proposals', 'id')[0].id;
+  const r = await call(w.env, structure, 'POST', `/placements/${id}/accept`);
+  assert.equal(r.status, 409);
+  assert.equal(r.json.error, 'writer_not_available');
+  assert.equal(w.db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(id).status, 'pending');
+  const read = await call(w.env, structure, 'GET', '/sessions/5/placements');
+  assert.equal(read.json.runs[0].placements[0].can_accept, false, 'a proposed-only kind is not marked as such for the page');
+});
+
+test('segment, demand signal and competitor accept through #1472\'s writers', async () => {
+  const w = withSession(world());
+  await seed(w.env, [
     { kind: 'segment', payload: { name: 'Finance leads' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'demand_signal', payload: { signal: 'would_pay' }, cite: { from: 20000, to: 26000 } },
-    { kind: 'competitor_mention', payload: { name: 'Ledgerly' }, cite: { from: 12000, to: 20000 } },
-    { kind: 'market_fact', payload: { fact: 'Ledgerly costs too much', source: 'the interviewee' }, cite: { from: 12000, to: 20000 } },
+    { kind: 'demand_signal', payload: { signal: 'would_pay', detail: 'Would pay tomorrow' }, cite: { from: 20000, to: 26000 } },
+    { kind: 'competitor_mention', payload: { name: 'Ledgerly', context: 'Too expensive' }, cite: { from: 12000, to: 20000 } },
   ]);
-  for (const { id } of rowsOf(db, 'validate_proposals', 'id')) {
-    const r = await call(env, structure, 'POST', `/placements/${id}/accept`);
-    assert.equal(r.status, 409);
-    assert.equal(r.json.error, 'writer_not_available');
-  }
-  assert.deepEqual(rowsOf(db, 'validate_proposals', 'status').map((r: any) => r.status), ['pending', 'pending', 'pending', 'pending']);
+  const [seg, demand, comp] = rowsOf(w.db, 'validate_proposals', 'id').map((x: any) => x.id);
+
+  assert.equal((await call(w.env, structure, 'POST', `/placements/${seg}/accept`)).status, 200);
+  const segRow = w.db.prepare('SELECT id, name, source, source_ref FROM customer_segments').get();
+  assert.deepEqual([segRow.name, segRow.source, segRow.source_ref], ['Finance leads', 'interview', 'session:5']);
+  assert.equal(w.db.prepare('SELECT segment_id FROM discovery_interviews WHERE id = 101').get().segment_id, segRow.id,
+    'the interview was not placed in the segment it named');
+
+  assert.equal((await call(w.env, structure, 'POST', `/placements/${demand}/accept`)).status, 200);
+  const sig = w.db.prepare('SELECT kind, status, source_kind, interview_id, session_id, note FROM demand_signals').get();
+  assert.deepEqual({ ...sig }, { kind: 'would_pay', status: 'to_confirm', source_kind: 'session', interview_id: 101, session_id: 5, note: 'Would pay tomorrow' },
+    'a proposed demand signal was counted before the founder confirmed it');
+
+  // No competitor list on the project: D659's writer refuses, and the
+  // placement stays proposed rather than being marked accepted.
+  const refused = await call(w.env, structure, 'POST', `/placements/${comp}/accept`);
+  assert.equal(refused.status, 409);
+  assert.equal(refused.json.error, 'writer_refused');
+  assert.equal(w.db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(comp).status, 'pending');
+
+  w.db.prepare(`INSERT INTO competitor_analyses (id, project_id, user_id, inputs_json, status, created_at, updated_at)
+                VALUES ('an-1', ${PROJECT}, ${ME}, '{}', 'ready', datetime('now'), datetime('now'))`).run();
+  const ok = await call(w.env, structure, 'POST', `/placements/${comp}/accept`);
+  assert.equal(ok.status, 200, JSON.stringify(ok.json));
+  assert.equal(w.db.prepare("SELECT COUNT(*) n FROM competitor_candidates WHERE name = 'Ledgerly'").get().n, 1);
+  const cs = w.db.prepare('SELECT project_id, source_kind, signal_type FROM competitor_signals').get();
+  assert.deepEqual({ ...cs }, { project_id: PROJECT, source_kind: 'session', signal_type: 'mention' });
 });
 
 test('another member cannot accept or discard; a Lab venture\'s member accepts into the rows the Lab reads', async () => {
@@ -374,10 +416,15 @@ test('two runs are aligned by module, each side keeping its own lines', () => {
   ]);
 });
 
-test('severity keeps the canvas\'s three words and stores on today\'s two-level scale', () => {
-  assert.equal(storedSeverity('severe'), 'need');
-  assert.equal(storedSeverity('real'), 'need');
-  assert.equal(storedSeverity('mild'), 'nice');
+test('an accepted severity is stored as the canvas\'s own word, and an evidence link keeps its strength', async () => {
+  const { env, db } = world();
+  await seed(env, [
+    { kind: 'pain_severity', payload: { phrase: 'Friday close', severity: 'mild' }, cite: { from: 4000, to: 12000 } },
+    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'measured' }, cite: { from: 4000, to: 12000 } },
+  ]);
+  for (const { id } of rowsOf(db, 'validate_proposals', 'id')) assert.equal((await call(env, structure, 'POST', `/placements/${id}/accept`)).status, 200);
+  assert.equal(db.prepare("SELECT severity FROM interview_pain_severities WHERE phrase_norm = 'friday close'").get().severity, 'mild');
+  assert.equal(db.prepare('SELECT strength FROM hypothesis_pain_links').get().strength, 'measured');
 });
 
 test('the project context lists live hypotheses and pain groups only', async () => {
@@ -449,7 +496,7 @@ test('compare: a second run is a re-structure with its own run_id, and the read 
   const pain = read.json.compare.modules.find((m: any) => m.module === 'problem_discovery');
   assert.deepEqual([pain.first.length, pain.second.length], [1, 1]);
   const comp = read.json.runs[0].placements.find((p: any) => p.kind === 'competitor_mention');
-  assert.equal(comp.can_accept, false, 'a proposed-only kind is not marked as such for the page');
+  assert.equal(comp.can_accept, true, 'a kind with a writer is marked proposed-only');
   assert.equal(comp.cite.quote, SEGMENTS[2].text);
   const steps = rowsOf(w.db, 'interview_structure_receipts', 'step').map((x: any) => x.step);
   assert.deepEqual(steps, ['structured', 're_structured']);

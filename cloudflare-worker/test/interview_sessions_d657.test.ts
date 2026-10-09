@@ -22,6 +22,7 @@ import { parseAudioOutput, parseLiveEvent, speakerLabel } from '../src/services/
 import { blocksFor, billedMinutes, splitCost } from '../src/services/liveTranscription.ts';
 
 const JWT_SECRET = 'd657-fixture-only-signing-secret-0123456789';
+import { STRUCTURE_RECEIPTS_SQL } from './_structure_receipts_schema.mjs';
 const MIGRATION = readFileSync(new URL('../sql/migrations/438_interview_sessions.sql', import.meta.url), 'utf8');
 const FOUNDER = 2;      // owns project 10
 const OTHER = 3;        // owns nothing here
@@ -44,11 +45,12 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   `);
   db.exec(MIGRATION);
   // D658 (#1471): the receipt read also lists the structuring lines, which
-  // live in 439's `interview_structure_receipts`; 439 extends 214/246's
-  // `validate_proposals`, so those come first, as they do in production.
+  // live in `interview_structure_receipts`, beside 439's columns on 214/246's
+  // `validate_proposals`, as they will in production.
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '439_validate_proposals_structuring.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${m}`, import.meta.url), 'utf8'));
   }
+  db.exec(STRUCTURE_RECEIPTS_SQL);
   db.prepare("UPDATE users SET founder_id = 100 WHERE id = 2").run();
   db.prepare("UPDATE users SET founder_id = 300 WHERE id = 3").run();
   db.prepare("UPDATE users SET founder_id = 400, role = 'exploring', spinout_lab_active = 1 WHERE id = 4").run();

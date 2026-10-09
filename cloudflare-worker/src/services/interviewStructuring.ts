@@ -6,9 +6,9 @@
  * What this file decides, as pure functions the routes call:
  *
  *   · THE KINDS. Seven placements, each with a payload schema, a key for
- *     merging duplicates, and whether a module writer exists yet. A kind
- *     whose writer has not merged stays proposed-only (`writer: false`) and
- *     the review read says so.
+ *     merging duplicates, and whether a module writer exists. A kind with
+ *     no store stays proposed-only (`writer: false`: market facts) and the
+ *     review read says so.
  *   · THE CITATION RULE. A placement must name the span it came from, as
  *     `cite: { from, to }` in milliseconds, inside the transcript it was
  *     given and overlapping at least one segment. One that does not is
@@ -19,11 +19,9 @@
  *   · ASK. An answer must cite at least one span of the transcript; one that
  *     cites nothing is refused rather than shown.
  *
- * Severity is three-level here (Severe, Real, Mild), as the canvas draws it.
- * Until #1472 (D659) gives `interview_pain_severities` a third level, accept
- * stores it on the two-level scale the Lab and founder Validate already share
- * (`painGroups.ts`): Severe and Real are a `need`, Mild a `nice`. The proposal
- * keeps the three-level word.
+ * Severity is three-level (Severe, Real, Mild), as the canvas draws it and as
+ * `interview_pain_severities` stores it since #1472 (D659): accept writes the
+ * level itself.
  */
 import type { Env } from '../types';
 import { run as aiRun } from './aiRouter';
@@ -78,11 +76,6 @@ export const EVIDENCE_DIRECTIONS = ['supports', 'refutes'] as const;
 /** The Lab has no Anecdote / Pattern / Measured scale; this is the canvas's. */
 export const EVIDENCE_STRENGTHS = ['anecdote', 'pattern', 'measured'] as const;
 
-/** Severe and Real are a need, Mild is nice-to-have, on today's two-level store. */
-export function storedSeverity(level: (typeof PAIN_SEVERITY_LEVELS)[number]): 'need' | 'nice' {
-  return level === 'mild' ? 'nice' : 'need';
-}
-
 interface KindSpec {
   /** Normalise the payload, or null to drop the placement. */
   parse(p: Record<string, unknown>, ctx: StructureContext): Record<string, unknown> | null;
@@ -117,7 +110,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   },
   segment: {
     module: 'ideal_customer_profile',
-    writer: false, // #1472 (D659): customer_segments and its writer
+    writer: true, // writeSegment + assignInterviewSegment (D659)
     parse: (p) => {
       const name = str(p.name, 80);
       return name ? { name } : null;
@@ -126,7 +119,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   },
   demand_signal: {
     module: 'demand_signals',
-    writer: false, // #1472 (D659): demand_signals and its writer
+    writer: true, // writeDemandSignal, arriving to_confirm (D659)
     parse: (p) => {
       const signal = oneOf(p.signal, DEMAND_SIGNALS);
       const detail = p.detail == null ? null : str(p.detail, 200);
@@ -153,7 +146,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   },
   competitor_mention: {
     module: 'market_intelligence',
-    writer: false, // #1472 (D659): tracked competitors with a project and a source
+    writer: true, // writeCompetitorMention, on the project's competitor list (D659)
     parse: (p) => {
       const name = str(p.name, 120);
       return name ? { name, context: str(p.context, 200) } : null;
