@@ -6,7 +6,9 @@ import { loadAiBudget, reserveAiBudget, settleAiReservation } from '../src/servi
 import { run, __resetForTest } from '../src/services/aiRouter.ts';
 import budgetRoute from '../src/routes/ai_budget.ts';
 
-const now=new Date('2026-10-08T12:00:00Z');
+// Midday today: the /me read below uses the real clock, so a fixed date stops
+// matching its day window the day after it was written.
+const now=new Date();now.setUTCHours(12,0,0,0);
 const fixture=()=>{const f=aiBudgetFixture();return {...f,env:{DB:f.DB,JWT_SECRET:'budget-fixture-only-key',ENVIRONMENT:'development'} as any};};
 const count=(db:any,table:string)=>db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
 async function request(f:any,path:string,userId:number,method='GET',body?:unknown) {
