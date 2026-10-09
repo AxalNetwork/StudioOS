@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, LogIn, KeyRound, Mail, ChevronDown, ChevronUp } from 'lucide-react';
-import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api } from '../lib/api';
 import { track } from '../lib/funnel';
 import { storePendingNext } from '../lib/pendingNext';
@@ -71,7 +70,9 @@ export default function LoginPage() {
   const [googleBusy, setGoogleBusy] = useState(false);
   // BLOCK-AUTH-02 — passkey state.
   const [passkeyBusy, setPasskeyBusy] = useState(false);
-  const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
+  // The full WebAuthn probe runs only after a passkey click. Checking property
+  // presence here keeps the native API and browser library off initial render.
+  const passkeySupported = typeof window !== 'undefined' && 'PublicKeyCredential' in window;
   // Task #10 — passwordless magic-link sign-in (BLOCK-AUTH-01 finally gets UI).
   const [magicBusy, setMagicBusy] = useState(false);
   const [magicSentTo, setMagicSentTo] = useState('');
@@ -158,6 +159,10 @@ export default function LoginPage() {
     setPasskeyBusy(true); setError('');
     track('login_submit', { method: 'passkey' });
     try {
+      const { startAuthentication, browserSupportsWebAuthn } = await import('@simplewebauthn/browser');
+      if (!browserSupportsWebAuthn()) {
+        throw new Error('Passkeys are not supported in this browser. Use an authenticator code or sign-in link.');
+      }
       const wanted = email.trim() || undefined;
       const options = await api.passkey.authOptions(wanted);
       const assertion = await startAuthentication({ optionsJSON: options });
