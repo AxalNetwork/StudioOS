@@ -5,10 +5,10 @@ import { requireAuth, requireHqAuthoring, requireStepUp } from '../auth';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { mapError } from './_t13t14t15_helpers';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { roundCallsEnabled, verifiedInvestor } from '../services/roundCallPolicy';
 import { RoundCallError, loadCall, projectFacts, roundContext, saveDraft, audience, saveAudience,
   founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion } from '../services/roundCalls';
-import type { CallRow } from '../services/roundCalls';
 
 type Ctx = Context<{ Bindings: Env }>;
 const routes = new Hono<{ Bindings: Env }>();
@@ -44,7 +44,7 @@ function id(value: unknown): number {
 function failure(c:Ctx,error:unknown) {
   if(error instanceof RoundCallError) return c.json({error:error.code,code:error.code},error.status);
   const message=error instanceof Error?error.message:'';
-  if(['Unauthorized','Forbidden','step_up_required','TOTP required','Super admin required','admin_frozen','branch_suspended'].includes(message)) return mapError(c,error);
+  if(AUTH_ERROR_STATUSES[message] || message==='step_up_required' || message==='admin_frozen' || message==='branch_suspended') return mapError(c,error);
   return c.json({error:'Round calls are unreadable. Try again.',code:'round_calls_unreadable'},503);
 }
 // Availability reveals no venture/investor data and lets the disabled button
