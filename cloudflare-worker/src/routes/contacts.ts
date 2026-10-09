@@ -247,7 +247,8 @@ async function ensureSchema(env: Env): Promise<void> {
   try {
     const info = await env.DB.prepare(`PRAGMA table_info(raise_prospects)`).all<{ name: string }>();
     const have = new Set((info.results || []).map((x) => x.name));
-    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT']] as const) {
+    // D663 (migration 442): the next step, when it is due, and the warm path.
+    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT'], ['next_step', 'TEXT'], ['next_step_due', 'TEXT'], ['warm_path', 'TEXT']] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_prospects ADD COLUMN ${col} ${decl}`).run(); }
         catch (e) { console.warn('[contacts] ALTER raise_prospects column failed (likely already applied)', col, e); }
