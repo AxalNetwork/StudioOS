@@ -249,6 +249,9 @@ const PATH_TO_SECTION = {
   privacy: 'security-privacy',
   'security-privacy': 'security-privacy',
   integrations: 'integrations',
+  // D652 — the rail's "Browse" and "Manage connectors" open /account/connectors
+  // (D649). Until #1463 builds that page, it is the Integrations tab.
+  connectors: 'integrations',
   billing: 'billing',
   appearance: 'appearance',
   // D568 — the two new sections, the canvas's own anchors for the renamed

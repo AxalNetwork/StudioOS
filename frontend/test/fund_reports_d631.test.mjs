@@ -55,7 +55,12 @@ test('real F2 issued report is read-only, identifies issue and links its separat
   const html = render(FundReportPeriodPage, ready({ ...page, period: issued }));
   for (const text of ['Issued · read-only', '2026-07-15T10:00:00Z', 'Issued by', 'Issuing cannot be undone.', 'Issue a correcting period']) assert.ok(html.includes(text), text);
   assert.match(html, /href="\/funds\/10\/reporting\/new\?corrects=1"/);
-  for (const field of html.matchAll(/<(?:input|textarea)\b[^>]*>/g)) assert.match(field[0], /readOnly/, field[0]);
+  // The report's own fields. The Worker AI rail beside it has a question box
+  // (D652) that is not part of the report and stays writable.
+  for (const field of html.matchAll(/<(?:input|textarea)\b[^>]*>/g)) {
+    if (/data-testid="input-eadwyn-/.test(field[0])) continue;
+    assert.match(field[0], /readOnly/, field[0]);
+  }
   assert.doesNotMatch(html, /Save draft|Add letter|Remove letter|>Issue<|>Confirm issue</);
   const lp = render(FundReportPeriodPage, ready({ ...page, can_manage: false, period: issued }));
   assert.doesNotMatch(lp, /Issue a correcting period|Save draft|Add development/);
