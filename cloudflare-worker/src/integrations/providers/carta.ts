@@ -18,6 +18,7 @@
 import type { Context } from 'hono';
 import { callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
+import { scheduledConnectorEnabled } from '../companyScope';
 import {
   registerProvider,
   REGISTRY,
@@ -227,7 +228,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 
   return {
     credentials,
-    scopes: SCOPES,
+    scopes: tokens.scope ? tokens.scope.split(/\s+/).filter(Boolean) : [],
     external_account_id: issuerId,
     external_account_name: issuerName,
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
@@ -604,6 +605,17 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
   }
 }
 
+async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
+  const refresh = typeof result.credentials.refresh_token === 'string' ? result.credentials.refresh_token : '';
+  if (!refresh) return;
+  const { id, secret } = await ensureCreds(env);
+  await fetch(`${AUTH_HOST}/o/revoke_token/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token: refresh, client_id: id, client_secret: secret }),
+  });
+}
+
 // ───────────────────────────────────────────────────────────── validateConfig
 
 function validateConfig(
@@ -660,6 +672,7 @@ async function postConnect(c: Context<{ Bindings: Env }>, user: User, row: Integ
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
   connect,
+  revokeGranted,
   buildAuthorizeUrl,
   sync,
   disconnect,
@@ -708,6 +721,7 @@ export async function syncAllCartaIntegrations(env: Env): Promise<{ scanned: num
     return { scanned: 0, ok: 0, failed: 0 };
   }
   for (const row of (rows.results || [])) {
+    if (!(await scheduledConnectorEnabled(env, row))) continue;
     scanned++;
     try {
       const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;
