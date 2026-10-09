@@ -89,6 +89,7 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null }) {
           return (
             <li key={a.uid} className="border-b border-axal-hairline py-2.5 text-[12.5px] dark:border-gray-800" data-testid="sent-ask">
               <div className="font-semibold">{ASK_LABELS[a.kind]} · {a.text}</div>
+              {a.kind==='capital'&&(a.link_ref?<Link className={LINK} to={'/round-calls/'+encodeURIComponent(a.link_ref)}>Open the private round call</Link>:a.link_reason&&<p className="text-axal-muted">{a.link_reason}</p>)}
               {author && replies.map((r) => {
                 const link = MODULE_LINKS[r.landed_module];
                 return (

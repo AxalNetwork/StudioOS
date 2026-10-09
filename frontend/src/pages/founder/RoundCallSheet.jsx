@@ -8,12 +8,26 @@ export const ROUND_CALL_STEPS=['Round','Materials','Audience','Preview','Send'];
 export function CallForCapitalButton({projectId}) {
   const availability=useCallRead(()=>roundCallsApi.availability());
   const [open,setOpen]=useState(false);
+  return <div><RoundCallAvailability read={availability} projectId={projectId} onOpen={()=>setOpen(true)}/>{open&&<RoundCallSheet projectId={projectId} onClose={()=>setOpen(false)}/>}</div>;
+}
+export function RoundCallAvailability({read,projectId,onOpen}) {
   return <div>
-    {availability.error?<p role="alert">Call for Capital is unreadable. <button type="button" className={callButton} onClick={availability.retry}>Try again</button></p>:
-      <button type="button" className={callButton} disabled={availability.loading||!availability.data?.enabled||!projectId} onClick={()=>setOpen(true)}>{availability.loading?'Checking availability…':availability.data?.enabled?'Call for Capital':'Call for Capital · Coming soon'}</button>}
-    {availability.data?.enabled&&projectId&&<Link className="ml-3 text-xs underline" to={'/round-calls?project_id='+projectId}>View calls</Link>}
-    {open&&<RoundCallSheet projectId={projectId} onClose={()=>setOpen(false)}/>}
+    {read.error?<p role="alert">Call for Capital is unreadable. <button type="button" className={callButton} onClick={read.retry}>Try again</button></p>:
+      <button type="button" className={callButton} disabled={read.loading||!read.data?.enabled||!projectId} onClick={onOpen}>{read.loading?'Checking availability…':read.data?.enabled?'Call for Capital':'Call for Capital · Coming soon'}</button>}
+    {read.data?.enabled&&projectId&&<Link className="ml-3 text-xs underline" to={'/round-calls?project_id='+projectId}>View calls</Link>}
   </div>;
+}
+export function recordedRoundFields(context,call=null) {
+  let inputs={};try{inputs=JSON.parse(context.scenario?.inputs_json||'{}');}catch{/* Stored planner fields still seed independently. */}
+  const priced=Array.isArray(inputs.rounds)?inputs.rounds.at(-1):null;
+  const safe=Array.isArray(inputs.safes)?inputs.safes.at(-1):null;
+  const round=context.round;
+  const inferred=priced?'equity':safe?.instrument==='note'?'convertible_note':safe?'safe':'';
+  const recordedTerms=priced?`Pre-money USD ${priced.pre_money}`:safe?`Valuation cap USD ${safe.cap??'Not recorded'}; discount ${safe.discount??'Not recorded'}`:'';
+  return {name:call?.name||round?.name||priced?.name||safe?.name||context.project.name+' round',
+    amount:call?String(call.amount_cents/100):round?.target_amount!=null?String(round.target_amount):priced?.investment!=null?String(priced.investment):safe?.amount!=null?String(safe.amount):'',
+    instrument:call?.instrument||inferred,terms:call?.terms||round?.notes||recordedTerms,minimum:call?String(call.minimum_cheque_cents/100):'',target:call?.target_close||round?.close_date||'',
+    deck_id:call?.deck_id!=null?String(call.deck_id):'',room:!!call?.data_room_project_uid};
 }
 const initial={name:'',amount:'',instrument:'',terms:'',minimum:'',target:'',deck_id:'',room:false};
 export default function RoundCallSheet({projectId,onClose,initialCall=null}) {
@@ -24,10 +38,8 @@ export default function RoundCallSheet({projectId,onClose,initialCall=null}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[outcome,setOutcome]=useState(null);
   useEffect(()=>{
     if(!context.data)return;
-    const c=initialCall,r=context.data.round;
-    setFields({name:c?.name||r?.name||context.data.project.name+' round',amount:c?String(c.amount_cents/100):r?.target_amount!=null?String(r.target_amount):'',
-      instrument:c?.instrument||'',terms:c?.terms||r?.notes||'',minimum:c?String(c.minimum_cheque_cents/100):'',target:c?.target_close||r?.close_date||'',
-      deck_id:c?.deck_id!=null?String(c.deck_id):'',room:!!c?.data_room_project_uid});
+    const seeded=recordedRoundFields(context.data,initialCall);
+    setFields(seeded);
   },[context.data,initialCall]);
   useEffect(()=>{setMatches(null);},[chosen,includeMatches]);
   function change(key,value){setFields(current=>({...current,[key]:value}));}

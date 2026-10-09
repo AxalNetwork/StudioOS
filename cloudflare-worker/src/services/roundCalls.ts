@@ -1,5 +1,5 @@
 import type { Env, User } from '../types';
-import { positiveCents, validClose, counselApproved, termsHash, readiness, matchReasons, founderRecipient, writableCall } from './roundCallPolicy';
+import { positiveCents, validClose, counselApproved, termsHash, readiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor } from './roundCallPolicy';
 import type { RoundCallTerms, InvestorThesis } from './roundCallPolicy';
 import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
@@ -136,9 +136,10 @@ export async function saveAudience(env: Env, call: CallRow, actor: User, input: 
 export async function founderPage(env: Env, call: CallRow) {
   const rows = await env.DB.prepare('SELECT r.investor_user_id,r.origin,r.match_reasons_json,r.opened_at,r.data_room_requested_at,r.commitment_cents,r.responded_at,r.delivery_state,u.name,u.email FROM round_call_recipients r JOIN users u ON u.id=r.investor_user_id WHERE r.call_id=? ORDER BY r.id').bind(call.id).all<Recipient>();
   const questions = await env.DB.prepare('SELECT q.uid,q.question,q.answer,q.asked_at,q.answered_at,u.name,u.email FROM round_call_questions q JOIN users u ON u.id=q.investor_user_id WHERE q.call_id=? ORDER BY q.asked_at,q.id').bind(call.id).all();
+  const external = await env.DB.prepare("SELECT 'update-'||r.uid AS uid,r.message AS question,r.name,r.created_at AS asked_at,u.uid AS update_uid FROM update_ask_replies r JOIN update_asks a ON a.id=r.ask_id JOIN portfolio_updates u ON u.id=a.update_id WHERE a.kind='capital' AND a.link_ref=? AND u.project_id=? AND COALESCE(r.landed_module,'')<>'round_call' ORDER BY r.id").bind(call.uid,call.project_id).all();
   const recipients = (rows.results || []).map(founderRecipient);
   return { call, viewer: 'founder', read_only: call.state==='closed' || (call.state==='sent' && call.target_close<today()),
-    recipients, questions:questions.results || [], counsel_approved:counselApproved(call),
+    recipients, questions:[...(questions.results || []),...(external.results || [])], counsel_approved:counselApproved(call),
     readiness:readiness(call,await projectFacts(env,call.project_id)),
     progress:{ received:recipients.length,opened:recipients.filter(r=>r.opened_at).length,
       data_room_requests:recipients.filter(r=>r.data_room_requested_at).length,
@@ -189,7 +190,7 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
     data_room:{recorded:call.data_room_project_uid!=null,nda_signed:!!nda,has_grant:!!grant,
       path:grant?'/research/diligence/'+encodeURIComponent(grant.uid):null} };
 }
-export async function respond(env: Env, call: CallRow, investor: User, input: Record<string, unknown>) {
+export async function respond(env: Env, call: CallRow, investor: User, input: Record<string, unknown>, extraStatements: D1PreparedStatement[] = []) {
   if(!writableCall(call,today())) throw new RoundCallError('call_read_only',409);
   const recipient=await env.DB.prepare('SELECT id FROM round_call_recipients WHERE call_id=? AND investor_user_id=?').bind(call.id,investor.id).first<{id:number}>();
   if(!recipient) throw new RoundCallError('call_not_found',404);
@@ -212,6 +213,7 @@ export async function respond(env: Env, call: CallRow, investor: User, input: Re
     ...roundCallPipelineStatements(env,{callId:call.id,projectId:call.project_id,investorId:investor.id,name:investor.name,email:investor.email,at,commitmentCents:cents}),
   ];
   if(question) statements.push(env.DB.prepare("INSERT INTO round_call_questions(uid,call_id,investor_user_id,question,asked_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM round_call_recipients r JOIN round_calls c ON c.id=r.call_id WHERE r.id=? AND r.last_response_at=? AND c.state='sent' AND c.target_close>=?)").bind(crypto.randomUUID(),call.id,investor.id,question,at,recipient.id,at,today()));
+  statements.push(...extraStatements);
   statements.push(await audit(env,investor,call.project_id,'round_call_response_requested',{uid:call.uid,action}));
   const result=await env.DB.batch(statements);
   if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('call_read_only_or_verification_changed',409);
@@ -255,4 +257,35 @@ export async function answerQuestion(env:Env,call:CallRow,actor:User,questionUid
   ]);
   if(Number(result[0]?.meta?.changes)!==1) throw new RoundCallError('question_unavailable',409);
   return {ok:true};
+}
+
+/** D653/B1: only a currently open call belonging to this venture can be linked. */
+export async function openCallForUpdate(env: Env, projectId: number): Promise<string|null> {
+  if(!roundCallsEnabled(env)) return null;
+  const row=await env.DB.prepare("SELECT uid FROM round_calls WHERE project_id=? AND state='sent' AND target_close>=? ORDER BY sent_at DESC,id DESC LIMIT 1").bind(projectId,today()).first<{uid:string}>();
+  return row?.uid ?? null;
+}
+/** The update does not grant access. Network recipients receive capital text only. */
+export async function updateAskLinks(env:Env,asks:any[],user:User,author:boolean,audienceName?:string) {
+  return Promise.all(asks.map(async ask=>{
+    if(ask.kind!=='capital')return ask;
+    if(!roundCallsEnabled(env))return {...ask,link_ref:null,link_reason:'Coming soon. Round calls are not enabled.'};
+    if(!ask.link_ref)return {...ask,link_ref:null,link_reason:'No open round call is linked to this ask.'};
+    if(audienceName==='network')return {...ask,link_ref:null};
+    const row=await env.DB.prepare("SELECT c.uid FROM round_calls c JOIN projects p ON p.id=c.project_id WHERE c.uid=? AND c.state='sent' AND c.target_close>=? AND ((?=1 AND p.founder_id=?) OR (?=1 AND EXISTS(SELECT 1 FROM round_call_recipients r WHERE r.call_id=c.id AND r.investor_user_id=?)))")
+      .bind(ask.link_ref,today(),author?1:0,user.founder_id ?? null,verifiedInvestor(user)?1:0,user.id).first<{uid:string}>();
+    return {...ask,link_ref:row?.uid ?? null};
+  }));
+}
+/** The source update reply and the actual call response/pipeline share one D1 batch. */
+export async function replyToLinkedCall(env:Env,ask:any,user:User,message:string,replyUid:string):Promise<boolean> {
+  if(ask.kind!=='capital'||!ask.link_ref||!roundCallsEnabled(env)||!verifiedInvestor(user))return false;
+  const row=await env.DB.prepare("SELECT c.* FROM round_calls c JOIN round_call_recipients r ON r.call_id=c.id WHERE c.uid=? AND c.project_id=? AND c.state='sent' AND c.target_close>=? AND r.investor_user_id=?")
+    .bind(ask.link_ref,ask.project_id,today(),user.id).first<CallRow>();
+  if(!row)return false;
+  if(message.length>2000)throw new RoundCallError('question_too_long',400);
+  const source=env.DB.prepare("INSERT INTO update_ask_replies(uid,ask_id,replier_user_id,name,email,message,landed_module,landed_ref) SELECT ?,?,?,?,?,?,'round_call',? WHERE EXISTS(SELECT 1 FROM round_call_recipients r JOIN round_calls c ON c.id=r.call_id JOIN users u ON u.id=r.investor_user_id WHERE c.id=? AND r.investor_user_id=? AND c.state='sent' AND c.target_close>=? AND u.role='investor' AND u.is_active=1 AND u.kyc_status='approved')")
+    .bind(replyUid,ask.id,user.id,user.name,user.email,message,row.uid,row.id,user.id,today());
+  await respond(env,row,user,{action:'question',question:message},[source]);
+  return true;
 }

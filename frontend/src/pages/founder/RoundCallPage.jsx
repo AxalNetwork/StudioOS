@@ -86,7 +86,8 @@ export function RoundCallPageView({state:s,on}) {
       </section>}
     </>}
     <section className="space-y-3"><h2 className="font-semibold">Questions</h2>{d.questions.length?d.questions.map(q=><article key={q.uid} className="rounded-xl border border-axal-hairline p-3"><p>{q.question}</p>{q.name&&<p className="text-xs text-axal-muted">{q.name} · {callDate(q.asked_at)}</p>}{q.answer?<p>Answered: {q.answer}</p>:<p>Unanswered</p>}
-      {founder&&!d.read_only&&<><label className="block">Answer<textarea className={callInput} value={s.answers[q.uid]||''} maxLength={4000} onChange={e=>on.answerValue(q.uid,e.target.value)}/></label><button type="button" className={callButton} disabled={s.busy||!s.answers[q.uid]?.trim()} onClick={()=>on.answer(q.uid)}>Answer in place</button></>}</article>):<p>No questions are recorded.</p>}</section>
+      {q.update_uid&&<Link className="underline" to={'/updates/'+q.update_uid}>Reply on the source update</Link>}
+      {founder&&!d.read_only&&!q.update_uid&&<><label className="block">Answer<textarea className={callInput} value={s.answers[q.uid]||''} maxLength={4000} onChange={e=>on.answerValue(q.uid,e.target.value)}/></label><button type="button" className={callButton} disabled={s.busy||!s.answers[q.uid]?.trim()} onClick={()=>on.answer(q.uid)}>Answer in place</button></>}</article>):<p>No questions are recorded.</p>}</section>
     {s.error&&<p role="alert" className="text-red-700 dark:text-red-300">{s.error}</p>}{s.message&&<p role="status">{s.message}</p>}
   </div>;
 }

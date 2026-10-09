@@ -53,3 +53,6 @@ D647: `contracts.js` calls the mounted admin_contracts publication, guided
 preview/send, provider, counted picker, recorded agreement/stat, history and
 signed-PDF endpoints. Binary PDFs are returned as authenticated JSON/base64
 through the shared request client; callers create and revoke temporary blob URLs.
+
+
+D653: `roundCalls.js` calls the mounted `/api/round-calls` domain for availability, real planner context, draft/audience, counsel review, send, responses and management. It uses the shared authenticated request client and has no public-token transport.

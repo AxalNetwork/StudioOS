@@ -120,3 +120,6 @@ canonical Super Admin only. Migration 434 records explicit published template sn
 preview/send routes verify the same version and body fingerprint, and history
 and signed-PDF routes project safe fields and hash the actual PDF bytes. The
 new desk opts into recorded send-event dates with `recorded=true`.
+
+
+D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.

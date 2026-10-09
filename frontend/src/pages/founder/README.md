@@ -32,3 +32,6 @@ D548 wires the stored Review status into Build's counts/filter/card rows. Grow's
 monthly headline uses only a target explicitly marked as the focus; the existing
 Focus card sets/clears it through the scoped targets route. Unknown focus remains
 unselected, and an unreadable target source is reported as Unreadable.
+
+
+D653: `RoundCallSheet.jsx` supplies Raise’s Call for Capital availability button and five steps; `roundCallParts.jsx` handles shared reads, money and the sheet frame. `RoundCallPage.jsx` serves the private list, founder/counsel review and verified recipient views. Disabled reads say Coming soon; missing records and failed reads stay distinct. Canvas: Cycle Action (`action=call`).
