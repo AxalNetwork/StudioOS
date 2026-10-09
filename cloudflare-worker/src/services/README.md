@@ -83,6 +83,13 @@ and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
 
+D663: `raiseCycle.ts` computes the Raise figures, seven cards and records for
+`../routes/cycle_raise.ts`, including the computed readiness checks, the
+diligence checklist and the narrative consistency check (fixed patterns, no
+model). `raiseWriters.ts` has one writer per migration 442 record.
+`deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
+they never add up to more than the view's read time.
+
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:
   - consent to record before an audio channel starts;

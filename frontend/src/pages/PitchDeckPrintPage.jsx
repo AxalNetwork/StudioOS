@@ -415,12 +415,40 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       if (!vid || !startedAt) return;
       const seconds = Math.floor((Date.now() - startedAt) / 1000);
       if (seconds <= 0) return;
-      api.deckShareHeartbeat(token, vid, seconds).catch(() => {});
+      api.deckShareHeartbeat(token, vid, seconds, slideSecondsRef.current).catch(() => {});
     };
     const iv = setInterval(tick, 30_000);
     const onHide = () => { if (document.visibilityState === 'hidden') tick(); };
     document.addEventListener('visibilitychange', onHide);
     return () => { tick(); clearInterval(iv); document.removeEventListener('visibilitychange', onHide); };
+  }, [shareMode, token]);
+
+  // D663 — seconds on each slide. Once a second while the tab is visible,
+  // the slide being read gets the second: in fullscreen the one on screen,
+  // otherwise the frame nearest the top of the viewport (the slide
+  // fullscreen would open on). The heartbeat sends these running totals and
+  // the Worker caps them so they never add up past the view's read time.
+  const slideSecondsRef = useRef({});
+  const currentIdxRef = useRef(0);
+  useEffect(() => { currentIdxRef.current = currentIdx; }, [currentIdx]);
+  useEffect(() => {
+    if (!shareMode || !token) return undefined;
+    const iv = setInterval(() => {
+      if (document.visibilityState !== 'visible' || !viewIdRef.current || !stageRef.current) return;
+      let idx = currentIdxRef.current;
+      if (!document.fullscreenElement) {
+        const frames = Array.from(stageRef.current.querySelectorAll('[data-slide-frame]'));
+        if (frames.length === 0) return;
+        let best = Infinity;
+        idx = 0;
+        frames.forEach((el, i) => {
+          const d = Math.abs(el.getBoundingClientRect().top - 60);
+          if (d < best) { best = d; idx = i; }
+        });
+      }
+      slideSecondsRef.current[idx] = (slideSecondsRef.current[idx] || 0) + 1;
+    }, 1000);
+    return () => clearInterval(iv);
   }, [shareMode, token]);
 
   // Task #6 — Fullscreen toggle. Uses the native Fullscreen API on the
