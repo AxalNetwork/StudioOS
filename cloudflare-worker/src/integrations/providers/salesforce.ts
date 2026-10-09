@@ -35,6 +35,7 @@ import {
   type PushResult,
 } from '../registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
+import { projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import {
   loadStageMaps,
   studioStageToSf,
@@ -269,7 +270,9 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   };
   return {
     credentials,
-    scopes: ['api', 'refresh_token', 'id'],
+    // Salesforce's token response does not report granted scopes. Never label
+    // the requested set as measured grants.
+    scopes: [],
     external_account_id: identity.organization_id || null,
     external_account_name: identity.username || identity.display_name || identity.email || null,
     capabilities: ['Push opportunities', 'Sync accounts', 'Custom objects'],
@@ -362,6 +365,7 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
     sf_account_id: string | null; project_id: number;
   }>();
   if (!deal) throw new Error(`deal_not_found_or_forbidden: ${dealId}`);
+  if (!(await projectEnabled(env, row.id, deal.project_id))) throw new Error('company_not_enabled');
 
   const config = row.config_json ? safeParse(row.config_json) : {};
   const stageMaps = loadStageMaps(config);
@@ -423,6 +427,7 @@ async function pushProjectAccount(env: Env, row: IntegrationRow, projectId: numb
     founder_sf_contact_id: string | null;
   }>();
   if (!proj) throw new Error(`project_not_found_or_forbidden: ${projectId}`);
+  if (!(await projectEnabled(env, row.id, projectId))) throw new Error('company_not_enabled');
 
   const config = row.config_json ? safeParse(row.config_json) : {};
   const fieldMaps = loadFieldMaps(config);
@@ -543,8 +548,9 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     'LEFT JOIN projects p ON p.id = d.project_id ' +
     'LEFT JOIN founders f ON f.id = p.founder_id ' +
     'WHERE f.user_id = ? AND datetime(d.updated_at) > datetime(?) ' +
+    'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1) ' +
     'ORDER BY datetime(d.updated_at) DESC LIMIT 100',
-  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00').all<{
+  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id).all<{
     id: number; status: string; sf_opportunity_id: string | null;
   }>();
   for (const d of (localDeals.results || [])) {
@@ -590,8 +596,9 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
           'SELECT d.id, d.status FROM deals d ' +
           'LEFT JOIN projects p ON p.id = d.project_id ' +
           'LEFT JOIN founders f ON f.id = p.founder_id ' +
-          'WHERE d.sf_opportunity_id = ? AND f.user_id = ?',
-        ).bind(r.Id, row.user_id).first<{ id: number; status: string }>();
+          'WHERE d.sf_opportunity_id = ? AND f.user_id = ? ' +
+          'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
+        ).bind(r.Id, row.user_id, row.id).first<{ id: number; status: string }>();
         if (local && local.status !== next) {
           await c.env.DB.prepare('UPDATE deals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             .bind(next, local.id).run();
@@ -636,6 +643,13 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
   } catch (e) {
     console.warn('[salesforce] revoke failed (non-fatal):', (e as Error).message);
   }
+}
+
+async function revokeGranted(_env: Env, result: ConnectResult): Promise<void> {
+  const token = typeof result.credentials.refresh_token === 'string' ? result.credentials.refresh_token
+    : typeof result.credentials.access_token === 'string' ? result.credentials.access_token : '';
+  const isSandbox = result.config?.is_sandbox === true;
+  if (token) await fetch(`${loginHost(isSandbox)}/services/oauth2/revoke?token=${encodeURIComponent(token)}`, { method: 'POST' });
 }
 
 // ───────────────────────────────────────────────────────────── action
@@ -722,6 +736,7 @@ function validateConfig(
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
   connect,
+  revokeGranted,
   buildAuthorizeUrl,
   push: pushOne,
   sync,
@@ -748,6 +763,7 @@ export async function syncAllSalesforceIntegrations(env: Env): Promise<{ scanned
     return { scanned: 0, ok: 0, failed: 0 };
   }
   for (const row of (rows.results || [])) {
+    if (!(await scheduledConnectorEnabled(env, row))) continue;
     scanned++;
     try {
       const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;

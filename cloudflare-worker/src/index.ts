@@ -1103,6 +1103,8 @@ app.route('/api/assessment', assessmentRoutes);
 app.route('/api/matches', matches);
 app.route('/api/consultations', consultations);
 app.route('/api/settings', settings);
+// D650: the old path and the canonical connector path share this router.
+app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 app.route('/api/crunchbase', crunchbaseRoutes);
 app.route('/api/personas', personas);

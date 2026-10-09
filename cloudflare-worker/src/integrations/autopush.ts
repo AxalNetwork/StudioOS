@@ -12,6 +12,8 @@ import type { Context, ExecutionContext } from 'hono';
 import type { Env, User } from '../types';
 import type { IntegrationRow } from './registry';
 import { getProviderImpl } from './registry';
+import { automaticSendAllowed } from './connectorRules';
+import { projectEnabled } from './companyScope';
 
 interface AutoPushBase {
   user: User;
@@ -75,6 +77,15 @@ async function runPushInternal(args: RunPushArgs): Promise<void> {
     "SELECT * FROM integrations WHERE user_id = ? AND provider_key = ? AND status = 'active' LIMIT 1",
   ).bind(user.id, providerKey).first<IntegrationRow>();
   if (!integ) return;
+  if (!automaticSendAllowed(providerKey, eventType, integ.config_json)) return;
+  const p = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+  let projectId = Number(p.project_id);
+  if (!Number.isSafeInteger(projectId) && Number.isSafeInteger(Number(p.deal_id))) {
+    const deal = await env.DB.prepare('SELECT project_id FROM deals WHERE id = ?')
+      .bind(Number(p.deal_id)).first<{ project_id: number }>();
+    projectId = deal?.project_id ?? NaN;
+  }
+  if (!Number.isSafeInteger(projectId) || !(await projectEnabled(env, integ.id, projectId))) return;
   const impl = getProviderImpl(providerKey);
   if (!impl?.push) return;
   // Provider `push` signatures take a Hono Context, but in practice every

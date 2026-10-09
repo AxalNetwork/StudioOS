@@ -83,8 +83,10 @@ function freshDb() {
     -- narrow the founder's view to the active company; a schema without the
     -- column makes that SELECT fail before any handler logic runs.
     CREATE TABLE projects (
-      id INTEGER PRIMARY KEY, name TEXT NOT NULL, founder_id INTEGER, company_id INTEGER
+      id INTEGER PRIMARY KEY, name TEXT NOT NULL, founder_id INTEGER, company_id INTEGER, deleted_at TEXT
     );
+    CREATE TABLE user_company_links (user_id INTEGER, company_id INTEGER);
+    CREATE TABLE integration_companies (integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     -- getCurrentUser best-effort hydrates MI Pro state; an empty table keeps the
     -- lookup quiet (a missing table would only log a warning, never fail).
     CREATE TABLE mi_pro_subscriptions (
@@ -123,8 +125,9 @@ function freshDb() {
   // session (so `getCurrentUser` resolves the JWT to a live user).
   db.prepare('INSERT INTO users (id, role, founder_id, is_active) VALUES (?, ?, ?, 1)')
     .run(USER_ID, 'founder', FOUNDER_ID);
-  db.prepare('INSERT INTO projects (id, name, founder_id) VALUES (?, ?, ?)')
-    .run(PROJECT_ID, 'Test Project', FOUNDER_ID);
+  db.prepare('INSERT INTO projects (id, name, founder_id, company_id) VALUES (?, ?, ?, ?)')
+    .run(PROJECT_ID, 'Test Project', FOUNDER_ID, 10);
+  db.prepare('INSERT INTO user_company_links(user_id, company_id) VALUES (?, ?)').run(USER_ID, 10);
   return db;
 }
 
@@ -146,6 +149,8 @@ async function seedStripeIntegration(env: any, db: InstanceType<typeof DatabaseS
   db.prepare(
     'INSERT INTO integrations (uid, user_id, provider_key, status, credentials_enc) VALUES (?, ?, ?, ?, ?)',
   ).run(UID, USER_ID, 'stripe', 'active', enc);
+  db.prepare('INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (?, ?, 1)')
+    .run(Number(db.prepare('SELECT id FROM integrations WHERE uid = ?').get(UID)?.id), 10);
 }
 
 function importStripe(env: any, token: string, projectId: number = PROJECT_ID): Promise<Response> {

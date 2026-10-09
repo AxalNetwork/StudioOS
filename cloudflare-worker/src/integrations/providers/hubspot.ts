@@ -35,6 +35,7 @@ import {
 } from '../registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 import { loadDealstageMap, studioStageToHubspot, hubspotStageToStudio, type StudioStage } from '../mappings/hubspot_stages';
+import { enabledCompanyIds, projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 
 const HS_API = 'https://api.hubapi.com';
 const HS_AUTH = 'https://app.hubspot.com';
@@ -274,7 +275,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
     };
     return {
       credentials,
-      scopes: info.scopes || SCOPES,
+      scopes: info.scopes || [],
       external_account_id: info.hub_id ? String(info.hub_id) : null,
       external_account_name: info.hub_domain || info.user || null,
       capabilities: ['Push deals', 'Pull contacts', 'Two-way sync'],
@@ -301,7 +302,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   };
   return {
     credentials,
-    scopes: info.scopes || SCOPES,
+    scopes: info.scopes || [],
     external_account_id: info.hub_id ? String(info.hub_id) : null,
     external_account_name: info.hub_domain || info.user || null,
     capabilities: ['Push deals', 'Pull contacts', 'Two-way sync'],
@@ -352,6 +353,7 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
     hubspot_company_id: string | null; project_id: number;
   }>();
   if (!deal) throw new Error(`deal_not_found: ${dealId}`);
+  if (!(await projectEnabled(env, row.id, deal.project_id))) throw new Error('company_not_enabled');
   const config = row.config_json ? safeParse(row.config_json) : {};
   const map = loadDealstageMap(config);
   const dealstage = studioStageToHubspot(map, deal.status);
@@ -402,6 +404,7 @@ async function pushProjectCompany(env: Env, row: IntegrationRow, projectId: numb
     founder_email: string | null; founder_name: string | null;
   }>();
   if (!proj) throw new Error(`project_not_found: ${projectId}`);
+  if (!(await projectEnabled(env, row.id, projectId))) throw new Error('company_not_enabled');
 
   const companyProps: Record<string, string | null> = {
     name: proj.name,
@@ -481,8 +484,9 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     'LEFT JOIN projects p ON p.id = d.project_id ' +
     'LEFT JOIN founders f ON f.id = p.founder_id ' +
     'WHERE f.user_id = ? AND datetime(d.updated_at) > datetime(?) ' +
+    'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1) ' +
     'ORDER BY datetime(d.updated_at) DESC LIMIT 100',
-  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00').all<{
+  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id).all<{
     id: number; status: string; hubspot_deal_id: string | null;
   }>();
   for (const d of (localDeals.results || [])) {
@@ -521,8 +525,9 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
           'SELECT d.id, d.status FROM deals d ' +
           'LEFT JOIN projects p ON p.id = d.project_id ' +
           'LEFT JOIN founders f ON f.id = p.founder_id ' +
-          'WHERE d.hubspot_deal_id = ? AND f.user_id = ?',
-        ).bind(hd.id, row.user_id).first<{ id: number; status: string }>();
+          'WHERE d.hubspot_deal_id = ? AND f.user_id = ? ' +
+          'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
+        ).bind(hd.id, row.user_id, row.id).first<{ id: number; status: string }>();
         if (local && local.status !== localStage) {
           await c.env.DB.prepare('UPDATE deals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             .bind(localStage, local.id).run();
@@ -611,8 +616,9 @@ async function webhook(c: Context<{ Bindings: Env }>, row: IntegrationRow, body:
           'SELECT d.id, d.status FROM deals d ' +
           'LEFT JOIN projects p ON p.id = d.project_id ' +
           'LEFT JOIN founders f ON f.id = p.founder_id ' +
-          'WHERE d.hubspot_deal_id = ? AND f.user_id = ?',
-        ).bind(String(ev.objectId), row.user_id).first<{ id: number; status: string }>();
+          'WHERE d.hubspot_deal_id = ? AND f.user_id = ? ' +
+          'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
+        ).bind(String(ev.objectId), row.user_id, row.id).first<{ id: number; status: string }>();
         if (local) {
           const next = hubspotStageToStudio(map, ev.propertyValue);
           if (next && next !== local.status) {
@@ -644,6 +650,11 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
   } catch (e) {
     console.warn('[hubspot] revoke failed (non-fatal):', (e as Error).message);
   }
+}
+
+async function revokeGranted(_env: Env, result: ConnectResult): Promise<void> {
+  const refresh = typeof result.credentials.refresh_token === 'string' ? result.credentials.refresh_token : '';
+  if (refresh) await fetch(`${HS_API}/oauth/v1/refresh-tokens/${encodeURIComponent(refresh)}`, { method: 'DELETE' });
 }
 
 // ───────────────────────────────────────────────────────────── action (pipeline picker)
@@ -726,6 +737,7 @@ function validateConfig(
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
   connect,
+  revokeGranted,
   buildAuthorizeUrl,
   push: pushOne,
   sync,
@@ -782,9 +794,10 @@ export async function importHubspotPipeline(
       const status = stageMap[d.properties.dealstage] || 'applied';
       try {
         const existing = await env.DB.prepare(
-          'SELECT id FROM deals WHERE hubspot_deal_id = ? LIMIT 1',
-        ).bind(d.id).first<{ id: number }>();
+          'SELECT d.id, d.project_id FROM deals d WHERE d.hubspot_deal_id = ? LIMIT 1',
+        ).bind(d.id).first<{ id: number; project_id: number }>();
         if (existing) {
+          if (!(await projectEnabled(env, row.id, existing.project_id))) { errors++; continue; }
           await env.DB.prepare(
             'UPDATE deals SET status = ?, amount = COALESCE(?, amount), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           ).bind(status, Number(d.properties.amount) || null, existing.id).run();
@@ -793,8 +806,10 @@ export async function importHubspotPipeline(
           // project per imported deal (keyed by dealname) so the import
           // succeeds for new rows.
           const { ensureProjectForImport } = await import('../../routes/imports');
-          const projectId = await ensureProjectForImport(env, user, d.properties.dealname || `HubSpot deal ${d.id}`, 'hubspot');
-          if (!projectId) { errors++; continue; }
+          const companies = await enabledCompanyIds(env, row.id);
+          if (companies.length !== 1) { errors++; continue; }
+          const projectId = await ensureProjectForImport(env, user, d.properties.dealname || `HubSpot deal ${d.id}`, 'hubspot', companies[0]);
+          if (!projectId || !(await projectEnabled(env, row.id, projectId))) { errors++; continue; }
           await env.DB.prepare(
             `INSERT INTO deals (project_id, hubspot_deal_id, status, amount, created_at, updated_at)
              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
@@ -828,6 +843,7 @@ export async function syncAllHubspotIntegrations(env: Env): Promise<{ scanned: n
     return { scanned: 0, ok: 0, failed: 0 };
   }
   for (const row of (rows.results || [])) {
+    if (!(await scheduledConnectorEnabled(env, row))) continue;
     scanned++;
     try {
       // We don't have a Hono Context in cron — synth a minimal stub that

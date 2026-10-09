@@ -115,7 +115,7 @@ async function connect(_c: Context<{ Bindings: Env }>, _user: User, input: Conne
   const accountName = [tokens.team?.name, wh.channel].filter(Boolean).join(' · ') || null;
   return {
     credentials,
-    scopes: SCOPES,
+    scopes: tokens.scope ? tokens.scope.split(/[\s,]+/).filter(Boolean) : [],
     external_account_id: tokens.team?.id || null,
     external_account_name: accountName,
     capabilities: ['Channel notifications', 'Block Kit messages'],

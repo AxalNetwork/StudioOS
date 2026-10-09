@@ -39,6 +39,7 @@
 import type { Context } from 'hono';
 import { stripTrailingSlashes, callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
+import { scheduledConnectorEnabled } from '../companyScope';
 import {
   registerProvider,
   type ProviderImpl,
@@ -307,7 +308,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   };
   return {
     credentials,
-    scopes: SCOPES,
+    scopes: tokens.scope ? tokens.scope.split(/\s+/).filter(Boolean) : [],
     external_account_id: acct.account_id,
     external_account_name: acct.account_name || userInfo.email || null,
     capabilities: ['Send envelopes', 'Webhook on signed', 'Template library'],
@@ -524,14 +525,14 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
   const local = row.external_account_id
     ? await env.DB.prepare(
         `SELECT id, envelope_uuid, status FROM esign_envelopes
-          WHERE provider = 'docusign'
+          WHERE provider = 'docusign' AND created_by = ?
             AND docusign_envelope_id = ?
             AND (docusign_account_id IS NULL OR docusign_account_id = ?)`,
-      ).bind(dsEnvelopeId, row.external_account_id).first<{ id: number; envelope_uuid: string; status: string }>()
+      ).bind(row.user_id, dsEnvelopeId, row.external_account_id).first<{ id: number; envelope_uuid: string; status: string }>()
     : await env.DB.prepare(
         `SELECT id, envelope_uuid, status FROM esign_envelopes
-          WHERE provider = 'docusign' AND docusign_envelope_id = ?`,
-      ).bind(dsEnvelopeId).first<{ id: number; envelope_uuid: string; status: string }>();
+          WHERE provider = 'docusign' AND created_by = ? AND docusign_envelope_id = ?`,
+      ).bind(row.user_id, dsEnvelopeId).first<{ id: number; envelope_uuid: string; status: string }>();
   if (!local) return { status: 'unknown', updated: false };
   const res = await dsFetch(env, row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}`);
   if (!res.ok) return { status: local.status, updated: false };
@@ -741,12 +742,12 @@ async function syncIntegration(env: Env, row: IntegrationRow): Promise<{ summary
   }
   const inflight = await env.DB.prepare(
     `SELECT docusign_envelope_id FROM esign_envelopes
-      WHERE provider = 'docusign'
+      WHERE provider = 'docusign' AND created_by = ?
         AND docusign_envelope_id IS NOT NULL
         AND docusign_account_id = ?
         AND status IN ('sent','partially_signed')
       ORDER BY id DESC LIMIT 100`,
-  ).bind(row.external_account_id).all<{ docusign_envelope_id: string }>();
+  ).bind(row.user_id, row.external_account_id).all<{ docusign_envelope_id: string }>();
   const counts = { polled: 0, updated: 0, errors: 0 };
   for (const r of (inflight.results || []) as Array<{ docusign_envelope_id: string }>) {
     counts.polled++;
@@ -765,6 +766,7 @@ export async function syncAllDocusignIntegrations(env: Env): Promise<{ scanned: 
   const list = (rows.results || []) as IntegrationRow[];
   let ok = 0, failed = 0;
   for (const row of list) {
+    if (!(await scheduledConnectorEnabled(env, row))) continue;
     try {
       await syncIntegration(env, row);
       ok++;
@@ -1107,6 +1109,20 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
   } catch { /* non-fatal */ }
 }
 
+async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
+  const refresh = typeof result.credentials.refresh_token === 'string' ? result.credentials.refresh_token : '';
+  if (!refresh) return;
+  const { id, secret } = await ensureCreds(env);
+  await fetch(`${authHost(result.config?.is_demo !== false)}/oauth/revoke`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${btoa(`${id}:${secret}`)}`,
+    },
+    body: new URLSearchParams({ token: refresh }),
+  });
+}
+
 /**
  * Look up an active DocuSign integration row owned by `userId`. Used by
  * the in-house e-sign send path to opportunistically route through
@@ -1173,6 +1189,7 @@ export async function ensureDocusignWebhookSecret(env: Env, row: IntegrationRow)
 const docusignProvider: ProviderImpl = {
   key: PROVIDER_KEY,
   connect,
+  revokeGranted,
   sync,
   webhook,
   disconnect,

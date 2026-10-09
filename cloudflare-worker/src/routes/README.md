@@ -44,6 +44,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/monitoring    → monitoring.ts
 /api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
+/api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650)
+/api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/liquidity     → liquidity.ts
