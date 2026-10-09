@@ -36,6 +36,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/founder/validate → founder_validate.ts, founder_validate_sessions.ts  (D657's interview sessions: /interviews/:id/sessions, /sessions/*)
 /api/portfolio-updates → portfolio_updates.ts  (founder updates; D654's Share an update: /share/*, /:uid/share|send|page, /asks/:uid/*)
 /api/cycles/grow   → cycle_grow.ts  (D664: the Grow overview, module reads and store writes; its shared card types live in the services folder as cycleCards)
+/api/cycles/raise  → cycle_raise.ts  (D663: the Raise overview, module reads and the readiness, narrative, checklist and next-step writes)
 /api/users         → users.ts
 /api/market-intel  → market_intel.ts
 /api/market-intel-public → market_intel_public.ts
@@ -70,7 +71,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
-/api/founder/validate → founder_validate_structure.ts (a structured interview's placements: accept, edit then accept, discard; D658)
+/api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -134,5 +135,17 @@ migration 440's records go through `../services/validateWriters.ts`. Reading
 follows the founder board's `canReadBoard` rule and writing follows
 `canWrite`. A card whose store fails is `unreadable` on its own. See
 `documentation/architecture/decisions/D659.md`.
+
+D663 (#1476): `cycle_raise.ts` is mounted at `/api/cycles/raise` in
+`index.ts`. `GET /overview` returns the four Raise figures and seven cards,
+and `GET /modules/:slug` returns one card plus its records. The reads are
+`../services/raiseCycle.ts`; the five writes (a readiness score, the computed
+rescore, a narrative version, a data-room file's checklist item, a prospect's
+next step and warm path) are `../services/raiseWriters.ts`, each recording its
+actor. Reading and writing both follow `canWrite`: the cards carry the cap
+table, the investor pipeline and who opened the data room. `decks.ts`'s share
+heartbeat also takes `slides`, the viewer's seconds per slide, stored through
+`../services/deckSlideDwell.ts`. See
+`documentation/architecture/decisions/D663.md`.
 
 D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.

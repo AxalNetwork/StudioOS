@@ -84,6 +84,24 @@ writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
 `/evidence-links/:id/strength`) call the same writers as #1471's interview
 accept path. See `decisions/D659.md`.
 
+### Raise cycle Worker read (D663, #1476)
+
+`cycle_raise.ts`, mounted at `/api/cycles/raise`, is the Worker half of the
+Raise cycle in `Cycle Overview.dc.html` (cycle Raise, O3) and
+`Cycle Modules · Boards.dc.html` (MR1–MR7). `GET /overview?project=` returns
+four figures (readiness score out of 100, committed against the target,
+investors in conversation, months of runway) and seven cards.
+`GET /modules/:slug?project=` returns one card and its records table. The
+slugs are `fundraising-readiness`, `investor-narrative`, `pitch-deck`,
+`data-room`, `cap-table`, `use-of-funds` and `capital-relationships`. The
+writes are `PUT /readiness/:key`, `POST /readiness/rescore`,
+`POST /narrative-versions`, `PUT /data-room/files/:id/checklist` and
+`PUT /prospects/:id/next-step`. Only the venture and admins reach it. The
+pipeline, cap table, data room and pitch tools keep their own pages; the
+module pages summarise them and link there. The deck share viewer's heartbeat
+now sends seconds per slide, which closes the "no per-slide dwell" gap noted
+for Pitch below. See `decisions/D663.md`.
+
 ### Cycle overviews and module pages (D661, #1474)
 
 The components are built in `frontend/src/pages/cycles/` and are not mounted yet: each cycle keeps its current page until its read from #1469 (D656) is on `main`. D661 gives the shape D656 left open for `Card.series` and the records.
