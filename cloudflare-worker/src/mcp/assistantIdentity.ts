@@ -4,10 +4,11 @@
 export const ASSISTANT_CALLBACKS: Record<string, readonly string[]> = {
   ChatGPT: ['https://chatgpt.com/connector_platform_oauth_redirect'],
   Claude: ['https://claude.ai/api/mcp/auth_callback'],
-  // No published exact callback found in the vendors' linked setup docs.
-  // S1 must verify these before adding an entry; never guess a trusted URL.
-  Gemini: [],
-  Grok: [],
+  // Google documents this callback for Gemini Enterprise; consumer callbacks
+  // not in this table remain unverified.
+  Gemini: ['https://vertexaisearch.cloud.google.com/oauth-redirect'],
+  // Grok's live sign-in completion endpoint canonicalizes the trailing slash.
+  Grok: ['https://grok.com/connectors-oauth-exchange-code/', 'https://grok.com/connectors-oauth-exchange-code'],
 };
 export function assistantIdentity(raw: string): { verified_assistant: string | null; assistant_label: string } {
   let uri: URL;

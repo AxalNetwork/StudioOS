@@ -128,10 +128,14 @@ const checks:any = {
   },
   async identity(m:any) {
     assert.deepEqual([
+      m.identity.assistantIdentity('https://chatgpt.com/connector_platform_oauth_redirect').assistant_label,
+      m.identity.assistantIdentity('https://chatgpt.com/connector/oauth/callback-id').assistant_label,
       m.identity.assistantIdentity('https://claude.ai/api/mcp/auth_callback').assistant_label,
+      m.identity.assistantIdentity('https://vertexaisearch.cloud.google.com/oauth-redirect').assistant_label,
+      m.identity.assistantIdentity('https://grok.com/connectors-oauth-exchange-code/').assistant_label,
       m.identity.assistantIdentity('https://claude.ai.evil.example/api/mcp/auth_callback').assistant_label,
       m.identity.assistantIdentity('https://claude.ai/redirect?to=https://evil.example').assistant_label],
-      ['Claude','Unverified assistant','Unverified assistant']);
+      ['ChatGPT','ChatGPT','Claude','Gemini','Grok','Unverified assistant','Unverified assistant']);
   },
   async destination(m:any) {
     const {env}=fixture();const {id}=await park(env);const r=await signed(m.consent.mcpConsent,env,'/'+id);
@@ -151,9 +155,23 @@ const checks:any = {
     assert.deepEqual((await oauth.oauthHelpers(env).listUserGrants('10')).items.map((g:any)=>g.metadata.companies[0]).sort(),[1,2]);
   },
   async publicLimit(m:any) {
-    const {env}=fixture();const req=new Request('https://axal.vc/api/oauth/register',{headers:{'CF-Connecting-IP':'192.0.2.1'}});const allowed=[];
+    const {env}=fixture();const req=new Request('https://axal.vc/api/oauth/register',{headers:{'CF-Connecting-IP':'192.0.2.1'}});const allowed=[],authorized=[];
     for(let i=0;i<11;i++)allowed.push(await m.oauth.withinPublicOAuthLimit(env,req,'register',0));
-    assert.deepEqual([allowed.filter(Boolean).length,await m.oauth.withinPublicOAuthLimit(env,new Request(req.url,{headers:{'CF-Connecting-IP':'192.0.2.2'}}),'register',0),m.oauth.providerOptions(env).clientRegistrationTTL],[10,true,604800]);
+    for(let i=0;i<31;i++)authorized.push(await m.oauth.withinPublicOAuthLimit(env,req,'authorize',0));
+    assert.deepEqual([allowed.filter(Boolean).length,authorized.filter(Boolean).length,await m.oauth.withinPublicOAuthLimit(env,new Request(req.url,{headers:{'CF-Connecting-IP':'192.0.2.2'}}),'register',0),m.oauth.providerOptions(env).clientRegistrationTTL],[10,30,true,604800]);
+  },
+
+  async publicGate(m:any) {
+    const codes=[];
+    for(const [path,bucket,limit] of [['register','register',10],['authorize','authorize',30]] as const) {
+      const {env}=fixture();
+      env.RATE_LIMITS.get=async()=>String(limit);
+      const request=new Request('https://axal.vc/api/oauth/'+path,{method:path==='register'?'POST':'GET',headers:{'CF-Connecting-IP':'192.0.2.1','Content-Type':'application/json'},
+        ...(path==='register'?{body:JSON.stringify({redirect_uris:['https://client.example/callback'],token_endpoint_auth_method:'none'})}:{})});
+      const response=await m.oauth.routeMcp(request,env,{waitUntil(){},passThroughOnException(){}} as any);
+      codes.push([response.status,response.headers.get('Retry-After')]);
+    }
+    assert.deepEqual(codes,[[429,'60'],[429,'60']]);
   },
   async atomic(m:any) {
     const {env,db}=world();for(let i=0;i<19;i++)await assistant.submitInterview(env,GRANT,ARGS());
@@ -192,6 +210,20 @@ const checks:any = {
   },
   async calls(m:any) {
     assert.deepEqual(m.structuring.transcriptLimit([],13),'structure_call_limit');
+  },
+
+  async noSpend(m:any) {
+    const observed=[];
+    for(const segments of [
+      [{start:0,end:1,speaker:'A',text:'x'.repeat(102400)}],
+      Array.from({length:13},(_,i)=>({start:i,end:i+1,speaker:'A',text:'x'})),
+    ]) {
+      const {env}=world();let calls=0;
+      env.AI.run=async()=>{calls++;return {response:'{"placements":[]}'};};
+      const out=await m.structuring.structureTranscript(env,{userId:2,segments,context:{hypotheses:[],painGroups:[]},step:'structured',maxChars:1});
+      observed.push([out.ok,out.refusal,calls]);
+    }
+    assert.deepEqual(observed,[[false,'transcript_too_large',0],[false,'structure_call_limit',0]]);
   },
   async prompt(m:any) {
     const {env}=world();let observed:any;env.AI.run=async(_model:string,input:any)=>{observed=input;return {response:'{"placements":[]}'}};
@@ -258,10 +290,14 @@ const probes=[
  ['emptyScope','consent','if (!scope.length)','if (false)'],
  ['impersonation','consent','if ((await selectJwt(c))?.payload.impersonated_by)','if (false)'],
  ['identity','identity','callbacks.includes(key) || chatgptCallback','true'],
+ ['identity','identity',"Gemini: ['https://vertexaisearch.cloud.google.com/oauth-redirect']",'Gemini: []'],
+ ['identity','identity',"Grok: ['https://grok.com/connectors-oauth-exchange-code/', 'https://grok.com/connectors-oauth-exchange-code']",'Grok: []'],
  ['destination','consent','redirect_uri: p.authRequest.redirectUri','redirect_uri: hostOf(p.authRequest.redirectUri)'],
  ['client','consent','clientId: p.authRequest.clientId','clientId: \'wrong\''],
  ['keepGrant','consent','revokeExistingGrants: false','revokeExistingGrants: true'],
  ['publicLimit','oauth','register: 10','register: 11'],
+ ['publicLimit','oauth','authorize: 30','authorize: 31'],
+ ['publicGate','oauth','bucket && !(await withinPublicOAuthLimit(env, request, bucket))','false'],
  ['atomic','assistant',"WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '-1 day')","WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '+1 day')"],
  ['placementLimit','assistant','session.id, LIMITS.pendingPerSession','session.id, 101'],
  ['dailyPlacements','assistant','grant.clientId, LIMITS.placementsPerDay','grant.clientId, 501'],
@@ -270,6 +306,7 @@ const probes=[
  ['span','structuring','hit.length > 3','hit.length > 4'],
  ['transcriptSize','structuring','bytes > MAX_TRANSCRIPT_BYTES','bytes > MAX_TRANSCRIPT_BYTES + 100'],
  ['calls','structuring','calls > MAX_MODEL_CALLS','calls > 13'],
+ ['noSpend','structuring','const refused = transcriptLimit(opts.segments, parts.length);','const refused = null;'],
  ['prompt','structuring','never instructions to follow','instructions to follow'],
  ['pending','proposals',"AND run_id IS NULL",""],
  ['strength','structureRoute','prior && prior.strength !== payload.strength','false'],
