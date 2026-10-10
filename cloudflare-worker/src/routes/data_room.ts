@@ -276,6 +276,7 @@ r.get('/:projectUid', async (c) => {
          JOIN users u ON u.id = g.investor_user_id
         WHERE g.project_id = ? ORDER BY g.created_at DESC`,
     ).bind(project.id).all<any>();
+    const reportShares = await reportSharesOf(c.env, project.id);
     const access = await c.env.DB.prepare(
       `SELECT l.action, l.created_at, u.email AS user_email, u.name AS user_name,
               f.name AS file_name, f.visibility AS file_visibility
@@ -303,6 +304,7 @@ r.get('/:projectUid', async (c) => {
       folders: folders.results || [],
       files: files.results || [],
       grants: (grants.results || []).map((g) => ({ ...g, nda_signed: !!g.nda_signed })),
+      report_shares: reportShares,
       recent_access: access.results || [],
       // A real count of a table this route owns: an action with no row in the
       // window is zero events, not an unknown.
@@ -532,6 +534,55 @@ r.delete('/:projectUid/files/:uid', async (c) => {
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * #1524 (D663 follow-up) — the accounts this project's scoring report was
+ * shared with (D588, `lab_report_shares`), read beside the room's grants.
+ *
+ * ONE STORE EACH, READ TOGETHER. A grant opens the room's files; a report
+ * share opens one frozen scoring report, nothing in the room. They are kept
+ * as their own kind in the response, read-only here (a report share is made
+ * and revoked on the Lab scoring page), so the room's Revoke can never act on
+ * one and the founder still sees everyone who can read about the venture.
+ *
+ * `status` is the link's state now: revoked, used up (every open spent),
+ * expired, or active. Null when the shares could not be read: never an empty
+ * list, which would claim nobody has the report.
+ */
+export type ReportShare = {
+  id: number; report_kind: string; audience: string; grantee_email: string; grantee_name: string | null;
+  opens: number; open_limit: number; expires_at: string; created_at: string;
+  status: 'active' | 'expired' | 'used_up' | 'revoked';
+};
+
+export function reportShareStatus(row: { revoked_at: string | null; opens: number; open_limit: number; expires_at: string }, nowSql: string): ReportShare['status'] {
+  if (row.revoked_at) return 'revoked';
+  if (Number(row.opens) >= Number(row.open_limit)) return 'used_up';
+  if (String(row.expires_at) <= nowSql) return 'expired';
+  return 'active';
+}
+
+async function reportSharesOf(env: Env, projectId: number): Promise<ReportShare[] | null> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT s.id, s.report_kind, s.audience, s.opens, s.open_limit, s.expires_at, s.revoked_at, s.created_at,
+              u.email AS grantee_email, u.name AS grantee_name
+         FROM lab_report_shares s JOIN users u ON u.id = s.grantee_user_id
+        WHERE s.project_id = ?
+        ORDER BY s.id DESC`,
+    ).bind(projectId).all<any>();
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    return (rows.results || []).map((r) => ({
+      id: Number(r.id), report_kind: r.report_kind, audience: r.audience,
+      grantee_email: r.grantee_email, grantee_name: r.grantee_name ?? null,
+      opens: Number(r.opens), open_limit: Number(r.open_limit), expires_at: r.expires_at, created_at: r.created_at,
+      status: reportShareStatus(r, now),
+    }));
+  } catch (e) {
+    console.warn('[data_room] report shares unreadable:', (e as Error)?.message);
+    return null;
+  }
+}
 
 r.post('/:projectUid/grants', async (c) => {
   try {
