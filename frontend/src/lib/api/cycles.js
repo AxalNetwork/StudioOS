@@ -18,6 +18,10 @@ const READS = {
     overview: (projectId) => request(`/cycles/validate/overview?${query(projectId)}`),
     module: (projectId, slug, q) => request(`/cycles/validate/modules/${encodeURIComponent(slug)}?${query(projectId, q)}`),
   },
+  raise: {
+    overview: (projectId) => request(`/cycles/raise/overview?${query(projectId)}`),
+    module: (projectId, slug, q) => request(`/cycles/raise/modules/${encodeURIComponent(slug)}?${query(projectId, q)}`),
+  },
 };
 
 /** The cycles whose read the page can draw. A cycle not here keeps its current page. */

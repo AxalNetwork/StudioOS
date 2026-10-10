@@ -230,7 +230,8 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   const zone = routeBlock(app, '/raise');
   assert.ok(zone?.includes('founderRaiseLanding'), 'the Raise zone root must defer ownership to A4');
   assert.match(app, /founderRaiseLanding = effectiveRole === 'founder'[\s\S]*?get\('mode'\) !== 'workspace'/);
-  assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <FounderRaiseDesk \/>\)/);
+  // D661 (#1474): the landing a founder gets is the Raise cycle overview now.
+  assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <CycleRoute cycle="raise" \/>\)/);
   assert.match(app, /FounderWorkspaceTabs set="raise" user=\{user\}><PitchWorkspacePage \/>/);
   // The desk is an overview OVER the sections, not instead of them.
   assert.match(routeBlock(app, '/raise/pitch'), /<FounderRaisePitch \/>/,
@@ -380,7 +381,8 @@ const WORKSPACES = {
   // D661 (#1474): Validate's root is the cycle overview, wired to #1487's read.
   Validate: ['/validate', 'CycleRoute cycle="validate"'],
   Build: ['/build', 'FounderBuildDesk'],
-  Raise: ['/raise', 'FounderRaiseDesk'],
+  // D661 (#1474): Raise's root is the cycle overview, wired to #1501's read.
+  Raise: ['/raise', 'CycleRoute cycle="raise"'],
   Grow: ['/grow', 'FounderGrowDesk'],
   Network: ['/network', 'FounderNetworkDesk'],
   Research: ['/research', 'FounderResearchDesk'],
@@ -464,6 +466,15 @@ test('the Worker AI rail is one component, and every founder workspace has it', 
   // nothing at all — "it looks blank, probably not connected to anything".
   for (const [label, [, desk]] of Object.entries(WORKSPACES)) {
     const src = codeOnly(read(deskFile(desk)));
+    if (desk.startsWith('CycleRoute')) {
+      // One route component for every cycle: the rail names the cycle it is
+      // mounted for, and the cycle's name is the workspace (D661).
+      const cycle = desk.match(/cycle="([a-z]+)"/)[1];
+      assert.match(src, /<WorkerRail[\s\S]*?workspace=\{name\}/, `${desk} must mount the shared rail`);
+      assert.match(read('frontend/src/pages/cycles/cycleModel.js'), new RegExp(`${cycle}: \\{ key: '${cycle}', name: '${label}'`),
+        `${desk}'s rail would not be named ${label}`);
+      continue;
+    }
     assert.match(src, new RegExp(`<WorkerRail[\\s\\S]*?workspace="${label}"`),
       `${desk} must mount the shared rail`);
   }

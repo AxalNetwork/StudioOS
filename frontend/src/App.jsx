@@ -396,7 +396,6 @@ const FounderBuildThisWeek = lazy(() => import('./pages/founder/FounderBuildThis
 const FounderBuildRoadmap = lazy(() => import('./pages/founder/FounderBuildRoadmap'));
 const FounderBuildKpi = lazy(() => import('./pages/founder/FounderBuildKpi'));
 const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCadence'));
-const FounderRaiseDesk = lazy(() => import('./pages/founder/FounderRaiseDesk'));
 const FounderRaisePitch = lazy(() => import('./pages/founder/FounderRaisePitch'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
@@ -3318,9 +3317,13 @@ function AppInner() {
           itself on a redirect into a sub-sub-route of Capital. Every section
           page Replit shipped is untouched; only the redirect is replaced,
           and only for a founder in landing mode. */}
+      {/* D661 (#1474): a founder's /raise is the cycle overview from #1501's
+          read, and /raise/<module> its module pages. Every Raise tool route
+          above is static and wins, so /raise/data-room stays the data room. */}
       <Route path="/raise" element={founderRaiseLanding
-        ? guard(labRoles(['admin', 'founder']), <FounderRaiseDesk />)
+        ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
         : <Navigate to="/raise/capital/pipeline" replace />} />
+      <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       {/* Advisors were the one signed-in licence this guard omitted, and the
           omission was not a policy: `ReferralsPage` has no role branch at all,

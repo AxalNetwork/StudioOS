@@ -11,7 +11,8 @@ import useAssistMode from '../../hooks/useAssistMode';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
-import * as validateAdapter from './adapters/validate';
+import { cycleOf } from './cycleModel';
+import { MODULES } from './modules';
 
 /**
  * D661 (#1474) — a cycle's overview and module pages, wired to its read.
@@ -32,7 +33,7 @@ import * as validateAdapter from './adapters/validate';
 
 const CYCLE_DEFS = {
   validate: {
-    modules: validateAdapter.MODULES,
+    modules: MODULES.validate,
     // The primary action opens the interview form; a session attaches to the
     // interview it records (`RecordSessionSheet`), so the form comes first.
     action: (q) => ({ label: 'Record a session', href: `/validate/interviews?new=record${q ? `&${q.slice(1)}` : ''}` }),
@@ -47,6 +48,32 @@ const CYCLE_DEFS = {
     }),
     // The AI fill bands the Validate desk carried, on the module they fill.
     fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
+  },
+  /**
+   * Raise's read (#1501, D663) is already in D661's shape: its cards carry
+   * chart specs and its records carry their own `add`, so it needs no
+   * adapter. Its modules are in `modules.js`, held to `services/raiseCycle.ts`'s
+   * list by `cycle_adapters_d661.test.ts`.
+   *
+   * `/raise/data-room` IS THE DATA ROOM. The module's slug and the tool's
+   * route are the same path, and the tool's static route wins, so the Data
+   * room tab opens the working tool itself, which is D661's rule for a
+   * module that has one. The other six have module pages.
+   */
+  raise: {
+    modules: MODULES.raise,
+    // D653's Call for Capital, behind ROUND_CALLS_ENABLED; with the flag off
+    // the page says so in its own words.
+    action: () => ({ label: 'Call for Capital', href: '/round-calls' }),
+    tools: toFnMap({
+      'investor-narrative': () => ({ label: 'Open the positioning workspace', href: '/raise/pitch/positioning' }),
+      'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
+      'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
+      'use-of-funds': () => ({ label: 'Open the financial model', href: '/raise/capital/model' }),
+      'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
+    }),
+    add: toFnMap({}),
+    fills: {},
   },
 };
 
@@ -78,7 +105,8 @@ export default function CycleRoute({ cycle }) {
   const { slug } = useParams();
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
   const { projectId, status: projectStatus } = useProject();
-  const [fillsOn] = useAssistMode('Validate');
+  const name = cycleOf(cycle)?.name || 'Validate';
+  const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
 
   const [overview, setOverview] = useState(null);
@@ -129,11 +157,11 @@ export default function CycleRoute({ cycle }) {
   const action = def.action(q);
   const rail = (
     <WorkerRail
-      workspace="Validate"
+      workspace={name}
       role="founder"
       stance="Evidence-led view"
       fills
-      note={ASSIST_SURFACES.workspace.desks.Validate.fills}
+      note={ASSIST_SURFACES.workspace.desks[name]?.fills}
       coverage={[projectId ? `Venture #${projectId} selected` : 'No venture selected']}
       footer="Traceable surface · no unsupported automated actions"
     />
@@ -141,7 +169,7 @@ export default function CycleRoute({ cycle }) {
 
   let body;
   if (projectStatus === 'none') {
-    body = <p className="m-0 rounded-xl border border-axal-hairline bg-white p-4 text-[13px] text-axal-muted dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400" data-testid="cycle-no-venture">There is no venture to show yet. Validate fills in once you have one.</p>;
+    body = <p className="m-0 rounded-xl border border-axal-hairline bg-white p-4 text-[13px] text-axal-muted dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400" data-testid="cycle-no-venture">There is no venture to show yet. {name} fills in once you have one.</p>;
   } else if (!slug) {
     body = (
       <>
@@ -154,7 +182,7 @@ export default function CycleRoute({ cycle }) {
           action={action}
           search={q}
         />
-        <AlsoIn role="founder" row="Validate" />
+        <AlsoIn role="founder" row={name} />
       </>
     );
   } else {
