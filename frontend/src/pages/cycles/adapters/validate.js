@@ -250,6 +250,13 @@ const SIGNAL = { loi: 'Letter of intent', pre_sale: 'Pre-sale', waitlist: 'Waitl
 const COUNTS = { confirmed: ['Confirmed', 'ok'], counted: ['Counted', 'v2'], to_confirm: ['To confirm', 'warn'] };
 const KIND = { direct: ['Direct', 'bad'], adjacent: ['Adjacent', 'warn'] };
 const PERIOD = { year: ' / year', month: ' / month', once: '' };
+// Eadwyn's mark (D424), in the retired board's own words (#1523). A founder's
+// own claim has no mark; a provenance read that failed says so per row.
+const PROVENANCE = {
+  eadwyn: ['Proposed by Eadwyn', 'v1'],
+  eadwyn_edited: ['Proposed by Eadwyn · you edited it', 'v2'],
+  unreadable: ['Unreadable', 'muted'],
+};
 
 const pill = (map, v) => (map[v] ? { text: map[v][0], tone: map[v][1] } : null);
 const word = (map, v) => (v == null ? null : map[v] || String(v));
@@ -341,7 +348,7 @@ export const RECORDS = {
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
   },
   experiments: {
-    keys: ['hypothesis', 'status', 'evidence', 'sprint', 'owner'],
+    keys: ['hypothesis', 'status', 'evidence', 'sprint', 'owner', 'source'],
     row: (r) => ({ id: r.id, cells: {
       hypothesis: r.hypothesis ?? null,
       status: CLAIM_WORD[r.status] ? { text: CLAIM_WORD[r.status], tone: CLAIM_TONE[r.status] } : null,
@@ -350,6 +357,7 @@ export const RECORDS = {
         : null,
       sprint: r.sprint ?? null,
       owner: r.owner ?? null,
+      source: pill(PROVENANCE, r.provenance),
     } }),
     filters: [
       { key: 'status', label: 'Status', options: Object.entries(CLAIM_WORD).map(([value, label]) => ({ value, label })) },

@@ -295,3 +295,59 @@ export function filledColumns(
   }
   return out;
 }
+
+/**
+ * WHICH CLAIMS EADWYN SUPPLIED, and only while they still say what it wrote
+ * (D424). Read by the founder Validate board (`routes/founder_validate.ts`)
+ * and by the Validate cycle's Experiments records (`services/cycleValidate.ts`,
+ * #1523): one reader, so the two can never mark the same claim differently.
+ *
+ * The accept path has written a `fill_provenance` row for every hypothesis a
+ * founder took from the band since migration 246, and nothing ever read them
+ * back for this board: the only reader was the market page's
+ * (`projects.ts`'s `/market-assumptions`). So a claim Eadwyn drafted and one a
+ * founder typed looked identical on the desk, the canvas's provenance mark
+ * notwithstanding.
+ *
+ * THE MARK FOLLOWS THE TEXT, NOT THE ROW. A provenance row says what was
+ * written then; a founder who has since rewritten the claim by hand owns it,
+ * and a card still reading "Eadwyn" over their sentence would be the same lie
+ * pointed the other way. So the newest row per claim counts only when its
+ * `written_value` is the claim's text now — `filledColumns`' comparison, done
+ * over one query for the whole board rather than one `fillsForRow` per card.
+ *
+ * `edited` is the founder's correction before accepting, which the accept
+ * route derives by comparing the two values; the mark says so.
+ *
+ * Throws on a failed read: the caller reports `fills_recorded: false` rather
+ * than an unmarked board, which would claim every claim was typed by hand.
+ */
+export async function claimFills(env: Env, projectId: number, items: any[]): Promise<Map<number, {
+  edited: boolean; model: string | null; fill_class: string;
+}>> {
+  await ensureFillProvenanceSchema(env);
+  const rows = await env.DB.prepare(
+    `SELECT fp.target_row_id, fp.written_value, fp.edited, fp.model, fp.fill_class
+       FROM fill_provenance fp
+       JOIN hypotheses h ON h.id = fp.target_row_id
+      WHERE fp.target_table = 'hypotheses' AND fp.target_column = 'claim'
+        AND h.project_id = ?
+      ORDER BY fp.id DESC`,
+  ).bind(projectId).all<{
+    target_row_id: number; written_value: string | null; edited: number;
+    model: string | null; fill_class: string;
+  }>();
+  const claimNow = new Map<number, string>(items.map((h) => [Number(h.id), String(h.claim ?? '').trim()]));
+  const seen = new Set<number>();
+  const out = new Map<number, { edited: boolean; model: string | null; fill_class: string }>();
+  for (const r of rows.results || []) {
+    const id = Number(r.target_row_id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const now = claimNow.get(id);
+    if (now && String(r.written_value ?? '').trim() === now) {
+      out.set(id, { edited: r.edited === 1, model: r.model ?? null, fill_class: r.fill_class });
+    }
+  }
+  return out;
+}

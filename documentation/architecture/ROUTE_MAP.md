@@ -96,6 +96,9 @@ writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
 `/waitlist-target`, `/competitor-mentions`, `/hypotheses/:id/plan`,
 `/evidence-links/:id/strength`) call the same writers as #1471's interview
 accept path. See `decisions/D659.md`.
+The `experiments` records carry Eadwyn's mark (D424) on each hypothesis as
+`provenance`, read by the board's `claimFills`. A failed read sets
+`fills_recorded: false` and marks every row `unreadable` (#1523, `D661.md`).
 
 ### Raise cycle Worker read (D663, #1476)
 
