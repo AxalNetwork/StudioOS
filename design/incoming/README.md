@@ -10,11 +10,11 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-10-06:
+exists for each — not by how far each has been built. Counts as of 2026-10-10:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 83 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 88 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
@@ -759,9 +759,9 @@ Each was unpacked from its bundle. Every nested `Cycle Overview`, `Cycle Action`
 
 | Canvas | Screens | Routes | Grade | Issues |
 | --- | --- | --- | --- | --- |
-| `Cycle Overview.dc.html` + `pro-cycles.js` | One component for all four cycles: the overview (`full`, `new`, `states`) and each module's page (`module` 0–6) | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` | UPGRADE | #1472, #1474, #1475, #1476, #1477 |
-| `Cycle Overview · Boards.dc.html` | O1–O5 | — | — | #1469 |
-| `Cycle Modules · Boards.dc.html` | MV1–MV6, MB1–MB6, MR1–MR7, MG1–MG7 | — | — | #1469 |
+| `Cycle Overview.dc.html` + `pro-cycles.js` | One component for all four cycles: the overview (`full`, `new`, `states`) and each module's page (`module` 0–6). **Moved to `canvases/integrated/` on 2026-10-10:** all four cycles are wired (D661). | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` | UPGRADE | #1472, #1474, #1475, #1476, #1477 |
+| `Cycle Overview · Boards.dc.html` | O1–O5. **Moved to `canvases/integrated/` on 2026-10-10.** | — | — | #1469 |
+| `Cycle Modules · Boards.dc.html` | MV1–MV6, MB1–MB6, MR1–MR7, MG1–MG7. **Moved to `canvases/integrated/` on 2026-10-10.** | — | — | #1469 |
 | `Cycle Actions · Boards.dc.html` | Each cycle's primary action as its own page, with every step and state | — | — | #1469 |
 | `Cycle Action.dc.html` (updated) | Adds `action=record`: Validate's "Record a session" | Validate's header | NEW | #1473 |
 | `Interview Session.dc.html` | `start`, `record`, `liveoff`, `text`, `review`, with the speech-to-text and structuring model rail | `/validate/session/:id` | NEW | #1470, #1471, #1473 |
