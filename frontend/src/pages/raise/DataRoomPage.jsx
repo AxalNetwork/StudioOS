@@ -643,6 +643,8 @@ function FounderRoom({ projects, initialProjectUid }) {
           )}
         </section>
 
+        <ReportShares shares={room?.report_shares} />
+
         {/* The second grant type, beside the first. Both answer "who sees my
             company"; splitting them across two screens is how a founder ends up
             believing they revoked something they did not. */}
@@ -651,6 +653,45 @@ function FounderRoom({ projects, initialProjectUid }) {
         <ActivityLog events={room?.recent_access || []} />
       </div>
     </RailFrame>
+  );
+}
+
+const REPORT_SHARE_STATUS = { active: 'active', expired: 'expired', used_up: 'every open used', revoked: 'revoked' };
+
+/**
+ * #1524 — the accounts the venture's scoring report was shared with (D588),
+ * beside the room's own grants so one screen answers "who can read about my
+ * company". Read-only: a report share opens one frozen report, not the room,
+ * and is made and revoked from the report's own Share button. Null is an
+ * unread list, said as such; an empty list draws nothing.
+ */
+export function ReportShares({ shares }) {
+  if (shares === undefined) return null;
+  if (shares === null) {
+    return (
+      <section className="mt-6" data-testid="dr-report-shares">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Scoring report shared with</h2>
+        <p className="text-xs text-red-700 dark:text-red-300">The report shares could not be read. This is not a claim that the report was shared with no one.</p>
+      </section>
+    );
+  }
+  if (!shares.length) return null;
+  return (
+    <section className="mt-6" data-testid="dr-report-shares">
+      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Scoring report shared with</h2>
+      <p className="text-xs text-gray-500 mb-3">These accounts can open the scoring report, not the files above. Each link is made and revoked from the report&apos;s Share button.</p>
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+        {shares.map((s) => (
+          <div key={s.id} className="p-3" data-testid={`dr-report-share-${s.id}`}>
+            <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{s.grantee_name || s.grantee_email}</div>
+            <div className="text-[11px] text-gray-500">
+              {s.grantee_name ? `${s.grantee_email} · ` : ''}
+              Scoring report · {Object.hasOwn(REPORT_SHARE_STATUS, String(s.status)) ? REPORT_SHARE_STATUS[s.status] : String(s.status)} · {s.opens} of {s.open_limit} opens · until {fmtWhen(s.expires_at) || 'a date not recorded'}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
