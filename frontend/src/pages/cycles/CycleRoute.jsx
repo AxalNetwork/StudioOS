@@ -409,7 +409,9 @@ export default function CycleRoute({ cycle }) {
   // docks to the edge.
   return (
     <RailFrame rail={rail} data-testid={`cycle-route-${cycle}`}>
-      <div className="min-w-0">
+      {/* The route is full-bleed (`p-0`), so the inset is this page's own,
+          the same `p-5` WorkspaceShell gives every other workspace page. */}
+      <div className="min-w-0 p-5" data-testid="cycle-route-body">
         {body}
         {creates && (
           <CreateStartupForm
