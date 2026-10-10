@@ -380,7 +380,8 @@ const deskFile = (desk) => (desk.startsWith('CycleRoute')
 const WORKSPACES = {
   // D661 (#1474): Validate's root is the cycle overview, wired to #1487's read.
   Validate: ['/validate', 'CycleRoute cycle="validate"'],
-  Build: ['/build', 'FounderBuildDesk'],
+  // D661 (#1474): Build's root is the cycle overview, wired to #1475's read.
+  Build: ['/build', 'CycleRoute cycle="build"'],
   // D661 (#1474): Raise's root is the cycle overview, wired to #1501's read.
   Raise: ['/raise', 'CycleRoute cycle="raise"'],
   // D661 (#1474): Grow's root is the cycle overview, wired to #1488's read.

@@ -22,4 +22,13 @@ export const MODULES = {
   ],
   // services/growCycle.ts
   grow: GROW,
+  // routes/cycle_build.ts (its MODULES, in its order)
+  build: [
+    { slug: 'solution-design', name: 'Solution design' },
+    { slug: 'prototype-mvp', name: 'Prototype / MVP' },
+    { slug: 'product-roadmap', name: 'Product roadmap' },
+    { slug: 'founding-team', name: 'Founding team' },
+    { slug: 'company-creation', name: 'Company creation' },
+    { slug: 'operating-systems', name: 'Operating systems' },
+  ],
 };

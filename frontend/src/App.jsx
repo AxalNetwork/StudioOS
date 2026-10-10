@@ -390,7 +390,6 @@ const FounderWorkspaceTabs = lazy(() => import('./pages/founder/FounderWorkspace
 const FounderWorkspacePage = lazy(() => import('./pages/founder/FounderWorkspacePage'));
 // D661 (#1474): the cycle overview and module pages, wired to each cycle's read.
 const CycleRoute = lazy(() => import('./pages/cycles/CycleRoute'));
-const FounderBuildDesk = lazy(() => import('./pages/founder/FounderBuildDesk'));
 const FounderBuildBoard = lazy(() => import('./pages/founder/FounderBuildBoard'));
 const FounderBuildThisWeek = lazy(() => import('./pages/founder/FounderBuildThisWeek'));
 const FounderBuildRoadmap = lazy(() => import('./pages/founder/FounderBuildRoadmap'));
@@ -2788,9 +2787,14 @@ function AppInner() {
       {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
           Projects / Board / Roadmap views. Standalone routes above stay intact
           for other personas. */}
+      {/* D661 (#1474): a founder's /build is the cycle overview from #1475's
+          read, and /build/<module> its module pages. Every Build page above
+          and below is a static route and wins over /build/:slug; no module
+          slug is one of them. */}
       <Route path="/build" element={founderBuildLanding
-        ? guard(['admin', 'founder'], <FounderBuildDesk />)
+        ? guard(['admin', 'founder'], <CycleRoute cycle="build" />)
         : <Navigate to="/build/this-week" replace />} />
+      <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
         ? <Navigate to={`/build${location.search}`} replace />
         : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />

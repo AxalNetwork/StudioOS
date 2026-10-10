@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
-import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, linkSearch, safeHref, sparkDrawable } from './cycleModel';
+import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -85,7 +85,7 @@ export function FigureTile({ fig }) {
   );
 }
 
-export function CardBody({ card, onRetry, charts, compact = false }) {
+export function CardBody({ card, onRetry, charts, compact = false, search = '' }) {
   const view = charts ? { state: 'ok', charts } : cardView(card);
   if (view.state === 'loading') {
     return (
@@ -99,7 +99,7 @@ export function CardBody({ card, onRetry, charts, compact = false }) {
   }
   if (view.state === 'empty') {
     const next = card?.next;
-    const href = safeHref(next?.href);
+    const href = nextHref(next?.href, search);
     return (
       <div className="flex flex-col items-start gap-1.5 rounded-[10px] border border-dashed border-gray-300 px-3.5 py-4 dark:border-gray-600" data-testid="card-empty">
         <span className="text-[12.5px] text-axal-muted dark:text-gray-400">{view.reason}</span>
@@ -133,7 +133,7 @@ export function CycleCard({ cycle, card, slug, onRetry, search = '' }) {
   const view = cardView(card);
   const name = card?.name || slug;
   const next = card?.next;
-  const href = safeHref(next?.href);
+  const href = nextHref(next?.href, search);
   return (
     <article className={CARD} data-testid={`cycle-card-${card?.slug || slug}`} data-state={view.state}>
       <div className="flex items-baseline justify-between gap-2.5">
@@ -142,7 +142,7 @@ export function CycleCard({ cycle, card, slug, onRetry, search = '' }) {
           : <span className="text-[14.5px] font-extrabold text-axal-ink dark:text-gray-100">{name || 'Loading…'}</span>}
         {card?.range && <span className="whitespace-nowrap text-[11px] text-axal-faint dark:text-gray-500">{card.range}</span>}
       </div>
-      <CardBody card={card} onRetry={onRetry} compact />
+      <CardBody card={card} onRetry={onRetry} compact search={search} />
       {view.state === 'ok' && card.caption && <span className="text-[12px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{card.caption}</span>}
       {view.state === 'ok' && next?.text && (
         <span className="text-[11.5px] text-axal-muted dark:text-gray-400">

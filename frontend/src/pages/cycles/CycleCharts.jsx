@@ -164,17 +164,24 @@ function Stack({ spec, label }) {
   const bare = !!spec.bare;
   const x0 = bare ? 0 : 150;
   const W = bare ? 520 : 360;
+  // A row splits its own total, so its parts read as shares. When every row
+  // has ONE part (Build's Now / Next / Later), shares would draw every row
+  // full; the rows then share one scale so they compare.
+  const sumOf = (r) => (r.parts || []).reduce((a, b) => a + (typeof b === 'number' ? b : 0), 0);
+  const shared = rows.length > 1 && rows.every((r) => (r.parts || []).length === 1);
+  const scale = shared ? maxOf(rows.map(sumOf)) : 0;
   return (
     <Svg h={rows.length * 22} label={label}>
       {rows.map((r, i) => {
         const parts = r.parts || [];
-        const tot = parts.reduce((a, b) => a + (typeof b === 'number' ? b : 0), 0);
+        const tot = sumOf(r);
+        const denom = shared ? scale : tot;
         let x = x0;
         return (
           <g key={`${r.label}-${i}`}>
             {!bare && <T x={0} y={i * 22 + 13} size={10.5} cls={INK}>{r.label}</T>}
             {tot > 0 && parts.map((p, j) => {
-              const w = (W * (typeof p === 'number' ? p : 0)) / tot;
+              const w = (W * (typeof p === 'number' ? p : 0)) / denom;
               const at = x;
               x += w;
               if (w <= 0) return null;
@@ -185,7 +192,7 @@ function Stack({ spec, label }) {
                 </g>
               );
             })}
-            {tot === 0 && <T x={x0} y={i * 22 + 13}>Not recorded</T>}
+            {tot === 0 && <T x={x0} y={i * 22 + 13}>{shared && parts.some((v) => typeof v === 'number') ? '0' : 'Not recorded'}</T>}
           </g>
         );
       })}
