@@ -26,6 +26,7 @@ import {
   INTEGRITY_VERSION,
 } from '../services/scoreIntegrity';
 import type { ScoreSnapshotRow } from '../services/scoreIntegrity';
+import { latestVerifiedByFounder, type OfficialRow } from '../services/peerBenchmark';
 
 const scoring = new Hono<{ Bindings: Env }>();
 
@@ -434,28 +435,6 @@ const NOT_ENOUGH = 'There are not enough scored ventures in this cohort at this 
 const NO_COHORT = 'This project has no Lab cohort recorded, so there is no cohort to compare.';
 const NO_OFFICIAL = 'This project has no official scoring run yet, so there is no percentile to place.';
 
-type OfficialRow = {
-  project_id: number;
-  founder_id: number | null;
-  id: number;
-  total_score: number;
-  created_at: string;
-  integrity_hash: string | null;
-  integrity_version: string | null;
-};
-
-type PlacedRun = {
-  score: number;
-  scoredAt: string;
-  snapshotId: number;
-  hash: string | null;
-};
-
-function laterOfficial(a: OfficialRow, b: OfficialRow): boolean {
-  if (a.created_at !== b.created_at) return a.created_at > b.created_at;
-  return a.id > b.id;
-}
-
 /** D589 — median and percentile for this project's founder, same cohort and week. */
 scoring.get('/cohort-benchmark/:projectId', async (c) => {
   const user = await requireAuth(c);
@@ -511,34 +490,8 @@ scoring.get('/cohort-benchmark/:projectId', async (c) => {
           AND (p.founder_id != ? OR p.id = ?)`,
     ).bind(cohort, week, project.founder_id, projectId).all<OfficialRow>();
 
-    const byFounder = new Map<number, OfficialRow[]>();
-    for (const row of listed.results || []) {
-      const key = row.founder_id == null ? -Number(row.project_id) : Number(row.founder_id);
-      const list = byFounder.get(key) || [];
-      list.push(row);
-      byFounder.set(key, list);
-    }
-    const placed = new Map<number, PlacedRun>();
-    for (const [founderKey, rows] of byFounder) {
-      rows.sort((a, b) => (laterOfficial(a, b) ? -1 : 1));
-      for (const row of rows) {
-        const verified = await verifyScoreHash(c.env, {
-          project_id: row.project_id,
-          total_score: Number(row.total_score),
-          integrity_hash: row.integrity_hash,
-          integrity_version: row.integrity_version,
-          created_at: row.created_at,
-        });
-        if (!verified.valid) continue;
-        placed.set(founderKey, {
-          score: Number(row.total_score),
-          scoredAt: row.created_at,
-          snapshotId: row.id,
-          hash: row.integrity_hash,
-        });
-        break;
-      }
-    }
+    // The same rule the peer benchmark uses (services/peerBenchmark.ts).
+    const placed = await latestVerifiedByFounder(c.env, listed.results || []);
 
     const ownKey = project.founder_id == null ? -projectId : Number(project.founder_id);
     const own = placed.get(ownKey);

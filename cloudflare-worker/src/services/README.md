@@ -93,6 +93,10 @@ diligence checklist and the narrative consistency check (fixed patterns, no
 model). `raiseWriters.ts` has one writer per migration 442 record.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
+`peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
+the Lab cohort at the week for a member, else every venture at the same
+stage, with D589's verified-run rule (`latestVerifiedByFounder`, which the
+cohort route also uses). Only the group's size and percentiles leave it.
 
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:
