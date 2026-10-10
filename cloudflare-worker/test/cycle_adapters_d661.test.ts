@@ -674,3 +674,122 @@ test('D661: every Build module page\'s records are {key,label} columns and {id,c
     }
   }
 });
+
+// ── The Add forms (forms.js), through the real Worker routes ───────────────
+
+import { FORMS, formFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
+import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
+
+/** The app's `request`, answered by the Grow and Build routes on SQLite: a refusal throws like the app's does. */
+function routeRequest(grow: any, buildDb: any) {
+  return async (path: string, opts: any) => {
+    const body = opts?.body ? JSON.parse(opts.body) : undefined;
+    let r: { status: number; body: any };
+    if (path.startsWith('/cycles/grow/')) r = await growCall(grow, opts.method, path.slice('/cycles/grow'.length), body);
+    else if (path.startsWith('/cycles/build/')) {
+      const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+      const res = await buildApp.request(`/api${path}`, { method: opts.method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: opts.body },
+        { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(buildDb) } as any);
+      r = { status: res.status, body: await res.json().catch(() => null) };
+    } else throw new Error(`no route for ${path}`);
+    if (r.status >= 400) { const e: any = new Error(r.body?.detail || `HTTP ${r.status}`); e.status = r.status; e.field = r.body?.field ?? null; throw e; }
+    return r.body;
+  };
+}
+
+const SAMPLES: Record<string, Record<string, Record<string, string>>> = {
+  grow: {
+    'product-improvement': { body: 'Needs single sign-on', source: 'customer', from_name: 'Ana', from_email: 'ana@x.example', theme: 'Security', roadmap_item_label: 'SSO', status: 'planned' },
+    distribution: { name: 'Podcasts', utm_source: 'Podcast', state: 'testing', spend: '1,250.50' },
+    'partner-network': { name: 'Initech', type: 'agency', stage: 'terms', terms: '10% of first-year revenue', revenue: '$300' },
+    'market-expansion': { name: 'Portugal', state: 'considering', demand_score: '7', demand_source: 'Waitlist by country' },
+    'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20), owner_name: 'Fay', status: 'upcoming' },
+  },
+  build: {
+    'solution-design': { title: 'Key-person dependency', severity: 'high', mitigation: 'Document the bank integration' },
+    'company-creation': { title: 'Register for payroll', due_date: dayFrom(45) },
+  },
+};
+
+test('D661: every Add form sends a body its Worker route accepts, and the row reads back on the module\'s table', async () => {
+  const grow = await growFixture();
+  const buildDb = buildFixture();
+  const w = makeCycleWrites(routeRequest(grow, buildDb));
+  const now = new Date();
+  for (const [cycle, forms] of Object.entries(FORMS)) {
+    for (const [slug, form] of Object.entries(forms as Record<string, any>)) {
+      const values = { ...initialValues(form), ...SAMPLES[cycle][slug] };
+      assert.deepEqual(validate(form, values), {}, `${cycle}/${slug}: the sample is valid`);
+      await form.submit(w, cycle === 'grow' ? GP : BP, values, now);
+    }
+  }
+  const growRow = async (slug: string, pick: (r: any) => boolean) => {
+    const r = await growCall(grow, 'GET', `/modules/${slug}?project=${GP}`);
+    return r.body.records.rows.find(pick);
+  };
+  assert.deepEqual(Object.fromEntries(Object.entries(await growRow('product-improvement', (r) => r.body === 'Needs single sign-on')).filter(([k]) => ['source', 'theme', 'status', 'roadmap_item_label'].includes(k))),
+    { source: 'customer', theme: 'Security', status: 'planned', roadmap_item_label: 'SSO' });
+  const podcasts = await growRow('distribution', (r) => r.name === 'Podcasts');
+  assert.deepEqual([podcasts.utm_source, podcasts.state, podcasts.spend_cents, podcasts.spend_source], ['podcast', 'testing', 125050, 'manual'], 'dollars to cents, this month, typed');
+  const initech = await growRow('partner-network', (r) => r.name === 'Initech');
+  assert.deepEqual([initech.type, initech.stage, initech.revenue_cents], ['agency', 'terms', 30000]);
+  const portugal = await growRow('market-expansion', (r) => r.name === 'Portugal');
+  assert.deepEqual([portugal.demand_score, portugal.demand_source, portugal.regulation_score, portugal.readiness], [7, 'Waitlist by country', null, null], 'an unscored part stays null, never 0');
+  const annual = await growRow('durable-company-building', (r) => r.title === 'Annual report');
+  assert.deepEqual([annual.kind, annual.owner_name, annual.status, String(annual.due_at).slice(0, 10)], ['compliance', 'Fay', 'upcoming', dayFrom(20)]);
+  const risks = (await buildCall(buildDb, `/modules/solution-design?project=${BP}`)).body.facts.risks;
+  assert.deepEqual(risks.map((r: any) => [r.title, r.severity, r.mitigation]), [['Key-person dependency', 'high', 'Document the bank integration']]);
+  const steps = (await buildCall(buildDb, `/modules/company-creation?project=${BP}`)).body.records.rows;
+  assert.ok(steps.some((r: any) => r.cells.filing === 'Register for payroll' && r.cells.due === dayFrom(45)));
+  // The checklist tick, and its undo.
+  await w.grow.checklist(GP, 'board_cadence', true);
+  let parts = (await growCall(grow, 'GET', `/modules/durable-company-building?project=${GP}`)).body.parts.checklist;
+  assert.deepEqual(parts.find((i: any) => i.key === 'board_cadence').source, 'manual');
+  await w.grow.checklist(GP, 'board_cadence', false);
+  parts = (await growCall(grow, 'GET', `/modules/durable-company-building?project=${GP}`)).body.parts.checklist;
+  assert.equal(parts.find((i: any) => i.key === 'board_cadence').done, false);
+  assert.equal(thisMonth(now), now.toISOString().slice(0, 7));
+});
+
+test('D661: every choice a form offers is one its Worker route accepts', async () => {
+  const grow = await growFixture();
+  const buildDb = buildFixture();
+  const w = makeCycleWrites(routeRequest(grow, buildDb));
+  let n = 0;
+  for (const [cycle, forms] of Object.entries(FORMS)) {
+    for (const [slug, form] of Object.entries(forms as Record<string, any>)) {
+      for (const field of form.fields.filter((f: any) => f.type === 'select')) {
+        for (const option of field.options) {
+          n += 1;
+          // Unique names, so a channel's UTM source or a market's name never collides.
+          const values = { ...initialValues(form), ...SAMPLES[cycle][slug], [field.name]: option.value,
+            ...(slug === 'distribution' ? { utm_source: `src${n}`, spend: '' } : {}), ...(slug === 'market-expansion' ? { name: `Market ${n}` } : {}),
+            ...(slug === 'partner-network' ? { revenue: '' } : {}) };
+          await assert.doesNotReject(form.submit(w, cycle === 'grow' ? GP : BP, values), `${cycle}/${slug}: ${field.name}=${option.value} was refused`);
+        }
+      }
+    }
+  }
+  assert.ok(n >= 20, `${n} choices checked`);
+});
+
+test('D661: the forms refuse what the Worker would, and show the Worker\'s own sentence on its field', async () => {
+  const market = formFor('grow', 'market-expansion');
+  assert.deepEqual(validate(market, { ...initialValues(market), name: 'Spain', regulation_score: '6' }),
+    { regulation_source: 'The regulation score needs its source.' }, 'a score needs its source');
+  assert.match(validate(market, { ...initialValues(market), name: 'Spain', cost_score: '11', cost_source: 'x' }).cost_score, /0 to 10/);
+  const channel = formFor('grow', 'distribution');
+  assert.deepEqual(Object.keys(validate(channel, initialValues(channel))).sort(), ['name', 'utm_source'], 'required fields');
+  assert.match(validate(channel, { ...initialValues(channel), name: 'X', utm_source: 'x', spend: 'lots' }).spend, /US dollars/);
+  assert.deepEqual([toCents('1,250.50'), toCents(''), toCents('-3')], [125050, null, Number.NaN]);
+  assert.deepEqual([toScore('7'), toScore(''), toScore('7.5'), toScore('11')], [7, null, Number.NaN, Number.NaN]);
+  for (const slug of ['constructor', 'toString', '__proto__']) assert.equal(formFor('grow', slug), null, `${slug} reached an inherited value`);
+  assert.equal(formFor('constructor', 'x'), null);
+  // A refusal the form cannot foresee: the Worker's sentence, on the field it names.
+  const grow = await growFixture();
+  const w = makeCycleWrites(routeRequest(grow, buildFixture()));
+  const values = { ...initialValues(channel), name: 'LinkedIn', utm_source: 'linkedin' };
+  await channel.submit(w, GP, values);
+  await assert.rejects(channel.submit(w, GP, { ...values, name: 'LinkedIn again' }), (e: any) => e.status === 409 && e.field === 'utm_source' && /already uses that UTM source/.test(e.message));
+});
