@@ -65,7 +65,9 @@ app.route('/api/cycles/raise', cycleRaise);
 app.route('/api/decks', decks);
 app.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
-const env = (db: any) => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+// The Worker's vars for a request; a test switches a flag on by setting it here.
+let FLAGS: Record<string, string> = {};
+const env = (db: any) => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), ...FLAGS } as any);
 const roleOf: Record<number, string> = { [FOUNDER]: 'founder', [OTHER]: 'founder', [ADMIN]: 'admin', [PARTNER]: 'partner', [INVESTOR]: 'investor' };
 
 async function call(db: any, who: number, method: string, path: string, body?: unknown) {
@@ -452,4 +454,73 @@ test('a database migrated before 442 gets the version columns and loses the two-
   assert.ok(idx.includes('idx_spinout_deck_overrides_project_key_version'));
   db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (1, 'cover.thesis', 'Saved', 1)`);
   assert.deepEqual(await loadSpinoutDeckOverrides(e, 1), { 'cover.thesis': 'Old' });
+});
+
+// ---------------------------------------------------------------------------
+// Capital relationships — a round call's responders (D653), behind the flag
+// ---------------------------------------------------------------------------
+
+function callFixture() {
+  const db = fixture();
+  db.exec(sqlOf('436_round_calls.sql'));
+  const u = db.prepare("INSERT INTO users (id, role, name, email, is_active, kyc_status) VALUES (?, 'investor', ?, ?, 1, 'approved')");
+  u.run(71, 'Rhea Responder', 'rhea@example.test');
+  u.run(72, 'Quinn Quiet', 'quinn@example.test');
+  u.run(73, 'Elsa Elsewhere', 'elsa@example.test');
+  u.run(74, 'Vera Verified', 'vera@example.test');
+  db.exec(`INSERT INTO round_calls (id, uid, project_id, name, amount_cents, instrument, terms, minimum_cheque_cents, target_close, state, terms_hash, created_by)
+           VALUES (1, 'call-1', ${P}, 'Seed call', 100000000, 'safe', 'Post-money SAFE', 2500000, '2999-01-01', 'sent', 'h', ${FOUNDER}),
+                  (2, 'call-2', ${P_OTHER}, 'Their call', 100000000, 'safe', 'Post-money SAFE', 2500000, '2999-01-01', 'sent', 'h', ${OTHER})`);
+  db.exec(`INSERT INTO round_call_recipients (call_id, investor_user_id, origin, commitment_cents, responded_at) VALUES
+           (1, 71, 'chosen', 5000000, '2026-10-09T10:00:00Z'),
+           (1, 72, 'match', NULL, NULL),
+           (2, 73, 'chosen', NULL, '2026-10-09T10:00:00Z'),
+           (1, 74, 'chosen', 4000000, '2026-10-08T10:00:00Z')`);
+  // The pipeline rows respond() writes: Rhea committed soft through the call.
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, email, stage, amount, commit_status, updated_at) VALUES
+           (1, 'p1', ${P}, 'Rhea Responder', 'RHEA@example.test', 'committed', 50000, 'soft', '2026-10-09 10:00:00'),
+           (2, 'p2', ${P}, 'Quinn Quiet', 'quinn@example.test', 'contacted', NULL, NULL, '2026-10-08 10:00:00'),
+           (3, 'p3', ${P}, 'Elsa Elsewhere', 'elsa@example.test', 'meeting', NULL, NULL, '2026-10-07 10:00:00'),
+           (4, 'p4', ${P}, 'Sam Signed', 'sam@example.test', 'committed', 80000, 'signed', '2026-10-06 10:00:00'),
+           (5, 'p5', ${P}, 'Vera Verified', 'vera@example.test', 'committed', 40000, 'signed', '2026-10-05 10:00:00')`);
+  return db;
+}
+
+test('a round call\'s responders are marked in Capital relationships, with their soft commitments, only while the flag is on', async () => {
+  const db = callFixture();
+  FLAGS = { ROUND_CALLS_ENABLED: 'true' };
+  try {
+    const rec = await moduleRead(db, 'capital-relationships', '&sort=name');
+    const by = Object.fromEntries(rec.body.records.rows.map((r: any) => [r.id, r.cells.stage]));
+    assert.deepEqual(by[1], { text: 'Committed · soft · via call', tone: 'warn' }, 'responded, and committed soft through the call');
+    assert.equal(by[2], 'Contacted', 'a recipient who never responded is not marked');
+    assert.equal(by[3], 'Meeting', 'a response to another venture\'s call does not count here');
+    assert.equal(by[4], 'Committed', 'a signed commitment is not soft');
+    assert.deepEqual(by[5], { text: 'Committed · via call' }, 'a responder whose commitment was signed since');
+    assert.ok(rec.body.records.filters.some((f: any) => f.key === 'source'));
+    const only = await moduleRead(db, 'capital-relationships', '&filter=source:call');
+    assert.deepEqual(only.body.records.rows.map((r: any) => r.id).sort(), [1, 5]);
+    const c = card((await overview(db)).body, 'capital-relationships');
+    const rows = c.series.find((s: any) => s.kind === 'rows' && s.items.some((i: any) => i.label === 'Responded to a round call'));
+    assert.deepEqual(rows.items.map((i: any) => [i.label, i.value]), [['Responded to a round call', 2], ['Soft commitments through a call', 1]]);
+  } finally { FLAGS = {}; }
+
+  // Flag off: nothing about calls is read or drawn, and the filter is not offered.
+  const off = await moduleRead(db, 'capital-relationships', '&sort=name&filter=source:call');
+  assert.equal(off.body.records.rows.length, 5, 'the source filter is ignored with the flag off');
+  assert.equal(off.body.records.rows.find((r: any) => r.id === 1).cells.stage.text, 'Committed · soft', 'still soft, never "via call"');
+  assert.ok(!off.body.records.filters.some((f: any) => f.key === 'source'));
+  const c = card((await overview(db)).body, 'capital-relationships');
+  assert.ok(!c.series.some((s: any) => s.kind === 'rows' && s.items.some((i: any) => /round call/.test(i.label))));
+});
+
+test('with the flag off the call tables are not read: a database without them still draws the card', async () => {
+  const db = fixture(); // no migration 436
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, email, stage) VALUES ('p', ${P}, 'A', 'a@example.test', 'contacted')`);
+  const c = card((await overview(db)).body, 'capital-relationships');
+  assert.equal(c.state, 'ok');
+  FLAGS = { ROUND_CALLS_ENABLED: 'true' };
+  try {
+    assert.equal(card((await overview(db)).body, 'capital-relationships').state, 'unreadable', 'the flag on reads them, so the missing table is said, not hidden');
+  } finally { FLAGS = {}; }
 });

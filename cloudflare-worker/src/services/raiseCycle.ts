@@ -23,6 +23,7 @@
 import type { Env } from '../types';
 import { safeCard, safeFigure, countState, PAGE_SIZE, type Card, type Figure } from './cycleCards';
 import { daysBefore, recordQuery, type RecordQuery } from './cycleValidate';
+import { roundCallsEnabled } from './roundCallPolicy';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -800,21 +801,44 @@ export const IN_CONVERSATION = ['contacted', 'meeting', 'diligence'];
 export type ProspectRow = {
   id: number; name: string | null; firm: string | null; stage: string; contact_id: number | null;
   next_step: string | null; next_step_due: string | null; warm_path: string | null; last_contact: string | null; updated_at: string | null;
+  commit_status: string | null;
+  /** True when this investor responded to one of the venture's round calls (D653); always false with the flag off. */
+  via_call: boolean;
 };
 
 /**
  * The project's prospects with their last contact, which is the stored
  * contact's `last_activity_at` and nothing else: a prospect with no contact,
  * or a contact with no activity, has no last contact.
+ *
+ * A CALL'S RESPONDERS ARE ALREADY PROSPECTS. `services/roundCalls.ts`
+ * `respond()` upserts each response into `raise_prospects` in the same batch
+ * that records it (`routes/contacts.ts` `roundCallPipelineStatements`), so
+ * nothing here writes a second path into the pipeline. What this read adds is
+ * which prospects came through a call: an investor whose verified account
+ * (matched by email, as the call's audience is) responded to one of this
+ * venture's calls. With `ROUND_CALLS_ENABLED` off the call tables are not
+ * read at all, and no prospect is marked.
  */
 export async function loadProspects(env: Env, projectId: number): Promise<ProspectRow[]> {
+  const calls = roundCallsEnabled(env);
   const res = await env.DB.prepare(
-    `SELECT p.id, p.name, p.firm, p.stage, p.contact_id, p.next_step, p.next_step_due, p.warm_path, p.updated_at,
-            c.last_activity_at AS last_contact
+    `SELECT p.id, p.name, p.firm, p.stage, p.contact_id, p.next_step, p.next_step_due, p.warm_path, p.updated_at, p.commit_status,
+            c.last_activity_at AS last_contact,
+            ${calls
+    ? `EXISTS(SELECT 1 FROM round_call_recipients r JOIN round_calls rc ON rc.id = r.call_id JOIN users u ON u.id = r.investor_user_id
+                       WHERE rc.project_id = p.project_id AND r.responded_at IS NOT NULL AND LOWER(u.email) = LOWER(p.email))`
+    : '0'} AS via_call
        FROM raise_prospects p LEFT JOIN contacts c ON c.id = p.contact_id AND c.project_id = p.project_id
       WHERE p.project_id = ? ORDER BY p.id`,
-  ).bind(projectId).all<ProspectRow>();
-  return res.results || [];
+  ).bind(projectId).all<Omit<ProspectRow, 'via_call'> & { via_call: number }>();
+  return (res.results || []).map((r) => ({ ...r, via_call: Number(r.via_call) === 1 }));
+}
+
+/** What the venture's round calls brought into the pipeline: responders, and their soft commitments. */
+export function callResponders(prospects: ProspectRow[]): { responders: number; soft: number } {
+  const via = prospects.filter((p) => p.via_call);
+  return { responders: via.length, soft: via.filter((p) => p.stage === 'committed' && p.commit_status === 'soft').length };
 }
 
 /** How many prospects reached each stage (passed ones excluded). */
@@ -846,6 +870,12 @@ export async function capitalCard(ctx: Ctx): Promise<Card> {
       { kind: 'funnel', steps: funnelOf(prospects) },
       { kind: 'rows', items: [{ label: 'Follow-ups overdue', value: fu.overdue, tone: fu.overdue ? 'bad' : 'ok' }, { label: 'Due in 7 days', value: fu.due }] },
     ];
+    // Shown only while round calls are on: with the flag off no call can be
+    // sent, so a "0 responders" row would describe a feature nobody has.
+    if (roundCallsEnabled(ctx.env)) {
+      const rc = callResponders(prospects);
+      series.push({ kind: 'rows', items: [{ label: 'Responded to a round call', value: rc.responders }, { label: 'Soft commitments through a call', value: rc.soft, tone: rc.soft ? 'warn' : 'muted' }] } as any);
+    }
     const noStep = prospects.filter((p) => IN_CONVERSATION.includes(p.stage) && !p.next_step).length;
     const next = fu.overdue
       ? { text: `Follow up with ${plural(fu.overdue, 'investor whose next step is', 'investors whose next step is')} overdue`, href: href(ctx, 'capital-relationships') }
@@ -856,9 +886,23 @@ export async function capitalCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/**
+ * A prospect's stage, and how it came: "Committed · soft" for a commitment
+ * made through a call (D653 writes those as `soft`, never signed), and
+ * "· via call" for any responder.
+ */
+export function stageCell(p: ProspectRow): Cell {
+  const label = STAGE_LABEL[p.stage] ?? p.stage;
+  const soft = p.stage === 'committed' && p.commit_status === 'soft';
+  const text = `${label}${soft ? ' · soft' : ''}${p.via_call ? ' · via call' : ''}`;
+  return soft || p.via_call ? { text, tone: soft ? 'warn' : undefined } : label;
+}
+
 async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   let rows = (await loadProspects(ctx.env, ctx.projectId)).filter((p) => has(rq.q, p.name, p.firm, p.warm_path));
   if (rq.filter.stage) rows = rows.filter((p) => p.stage === rq.filter.stage);
+  const calls = roundCallsEnabled(ctx.env);
+  if (calls && rq.filter.source === 'call') rows = rows.filter((p) => p.via_call);
   if (rq.sort === 'due') rows.sort((a, b) => String(a.next_step_due ?? '9999').localeCompare(String(b.next_step_due ?? '9999')));
   else if (rq.sort === 'name') rows.sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
   else rows.sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')));
@@ -868,7 +912,7 @@ async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       id: p.id,
       cells: {
         investor: [p.name, p.firm].filter(Boolean).join(' · ') || null,
-        stage: STAGE_LABEL[p.stage] ?? p.stage,
+        stage: stageCell(p),
         last_contact: day(p.last_contact),
         next_step: p.next_step
           ? { text: p.next_step_due ? `${p.next_step} · ${p.next_step_due}` : p.next_step, tone: p.next_step_due && p.next_step_due < ctx.today ? 'bad' : undefined }
@@ -878,7 +922,10 @@ async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     })),
     rq.page,
     {
-      filters: [{ key: 'stage', label: 'Stage', options: [...STAGES, 'passed'].map((s) => ({ value: s, label: STAGE_LABEL[s] })) }],
+      filters: [
+        { key: 'stage', label: 'Stage', options: [...STAGES, 'passed'].map((s) => ({ value: s, label: STAGE_LABEL[s] })) },
+        ...(calls ? [{ key: 'source', label: 'Source', options: [{ value: 'call', label: 'Responded to a call' }] }] : []),
+      ],
       sorts: [{ key: 'recent', label: 'Recently updated' }, { key: 'due', label: 'Next step due' }, { key: 'name', label: 'Name' }],
       add: { text: 'Add an investor', href: TOOL_HREF.pipeline },
     },

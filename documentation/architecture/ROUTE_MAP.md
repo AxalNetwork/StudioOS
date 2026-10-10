@@ -113,7 +113,10 @@ writes are `PUT /readiness/:key`, `POST /readiness/rescore`,
 pipeline, cap table, data room and pitch tools keep their own pages; the
 module pages summarise them and link there. The deck share viewer's heartbeat
 now sends seconds per slide, which closes the "no per-slide dwell" gap noted
-for Pitch below. See `decisions/D663.md`.
+for Pitch below. With `ROUND_CALLS_ENABLED` on, Capital relationships marks the
+prospects that responded to a round call (D653) and counts their soft
+commitments; it reads `round_call_recipients` and writes nothing. See
+`decisions/D663.md`.
 
 ### Cycle overviews and module pages (D661, #1474)
 

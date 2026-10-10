@@ -200,13 +200,13 @@ const raiseApp = new Hono<any>();
 raiseApp.route('/api/cycles/raise', cycleRaise);
 raiseApp.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
-async function raiseCall(db: any, path: string) {
+async function raiseCall(db: any, path: string, flags: Record<string, string> = {}) {
   const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
   try {
     const res = await raiseApp.request(`/api/cycles/raise${path}`, { headers: { Authorization: `Bearer ${token}` } },
-      { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+      { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), ...flags } as any);
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
 }
@@ -269,6 +269,26 @@ test('D661: every Raise module page\'s records are {key,label} columns and {id,c
       for (const k of Object.keys(row.cells)) assert.ok(keys.has(k), `${m.slug}: a cell "${k}" has no column`);
     }
   }
+});
+
+test('D663: a round call\'s responders, with the flag on, draw through the page as a toned cell and a rows chart', async () => {
+  const { cellView } = await import('../../frontend/src/pages/cycles/cycleModel.js');
+  const db = raiseSeeded();
+  db.exec(sqlOf('436_round_calls.sql'));
+  db.exec("INSERT INTO users (id, role, name, email, is_active, kyc_status) VALUES (71, 'investor', 'Rhea', 'rhea@example.test', 1, 'approved')");
+  db.exec(`INSERT INTO round_calls (id, uid, project_id, name, amount_cents, instrument, terms, minimum_cheque_cents, target_close, state, terms_hash, created_by)
+           VALUES (1, 'c1', ${P}, 'Seed call', 100000000, 'safe', 'SAFE', 2500000, '2999-01-01', 'sent', 'h', ${FOUNDER})`);
+  db.exec("INSERT INTO round_call_recipients (call_id, investor_user_id, origin, commitment_cents, responded_at) VALUES (1, 71, 'chosen', 5000000, '2026-10-09T10:00:00Z')");
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, email, stage, amount, commit_status) VALUES ('r', ${P}, 'Rhea', 'rhea@example.test', 'committed', 50000, 'soft')`);
+  const flags = { ROUND_CALLS_ENABLED: 'true' };
+  const m = adaptModule('raise', 'capital-relationships', (await raiseCall(db, `/modules/capital-relationships?project=${P}&filter=source:call`, flags)).body);
+  assert.equal(m.records.rows.length, 1);
+  const v = cellView(m.records.rows[0].cells.stage);
+  assert.equal(v.text, 'Committed · soft · via call');
+  assert.equal(v.tone, 'warn');
+  const c = adaptOverview('raise', (await raiseCall(db, `/overview?project=${P}`, flags)).body).cards.find((x: any) => x.slug === 'capital-relationships');
+  const drawn = drawableSeries(c.series);
+  assert.ok(drawn.some((s: any) => s.kind === 'rows' && s.items.some((i: any) => i.label === 'Responded to a round call' && i.value === 1)), 'the responders row is drawn');
 });
 
 test('D661: a slug from a read or a URL reaches only the adapter\'s own functions, never an inherited one', () => {
