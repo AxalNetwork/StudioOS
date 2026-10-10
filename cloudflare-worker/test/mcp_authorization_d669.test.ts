@@ -100,16 +100,38 @@ const checks:any = {
     assert.deepEqual(out,404);
   },
   async readable(m:any) {
-    const {env,db}=fixture();db.exec("UPDATE users SET role='partner' WHERE id=10");
-    const user=db.prepare('SELECT * FROM users WHERE id=10').get();
-    const offered=await m.grants.grantableCompanies(env,user);
-    const p=await m.grants.grantCompany(env,{...props,companies:[3]},user,3).then((p:any)=>p.id,()=>null);
-    assert.deepEqual([offered.map((p:any)=>p.id),p],[[1,3,2],3]);
+    const observed=[];
+    for (const role of ['admin','partner']) {
+      const {env,db}=fixture();db.prepare('UPDATE users SET role = ?, spinout_lab_active = 1 WHERE id = 10').run(role);
+      const user=db.prepare('SELECT * FROM users WHERE id=10').get();
+      const offered=await m.grants.grantableCompanies(env,user);
+      const p=await m.grants.grantCompany(env,{...props,companies:[3]},user,3).then((p:any)=>p.id,()=>null);
+      observed.push([role,offered.map((p:any)=>p.id),p]);
+    }
+    assert.deepEqual(observed,[['admin',[1,2],3],['partner',[1,2],3]]);
+  },
+  async unownedApprove(m:any) {
+    const observed=[];
+    for (const role of ['admin','partner']) {
+      const {env,db}=fixture();db.prepare('UPDATE users SET role = ?, spinout_lab_active = 1 WHERE id = 10').run(role);
+      const {id}=await park(env);
+      const r=await signed(m.consent.mcpConsent,env,'/'+id+'/approve','POST',{companies:[3]});
+      observed.push([role,r.status,r.body.detail]);
+    }
+    assert.deepEqual(observed,[['admin',403,'You can only connect companies you own'],['partner',403,'You can only connect companies you own']]);
   },
   async cofounder(m:any) {
     const {env,db}=fixture();db.exec("CREATE TABLE IF NOT EXISTS project_members(project_id INTEGER,user_id INTEGER,status TEXT,role TEXT);INSERT INTO project_members VALUES(3,10,'accepted','cofounder')");
     const user=db.prepare('SELECT * FROM users WHERE id=10').get();
     assert.deepEqual((await m.grants.grantableCompanies(env,user)).map((p:any)=>p.id),[1,2]);
+  },
+  async labOwner(m:any) {
+    const {env,db}=fixture();db.exec("UPDATE users SET role='exploring', spinout_lab_active=1 WHERE id=10");
+    const user=db.prepare('SELECT * FROM users WHERE id=10').get();
+    const active=(await m.grants.grantableCompanies(env,user)).map((p:any)=>p.id);
+    db.exec('UPDATE users SET spinout_lab_active=0 WHERE id=10');
+    const inactive=db.prepare('SELECT * FROM users WHERE id=10').get();
+    assert.deepEqual([active,(await m.grants.grantableCompanies(env,inactive)).map((p:any)=>p.id)],[[1,2],[]]);
   },
   async consentScopes(m:any) {
     const {env}=fixture();const {id}=await park(env,['validate:read']);
@@ -285,7 +307,10 @@ const probes=[
  ['project','assistant',".bind(company).first<ProjectRef", ".bind(15).first<ProjectRef"],
  ['session','assistant','!grant.companies.map(Number).includes(Number(session.project_id))','false'],
  ['readable','grants','write ? canWrite(p, user as unknown as User) : canReadBoard(p, user as unknown as User)','canWrite(p, user as unknown as User)'],
- ['cofounder','grants','.filter((p) => canReadBoard(p, user))','.filter(() => true)'],
+ ['readable','grants','.filter((p) => ownsVenture(p, user))','.filter((p) => canReadBoard(p, user))'],
+ ['unownedApprove','consent','if (asked.some((n) => !allowed.has(n)))','if (false)'],
+ ['cofounder','grants','.filter((p) => ownsVenture(p, user))','.filter(() => true)'],
+ ['labOwner','grants','.filter((p) => ownsVenture(p, user))','.filter(() => false)'],
  ['consentScopes','consent','scopes: requestedScopes(p.authRequest.scope)','scopes: [\'validate:read\',\'validate:write\']'],
  ['emptyScope','consent','if (!scope.length)','if (false)'],
  ['impersonation','consent','if ((await selectJwt(c))?.payload.impersonated_by)','if (false)'],

@@ -170,7 +170,7 @@ test('authorize requires S256 PKCE, parks the request and sends the founder to t
 
 // ── Consent ────────────────────────────────────────────────────────────────
 
-test('consent: the page reads name, host and grantable companies; approve refuses a company the caller cannot write to', async () => {
+test('consent: the page offers owned companies only; approve refuses an unowned company', async () => {
   const { env } = fixture();
   const id = requestIdOf(await authorize(env, await register(env, 'Claude')));
   const read = await asUser(env, FOUNDER, 'GET', `/api/mcp/consent/${id}`);
@@ -179,9 +179,9 @@ test('consent: the page reads name, host and grantable companies; approve refuse
   assert.deepEqual(read.body.companies.map((c: any) => c.id), [P, P2], 'only the founder\'s own companies');
   assert.equal((await asUser(env, FOUNDER, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [P, P_OTHER] })).status, 403);
   assert.equal((await asUser(env, FOUNDER, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [] })).status, 400);
-  // Exactly the app's canReadBoard rule: staff can read every board.
-  assert.deepEqual((await asUser(env, ADMIN, 'GET', `/api/mcp/consent/${id}`)).body.companies.map((p: any) => p.id), [P, P_OTHER, P2]);
-  assert.equal((await asUser(env, ADMIN, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [P] })).status, 200);
+  // Staff's board read does not authorize handing a venture to an assistant.
+  assert.deepEqual((await asUser(env, ADMIN, 'GET', `/api/mcp/consent/${id}`)).body.companies.map((p: any) => p.id), []);
+  assert.equal((await asUser(env, ADMIN, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [P] })).status, 403);
 });
 
 test('consent: a request id is single-use, an unknown or lapsed one is expired, and deny returns access_denied', async () => {

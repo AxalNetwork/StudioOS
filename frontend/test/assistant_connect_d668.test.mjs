@@ -66,7 +66,7 @@ test('the expired, used, empty, off and unreadable states render, and none can a
   assert.match(consent({ error: { status: 409 } }).text, /already used[^]*Start again from your assistant/);
   assert.match(consent({ error: { status: 404 } }).text, /Not available yet/);
   const empty = consent({ request: { ...REQUEST, companies: [] } });
-  assert.match(empty.text, /no company you can read in Validate/);
+  assert.match(empty.text, /no company you own/);
   assert.match(empty.text, /It returns tohttps:\/\/chatgpt\.com\/connector_platform_oauth_redirect/, 'the full redirect still shows');
   for (const e of [{ status: 410 }, { status: 409 }, { status: 404 }, { status: 500 }]) assert.doesNotMatch(consent({ error: e }).h, /button-consent-approve/);
   assert.doesNotMatch(empty.h, /button-consent-approve/);

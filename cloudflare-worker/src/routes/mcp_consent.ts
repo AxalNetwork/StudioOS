@@ -84,7 +84,7 @@ mcpConsent.post('/:id/approve', async (c) => {
   if (!asked.length || asked.some((n) => !Number.isInteger(n) || n <= 0)) return c.json({ detail: 'Tick at least one company' }, 400);
   // Checked again here: the page's list is not trusted.
   const allowed = new Set((await grantableCompanies(c.env, user)).map((x) => x.id));
-  if (asked.some((n) => !allowed.has(n))) return c.json({ detail: 'You can only connect companies you can read in Validate' }, 403);
+  if (asked.some((n) => !allowed.has(n))) return c.json({ detail: 'You can only connect companies you own' }, 403);
   const helpers = oauthHelpers(c.env);
   const client = await helpers.lookupClient(p.authRequest.clientId);
   if (!client) return c.json({ detail: 'This assistant is no longer registered. Start again from your assistant.' }, 410);
