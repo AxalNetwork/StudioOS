@@ -97,6 +97,10 @@ they never add up to more than the view's read time.
 the Lab cohort at the week for a member, else every venture at the same
 stage, with D589's verified-run rule (`latestVerifiedByFounder`, which the
 cohort route also uses). Only the group's size and percentiles leave it.
+`narrativeFix.ts` (#1524) hands one stored mismatch to the
+`raise/narrative-fix` draft band and holds the wording to it: a draft quoting a
+figure the check did not find is refused, and every kept one ends with the
+check's own sentence.
 
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:

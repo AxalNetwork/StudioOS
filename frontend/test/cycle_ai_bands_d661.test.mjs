@@ -67,6 +67,7 @@ const BANDS = {
   raise: [
     ['cap-table', 'raise/capital'], ['cap-table', 'raise/liquidity'],
     ['fundraising-readiness', 'raise/data-room'], ['fundraising-readiness', 'raise/legal'],
+    ['investor-narrative', 'raise/narrative-fix'],
   ],
   grow: [['team-expansion', 'grow/talent'], ['distribution', 'grow/customers']],
   build: [
@@ -118,7 +119,7 @@ test('a band is drawn only with the switch on and a venture chosen, and spends n
   }).join('\n');
   for (const field of ['label', 'run', 'accept', 'empty', 'nothingToDraft', 'foot']) {
     const n = (drafts.match(new RegExp(`\\b${field}: '`, 'g')) || []).length;
-    assert.equal(n, 10, `${n} of the ten bands carry ${field}`);
+    assert.equal(n, 11, `${n} of the eleven bands carry ${field}`);
   }
   // D424's voice rule, kept from the desks: Eadwyn's output is never advice.
   assert.doesNotMatch(drafts, /\b(advice|recommend\w*)\b/i, 'a band calls what Eadwyn produces advice');

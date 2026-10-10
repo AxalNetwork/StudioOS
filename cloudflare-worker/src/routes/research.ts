@@ -36,6 +36,7 @@ import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
+import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch } from '../services/narrativeFix';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
@@ -1326,6 +1327,12 @@ const DRAFT_SURFACES: Record<string, {
    * written at all — neither the record nor `accepted_at`.
    */
   accept?: (c: { env: Env }, userId: number, scope: string, body: string) => Promise<string | null>;
+  /**
+   * What is stored for a run, given the model's text, for a surface that holds
+   * the wording to its material after the model writes. Null means no draft:
+   * the run is refused as `draft_unfaithful` and nothing is stored.
+   */
+  finish?: (c: { env: Env }, userId: number, scope: string, text: string) => Promise<string | null>;
 }> = {
   'research/ask': {
     instruction: [
@@ -3593,6 +3600,28 @@ const DRAFT_SURFACES: Record<string, {
     instruction: CALL_REMINDER_INSTRUCTION,
     gather: (c, userId, scope) => callReminderMaterial(c.env, userId, scope),
   },
+
+  // #1524 item 3 (D663) — the Investor narrative band: Eadwyn phrases the fix
+  // for ONE mismatch the consistency check stored, on request. The material is
+  // that one row (`services/narrativeFix.ts`); `finish` refuses a wording that
+  // quotes a figure the row does not carry and appends the check's own
+  // sentence, so both sides are cited and neither is picked. There is no
+  // `accept` hook: accepting keeps the wording and changes neither record.
+  'raise/narrative-fix': {
+    instruction: NARRATIVE_FIX_INSTRUCTION,
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const m = await narrativeMismatch(c.env, pid);
+      return m ? narrativeFixMaterial(m) : [];
+    },
+    finish: async (c, userId, scope, text) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return null;
+      const m = await narrativeMismatch(c.env, pid);
+      return m ? finishNarrativeFix(text, m) : null;
+    },
+  },
 };
 
 research.get('/drafts', async (c) => {
@@ -3654,8 +3683,10 @@ research.post('/drafts', async (c) => {
     console.error('[research] draft failed:', (e as Error).message);
     return c.json({ detail: 'draft_unavailable' }, 503);
   }
-  const text = out.ok && out.output ? out.output.trim() : '';
-  if (!text) return c.json({ detail: 'draft_unavailable' }, 503);
+  const drafted = out.ok && out.output ? out.output.trim() : '';
+  if (!drafted) return c.json({ detail: 'draft_unavailable' }, 503);
+  const text = spec.finish ? await spec.finish(c, user.id, scope, drafted) : drafted;
+  if (!text) return c.json({ detail: 'draft_unfaithful' }, 503);
 
   const uid = newUid();
   await c.env.DB.prepare(
