@@ -411,9 +411,13 @@ test('the doors: the user menu under Usage, the Account section after Usage, and
   assert.doesNotMatch(settings, /id: 'integrations'/, 'Integrations left the section list');
   assert.match(settings, /\{safeActive === 'connectors' && <ConnectorsTab \/>\}/);
   assert.match(settings, /function ConnectorsTab\(\) \{[\s\S]*?<ConnectorsSection \/>\s*<Card title="API keys"/);
-  const build = read('frontend/src/pages/founder/FounderBuildDesk.jsx');
-  assert.match(build, /<div className="build-actions">\s*<button type="button" data-testid="button-connect-a-tool" className="build-open" onClick=\{\(\) => setConnecting\(true\)\}>Connect a tool<\/button>/);
-  assert.match(build, /\{connecting && <Suspense fallback=\{null\}><ConnectToolSheet onClose=\{\(\) => setConnecting\(false\)\} \/><\/Suspense>\}/);
+  // Build's header is the Build cycle overview's primary action since the A3
+  // desk retired (D661, #1474): "Connect a tool" opens the same sheet.
+  const build = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const def = build.slice(build.indexOf('\n  build: {'), build.indexOf('\n};', build.indexOf('\n  build: {')));
+  assert.match(def, /action: \(q, open\) => \(\{ label: 'Connect a tool', onClick: open \}\),\s*sheet: ConnectToolSheet,/);
+  assert.match(build, /import ConnectToolSheet from '\.\.\/account\/ConnectToolSheet';/);
+  assert.match(build, /\{Sheet && sheetOpen && projectId && \(\s*<Sheet projectId=\{projectId\} onClose=\{\(\) => setSheetOpen\(false\)\}/);
 });
 
 test('IntegrationsPage.jsx is retired, and nothing in the app links to the old addresses', () => {

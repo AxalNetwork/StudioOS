@@ -64,14 +64,16 @@ function helpers() {
 test('the Team page is mounted in workspace mode, the old page is gone, and the founder redirects carry mode=workspace', () => {
   const route = APP.split('\n').find((l) => l.includes('path="/build/team"'));
   assert.match(route, /<FounderWorkspaceTabs set="grow" user=\{user\}><FounderTeamPage \/><\/FounderWorkspaceTabs>/);
-  assert.match(route, /founderGrowLanding \? <FounderGrowDesk \/>/, 'the Grow desk still owns the bare route for a founder');
+  // The Grow desk owned a founder's bare route until D661 (#1474) retired it;
+  // Grow's landing is /grow, so the bare route is the Team workspace too.
+  assert.doesNotMatch(route, /founderGrowLanding|FounderGrowDesk/, 'the bare route branches on a retired desk');
   assert.doesNotMatch(APP, /TeamBuildingPage/);
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/TeamBuildingPage.jsx')), 'the retired page is deleted (D304)');
   for (const [path, tab] of [['/advisors', 'advisor'], ['/my/jobs', 'jobs'], ['/cofounder', 'cofounder']]) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.match(line, new RegExp(`user\\?\\.role === 'founder' \\? <Navigate to="/build/team\\?mode=workspace&tab=${tab}" replace />`), path);
   }
-  assert.doesNotMatch(APP, /to="\/build\/team\?tab=/, 'no redirect sends a bare ?tab= into the Grow desk');
+  assert.doesNotMatch(APP, /to="\/build\/team\?tab=/, 'a redirect dropped mode=workspace, which old links still carry');
   // The founder home's bookings card that linked here was retired with the
   // 69dc42f3 body (D564); no founder Studio link sends a bare ?tab= either.
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/founder/FounderStudioBody.jsx')), /\/build\/team\?tab=/);

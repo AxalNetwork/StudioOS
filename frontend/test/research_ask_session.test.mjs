@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { codeOnly } from './_codeOnly.mjs';
+import { CYCLES, cycleBands, cycleRouteSource } from './_cycleBands.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const WORKER = read('cloudflare-worker/src/routes/research.ts');
@@ -293,12 +294,20 @@ test('the AI band never runs on mount, and its surfaces are allow-listed', () =>
   // those as draft surfaces compares two unrelated lists.
   const files = execFileSync('grep', ['-rl', '<ZoneDraft', 'frontend/src'], { encoding: 'utf8' })
     .split('\n').filter(Boolean);
-  const mounted = [...new Set(files.flatMap((f) => {
+  // The cycle pages (D661) draw their bands from one table through one
+  // `<ZoneDraft {...draft}>`, so their surfaces are that table's entries, each
+  // cycle's read from its own `CYCLE_DEFS` entry. The spread mount must stay
+  // the only one in that file, or the table stops being the whole census.
+  const cycleSrc = cycleRouteSource();
+  assert.equal(cycleSrc.split('<ZoneDraft').length - 1, 1, 'CycleRoute mounts a band outside its drafts table');
+  assert.match(cycleSrc, /<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\}/);
+  const fromCycles = CYCLES.flatMap((cycle) => cycleBands(cycleSrc, cycle).map(([, surface]) => surface));
+  const mounted = [...new Set([...files.flatMap((f) => {
     const src = codeOnly(read(f));
     return src.split('<ZoneDraft').slice(1)
       .map((seg) => seg.slice(0, seg.indexOf('/>')).match(/surface="([a-z/-]+)"/)?.[1])
       .filter(Boolean);
-  }))].sort();
+  }), ...fromCycles])].sort();
   assert.ok(mounted.length >= 6, `expected the band to be mounted on the artboards; found ${mounted.length}`);
   assert.deepEqual(allowed, mounted,
     'the worker’s draft surfaces and the pages that mount a band have diverged: '

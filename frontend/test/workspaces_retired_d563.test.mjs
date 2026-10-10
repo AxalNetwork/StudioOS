@@ -56,11 +56,16 @@ function lights(row, path) {
   return row.match.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
-/** Where each "also" row's overview draws its list. */
+/**
+ * Where each "also" row's overview draws its list. The founder cycle rows are
+ * one page, `CycleRoute.jsx` (D661, #1474), whose overview draws the list for
+ * the cycle it is mounted for, under the cycle's own name.
+ */
+const CYCLE_ROUTE = 'frontend/src/pages/cycles/CycleRoute.jsx';
 const DESK = {
-  'founder|Validate': 'frontend/src/pages/founder/FounderValidatePage.jsx',
-  'founder|Raise': 'frontend/src/pages/founder/FounderRaiseDesk.jsx',
-  'founder|Grow': 'frontend/src/pages/founder/FounderGrowDesk.jsx',
+  'founder|Validate': CYCLE_ROUTE,
+  'founder|Raise': CYCLE_ROUTE,
+  'founder|Grow': CYCLE_ROUTE,
   'investor|Portfolio': 'frontend/src/pages/investor/InvestorPortfolioCanvas.jsx',
 };
 // Every other row is a bucket root, which renders BucketBoard or, with no
@@ -121,7 +126,10 @@ test('every "also" page is linked from its row\'s overview', () => {
       if (door !== 'also') continue;
       assert.ok(alsoInFor(role, row).some((w) => w.route === route), `${route} is missing from ${role} · ${row}'s Also in list`);
       const desk = DESK[`${role}|${row}`];
-      if (desk) {
+      if (desk === CYCLE_ROUTE) {
+        assert.match(read(desk), /<AlsoIn role="founder" row=\{name\} \/>/, `${desk} does not draw the cycle's Also in list`);
+        assert.match(read('frontend/src/pages/cycles/cycleModel.js'), new RegExp(`name: '${row}'`), `no cycle is named ${row}`);
+      } else if (desk) {
         assert.match(read(desk), new RegExp(`<AlsoIn role="${role}" row="${row}" />`), `${desk} does not draw ${row}'s Also in list`);
       } else {
         assert.ok(bucketsFor(role).some((b) => b.label === row), `${role} · ${row} is neither a desk nor a bucket root`);

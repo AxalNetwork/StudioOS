@@ -26,7 +26,13 @@ import { MODULES } from './modules';
  * `/<cycle>` draws the overview and `/<cycle>/:slug` one module page, from
  * `GET /api/cycles/<cycle>/…` through `adapters/` (Validate #1487, Raise
  * #1501, Grow #1488, Build #1475). The project is `?project_id=`, else the founder's
- * first, as the desks these replace chose it.
+ * first, as the retired desks chose it.
+ *
+ * THE AI BANDS ARE A TABLE (`drafts`), rendered by one `<ZoneDraft {...draft}>`
+ * below. `research_ask_session.test.mjs` censuses every band against the
+ * Worker's `DRAFT_SURFACES` and reads this file's `surface: '…'` entries for
+ * it, and `validate_fills_the_blanks.test.mjs` holds each cycle's rail
+ * sentence to the bands in its own entry.
  *
  * THE MODULES' WORKING TOOLS STAY WHERE THEY ARE. No canvas yet draws a
  * module's Add form, a record's edit view, or Validate's curation (merging
@@ -80,6 +86,37 @@ const CYCLE_DEFS = {
     }),
     add: toFnMap({}),
     fills: {},
+    // The Raise desk's four AI bands (ZoneDraft, D424), on the modules they
+    // read: the round and its order of payment on Cap table, which holds the
+    // scenario both read; the room and the clauses on Fundraising readiness,
+    // which scores the data room and the documents. Data room has no module
+    // page of its own (its tool's route wins), so its band sits here too.
+    drafts: new Map([
+      ['cap-table', [{
+        surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',
+        empty: 'Nothing proposed yet. Eadwyn will read your round and cap-table scenario back in plain language, and show every step of the arithmetic.',
+        nothingToDraft: 'No round and no cap-table scenario are recorded for this startup yet.',
+        foot: 'Shown step by step, because you will be asked to defend this number.',
+      }, {
+        surface: 'raise/liquidity', label: 'Proposal · plain-language read', run: 'Explain the order of payment', accept: 'Attach to term sheet',
+        empty: 'Nothing proposed yet. Eadwyn will explain who is paid what and in what order from your cap table and round — and name every term the answer needs that nothing here records.',
+        nothingToDraft: 'No cap-table scenario is recorded, so there is no ownership to pay out.',
+        foot: 'No preference term is stored, so none is assumed.',
+      }]],
+      ['fundraising-readiness', [{
+        surface: 'raise/data-room', label: 'Gap analysis', run: 'Read the room', accept: 'Keep this reading',
+        empty: 'Nothing proposed yet. Eadwyn will read what this room holds, what sits behind NDA, and what the investors with access have actually opened.',
+        nothingToDraft: 'This room holds no folders and no files yet.',
+        foot: 'Read from the room itself, never from a generic diligence checklist.',
+      }, {
+        surface: 'raise/legal', tone: 'warn', label: 'Clause explained', run: 'Explain the clauses', accept: 'Keep this reading',
+        empty: 'Nothing proposed yet. Eadwyn will read the documents you have stored and name the clauses worth looking at again, quoting each one.',
+        nothingToDraft: 'No stored legal document has any text to read.',
+        // A reading of your own documents, and the footnote says what it is
+        // rather than what it is not (D424's voice rule).
+        foot: 'A reading of your documents, not counsel’s review. Counsel is on the Team page.',
+      }]],
+    ]),
   },
   /**
    * Grow's read (#1488, D664) carries its own shapes, so it has an adapter
@@ -228,8 +265,10 @@ export default function CycleRoute({ cycle }) {
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
   const drafts = slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
-  // The cost before a run (D424), read only while a band is drawn.
-  const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && drafts.length) });
+  const fillKind = slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
+  // The cost before a run (D424), read only while a band is drawn: a draft
+  // band or a fill band, which quotes its own kind's task from the same read.
+  const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && (drafts.length || fillKind)) });
 
   const [overview, setOverview] = useState(null);
   const [overviewStatus, setOverviewStatus] = useState('loading');
@@ -319,7 +358,6 @@ export default function CycleRoute({ cycle }) {
     );
   } else {
     const recs = module?.records;
-    const fillKind = def.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
     body = (
       <CycleModulePage
         cycle={cycle}
@@ -339,7 +377,7 @@ export default function CycleRoute({ cycle }) {
         search={q}
       >
         {fillKind && projectId && (
-          <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} onApplied={() => setReload((n) => n + 1)} />
+          <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} onApplied={() => setReload((n) => n + 1)} />
         )}
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />

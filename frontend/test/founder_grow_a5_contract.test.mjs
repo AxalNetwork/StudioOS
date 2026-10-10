@@ -3,77 +3,24 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { escapeRe } from './_escapeRe.mjs';
+import { cycleDef, cycleRouteSource } from './_cycleBands.mjs';
 
 const read = (path) => codeOnly(readFileSync(resolve(process.cwd(), path), 'utf8'));
-const page = read('frontend/src/pages/founder/FounderGrowDesk.jsx');
-const app = read('frontend/src/App.jsx');
+// The A5 desk is retired (D661, #1474): Grow's landing is the cycle overview,
+// whose entry in `CycleRoute.jsx` carries the desk's two AI bands.
+const grow = cycleDef(cycleRouteSource(), 'grow');
 
-test('A5 Grow is founder-owned and workspace mode preserves Talent', () => {
-  assert.match(app, /const founderGrowLanding = effectiveRole === 'founder'[\s\S]*?get\('mode'\) !== 'workspace'/);
-  const route = app.split('\n').find((line) => line.includes('path="/build/team"'));
-  assert.match(route, /founderGrowLanding \? <FounderGrowDesk \/>/);
-  assert.match(route, /FounderWorkspaceTabs set="grow"/);
-});
-
-test('A5 reads only documented sources and does not post investor matches', () => {
-  for (const call of ['listMetricsSnapshots', 'metricsSummary', 'listWaitlistCustomers', 'brandGetLanding', 'brandListPages', 'brandListWaitlist', 'raiseProspects', 'founderCoMarketing', 'listCalendarEvents']) assert.ok(page.includes(`api.${call}`), `the desk no longer reads api.${call}`);
+test('the Grow pages read the founder-side co-marketing route, never a partner-only one', () => {
   // The partner-side co-marketing reads refuse every founder (requirePartnerProfile),
   // so a founder page that calls them shows "sources unavailable" on every load.
-  for (const grow of ['FounderGrowDesk', 'FounderGrowLaunch', 'FounderGrowPartnerships']) {
-    const src = read(`frontend/src/pages/founder/${grow}.jsx`);
-    assert.doesNotMatch(src, /api\.listMyCoMarketing(Pitches|Attributions)\(/, `${grow} calls a partner-only co-marketing read`);
-    assert.match(src, /api\.founderCoMarketing\(/, `${grow} does not read the founder-side co-marketing route`);
+  for (const page of ['FounderGrowLaunch', 'FounderGrowPartnerships']) {
+    const src = read(`frontend/src/pages/founder/${page}.jsx`);
+    assert.doesNotMatch(src, /api\.listMyCoMarketing(Pitches|Attributions)\(/, `${page} calls a partner-only co-marketing read`);
+    assert.match(src, /api\.founderCoMarketing\(/, `${page} does not read the founder-side co-marketing route`);
   }
-  assert.match(page, /jobsApi\.applications\(role\.id\)/, 'the desk no longer reads applicant counts');
-  assert.ok(!page.includes('matchInvestors'));
-  assert.match(page, /import \{ api, jobs as jobsApi \} from '\.\.\/\.\.\/lib\/api'/);
-  assert.match(page, /jobsApi\.mine\(\)/);
-  assert.doesNotMatch(page, /api\.jobs\./);
-  assert.match(page, /list\(records\.customers, 'signups'\)/);
-  assert.match(page, /list\(records\.jobs, 'jobs'\)/);
-  assert.match(page, /list\(records\.brandWaitlist, 'signups'\)/);
-  assert.match(page, /project_id.*projectId.*project_uid.*projectUid/s);
 });
 
-test('every card hands off to the Grow page it summarises, and none to another bucket', () => {
-  // REVERSED, AND THE OLD LIST IS THE FINDING. This required exactly six
-  // cross-bucket destinations — `/build/metrics`, `/build/discovery`,
-  // `/build/team?mode=workspace`, `/spinout-lab/brand`,
-  // `/raise/capital/pipeline` and `/comarketing` — on the reading that a
-  // summary card should hand off to wherever that record is edited. Two
-  // problems with it that the reading did not survive: the seven `/grow/*`
-  // pages this desk summarises had been built, so the handoffs were pointing
-  // past them; and `?mode=workspace` is read by `App.jsx` and renders the
-  // shared `FounderWorkspaceTabs`, so that one was not even a page. A reader
-  // could open the summary of their own Grow pages and reach none of them.
-  //
-  // The rule is now the one an overview needs: each card links to its own page,
-  // and the targets come from `SECTIONS` so a slug cannot drift between the
-  // chip row and the card beneath it.
-  assert.match(page, /const GROW_PAGES = Object\.fromEntries\(SECTIONS\.map\(\(\[label, slug\]\) => \[slug, `\/grow\/\$\{slug\}`\]\)\);/,
-    'the card targets are no longer derived from the section list the chips use');
-  for (const slug of ['focus', 'customers', 'talent', 'brand', 'capital-match', 'partnerships', 'launch']) {
-    assert.ok(new RegExp(`GROW_PAGES(\\.${escapeRe(slug)}|\\['${escapeRe(slug)}'\\])`).test(page),
-      `the ${slug} card does not link to /grow/${slug}`);
-  }
-  for (const gone of ['/build/metrics', '/build/discovery', '/build/team?mode=workspace',
-    '/spinout-lab/brand', '/raise/capital/pipeline', '/comarketing']) {
-    assert.ok(!codeOnly(page).includes(`to={\`${gone}`),
-      `a Grow card still hands off to ${gone}, which is not a Grow page`);
-  }
-  assert.doesNotMatch(page, /mode=workspace/,
-    'a card is routing through the shared workspace instead of to a page');
-  // "Read-only source coverage" is A5's own stance line and stays here. The
-  // boundary statement ("no automated actions") is the shared rail's default
-  // footer now, so it is asserted against the component rather than pasted
-  // into every desk — see founder_shell.test.mjs.
-  assert.match(page, /<WorkerRail\b[\s\S]*?workspace="Grow"/,
-    'A5 must mount the shared Worker AI rail');
-  assert.match(page, /stance="Read-only source coverage"/);
-});
-
-test('A5 never turns canvas fixtures into product data or claims', () => {
+test('Grow never turns canvas fixtures into product data or claims', () => {
   // A FIXTURE AND A CONTROL LABEL WERE IN ONE REGEX, AND THEY ARE NOT THE SAME
   // RULE. `Nadia Okonkwo`, `14 of 25` and `Latitude Seed` are the canvas's
   // invented data and must never reach a page — that ban is right and stays
@@ -84,14 +31,13 @@ test('A5 never turns canvas fixtures into product data or claims', () => {
   // The rule that replaces the merge: a control label is admitted exactly when
   // the control does what it says. `Accept sequence` is admitted — accepting a
   // drafted outreach sequence is what that button does. The other two are
-  // still banned, and each for its own reason, asserted in
-  // `founder_grow_overview_a5` beside the thing it is about: `Move to screen`
-  // is a write to `job_applications.status` that no route performs, and
-  // `Generate 4 more` needs an image model this build does not have.
-  assert.doesNotMatch(page, /14 of 25|38 in play|61 leads|37%|Nadia Okonkwo|Latitude Seed|Thornbury Capital|Verwood Ventures|Mistral|FLUX|GPT-OSS|BGE-M3|DeepSeek|Llama|QwQ|Granite|\$14\.20/i,
+  // still banned, each for its own reason: `Move to screen` is a write to
+  // `job_applications.status` that no route performs, and `Generate 4 more`
+  // needs an image model this build does not have.
+  assert.doesNotMatch(grow, /14 of 25|38 in play|61 leads|37%|Nadia Okonkwo|Latitude Seed|Thornbury Capital|Verwood Ventures|Mistral|FLUX|GPT-OSS|BGE-M3|DeepSeek|Llama|QwQ|Granite|\$14\.20/i,
     'a canvas fixture has been transcribed onto the page as data');
-  assert.doesNotMatch(page, /Move to screen|Generate 4 more|Edit touch 1|See all 14 ranked/i,
+  assert.doesNotMatch(grow, /Move to screen|Generate 4 more|Edit touch 1|See all 14 ranked/i,
     'a control promises something no route performs');
-  assert.match(page, /accept="Accept sequence"/,
+  assert.match(grow, /accept: 'Accept sequence'/,
     'the artboard’s own accept label is gone from the band that does exactly that');
 });

@@ -91,8 +91,11 @@ test('the editors keep their deep links: ?mode=workspace, Discovery ?tab=, Signa
 });
 
 test('no founder desk embeds a legacy editor', () => {
-  for (const file of ['FounderBuildDesk', 'FounderValidatePage', 'FounderResearchDesk', 'FounderNetworkDesk']) {
-    const src = codeOnly(raw(`frontend/src/pages/founder/${file}.jsx`));
+  // The Build and Validate desks are retired (D661, #1474); the cycle pages
+  // that replaced them are held to the same rule.
+  for (const file of ['pages/cycles/CycleRoute', 'pages/cycles/CycleOverview', 'pages/cycles/CycleModulePage',
+    'pages/founder/FounderResearchDesk', 'pages/founder/FounderNetworkDesk']) {
+    const src = codeOnly(raw(`frontend/src/${file}.jsx`));
     for (const editor of ['ExecutionPage', 'DiscoveryPage', 'SignalsPage', 'NetworkPage']) {
       assert.ok(!new RegExp(`\\b${editor}\\b`).test(src), `${file} embeds ${editor}`);
     }

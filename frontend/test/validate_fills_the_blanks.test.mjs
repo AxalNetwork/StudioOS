@@ -26,6 +26,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { CYCLE_ROUTE, cycleBands, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
@@ -64,9 +65,11 @@ test('the rail draws the switch only where flipping it does something', () => {
     'the switch must require BOTH a choice-declaring surface and a host that has work');
   // The hosts that have proposal bands. The four desks joined in D424: their
   // bands had been gated on the mode since they were mounted, and no rail on
-  // those desks drew a switch, so none of them could be reached.
+  // those desks drew a switch, so none of them could be reached. The four
+  // cycle pages that replaced them (D661) share one host, `CycleRoute.jsx`.
   const hosts = [
     'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
+    CYCLE_ROUTE,
     ...Object.values(DESKS).filter((d) => d.bands.length).map((d) => d.file),
   ];
   for (const h of hosts) {
@@ -76,35 +79,40 @@ test('the rail draws the switch only where flipping it does something', () => {
 });
 
 /**
- * Every founder desk: its file, the draft surfaces its bands run, and the
- * clause in its `desks` sentence that promises each one (D424). A desk with no
- * bands has an empty list and must not draw a switch.
+ * Every founder cycle page and desk: the bands it runs, and the clause in its
+ * `desks` sentence that promises each one (D424). A host with no bands has an
+ * empty list and must not draw a switch.
  *
  * `route` is where the capability lives: Validate's bands post to
- * founder_validate.ts, and every other desk's bands run a `DRAFT_SURFACES`
- * entry in research.ts.
+ * founder_validate.ts, and every other band runs a `DRAFT_SURFACES` entry in
+ * research.ts.
+ *
+ * THE FOUR CYCLES (D661) are one host, `CycleRoute.jsx`: each cycle's bands
+ * are its own entry in `CYCLE_DEFS` (a `drafts` table, and Validate's `fills`),
+ * read by `_cycleBands.mjs` so one cycle's bands never count as another's. A
+ * Validate band's fourth item is the fill kind its module mounts.
  */
-const DESKS = {
+const CYCLES = {
   Validate: {
-    file: 'frontend/src/pages/founder/FounderValidatePage.jsx',
+    cycle: 'validate',
     bands: [
       [/transcrib\w*\s+recording/i, /founderValidate\.post\('\/interviews\/:id\/transcribe'/, 'transcription', null],
-      [/tags?\s+logged\s+phrases/i, /kind === 'pain_tag'/, 'pain tagging', 'kind="pain_tag"'],
-      [/drafts?\s+hypothesis/i, /insertHypothesis/, 'hypothesis drafting', 'kind="hypothesis"'],
+      [/tags?\s+logged\s+phrases/i, /kind === 'pain_tag'/, 'pain tagging', 'pain_tag'],
+      [/drafts?\s+hypothesis/i, /insertHypothesis/, 'hypothesis drafting', 'hypothesis'],
     ],
   },
   Build: {
-    file: 'frontend/src/pages/founder/FounderBuildDesk.jsx',
+    cycle: 'build',
     bands: [
       [/monday plan/i, 'build/this-week'],
-      // D510 — the cadence card's band, between the week and the roadmap.
+      // D510 — the cadence band, on Operating systems beside the week.
       [/friday retro/i, 'build/retro'],
       [/roadmap ordering/i, 'build/roadmap'],
       [/annotates the metric/i, 'build/kpi'],
     ],
   },
   Raise: {
-    file: 'frontend/src/pages/founder/FounderRaiseDesk.jsx',
+    cycle: 'raise',
     bands: [
       [/round back/i, 'raise/capital'],
       [/clauses/i, 'raise/legal'],
@@ -113,12 +121,15 @@ const DESKS = {
     ],
   },
   Grow: {
-    file: 'frontend/src/pages/founder/FounderGrowDesk.jsx',
+    cycle: 'grow',
     bands: [
       [/ranks applicants/i, 'grow/talent'],
       [/outreach sequence/i, 'grow/customers'],
     ],
   },
+};
+
+const DESKS = {
   // D551 (#1144) — the two A6 bands, once a draft surface read a founder's contacts.
   Network: {
     file: 'frontend/src/pages/founder/FounderNetworkDesk.jsx',
@@ -129,6 +140,9 @@ const DESKS = {
   },
   Research: { file: 'frontend/src/pages/founder/FounderResearchDesk.jsx', bands: [] },
 };
+
+/** Every host's bands, cycles and desks alike. */
+const ALL = { ...CYCLES, ...DESKS };
 
 /** `desks: { Name: { fills|none: '…' } }` out of the config, as text. */
 function deskCopy() {
@@ -279,7 +293,7 @@ test('the mode card promises only what is true on every desk that draws it', () 
   assert.ok(at > 0, 'the workspace surface no longer declares a mode');
   const note = /note: '([^']+)'/.exec(cfg.slice(at, at + 1200))?.[1];
   assert.ok(note, 'the mode declares no note');
-  for (const { bands } of Object.values(DESKS)) {
+  for (const { bands } of Object.values(ALL)) {
     for (const [inNote] of bands) {
       assert.doesNotMatch(note, inNote, `the shared card promises one desk's capability: ${inNote}`);
     }
@@ -307,19 +321,40 @@ test('each desk promises exactly the bands it mounts, and nothing else', () => {
   const copy = deskCopy();
   const validateRoutes = read('cloudflare-worker/src/routes/founder_validate.ts');
   const research = read('cloudflare-worker/src/routes/research.ts');
-  assert.deepEqual(Object.keys(copy).sort(), Object.keys(DESKS).sort(),
-    'the per-desk copy and the six founder desks disagree');
+  assert.deepEqual(Object.keys(copy).sort(), Object.keys(ALL).sort(),
+    'the per-desk copy and the four cycles and two founder desks disagree');
 
-  for (const [name, desk] of Object.entries(DESKS)) {
-    const page = codeOnly(read(desk.file));
+  // THE CYCLE PAGES' ONE RAIL prints the sentence filed under the cycle's own
+  // name (`cycleModel.js`), so it is checked once here and each cycle's name
+  // is held to its copy key below.
+  const route = cycleRouteSource();
+  assert.match(route, /const name = cycleOf\(cycle\)\?\.name \|\| 'Validate';/);
+  assert.match(route, /<WorkerRail\s+workspace=\{name\}[\s\S]*?\n\s*fills\n\s*note=\{ASSIST_SURFACES\.workspace\.desks\[name\]\?\.fills\}/,
+    'the cycle rail does not print its own cycle\'s sentence');
+  const model = codeOnly(read('frontend/src/pages/cycles/cycleModel.js'));
+  for (const [name, { cycle }] of Object.entries(CYCLES)) {
+    assert.match(model, new RegExp(`\\b${cycle}: \\{ key: '${cycle}', name: '${name}'`), `the ${cycle} cycle is not named ${name}`);
+  }
+
+  for (const [name, desk] of Object.entries(ALL)) {
+    const isCycle = Boolean(desk.cycle);
+    const page = isCycle ? '' : codeOnly(read(desk.file));
     const entry = copy[name];
-    // The rail's `note` IS this desk's sentence — read from the config under
-    // the desk's own name, never another desk's and never retyped.
-    assert.match(page, new RegExp(`note=\\{ASSIST_SURFACES\\.workspace\\.desks\\.${name}\\.${entry.kind}\\}`),
-      `${name}'s rail does not print its own sentence`);
-    assert.match(page, new RegExp(`<WorkerRail[\\s\\S]*?workspace="${name}"`), `${name}'s rail names another workspace`);
+    if (!isCycle) {
+      // The rail's `note` IS this desk's sentence — read from the config under
+      // the desk's own name, never another desk's and never retyped.
+      assert.match(page, new RegExp(`note=\\{ASSIST_SURFACES\\.workspace\\.desks\\.${name}\\.${entry.kind}\\}`),
+        `${name}'s rail does not print its own sentence`);
+      assert.match(page, new RegExp(`<WorkerRail[\\s\\S]*?workspace="${name}"`), `${name}'s rail names another workspace`);
+    }
+    // What this host mounts: a cycle's own table entry, or the desk's JSX.
+    const mounted = isCycle
+      ? cycleBands(route, desk.cycle).map(([, surface]) => surface)
+      : [...page.matchAll(/surface="([^"]+)"/g)].map((m) => m[1]);
+    const fillKinds = isCycle ? Object.values(cycleFills(route, desk.cycle)) : null;
 
     if (!desk.bands.length) {
+      assert.ok(!isCycle, `${name} is a cycle page with no band, and its rail draws the switch anyway (D17)`);
       assert.equal(entry.kind, 'none', `${name} has no band, so it must say why there is no switch`);
       assert.doesNotMatch(page, /<ZoneDraft|<FillProposals/, `${name} mounts a band its copy says it does not have`);
       assert.doesNotMatch(page, /<WorkerRail[^>]*?\n\s*fills\n/, `${name} draws a switch that changes nothing (D17)`);
@@ -340,14 +375,17 @@ test('each desk promises exactly the bands it mounts, and nothing else', () => {
         // Validate: the route must exist, and the band (where it is one on
         // this desk) must be mounted with that kind.
         assert.match(validateRoutes, target, `${name} promises ${band[2]} and no route does it`);
-        if (band[3]) assert.ok(page.includes(band[3]), `${name} promises ${band[2]} and mounts no band for it`);
+        if (band[3]) {
+          assert.ok(isCycle ? fillKinds.includes(band[3]) : page.includes(band[3]),
+            `${name} promises ${band[2]} and mounts no band for it`);
+        }
       } else {
-        assert.ok(page.includes(`surface="${target}"`), `${name} promises ${target} and mounts no band for it`);
+        assert.ok(mounted.includes(target), `${name} promises ${target} and mounts no band for it`);
         assert.ok(research.includes(`\n  '${target}': {`), `${name}'s ${target} band has no DRAFT_SURFACES entry`);
       }
     }
-    // Every draft band the desk mounts is one the sentence accounts for.
-    for (const [, surf] of page.matchAll(/surface="([^"]+)"/g)) {
+    // Every draft band the host mounts is one the sentence accounts for.
+    for (const surf of mounted) {
       assert.ok(desk.bands.some(([, t]) => t === surf), `${name} mounts ${surf} and its sentence does not name it`);
     }
   }

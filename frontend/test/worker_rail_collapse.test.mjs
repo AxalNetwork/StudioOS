@@ -105,13 +105,14 @@ test('every rail track keeps its own width as the fallback', () => {
       tracks.push({ file: relative(ROOT, file), inner: m[1] });
     }
   }
-  assert.ok(tracks.length >= 19, `expected the known host grids, found ${tracks.length}`);
+  // Twenty until D661 (#1474) retired three desks whose stylesheets each drew one.
+  assert.ok(tracks.length >= 17, `expected the known host grids, found ${tracks.length}`);
   for (const t of tracks) {
     assert.match(t.inner, /^--fwr-track,\s*\d{3}px$/,
       `${t.file} must fall back to its own pixel width`);
   }
-  // Not all the same number: several hosts differ by design (268, 270, 276,
-  // 278, 285, 286, 288) and collapsing them to one value here would be a
+  // Not all the same number: several hosts differ by design (258, 268, 270,
+  // 276, 278, 280, 286, 288) and collapsing them to one value here would be a
   // layout change smuggled in as a refactor.
   const widths = new Set(tracks.map((t) => t.inner.split(',')[1].trim()));
   assert.ok(widths.size >= 5, `hosts must keep their distinct widths, saw ${[...widths].join(' ')}`);
