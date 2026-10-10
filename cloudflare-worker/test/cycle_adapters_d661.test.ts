@@ -28,6 +28,7 @@ import { MODULES as PAGE_MODULES, CARDS, RECORDS } from '../../frontend/src/page
 import { drawableSeries, cardView, figureValue } from '../../frontend/src/pages/cycles/cycleModel.js';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { recordFill } from '../src/services/fills/provenance.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -59,7 +60,7 @@ const app = new Hono<any>();
 app.route('/api/cycles/validate', cycleValidate);
 app.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
-async function call(db: any, method: string, path: string, body?: unknown) {
+async function call(db: any, method: string, path: string, body?: unknown, binding?: any) {
   const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
@@ -67,7 +68,7 @@ async function call(db: any, method: string, path: string, body?: unknown) {
     const res = await app.request(`/api/cycles/validate${path}`, {
       method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: body === undefined ? undefined : JSON.stringify(body),
-    }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+    }, { JWT_SECRET, ENVIRONMENT: 'development', DB: binding ?? d1Over(db) } as any);
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
 }
@@ -95,6 +96,16 @@ async function seeded() {
   }
   db.exec(`INSERT INTO hypotheses (id, project_id, code, claim, sprint) VALUES (1, ${P}, 'H1', 'Fleets pay', 'Sprint 3'), (2, ${P}, 'H2', 'Drivers text', NULL), (3, ${P}, 'H3', 'Owners decide', NULL)`);
   db.exec(`INSERT INTO hypothesis_pain_links (id, hypothesis_id, pain_group_id, direction, created_at) VALUES (1, 1, 1, 'supports', '${ago(3)} 10:00:00'), (2, 2, 2, 'supports', '${ago(20)} 10:00:00')`);
+  // Eadwyn's mark (#1523), written by the accept path's own writer: H1 taken
+  // as Eadwyn wrote it, H2 corrected before accepting, H3 the founder's own.
+  const fillEnv = { DB: d1Over(db) } as any;
+  const fill = (rowId: number, proposed: string, written: string) => recordFill(fillEnv, {
+    target: { table: 'hypotheses', rowId, column: 'claim' }, proposalId: null, fillClass: 'synthesis',
+    proposedValue: proposed, writtenValue: written, citation: null, model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    task: 'validate_draft_hypotheses', decidedBy: FOUNDER,
+  } as any);
+  await fill(1, 'Fleets pay', 'Fleets pay');
+  await fill(2, 'Drivers send texts', 'Drivers text');
   assert.equal((await call(db, 'PUT', `/evidence-links/1/strength?project=${P}`, { strength: 'pattern' })).status, 200);
   const plan = await call(db, 'PUT', `/hypotheses/1/plan?project=${P}`, { owner_user_id: FOUNDER });
   assert.equal(plan.status, 200, JSON.stringify(plan.body));
@@ -907,4 +918,63 @@ test('D661: an Edit is refused for a row the venture does not hold, and the slug
     rows: [{ name: 'No id', state: 'active' }, { uid: 'g1', name: 'Has id', state: 'paused' }], total: 2, page: 1, page_size: 25 } };
   const rows = adaptModule('grow', 'distribution', read).records.rows;
   assert.deepEqual(rows.map((r: any) => [r.edit, channel.idOf(r)]), [[null, null], [{ uid: 'g1', name: 'Has id', state: 'paused' }, 'g1']]);
+});
+
+// ── #1523: Eadwyn's mark on accepted hypotheses, on Experiments (D424 §3) ──
+
+test('#1523: Experiments marks each claim through the real route and the adapter: Eadwyn, Eadwyn edited, the founder\'s own', async () => {
+  const db = await seeded();
+  const r = await call(db, 'GET', `/modules/experiments?project=${P}&sort=code`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.records.fills_recorded, true);
+  assert.deepEqual(r.body.records.rows.map((x: any) => [x.hypothesis, x.provenance]), [
+    ['H1 · Fleets pay', 'eadwyn'], ['H2 · Drivers text', 'eadwyn_edited'], ['H3 · Owners decide', null],
+  ]);
+  const d = adaptModule('validate', 'experiments', r.body);
+  assert.equal(d.records.cols.at(-1).key, 'source');
+  assert.deepEqual(d.records.rows.map((x: any) => x.cells.source), [
+    { text: 'Proposed by Eadwyn', tone: 'v1' },
+    { text: 'Proposed by Eadwyn · you edited it', tone: 'v2' },
+    null,
+  ]);
+});
+
+test('#1523: a claim rewritten by hand since Eadwyn proposed it is the founder\'s own, with no mark', async () => {
+  const db = await seeded();
+  db.exec(`UPDATE hypotheses SET claim = 'Fleets pay monthly' WHERE id = 1`);
+  const r = await call(db, 'GET', `/modules/experiments?project=${P}&sort=code`);
+  assert.equal(r.body.records.rows[0].provenance, null, 'Eadwyn\'s mark stayed over the founder\'s own sentence');
+});
+
+test('#1523: a failed provenance read keeps every hypothesis and says the marks could not be read', async () => {
+  const db = await seeded();
+  const real = d1Over(db);
+  const failing = new Proxy(real, {
+    get(target: any, prop: string) {
+      if (prop === 'prepare') {
+        return (sql: string) => {
+          if (/FROM fill_provenance/.test(sql)) throw new Error('fill_provenance unreadable');
+          return target.prepare(sql);
+        };
+      }
+      const v = target[prop];
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+  });
+  const r = await call(db, 'GET', `/modules/experiments?project=${P}&sort=code`, undefined, failing);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.records.state, undefined, 'a failed mark read cost the whole table');
+  assert.equal(r.body.records.fills_recorded, false);
+  assert.equal(r.body.records.rows.length, 3, 'a hypothesis went missing when its mark could not be read');
+  assert.ok(r.body.records.rows.every((x: any) => x.provenance === 'unreadable'), 'a failed read passed for "typed by hand"');
+  const d = adaptModule('validate', 'experiments', r.body);
+  assert.ok(d.records.rows.every((x: any) => x.cells.source?.text === 'Unreadable' && x.cells.source?.tone === 'muted'));
+});
+
+test('#1523: the board and the cycle read share one provenance reader', () => {
+  const board = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/founder_validate.ts'), 'utf8');
+  const cycle = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/cycleValidate.ts'), 'utf8');
+  assert.match(board, /import \{[^}]*\bclaimFills\b[^}]*\} from '\.\.\/services\/fills\/provenance'/);
+  assert.match(cycle, /import \{ claimFills \} from '\.\/fills\/provenance'/);
+  for (const src of [board, cycle]) assert.doesNotMatch(src, /FROM fill_provenance/, 'a second copy of the provenance query');
 });

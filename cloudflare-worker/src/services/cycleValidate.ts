@@ -31,6 +31,7 @@ import {
 } from './painGroups';
 import { evidenceFor, verdictFor, laneFor } from '../routes/_founder_validate_helpers';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
+import { claimFills } from './fills/provenance';
 
 export const CYCLE = 'validate';
 export const QUESTION = 'Is this worth building?';
@@ -902,7 +903,11 @@ export const CARD_FOR: Record<ModuleSlug, (ctx: Ctx) => Promise<Card>> = {
 // ---------------------------------------------------------------------------
 
 export type RecordQuery = { q: string; filter: Record<string, string>; sort: string; page: number };
-export type Records = { cols: string[]; rows: Array<Record<string, unknown>>; total: number; page: number; page_size: number };
+export type Records = {
+  cols: string[]; rows: Array<Record<string, unknown>>; total: number; page: number; page_size: number;
+  /** Experiments only: false when `fill_provenance` could not be read (#1523). */
+  fills_recorded?: boolean;
+};
 
 /** `filter=key:value,key:value` → a map, each part charset-checked. */
 export function parseFilter(raw: unknown): Record<string, string> {
@@ -1051,8 +1056,29 @@ async function demandRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   })), rq.page);
 }
 
+/**
+ * Eadwyn's mark on one claim (D424, #1523), from the board's own reader
+ * (`claimFills`): `eadwyn` for a claim it proposed and the founder accepted as
+ * written, `eadwyn_edited` when the founder corrected it before accepting,
+ * `null` for a founder's own claim (or one rewritten since), and
+ * `unreadable` when `fill_provenance` could not be read, so a failed read never
+ * passes for "every claim was typed by hand".
+ */
+export type ClaimProvenance = 'eadwyn' | 'eadwyn_edited' | 'unreadable' | null;
+
 async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true })]);
+  // One read for every claim, never allowed to cost the table.
+  let fillsRecorded = true;
+  const fills = await claimFills(ctx.env, ctx.projectId, hyps).catch(() => {
+    fillsRecorded = false;
+    return new Map<number, { edited: boolean }>();
+  });
+  const provenanceOf = (id: number): ClaimProvenance => {
+    if (!fillsRecorded) return 'unreadable';
+    const f = fills.get(id);
+    return f ? (f.edited ? 'eadwyn_edited' : 'eadwyn') : null;
+  };
   let rows = claimsOf(hyps, links, interviews, model).filter((c) => has(rq.q, c.code, c.claim));
   if (rq.filter.status) rows = rows.filter((c) => c.status === rq.filter.status);
   if (rq.filter.sprint) rows = rows.filter((c) => c.sprint === rq.filter.sprint);
@@ -1060,10 +1086,14 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   if (rq.sort === 'status') rows.sort((a, b) => CLAIM_STATUSES.indexOf(a.status) - CLAIM_STATUSES.indexOf(b.status));
   else if (rq.sort === 'code') rows.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   else rows.sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')));
-  return paged(['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner'], rows.map((c) => ({
-    id: c.id, hypothesis: `${c.code} · ${c.claim}`, status: c.status,
-    evidence: c.evidence, strength: c.strength, sprint: c.sprint, owner: c.owner,
-  })), rq.page);
+  return {
+    ...paged(['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'], rows.map((c) => ({
+      id: c.id, hypothesis: `${c.code} · ${c.claim}`, status: c.status,
+      evidence: c.evidence, strength: c.strength, sprint: c.sprint, owner: c.owner,
+      provenance: provenanceOf(c.id),
+    })), rq.page),
+    fills_recorded: fillsRecorded,
+  };
 }
 
 export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Promise<Records>> = {
