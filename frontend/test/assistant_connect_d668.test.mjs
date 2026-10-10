@@ -20,23 +20,23 @@ import { ASSISTANTS, MCP_SERVER_URL, grantsAfterRevoke } from '../src/pages/acco
 import { AssistantBadge, AssistantEntry } from '../src/pages/founder/AssistantEntry.jsx';
 import { openingStep, placementSource, starterPrompt } from '../src/pages/founder/assistantSession.js';
 
-const REQUEST = { client_name: 'ChatGPT', redirect_host: 'chatgpt.com', companies: [{ id: 7, name: 'Northwind' }, { id: 9, name: 'Acme' }] };
+const REQUEST = { client_name: 'ChatGPT', redirect_host: 'chatgpt.com', redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', scopes: ['validate:read', 'validate:write'], companies: [{ id: 7, name: 'Northwind' }, { id: 9, name: 'Acme' }] };
 const html = (el) => renderToStaticMarkup(React.createElement(MemoryRouter, null, el));
 const consent = (props) => { const h = html(React.createElement(ConsentView, props)); return { h, text: renderedText(h) }; };
 
 test('the consent page always shows the redirect host, larger than the self-declared name', () => {
   const { h, text } = consent({ request: REQUEST });
   assert.match(h, /data-testid="consent-redirect-host"[^]*chatgpt\.com/);
-  assert.match(text, /It returns to\s*chatgpt\.com/);
+  assert.match(text, /It returns to\s*https:\/\/chatgpt\.com\/connector_platform_oauth_redirect/);
   assert.match(text, /Read your Validate context/);
   assert.match(text, /Submit interviews for your review/);
   assert.match(text, /It cannot change a module, delete anything, or see other companies\./);
   // A request with no host says so; a name never stands in for it.
-  const nohost = consent({ request: { ...REQUEST, redirect_host: '' } }).text;
+  const nohost = consent({ request: { ...REQUEST, redirect_uri: '' } }).text;
   assert.match(nohost, /It returns to\s*Not recorded/);
   // A name that claims to be a host is drawn as the name only.
-  const spoof = consent({ request: { ...REQUEST, client_name: 'claude.ai', redirect_host: 'evil.example' } }).text;
-  assert.match(spoof, /It returns to\s*evil\.example/);
+  const spoof = consent({ request: { ...REQUEST, client_name: 'claude.ai', redirect_uri: 'https://evil.example/callback' } }).text;
+  assert.match(spoof, /It returns to\s*https:\/\/evil\.example\/callback/);
 });
 
 test('Approve sends exactly the ticked companies the request offered', () => {

@@ -35,6 +35,8 @@ import {
 } from './interviewSessions';
 import {
   MAX_QUOTE,
+  quoteSpan,
+  normaliseWs,
   PLACEMENT_KINDS,
   isPlacementKind,
   structureTranscript,
@@ -78,6 +80,8 @@ export const LIMITS = {
   bytes: 100 * 1024,
   submissionsPerDay: 20,
   placementsPerCall: 100,
+  pendingPerSession: 100,
+  placementsPerDay: 500,
 } as const;
 
 /** What the founder's assistant run is labelled as in the stored rows. */
@@ -106,62 +110,29 @@ async function loadUser(env: Env, userId: number): Promise<User> {
   return user;
 }
 
-/** Is this company in the grant, and does the founder still belong to it? */
-async function assertCompany(env: Env, grant: AssistantGrant, companyId: number): Promise<void> {
-  if (!grant.companies.map(Number).includes(companyId)) {
-    throw new ToolError(403, 'company_not_granted', 'This connection was not given access to that company.');
-  }
-  const linked = await env.DB.prepare('SELECT 1 AS ok FROM user_company_links WHERE user_id = ? AND company_id = ?')
-    .bind(grant.userId, companyId).first();
-  if (!linked) throw new ToolError(403, 'company_no_longer_yours', 'The account behind this connection no longer belongs to that company.');
-}
-
-/**
- * The company's venture: its one live project. A company with several is
- * refused unless `project` names one of them — a write is never sent to a
- * venture the founder did not pick.
- */
-export async function resolveCompanyProject(
-  env: Env, grant: AssistantGrant, company: unknown, project?: unknown,
-): Promise<Scope> {
-  if (!isInt(company) || company <= 0) throw new ToolError(400, 'company_required', 'Name the company by its id.');
-  await assertCompany(env, grant, company);
+/** "company" is always projects.id, exactly what the consent page ticked. */
+export async function resolveCompanyProject(env: Env, grant: AssistantGrant, company: unknown, project?: unknown): Promise<Scope> {
+  if (!isInt(company) || company <= 0) throw new ToolError(400, 'company_required', 'Name the company by its granted project id.');
+  if (!grant.companies.map(Number).includes(company)) throw new ToolError(403, 'company_not_granted', 'This connection was not given access to that project.');
+  // Legacy callers cannot use "project" to redirect a write to another venture.
+  if (project != null && project !== company) throw new ToolError(400, 'project_mismatch', 'company already names the granted project.');
   const user = await loadUser(env, grant.userId);
-  const rows = await env.DB.prepare(
-    'SELECT id, founder_id, company_id FROM projects WHERE company_id = ? AND deleted_at IS NULL ORDER BY id',
-  ).bind(company).all<ProjectRef & { company_id: number }>();
-  const list = rows.results || [];
-  let chosen: (ProjectRef & { company_id: number }) | undefined;
-  if (project !== undefined && project !== null) {
-    chosen = list.find((p) => Number(p.id) === Number(project));
-    if (!chosen) throw new ToolError(404, 'project_not_in_company', 'That venture is not one of this company’s.');
-  } else if (list.length === 1) {
-    chosen = list[0];
-  } else if (list.length === 0) {
-    throw new ToolError(409, 'company_has_no_venture', 'This company has no venture to record an interview against yet.');
-  } else {
-    throw new ToolError(409, 'company_has_several_ventures', 'This company has more than one venture. Name the one this interview is for with `project`.');
-  }
+  const chosen = await env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(company).first<ProjectRef & { company_id: number | null }>();
+  if (!chosen) throw new ToolError(404, 'project_not_found', 'That project is no longer available.');
   if (!canWrite(chosen, user)) throw new ToolError(403, 'cannot_write', 'The account behind this connection cannot write to that venture.');
   return { user, project: chosen };
 }
 
-/** A session this grant may act on: its venture's company is granted and still writable. */
+/** A session is scoped by its project_id, never by a companies.id crosswalk. */
 async function scopeSession(env: Env, grant: AssistantGrant, sessionId: unknown): Promise<Scope & { session: SessionRow }> {
   if (!isInt(sessionId) || sessionId <= 0) throw new ToolError(400, 'session_required', 'Name the session by its id.');
   const session = await loadSession(env, sessionId);
-  if (!session) throw new ToolError(404, 'session_not_found', 'There is no such session.');
-  const project = await env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
-    .bind(session.project_id).first<ProjectRef & { company_id: number | null }>();
-  // The same answer for "not yours" as for "not there": a grant learns
-  // nothing about another company's sessions.
-  if (!project || project.company_id == null || !grant.companies.map(Number).includes(Number(project.company_id))) {
+  if (!session || !grant.companies.map(Number).includes(Number(session.project_id))) {
     throw new ToolError(404, 'session_not_found', 'There is no such session.');
   }
-  await assertCompany(env, grant, Number(project.company_id));
-  const user = await loadUser(env, grant.userId);
-  if (!canWrite(project, user)) throw new ToolError(403, 'cannot_write', 'The account behind this connection cannot write to that venture.');
-  return { user, project, session };
+  const scoped = await resolveCompanyProject(env, grant, Number(session.project_id));
+  return { ...scoped, session };
 }
 
 async function audit(env: Env, grant: AssistantGrant, projectId: number, action: string, details: Record<string, unknown>) {
@@ -299,14 +270,6 @@ export async function submitInterview(env: Env, grant: AssistantGrant, args: Sub
   }
   const { project } = await resolveCompanyProject(env, grant, args?.company, args?.project);
 
-  const today = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM interview_sessions
-      WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '-1 day')`,
-  ).bind(grant.clientId, grant.userId).first<{ n: number }>();
-  if (Number(today?.n ?? 0) >= LIMITS.submissionsPerDay) {
-    throw new ToolError(429, 'daily_limit', `This connection has submitted ${LIMITS.submissionsPerDay} interviews in the last day. Try again tomorrow.`);
-  }
-
   const iv = await env.DB.prepare(
     `INSERT INTO discovery_interviews
        (project_id, interviewee_name, interviewee_role, interviewee_company, interview_date, stage, done_at, channel)
@@ -321,11 +284,15 @@ export async function submitInterview(env: Env, grant: AssistantGrant, args: Sub
       `INSERT INTO interview_sessions
          (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
           started_at, stopped_at, submitted_via, submitted_via_name, submitted_summary)
-       VALUES (?, ?, ?, ?, ?, 'draft', 'given', ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+       SELECT ?, ?, ?, ?, ?, 'draft', 'given', ?, ?, ?, ?, ?, ?, ?
+        WHERE (SELECT COUNT(*) FROM interview_sessions
+          WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '-1 day')) < ?
+       RETURNING id`,
     ).bind(uid, iv.id, project.id, grant.userId, channel, consent.method, consent.recordedAt,
-      occurredIso, occurredIso, grant.clientId, str(grant.clientName, 120) ?? 'An AI assistant', summary)
+      occurredIso, occurredIso, grant.clientId, str(grant.clientName, 120) ?? 'An AI assistant', summary, grant.clientId, grant.userId, LIMITS.submissionsPerDay)
       .first<{ id: number }>();
-    sessionId = ins ? Number(ins.id) : null;
+    if (!ins) throw new ToolError(429, 'daily_limit', `This connection has submitted ${LIMITS.submissionsPerDay} interviews in the last day. Try again tomorrow.`);
+    sessionId = Number(ins.id);
     const session = sessionId ? await loadSession(env, sessionId) : null;
     if (!session) throw new Error('session_not_created');
     await replaceWithFinal(env, session, segments, SUBMISSION_MODEL, null, 'transcribed');
@@ -334,6 +301,7 @@ export async function submitInterview(env: Env, grant: AssistantGrant, args: Sub
     if (sessionId) await env.DB.prepare('DELETE FROM interview_transcript_segments WHERE session_id = ?').bind(sessionId).run().catch(() => {});
     if (sessionId) await env.DB.prepare('DELETE FROM interview_sessions WHERE id = ?').bind(sessionId).run().catch(() => {});
     await env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(iv.id).run().catch(() => {});
+    if (e instanceof ToolError) throw e;
     console.error('[assistant] submit failed:', (e as Error)?.message);
     throw new ToolError(500, 'not_stored', 'The interview could not be stored. Nothing was kept.');
   }
@@ -359,33 +327,8 @@ async function finalSegments(env: Env, sessionId: number): Promise<Segment[]> {
   return toSegments(rows.results ?? []);
 }
 
-/** Whitespace normalised, nothing else: case and punctuation are the quote's. */
-export const normaliseWs = (s: string) => String(s).replace(/\s+/g, ' ').trim();
-
-/**
- * Where a quote sits in the stored transcript, or null when it is not there
- * verbatim. The span is the segments the quote falls in — computed here, never
- * taken from the assistant.
- */
-export function quoteSpan(segments: readonly Segment[], quote: string): { from: number; to: number } | null {
-  const q = normaliseWs(quote);
-  if (!q) return null;
-  let full = '';
-  const at: { s: Segment; from: number; to: number }[] = [];
-  for (const s of segments) {
-    const t = normaliseWs(s.text);
-    if (!t) continue;
-    if (full) full += ' ';
-    at.push({ s, from: full.length, to: full.length + t.length });
-    full += t;
-  }
-  const idx = full.indexOf(q);
-  if (idx < 0) return null;
-  const end = idx + q.length;
-  const hit = at.filter((x) => x.from < end && x.to > idx);
-  if (!hit.length) return null;
-  return { from: hit[0].s.start, to: hit[hit.length - 1].s.end };
-}
+// One verbatim quote locator for the assistant and StudioOS paths.
+export { quoteSpan, normaliseWs } from './interviewStructuring';
 
 export interface ProposeArgs {
   session_id: unknown;
@@ -415,7 +358,7 @@ export async function proposePlacements(env: Env, grant: AssistantGrant, args: P
   const ctx = await loadStructureContext(env, project.id);
 
   const dropped: { index: number; reason: string }[] = [];
-  const keep: { kind: string; payload: Record<string, unknown>; from: number; to: number; quote: string }[] = [];
+  const keep: { index: number; kind: string; payload: Record<string, unknown>; from: number; to: number; quote: string }[] = [];
   const seen = new Set<string>();
   list.forEach((raw, index) => {
     const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
@@ -435,24 +378,31 @@ export async function proposePlacements(env: Env, grant: AssistantGrant, args: P
     const key = `${kind}|${spec.key(payload)}`;
     if (seen.has(key)) { dropped.push({ index, reason: 'duplicate' }); return; }
     seen.add(key);
-    keep.push({ kind, payload, from: span.from, to: span.to, quote });
+    keep.push({ index, kind, payload, from: span.from, to: span.to, quote });
   });
 
   const runId = newRunId();
+  let stored = 0;
   if (keep.length) {
-    await env.DB.batch(keep.map((p) => env.DB.prepare(
+    const results = await env.DB.batch(keep.map((p) => env.DB.prepare(
       `INSERT INTO validate_proposals
          (project_id, kind, payload_json, model, task, created_by, surface, fill_class,
           citation_json, target_ref, session_id, cite_from, cite_to, run_id, source)
-       VALUES (?, ?, ?, NULL, 'assistant_placements', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?, 'assistant')`,
+       SELECT ?, ?, ?, NULL, 'assistant_placements', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?, 'assistant'
+        WHERE (SELECT COUNT(*) FROM validate_proposals WHERE session_id = ? AND status = 'pending' AND run_id IS NOT NULL) < ?
+          AND (SELECT COUNT(*) FROM validate_proposals vp JOIN interview_sessions s ON s.id = vp.session_id
+            WHERE vp.source = 'assistant' AND vp.created_by = ? AND s.submitted_via = ?
+              AND vp.created_at >= datetime('now', '-1 day')) < ?`,
     ).bind(
       project.id, p.kind, JSON.stringify(p.payload), grant.userId,
       JSON.stringify({ kind: 'transcript', session_id: session.id, from: p.from, to: p.to, quote: p.quote, run_label: runLabel }),
       `interview:${session.interview_id}`, session.id, p.from, p.to, runId,
+      session.id, LIMITS.pendingPerSession, grant.userId, grant.clientId, LIMITS.placementsPerDay,
     )));
+    results.forEach((r, i) => { if (r.meta?.changes) stored += 1; else dropped.push({ index: keep[i].index, reason: 'placement_limit' }); });
   }
   await audit(env, grant, project.id, 'assistant_placements_proposed', {
-    session_uid: session.uid, run_id: runId, stored: keep.length, dropped: dropped.length,
+    session_uid: session.uid, run_id: runId, stored, dropped: dropped.length,
   });
   return { run_id: runId, stored: keep.length, dropped };
 }
@@ -532,8 +482,8 @@ export const TOOLS = {
       type: 'object',
       required: ['company', 'channel', 'occurred_at', 'interviewee', 'consent'],
       properties: {
-        company: { type: 'integer', description: 'The granted company’s id (from list_companies).' },
-        project: { type: 'integer', description: 'Only when the company has several ventures: which one.' },
+        company: { type: 'integer', description: 'The granted project id (from list_companies).' },
+        project: { type: 'integer', description: 'Deprecated: if supplied, must equal company.' },
         channel: { type: 'string', enum: [...CHANNELS] },
         occurred_at: { type: 'string', format: 'date-time' },
         interviewee: {

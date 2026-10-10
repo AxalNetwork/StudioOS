@@ -11,3 +11,5 @@
 - **A tool that takes a company sets `company: true`,** and the server checks
   it against the grant before the tool runs. A tool never reads a company the
   grant does not cover.
+
+D669: `interviews.ts` adapts the three interview services to the SDK's zod schemas. Every read needs validate:read; every interview tool needs validate:write. All six run through the server's common grant and account gate.

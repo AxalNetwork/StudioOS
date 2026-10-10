@@ -120,7 +120,7 @@ test('light by default, dark on request; every payload kind reads as words', () 
   const dark = html(React.createElement(InterviewReview, { theme: 'dark', read: F.PLACEMENTS_ONE_RUN }));
   assert.match(dark, /data-theme="dark" class="dark"/);
   assert.equal(placementText(F.RUN_B[1]), 'Would pay · up to $200 a month');
-  assert.equal(placementText(F.RUN_A[2]), 'Supports hypothesis #4 through pain group #9 · Pattern');
+  assert.equal(placementText(F.RUN_A[2]), 'Supports H4 · Ops teams reconcile weekly through Manual reconciliation · Pattern');
   assert.equal(placementText({ ...F.RUN_A[0], edited_payload: { phrase: 'x', severity: 'mild' } }), '“x” · Mild', 'an edit wins over what the model said');
   assert.match(placementText({ kind: 'nope', payload: {} }), /^Unreadable/);
   assert.equal(spanLabel(null, 5), 'Span not recorded');

@@ -86,7 +86,7 @@ async function register(env: any, name = 'Claude') {
 }
 
 async function authorize(env: any, clientId: string, { pkce = true } = {}) {
-  const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, state: 'st8', resource: `${ORIGIN}/api/mcp`, scope: 'validate:read interviews:submit' });
+  const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, state: 'st8', resource: `${ORIGIN}/api/mcp`, scope: 'validate:read validate:write' });
   if (pkce) { q.set('code_challenge', await challenge()); q.set('code_challenge_method', 'S256'); }
   return hit(env, `/api/oauth/authorize?${q}`);
 }
@@ -179,9 +179,9 @@ test('consent: the page reads name, host and grantable companies; approve refuse
   assert.deepEqual(read.body.companies.map((c: any) => c.id), [P, P2], 'only the founder\'s own companies');
   assert.equal((await asUser(env, FOUNDER, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [P, P_OTHER] })).status, 403);
   assert.equal((await asUser(env, FOUNDER, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [] })).status, 400);
-  // An admin can write to every project, but is offered none: staff are not founders of these.
-  assert.deepEqual((await asUser(env, ADMIN, 'GET', `/api/mcp/consent/${id}`)).body.companies, []);
-  assert.equal((await asUser(env, ADMIN, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [P] })).status, 403);
+  // Exactly the app's canReadBoard rule: staff can read every board.
+  assert.deepEqual((await asUser(env, ADMIN, 'GET', `/api/mcp/consent/${id}`)).body.companies.map((p: any) => p.id), [P, P_OTHER, P2]);
+  assert.equal((await asUser(env, ADMIN, 'POST', `/api/mcp/consent/${id}/approve`, { companies: [P] })).status, 200);
 });
 
 test('consent: a request id is single-use, an unknown or lapsed one is expired, and deny returns access_denied', async () => {
@@ -211,7 +211,7 @@ test('tools: list_companies is the grant; get_validate_context never names an in
   const { token } = await connect(env, [P]);
   const list = await mcp(env, token, 'tools/list');
   assert.equal(list.status, 200, JSON.stringify(list.body));
-  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['get_interview_guide', 'get_validate_context', 'list_companies']);
+  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['get_interview_guide', 'get_validate_context', 'list_companies', 'propose_placements', 'structure_with_studioos', 'submit_interview']);
   for (const t of list.body.result.tools) assert.ok(t.description.length > 20 && t.inputSchema?.type === 'object', t.name);
   assert.deepEqual(toolJson(await callTool(env, token, 'list_companies')).companies, [{ id: P, name: 'Acme' }]);
   const ctxRes = await callTool(env, token, 'get_validate_context', { company: P });
@@ -237,7 +237,7 @@ test('tools: a company outside the grant is refused, and so is one the user has 
   assert.equal(foreign.body.result.isError, true);
   db.exec(`UPDATE projects SET founder_id = 1002 WHERE id = ${P}`); // the founder no longer owns it
   const lost = await callTool(env, token, 'get_validate_context', { company: P });
-  assert.match(toolJson(lost).error, /can no longer write to that company/);
+  assert.match(toolJson(lost).error, /can no longer read that company/);
   assert.deepEqual(toolJson(await callTool(env, token, 'list_companies')).companies, [], 'a lost company drops out of the list');
 });
 
@@ -317,3 +317,6 @@ test('wrangler.toml: the two discovery paths run the Worker first, the flag is "
   assert.doesNotMatch(toml, /pattern\s*=\s*"[^"]*(\/api\/mcp|well-known|oauth)/, 'no route for the MCP paths');
   assert.match(toml, /^main = "cloudflare-worker\/src\/index\.ts"$/m);
 });
+
+// D669's regression probes reuse the real OAuth/SQLite fixture.
+export { fixture, register, authorize, asUser, requestIdOf, connect, mcp, callTool, toolJson };

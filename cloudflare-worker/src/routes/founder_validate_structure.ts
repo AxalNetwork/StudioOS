@@ -168,6 +168,13 @@ async function applyPlacement(
       await setInterviewIcpFit(env, await ownInterview(), String(payload.fit));
       return;
     case 'evidence': {
+      const prior = await env.DB.prepare(
+        'SELECT strength FROM hypothesis_pain_links WHERE hypothesis_id = ? AND pain_group_id = ? AND direction = ?',
+      ).bind(Number(payload.hypothesis_id), Number(payload.pain_group_id), payload.direction === 'refutes' ? 'contradicts' : 'supports')
+        .first<{ strength: string | null }>();
+      if (prior && prior.strength !== payload.strength) {
+        throw new WriterError(409, 'This evidence link already has a different strength. Review it in Experiments before changing it.');
+      }
       const direction = payload.direction === 'refutes' ? 'contradicts' : 'supports';
       const ok = await insertHypothesisLink(
         env, row.project_id, Number(payload.hypothesis_id), Number(payload.pain_group_id), direction,
@@ -176,7 +183,7 @@ async function applyPlacement(
       const link = await env.DB.prepare(
         'SELECT id FROM hypothesis_pain_links WHERE hypothesis_id = ? AND pain_group_id = ? AND direction = ?',
       ).bind(Number(payload.hypothesis_id), Number(payload.pain_group_id), direction).first<{ id: number }>();
-      if (link) await setEvidenceStrength(env, { projectId: row.project_id, userId: user.id, linkId: Number(link.id), strength: payload.strength });
+      if (link && !prior) await setEvidenceStrength(env, { projectId: row.project_id, userId: user.id, linkId: Number(link.id), strength: payload.strength, expectedStrength: null });
       return;
     }
     case 'segment': {
@@ -412,11 +419,16 @@ structure.get('/sessions/:id/placements', async (c) => {
   // own label; StudioOS's runs say StudioOS.
   const submittedVia = (s.session as any).submitted_via_name ?? null;
   const parse = (t: string | null) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
+  const context = await loadStructureContext(c.env, s.session.project_id);
   const placements = (rows.results ?? []).map((r: any) => ({
     id: r.id,
     kind: r.kind,
     module: isPlacementKind(r.kind) ? PLACEMENT_KINDS[r.kind as PlacementKind].module : 'other',
     payload: parse(r.payload_json),
+    evidence_context: r.kind === 'evidence' ? {
+      hypothesis: context.hypotheses.find((h) => h.id === Number((parse(r.edited_payload_json) ?? parse(r.payload_json))?.hypothesis_id)) ?? null,
+      pain_group: context.painGroups.find((g) => g.id === Number((parse(r.edited_payload_json) ?? parse(r.payload_json))?.pain_group_id)) ?? null,
+    } : null,
     edited_payload: parse(r.edited_payload_json),
     status: r.status,
     // Proposed-only kinds say so here, so the page can say so too.

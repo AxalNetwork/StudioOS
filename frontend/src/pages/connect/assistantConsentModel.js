@@ -13,8 +13,9 @@
  * is always drawn beside it and larger than it.
  */
 
-/** What every StudioOS assistant grant may do, and may not. Fixed: no scope is optional. */
-export const ASSISTANT_SCOPES = ['Read your Validate context', 'Submit interviews for your review'];
+/** Labels only for the scopes this authorization requested. */
+export const ASSISTANT_SCOPES = { 'validate:read': 'Read your Validate context', 'validate:write': 'Submit interviews for your review' };
+export const scopesOf = (request) => [...new Set(request?.scopes || [])].map((s) => ASSISTANT_SCOPES[s]).filter(Boolean);
 export const ASSISTANT_LIMITS = 'It cannot change a module, delete anything, or see other companies.';
 
 /**
@@ -35,9 +36,9 @@ export function consentState({ request, error, loading }) {
   return 'ready';
 }
 
-/** The redirect host as drawn: the request's own, or "Not recorded" — never the client's name. */
+/** The full redirect URI as drawn: the request's own, or "Not recorded" — never the client's name. */
 export function hostOf(request) {
-  const h = String(request?.redirect_host || '').trim();
+  const h = String(request?.redirect_uri || '').trim();
   return h || null;
 }
 

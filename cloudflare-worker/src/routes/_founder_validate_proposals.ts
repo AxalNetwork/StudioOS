@@ -185,7 +185,7 @@ export async function listPending(env: Env, projectId: number): Promise<StoredPr
     `SELECT id, kind, payload_json, model, task, status, created_at,
             fill_class, citation_json
        FROM validate_proposals
-      WHERE project_id = ? AND status = 'pending'
+      WHERE project_id = ? AND status = 'pending' AND run_id IS NULL
       ORDER BY id DESC
       LIMIT 50`,
   ).bind(projectId).all<StoredProposal>();

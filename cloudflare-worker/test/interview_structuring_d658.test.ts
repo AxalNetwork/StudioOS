@@ -129,7 +129,7 @@ const rowsOf = (db: any, table: string, cols: string) => db.prepare(`SELECT ${co
 test('a placement with no cited span, or a span outside the transcript, is dropped and never stored', async () => {
   const { env, db } = world();
   const parsed = await seed(env, [
-    { kind: 'pain_severity', payload: { phrase: 'reconcile by hand', severity: 'severe' }, cite: { from: 4000, to: 12000 } },
+    { kind: 'pain_severity', payload: { phrase: 'reconcile by hand', severity: 'severe' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
     { kind: 'pain_severity', payload: { phrase: 'no cite at all', severity: 'real' } },
     { kind: 'competitor_mention', payload: { name: 'Ledgerly' }, cite: { from: 90000, to: 95000 } },
     { kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 9000, to: 9000 } },
@@ -151,11 +151,11 @@ test('a span is only a span: it must end after it starts and overlap a segment',
 
 test('a payload that does not fit its kind is dropped, and evidence can only name this project\'s rows', () => {
   const r = parsePlacements(JSON.stringify({ placements: [
-    { kind: 'pain_severity', payload: { phrase: 'x', severity: 'critical' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'evidence', payload: { hypothesis_id: 99, pain_group_id: 41, direction: 'supports', strength: 'anecdote' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'Anecdote' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'demand_signal', payload: { signal: 'would pay' }, cite: { from: 20000, to: 26000 } },
-    { kind: 'unknown_kind', payload: {}, cite: { from: 0, to: 4000 } },
+    { kind: 'pain_severity', payload: { phrase: 'x', severity: 'critical' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'evidence', payload: { hypothesis_id: 99, pain_group_id: 41, direction: 'supports', strength: 'anecdote' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'Anecdote' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'demand_signal', payload: { signal: 'would pay' }, cite: { from: 20000, to: 26000 }, quote: 'If it worked I would pay for it tomorrow.' },
+    { kind: 'unknown_kind', payload: {}, cite: { from: 0, to: 4000 }, quote: 'How do you reconcile invoices today?' },
   ] }), SEGMENTS, CTX);
   assert.deepEqual(r.placements.map((p) => [p.kind, p.payload]), [
     ['evidence', { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'anecdote' }],
@@ -178,8 +178,8 @@ test('a long transcript is split on segment boundaries, every segment once, and 
     seen.push(content.split('\n')[0]);
     const first = Number(/\[(\d+)-/.exec(content)![1]);
     return { response: JSON.stringify({ placements: [
-      { kind: 'competitor_mention', payload: { name: 'Ledgerly' }, cite: { from: first, to: first + 1000 } },
-      { kind: 'segment', payload: { name: `Part at ${first}` }, cite: { from: first, to: first + 1000 } },
+      { kind: 'competitor_mention', payload: { name: 'Ledgerly' }, cite: { from: first, to: first + 1000 }, quote: long.find((s) => s.start === first)!.text.trim() },
+      { kind: 'segment', payload: { name: `Part at ${first}` }, cite: { from: first, to: first + 1000 }, quote: long.find((s) => s.start === first)!.text.trim() },
     ] }) };
   });
   const out = await structureTranscript(env, { userId: ME, segments: long, context: CTX, step: 'structured', maxChars: 3000 });
@@ -198,7 +198,7 @@ test('the receipt names the model that answered, and the fallback when the first
   const { env, calls } = world((model) => {
     if (model === MID) throw new Error('capacity');
     return { response: JSON.stringify({ placements: [
-      { kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 } },
+      { kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
     ] }) };
   });
   const out = await structureTranscript(env, { userId: ME, segments: SEGMENTS, context: CTX, step: 'structured' });
@@ -222,9 +222,9 @@ test('a refused run stores nothing and says why', async () => {
 test('accepted pain severity, ICP fit and evidence write the same rows the manual routes write', async () => {
   const { env, db } = world();
   const parsed = await seed(env, [
-    { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'real' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'icp_fit', payload: { fit: 'partial', reason: 'Small team' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'pattern' }, cite: { from: 4000, to: 12000 } },
+    { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'real' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'icp_fit', payload: { fit: 'partial', reason: 'Small team' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'pattern' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
   ], 101);
   assert.equal(parsed.placements.length, 3);
   const ids = rowsOf(db, 'validate_proposals', 'id').map((r: any) => r.id);
@@ -266,7 +266,7 @@ test('the manual routes and the accept path share one writer each', () => {
 
 test('edit then accept writes the edit and keeps the model\'s payload; a bad edit writes nothing', async () => {
   const { env, db } = world();
-  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 } }]);
+  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' }]);
   const id = rowsOf(db, 'validate_proposals', 'id')[0].id;
   const bad = await call(env, structure, 'POST', `/placements/${id}/accept`, { payload: { fit: 'amazing', reason: 'x' } });
   assert.equal(bad.status, 422);
@@ -285,7 +285,7 @@ test('edit then accept writes the edit and keeps the model\'s payload; a bad edi
 
 test('two accepts racing write once, and a refuting placement is stored as a contradicting link', async () => {
   const { env, db } = world();
-  await seed(env, [{ kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 42, direction: 'refutes', strength: 'measured' }, cite: { from: 12000, to: 20000 } }]);
+  await seed(env, [{ kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 42, direction: 'refutes', strength: 'measured' }, cite: { from: 12000, to: 20000 }, quote: 'We looked at Ledgerly but it was too expensive.' }]);
   const id = rowsOf(db, 'validate_proposals', 'id')[0].id;
   const [a, b] = await Promise.all([
     call(env, structure, 'POST', `/placements/${id}/accept`),
@@ -301,9 +301,9 @@ test('two accepts racing write once, and a refuting placement is stored as a con
 test('a discarded placement writes nothing to any module', async () => {
   const { env, db } = world();
   await seed(env, [
-    { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'severe' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'refutes', strength: 'anecdote' }, cite: { from: 4000, to: 12000 } },
+    { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'severe' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'refutes', strength: 'anecdote' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
   ]);
   const snapshot = () => JSON.stringify([
     rowsOf(db, 'interview_pain_severities', '*'),
@@ -324,7 +324,7 @@ test('a discarded placement writes nothing to any module', async () => {
 
 test('a market fact has no store: it stays proposed, and the review read says so', async () => {
   const w = withSession(world());
-  await seed(w.env, [{ kind: 'market_fact', payload: { fact: 'Ledgerly costs too much', source: 'the interviewee' }, cite: { from: 12000, to: 20000 } }]);
+  await seed(w.env, [{ kind: 'market_fact', payload: { fact: 'Ledgerly costs too much', source: 'the interviewee' }, cite: { from: 12000, to: 20000 }, quote: 'We looked at Ledgerly but it was too expensive.' }]);
   const id = rowsOf(w.db, 'validate_proposals', 'id')[0].id;
   const r = await call(w.env, structure, 'POST', `/placements/${id}/accept`);
   assert.equal(r.status, 409);
@@ -337,9 +337,9 @@ test('a market fact has no store: it stays proposed, and the review read says so
 test('segment, demand signal and competitor accept through #1472\'s writers', async () => {
   const w = withSession(world());
   await seed(w.env, [
-    { kind: 'segment', payload: { name: 'Finance leads' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'demand_signal', payload: { signal: 'would_pay', detail: 'Would pay tomorrow' }, cite: { from: 20000, to: 26000 } },
-    { kind: 'competitor_mention', payload: { name: 'Ledgerly', context: 'Too expensive' }, cite: { from: 12000, to: 20000 } },
+    { kind: 'segment', payload: { name: 'Finance leads' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'demand_signal', payload: { signal: 'would_pay', detail: 'Would pay tomorrow' }, cite: { from: 20000, to: 26000 }, quote: 'If it worked I would pay for it tomorrow.' },
+    { kind: 'competitor_mention', payload: { name: 'Ledgerly', context: 'Too expensive' }, cite: { from: 12000, to: 20000 }, quote: 'We looked at Ledgerly but it was too expensive.' },
   ]);
   const [seg, demand, comp] = rowsOf(w.db, 'validate_proposals', 'id').map((x: any) => x.id);
 
@@ -372,12 +372,12 @@ test('segment, demand signal and competitor accept through #1472\'s writers', as
 
 test('another member cannot accept or discard; a Lab venture\'s member accepts into the rows the Lab reads', async () => {
   const { env, db } = world();
-  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 } }]);
+  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' }]);
   const id = rowsOf(db, 'validate_proposals', 'id')[0].id;
   assert.equal((await call(env, structure, 'POST', `/placements/${id}/accept`, undefined, OTHER)).status, 403);
   assert.equal((await call(env, structure, 'POST', `/placements/${id}/discard`, undefined, OTHER)).status, 403);
 
-  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'partial', reason: 'Pilot buyer' }, cite: { from: 4000, to: 12000 } }], 201, LAB_PROJECT);
+  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'partial', reason: 'Pilot buyer' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' }], 201, LAB_PROJECT);
   const labId = db.prepare('SELECT id FROM validate_proposals WHERE project_id = ?').get(LAB_PROJECT).id;
   assert.equal((await call(env, structure, 'POST', `/placements/${labId}/accept`, undefined, LAB)).status, 200);
   assert.equal(db.prepare('SELECT icp_fit FROM discovery_interviews WHERE id = 201').get().icp_fit, 'partial',
@@ -386,7 +386,7 @@ test('another member cannot accept or discard; a Lab venture\'s member accepts i
 
 test('a placement naming an interview of another project is refused and stays pending', async () => {
   const { env, db } = world();
-  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'strong', reason: 'x y' }, cite: { from: 4000, to: 12000 } }], 201, PROJECT);
+  await seed(env, [{ kind: 'icp_fit', payload: { fit: 'strong', reason: 'x y' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' }], 201, PROJECT);
   const id = rowsOf(db, 'validate_proposals', 'id')[0].id;
   const r = await call(env, structure, 'POST', `/placements/${id}/accept`);
   assert.equal(r.status, 409);
@@ -426,9 +426,9 @@ test('segment, demand signal and competitor: an accepted placement writes the ro
   const a = withSession(world());
   a.db.prepare(ANALYSIS).run();
   await seed(a.env, [
-    { kind: 'segment', payload: { name: 'Finance leads' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'demand_signal', payload: { signal: 'would_pay', detail: 'Would pay tomorrow' }, cite: { from: 20000, to: 26000 } },
-    { kind: 'competitor_mention', payload: { name: 'Ledgerly', context: 'Too expensive' }, cite: { from: 12000, to: 20000 } },
+    { kind: 'segment', payload: { name: 'Finance leads' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'demand_signal', payload: { signal: 'would_pay', detail: 'Would pay tomorrow' }, cite: { from: 20000, to: 26000 }, quote: 'If it worked I would pay for it tomorrow.' },
+    { kind: 'competitor_mention', payload: { name: 'Ledgerly', context: 'Too expensive' }, cite: { from: 12000, to: 20000 }, quote: 'We looked at Ledgerly but it was too expensive.' },
   ]);
   for (const { id } of rowsOf(a.db, 'validate_proposals', 'id')) {
     const r = await call(a.env, structure, 'POST', `/placements/${id}/accept`);
@@ -459,8 +459,8 @@ test('segment, demand signal and competitor: an accepted placement writes the ro
 test('an accepted severity is stored as the canvas\'s own word, and an evidence link keeps its strength', async () => {
   const { env, db } = world();
   await seed(env, [
-    { kind: 'pain_severity', payload: { phrase: 'Friday close', severity: 'mild' }, cite: { from: 4000, to: 12000 } },
-    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'measured' }, cite: { from: 4000, to: 12000 } },
+    { kind: 'pain_severity', payload: { phrase: 'Friday close', severity: 'mild' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+    { kind: 'evidence', payload: { hypothesis_id: 31, pain_group_id: 41, direction: 'supports', strength: 'measured' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
   ]);
   for (const { id } of rowsOf(db, 'validate_proposals', 'id')) assert.equal((await call(env, structure, 'POST', `/placements/${id}/accept`)).status, 200);
   assert.equal(db.prepare("SELECT severity FROM interview_pain_severities WHERE phrase_norm = 'friday close'").get().severity, 'mild');
@@ -492,8 +492,8 @@ function withSession(w: ReturnType<typeof world>, project = PROJECT, interview =
 }
 
 const REPLY = JSON.stringify({ placements: [
-  { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'severe' }, cite: { from: 4000, to: 12000 } },
-  { kind: 'competitor_mention', payload: { name: 'Ledgerly' }, cite: { from: 12000, to: 20000 } },
+  { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'severe' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
+  { kind: 'competitor_mention', payload: { name: 'Ledgerly' }, cite: { from: 12000, to: 20000 }, quote: 'We looked at Ledgerly but it was too expensive.' },
   { kind: 'icp_fit', payload: { fit: 'strong', reason: 'Owns the close' } },
 ] });
 
@@ -522,7 +522,7 @@ test('compare: a second run is a re-structure with its own run_id, and the read 
   const w = withSession(world(() => {
     n += 1;
     return { response: n === 1 ? REPLY : JSON.stringify({ placements: [
-      { kind: 'pain_severity', payload: { phrase: 'Friday close', severity: 'real' }, cite: { from: 4000, to: 12000 } },
+      { kind: 'pain_severity', payload: { phrase: 'Friday close', severity: 'real' }, cite: { from: 4000, to: 12000 }, quote: 'By hand, every Friday. It takes my whole afternoon and I hate it.' },
     ] }) };
   }));
   const a = await call(w.env, structure, 'POST', '/sessions/5/structure');
