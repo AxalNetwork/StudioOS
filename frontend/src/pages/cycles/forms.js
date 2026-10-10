@@ -239,8 +239,9 @@ const dateText = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ?
 const growEdit = (row) => (row && typeof row.edit === 'object' && row.edit ? row.edit : null);
 /** A Build row id the routes take: a positive whole number, from `prefix<n>` or a bare number. */
 const buildId = (prefix) => (row) => {
-  const m = new RegExp(`^${prefix}(\\d+)$`).exec(String(row?.id ?? ''));
-  const n = m ? Number(m[1]) : NaN;
+  const id = String(row?.id ?? '');
+  const digits = id.startsWith(prefix) ? id.slice(prefix.length) : '';
+  const n = /^\d+$/.test(digits) ? Number(digits) : NaN;
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
