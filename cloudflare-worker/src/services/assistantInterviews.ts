@@ -404,7 +404,7 @@ export async function proposePlacements(env: Env, grant: AssistantGrant, args: P
   await audit(env, grant, project.id, 'assistant_placements_proposed', {
     session_uid: session.uid, run_id: runId, stored, dropped: dropped.length,
   });
-  return { run_id: runId, stored: keep.length, dropped };
+  return { run_id: runId, stored, dropped };
 }
 
 // ---------------------------------------------------------------------------
