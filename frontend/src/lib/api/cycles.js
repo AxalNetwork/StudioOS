@@ -1,4 +1,5 @@
 import { request } from '../api.js';
+import { makeCycleWrites } from './cycleWrites.js';
 
 // D661 (#1474) — the cycle pages' shared read (#1469, D656), one entry per
 // cycle whose read is on `main`. Each path is spelled out so the drift check
@@ -34,6 +35,9 @@ const READS = {
 
 /** The cycles whose read the page can draw. A cycle not here keeps its current page. */
 export const WIRED_CYCLES = Object.keys(READS);
+
+/** The cycle pages' writes, bound to the app's `request` (see `cycleWrites.js`). */
+export const cyclesWrite = makeCycleWrites(request);
 
 export const cyclesApi = {
   overview: (cycle, projectId) => READS[cycle].overview(projectId),

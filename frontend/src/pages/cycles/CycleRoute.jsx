@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { cyclesApi } from '../../lib/api/cycles';
+import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { WorkerRail } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
@@ -16,6 +16,8 @@ import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
+import RecordFormSheet from './RecordFormSheet';
+import { formFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import { cycleOf } from './cycleModel';
 import { MODULES } from './modules';
@@ -160,7 +162,10 @@ const CYCLE_DEFS = {
     ]),
     // A module's further parts, drawn under its table from the module read.
     parts: toFnMap({
-      'durable-company-building': (data) => <DurabilityChecklist items={data?.parts?.checklist} />,
+      'durable-company-building': (data, ctx) => (
+        <DurabilityChecklist items={data?.parts?.checklist}
+          onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
+      ),
     }),
   },
   /**
@@ -264,6 +269,10 @@ export default function CycleRoute({ cycle }) {
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
+  // The module's Add form (`forms.js`), for a store with no page of its own.
+  const form = slug && def ? formFor(cycle, slug) : null;
+  const [formOpen, setFormOpen] = useState(false);
+  useEffect(() => { setFormOpen(false); }, [slug]);
   const drafts = slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -372,7 +381,7 @@ export default function CycleRoute({ cycle }) {
         query={query}
         onQuery={setQuery}
         action={action}
-        add={fnOf(def.add, slug)?.(q)}
+        add={fnOf(def.add, slug)?.(q) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
         tool={fnOf(def.tools, slug)?.(q)}
         search={q}
       >
@@ -382,7 +391,7 @@ export default function CycleRoute({ cycle }) {
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
         )) : null}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module)}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) })}
       </CycleModulePage>
     );
   }
@@ -406,6 +415,12 @@ export default function CycleRoute({ cycle }) {
             }}
             onCreated={() => setProjectsKey((n) => n + 1)}
           />
+        )}
+        {form && formOpen && projectId && (
+          <RecordFormSheet form={form} cycle={name}
+            onSubmit={(values) => form.submit(cyclesWrite, projectId, values)}
+            onSaved={() => setReload((n) => n + 1)}
+            onClose={() => setFormOpen(false)} />
         )}
         {Sheet && sheetOpen && projectId && (
           <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />

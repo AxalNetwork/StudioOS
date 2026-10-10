@@ -22,6 +22,8 @@ import CycleOverview, { CycleCard, FigureTile } from '../src/pages/cycles/CycleO
 import CycleModulePage, { RecordsTable } from '../src/pages/cycles/CycleModulePage.jsx';
 import { Chart } from '../src/pages/cycles/CycleCharts.jsx';
 import DurabilityChecklist from '../src/pages/cycles/DurabilityChecklist.jsx';
+import RecordFormSheet from '../src/pages/cycles/RecordFormSheet.jsx';
+import { FORMS, formFor } from '../src/pages/cycles/forms.js';
 import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixtures.mjs';
 import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
 
@@ -192,6 +194,36 @@ test('BUILD: the one way to create a startup survives, next links keep the ventu
   const shares = html(h(Chart, { spec: { kind: 'stack', rows: [{ label: 'Spain', parts: [8, 2] }, { label: 'France', parts: [1, 1] }], tones: ['v1', 'v2'] } }));
   const shareWidths = [...shares.matchAll(/<rect[^>]*width="([\d.]+)"/g)].map((m) => Number(m[1]));
   assert.deepEqual(shareWidths, [287, 71, 179, 179], 'rows with several parts still split their own total');
+});
+
+test('ADD FORMS: one side sheet draws each form, the module offers it, and the checklist can be ticked', () => {
+  const sheet = html(h(RecordFormSheet, { form: formFor('grow', 'market-expansion'), cycle: 'Grow', onSubmit: async () => {}, onClose() {} }));
+  assert.match(sheet, /role="dialog" aria-label="Add a market"/);
+  assert.match(text(sheet), /Grow Add a market/);
+  assert.match(text(sheet), /Market · required/);
+  assert.match(sheet, /id="cycle-form-regulation_score"[^>]*type="number"/);
+  assert.equal(html(h(RecordFormSheet, { form: null, cycle: 'Grow' })), '', 'no form, no sheet');
+  const channel = html(h(RecordFormSheet, { form: formFor('grow', 'distribution'), cycle: 'Grow', onSubmit: async () => {}, onClose() {} }));
+  assert.match(channel, /The utm_source on this channel/, 'a hint is shown under its field');
+  assert.match(channel, /inputMode="decimal"/, 'money is typed as an amount');
+  // Every module with a form, and no other, offers Add from it.
+  assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
+    ['build/company-creation', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
+  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  assert.match(route, /add=\{fnOf\(def\.add, slug\)\?\.\(q\) \|\| \(form && projectId \? \{ text: form\.button, onClick: \(\) => setFormOpen\(true\) \} : undefined\)\}/);
+  assert.match(route, /onSubmit=\{\(values\) => form\.submit\(cyclesWrite, projectId, values\)\}/);
+  assert.match(route, /onSaved=\{\(\) => setReload\(\(n\) => n \+ 1\)\}/, 'a save reads the module again');
+  // The checklist: tick an open item, undo your own tick, never undo the Lab's.
+  const items = [
+    { key: 'ein_received', label: 'Tax ID (EIN) received', done: true, source: 'Spin-Out Lab', done_at: null },
+    { key: 'key_person_cover', label: 'Key-person cover set up', done: true, source: 'manual', done_at: null },
+    { key: 'board_cadence', label: 'Board meeting cadence agreed', done: false, source: null, done_at: null },
+  ];
+  const ticks = html(h(DurabilityChecklist, { items, onToggle: async () => {} }));
+  assert.match(ticks, /data-testid="checklist-tick-board_cadence"/);
+  assert.match(ticks, /data-testid="checklist-untick-key_person_cover"/);
+  assert.doesNotMatch(ticks, /checklist-(un)?tick-ein_received/, 'a Lab milestone is not undone by hand');
+  assert.doesNotMatch(html(h(DurabilityChecklist, { items })), /checklist-tick/, 'read-only without onToggle');
 });
 
 // ------------------------------------------------------------------ the screens
