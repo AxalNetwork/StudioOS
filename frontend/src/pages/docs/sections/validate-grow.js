@@ -24,7 +24,6 @@ export default {
       ],
       related: [
         { label: 'Scoring anti-cheat', href: '#validate-grow/scoring-integrity' },
-        { label: 'Market Intelligence', href: '#validate-grow/market-intel' },
         { label: 'Pitch Deck', href: '#build/pitch-deck' },
       ],
     },
@@ -241,28 +240,6 @@ export default {
       ],
       related: [
         { label: 'Advisors', href: '#validate-grow/advisors' },
-      ],
-    },
-    {
-      id: 'market-intel',
-      title: 'Market Intelligence',
-      overview:
-        "Market Intelligence aggregates sector signals, funding activity, competitive moves, and studio benchmarks for the spaces you care about. It’s a daily-readable feed you can filter by sector and signal type.",
-      howto: [
-        'Open Market Intel from the sidebar.',
-        'Pick the sectors you want to track.',
-        'Save signals to your Watchlist for follow-up; star the most important ones.',
-      ],
-      tips: [
-        'Read the Friday digest if you only have time for one read per week.',
-        'The conviction picks list highlights ideas the studio team is actively interested in.',
-      ],
-      pitfalls: [
-        'Tracking too many sectors makes the feed noisy — pick three to start.',
-        'Conviction picks are studio-internal signals, not investment recommendations.',
-      ],
-      related: [
-        { label: 'Watchlist & Decision Journal', href: '#capital/investors' },
       ],
     },
   ],

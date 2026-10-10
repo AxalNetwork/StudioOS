@@ -3,11 +3,12 @@
  *
  * Two layers of coverage:
  *
- *   (A) Source-level static assertion that the new
- *       `GET /api/investor-signals` handler in
- *       `routes/investor_signals.ts` actually invokes a `callerHasFullLens`
- *       check and returns a 402 `tier_required` response. This catches a
- *       regression where a future edit removes the tier gate.
+ *   (A) Source-level static assertion that the full-lens market-intel
+ *       handlers (`/founder-lens`, `/citations`) invoke a
+ *       `callerHasFullLens` check and return a 402 `tier_required`
+ *       response. This catches a regression where a future edit removes the
+ *       tier gate. (`/api/investor-signals`, which this file also held, was
+ *       retired with the /market-intel page, D670.)
  *
  *   (B) Pure-logic checks of the predicates the routes use:
  *         * `callerHasFullLens` — Free / no-tier callers rejected,
@@ -31,33 +32,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /* (A) Source-level static assertions                                 */
 /* ------------------------------------------------------------------ */
 
-test('GET /api/investor-signals enforces tier gating in source', async () => {
-  const src = await readFile(
-    resolve(__dirname, '../src/routes/investor_signals.ts'),
-    'utf8',
-  );
-  // Locate the new GET '/' handler (the filtered Task #5 endpoint) and
-  // assert the body contains both the predicate call and the 402 reply.
-  const handlerMatch = src.match(/investorSignals\.get\(\s*'\/'\s*,\s*async\s*\(c\)\s*=>\s*\{([\s\S]*?)\n\}\)\s*;/);
-  assert.ok(handlerMatch, 'investorSignals.get("/", …) handler missing');
-  const body = handlerMatch[1];
-  assert.match(body, /callerHasFullLens\(\s*user\s*\)/,
-    'tier-gate predicate missing — Free callers must be rejected');
-  assert.match(body, /tier_required/,
-    'tier-gate response shape missing the `tier_required` error code');
-  assert.match(body, /\b402\b/,
-    'tier-gate response missing 402 status');
-});
-
-test('GET /api/market-intel/geography-lens shares the geography handler', async () => {
+test('the full-lens market-intel handlers enforce tier gating in source', async () => {
   const src = await readFile(
     resolve(__dirname, '../src/routes/market_intel.ts'),
     'utf8',
   );
-  // Both routes must point at the same handler symbol so tier gating
-  // cannot drift between the two paths.
-  assert.match(src, /marketIntel\.get\(\s*'\/geography'\s*,\s*geographyLensHandler\s*\)/);
-  assert.match(src, /marketIntel\.get\(\s*'\/geography-lens'\s*,\s*geographyLensHandler\s*\)/);
+  for (const path of ['/founder-lens', '/citations']) {
+    const at = src.indexOf(`marketIntel.get('${path}'`);
+    assert.ok(at >= 0, `marketIntel.get('${path}', …) handler missing`);
+    const body = src.slice(at, src.indexOf('\n});', at));
+    assert.match(body, /callerHasFullLens\(\s*user\s*\)/,
+      `${path}: tier-gate predicate missing — Free callers must be rejected`);
+    assert.match(body, /tier_required/, `${path}: the tier_required error code is missing`);
+    assert.match(body, /\b402\b/, `${path}: the 402 status is missing`);
+  }
 });
 
 test('runFreeConnectors is exported and wired into the cron', async () => {
@@ -80,42 +68,14 @@ test('runFreeConnectors is exported and wired into the cron', async () => {
   );
   assert.match(indexSrc, /runFreeConnectors\s*\(\s*env\s*,\s*(?:'(?:hourly|daily|weekly)'|[A-Za-z_$][\w$]*)\s*\)/,
     'cron handler must invoke runFreeConnectors on the spec cadence');
-  // Daily 04:00 UTC combined refresh: recomputeIndexes + investor-signals.
+  // Daily 04:00 UTC refresh: recomputeIndexes. The investor-signals snapshot
+  // that shared the slot was retired with the /market-intel page (D670).
   assert.match(indexSrc, /getUTCHours\(\)\s*===\s*4\s*&&\s*now\.getUTCMinutes\(\)\s*===\s*0/,
     'cron must check for 04:00 UTC daily');
   assert.match(indexSrc, /\brecomputeIndexes\b/,
     'cron must run recomputeIndexes at 04:00 UTC daily');
-  assert.match(indexSrc, /\baggregateInvestorSignals\b/,
-    'cron must refresh investor-signals snapshot at 04:00 UTC daily');
-});
-
-test('GET /api/market-intel/investor-signals is mounted as alias', async () => {
-  const src = await readFile(
-    resolve(__dirname, '../src/routes/market_intel.ts'),
-    'utf8',
-  );
-  assert.match(src, /marketIntel\.route\(\s*'\/investor-signals'\s*,\s*investorSignalsApp\s*\)/,
-    'spec endpoint /api/market-intel/investor-signals must be mounted');
-});
-
-test('GET /api/investor-signals/latest is also tier-gated', async () => {
-  const src = await readFile(
-    resolve(__dirname, '../src/routes/investor_signals.ts'),
-    'utf8',
-  );
-  // /latest is mounted under both /api/investor-signals and
-  // /api/market-intel/investor-signals (via marketIntel.route alias),
-  // so gating the handler covers both surfaces.
-  const latestHandler = src.match(
-    /investorSignals\.get\(\s*'\/latest'\s*,\s*async\s*\(c\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/,
-  );
-  assert.ok(latestHandler, '/latest handler missing or restructured');
-  assert.match(latestHandler[1], /callerHasFullLens\(\s*user\s*\)/,
-    '/latest must enforce tier gate (Free → 402)');
-  assert.match(latestHandler[1], /tier_required/,
-    '/latest must respond with tier_required for Free');
-  assert.match(latestHandler[1], /\b402\b/,
-    '/latest must respond 402 for Free');
+  assert.doesNotMatch(indexSrc, /\baggregateInvestorSignals\b/,
+    'the retired investor-signals snapshot is refreshed again');
 });
 
 test('GET /citations honours `since` param + returns ingest timestamp', async () => {
@@ -138,9 +98,9 @@ test('GET /citations honours `since` param + returns ingest timestamp', async ()
 /* (B) Pure-logic predicate checks                                    */
 /* ------------------------------------------------------------------ */
 
-// Mirror of `callerHasFullLens` from routes/market_intel.ts +
-// routes/investor_signals.ts. Re-extracted here so the test fails if the
-// predicate ever drifts between the two routes.
+// Mirror of `callerHasFullLens` (util/marketIntelTier.ts), which
+// routes/market_intel.ts reads. Re-extracted here so the test fails if the
+// predicate ever drifts.
 const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'advisor'];
 function callerHasFullLens(user) {
   if (!user) return false;
@@ -216,73 +176,36 @@ test('snapshot-level n_total is masked when total contributors < 5', () => {
 test('Hono handler returns 402 tier_required for Free callers (runtime)', async () => {
   const { Hono } = await import('hono');
 
-  // Mirror investor_signals.ts shape: a sub-app with `/` (filtered) and
-  // `/latest`, both gated by callerHasFullLens. Auth is mocked via the
-  // `x-mock-user` header so the test exercises the real handler logic
-  // without needing requireAuth/JWT plumbing.
-  function buildSignalsApp() {
-    const a = new Hono();
-    const gate = (handler) => async (c) => {
-      const u = c.req.header('x-mock-user');
-      const user = u ? JSON.parse(u) : null;
-      if (!callerHasFullLens(user)) {
-        return c.json({ error: 'tier_required', required: 'growth' }, 402);
-      }
-      return handler(c);
-    };
-    a.get('/', gate(async (c) => c.json({ ok: true, dimensions: {} })));
-    a.get('/latest', gate(async (c) => c.json({ snapshot: { n_total: 12 } })));
-    return a;
-  }
-
-  // (i) Standalone mount: GET /api/investor-signals + /latest.
-  const root = new Hono();
-  root.route('/investor-signals', buildSignalsApp());
-
-  // (ii) Alias mount under market-intel: replay
-  // marketIntel.route('/investor-signals', investorSignalsApp).
-  const aliasParent = new Hono();
-  aliasParent.route('/market-intel/investor-signals', buildSignalsApp());
-
-  const surfaces = [
-    { app: root, base: '/investor-signals' },
-    { app: aliasParent, base: '/market-intel/investor-signals' },
-  ];
-
-  for (const { app, base } of surfaces) {
-    // Free founder → 402 on both / and /latest.
-    for (const path of [base, `${base}/latest`]) {
-      const r = await app.fetch(new Request(`http://t${path}`, {
-        headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'free' }) },
-      }));
-      assert.equal(r.status, 402, `Free caller must get 402 from ${path}`);
-      const body = await r.json();
-      assert.equal(body.error, 'tier_required');
-      assert.equal(body.required, 'growth');
+  // Mirror market_intel.ts's full-lens shape: `/founder-lens` and
+  // `/citations`, both gated by callerHasFullLens. Auth is mocked via the
+  // `x-mock-user` header so the test exercises the gate without needing
+  // requireAuth/JWT plumbing.
+  const a = new Hono();
+  const gate = (handler) => async (c) => {
+    const u = c.req.header('x-mock-user');
+    const user = u ? JSON.parse(u) : null;
+    if (!callerHasFullLens(user)) {
+      return c.json({ error: 'tier_required', required: 'growth' }, 402);
     }
-    // No-auth caller → 402.
-    const r0 = await app.fetch(new Request(`http://t${base}/latest`));
-    assert.equal(r0.status, 402, `unauth caller must get 402 from ${base}/latest`);
-    // Growth founder → 200 on both.
-    for (const path of [base, `${base}/latest`]) {
-      const r = await app.fetch(new Request(`http://t${path}`, {
-        headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'growth' }) },
-      }));
-      assert.equal(r.status, 200, `Growth caller must get 200 from ${path}`);
-    }
-    // Professional investor → 200; Starter investor → 402.
-    const rPro = await app.fetch(new Request(`http://t${base}/latest`, {
-      headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'professional' }) },
-    }));
-    assert.equal(rPro.status, 200, `professional investor must get 200 from ${base}/latest`);
-    const rStarter = await app.fetch(new Request(`http://t${base}/latest`, {
-      headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'starter' }) },
-    }));
-    assert.equal(rStarter.status, 402, `starter investor must get 402 from ${base}/latest`);
-    // Admin bypass → 200.
-    const rAdmin = await app.fetch(new Request(`http://t${base}`, {
-      headers: { 'x-mock-user': JSON.stringify({ role: 'admin' }) },
-    }));
-    assert.equal(rAdmin.status, 200, `admin must bypass at ${base}`);
+    return handler(c);
+  };
+  a.get('/founder-lens', gate(async (c) => c.json({ picks: [] })));
+  a.get('/citations', gate(async (c) => c.json({ citations: [] })));
+  const app = new Hono();
+  app.route('/market-intel', a);
+
+  const as = (user) => (user ? { headers: { 'x-mock-user': JSON.stringify(user) } } : {});
+  const status = async (path, user) => (await app.fetch(new Request(`http://t/market-intel${path}`, as(user)))).status;
+
+  for (const path of ['/founder-lens', '/citations']) {
+    assert.equal(await status(path, { role: 'founder', subscription_tier: 'free' }), 402, `Free caller must get 402 from ${path}`);
+    const body = await (await app.fetch(new Request(`http://t/market-intel${path}`, as({ role: 'founder', subscription_tier: 'free' })))).json();
+    assert.equal(body.error, 'tier_required');
+    assert.equal(body.required, 'growth');
+    assert.equal(await status(path, null), 402, `unauth caller must get 402 from ${path}`);
+    assert.equal(await status(path, { role: 'founder', subscription_tier: 'growth' }), 200, `Growth caller must get 200 from ${path}`);
+    assert.equal(await status(path, { role: 'investor', investor_tier: 'professional' }), 200, `professional investor must get 200 from ${path}`);
+    assert.equal(await status(path, { role: 'investor', investor_tier: 'starter' }), 402, `starter investor must get 402 from ${path}`);
+    assert.equal(await status(path, { role: 'admin' }), 200, `admin must bypass at ${path}`);
   }
 });

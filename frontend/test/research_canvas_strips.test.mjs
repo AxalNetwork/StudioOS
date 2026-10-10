@@ -22,12 +22,10 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
-const signals = read('frontend/src/pages/SignalsPage.jsx');
 const companies = read('frontend/src/components/CompetitorAnalysis.jsx');
 // The RAW source, for the one thing `codeOnly` deliberately destroys: a tile
 // that is no longer drawn keeps its reason in a docblock, and the assertions
 // that the reason survived have to read the comments to see it.
-const signalsRaw = raw('frontend/src/pages/SignalsPage.jsx');
 const companiesRaw = raw('frontend/src/components/CompetitorAnalysis.jsx');
 
 /**
@@ -55,9 +53,9 @@ function tilesIn(code, from = 0) {
 // `market_intel_rows` sector feed when `/research/markets` mounted it embedded.
 // The `pr3` artboard is about a different object: comparable RANGES for the
 // firm's own service lines, each attachable to a proposal. A sector signal is
-// not a price. So the zone mounts `pages/research/MarketZone`, the feed keeps
-// `/signals` with no zone header at all, and the machinery that bridged them is
-// gone from `SignalsPage`.
+// not a price. So the zone mounts `pages/research/MarketZone`. The feed kept
+// `/signals` with no zone header until D670 retired that page, and with it the
+// two tests that held `SignalsPage` to that.
 //
 // EVERY RULE THOSE FOUR TESTS HELD IS STILL HELD, one file over, and each is
 // worth more on the new page than it was on the old one:
@@ -126,32 +124,6 @@ test('age gates attachment rather than labelling it', () => {
   // has ever priced.
   assert.match(code, /text: 'Nothing to attach'/,
     'a never-run reading reads as blocked instead of as never run');
-});
-
-test('the signals feed keeps its own page and loses the zone header', () => {
-  // The machinery that drew a zone header over the feed is gone with the mount
-  // that used it, rather than left behind looking maintained.
-  const sig = codeOnly(read('frontend/src/pages/SignalsPage.jsx'));
-  for (const gone of ['MARKETS_STRIP', 'AGE_WINDOWS', 'function ageInDays', 'zoneActions', 'zoneFilters']) {
-    assert.ok(!sig.includes(gone), `SignalsPage still carries ${gone}, for a mount that no longer exists`);
-  }
-  // And the reason survives where a reader will look for it.
-  assert.match(signalsRaw, /THE ZONE-HEADER MACHINERY THAT STOOD HERE IS GONE/,
-    'the record of why the strip left this page has been deleted with it');
-});
-
-
-test('founder and investor reach no markets tile and no paragraph about one', () => {
-  // ALSO REVERSED. This required a `<StatedLimit>` naming the saved deep-dive
-  // and the instrument card the artboards ask for. Saying an absence once beat
-  // saying it four times; not saying it on the customer surface beats both.
-  const after = signals.slice(signals.indexOf('{strip && bands && ('));
-  assert.doesNotMatch(after, /<StatedLimit/, 'the canvas-narration panel is back');
-  assert.doesNotMatch(signals, /import \{ StatedLimit \}/, 'the narration component is imported again');
-  // And no second strip is drawn for them: `<Stat` appears only inside the
-  // advisor/partner branch above.
-  const tail = after.slice(after.indexOf('{/* KPI strip */}'));
-  assert.doesNotMatch(tail, /<Stat\s/, 'founder and investor must reach no stat tile on this zone');
 });
 
 // ── Companies ─────────────────────────────────────────────────────────────

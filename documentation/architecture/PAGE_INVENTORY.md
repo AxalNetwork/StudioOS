@@ -19,7 +19,7 @@ canvas behind it still shows up here.
 | Headerless | Raise | `/raise` | Founder Workspaces Canvas |
 | Headerless | Grow | `/grow` | Founder Workspaces Canvas, Grow · Share an update, Pages · Founder Grow |
 | Headerless | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
-| Headerless | Research | `/research` | Founder Workspaces Canvas, Research · Main |
+| Headerless | Research | `/research` | Founder Workspaces Canvas, Research · Main, Signals |
 
 ## `advisor` — 7 destinations in 1 group
 
@@ -31,7 +31,7 @@ canvas behind it still shows up here.
 | Headerless | Cohorts | `/cohorts` | — (no canvas; shipped ahead of the design corpus) |
 | Headerless | Expertise | `/expertise` | Pages · Advisor Expertise |
 | Headerless | Network | `/network` | Advisor Canvas |
-| Headerless | Research | `/research` | Research · Main |
+| Headerless | Research | `/research` | Research · Main, Signals |
 
 ## `investor` — 9 destinations in 1 group
 
@@ -44,7 +44,7 @@ canvas behind it still shows up here.
 | Headerless | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace, Quarterly Report |
 | Headerless | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
 | Headerless | Network | `/network` | Investor LP Canvas, Pages · Investor Network |
-| Headerless | Research | `/research` | Investor LP Canvas, Research · Main |
+| Headerless | Research | `/research` | Investor LP Canvas, Pages · Investor Research, Research · Main |
 | Headerless | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `partner` — 7 destinations in 1 group

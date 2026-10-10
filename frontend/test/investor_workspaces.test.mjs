@@ -30,7 +30,10 @@ test('investor workspace routes branch on the active role', () => {
       `${path} does not mount the ${key} investor workspace`);
   }
   assert.match(app, /path="\/network"[\s\S]{0,180}effectiveRole === 'investor'[\s\S]{0,100}<InvestorNetworkWorkspace \/>/);
-  assert.match(app, /path="\/market-intel"[\s\S]{0,220}effectiveRole === 'investor'[\s\S]{0,100}<InvestorResearchWorkspace \/>/);
+  // /market-intel rendered the investor Research workspace too; D670 retired
+  // it, and /research is that workspace's one address.
+  assert.match(app, /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/);
+  assert.match(routeBlock(app, '/research'), /researchRole === 'investor'[\s\S]{0,120}<InvestorResearchWorkspace \/>/);
 });
 
 test('investor Research implements I8 without fabricated diligence claims', () => {
@@ -62,8 +65,8 @@ test('investor Research implements I8 without fabricated diligence claims', () =
   assert.match(research, /<WorkerRail[\s\S]*?workspace="Research"[\s\S]*?role="investor"/,
     'investor Research must mount the shared Worker AI rail');
   assert.match(research, /api\.miSources\(\)/);
-  assert.match(research, /api\.miWatchlistList\(\)/);
-  assert.match(research, /\['rows', 'watchlist', 'items', 'data'\]/);
+  // The sector watchlist read left with the digest it fed (D670).
+  assert.doesNotMatch(research, /miWatchlistList|watchlist/);
   assert.match(research, /computed_at/);
   assert.match(research, /sources\.map\(\(source\)/);
   assert.match(research, /source\.live[\s\S]{0,180}source\.paid/);

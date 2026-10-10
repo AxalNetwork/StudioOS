@@ -34,7 +34,7 @@ GitHub issues remain outside that evidence.
 | U4 | Retirement resolved; private client notes implemented locally | Migration 369 and the advisor-owned note editor require the normal migration/deployment flow to reach production. |
 | U5 | Firm information implemented; candidate offering document inspected and unsuitable for public reuse | The retrieved booklet contains placeholders, is marked confidential, and names a different fund/GP from the canonical entity map. Supply or approve a completed public summary, allocation weights and any response-time commitment. |
 | U6 | Implemented on current main under D492 | Existing and later cohort members receive notices; founders can hide themselves from individual advisors in Account → Security & Privacy. |
-| U7 | UI/API mismatch fixed | Advisors can open Market Intelligence from Research under the existing API entitlement. |
+| U7 | Moot (D670) | Advisors could open Market Intelligence from Research under the existing API entitlement; D670 then retired the page itself. |
 | U8 | Implemented on current main under D493 | New records require acceptance; existing records remain accepted and their subjects receive a notice. Preserve the request workflow. |
 | U9 | Resolved in code and verified externally | The complete Cloudflare Pages inventory has no `studioos` project. |
 | U10 | Verified again by live measurement | Public smoke passes on both production hosts; this is independent of authenticated branch verification. |

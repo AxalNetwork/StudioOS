@@ -128,9 +128,8 @@ test('Expertise owns the canonical advisor profile destination', () => {
 
 test('Advisor-only framing is isolated from shared roles', () => {
   const network = read('frontend/src/pages/NetworkPage.jsx');
-  const signals = read('frontend/src/pages/SignalsPage.jsx');
+  // SignalsPage's `mode === 'advisor'` was the second example; D670 retired it.
   assert.match(network, /role === 'advisor'/);
-  assert.match(signals, /mode === 'advisor'/);
   assert.match(read('frontend/src/ui/SidebarNav.jsx'), /advisorAccent/);
   assert.doesNotMatch(readRoutesSource(), /<Route path="\/advisor"/);
 });

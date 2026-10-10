@@ -81,7 +81,8 @@ test('canonical Partner deep links are owned by the correct workspace', () => {
     Delivery: ['/delivery', '/delivery/health'],
     Offers: ['/offers', '/services', '/perks', '/comarketing', '/offers/catalog'],
     Network: ['/network', '/relationships', '/contacts'],
-    Research: ['/research', '/signals', '/market-intel'],
+    // '/signals' and '/market-intel' left with their pages (D670).
+    Research: ['/research'],
   };
   for (const [label, paths] of Object.entries(expectedMatches)) {
     const rowStart = partner.indexOf(`label: '${label}'`);
@@ -134,17 +135,15 @@ test('Partner pages share amber identity and cyan provenance without recoloring 
   assert.match(sidebar, /text-violet-/);
 });
 
-test('shared Network and Research pages only mount Partner chrome for Partner users', () => {
+test('the shared Network page only mounts Partner chrome for Partner users', () => {
   const tabs = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
   const network = read('frontend/src/pages/NetworkPage.jsx');
-  const research = read('frontend/src/pages/MarketIntelPage.jsx');
   assert.match(tabs, /user\?\.role !== 'partner'/);
   assert.match(network, /role === 'partner'/);
   assert.match(network, /workspace="network"/);
   assert.match(network, /role === 'advisor'/);
-  assert.match(research, /user\?\.role === 'partner'/);
-  assert.match(research, /workspace="research"/);
-  assert.match(research, /Some live market data could not be loaded/);
+  // MarketIntelPage was the shared Research page this test also held; D670
+  // retired it, and Research is the role-branched ResearchWorkspace.
 });
 
 test('Trust stays in the user menu and Company Settings stays in the pinned footer', () => {

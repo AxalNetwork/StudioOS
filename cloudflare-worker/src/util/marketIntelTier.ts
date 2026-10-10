@@ -1,8 +1,8 @@
 /**
  * Task #5 (AK) — single source of truth for the Market Intelligence
- * "full lens" tier predicate. Both `routes/market_intel.ts` and
- * `routes/investor_signals.ts` import from here so the gate cannot
- * drift between the seven sub-tabs.
+ * "full lens" tier predicate, used by `routes/market_intel.ts`. (The
+ * investor-signals reads that shared it were retired with the /market-intel
+ * page, D670.)
  *
  * Free / Starter callers see only the sector-compass overview; this
  * predicate returns true for the entitled cohort:

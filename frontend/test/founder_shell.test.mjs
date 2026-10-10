@@ -86,7 +86,10 @@ test('every destination the old nav reached still has a door', () => {
   const labTools = codeOnly(read('frontend/src/pages/SpinoutLabWorkspace.jsx'));
   const labDoor = (p) => p.startsWith('/spinout-lab/') && targets.includes('/spinout-lab')
     && labTools.includes(`to: '${p}'`);
-  const doorless = BEFORE.filter((p) => !targets.includes(p) && !tabsTo(p) && !labDoor(p));
+  // D670 retired two of them outright, on the owner's call; they only
+  // redirect to /research now, so they need no door.
+  const RETIRED = ['/signals', '/market-intel'];
+  const doorless = BEFORE.filter((p) => !RETIRED.includes(p) && !targets.includes(p) && !tabsTo(p) && !labDoor(p));
   assert.deepEqual(doorless, [], 'no nav row, no workspace tab and no Lab tool card — reachable only by typed URL');
   assert.ok(labDoor('/spinout-lab/brand') && !tabsTo('/spinout-lab/brand'),
     'the Lab brand tool is reached from the Lab, and not from a Grow tab');
@@ -97,7 +100,8 @@ test('the seven doorless destinations are exactly the ones the bar rescues', () 
   // If any of these loses its tab, it becomes unreachable outright — there is
   // no second door anywhere in frontend/src. This is the assertion that would
   // have caught the regression in #350.
-  for (const p of ['/execution', '/signals', '/build/team', '/build/metrics',
+  // `/signals` stood here until D670 retired it.
+  for (const p of ['/execution', '/build/team', '/build/metrics',
     '/network-effects', '/raise/capital']) {
     assert.ok(tabsTo(p), `${p} has no inbound link anywhere else — the tab IS the door`);
   }
@@ -125,8 +129,9 @@ test('each row that owns sections is actually wrapped at its routes', () => {
     const to = /\{ to: '([^']+)'/.exec(line);
     if (to && current) SITES[current].push(to[1]);
   }
-  assert.deepEqual(Object.keys(SITES), ['validate', 'build', 'raise', 'grow', 'research'],
-    'the five workspace rows are the five tab sets');
+  // Research's set (Market and Signals) left with both pages (D670).
+  assert.deepEqual(Object.keys(SITES), ['validate', 'build', 'raise', 'grow'],
+    'the four workspace rows that own sections are the four tab sets');
 
   // Two ways a route can belong to a row, and the shell ships both:
   //
@@ -238,15 +243,15 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
     'the Pitch section page must survive the desk being mounted');
 });
 
-test('A7 owns the founder Research landing while workspace mode retains Signals', () => {
+test('A7 owns the founder Research landing, and /signals only redirects to it', () => {
   const line = app.split('\n').find((item) => item.includes('path="/signals"'));
-  assert.ok(line?.includes('founderResearchLanding'), '/signals must defer ownership to A7');
   assert.match(app, /founderResearchLanding = effectiveRole === 'founder'/);
-  // D422: the landing is `/research`'s; bare `/signals` redirects there.
-  assert.match(line, /founderResearchLanding/);
-  assert.match(app, /founderResearchLanding\s*\?\s*<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
+  // D422: the landing is `/research`'s; bare `/signals` redirects there. D670
+  // retired the Signals feed, so the redirect is everyone's and no route
+  // mounts a Research tab bar any more.
+  assert.match(line, /<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
   assert.match(app, /founderResearchLanding\s*\?\s*guard\([^)]*\), <FounderResearchDesk \/>\)/);
-  assert.match(app, /FounderWorkspaceTabs set="research" user=\{user\}><SignalsPage user=\{user\} \/>/);
+  assert.doesNotMatch(app, /<SignalsPage\b|FounderWorkspaceTabs set="research"/);
 });
 
 test('a founder never gets two tab bars on one page', () => {
@@ -334,11 +339,9 @@ test('the Research row lands somewhere every founder can actually open', () => {
   assert.ok(target, `the Research row points at ${research.to}, which has no route`);
   assert.match(target.slice(target.indexOf('guard(')), /\[[^\]]*'founder'[^\]]*\]/,
     `${research.to} must admit 'founder' outright, not only Lab-active ones`);
-  const mi = app.split('\n').find((l) => l.includes('path="/market-intel"'));
-  assert.ok(!/\[[^\]]*'founder'[^\]]*\]/.test(mi.slice(mi.indexOf('guard('))),
-    'if /market-intel ever admits founders outright, point Research back at it');
-  assert.match(bar, /to: '\/market-intel'[^}]*labOnlyFor: \['founder'\]/s,
-    'the Market tab must hide itself for a founder outside the Lab');
+  // /market-intel and its Lab-only Market tab were the other half of this
+  // test; D670 retired the page, and the route only redirects to /research.
+  assert.doesNotMatch(bar, /to: '\/market-intel'/, 'the retired Market tab is back');
 });
 
 test('Trust stays out of the sidebar', () => {
@@ -544,7 +547,7 @@ test('the founder full-bleed list covers every desk and section page', () => {
   assert.ok(listed.size >= 20, 'FOUNDER_FULL_BLEED is unexpectedly small');
   const required = [
     ...Object.values(WORKSPACES).map(([root]) => root),
-    '/build/discovery', '/execution', '/build/team', '/signals',
+    '/build/discovery', '/execution', '/build/team',
     ...allZoneRoutes('founder'),
   ];
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
@@ -553,7 +556,7 @@ test('the founder full-bleed list covers every desk and section page', () => {
   // DERIVED, NOT TYPED. Every zone route the shell config declares is covered
   // because the list is built from that config — so a new zone cannot be added
   // to a founder bucket and left out of the layout, which is the failure this
-  // whole test exists for. Only the four legacy mounts are still hand-written,
+  // whole test exists for. Only the three legacy mounts are still hand-written,
   // and they are exactly the paths the shell config does not claim.
   const sidebar = codeOnly(read('frontend/src/sidebarConfig.js'));
   assert.match(sidebar, /export const FOUNDER_FULL_BLEED = \[\s*\.\.\.workspaceRoutes\('founder'\)/,

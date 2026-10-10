@@ -18,8 +18,8 @@ import { Instrument, NotRecorded } from '../../workspaces/canvasKit';
  * the firm's own service lines, each attachable to a proposal so a client can
  * see the reasoning behind a quoted number. Its table is `Reading · Comparable
  * range · Run date · Age · Proposal attachment`. A sector signal is not a price,
- * and no amount of layout makes one into the other; the feed keeps its own
- * route at `/signals`, linked below, and is not retired.
+ * and no amount of layout makes one into the other. The feed kept its own
+ * route at `/signals` until D670 retired that page.
  *
  * AGE IS A GATE, NOT A LABEL — the artboard says so in its own subtitle and it
  * is the whole composition. A reading past ninety days is BLOCKED from
@@ -31,8 +31,8 @@ import { Instrument, NotRecorded } from '../../workspaces/canvasKit';
  *
  * `STALE_AT` AND `AGE_AT` ARE THIS ARTBOARD'S OWN NUMBERS, transcribed and not
  * chosen: ninety and thirty, where `Pages · Advisor Research` says a hundred and
- * twenty. They lived in `SignalsPage`'s `MARKETS_STRIP` and moved here with the
- * zone.
+ * twenty. They lived in `SignalsPage`'s `MARKETS_STRIP` (retired by D670) and
+ * moved here with the zone.
  *
  * A READING IS ENTERED, NEVER GENERATED. There is no comparables database in
  * this product, so a `Re-run stale` that called a model would invent a market
@@ -356,12 +356,6 @@ export default function MarketZone({ zoneActions, zoneFilters, role = 'partner' 
         <p>
           So a range is refused without the number of comparables it came from and the date you
           ran it. Both appear on the row, and both travel with it onto any proposal.
-        </p>
-        <p>
-          Sector signals — who is hiring, who filed, where demand is moving — are a different
-          feed and live on{' '}
-          <Link to="/signals" className="text-axal-violet underline">Signals</Link>. This page is
-          about prices.
         </p>
       </StatedLimit>
     </div>

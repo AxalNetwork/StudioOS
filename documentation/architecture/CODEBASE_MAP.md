@@ -176,7 +176,7 @@ Six, byte-identical in both tables:
 * * * * *      queue drain + sub-minute internal dispatch
 0 3 * * *      daily cleanup (legacy)
 0 */6 * * *    market-intel free connectors refresh
-0 4 * * *      market-intel composite + daily snapshot
+0 4 * * *      market-intel composite (its investor-signals snapshot went with D670)
 0 9 * * *      daily digest emails
 0 9 * * 2      weekly digest emails (Monday)
 ```

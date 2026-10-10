@@ -2,6 +2,13 @@
 
 **Public-market evidence for what to build next.**
 
+> **D670 (2026-10-10): the `/signals` page is retired.** The URL redirects to
+> `/research`, and the reads only the page made (`/filters`, `/kpis`, `/meta`,
+> `/:id`, the manual `/refresh`) are gone. The engine below still runs: the
+> nightly refresh fills the `signals` table, and Research reads it through
+> `GET /api/signals`, `/api/signals/sources` and `routes/research_*.ts`.
+> Where this page describes the dashboard, it describes what was.
+
 Signals is a founder decision-support engine that surfaces founder-actionable
 startup opportunities from **public** company data — public companies, markets,
 sectors, countries and customer segments. It is **not** a stock/trading

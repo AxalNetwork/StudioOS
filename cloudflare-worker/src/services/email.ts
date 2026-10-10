@@ -906,8 +906,8 @@ export async function sendNotificationEmail(
   }
   try {
     const accessToken = await getGmailAccessToken(env);
-    // Task #33 — callers can supply a pre-rendered HTML body (e.g. the
-    // designed Market-Intel digest template); the plain-text `body`
+    // Task #33 — callers can supply a pre-rendered HTML body (the
+    // Market-Intel digest did, until D670 retired it); the plain-text `body`
     // becomes the multipart/alternative fallback. Without an explicit
     // html opt we keep the legacy single-<p> wrapper so existing
     // notification flows render unchanged.

@@ -28,7 +28,6 @@ building blocks.
 | `products/` | Product and catalogue cards. |
 | `profile/` | Profile blocks shared across personas. |
 | `scoring/` | The scoring engine's panels. |
-| `signals/` | Signal cards and evidence drawers. |
 | `spinout/` | Spin-Out Lab shared pieces. |
 
 ## Top-level shell pieces

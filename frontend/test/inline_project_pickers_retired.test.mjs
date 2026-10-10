@@ -79,7 +79,7 @@ const FROM_URL = [
  * picker was hidden, so removing it changed nothing for them.
  */
 const FROM_FIRST_FETCHED = [
-  ['pages/MarketIntelPage.jsx', /if \(list\[0\]\) setProjectId\(list\[0\]\.id\)/],
+  // pages/MarketIntelPage.jsx stood here; D670 retired it.
   ['pages/RaisePipelinePage.jsx', /if \(safe\.length > 0\) setProjectId\(safe\[0\]\.id\)/],
 ];
 

@@ -52,7 +52,9 @@ const LEGACY_ROWS = [
   '/admin/publications', '/admin/partners', '/admin/refer-earn', '/admin/team',
   '/admin/my-licence', '/admin/trash',
   // studio
-  '/pipeline', '/scoring', '/portfolio/risk-matrix', '/market-intel', '/signals', '/advisory',
+  '/pipeline', '/scoring', '/portfolio/risk-matrix', '/advisory',
+  // '/market-intel' and '/signals' stood here. D670 retired both pages; they
+  // only redirect to /research now, so there is no console left to place.
   // '/matches' (AI Matches) stood here. The page was deleted, not moved, so
   // there is no console left to place and no route an exception could name.
   '/deals',
@@ -101,10 +103,11 @@ const entryFor = (legacyRoute) => byKey(legacyRoute) || UNPLACED.find((u) => u.k
 test('the question is the size it was measured at', () => {
   // Fifty live rows on the day the map was drawn, fourteen tabs, one parked
   // row. A shorter list here means the guard is asking less than it did —
-  // with one recorded exception: /matches, the AI Matching Engine, was deleted
-  // outright, which is the one way a legacy console leaves the question.
-  assert.equal(LEGACY_ROWS.length, 49);
-  assert.equal(new Set(LEGACY_ROWS).size, 49, 'a legacy route is listed twice');
+  // with recorded exceptions: /matches, the AI Matching Engine, was deleted
+  // outright, and D670 retired /market-intel and /signals, which is the one
+  // way a legacy console leaves the question.
+  assert.equal(LEGACY_ROWS.length, 47);
+  assert.equal(new Set(LEGACY_ROWS).size, 47, 'a legacy route is listed twice');
   assert.ok(TABS.length >= 14, `ADMIN_SECTIONS read ${TABS.length} tabs; the map was drawn for 14`);
   assert.ok(X_ROW_PARKED, 'the commented-out /admin/x row is gone from sidebarConfig.js');
   assert.ok(ROUTES.size >= 300, `App.jsx parsed to ${ROUTES.size} routes — the route reader is broken`);
@@ -201,8 +204,9 @@ test('every placement names a real tier, a real row of that tier, and a real for
     }
     if (e.tier === 'palette') assert.ok(e.group, `${e.key}: a palette-only entry names its group`);
   }
-  // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 28, 'S23 and H37 drew 28 pages once AI Matches is gone');
+  // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since,
+  // and D670 retired Market Intelligence and Signals.
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 26, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals are gone');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {

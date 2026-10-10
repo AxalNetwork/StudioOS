@@ -160,7 +160,6 @@ const AdminPublicationNew = lazy(() => import('./pages/admin/PublicationNew'));
 const AdminPublicationDetail = lazy(() => import('./pages/admin/PublicationDetail'));
 const PublicInsight = lazy(() => import('./pages/insights/PublicInsight'));
 const InsightsPage = lazy(() => import('./pages/insights/InsightsPage'));
-const MarketIntelPage = lazy(() => import('./pages/MarketIntelPage'));
 const AdvisoryPage = lazy(() => import('./pages/AdvisoryPage'));
 const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
@@ -371,7 +370,6 @@ const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
-const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 // D632 — a draft variant, renamed and edited in place.
 const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
@@ -2269,20 +2267,20 @@ function AppInner() {
   // the hash travel with it, as D422's redirects below do.
   const liquidityParams = new URLSearchParams(location.search);
   liquidityParams.set('mode', 'workspace');
-  const signalsParams = new URLSearchParams(location.search);
-  const signalsMode = signalsParams.get('mode');
-  const signalsHasNonProjectQuery = [...signalsParams.keys()].some((key) => key !== 'project_id');
+  const researchParams = new URLSearchParams(location.search);
+  const researchMode = researchParams.get('mode');
+  const researchHasNonProjectQuery = [...researchParams.keys()].some((key) => key !== 'project_id');
   const founderResearchLanding = effectiveRole === 'founder'
-    && (signalsMode === 'landing' || (!signalsHasNonProjectQuery && signalsMode !== 'workspace'));
-  // D422. THREE FOUNDER MOUNTS THAT WERE A SECOND URL FOR A DESK. Bare
-  // `/execution`, `/build/discovery` and `/signals` rendered, for a founder, the
-  // very desk `/build`, `/validate` and `/research` render — so each desk had
-  // two addresses and the sidebar had to match both. They redirect now, query
-  // string and all. The EDITORS behind them stay: `?mode=workspace` (and
-  // Discovery's `?tab=`, and every Signals deep link) still opens ExecutionPage,
-  // DiscoveryPage and SignalsPage, because no canvas zone yet carries their
-  // writes — creating a task or an objective, editing or deleting an
-  // interview, curating a pain group, the signals feed itself.
+    && (researchMode === 'landing' || (!researchHasNonProjectQuery && researchMode !== 'workspace'));
+  // D422. FOUNDER MOUNTS THAT WERE A SECOND URL FOR A DESK. Bare
+  // `/execution` and `/build/discovery` rendered, for a founder, the very desk
+  // `/build` and `/validate` render — so each desk had two addresses and the
+  // sidebar had to match both. They redirect now, query string and all. The
+  // EDITORS behind them stay: `?mode=workspace` (and Discovery's `?tab=`) still
+  // opens ExecutionPage and DiscoveryPage, because no canvas zone yet carries
+  // their writes — creating a task or an objective, editing or deleting an
+  // interview, curating a pain group. `/signals` was the third, and D670
+  // retired its page: it redirects to `/research` for everyone.
   const founderDiscoveryEditor = effectiveRole === 'founder'
     && (new URLSearchParams(location.search).get('mode') === 'workspace'
       || ['leads', 'interviews', 'insights'].includes(new URLSearchParams(location.search).get('tab')));
@@ -2522,9 +2520,9 @@ function AppInner() {
           mounted at `/market-intel` alone. Worse, `/research/ask` is one of the
           zones that deliberately renders "No store behind this yet", so the
           first screen a licence saw was an honest empty state standing in for
-          a page that exists. The root now serves the investor overview, and
-          `/market-intel` keeps rendering the same component for its inbound
-          links. */}
+          a page that exists. The root now serves the investor overview.
+          `/market-intel` rendered the same component for its inbound links
+          until D670 retired that page; it now redirects here. */}
       <Route path="/research" element={founderResearchLanding
         ? guard(labRoles(['admin', 'founder']), <FounderResearchDesk />)
         : researchRole === 'investor'
@@ -2560,11 +2558,10 @@ function AppInner() {
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
       <Route path="/build/kpi" element={guard(labRoles(['admin', 'founder']), <FounderBuildKpi />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><MetricsPage /></FounderWorkspaceTabs>))} />
-      {/* Signals — founder decision engine over public-market evidence. Shared
-          by Founder + Advisor modes (mode changes ordering + copy only). */}
-      <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], founderResearchLanding
-        ? <Navigate to={`/research${location.search}`} replace />
-        : founderWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><SignalsPage user={user} /></FounderWorkspaceTabs>))} />
+      {/* D670 — the Signals page is retired. Research reads the same signals
+          table, so an old link lands there for everyone, with its query kept
+          as D422's redirects keep theirs (`?project_id=` lands where it did). */}
+      <Route path="/signals" element={<Navigate to={`/research${location.search}`} replace />} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('raise', <CapTablePage />))} />
       {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
           inquiry threads and reviews whose backend exists only in the dev-only
@@ -2984,10 +2981,10 @@ function AppInner() {
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
-      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor', 'advisor']), effectiveRole === 'investor'
-        ? <InvestorResearchWorkspace />
-        : effectiveRole === 'advisor' ? <MarketIntelPage />
-        : investorWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>))} />
+      {/* D670 — the Market intelligence page is retired, with its sector
+          digest email. Research reads the same market data, so an old link
+          (and a link in a digest already sent) lands there. */}
+      <Route path="/market-intel" element={<Navigate to="/research" replace />} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
       {/* Team (Grow › Talent). Founders reach the advisor directory,
           Co-founder Match and their roles through the Team workspace at
@@ -3209,6 +3206,7 @@ function AppInner() {
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       {/* documentation/architecture/DECISIONS.md D12 — the Research row is /market-intel and nothing else.
+          (D670 retired /market-intel itself; the Research row is /research.)
           D8 redirected the market tab; D9 withdrew the funds tab; D12 withdrew
           the remaining four (companies, AI research, news, documents) for the
           same reason D9 gave, having corrected D9's own per-tab table.

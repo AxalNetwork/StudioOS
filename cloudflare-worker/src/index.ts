@@ -70,7 +70,7 @@ import deals from './routes/deals';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import marketIntelPublic from './routes/market_intel_public';
-import { investorProfile, investorSignals, aggregateInvestorSignals } from './routes/investor_signals';
+import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
@@ -238,7 +238,7 @@ import partnerOfficeHoursRoutes from './routes/partner_office_hours';
 // Task #6 (W-1) — investor paywall surfaces.
 import introductionsRoutes from './routes/introductions';
 import investorSeatsRoutes, { downgradeExpiredInvestorTrials } from './routes/investor_seats';
-import { requireInvestorTier, requireInvestorTierExcept } from './middleware/requireInvestorTier';
+import { requireInvestorTierExcept } from './middleware/requireInvestorTier';
 import watchlistRoutes from './routes/watchlist';
 import followsRoutes from './routes/follows';
 import journalRoutes from './routes/journal';
@@ -744,10 +744,6 @@ for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, investorPro);
   app.use(`${p}/*`, investorPro);
 }
-// Market Intel: only the export endpoint is paywalled for free investors;
-// browsing pulses/benchmarks remains free. Inline gate lives in
-// market_intel.ts /export.
-app.use('/api/market-intel/export', requireInvestorTier('professional'));
 
 app.route('/api/scoring', scoring);
 // D588 (#1215) — a founder shares one official scoring run with one named account.
@@ -771,12 +767,12 @@ app.route('/api/tickets', tickets);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
-// Public (no-auth) companion of /api/market-intel — currently the email
-// digest unsubscribe link. Mounted as a sibling so it sits OUTSIDE the
-// requireAuth middleware applied to /api/market-intel.
+// Public (no-auth) companion of /api/market-intel — the public publications,
+// and the retired sector digest's unsubscribe and pause links (D670), which
+// now only say the digest has stopped. Mounted as a sibling so it sits
+// OUTSIDE the requireAuth middleware applied to /api/market-intel.
 app.route('/api/market-intel-public', marketIntelPublic);
 app.route('/api/investor-profile', investorProfile);
-app.route('/api/investor-signals', investorSignals);
 // Task #31 — Dashboard personal assistant is Anthropic-only and is
 // gated behind ENABLE_ANTHROPIC_DEV=1 on non-production stages. We
 // can't read env at module init time, so the gate runs as a
@@ -1195,7 +1191,7 @@ app.route('/api/mentors', advisorsRoutes);
 app.route('/api/partner-office-hours', partnerOfficeHoursRoutes);
 
 // Task #6 (W-1) — investor paywall: introductions (quota-gated) + seats
-// (Institutional). Tier gates for pipeline/deals/calendar/market-intel are
+// (Institutional). Tier gates for pipeline/deals/calendar are
 // applied above (mounted before the route table to wrap all handlers).
 app.route('/api/introductions', introductionsRoutes);
 app.route('/api/investor-seats', investorSeatsRoutes);
@@ -1665,14 +1661,12 @@ export default {
           cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
         }
         // D106 — PLATFORM CONTENT IS HQ'S WORK, AND N BRANCHES MUST NOT EACH
-        // DO IT. Four cadences below fetch from the open internet or send a
-        // platform-wide digest: the Founder Signals refresh, the whole
-        // market-intel connector block, the Platform Personas digest and the
-        // market-intel watchlist digest. Under one Worker per branch each of
-        // those would run N times — N× the external API quota against the
-        // same public sources, N copies of identical rows in N databases, and
-        // for the digests, N mails to a population that is HQ's, not the
-        // branch's.
+        // DO IT. Two cadences below fetch from the open internet: the Founder
+        // Signals refresh and the whole market-intel connector block. Under one
+        // Worker per branch each would run N times — N× the external API quota
+        // against the same public sources, N copies of identical rows in N
+        // databases. (The market-intel watchlist digest was the platform-wide
+        // mail this gate also held; D670 retired it.)
         //
         // THE CRON TRIM IN THE GENERATED CONFIG DOES NOT DO THIS, and it is
         // worth saying plainly because it looks as though it might. A branch
@@ -1764,8 +1758,10 @@ export default {
         // evidence from the free public sources (HN/Algolia, Stack Exchange,
         // GitHub, Federal Register, SEC EDGAR FTS) and persists promoted
         // signals + their evidence into D1, replacing the illustrative seed
-        // corpus on the /signals page. Idempotent; a failed night just leaves
-        // yesterday's real data (or the labeled examples) in place.
+        // corpus. D670 retired the /signals page; Research's overview, markets,
+        // sectors and founder desk read this table, so the refresh stays.
+        // Idempotent; a failed night just leaves yesterday's real data (or the
+        // labeled examples) in place.
         if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
           try {
             const { runRefresh } = await import('./services/signals/engine');
@@ -1773,17 +1769,6 @@ export default {
             console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
           } catch (e) {
             console.error('[cron] signals ingestion failed', e);
-          }
-        }
-        // Task #4 — Investor Signals aggregation every 6h at HH:05.
-        // Cron fires every minute; gate on hour%6==0 + minute==5 so the
-        // aggregator runs four times a day (00:05, 06:05, 12:05, 18:05 UTC).
-        if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() === 5) {
-          try {
-            const r = await aggregateInvestorSignals(env);
-            console.info(`[cron] investor_signals aggregated n_total=${r.n_total} snapshot_id=${r.snapshot_id}`);
-          } catch (e) {
-            console.error('[cron] investor_signals aggregation failed', e);
           }
         }
         // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:
@@ -2426,20 +2411,15 @@ export default {
             const r = await runSourcesByCadence(env, 'weekly');
             if (r.scanned) console.info(`[cron] mi weekly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
-          // Task #5 (AK) — daily 04:00 UTC: combined index recompute +
-          // investor-signals snapshot refresh. The 03:15 slot was kept
-          // through #14 for historical compatibility but the AK spec
-          // pins this surface to a single nightly refresh window so
-          // operators have one timestamp to monitor for staleness.
+          // Task #5 (AK) — daily 04:00 UTC: the index recompute. The 03:15
+          // slot was kept through #14 for historical compatibility but the AK
+          // spec pins this surface to a single nightly refresh window so
+          // operators have one timestamp to monitor for staleness. (The
+          // investor-signals snapshot refresh that shared this slot went with
+          // the /market-intel page, D670.)
           if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
             const r = await recomputeIndexes(env);
             console.info(`[cron] mi recompute sectors=${r.sectors} rows_written=${r.rows_written}`);
-            try {
-              const s = await aggregateInvestorSignals(env);
-              console.info(`[cron] investor_signals daily-refresh n_total=${s.n_total} snapshot_id=${s.snapshot_id}`);
-            } catch (e) {
-              console.error('[cron] investor_signals daily-refresh failed', e);
-            }
           }
           // Institutional quarterly Axal-VC PDF — stub trigger. The PDF
           // renderer + R2 dropbox land with AA-2; this cron simply logs
@@ -2451,29 +2431,9 @@ export default {
         } catch (e) {
           console.error('[cron] market intel failed', e);
         }
-        // Task #30 — Market-Intel watchlist digest. Walks
-        // market_intel_watchlist on the cadence-matched send slots
-        // (weekly Mon 09:00 UTC, monthly 1st 09:00 UTC), composes the
-        // composite-delta + new-citations email per user, and stamps
-        // last_period_key on confirmed delivery so a same-period retry
-        // is a no-op. Cheap on every other tick: the helper exits in
-        // O(1) when neither cadence window matches.
-        // D106 — HQ only, and for a second reason beyond the fan-out: the
-        // digest composes a composite delta and new citations out of the
-        // market-intel rows the block above gathers, which on a branch are
-        // not there. Mailing a delta computed from an empty corpus is worse
-        // than not mailing.
-        if (hqCadences) {
-          try {
-            const { sendMarketIntelDigests } = await import('./services/market_intel/digest');
-            const r = await sendMarketIntelDigests(env, now);
-            if (r.sent > 0 || r.failed > 0) {
-              console.info(`[cron] mi watchlist digest users=${r.users} sent=${r.sent} failed=${r.failed} rows=${r.rows}`);
-            }
-          } catch (e) {
-            console.error('[cron] mi watchlist digest failed', e);
-          }
-        }
+        // D670 — the market-intel watchlist digest (Task #30: a weekly email on
+        // Mondays and a monthly one on the 1st, 09:00 UTC) is retired with the
+        // /market-intel page. Nothing here sends it any more.
         // Task #14 — flush pending digest emails. Cheap on idle ticks
         // (single GROUP BY query) and only sends to users whose local
         // time is currently 09:00 with cadence-matched weekday. The

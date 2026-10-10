@@ -4,6 +4,11 @@ Pulls from external sources, extracts structured signals, scores and caches
 them. Served by `cloudflare-worker/src/routes/market_intel.ts` (authenticated, tier-gated) and
 `cloudflare-worker/src/routes/market_intel_public.ts`.
 
+D670 retired the `/market-intel` page and its weekly and monthly sector digest
+(its module is deleted). Research and the Spinout Lab's market page still read
+what this folder gathers, so ingestion, the reducer and the index recompute
+keep running on their crons.
+
 | File | What it does |
 | --- | --- |
 | `liveRows.ts` | Which rows and indexes are real (D538). Every read of `market_intel_rows` goes through `liveRowSql()`, every read of `market_intel_indexes` through `liveIndexSql()`. |
@@ -11,7 +16,6 @@ them. Served by `cloudflare-worker/src/routes/market_intel.ts` (authenticated, t
 | `aggregator.ts` | Runs the sources and collects results. |
 | `reducer.ts` | Folds raw results into signals. |
 | `scoring.ts` | Ranks them. |
-| `digest.ts` | The periodic digest. |
 | `cache.ts` | Caching layer. |
 | `quota.ts` | Per-caller budgets. |
 | `schema.ts`, `extractor_schema.ts` | The stored shapes. |

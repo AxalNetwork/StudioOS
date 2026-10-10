@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   MessageSquare, Package, Brain, Briefcase, Map, TrendingUp,
-  Sparkles, DollarSign, Scale, Shield, Users, Megaphone, Gift, Network, Radar, Globe,
+  Sparkles, DollarSign, Scale, Shield, Users, Megaphone, Gift, Network,
 } from 'lucide-react';
 import WorkspaceTabs from '../../components/WorkspaceTabs';
 import { hasTier } from '../../sidebarConfig';
@@ -25,6 +25,9 @@ import { hasTier } from '../../sidebarConfig';
  *     /messages  /execution  /signals  /build/team
  *     /build/metrics  /network-effects  /raise/capital
  *
+ * (/signals and /market-intel were retired by D670 and redirect to
+ * /research, so the Research set they made up is gone.)
+ *
  * Collapsing twenty-one rows to ten without these bars would have stranded six
  * of them (/messages keeps a row of its own).
  *
@@ -36,13 +39,10 @@ import { hasTier } from '../../sidebarConfig';
  *   no tier gate — the nav was the whole gate — so the tab reproduces it with
  *   `hasTier` rather than silently widening who sees the surface.
  *
- *   /market-intel is guarded `labRoles(['admin','partner','investor'])` — it
- *   omits founder from the list outright and admits one only while
- *   `spinout_lab_active === 1`. That predates this shell and the guard is not
- *   changed here, but the tab must not lie about it, so it carries
- *   `labOnlyFor` and disappears for a founder who is not in the Lab. The
- *   Research ROW points at /signals for the same reason: every founder can
- *   open it, so the row is never a bounce.
+ *   A tab whose route is wrapped in `labRoles()` for some role carries
+ *   `labOnlyFor` with that role, so it disappears for anyone outside the Lab
+ *   instead of opening a bounce. No tab needs it since /market-intel's tab
+ *   left with the page (D670); the check stays for the next one.
  */
 
 // WHERE THIS BAR STILL DRAWS (#1447). The canvas zone pages — /validate/*,
@@ -109,15 +109,6 @@ const SETS = {
       roles: ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'] },
     { to: '/network-effects', label: 'Network effects', icon: Network,
       roles: ['admin', 'founder', 'partner', 'investor'] },
-  ],
-  // Canvas zones: Ask · Markets · Companies · Funds · Library, each its own page
-  // at /research/<zone>. Market intel and Signals are the older editors behind
-  // them.
-  research: [
-    { to: '/market-intel', label: 'Market', icon: Globe,
-      roles: ['admin', 'founder', 'partner', 'investor'], labOnlyFor: ['founder'] },
-    { to: '/signals', label: 'Signals', icon: Radar,
-      roles: ['admin', 'founder', 'partner', 'investor', 'advisor'] },
   ],
 };
 

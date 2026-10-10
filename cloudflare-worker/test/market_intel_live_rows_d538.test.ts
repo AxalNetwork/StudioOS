@@ -249,7 +249,7 @@ test('sector-compass: a live index row is shown, with the others still not recor
   assert.equal(body.sectors.find((s: any) => s.sector === 'DevTools').composite, null);
 });
 
-test('founder-lens, investor-lens and geography: no gap, score or composite without a live source', async () => {
+test('founder-lens: no gap or score without a live source', async () => {
   const db = fixture();
   const period = periodKey();
   for (const dim of ['composite', 'demand', 'supply', 'capital', 'sentiment']) {
@@ -263,11 +263,8 @@ test('founder-lens, investor-lens and geography: no gap, score or composite with
     assert.equal(p.demand, null); assert.equal(p.supply, null);
     assert.equal(p.reason, NO_LIVE_SOURCE_REASON);
   }
-  const investor = (await get(env, '/market-intel/investor-lens')).body;
-  for (const s of investor.ranked) { assert.equal(s.score, null); assert.equal(s.capital, null); }
-  const geo = (await get(env, '/market-intel/geography')).body;
-  assert.deepEqual(geo.geos[0].sectors, []);
-  assert.equal(geo.geos[0].not_recorded.reason, NO_LIVE_SOURCE_REASON);
+  // The investor and geography lenses this test also read were retired with
+  // the /market-intel page (D670).
 });
 
 test('citations never return a stub row', async () => {
@@ -286,7 +283,7 @@ test('citations never return a stub row', async () => {
 /* 4. Figures written into the code                                    */
 /* ------------------------------------------------------------------ */
 
-test('market-pulse, macro, private-rounds, benchmarks and competitive-intelligence say what they do not record', async () => {
+test('market-pulse, private-rounds and benchmarks say what they do not record', async () => {
   const env = envFor(fixture());
   await withoutNetwork(async () => {
     const pulse = (await get(env, '/market-intel/market-pulse')).body;
@@ -298,13 +295,8 @@ test('market-pulse, macro, private-rounds, benchmarks and competitive-intelligen
     // what it got; with the network off that is nothing, and no headline is
     // invented in its place.
     assert.deepEqual(pulse.headlines, []);
-
-    const macro = (await get(env, '/market-intel/macro')).body;
-    assert.deepEqual(macro.sectors, []);
-    assert.equal(macro.sectors_not_recorded.recorded, false);
-    assert.equal(macro.exit_environment, null);
-    assert.equal(macro.interest_rate_impact, null);
-    assert.equal(macro.updated_at, undefined, 'the hardcoded 2026-03-27 stamp is back');
+    // `/macro`, `/competitive-intelligence` and `/export` said the same of
+    // their parts until D670 retired them with the /market-intel page.
   });
   const rounds = (await get(env, '/market-intel/private-rounds')).body;
   assert.deepEqual(rounds.rounds, []);
@@ -313,15 +305,6 @@ test('market-pulse, macro, private-rounds, benchmarks and competitive-intelligen
 
   const bench = (await get(env, '/market-intel/studio-benchmarks')).body;
   assert.deepEqual(Object.keys(bench), ['not_recorded'], 'a benchmark figure is back');
-
-  const ci = (await get(env, '/market-intel/competitive-intelligence')).body;
-  assert.deepEqual(ci.high_conviction_plays, []);
-  assert.deepEqual(ci.market_pulse, []);
-  assert.equal(ci.studio_benchmarks, null);
-
-  const exp = await get(env, '/market-intel/export');
-  assert.equal(exp.status, 409);
-  assert.equal(exp.body.error, 'not_recorded');
 
   const priv = (await get(env, '/private-data/market/private-signals')).body;
   assert.deepEqual(priv.signals, []);

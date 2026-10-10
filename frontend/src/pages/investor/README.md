@@ -32,9 +32,9 @@ the generic route wrapper once a canvas has graduated.
 - `InvestorNetworkWorkspace.jsx` owns `/network` for the investor role,
   parallel to `FounderNetworkDesk` in `../founder/` — same route, role-branched
   in `App.jsx` ahead of the founder ternary.
-- `InvestorResearchWorkspace.jsx` owns `/market-intel` for the investor role,
-  parallel to the founder branch (`FounderWorkspaceTabs set="research"` wrapping
-  `MarketIntelPage`) on the same route.
+- `InvestorResearchWorkspace.jsx` is the investor's `/research` overview.
+  `/market-intel` rendered it too until D670 retired that page; the old URL now
+  redirects to `/research`.
 - The CSS files beside each component are route-scoped for the same reason as
   `../founder/`'s: dense canvas layouts should not leak into shared tools.
 - `deals/` holds one file per Deals artboard (ID1–ID4), each a full
@@ -44,7 +44,7 @@ the generic route wrapper once a canvas has graduated.
   through to the workspace, which serves the bucket root at `/deals` either
   way.
 
-`/network` and `/market-intel` are role-branched on one route rather than
+`/network` and `/research` are role-branched on one route rather than
 split into two — see the comment above each `<Route>` in `App.jsx` before
 changing either branch; `frontend/test/founder_network_a6_contract.test.mjs`
 and `frontend/test/founder_shell.test.mjs` both pin the founder side of these

@@ -118,8 +118,11 @@ test('index.ts mounts requireInvestorTier(professional) on /api/ic', async () =>
   const src = await readFile(resolve(__dirname, '../src/index.ts'), 'utf8');
   assert.match(src, /INVESTOR_PRO_PREFIXES\s*=\s*\[[\s\S]*?'\/api\/ic'/,
     '/api/ic must be in INVESTOR_PRO_PREFIXES');
-  assert.match(src, /requireInvestorTier\('professional'\)/,
-    'INVESTOR_PRO_PREFIXES loop must apply requireInvestorTier(professional)');
+  // This matched any `requireInvestorTier('professional')` in the file, and
+  // the one it found was the Market-Intel export gate (retired by D670). The
+  // loop applies the `Except` form, so pin the loop itself.
+  assert.match(src, /const investorPro = requireInvestorTierExcept\('professional'\);\s*for \(const p of INVESTOR_PRO_PREFIXES\) \{\s*app\.use\(p, investorPro\);/,
+    'INVESTOR_PRO_PREFIXES loop must apply requireInvestorTierExcept(professional)');
 });
 
 test('index.ts mounts STUDIO_PREFIXES with /api/lp-reports and /api/positions', async () => {

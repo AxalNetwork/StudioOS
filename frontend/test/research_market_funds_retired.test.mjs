@@ -59,27 +59,24 @@ test('no nav still points at the retired research/market URL', () => {
   assert.doesNotMatch(sidebar, /'\/advisor\/research\/market'/);
 });
 
-test('every shell that offers Market Intelligence reaches /market-intel', () => {
-  // Every role that had the tab keeps a route to the real page. D12 removed
-  // twenty fixture rows and admin's emptied Research group, but deliberately
-  // left all five roles standing — a role losing its one live research
-  // surface would be a regression hiding inside a withdrawal.
-  //
-  // Re-aimed in D284 from a count of five `'/market-intel'` literals inside
-  // SIDEBAR_GROUPS to the property that count stood for. Four shells offer it
-  // as a row's `match` (the Research or Studio row lights on it); the admin
-  // shell offers it from the Workspaces launcher, whose list is
-  // `lib/adminPlacement.js` — the row left the admin sidebar with the other
-  // 28 working pages. Exactly these five, named, never "at least".
-  const viaRows = Object.entries(SIDEBAR_GROUPS)
+test('no shell offers the retired /market-intel, and every role with a Research row reaches /research', () => {
+  // This held the opposite until D670: every role that had Market Intelligence
+  // kept a route to it, four by a row's `match` and admin by the launcher. The
+  // owner then retired the page (and its sector digest) outright, so the
+  // property is now that nothing offers it, its URL only redirects, and the
+  // four roles that kept a Research row still land on /research.
+  const offers = Object.entries(SIDEBAR_GROUPS)
     .filter(([, groups]) => groups.some((g) => (g.items || []).some((it) =>
       it.to === '/market-intel' || (it.match || []).includes('/market-intel'))))
     .map(([role]) => role);
-  const viaLauncher = WORKSPACES.some((w) => w.route === '/market-intel') ? ['admin'] : [];
-  assert.deepEqual([...viaRows, ...viaLauncher].sort(),
-    ['admin', 'advisor', 'founder', 'investor', 'partner'],
-    'expected all five roles to reach /market-intel: four by a row, admin by the launcher');
-  assert.match(read('frontend/src/App.jsx'), /path="\/market-intel"/, '/market-intel is no longer a route');
+  assert.deepEqual(offers, [], 'a shell offers the retired /market-intel again');
+  assert.ok(!WORKSPACES.some((w) => w.route === '/market-intel'), 'the admin palette offers /market-intel again');
+  assert.match(read('frontend/src/App.jsx'), /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/,
+    '/market-intel must redirect to /research, never 404');
+  const research = Object.entries(SIDEBAR_GROUPS)
+    .filter(([, groups]) => groups.some((g) => (g.items || []).some((it) => it.label === 'Research' && it.to === '/research')))
+    .map(([role]) => role).sort();
+  assert.deepEqual(research, ['advisor', 'founder', 'investor', 'partner']);
 });
 
 test('the research index lands on a surface that renders', () => {

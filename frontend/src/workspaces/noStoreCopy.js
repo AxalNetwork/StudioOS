@@ -109,7 +109,7 @@ export const RESEARCH_STORE_GAPS = {
   // D392 — CORRECTED AND SCOPED. This said the page "reads instead ... the
   // signals feed". It has not since `/research/markets` became `MarketZone`:
   // comparable readings a person enters, dated and age-gated (migration 223),
-  // with the feed kept at `/signals`. The missing store it names is still
+  // with the feed kept at `/signals` (until D670). The missing store it names is still
   // missing and still what the founder and investor canvases narrow — so the
   // entry stays for them. For partner and advisor, whose canvases draw exactly
   // the readings `MarketZone` holds, it is not shown (`roles`).

@@ -87,11 +87,6 @@ export const EXPLAINERS = {
     body: 'Your founder home for the whole lifecycle — submit and score a new startup, run execution, operate the studio, and manage spin-outs, all in one tabbed workspace.',
     docPath: 'studio',
   },
-  market_intel: {
-    title: 'Market signal, on demand',
-    body: 'Comp-set deltas, funding rounds, hiring velocity and news sentiment for the segments you care about — refreshed daily.',
-    docPath: 'validate-grow/market-intel',
-  },
   capital: {
     title: 'Capital & investment ops',
     body: 'Run the fundraise — pipeline, materials, signed terms — and track allocations across funds and SPVs in one place.',

@@ -212,8 +212,6 @@ const FEATURE_CATALOG: FeatureEntry[] = [
     url: '/portfolio/health', label: 'Portfolio Health', roles: ['admin', 'investor', 'partner'] },
   { keywords: ['watchlist'],
     url: '/watchlist', label: 'Watchlist & Decision Journal', roles: ['admin', 'investor', 'partner'] },
-  { keywords: ['investor signals', 'market intel', 'signals'],
-    url: '/market-intel?tab=signals', label: 'Investor Signals', roles: ['admin', 'investor'] },
   { keywords: ['settings', 'preferences', 'account'],
     url: '/account', label: 'Settings', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['notifications', 'inbox'],

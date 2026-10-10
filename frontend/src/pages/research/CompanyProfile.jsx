@@ -255,7 +255,7 @@ export function Signals({ market, geography, tracked }) {
                   <h3 className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{s.title}</h3>
                   {s.why_now ? <p className="text-[12px] text-axal-muted"><strong>Why now:</strong> {s.why_now}</p> : null}
                   {s.thesis ? <p className="text-[12px] text-axal-muted">{s.thesis}</p> : null}
-                  <p className={faint}>Updated {s.updated_at || NOT_RECORDED} · <Link to="/signals" className="underline">Read the signal →</Link></p>
+                  <p className={faint}>Updated {s.updated_at || NOT_RECORDED}</p>
                 </Card>
               ))}
             </div>
