@@ -59,4 +59,9 @@ one module's card and records, the Lab market page's three stored checks, and
 the manual writes for migration 440's records. Every call names the project
 with `?project=`.
 
+D661 (#1474): `cycles.js` reads the four cycle pages (`/api/cycles/:cycle/overview`
+and `/modules/:slug`). `cycleWrites.js` is the write table behind their Add forms,
+a factory over `request` so the contract test can run it against the real Worker
+routes; `cycles.js` binds it to the app's client as `cyclesWrite`.
+
 D653: `roundCalls.js` calls the mounted `/api/round-calls` domain for availability, real planner context, draft/audience, counsel review, send, responses and management. It uses the shared authenticated request client and has no public-token transport.
