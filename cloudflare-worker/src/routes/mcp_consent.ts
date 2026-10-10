@@ -1,11 +1,11 @@
 /**
  * D666 (#1496) — the SPA's half of connecting an AI assistant (D665):
  *
- *   GET    /api/mcp/consent/:id            the parked request: client, redirect host, scopes, grantable companies
+ *   GET    /api/mcp/consent/:id            the parked request: client, full redirect URI, scopes, grantable companies
  *   POST   /api/mcp/consent/:id/approve    { companies: [id…] } → { redirectTo }
  *   POST   /api/mcp/consent/:id/deny       → { redirectTo } carrying access_denied
  *   GET    /api/connectors/assistants      the caller's grants (never a token)
- *   DELETE /api/connectors/assistants/:id  revoke one grant, at once
+ *   DELETE /api/connectors/assistants/:id  revoke one grant (KV reaches other edges within about a minute)
  *
  * All signed in (`requireAuth`), and all 404 with MCP_SERVER_ENABLED off.
  *
@@ -15,7 +15,7 @@
  * compare-and-set, so two answers racing within KV's propagation window could
  * both read the request; both would be the same signed-in user's own answer.
  *
- * NOTHING IS AUTO-APPROVED. The redirect host is returned beside the client's
+ * NOTHING IS AUTO-APPROVED. The full redirect URI is returned beside the client's
  * self-declared name so the page can show where the connection goes.
  */
 import { Hono } from 'hono';

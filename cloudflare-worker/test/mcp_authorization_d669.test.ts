@@ -16,7 +16,8 @@ import * as structuring from '../src/services/interviewStructuring.ts';
 import * as proposals from '../src/routes/_founder_validate_proposals.ts';
 import * as structureRoute from '../src/routes/founder_validate_structure.ts';
 import * as writers from '../src/services/validateWriters.ts';
-import { fixture } from './mcp_server_d666.test.ts';
+import { fixture, connect } from './mcp_server_d666.test.ts';
+import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { world, GRANT, ARGS } from './assistant_interviews_d667.test.ts';
 const actual = { server, grants, oauth, consent, identity, assistant, structuring, proposals, structureRoute, writers };
 const SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -37,6 +38,33 @@ async function park(env:any,scope=['validate:read','validate:write']) {
 }
 const count=(db:any,t:string)=>Number(sql(db,'SELECT COUNT(*) n FROM '+t).n);
 const checks:any = {
+  async rpc(m:any) {
+    const {env:interviewEnv,db}=world();
+    const env={...fixture().env,...interviewEnv};
+    db.exec("ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER; ALTER TABLE users ADD COLUMN deletion_requested_at TEXT; UPDATE users SET founder_id=9 WHERE id=10");
+    const {token,clientId}=await connect(env,[7]);
+    const provider=new OAuthProvider({...oauth.providerOptions(env),apiHandler:m.server.mcpApiHandler});
+    async function invoke(name:string,args:any) {
+      const response=await provider.fetch(new Request('https://axal.vc/api/mcp',{method:'POST',headers:{
+        'Content-Type':'application/json',Accept:'application/json, text/event-stream','MCP-Protocol-Version':'2025-06-18',Authorization:'Bearer '+token},
+        body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})}),env,{waitUntil(){},passThroughOnException(){}} as any);
+      const body:any=await response.json();
+      return {status:response.status,result:body.result,output:body.result?.content?.[0]?.text?JSON.parse(body.result.content[0].text):null};
+    }
+    const submitted=await invoke('submit_interview',ARGS());
+    const session=db.prepare('SELECT * FROM interview_sessions WHERE id=?').get(submitted.output?.session_id??0) as any;
+    let proposed:any=null,structured:any=null,pending:any=[];
+    if(session){
+      proposed=await invoke('propose_placements',{session_id:session.id,placements:[{module:'ideal_customer_profile',kind:'segment',payload:{name:'Finance'},quote:'every Friday.'}]});
+      structured=await invoke('structure_with_studioos',{session_id:session.id});
+      const jwt=await new SignJWT({user_id:10}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
+      const review=await structureRoute.default.request('/sessions/'+session.id+'/placements',{headers:{Authorization:'Bearer '+jwt}},env);
+      const rows:any=await review.json();pending=rows.runs?.flatMap((r:any)=>r.placements.map((p:any)=>p.status))??[];
+    }
+    assert.deepEqual([submitted.status,submitted.result?.isError??false,session?.project_id,session?.submitted_via===clientId,proposed?.output?.stored,structured?.result?.isError??false,pending],
+      [200,false,7,true,1,false,['pending']]);
+  },
+
   async registry(m:any) {
     assert.deepEqual(m.server.registeredTools().map((t:any)=>[t.name,t.requiredScope]).sort(),[
       ['get_interview_guide','validate:read'],['get_validate_context','validate:read'],['list_companies','validate:read'],
@@ -217,6 +245,7 @@ async function modules(kind:string,old:string,replacement:string,index:number) {
   return out;
 }
 const probes=[
+ ['rpc','interviews','({ ...props, clientName:',"({ ...props, clientId: 'wrong-client', clientName:"],
  ['registry','server','registerMcpTools(INTERVIEW_TOOLS);',''],
  ['scope','server','if (!scope.includes(tool.requiredScope))','if (false)'],
  ['writes','server','if (!scope.includes(tool.requiredScope))','if (false)'],

@@ -15,9 +15,10 @@ import * as model from '../src/pages/connect/assistantConsentModel.js';
 import * as review from '../src/pages/founder/InterviewReview.jsx';
 const actual={consent,model,review};
 const request={client_name:'Claude',redirect_uri:'https://evil.example/callback/path',verified_assistant:null,scopes:['validate:read'],companies:[{id:7,name:'Actual project'}]};
-const render=(Component,props)=>renderedText(renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(Component,props))));
+const markup=(Component,props)=>renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(Component,props)));
+const render=(Component,props)=>renderedText(markup(Component,props));
 const checks={
- destination(m){const text=render(m.consent.ConsentView,{request});assert.deepEqual([text.includes('https://evil.example/callback/path'),text.includes('Unverified assistant'),text.includes('Claude wants to connect'),text.includes('keeps your earlier connections')],[true,true,true,true]);},
+ destination(m){const html=markup(m.consent.ConsentView,{request});const text=renderedText(html);const uri=html.match(/data-testid="consent-redirect-host"[^]*?<div class="break-all[^"]*">([^<]*)<\/div>/)?.[1];assert.deepEqual([uri,text.includes('Unverified assistant'),text.includes('Claude wants to connect'),text.includes('keeps your earlier connections')],[request.redirect_uri,true,true,true]);},
  scopes(m){const text=render(m.consent.ConsentView,{request});assert.deepEqual([text.includes('Read your Validate context'),text.includes('Submit interviews for your review')],[true,false]);},
  evidence(m){const p={kind:'evidence',payload:{hypothesis_id:31,pain_group_id:41,direction:'supports',strength:'pattern'},evidence_context:{hypothesis:{id:31,code:'H4',claim:'Finance leads reconcile weekly'},pain_group:{id:41,title:'Manual close'}}};
   assert.deepEqual(m.review.placementText(p),'Supports H4 · Finance leads reconcile weekly through Manual close · Pattern');},

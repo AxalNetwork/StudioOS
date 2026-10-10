@@ -575,7 +575,7 @@ export async function askTranscript(
   return { ok: true, answer: answers.join(' '), cites, receipt };
 }
 
-/** Delimiters vary per message; embedded delimiters remain part of the JSON data. */
+/** Delimiters vary per message; embedded delimiters remain part of the transcript data. */
 export function transcriptData(segments: readonly Segment[]): string {
   const delimiter = `TRANSCRIPT_${crypto.randomUUID()}`;
   return `BEGIN_${delimiter}\n${transcriptLines(segments)}\nEND_${delimiter}`;
