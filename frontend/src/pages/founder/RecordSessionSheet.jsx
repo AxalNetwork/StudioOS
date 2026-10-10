@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
+import { AssistantEntry } from './AssistantEntry';
 
 /**
  * Validate › Record a session (D660, #1473), to `design/incoming/Cycle
@@ -26,6 +28,8 @@ export const CHANNELS = [
   ['manual', 'Manual entry'],
 ];
 export const AUDIO = new Set(['in_person', 'video', 'phone']);
+/** D668: not a channel StudioOS records on. The founder's assistant submits the interview (D665). */
+export const ASSISTANT = 'assistant';
 export const CONSENT_METHODS = [
   ['verbal', 'Said yes, out loud'],
   ['written', 'In writing'],
@@ -119,6 +123,8 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
     return () => { alive = false; };
   }, [api, initialModels]);
 
+  const { company } = useActiveCompany() || {};
+  const viaAssistant = channel === ASSISTANT;
   const audio = AUDIO.has(channel);
   const ready = canStart(channel, consent) && (audio || parseConversation(conversation).length > 0);
   const finalLabel = models?.final?.find((m) => m.model === final)?.label;
@@ -151,6 +157,7 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
             {CHANNELS.map(([k, label]) => (
               <button key={k} type="button" role="radio" aria-checked={channel === k} data-testid={`channel-${k}`} className={chip(channel === k)} onClick={() => setChannel(k)}>{label}</button>
             ))}
+            <button type="button" role="radio" aria-checked={viaAssistant} data-testid="channel-assistant" className={chip(viaAssistant)} onClick={() => setChannel(ASSISTANT)}>From an AI assistant</button>
           </div>
         </Group>
         <Group title="With">
@@ -162,7 +169,9 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
             ? <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-gray-700 dark:text-gray-300">{points.map((p) => <li key={p}>{p}</li>)}</ul>
             : <p className="text-[12px] text-axal-faint">Not recorded</p>}
         </Group>
-        {audio ? (
+        {viaAssistant ? (
+          <AssistantEntry companyName={company?.company_name || ''} />
+        ) : audio ? (
           <Group title="Consent">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -205,14 +214,15 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
         {error && <p role="alert" data-testid="sheet-error" className="mb-2 text-[12px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
         <div className="flex items-center justify-between gap-3">
           <p className="text-[12px] text-axal-faint" data-testid="sheet-foot-note">
-            {audio && !canStart(channel, consent) ? 'Start unlocks once consent is recorded.'
+            {viaAssistant ? 'Your assistant sends the interview; it appears here for your review.'
+              : audio && !canStart(channel, consent) ? 'Start unlocks once consent is recorded.'
               : audio ? `Transcribe with ${finalLabel || 'Not recorded'}` : 'No audio is recorded on this channel.'}
           </p>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-[12px] font-bold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
-            <button type="button" data-testid="button-start-recording" disabled={!ready || busy} onClick={submit} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
+            {!viaAssistant && <button type="button" data-testid="button-start-recording" disabled={!ready || busy} onClick={submit} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
               {audio ? 'Start recording' : 'Save session'}
-            </button>
+            </button>}
           </div>
         </div>
       </footer>

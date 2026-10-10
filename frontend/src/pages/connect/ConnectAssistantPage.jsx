@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ASSISTANT_LIMITS, ASSISTANT_SCOPES, approveBody, canApprove, consentState, hostOf } from './assistantConsentModel.js';
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { assistantsApi } from '../../lib/api/assistants.js';
+import { ASSISTANT_LIMITS, ASSISTANT_SCOPES, approveBody, canApprove, consentState, hostOf, safeRedirect } from './assistantConsentModel.js';
 
 /**
  * D668 (#1498) — `/connect/assistant?request=:id`: a founder approves an AI
@@ -106,4 +107,46 @@ export function ConsentView({ request, error, loading = false, busy = false, sen
   );
 }
 
-export default ConsentView;
+/**
+ * The mounted page: reads `?request=`, answers it through `assistantsApi`, and
+ * follows the Worker's `redirectTo` only when `safeRedirect` allows it. The
+ * route itself sends a signed-out visitor to sign-in and back (`App.jsx`).
+ */
+export default function ConnectAssistantPage({ api = assistantsApi, go = (url) => window.location.assign(url) }) {
+  const location = useLocation();
+  const id = new URLSearchParams(location.search).get('request') || '';
+  const [read, setRead] = useState({ loading: true });
+  const [busy, setBusy] = useState(false);
+  const [sendError, setSendError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    api.consent(id).then(
+      (request) => { if (alive) setRead({ request }); },
+      (error) => { if (alive) setRead({ error: { status: error?.status ?? 0 } }); },
+    );
+    return () => { alive = false; };
+  }, [api, id]);
+
+  const answer = async (call) => {
+    setBusy(true); setSendError('');
+    try {
+      const { redirectTo } = await call();
+      const to = safeRedirect(redirectTo);
+      if (!to) { setSendError('The assistant gave an address StudioOS will not send you to. Nothing more was done.'); return; }
+      go(to);
+    } catch (e) {
+      // A request answered or lapsed meanwhile reads as its own state.
+      if ([404, 409, 410].includes(e?.status)) setRead({ error: { status: e.status } });
+      else setSendError(e?.message || 'That could not be sent. Try again.');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <ConsentView
+      request={read.request} error={read.error} loading={!!read.loading} busy={busy} sendError={sendError}
+      onApprove={(body) => answer(() => api.approve(id, body.companies))}
+      onDeny={() => answer(() => api.deny(id))}
+    />
+  );
+}

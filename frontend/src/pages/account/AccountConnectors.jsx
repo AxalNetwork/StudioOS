@@ -6,6 +6,7 @@ import { connectorsApi } from '../../lib/api/connectors';
 import { Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, ConnectorPanel, Group, Sheet, openingView, useConnectors } from './ConnectorSheet';
+import { AssistantsSection } from './AssistantsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, discoverChips,
   discoverSections, doesLabel, feedsLabel, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursRows,
@@ -396,6 +397,9 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
       </div>
 
       {content}
+
+      {/* D668 (#1498): AI assistants that use StudioOS (D665), on both tabs. */}
+      <AssistantsSection />
 
       {sheet && sheetP && (
         <ConnectorPanel

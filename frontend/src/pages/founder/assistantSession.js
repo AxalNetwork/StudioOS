@@ -44,13 +44,24 @@ export function assistantLabel(name, host) {
 }
 
 /**
- * A placement's source label. A placement from an assistant names it and its
- * host; one from StudioOS's own structuring (D658) says so. Nothing is
- * unlabelled.
+ * A placement's source label, from D667's review read: `source` is
+ * `assistant` or `studioos`, and an assistant's placement carries the
+ * session's `submitted_via_name`. The read holds no redirect host (that lives
+ * on the grant, #1496), so a name without one says it is the assistant's own.
+ * Nothing is unlabelled, and only `assistant` is credited to one.
  */
 export function placementSource(p) {
-  if (p?.proposed_by === 'studioos' || (!p?.submitted_via_name && !p?.proposed_by_name)) return 'Proposed by StudioOS';
-  return `Proposed by ${assistantLabel(p.proposed_by_name || p.submitted_via_name, p.proposed_by_host || p.submitted_via_host)}`;
+  if (p?.source !== 'assistant') return 'Proposed by StudioOS';
+  const name = String(p.submitted_via_name || '').trim();
+  const host = String(p.submitted_via_host || '').trim();
+  if (!name) return 'Proposed by an AI assistant (name not recorded)';
+  return host ? `Proposed by ${assistantLabel(name, host)}` : `Proposed by ${name} (the name the assistant gave itself)`;
+}
+
+/** A run's column heading in the compare view: the assistant's name, or StudioOS's model. */
+export function runLabel(run) {
+  if (run?.source === 'assistant') return `${String(run.submitted_via_name || '').trim() || 'An AI assistant'} (assistant)`;
+  return run?.model ? `StudioOS · ${run.model}` : 'StudioOS · model not recorded';
 }
 
 /** The assistant badge's text for a session, or null for a session recorded here. */

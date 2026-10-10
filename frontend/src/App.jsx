@@ -404,6 +404,8 @@ const FounderRaiseDataRoom = lazy(() => import('./pages/founder/FounderRaiseData
 const FounderRaiseLiquidity = lazy(() => import('./pages/founder/FounderRaiseLiquidity'));
 const FounderGrowDesk = lazy(() => import('./pages/founder/FounderGrowDesk'));
 const SentUpdatePage = lazy(() => import('./pages/founder/SentUpdatePage'));
+// D668 (#1498): an AI assistant's consent page (D665, D666).
+const ConnectAssistantPage = lazy(() => import('./pages/connect/ConnectAssistantPage'));
 const RoundCallPage = lazy(() => import('./pages/founder/RoundCallPage'));
 const RoundCallIndex = lazy(() => import('./pages/founder/RoundCallPage').then(module => ({ default: module.RoundCallIndex })));
 const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
@@ -452,6 +454,7 @@ import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEP
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
 import { connectorsRedirect } from './pages/account/connectorsModel';
+import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -2993,6 +2996,10 @@ function AppInner() {
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
       <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], <RoundCallIndex />)} />
       <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], <RoundCallPage />)} />
+      {/* D668 (#1498): approve an AI assistant for the companies ticked. Outside
+          the shell's guard on purpose: the assistant's OAuth flow lands here,
+          and a signed-out visitor goes to sign-in and back to this request. */}
+      <Route path="/connect/assistant" element={user ? <ConnectAssistantPage /> : <Navigate to={assistantSignInPath(location)} replace />} />
       <Route path="/updates/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SentUpdatePage />)} />
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <FounderGrowDesk />)

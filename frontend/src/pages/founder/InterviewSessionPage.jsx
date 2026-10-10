@@ -4,6 +4,8 @@ import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { createCapture, indexedDbQueue } from '../../lib/interviewCapture';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView, { recordingState } from './RecordingView';
+import { AssistantBadge } from './AssistantEntry';
+import { openingStep } from './assistantSession.js';
 import { ModelList, AUDIO } from './RecordSessionSheet';
 import InterviewReview from './InterviewReview';
 
@@ -327,10 +329,18 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const elapsed = (session.active_ms || 0) + (session.status === 'recording' && session.recording_since
     ? Math.max(0, now - Date.parse(`${String(session.recording_since).replace(' ', 'T')}Z`)) : 0);
 
+  const reviewFirst = openingStep(session) === 'review';
+  const review = ['transcribed', 'structured', 'reviewed'].includes(session.status) && (
+    <section data-testid="session-review" data-first={reviewFirst ? 'true' : 'false'} className="space-y-2">
+      <h2 className="text-[16px] font-bold">Review</h2>
+      <ReviewStep api={api} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
+    </section>
+  );
+
   return (
     <div className="mx-auto grid max-w-6xl gap-6 p-4 md:grid-cols-[1fr_280px] md:p-6" data-testid="interview-session-page">
       <main className="min-w-0 space-y-4">
-        <nav className="text-[12px]"><Link to="/validate/interviews" className="text-axal-muted underline">Interviews</Link></nav>
+        <nav className="flex items-center gap-2 text-[12px]"><Link to="/validate/interviews" className="text-axal-muted underline">Interviews</Link><AssistantBadge session={session} /></nav>
         {error && <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
         {session.status === 'draft' && <StartPanel session={session} error={startError} busy={busy} onStart={start} onConsent={consent} />}
         {recording && (
@@ -352,13 +362,10 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
             {session.status === 'stopped' && AUDIO.has(session.channel) && (
               <button type="button" onClick={async () => { try { await api.transcribe(session.id, session.final_model); } catch (e) { setError(e?.message); } load(); loadReceipt(); }} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white">Transcribe</button>
             )}
+            {/* D668: a session an assistant submitted opens on the review step, above its transcript. */}
+            {reviewFirst && review}
             <TranscriptReview segments={segments} intervieweeName={intervieweeName} onAssign={assign} />
-            {['transcribed', 'structured', 'reviewed'].includes(session.status) && (
-              <section data-testid="session-review" className="space-y-2">
-                <h2 className="text-[16px] font-bold">Review</h2>
-                <ReviewStep api={api} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
-              </section>
-            )}
+            {!reviewFirst && review}
             {marks.length > 0 && (
               <ul className="text-[12px] text-axal-muted">{marks.map((m) => <li key={m.id}>Marked at {Math.floor(m.offset_ms / 60000)}:{String(Math.floor((m.offset_ms % 60000) / 1000)).padStart(2, '0')}{m.label ? ` · ${m.label}` : ''}</li>)}</ul>
             )}

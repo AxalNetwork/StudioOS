@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { placementSource, runLabel } from './assistantSession.js';
 
 /**
  * The review step of an interview session (D660 part 2, #1473), to
@@ -77,12 +78,19 @@ export function spanLabel(from, to) {
   return Number.isFinite(from) && Number.isFinite(to) ? `${f(from)}–${f(to)}` : 'Span not recorded';
 }
 
-/** The latest run's placements, grouped by module in the canvas's order. */
+/**
+ * The placements to review, grouped by module in the canvas's order: the
+ * latest run of each source. With StudioOS's runs only, that is the latest
+ * run, as before. D668: an AI assistant's run (D667) stays listed after
+ * StudioOS structures the same transcript to compare, so its proposals can
+ * still be accepted; each card names its source.
+ */
 export function groupByModule(read) {
   const runs = read?.runs || [];
-  const latest = runs[runs.length - 1];
+  const latestOf = (src) => [...runs].reverse().find((r) => (r.source === 'assistant' ? 'assistant' : 'studioos') === src);
+  const shown = [latestOf('assistant'), latestOf('studioos')].filter(Boolean);
   const groups = new Map();
-  for (const pl of latest?.placements || []) {
+  for (const pl of shown.flatMap((r) => r.placements || [])) {
     const m = MODULE_LABELS[pl.module] ? pl.module : 'other';
     if (!groups.has(m)) groups.set(m, []);
     groups.get(m).push(pl);
@@ -122,6 +130,7 @@ export function PlacementCard({ p, error, busy, onAccept, onDiscard }) {
   return (
     <li className={CARD} data-testid={`placement-${p.id}`} data-status={p.status}>
       <p className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">{placementText(p)}</p>
+      <p className="mt-0.5 text-[11px] font-semibold text-axal-faint" data-testid={`placement-source-${p.id}`} data-source={p.source === 'assistant' ? 'assistant' : 'studioos'}>{placementSource(p)}</p>
       <blockquote className="mt-1 border-l-2 border-violet-300 pl-2 text-[12px] italic text-gray-600 dark:border-violet-700 dark:text-gray-300" data-testid={`placement-cite-${p.id}`}>
         {p.cite?.quote || 'Quote not recorded'} <span className="not-italic text-axal-faint">· {spanLabel(p.cite?.from, p.cite?.to)}</span>
       </blockquote>
@@ -180,7 +189,8 @@ export function ComparePanel({ read, onRestructure, busy }) {
       className={`${BTN} mt-2 border border-gray-200 dark:border-gray-700`}>Structure again with {nextStructureModel(read)}</button>
   );
   if (!cmp) return <div data-testid="compare-none" className="text-[13px] text-axal-faint"><p>Structure again with a second model to compare the two.</p>{again}</div>;
-  const model = (id) => read.runs.find((r) => r.run_id === id)?.model || 'Model not recorded';
+  // D668: an assistant's run is headed by the assistant, StudioOS's by its model.
+  const model = (id) => runLabel(read.runs.find((r) => r.run_id === id));
   return (
     <>
     <table data-testid="compare" className="w-full table-fixed text-[12px]">

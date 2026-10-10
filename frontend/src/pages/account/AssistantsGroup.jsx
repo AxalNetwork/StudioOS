@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { assistantsApi } from '../../lib/api/assistants.js';
 import { Unreadable } from '../../ui';
-import { ASSISTANTS, MCP_SERVER_URL, grantRow } from './assistantSetup.js';
+import { ASSISTANTS, MCP_SERVER_URL, grantRow, grantsAfterRevoke } from './assistantSetup.js';
 
 /**
  * D668 (#1498) — Connectors' "AI assistants" group: a setup card for each
@@ -98,6 +99,14 @@ export function GrantsList({ grants, status = 'ready', onRevoke, onRetry, initia
 }
 
 export default function AssistantsGroup({ grants, status, onRevoke, onRetry, copy }) {
+  if (status === 'off') {
+    return (
+      <section className="flex min-w-0 flex-col gap-2" id="ai-assistants" data-testid="connectors-section-AI assistants" data-state="off">
+        <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">AI assistants</h3>
+        <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="assistants-off">Not available yet. Connecting ChatGPT, Claude, Gemini or Grok to StudioOS is not switched on.</p>
+      </section>
+    );
+  }
   return (
     <section className="flex min-w-0 flex-col gap-3" id="ai-assistants" data-testid="connectors-section-AI assistants">
       <div>
@@ -112,4 +121,26 @@ export default function AssistantsGroup({ grants, status, onRevoke, onRetry, cop
       </div>
     </section>
   );
+}
+
+/**
+ * The group, mounted on Connectors: reads the caller's grants and revokes one.
+ * A 404 is the Worker's MCP_SERVER_ENABLED being off, drawn as "Not available
+ * yet" with no setup cards, so no one is sent to a server that is switched off.
+ */
+export function AssistantsSection({ api = assistantsApi }) {
+  const [state, setState] = useState({ status: 'loading', grants: [] });
+  const load = useCallback(() => {
+    setState((s) => ({ ...s, status: 'loading' }));
+    api.grants().then(
+      (r) => setState({ status: 'ready', grants: Array.isArray(r?.grants) ? r.grants : [] }),
+      (e) => setState({ status: e?.status === 404 ? 'off' : 'unreadable', grants: [] }),
+    );
+  }, [api]);
+  useEffect(() => { load(); }, [load]);
+  const revoke = async (id) => {
+    await api.revoke(id);
+    setState((s) => ({ ...s, grants: grantsAfterRevoke(s.grants, id) }));
+  };
+  return <AssistantsGroup grants={state.grants} status={state.status} onRevoke={revoke} onRetry={load} />;
 }

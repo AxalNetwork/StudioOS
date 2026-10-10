@@ -50,7 +50,8 @@ test('Approve sends exactly the ticked companies the request offered', () => {
   assert.match(approveTag(none), /disabled=""/, 'nothing ticked: Approve is off');
   const one = consent({ request: REQUEST, initialTicked: [9] }).h;
   assert.doesNotMatch(approveTag(one), /disabled=""/);
-  const box = (h, id) => h.match(new RegExp(`<input[^>]*data-testid="consent-company-${id}"[^>]*>`))[0];
+  // The rendered tag of one company's tick, found by its testid (a fixed string, not a pattern).
+  const box = (h, id) => { const at = h.indexOf(`data-testid="consent-company-${id}"`); return h.slice(h.lastIndexOf('<input', at), h.indexOf('>', at) + 1); };
   assert.match(box(one, 9), /checked=""/);
   assert.doesNotMatch(box(one, 7), /checked=""/);
 });
@@ -130,13 +131,56 @@ test('the sheet\'s entry: three steps, the consent line, the link, and a starter
 });
 
 test('a placement\'s label names its source; an assistant session carries its badge and opens on review', () => {
-  assert.equal(placementSource({ proposed_by: 'assistant', proposed_by_name: 'ChatGPT', proposed_by_host: 'chatgpt.com' }), 'Proposed by ChatGPT (chatgpt.com)');
-  assert.equal(placementSource({ proposed_by: 'studioos' }), 'Proposed by StudioOS');
-  assert.equal(placementSource({}), 'Proposed by StudioOS');
-  assert.equal(placementSource({ submitted_via_name: 'Grok' }), 'Proposed by Grok (host not recorded)');
+  // D667's review read: `source` and the session's `submitted_via_name`; no host on the read.
+  assert.equal(placementSource({ source: 'assistant', submitted_via_name: 'ChatGPT', submitted_via_host: 'chatgpt.com' }), 'Proposed by ChatGPT (chatgpt.com)');
+  assert.equal(placementSource({ source: 'assistant', submitted_via_name: 'ChatGPT' }), 'Proposed by ChatGPT (the name the assistant gave itself)');
+  assert.equal(placementSource({ source: 'assistant' }), 'Proposed by an AI assistant (name not recorded)');
+  assert.equal(placementSource({ source: 'studioos' }), 'Proposed by StudioOS');
+  assert.equal(placementSource({}), 'Proposed by StudioOS', 'a row from before migration 447 is StudioOS\'s own');
+  assert.equal(placementSource({ source: 'studioos', submitted_via_name: 'Grok' }), 'Proposed by StudioOS', 'only an assistant row is credited to one');
   const s = { submitted_via_name: 'Claude', submitted_via_host: 'claude.ai' };
   assert.equal(openingStep(s), 'review');
   assert.equal(openingStep({ channel: 'video' }), null);
   assert.match(html(React.createElement(AssistantBadge, { session: s })), />From Claude</);
   assert.equal(html(React.createElement(AssistantBadge, { session: { channel: 'video' } })), '');
+});
+
+// ── Wired to D667 (#1497): the review step and the session page ────────────
+
+import InterviewReview from '../src/pages/founder/InterviewReview.jsx';
+import { runLabel } from '../src/pages/founder/assistantSession.js';
+import { readFileSync } from 'node:fs';
+
+const pl = (id, source, extra = {}) => ({
+  id, run_id: source === 'assistant' ? 'run_gpt' : 'run_sos', model: source === 'assistant' ? null : '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  module: 'problem_discovery', kind: 'pain_severity', status: 'pending', can_accept: true,
+  payload: { phrase: 'reconciling two systems', severity: 'severe' }, cite: { quote: 'we reconcile by hand', from: 0, to: 4000 },
+  source, submitted_via_name: source === 'assistant' ? 'ChatGPT' : null, ...extra,
+});
+const READ = {
+  runs: [
+    { run_id: 'run_gpt', model: null, source: 'assistant', submitted_via_name: 'ChatGPT', placements: [pl(1, 'assistant')] },
+    { run_id: 'run_sos', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', source: 'studioos', submitted_via_name: null, placements: [pl(2, 'studioos')] },
+  ],
+  compare: { first: 'run_gpt', second: 'run_sos', modules: [{ module: 'problem_discovery', first: [pl(1, 'assistant')], second: [pl(2, 'studioos')] }] },
+};
+
+test('the review step labels each placement by its source, and the compare view heads each run by who proposed it', () => {
+  const h = renderToStaticMarkup(React.createElement(InterviewReview, { read: READ }));
+  const text = renderedText(h);
+  assert.match(h, /data-testid="placement-source-1" data-source="assistant">Proposed by ChatGPT \(the name the assistant gave itself\)</);
+  assert.match(h, /data-testid="placement-source-2" data-source="studioos">Proposed by StudioOS</);
+  assert.match(text, /ChatGPT \(assistant\)/, 'the assistant\'s run is headed by the assistant');
+  assert.match(text, /StudioOS · @cf\/meta\/llama-3\.3-70b-instruct-fp8-fast/);
+  assert.doesNotMatch(text, /Model not recorded/);
+  assert.equal(runLabel({ source: 'studioos', model: null }), 'StudioOS · model not recorded');
+  assert.equal(runLabel({ source: 'assistant' }), 'An AI assistant (assistant)');
+});
+
+test('the session page carries the badge and puts an assistant session\'s review above its transcript', () => {
+  const src = readFileSync('frontend/src/pages/founder/InterviewSessionPage.jsx', 'utf8');
+  assert.match(src, /<AssistantBadge session=\{session\} \/>/);
+  assert.match(src, /const reviewFirst = openingStep\(session\) === 'review';/);
+  const order = ['{reviewFirst && review}', '<TranscriptReview', '{!reviewFirst && review}'].map((t) => src.indexOf(t));
+  assert.ok(order.every((i) => i > 0) && order[0] < order[1] && order[1] < order[2], 'review, transcript, review-if-not-first');
 });

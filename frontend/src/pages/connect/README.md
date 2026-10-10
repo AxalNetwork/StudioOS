@@ -10,5 +10,6 @@
 - **The redirect host is always shown, larger than the client's name.** A
   client names itself; the host is where the connection goes.
 - **Approve sends exactly the ticked companies** the request offered.
-- **Nothing here is mounted until #1496's routes are on `main`.** Until then
-  the views render from fixtures in `frontend/test/assistant_connect_d668.test.mjs`.
+- **The page is mounted at `/connect/assistant`** in `App.jsx`, outside the
+  shell's guard: a signed-out visitor goes to sign-in and back. It follows a
+  redirect only through `safeRedirect`.
