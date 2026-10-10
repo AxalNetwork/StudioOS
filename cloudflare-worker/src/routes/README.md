@@ -24,6 +24,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
 /api/projects      → projects.ts
+/api/cycles/build  → cycle_build.ts      (Build overview, six module reads, and D662 field writes)
 /api/legal         → legal.ts
 /api/legalcap      → legalcap.ts
 /api/partners      → partners.ts

@@ -23,7 +23,7 @@ import { resolve, join } from 'node:path';
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
-test('the two tables were write-only before this change', () => {
+test('cap-table vesting readers remain scoped to their intended audience', () => {
   // Guards the premise. If another reader appears, this endpoint may be
   // duplicating one — worth knowing rather than assuming.
   const dir = resolve(root, 'cloudflare-worker/src');
@@ -46,14 +46,18 @@ test('the two tables were write-only before this change', () => {
   // and writes nothing — pinned below so the list can grow only that way.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts'],
-    'only the Carta importer, this endpoint and the D435 company-scoped read should touch these tables',
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts'],
+    'only the Carta importer and the three reviewed readers should touch these tables',
   );
   const company = read('cloudflare-worker/src/routes/company.ts');
   assert.doesNotMatch(company, /cap_table_vesting/, 'the Team page reads pools, not vesting rows');
   assert.doesNotMatch(company, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_option_pools/, 'a read, never a write');
   assert.match(company, /FROM cap_table_option_pools o\s*JOIN user_company_links ucl ON ucl\.user_id = o\.user_id\s*WHERE ucl\.company_id = \?/,
     'the company-scoped read is joined through the membership, so it can only return a member’s import');
+  const build = read('cloudflare-worker/src/routes/cycle_build.ts');
+  assert.match(build, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
+    'the Build cycle can read vesting only through a holder of the requested project and owner');
+  assert.doesNotMatch(build, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_vesting/, 'the Build cycle cannot write personal vesting');
 });
 
 test('the endpoint is scoped to the caller', () => {

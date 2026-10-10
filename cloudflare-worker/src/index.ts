@@ -176,6 +176,7 @@ import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
+import cycleBuildRoutes from './routes/cycle_build';
 import metricsRoutes from './routes/metrics';
 import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
@@ -1138,6 +1139,7 @@ app.route('/api/founder-risk', founderRiskRoutes);
 // Task #9 — Venture Risk (internal deal-team 10-layer rating).
 app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
+app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);
 // D363 — the Spin-Out Lab revenue ledger (migration 311).

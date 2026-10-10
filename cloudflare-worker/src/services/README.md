@@ -47,6 +47,10 @@ runs these directly against an in-process SQLite, with no request at all.
 
 ## Rules
 
+`cycleCards.ts` defines the D656 Figure and Card shapes, card failure isolation,
+and shared paging. `buildCycleRecords.ts` holds D662's D661-shaped record table,
+chart specs and bounded search/filter/sort/paging for the Build modules.
+
 - No `Context`, no `Response`. If you need one, the code belongs in `routes/`.
 - Never build SQL by interpolation. `check-sql-prepare` fails the build on a
   `${}` inside `DB.prepare(...)` unless it is a provably safe fragment, and
