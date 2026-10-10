@@ -400,7 +400,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           workspace="Research"
           role={role}
           stance="Read-only source coverage"
-          note="This rail reports which zones have a store behind them. Its composer answers from the connectors you switch on and sends nothing without your click. It does not run research."
+          note="This rail reports which zones have a store behind them. It does not run research, answer questions, or take actions."
           coverage={[coverageLine]}
           unavailable={[
             // WAS "nothing here can cite", which stopped being true the moment

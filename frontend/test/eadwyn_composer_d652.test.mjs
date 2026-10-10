@@ -167,8 +167,15 @@ test('the switches are the conversation\'s: read from it, written to it as a who
   assert.doesNotMatch(src, /safeWriteJSON\([^)]*connectors/, 'switches are kept in the browser, not on the conversation');
 });
 
-test('the rail mounts the composer on the rail\'s model and page, and re-reads spend after a run', () => {
+// The owner, 2026-10-10: the Worker AI rail is the AIRail canvas, which has
+// no chat. The composer stays built and tested above, unmounted, until a
+// canvas gives it a place of its own.
+test('the Worker AI rail carries no chat: the composer is not mounted, and the AIRail canvas draws none', () => {
   const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
-  assert.match(rail, /import EadwynComposer from '\.\/EadwynComposer';/);
-  assert.match(rail, /<EadwynComposer\s+workspace=\{workspace\}\s+model=\{activeModel \|\| undefined\}\s+page=\{pagePath \|\| undefined\}\s+onRan=\{\(\) => \{ reload\(\); budgetReading\.reload\(\); \}\}\s*\/>/);
+  assert.doesNotMatch(rail, /EadwynComposer/, 'the rail imports or mounts the composer again');
+  assert.doesNotMatch(rail, /Ask Eadwyn/);
+  const canvas = read('design/incoming/AIRail.dc.html');
+  assert.doesNotMatch(canvas, /Ask Eadwyn|EadwynComposer/, 'the AIRail canvas now draws a chat; revisit this guard');
+  const research = codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx'));
+  assert.doesNotMatch(research, /composer answers/, 'a rail note promises a composer the rail does not have');
 });
