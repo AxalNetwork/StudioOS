@@ -73,7 +73,7 @@ const checks:any = {
   async scope(m:any) {
     const {env}=fixture();let ran=0;const tool={name:'test',requiredScope:'validate:write',company:false,run:async()=>++ran};
     const out=await m.server.callTool(env,props,null,tool,{},['validate:read']);
-    assert.deepEqual([out.isError,ran,readJson(out).error.includes('validate:write')],[true,0,true]);
+    assert.deepEqual([out.isError,ran,String(readJson(out).error ?? '').includes('validate:write')],[true,0,true]);
   },
   async writes(m:any) {
     const {env}=fixture();const results=[];
@@ -301,7 +301,7 @@ const probes=[
  ['atomic','assistant',"WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '-1 day')","WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '+1 day')"],
  ['placementLimit','assistant','session.id, LIMITS.pendingPerSession','session.id, 101'],
  ['dailyPlacements','assistant','grant.clientId, LIMITS.placementsPerDay','grant.clientId, 501'],
- ['lines','structuring','normaliseWs(s.text)','s.text.trim()'],
+ ['lines','structuring','${normaliseWs(s.text)}','${s.text.trim()}'],
  ['quote','structuring','cite!.from !== span.from || cite!.to !== span.to','false'],
  ['span','structuring','hit.length > 3','hit.length > 4'],
  ['transcriptSize','structuring','bytes > MAX_TRANSCRIPT_BYTES','bytes > MAX_TRANSCRIPT_BYTES + 100'],
