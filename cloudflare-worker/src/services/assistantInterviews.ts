@@ -390,14 +390,14 @@ export async function proposePlacements(env: Env, grant: AssistantGrant, args: P
           citation_json, target_ref, session_id, cite_from, cite_to, run_id, source)
        SELECT ?, ?, ?, NULL, 'assistant_placements', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?, 'assistant'
         WHERE (SELECT COUNT(*) FROM validate_proposals WHERE session_id = ? AND status = 'pending' AND run_id IS NOT NULL) < ?
-          AND (SELECT COUNT(*) FROM validate_proposals vp JOIN interview_sessions s ON s.id = vp.session_id
-            WHERE vp.source = 'assistant' AND vp.created_by = ? AND s.submitted_via = ?
+          AND (SELECT COUNT(*) FROM validate_proposals vp
+            WHERE vp.source = 'assistant' AND vp.created_by = ?
               AND vp.created_at >= datetime('now', '-1 day')) < ?`,
     ).bind(
       project.id, p.kind, JSON.stringify(p.payload), grant.userId,
       JSON.stringify({ kind: 'transcript', session_id: session.id, from: p.from, to: p.to, quote: p.quote, run_label: runLabel }),
       `interview:${session.interview_id}`, session.id, p.from, p.to, runId,
-      session.id, LIMITS.pendingPerSession, grant.userId, grant.clientId, LIMITS.placementsPerDay,
+      session.id, LIMITS.pendingPerSession, grant.userId, LIMITS.placementsPerDay,
     )));
     results.forEach((r, i) => { if (r.meta?.changes) stored += 1; else dropped.push({ index: keep[i].index, reason: 'placement_limit' }); });
   }

@@ -28,5 +28,5 @@ missing, every path answers 404.
   Never an argument or a result.
 - **A new tool registers through `registerMcpTools`**, with a required scope, plain description and typed input schema. All reads use the app's `canReadBoard`; interview writes use `canWrite`. The grant's company numbers are project ids.
 - **Consent identifies callbacks** through `assistantIdentity.ts`; a self-declared name never establishes a vendor identity. Full redirect URI and requested scopes are shown.
-- **Limits**: register 10/IP/minute, authorize 30/IP/minute; dynamic registrations 7 days; interview submissions 20/client/user/day, atomic in D1; pending session placements 100 and assistant placements 500/client/user/day.
+- **Limits**: register 10/IP/minute, authorize 30/IP/minute; dynamic registrations 7 days; interview submissions 20/client/user/day, atomic in D1; pending session placements 100 and assistant placements 500/user/day.
 - **Revocation propagates across edges in about a minute**, because grants use KV.

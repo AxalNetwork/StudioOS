@@ -186,7 +186,7 @@ const checks:any = {
     assert.deepEqual([out.stored,out.dropped[0]?.reason,count(db,'validate_proposals')],[0,'placement_limit',100]);
   },
   async dailyPlacements(m:any) {
-    const {env,db}=world();const a=await assistant.submitInterview(env,GRANT,ARGS()),b=await assistant.submitInterview(env,GRANT,ARGS());
+    const {env,db}=world();const a=await assistant.submitInterview(env,{...GRANT,clientId:'another-client'},ARGS()),b=await assistant.submitInterview(env,GRANT,ARGS());
     const insert=db.prepare("INSERT INTO validate_proposals(project_id,kind,payload_json,created_by,session_id,run_id,source,status) VALUES(7,'segment','{}',2,?,'seed','assistant','discarded')");
     for(let i=0;i<500;i++)insert.run(a.session_id);
     const out=await m.assistant.proposePlacements(env,GRANT,{session_id:b.session_id,placements:[{module:'ideal_customer_profile',kind:'segment',payload:{name:'Finance'},quote:'every Friday.'}]});
@@ -300,7 +300,7 @@ const probes=[
  ['publicGate','oauth','bucket && !(await withinPublicOAuthLimit(env, request, bucket))','false'],
  ['atomic','assistant',"WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '-1 day')","WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '+1 day')"],
  ['placementLimit','assistant','session.id, LIMITS.pendingPerSession','session.id, 101'],
- ['dailyPlacements','assistant','grant.clientId, LIMITS.placementsPerDay','grant.clientId, 501'],
+ ['dailyPlacements','assistant','grant.userId, LIMITS.placementsPerDay','grant.userId, 501'],
  ['lines','structuring','${normaliseWs(s.text)}','${s.text.trim()}'],
  ['quote','structuring','cite!.from !== span.from || cite!.to !== span.to','false'],
  ['span','structuring','hit.length > 3','hit.length > 4'],
