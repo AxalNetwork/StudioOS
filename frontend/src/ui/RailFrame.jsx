@@ -23,9 +23,9 @@ import './workerRail.css';
  * WHAT IT DOES, AND WHERE.
  *   · At 1024px and up: a row of two. The body takes the rest; the rail
  *     column is `var(--fwr-track, 280px)` wide, white, with a left hairline,
- *     and stretched to the row so the seam runs the page's length. Inside it,
- *     the rail is sticky and scrolls on its own when it is taller than the
- *     window, so its model cards never run the page out to their length.
+ *     and stretched to the row so the seam runs the page's length. The rail
+ *     has no scroll of its own: it flows with the page, so the page's one
+ *     scrollbar reaches every card.
  *   · Below 1024px: the body alone. The rail column is `display: none`, which
  *     keeps `WorkerRail` mounted, so its floating button and bottom sheet
  *     (D405), portalled to <body>, keep working exactly as before.

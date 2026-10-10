@@ -502,15 +502,11 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
     border-left: 1px solid #ececf1;
     background: #fff;
   }
-  /* Sticky, and scrolled on its own when it is taller than the window: the
-     model cards stay inside the panel instead of running the page out to
-     their length. 56px is the app header; 36px the panel's own inset above
-     and below. */
-  .fwr-frame-dock {
-    position: sticky; top: 18px;
-    max-height: calc(100vh - 56px - 36px);
-    overflow-y: auto; overscroll-behavior: contain;
-  }
+  /* No scroll of its own. The dock was once sticky with a window-high cap
+     and `overflow-y: auto`, which gave the panel a second scrollbar beside
+     the page's whenever its cards ran taller than the window. The rail now
+     flows with the page: the page's one scrollbar reaches every card. */
+  .fwr-frame-dock { position: static; overflow: visible; }
   /* Docked to the edge. The page container pads its content 24px at this
      width (App.jsx, `md:p-6`); a frame that is a direct child of it takes
      that padding back with an equal negative margin on the right and the
