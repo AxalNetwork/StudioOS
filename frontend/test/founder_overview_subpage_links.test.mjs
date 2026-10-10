@@ -1,5 +1,13 @@
 /**
- * The four founder overview desks link to the subpages they summarise.
+ * The founder overview desks link to the subpages they summarise.
+ *
+ * SINCE D661 (#1474) THIS HOLDS FOR NETWORK AND RESEARCH ONLY. The Validate,
+ * Build, Raise and Grow desks are retired: their landings are the cycle
+ * overviews (`pages/cycles/`), whose tabs and card titles are built from the
+ * cycle's own module list, and whose module pages link each module's working
+ * tool wherever it lives, by D661's own rule. What still binds them is the
+ * last rule here: no link through the shared workspace. The history below is
+ * kept because it is why that rule exists.
  *
  * WHAT AN OVERVIEW IS FOR. `/validate`, `/build`, `/raise` and `/grow` each
  * draw a card per subpage in their bucket: what is recorded there, and how much
@@ -43,10 +51,6 @@ const read = (p) => codeOnly(raw(p));
 const APP = read('frontend/src/App.jsx');
 
 const DESKS = [
-  { bucket: 'validate', file: 'frontend/src/pages/founder/FounderValidatePage.jsx' },
-  { bucket: 'build', file: 'frontend/src/pages/founder/FounderBuildDesk.jsx' },
-  { bucket: 'raise', file: 'frontend/src/pages/founder/FounderRaiseDesk.jsx' },
-  { bucket: 'grow', file: 'frontend/src/pages/founder/FounderGrowDesk.jsx' },
   // A6 and A7 joined in D421. Both handed off to legacy mounts —
   // `/network?mode=workspace&tab=…` and `/market-intel`, `/raise/…` — while
   // their own zones sat one pill away.
@@ -156,26 +160,8 @@ test('no founder overview routes a reader through the shared workspace', () => {
     assert.ok(!read(file).includes('mode=workspace'),
       `the /${bucket} overview routes through the shared workspace instead of to a page`);
   }
-});
-
-test('the Grow focus card names the metrics it cannot compute, not [object Object]', () => {
-  const src = read('frontend/src/pages/founder/FounderGrowDesk.jsx');
-  // `summary.unavailable` is `[{ metric, reason }]` — the worker returns the
-  // reason on purpose, so a blank KPI says which input it needs rather than
-  // reading as a zero or a bug. This desk joined the objects straight into a
-  // sentence, which rendered five `[object Object]`s on a startup with no
-  // snapshot and threw away the only thing the field carries.
-  assert.ok(!/\$\{unavailable\.join\(/.test(src),
-    'an array of objects is being interpolated into a sentence again');
-  assert.match(src, /const metricName = \(item\) =>/,
-    'the metric name is no longer read off the object');
-  assert.match(src, /unavailable\.map\(metricName\)\.join\(', '\)/,
-    'the sentence stopped naming the metrics');
-  assert.match(src, /\{text\(item\?\.reason\) \|\| 'No reason recorded\.'\}/,
-    'the reason the worker sends is being dropped');
-
-  // AND THE CONTRACT IT READS IS STILL THAT SHAPE.
-  const engine = raw('cloudflare-worker/src/services/saasMetrics.ts');
-  assert.match(engine, /unavailable: Array<\{ metric: string; reason: string \}>/,
-    'the field changed shape — this page reads `metric` and `reason`');
+  for (const file of ['CycleRoute', 'CycleOverview', 'CycleModulePage', 'cycleModel']) {
+    const path = `frontend/src/pages/cycles/${file}.${file === 'cycleModel' ? 'js' : 'jsx'}`;
+    assert.ok(!read(path).includes('mode=workspace'), `${path} routes through the shared workspace instead of to a page`);
+  }
 });

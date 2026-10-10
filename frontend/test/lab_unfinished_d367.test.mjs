@@ -179,11 +179,12 @@ test('notRecordedInputs names every missing figure; Preview and Save refuse on i
 
 // ---- 4. metrics date -------------------------------------------------------
 
-test('Build desk: the snapshot carries the date the founder sees', () => {
-  const desk = read('frontend/src/pages/founder/FounderBuildDesk.jsx');
-  const entry = between(desk, 'function KpiEntry(', '<p className="build-source">');
-  assert.match(entry, /const \[asOf, setAsOf\] = useState\(\(\) => localToday\(\)\);/);
-  assert.match(entry, /api\.createMetricsSnapshot\(projectId, \{ snapshot_date: clean\(asOf\), /);
-  assert.match(entry, /if \(!\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(clean\(asOf\)\)\) \{ setNote\('Choose the date these figures describe before saving\.'\); return; \}/);
-  assert.match(entry, /<input type="date" data-testid="input-kpi-as-of" value=\{asOf\}/);
+test('metrics entry: the snapshot carries the date the founder sees', () => {
+  // The Build desk's inline entry went with the desk (D661, #1474); the
+  // metrics editor is where a snapshot is entered, and it sends the date in
+  // its own date field, not one it picks.
+  const page = read('frontend/src/pages/MetricsPage.jsx');
+  assert.match(page, /<input type="date" value=\{value\.snapshot_date\} onChange=\{\(e\) => onChange\(\{ \.\.\.value, snapshot_date: e\.target\.value \}\)\}/);
+  const save = between(page, 'async function handleSave()', 'await api.createMetricsSnapshot');
+  assert.match(save, /snapshot_date: adding\.snapshot_date,/);
 });

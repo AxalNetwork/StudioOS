@@ -48,12 +48,9 @@ const SPEND = {
 };
 const ai = (over = {}) => ({ spend: SPEND, spendError: null, loading: false, reload: () => {}, ...over });
 
-const DESKS = {
-  Validate: 'frontend/src/pages/founder/FounderValidatePage.jsx',
-  Build: 'frontend/src/pages/founder/FounderBuildDesk.jsx',
-  Raise: 'frontend/src/pages/founder/FounderRaiseDesk.jsx',
-  Grow: 'frontend/src/pages/founder/FounderGrowDesk.jsx',
-};
+// The four desks this anatomy was drawn on are retired (D661, #1474); their
+// bands are drawn on the cycle pages, all from one host.
+const CYCLE_ROUTE = 'frontend/src/pages/cycles/CycleRoute.jsx';
 
 // ── 2. The cost before a run ─────────────────────────────────────────────────
 
@@ -124,29 +121,19 @@ test('a fill band quotes its own kind\'s task, which the Worker sends with the c
   assert.match(body, /\n\s+task: k\.task,\n/, 'the list does not say which task a kind bills');
 });
 
-test('every band on the four desks gets the desk\'s spend read, and the read waits for the mode', () => {
-  for (const [name, file] of Object.entries(DESKS)) {
-    const page = codeOnly(read(file));
-    assert.match(page, /const ai = useAiSpend\(\{ enabled: fillsOn && Boolean\(projectId\) \}\);/,
-      `${name} reads spend with its bands off, or not at all`);
-    const bands = [...page.matchAll(/<(ZoneDraft|FillProposals)\b[\s\S]*?\/>/g)].map((m) => m[0]);
-    assert.ok(bands.length > 0, `${name} has no bands`);
-    for (const b of bands) assert.match(b, /\bai=\{ai\}/, `${name} mounts a band with no cost before its run:\n${b.slice(0, 120)}`);
-  }
+test('every band on the cycle pages gets the page\'s spend read, and the read waits for the mode', () => {
+  const page = codeOnly(read(CYCLE_ROUTE));
+  assert.match(page, /const ai = useAiSpend\(\{ enabled: Boolean\(fillsOn && projectId && \(drafts\.length \|\| fillKind\)\) \}\);/,
+    'the cycle pages read spend with their bands off, or not at all');
+  const bands = [...page.matchAll(/<(ZoneDraft|FillProposals)\b[\s\S]*?\/>/g)].map((m) => m[0]);
+  assert.equal(bands.length, 2, 'the cycle pages mount bands outside their two band slots');
+  for (const b of bands) assert.match(b, /\bai=\{ai\}/, `a cycle band has no cost before its run:\n${b.slice(0, 120)}`);
 });
 
-// ── 3. Eadwyn's mark on a claim ──────────────────────────────────────────────
-
-test('the Validate desk draws Eadwyn\'s mark from the board, and says when it could not read it', () => {
-  const page = codeOnly(read(DESKS.Validate));
-  assert.match(page, /<FilledMark filled=\{item\.filled\} id=\{item\.id\} \/>/, 'the hypothesis card draws no mark');
-  assert.match(page, /if \(!filled\) return null;/);
-  assert.match(page, /filled\.edited \? 'Proposed by Eadwyn · you edited it' : 'Proposed by Eadwyn'/,
-    'a corrected proposal reads as an unaided one');
-  assert.match(page, /fillsRecorded=\{board\?\.fills_recorded !== false\}/);
-  assert.match(page, /!fillsRecorded \? <div data-testid="status-desk-fills-unreadable"><Unreadable/,
-    'a failed provenance read renders as a board with no marks');
-});
+// Eadwyn's mark on an accepted claim (D424 §3) was drawn by the Validate desk
+// from the hypothesis board's `filled`. The desk is retired, and the Validate
+// cycle read carries no provenance yet, so the mark is a follow-up on #1474,
+// not a check here.
 
 // ── Voice ────────────────────────────────────────────────────────────────────
 
@@ -154,13 +141,13 @@ test('no desk calls what Eadwyn produces advice or a recommendation', () => {
   // "Advisor" is not banned here: human advisors are a real persona, and the
   // Network zones filter by them. What is banned is the assistant's output
   // described as advice.
-  for (const file of [...Object.values(DESKS),
+  for (const file of [CYCLE_ROUTE,
     'frontend/src/pages/founder/FounderNetworkDesk.jsx', 'frontend/src/pages/founder/FounderResearchDesk.jsx']) {
     const page = codeOnly(read(file));
     assert.doesNotMatch(page, /\badvice\b/i, `${file} says "advice"`);
     assert.doesNotMatch(page, /\brecommend(ation|ed|s)?\b/i, `${file} says "recommend"`);
   }
-  assert.match(read(DESKS.Raise), /foot="A reading of your documents, not counsel's review\. Counsel is on the Team page\."/);
+  assert.match(read(CYCLE_ROUTE), /foot: 'A reading of your documents, not counsel[’']s review\. Counsel is on the Team page\.'/);
 });
 
 // ── 4. Tokens ────────────────────────────────────────────────────────────────
@@ -185,7 +172,7 @@ test('the semantic tokens the anatomy paints with are minted at their census val
   const uses = [
     ['frontend/src/workspaces/ZoneDraft.jsx', /text-axal-positive dark:text-emerald-400/],
     ['frontend/src/workspaces/ZoneDraft.jsx', /border-axal-destructive-edge bg-axal-destructive-tint[\s\S]{0,80}text-axal-destructive dark:border-red-900 dark:bg-red-950\/30 dark:text-red-200/],
-    [DESKS.Validate, /border-axal-lavender-edge bg-axal-lavender[^"]*dark:border-violet-900 dark:bg-violet-950\/40 dark:text-violet-300/],
+    ['frontend/src/pages/cycles/CycleModulePage.jsx', /border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900\/30 dark:text-violet-300/],
   ];
   for (const [file, re] of uses) assert.match(read(file), re, `${file} paints a semantic token with no dark pair`);
 });

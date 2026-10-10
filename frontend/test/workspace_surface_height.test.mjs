@@ -94,13 +94,11 @@ test('no workspace stylesheet sizes itself to the viewport', () => {
 });
 
 test('the surfaces that had the bug now size to their container', () => {
-  // Named so a revert is loud rather than silent. These four are the routes
-  // the defect was reported on.
+  // Named so a revert is loud rather than silent. Four routes reported the
+  // defect; the Raise, Build and Validate desks went with D661 (#1474), and
+  // the cycle pages that replaced them size by Tailwind classes, not a sheet.
   const want = [
     ['frontend/src/pages/founder/founderNetworkDesk.css', '.a6-network'],
-    ['frontend/src/pages/founder/founderRaiseDesk.css', '.raise-desk'],
-    ['frontend/src/pages/founder/founderBuildDesk.css', '.build-desk'],
-    ['frontend/src/pages/founder/founderValidate.css', '.validate-desk'],
   ];
   for (const [file, sel] of want) {
     const css = readFileSync(resolve(process.cwd(), file), 'utf8');

@@ -151,18 +151,21 @@ test('no founder landing offers its own startup picker', () => {
   // <select> in the hero — so the same page had two ways to change what it was
   // showing, and only one of them told the rest of the app.
   //
-  // A project still reaches these pages by `?project_id=`, which both landings
-  // read; what is gone is the in-page control that competed with the switcher.
+  // A project still reaches these pages by `?project_id=`, which every cycle
+  // landing reads; what is gone is the in-page control that competed with the
+  // switcher. The desks are retired (D661, #1474), and the cycle pages that
+  // replaced them are held to the same rule.
   for (const file of [
-    'frontend/src/pages/founder/FounderValidatePage.jsx',
-    'frontend/src/pages/founder/FounderBuildDesk.jsx',
+    'frontend/src/pages/cycles/CycleRoute.jsx',
+    'frontend/src/pages/cycles/CycleOverview.jsx',
+    'frontend/src/pages/cycles/CycleModulePage.jsx',
   ]) {
     const src = codeOnly(read(file));
-    assert.doesNotMatch(src, /<select[^>]*data-testid="select-(validate|build)-project"/,
+    assert.doesNotMatch(src, /<select[^>]*data-testid="select-[a-z]+-project"/,
       `${file} must not render its own startup picker — CompanySwitcher owns that`);
     assert.doesNotMatch(src, /projects\.map\(\(project\) => <option/,
       `${file} must not build a project option list`);
-    assert.match(src, /searchParams\.get\('project_id'\)|params\.get\('project_id'\)/,
-      `${file} must still honour ?project_id=, so no project becomes unreachable`);
   }
+  assert.match(codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx')), /searchParams\.get\('project_id'\)/,
+    'the cycle pages must still honour ?project_id=, so no project becomes unreachable');
 });

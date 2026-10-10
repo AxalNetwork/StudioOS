@@ -25,6 +25,7 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { api } from '../src/lib/api.js';
 import { bandPage } from '../src/workspaces/ZoneDraft.jsx';
+import { cycleDef, cycleRouteSource } from './_cycleBands.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -92,13 +93,15 @@ test('D510: the band hands its page to the run, and only to the run', () => {
 });
 
 test('D510: the retro band says what the board cannot tell it', () => {
-  const page = read('frontend/src/pages/founder/FounderBuildDesk.jsx');
-  const at = page.indexOf('surface="build/retro"');
+  // On the Build cycle's Operating systems page since the A3 desk retired
+  // (D661, #1474): one entry in `CycleRoute.jsx`'s band table.
+  const build = cycleDef(cycleRouteSource(), 'build');
+  const at = build.indexOf("surface: 'build/retro'");
   assert.ok(at > 0, 'the retro band is not mounted');
-  const mount = page.slice(at, page.indexOf('/>', at));
+  const mount = build.slice(at, build.indexOf('}', at));
   // The canvas's fixture counts moves ("carried a third time"); the board
   // records none, and the band's own foot says so where the reader sees it.
-  assert.match(mount, /foot="The board keeps no history of its moves/);
-  assert.match(mount, /nothingToDraft="There are no cards on this board to summarise yet\."/);
+  assert.match(mount, /foot: 'The board keeps no history of its moves/);
+  assert.match(mount, /nothingToDraft: 'There are no cards on this board to summarise yet\.'/);
   assert.doesNotMatch(mount, /carried|third time|moved three/i, 'the band repeats a count nothing records');
 });

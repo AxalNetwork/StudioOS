@@ -56,7 +56,6 @@ const FROM_URL = [
   'pages/founder/FounderGrowBrand.jsx',
   'pages/founder/FounderGrowCapitalMatch.jsx',
   'pages/founder/FounderGrowCustomers.jsx',
-  'pages/founder/FounderGrowDesk.jsx',
   'pages/founder/FounderGrowFocus.jsx',
   'pages/founder/FounderGrowLaunch.jsx',
   'pages/founder/FounderGrowPartnerships.jsx',
@@ -65,12 +64,13 @@ const FROM_URL = [
   'pages/founder/FounderNetworkRelationships.jsx',
   'pages/founder/FounderRaiseCapital.jsx',
   'pages/founder/FounderRaiseDataRoom.jsx',
-  'pages/founder/FounderRaiseDesk.jsx',
   'pages/founder/FounderRaiseLegal.jsx',
   'pages/founder/FounderRaiseLiquidity.jsx',
   'pages/founder/FounderRaisePitch.jsx',
   'pages/founder/FounderRaiseStatus.jsx',
   'pages/raise/DataRoomPage.jsx',
+  // The cycle pages that replaced the four desks (D661, #1474).
+  'pages/cycles/CycleRoute.jsx',
 ];
 
 /**
@@ -121,7 +121,7 @@ test('the create-a-startup form has no button of its own, and still opens', () =
     'the removed button must not come back alongside the form');
 });
 
-test('/build?new=1 opens the form even when the desk is already mounted', () => {
+test('/build?new=1 opens the form even when the page is already mounted', () => {
   // THE REGRESSION THIS PREVENTS, stated plainly: `creating` was seeded by a
   // `useState` INITIALIZER reading `?new=1`, which runs once. Twelve of the
   // thirteen links to /build?new=1 arrive from another route and so remount the
@@ -129,13 +129,15 @@ test('/build?new=1 opens the form even when the desk is already mounted', () => 
   // /build itself, where `nav('/build?new=1')` changes the search string without
   // remounting: the initializer never re-ran and the entry did nothing. The
   // form's own button hid that. The button is gone, so the param has to work.
-  const src = code('frontend/src/pages/founder/FounderBuildDesk.jsx');
-  assert.match(src, /useState\(\(\) => searchParams\.get\('new'\) === '1'\)/,
+  // The Build desk held the form until D661 (#1474); the Build cycle overview
+  // holds it now, under the same two rules.
+  const src = code('frontend/src/pages/cycles/CycleRoute.jsx');
+  assert.match(src, /useState\(\(\) => creates && searchParams\.get\('new'\) === '1'\)/,
     'the mount case must still be seeded from the param');
-  assert.match(src, /useEffect\(\(\) => \{\s*if \(searchParams\.get\('new'\) === '1'\) setCreating\(true\);\s*\},\s*\[searchParams\]\)/,
+  assert.match(src, /useEffect\(\(\) => \{\s*if \(creates && searchParams\.get\('new'\) === '1'\) setCreating\(true\);\s*\},\s*\[creates, searchParams\]\)/,
     'and the param must be followed when it CHANGES, or the Command Palette entry is inert on /build');
   assert.doesNotMatch(src, /data-testid="button-new-startup"/,
-    'the desk must not reintroduce its own create button');
+    'the page must not reintroduce its own create button');
 });
 
 test('neither zone body deflects to a workspace with a control of its own', () => {

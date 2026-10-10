@@ -2,65 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { escapeRe } from './_escapeRe.mjs';
 
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
-test('A4 Raise desk uses selected-project source records and preserves the pitch workspace', () => {
-  const desk = read('frontend/src/pages/founder/FounderRaiseDesk.jsx');
-  const workspace = read('frontend/src/pages/PitchWorkspacePage.jsx');
+test('the pitch editor opens on the venture a link names', () => {
+  // The A4 desk that seeded this handoff is retired (D661, #1474); a link
+  // that names the venture in `?project_id=` still opens the editor on it.
   const editor = read('frontend/src/pages/PitchDeckPage.jsx');
-  assert.match(desk, /Get capital, stay legal/);
-  for (const call of ['api\\.raiseRound\\(projectId\\)', 'api\\.raiseProspects\\(projectId\\)', 'api\\.listDocuments\\(projectId\\)', 'api\\.dataRoom\\(project\\.uid\\)', 'api\\.deckListVersions\\(projectId\\)']) assert.match(desk, new RegExp(call));
-  // WAS `assert.match(desk, /mode=workspace/)`, ON A READING THAT NO LONGER
-  // HOLDS. The point of that line was that the seeded handoff to the pitch
-  // workspace survived — but `?mode=workspace` is read by `App.jsx` and renders
-  // the shared `FounderWorkspaceTabs` INSTEAD of `/raise/pitch`, so the Pitch
-  // card's own link went past the page it summarises. The seeding is what
-  // mattered and it is unchanged: the workspace still reads
-  // `founderRaiseSeed`, and it is still reachable — from the sidebar and from
-  // the pitch page itself, which is where a workspace belongs.
-  //
-  // What this now requires is the rule the desk was missing: every card links
-  // to its own `/raise/*` page.
-  assert.doesNotMatch(desk, /mode=workspace/,
-    'a Raise card is routing through the shared workspace instead of to its own page');
-  // Each card's own DeskLink, matched by its test id, so a card cannot pass on
-  // a path that appears somewhere else in the file.
-  for (const [testid, path] of [
-    ['link-open-round-status', '/raise/status'],
-    ['link-open-capital', '/raise/capital'],
-    ['link-open-legal', '/raise/legal'],
-    ['link-open-data-room', '/raise/data-room'],
-    ['link-open-pitch-workspace', '/raise/pitch'],
-    ['link-open-liquidity', '/raise/liquidity'],
-  ]) {
-    const link = desk.match(new RegExp(`testid="${escapeRe(testid)}"\\s+to=\\{([^}]*)\\}`));
-    assert.ok(link, `the ${testid} link is gone from the Raise desk`);
-    assert.ok(link[1].includes(path), `${testid} points at ${link[1]}, not ${path}`);
-  }
-  assert.doesNotMatch(desk, /to="\/liquidity"/,
-    '`/liquidity` is a workspace mount; `/raise/liquidity` is this bucket’s own page');
-  assert.match(workspace, /location\.state\?\.founderRaiseSeed/);
-  assert.match(workspace, /initialProjects=\{raiseSeed\?\.projects\}/);
   assert.match(editor, /Number\(searchParams\.get\('project_id'\)\)/);
-  assert.match(editor, /if \(!initialProjects\.length\)/,
-    'a seeded Raise handoff must not immediately duplicate the project-list request');
-  // THESE THREE WERE "NOTHING IS SHOWN BECAUSE NOTHING RESPONDS", AND TWO OF
-  // THEM STOPPED BEING TRUE. `No dilution calculation is shown because no
-  // current response provides one` and `Clause analysis and term-sheet
-  // warnings: Not recorded` both described a desk with no way to produce
-  // either; A4's `Proposal · plain-language read` and `Clause explained` bands
-  // now can, from the founder's own round and their own stored documents. What
-  // has to stay true is the rule underneath: the desk states what is NOT
-  // recorded rather than filling it in — and for liquidity nothing has changed
-  // at all, because no preference term is stored anywhere.
-  assert.match(desk, /No blocker is recorded against a round, so none is counted\./,
-    'the status card counts blockers nothing records');
-  assert.match(desk, /so there is no waterfall to draw and this desk does not invent one/,
-    'the liquidity zone no longer says why it draws no waterfall');
-  assert.match(desk, /no content review runs anywhere in this build/,
-    'the desk no longer says that nothing is screened before it is shared');
-  assert.doesNotMatch(desk, /Kestrel|DeepSeek|Llama|FLUX|QwQ|Granite|\$620,000|\$1\.5M|\$435k|\$185k|Oct 14|22 days|9 investors|full ratchet|anti-dilution|2x participating|Slack|cohort retention|\$14\.20/i);
 });
 
 test('a per-share price is not rendered by the whole-dollar formatter', () => {

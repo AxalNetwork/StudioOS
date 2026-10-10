@@ -109,13 +109,12 @@ test('no stylesheet marks a nav link current by its position', () => {
     offenders.join('\n'));
 });
 
+// The Validate, Raise, Grow and Build desks are retired (D661, #1474), with
+// the Validate, Raise and Build stylesheets. founderGrowDesk.css stays: the
+// seven Grow zone pages draw their header and pill row from it.
 const DESKS = [
-  ['frontend/src/pages/founder/FounderValidatePage.jsx', 'validate-anchors'],
-  ['frontend/src/pages/founder/FounderRaiseDesk.jsx', 'raise-anchors'],
-  ['frontend/src/pages/founder/FounderGrowDesk.jsx', 'a5-grow-hero'],
   ['frontend/src/pages/founder/FounderNetworkDesk.jsx', 'a6-hero'],
   ['frontend/src/pages/founder/FounderResearchDesk.jsx', 'a7-anchors'],
-  ['frontend/src/pages/founder/FounderBuildDesk.jsx', 'build-anchors'],
 ];
 
 test('every founder desk strip derives its current pill from the URL', () => {
@@ -138,14 +137,11 @@ test('zonePillClass names a pill current only when the router says it is', async
   assert.equal(zonePillClass({}), undefined);
 });
 
-test('the six desk stylesheets style .is-active, and none styles .active', () => {
+test('the desk stylesheets style .is-active, and none styles .active', () => {
   const SHEETS = [
-    ['frontend/src/pages/founder/founderValidate.css', '.validate-anchors'],
-    ['frontend/src/pages/founder/founderRaiseDesk.css', '.raise-anchors'],
     ['frontend/src/pages/founder/founderGrowDesk.css', '.a5-grow-hero nav'],
     ['frontend/src/pages/founder/founderNetworkDesk.css', '.a6-hero'],
     ['frontend/src/pages/founder/founderResearchDesk.css', '.a7-anchors'],
-    ['frontend/src/pages/founder/founderBuildDesk.css', '.build-anchors'],
   ];
   for (const [file, scope] of SHEETS) {
     const css = read(file);
@@ -181,11 +177,8 @@ test('a desk with a dark idle pill has a legible dark active pill', () => {
   const AA = 4.5;
   let checked = 0;
   for (const [file, scope] of [
-    ['frontend/src/pages/founder/founderValidate.css', '.validate-anchors'],
-    ['frontend/src/pages/founder/founderRaiseDesk.css', '.raise-anchors'],
     ['frontend/src/pages/founder/founderGrowDesk.css', '.a5-grow-hero nav'],
     ['frontend/src/pages/founder/founderNetworkDesk.css', '.a6-hero'],
-    ['frontend/src/pages/founder/founderBuildDesk.css', '.build-anchors'],
   ]) {
     const css = read(file);
     const m = css.match(new RegExp(`\\.dark ${scope.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')} a\\.is-active\\{([^}]*)\\}`));
@@ -198,7 +191,7 @@ test('a desk with a dark idle pill has a legible dark active pill', () => {
       `${file}: dark active pill ${fg} on ${bg} is ${ratio.toFixed(2)}:1, under AA ${AA}:1`);
     checked += 1;
   }
-  assert.equal(checked, 5, 'every desk that has a dark idle pill rule must have been checked');
+  assert.equal(checked, 2, 'every desk that has a dark idle pill rule must have been checked');
 });
 
 test('AdvisorWorkspaceShell no longer marks a nav item current by index', () => {

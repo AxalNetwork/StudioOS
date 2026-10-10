@@ -14,7 +14,7 @@ live here, one file each:
 | `AccountUsage.jsx` | Usage (D642): the AI allowance, the last 30 days, where it went, models and rates, the last run, and storage (U1–U6) |
 | `AccountConnectors.jsx` | Connectors (D651): Yours, Discover, the Add menu, the request form and the page states; reads a provider's sign-in return from the address |
 | `ConnectorSheet.jsx` | The connector sheet and the connect flow, and `useConnectors`, the catalogue read every connectors surface shares |
-| `ConnectToolSheet.jsx` | Build's "Connect a tool" sheet (D651), opened from `../founder/FounderBuildDesk.jsx` |
+| `ConnectToolSheet.jsx` | Build's "Connect a tool" sheet (D651), the Build cycle overview's primary action in `../cycles/CycleRoute.jsx` |
 | `connectorTools.jsx` | The provider tools the sheet opens, moved from the retired Integrations page: the LinkedIn import, HubSpot's pipeline and Salesforce's mapping |
 | `AccountFollowing.jsx` | Following |
 | `AccountDeveloper.jsx` | Developer, for the one role its routes answer |

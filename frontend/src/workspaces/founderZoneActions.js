@@ -23,10 +23,11 @@ import { makeZoneActions } from './zoneActionBuilder';
  * that calls the write method the label promises. Four labels lost their link
  * that way: `/matches` (where `introductionsRequest` lived, since removed) was
  * admin, partner and investor only; `/contacts` redirects to `/network?tab=contacts`, whose
- * tab a founder's Network desk does not read; `/build/discovery` renders
- * `FounderValidatePage` for a founder, so the waitlist invite panel behind it
- * is not theirs to reach; and `/build/team` renders the Grow desk, not
- * `FounderTeamPage`. All four are notes below. A link that 404s, or that lands
+ * tab a founder's Network desk does not read; `/build/discovery` sent a founder
+ * to the Validate desk, so the waitlist invite panel behind it was not theirs
+ * to reach; and `/build/team` rendered the Grow desk, not `FounderTeamPage`
+ * (it renders the Team workspace since D661 retired that desk). All four are
+ * notes below. A link that 404s, or that lands
  * on a page the reader is not allowed to open, is the same broken promise as a
  * button that does nothing — it is just slower to discover.
  *
