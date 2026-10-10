@@ -24,6 +24,7 @@ import type { Env } from '../types';
 import { safeCard, safeFigure, countState, PAGE_SIZE, type Card, type Figure } from './cycleCards';
 import { daysBefore, recordQuery, type RecordQuery } from './cycleValidate';
 import { roundCallsEnabled } from './roundCallPolicy';
+import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -216,6 +217,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
         labels: [{ at: 0, label: history[0].day }, { at: history.length - 1, label: history[history.length - 1].day }],
       });
     }
+    series.push(await benchmarkSpec(ctx));
     const unscored = items.filter((i) => !latest.has(Number(i.id)));
     const gap = items.map((i) => latest.get(Number(i.id))).find((s) => s && s.missing);
     const next = gap
@@ -225,6 +227,33 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
         : null;
     return { state: countState(latest.size), series, next, reason: null };
   });
+}
+
+/**
+ * The peer benchmark beside the founder's own venture score, as a rows spec
+ * (#1524). Its own failure is said in its own row: the readiness card does
+ * not become unreadable because the benchmark could not be read.
+ */
+export function benchmarkRows(b: PeerBenchmark): Array<{ label: string; value: string | number | null; tone?: string }> {
+  const own = { label: 'Your venture score', value: b.own_score };
+  if (b.state === 'ok' && b.group) {
+    return [
+      own,
+      { label: `Peer median · ${b.group.size} ${b.group.label}`, value: b.p50 },
+      { label: 'Middle half of peers', value: `${b.p25}–${b.p75}` },
+      { label: 'Your percentile', value: `${b.percentile}th`, tone: 'v1' },
+    ];
+  }
+  return [own, { label: 'Peer benchmark', value: b.reason, tone: 'muted' }];
+}
+
+async function benchmarkSpec(ctx: Ctx): Promise<unknown> {
+  try {
+    return { kind: 'rows', items: benchmarkRows(await peerBenchmark(ctx.env, ctx.projectId)) };
+  } catch (e) {
+    console.warn('[raiseCycle] peer benchmark unreadable:', (e as Error)?.message);
+    return { kind: 'rows', items: [{ label: 'Peer benchmark', value: 'The peer benchmark could not be read.', tone: 'bad' }] };
+  }
 }
 
 async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {

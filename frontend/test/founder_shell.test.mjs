@@ -416,10 +416,10 @@ test('a founder desk pill opens its route — navigating on a desktop, switching
   // route's page in place as a lens, with no route change and no history
   // entry. Both come from the shared `LensNavLink`, so a pill built as a bare
   // NavLink would navigate on a phone too.
-  const DESKS = [
-    'FounderValidatePage', 'FounderBuildDesk', 'FounderRaiseDesk',
-    'FounderGrowDesk', 'FounderNetworkDesk', 'FounderResearchDesk',
-  ];
+  // The Validate, Build, Raise and Grow desks are retired (D661, #1474). The
+  // cycle pages that replaced them draw their module tabs only from the
+  // md breakpoint up (`cycle-tabs`), so no phone taps one.
+  const DESKS = ['FounderNetworkDesk', 'FounderResearchDesk'];
   const routes = new Set(
     [...app.matchAll(/path="([^":]+)"/g)].map((m) => m[1]).filter((p) => p.startsWith('/')),
   );
@@ -456,7 +456,8 @@ test('every founder zone page\'s section row switches lenses on a phone (D575)',
       assert.doesNotMatch(m[0], /<(?:Nav)?Link\b/, `${f}'s section row has a pill that navigates on a phone`);
     }
   }
-  assert.ok(rows.length >= 27, `only ${rows.length} founder section rows are lens switchers`);
+  // Twenty-seven until D661 (#1474) retired four desks, each with one row.
+  assert.ok(rows.length >= 23, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {

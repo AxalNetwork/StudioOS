@@ -401,7 +401,6 @@ const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapit
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
 const FounderRaiseDataRoom = lazy(() => import('./pages/founder/FounderRaiseDataRoom'));
 const FounderRaiseLiquidity = lazy(() => import('./pages/founder/FounderRaiseLiquidity'));
-const FounderGrowDesk = lazy(() => import('./pages/founder/FounderGrowDesk'));
 const SentUpdatePage = lazy(() => import('./pages/founder/SentUpdatePage'));
 // D668 (#1498): an AI assistant's consent page (D665, D666).
 const ConnectAssistantPage = lazy(() => import('./pages/connect/ConnectAssistantPage'));
@@ -2776,8 +2775,9 @@ function AppInner() {
           page without moving that would have removed the only way to make a
           startup, and nothing in CI would have said so — check-api-drift reads
           api.js -> worker and never the reverse. It now lives in
-          components/CreateStartupForm.jsx, mounted on FounderBuildDesk, which
-          honours ?new=1 because a redirect cannot carry a query string.
+          components/CreateStartupForm.jsx, mounted on the Build cycle overview
+          (pages/cycles/CycleRoute.jsx, D661), which honours ?new=1 because a
+          redirect cannot carry a query string.
 
           /projects/:id below is NOT retired: ProjectDetail is deep-linked from
           the dashboard, the investor desk, the risk matrix, the slide editor
@@ -2991,12 +2991,13 @@ function AppInner() {
       <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
       {/* Team (Grow › Talent). Founders reach the advisor directory,
           Co-founder Match and their roles through the Team workspace at
-          /build/team?mode=workspace; the legacy standalone routes stay live
-          for every other role but redirect a founder into the tab that owns
-          that job. The redirects carry `mode=workspace` because a bare
-          /build/team is the Grow desk for a founder (founderGrowLanding), so
-          `?tab=` alone never reached a tab (D435). */}
-      <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><FounderTeamPage /></FounderWorkspaceTabs>))} />
+          /build/team; the legacy standalone routes stay live for every other
+          role but redirect a founder into the tab that owns that job (D435).
+          A bare /build/team was the Grow desk for a founder until D661
+          (#1474) retired the desks: Grow's landing is the cycle overview at
+          /grow, so /build/team is the Team workspace for everyone, and the
+          redirects' `mode=workspace` is kept only so old links stay stable. */}
+      <Route path="/build/team" element={guard(['admin', 'founder'], founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><FounderTeamPage /></FounderWorkspaceTabs>))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
       <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], <RoundCallIndex />)} />
       <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], <RoundCallPage />)} />
@@ -3008,7 +3009,7 @@ function AppInner() {
       {/* D661 (#1474): a founder's /grow is the cycle overview from #1488's
           read, and /grow/<module> its module pages. The seven Grow pages
           below are static and win over /grow/:slug; no module slug is one of
-          them. /build/team still opens the Grow desk until the desk cleanup. */}
+          them. */}
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <CycleRoute cycle="grow" />)
         : <Navigate to="/grow/focus" replace />} />
