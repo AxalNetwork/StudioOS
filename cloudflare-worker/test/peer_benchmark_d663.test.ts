@@ -132,6 +132,13 @@ test('a Lab member\'s group is their D589 cohort and week, with D589\'s median',
     await official(db, 500 + i, s);
   }
   await peers(db, 'seed', [1, 2, 3, 4, 5]); // same stage, not the cohort: not peers for a Lab member
+  // Admitted Lab members of another cohort, and of this cohort at another week: not peers either.
+  for (const [id, cohort, week] of [[30, 'C2', 3], [31, 'C1', 4]] as const) {
+    db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_week, spinout_lab_active) VALUES (?, 'founder', ?, ?, 1, ?, ?, 1)").run(id, `O${id}`, `o${id}@example.test`, 3000 + id, week);
+    db.prepare('INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort) VALUES (?, 1, ?)').run(id, cohort);
+    venture(db, 600 + id, 3000 + id, `Other ${id}`, 'idea');
+    await official(db, 600 + id, 1);
+  }
   const b = await peerBenchmark(ENV(db), OWN);
   assert.deepEqual(b.group, { kind: 'lab_cohort', label: 'Lab cohort C1, week 3', size: 5 });
   const app = new Hono<any>(); app.route('/scoring', scoring);

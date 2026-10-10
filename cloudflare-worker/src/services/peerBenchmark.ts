@@ -128,20 +128,24 @@ export async function peerGroupOf(env: Env, project: ProjectRef): Promise<PeerGr
 
 /** The official runs a group draws from, the founder's own project included and their other projects excluded. */
 export async function groupRows(env: Env, group: PeerGroup, project: ProjectRef): Promise<OfficialRow[]> {
-  const official = `JOIN score_snapshots s ON s.project_id = p.id AND s.is_sandbox = 0 AND s.admin_review_status IN ('auto_approved', 'approved')`;
-  const fields = 'p.id AS project_id, p.founder_id AS founder_id, s.id, s.total_score, s.created_at, s.integrity_hash, s.integrity_version';
+  // Both statements are literal: the official-run filter is written out in
+  // each rather than spliced, so nothing but bound values reaches the query.
   if (group.kind === 'lab_cohort') {
     const res = await env.DB.prepare(
-      `SELECT ${fields}
-         FROM projects p JOIN users u ON u.founder_id = p.founder_id JOIN user_spinout_flags f ON f.user_id = u.id ${official}
+      `SELECT p.id AS project_id, p.founder_id AS founder_id, s.id, s.total_score, s.created_at, s.integrity_hash, s.integrity_version
+         FROM projects p
+         JOIN users u ON u.founder_id = p.founder_id
+         JOIN user_spinout_flags f ON f.user_id = u.id
+         JOIN score_snapshots s ON s.project_id = p.id AND s.is_sandbox = 0 AND s.admin_review_status IN ('auto_approved', 'approved')
         WHERE p.deleted_at IS NULL AND f.spinout_lab_admitted = 1 AND f.spinout_lab_cohort = ? AND u.spinout_lab_week = ?
           AND (p.founder_id != ? OR p.id = ?)`,
     ).bind(group.cohort, group.week, project.founder_id, project.id).all<OfficialRow>();
     return res.results || [];
   }
   const res = await env.DB.prepare(
-    `SELECT ${fields}
-       FROM projects p ${official}
+    `SELECT p.id AS project_id, p.founder_id AS founder_id, s.id, s.total_score, s.created_at, s.integrity_hash, s.integrity_version
+       FROM projects p
+       JOIN score_snapshots s ON s.project_id = p.id AND s.is_sandbox = 0 AND s.admin_review_status IN ('auto_approved', 'approved')
       WHERE p.deleted_at IS NULL AND COALESCE(p.stage, 'idea') = ?
         AND (p.founder_id IS NULL OR p.founder_id IS NOT ? OR p.id = ?)`,
   ).bind(group.stage, project.founder_id, project.id).all<OfficialRow>();
