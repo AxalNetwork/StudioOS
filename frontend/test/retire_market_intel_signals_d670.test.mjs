@@ -75,9 +75,12 @@ test('the endpoints only those pages read are gone, and Research keeps its reads
     '/geography-lens', '/watchlist', '/sentiment', '/talc', '/demand-supply', '/sector-heat',
     '/sentiment-geo', '/capital-velocity', '/partner-pulse', '/fit/investor/me',
     '/platform-personas', '/investor-signals'];
+  // Plain substring checks, no constructed RegExp: the path itself, quoted,
+  // and any sub-path under it (`/watchlist/:id`, `/platform-personas/export`).
+  const VERBS = ['get', 'post', 'delete', 'use', 'route'];
   for (const path of GONE) {
-    assert.doesNotMatch(mi, new RegExp(`marketIntel\\.(?:get|post|delete|use|route)\\('${path.replace(/\//g, '\\/')}['/]`),
-      `/api/market-intel${path} is back`);
+    const mounted = VERBS.some((verb) => mi.includes(`marketIntel.${verb}('${path}'`) || mi.includes(`marketIntel.${verb}('${path}/`));
+    assert.ok(!mounted, `/api/market-intel${path} is back`);
     assert.ok(!api.includes(`'/market-intel${path}`) && !api.includes(`\`/market-intel${path}`),
       `api.js calls /market-intel${path} again`);
   }
