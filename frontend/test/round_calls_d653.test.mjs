@@ -27,7 +27,22 @@ const sheetBase={step:0,fields:{name:'Recorded seed',amount:'100000',instrument:
 const pageBase={data:founder,busy:false,error:'',message:'',recipientPage:0,reference:'',target:'',amount:'',question:'',answers:{}};
 const sheetHtml=(m,s={})=>render(m.sheet.RoundCallSheetView,{state:{...sheetBase,...s},on});
 const pageHtml=(m,data,extra={})=>render(m.page.RoundCallPageView,{state:{...pageBase,data,...extra},on});
-const button=(html,text)=>new RegExp('<button([^>]*)>'+text+'</button>').exec(html)?.[1]??'MISSING';
+// These views render plain-text button labels. Compare them literally, so a
+// label cannot become a regular expression or silently match a different button.
+function button(html,label) {
+  let from=0;
+  for (;;) {
+    const start=html.indexOf('<button',from);
+    if(start<0)return 'MISSING';
+    const end=html.indexOf('>',start+7);
+    if(end<0)return 'MISSING';
+    if(html[start+7]!==' '&&html[start+7]!=='>' ){from=end+1;continue;}
+    const close=html.indexOf('</button>',end+1);
+    if(close<0)return 'MISSING';
+    if(html.slice(end+1,close)===label)return html.slice(start+7,end);
+    from=close+9;
+  }
+}
 const actual={sheet,page,parts,SentUpdateView};
 const checks={
   steps(m){const html=sheetHtml(m);assert.deepEqual([m.sheet.ROUND_CALL_STEPS,html.includes('aria-current="step"'),html.includes('value="Recorded seed"')],[['Round','Materials','Audience','Preview','Send'],true,true]);},
