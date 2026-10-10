@@ -303,6 +303,14 @@ function kpiChange(r) {
 }
 
 /**
+ * What an Edit form starts from (`forms.js`): the row's own store id and the
+ * raw values its route takes, only when the read named the id. A row without
+ * one draws no Edit.
+ */
+const editOf = (id, r, keys) => (id == null ? null : { ...Object.fromEntries(keys.map((k) => [k, r[k] ?? null])), ...id });
+const MARKET_FIELDS = ['state', 'decision', 'demand_score', 'demand_source', 'regulation_score', 'regulation_source', 'partners_score', 'partners_source', 'cost_score', 'cost_source'];
+
+/**
  * Column keys in the order the read lists its labels; each row builder fills
  * them. D664's records take ONE `field:value` filter and sort on a row field
  * (`-` for descending), so each table offers one filter and sorts by field.
@@ -316,7 +324,7 @@ export const RECORDS = {
       theme: r.theme ?? null,
       roadmap_item: r.roadmap_item_label ?? null,
       status: pill(FEEDBACK_STATUS, r.status),
-    } }),
+    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, ['status', 'theme', 'roadmap_item_label']) }),
     filters: [{ key: 'status', label: 'Status', options: options(FEEDBACK_STATUS) }],
     sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }],
   },
@@ -328,7 +336,7 @@ export const RECORDS = {
       spend: typed(usd(r.spend_cents), r.spend_source),
       customers: num(r.customers) ? r.customers : null,
       cac: usd(r.cac_cents) ?? reasonCell(r.cac_reason),
-    } }),
+    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, ['name', 'state']) }),
     filters: [{ key: 'state', label: 'State', options: options(CHANNEL_STATE) }],
     sorts: [{ key: '-cac_cents', label: 'Highest CAC' }, { key: 'cac_cents', label: 'Lowest CAC' }, { key: 'name', label: 'Name' }],
   },
@@ -365,7 +373,7 @@ export const RECORDS = {
       stage: pill(PARTNER_PILL, r.stage),
       terms: r.terms ?? null,
       revenue: typed(usd(r.revenue_cents), r.revenue_source),
-    } }),
+    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, ['type', 'stage', 'terms']) }),
     filters: [{ key: 'stage', label: 'Stage', options: options(PARTNER_PILL) }],
     sorts: [{ key: 'name', label: 'Name' }, { key: '-revenue_cents', label: 'Revenue sourced' }],
   },
@@ -377,7 +385,7 @@ export const RECORDS = {
       readiness: num(r.readiness) ? `${r.readiness} / 40` : reasonCell(r.readiness_reason),
       weakest_part: r.weakest_part ?? null,
       decision: r.decision == null ? null : `${word(DECISION, r.decision)}${r.decided_on ? ` · ${r.decided_on}` : ''}`,
-    } }),
+    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, MARKET_FIELDS) }),
     filters: [{ key: 'state', label: 'State', options: options(MARKET_STATE) }],
     sorts: [{ key: '-readiness', label: 'Readiness' }, { key: 'name', label: 'Name' }],
   },
@@ -389,7 +397,7 @@ export const RECORDS = {
       due: typeof r.due_at === 'string' ? r.due_at.slice(0, 10) : null,
       owner: r.owner_name ?? { text: 'No owner', tone: 'warn' },
       state: pill(OBLIGATION_STATE, r.status),
-    } }),
+    }, edit: editOf(num(r.id) ? { id: r.id } : null, r, ['status', 'owner_name', 'due_at']) }),
     filters: [{ key: 'status', label: 'State', options: options(OBLIGATION_STATE) }],
     sorts: [{ key: 'due_at', label: 'Due soonest' }, { key: '-due_at', label: 'Due latest' }],
   },

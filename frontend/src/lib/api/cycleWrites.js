@@ -1,5 +1,5 @@
 /**
- * D661 (#1474) — the writes behind the cycle pages' Add forms
+ * D661 (#1474) — the writes behind the cycle pages' Add and Edit forms
  * (`pages/cycles/forms.js`), for the stores that have no page of their own
  * yet. A factory over `request`, so `cycles.js` binds it to the app's helper
  * and `cycle_adapters_d661.test.ts` binds it to the real Worker routes.
@@ -22,10 +22,21 @@ export function makeCycleWrites(request) {
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       obligation: (projectId, body) => request('/cycles/grow/obligations', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       checklist: (projectId, key, done) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, done: done === true }) }),
+      // Edits: a PATCH changes only the fields it is sent.
+      feedbackUpdate: (projectId, uid, body) => request(`/cycles/grow/feedback/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      channelUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      partnerUpdate: (projectId, uid, body) => request(`/cycles/grow/partners/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      marketUpdate: (projectId, uid, body) => request(`/cycles/grow/markets/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      obligationUpdate: (projectId, id, body) => request(`/cycles/grow/obligations/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
     },
     build: {
       risk: (projectId, body) => request(`/cycles/build/risks?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStep: (projectId, body) => request(`/cycles/build/formation-steps?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      formationStepUpdate: (projectId, id, body) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // A feature's must-have mark and due date (D662). The feature itself is
+      // MVP scope's row: `mvpFeature` adds one, with the project in the path.
+      feature: (projectId, id, body) => request(`/cycles/build/features/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      mvpFeature: (projectId, body) => request(`/progress/mvp-scope/${seg(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
     },
   };
 }

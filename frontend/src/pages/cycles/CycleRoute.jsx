@@ -17,9 +17,9 @@ import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import RecordFormSheet from './RecordFormSheet';
-import { formFor } from './forms';
+import { editFor, formFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
-import { cycleOf } from './cycleModel';
+import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 
 /**
@@ -88,10 +88,10 @@ const CYCLE_DEFS = {
    * (`adapters/grow.js`), as Validate does. The primary action is D654's
    * Share an update, the sheet the Grow desk opened.
    *
-   * Grow's new stores (feedback, channels, partners, markets) have their
-   * Worker writes but no form yet, so those four link no tool and draw no
-   * Add; their editors follow on #1474. Revenue, roles and obligations link
-   * the pages that edit them today.
+   * Grow's new stores (feedback, channels, partners, markets, obligations)
+   * have no page of their own: their Add and Edit forms are `forms.js`'s, on
+   * the module page. Revenue, roles and the compliance calendar link the
+   * pages that edit them today.
    */
   grow: {
     modules: MODULES.grow,
@@ -137,10 +137,10 @@ const CYCLE_DEFS = {
    * no adapter, as Raise's does. The primary action is D650's Connect a tool,
    * the sheet the Build desk opened.
    *
-   * Build's new stores (features, risks, formation steps) have their Worker
-   * writes but no form yet, so Solution design, Prototype / MVP and Company
-   * creation link no tool; their editors follow on #1474. The roadmap, the cap
-   * table and the operating cadence link the pages that edit them today.
+   * Build's new stores (risks, formation steps, the must-have mark) have no
+   * page of their own: their Add and Edit forms are `forms.js`'s, on the
+   * module page. The roadmap, the cap table and the operating cadence link
+   * the pages that edit them today.
    */
   build: {
     modules: MODULES.build,
@@ -232,10 +232,13 @@ export default function CycleRoute({ cycle }) {
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
-  // The module's Add form (`forms.js`), for a store with no page of its own.
+  // The module's Add and Edit forms (`forms.js`), for a store with no page of
+  // its own. `editing` is the row being edited.
   const form = slug && def ? formFor(cycle, slug) : null;
+  const edit = slug && def ? editFor(cycle, slug) : null;
   const [formOpen, setFormOpen] = useState(false);
-  useEffect(() => { setFormOpen(false); }, [slug]);
+  const [editing, setEditing] = useState(null);
+  useEffect(() => { setFormOpen(false); setEditing(null); }, [slug]);
   const drafts = slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   // The cost before a run (D424), read only while a band is drawn.
   const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && drafts.length) });
@@ -344,6 +347,11 @@ export default function CycleRoute({ cycle }) {
         onQuery={setQuery}
         action={action}
         add={fnOf(def.add, slug)?.(q) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
+        rowAction={edit && projectId ? (row) => (edit.idOf(row) == null ? null : {
+          text: edit.button,
+          label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
+          onClick: () => setEditing(row),
+        }) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         search={q}
       >
@@ -383,6 +391,12 @@ export default function CycleRoute({ cycle }) {
             onSubmit={(values) => form.submit(cyclesWrite, projectId, values)}
             onSaved={() => setReload((n) => n + 1)}
             onClose={() => setFormOpen(false)} />
+        )}
+        {edit && editing && projectId && edit.idOf(editing) != null && (
+          <RecordFormSheet key={String(editing.id)} form={edit} current={edit.valuesOf(editing)} cycle={name}
+            onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
+            onSaved={() => setReload((n) => n + 1)}
+            onClose={() => setEditing(null)} />
         )}
         {Sheet && sheetOpen && projectId && (
           <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />
