@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 85 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 88 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -112,6 +112,16 @@ View and its board (RV1–RV12) are built at `/validate/session/:id` (#1473), so
 `ring-viz.js` drawing script they load moved to `integrated/`: `integrated/`
 went **83 → 85**. `Interview Session.dc.html` stays in `incoming/` until
 #1471 builds its structuring rail.
+
+**2026-10-10 (D661), three canvases graduated from `incoming/`.** All four
+cycles are wired to their reads (#1474): `/validate`, `/build`, `/raise` and
+`/grow` are the overview, and `/:cycle/:module` the module pages. So
+`Cycle Overview.dc.html`, `Cycle Overview · Boards.dc.html`,
+`Cycle Modules · Boards.dc.html` and the `pro-cycles.js` script the overview
+loads by name moved to `integrated/`: `integrated/` went **85 → 88**. They
+came from the intake queue, so `backlog/` did not move. `Cycle Action.dc.html`
+and `Cycle Actions · Boards.dc.html` stay in `incoming/`: they belong to the
+four primary actions (#1463, #1465, #1466, #1473), not to #1474.
 
 **The `107` in the title is the first audit's corpus, not today's total.** It
 is `54 + 26 + 27` — the sum as it stood when `integrated/` read 54. The three
