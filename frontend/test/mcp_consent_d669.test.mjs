@@ -27,7 +27,7 @@ const files={consent:'frontend/src/pages/connect/ConnectAssistantPage.jsx',model
 async function altered(kind,old,replacement,index){
  const path=files[kind];let source=readFileSync(path,'utf8');if(!source.includes(old))throw Error('Stale D669 rendered mutation: '+old);source=source.replace(old,replacement);
  const {code}=await transformWithOxc(source,resolve(path),{jsx:{runtime:'automatic'}});const req=createRequire(pathToFileURL(resolve(path)));
- const js=code.replace(/from (['"])([^'"]+)\1/g,(all,q,spec)=>'from '+q+pathToFileURL(spec.startsWith('.')?resolve(dirname(path),spec):req.resolve(spec)).href+q);
+ const js=code.replace(/from (['"])([^'"]+)\1/g,(all,q,spec)=>{let target;try{target=spec.startsWith('.')?resolve(dirname(path),spec):req.resolve(spec);}catch{return all;}return 'from '+q+pathToFileURL(target).href+q;});
  const url='data:text/javascript;base64,'+Buffer.from(js+'\n// d669 '+index).toString('base64');
  const mod=await import(url);if(kind==='model'){
    const view=readFileSync(files.consent,'utf8').replace("from './assistantConsentModel.js'","from '"+url+"'");

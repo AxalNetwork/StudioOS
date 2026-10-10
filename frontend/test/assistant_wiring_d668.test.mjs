@@ -43,7 +43,7 @@ async function mount(element, url = '/') {
   };
 }
 
-const REQUEST = { client_name: 'Claude', redirect_host: 'claude.ai', scopes: [], companies: [{ id: 7, name: 'Acme' }, { id: 9, name: 'Second' }] };
+const REQUEST = { client_name: 'Claude', redirect_host: 'claude.ai', redirect_uri: 'https://claude.ai/api/mcp/auth_callback', scopes: ['validate:read', 'validate:write'], companies: [{ id: 7, name: 'Acme' }, { id: 9, name: 'Second' }] };
 const fail = (status) => Promise.reject(Object.assign(new Error('x'), { status }));
 
 test('consent: reads the request, sends exactly the ticked company, and follows the https redirect', async () => {
@@ -52,7 +52,7 @@ test('consent: reads the request, sends exactly the ticked company, and follows 
   const m = await mount(h(ConnectAssistantPage, { api, go: (u) => went.push(u) }), '/connect/assistant?request=req123');
   try {
     await m.flush();
-    assert.match(m.text(), /It returns to claude\.ai/);
+    assert.match(m.text(), /It returns to https:\/\/claude\.ai\/api\/mcp\/auth_callback/);
     await m.tick('consent-company-9');
     await m.clickTestId('button-consent-approve');
     assert.deepEqual(calls, [['consent', 'req123'], ['approve', 'req123', [9]]]);

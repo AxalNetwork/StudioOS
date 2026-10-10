@@ -58,7 +58,7 @@ export async function grantCompany(env: Env, props: GrantProps, user: UserRow, r
   }
   const p = await env.DB.prepare('SELECT id, name, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
     .bind(id).first<{ id: number; name: string | null; founder_id: number | null }>();
-  if (!p || !(write ? canWrite(p, user as User) : canReadBoard(p, user as User))) {
+  if (!p || !(write ? canWrite(p, user as unknown as User) : canReadBoard(p, user as unknown as User))) {
     throw new ToolRefused(`You can no longer ${write ? 'write to' : 'read'} that company, so this connection cannot use it.`);
   }
   return { id: p.id, name: p.name || `Company #${p.id}` };
