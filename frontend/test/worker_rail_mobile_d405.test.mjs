@@ -91,9 +91,11 @@ test('a closed sheet ignores closers, and no unknown event opens it', () => {
 // ─────────────────────────────────────────────── the rail and the page ──
 
 test('a server render draws the panel and no floating button: the portal waits for the client', () => {
-  const h = html(WorkerRail, { workspace: 'Build', coverage: ['3 hypotheses'] });
+  const h = html(WorkerRail, { workspace: 'Build' });
   assert.match(h, /data-testid="worker-rail"/);
-  assert.match(renderedText(h), /3 hypotheses/, 'the panel lost its blocks');
+  // The canvas's blocks: the Manual card, Usage and the safety row.
+  assert.match(renderedText(h), /ManualNo tokens\. Page works alone\.Usage/, 'the panel lost its blocks');
+  assert.match(h, /data-testid="text-worker-rail-screened"/, 'the panel lost its safety row');
   assert.doesNotMatch(h, /button-worker-rail-fab/, 'the button rendered on the server, where there is no document');
   assert.doesNotMatch(h, /worker-rail-sheet/);
 });

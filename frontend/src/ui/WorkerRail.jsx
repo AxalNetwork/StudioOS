@@ -1,16 +1,16 @@
 import { useCallback, useContext, useEffect, useId, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PanelRightClose, PanelRightOpen, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Sparkles, X } from 'lucide-react';
 import { Link, UNSAFE_LocationContext, useInRouterContext } from 'react-router-dom';
 import useAiBudget from '../hooks/useAiBudget';
-import { AiBudgetUsage } from './AiBudgetUsage';
-import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
+import { allowanceMonth, microMoney } from './AiBudgetUsage';
+import useAiSpend, { railCards } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
-import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
-import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, pageMonthLine, splitByPage } from './assistCost';
-import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
-import { MODEL_COPY } from './railModels';
+import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, spendMeter } from './assistCost';
+import { ASSIST_SURFACES, observedRunCost } from './eadwynConfig';
+import { MODEL_COPY, jobsFor } from './railModels';
+import { readRailModel, writeRailModel } from './railModelChoice';
 import { Unreadable } from './Honesty';
 import { railInheritance } from './railInheritance';
 import { ACCENT } from '../workspaces/shellConfig';
@@ -31,78 +31,39 @@ import './workerRail.css';
  * is the report this component answers, filed twice, once per licence: "some
  * pages doesn't have it, it does show anything, it looks blank".
  *
- * IT WAS CALLED `FounderWorkerRail`. Nothing it RENDERS was ever founder-
- * specific — the title is `Worker AI · {workspace}`, the blocks are Mode,
- * Coverage, Unavailable here and Usage this month, the footer is the shared
- * `EADWYN_GUARDRAIL` — so the rename cost nothing and the name was the last
- * thing claiming the rail belonged to one licence. What IS per-licence is the
- * accent, and that now comes from `role`.
+ * IT WAS CALLED `FounderWorkerRail`. Nothing it RENDERS is founder-specific —
+ * the title is `Worker AI · {workspace}` — so the name was the last thing
+ * claiming the rail belonged to one licence. What IS per-licence is the
+ * accent, and that comes from `role`.
  *
- * WHAT THE FOUR BLOCKS SAY, and why they are these four. The canvas (artboard
- * A1, `Founder_Workspaces_Canvas.dc.html`) specifies a rail identical on all six
- * workspaces, docked right, collapsible to a spine, carrying mode, model, meter
- * and safety.
+ * WHAT IT DRAWS IS THE AIRAIL CANVAS, `design/incoming/AIRail.dc.html`, and
+ * nothing else (owner, 2026-10-10). Blocks had been added one decision at a
+ * time — Coverage, a "Read this page back" run, "Unavailable here" notes, a
+ * spend-by-page list, the guardrail footer, and on 2026-10-09 D652's "Ask
+ * Eadwyn" chat — until the rail no longer looked like its canvas. They are
+ * gone; the four canvas blocks remain, on real data:
  *
- *   1. MODE — `Manual`, unless the HOST passes `fills`. The canvas's other
- *      mode is "AI fills the blanks", and on most pages nothing fills a blank:
- *      the one run below drafts a note the reader keeps or discards, on a
- *      click, and writes to nothing. A toggle there would be a setting the
- *      user thinks they have made. A page that does have fill work passes
- *      `fills` (Founder Validate is the first), and only then is the second
- *      card and its switch drawn — D17's rule, stated at the prop below.
+ *   1. MODE — the "Manual" card ("No tokens. Page works alone.") and, only
+ *      where the host passes `fills`, the "AI fills the blanks" card with its
+ *      switch and the desk's own sentence (`note`, D424). A page with nothing
+ *      to fill draws Manual alone, as a statement: a switch there would change
+ *      nothing (D17).
  *
- *   2. COVERAGE — the honest half of what the twenty-seven copies displayed:
- *      counts of rows the page has already fetched. It is the only per-page
- *      block, passed in as `coverage`, and it is where a workspace says what it
- *      is looking at. `unavailable` carries the same pages' "Unavailable here"
- *      notes, which name what is NOT connected rather than implying it is.
+ *   2. MODEL · THIS PAGE — one card per model the section's work runs on,
+ *      from `railCards` over the section's jobs (`railModels.js`) and the
+ *      router's own tables (`/api/ai/pricing`): the router's model, or the
+ *      founder's pick where a job takes one, with DEFAULT when it is the
+ *      router's (D400). The other models those jobs offer are compact rows.
+ *      The ids and rates are the router's, never the canvas's; a model the
+ *      router does not run or price draws nothing. Under each card, the
+ *      founder's own average run (D16), measured and never modelled.
  *
- *   3. USAGE — real, and the one figure the old rails never had. The caller's
- *      own month-to-date spend and the cap the router enforces, from
- *      `/api/ai/me/spend`. Account-level, so it is correct on a page that runs
- *      nothing. A failed request, or `recorded: false` (the usage table could
- *      not be read), renders Unreadable with a retry — an absent fact is not a
- *      zero fact, and an empty meter asserts one. (Same contract as
- *      `hooks/useAiSpend.js` states.)
+ *   3. USAGE — the month's included allowance spent, of the allowance, with
+ *      a bar (the allowance ledger, D629), then this page's month and this
+ *      page's last run (D552 step 3, D401). Every failed read is Unreadable
+ *      with a retry; an absent fact is not a zero fact.
  *
- *   3b. MODEL — and it took a route to earn it. There was deliberately no
- *      model block here for a long time, because `ASSIST_SURFACES` keys a
- *      surface to an aiRouter task class and that key decides the model and
- *      the price it reports — "getting it wrong misreports every figure on the
- *      rail" — and no workspace ran any of the router's task classes. Naming a
- *      model would have put one on a page that never called it.
- *
- *      `POST /api/ai/workspace/explain` is what changed, not this component:
- *      every workspace zone can now run `workspace_explain` over the Coverage
- *      lines beside it. The card is drawn from `priceForTask` against the
- *      router's own table, so the model and the per-million rate are the
- *      router's, never the canvas's. An unpriced run is unknown rather than
- *      free, so no rate is ever drawn without a price row; and when the price
- *      list could not be READ, the block says so with a retry rather than
- *      vanishing (D400).
- *
- *      AND IT IS A MENU NOW. `ROUTE[task].alternates` — the list `run()`
- *      validates a caller's pick against — reaches this component over
- *      `/api/ai/pricing`, so the rail offers exactly what the worker will
- *      accept and cannot drift from it in either direction. Which entry is the
- *      DEFAULT is derived too, from the route's own `model`. What is typed is
- *      the name and the sentence, and those live in `railModels.js` so this
- *      file holds no editorial copy about a model at all.
- *
- *      DECISIONS D13 removed this menu, and named the condition for its
- *      return: "a caller must never be able to route a `safety` call away from
- *      the guard model". That is now structural — `safety` declares no
- *      alternates, so there is nothing to pick from — rather than a rule
- *      somebody has to remember.
- *
- *      The estimate stays the caller's OWN observed average for the task
- *      (D16), honestly absent until they have run it once, and sits BELOW the
- *      menu rather than inside a card: `/api/ai/me/spend` groups by task, not
- *      by model, so printing it under one entry would attribute an average
- *      across models to whichever is selected.
- *
- *   4. SAFETY — `EADWYN_GUARDRAIL`, the product-wide boundary, imported rather
- *      than restated so this rail and `AssistRail` cannot say different things.
+ *   4. SAFETY — the canvas's last row, in the desk's own words.
  *
  * COLLAPSIBLE — and the reason it was not is worth keeping, because it is what
  * the fix had to solve. This docblock used to read "NOT COLLAPSIBLE,
@@ -149,20 +110,6 @@ import './workerRail.css';
  * a bare snake_case key holding a JSON boolean.
  */
 const RAIL_COLLAPSED_KEY = 'worker_rail_collapsed';
-/**
- * The chosen model, per WORKSPACE rather than per zone.
- *
- * The Validate canvas settles this and says why in its own rail block:
- * "Inherited from Validate — Mode and model are chosen on the workspace, not
- * re-picked here." A founder picks once for Validate and every zone under it
- * follows; picking again on `/validate/hypotheses` would be four settings for
- * one decision.
- *
- * Per workspace and not global, because the trade differs: a page with four
- * summary lines does not need the model a page with forty does.
- */
-const MODEL_KEY_PREFIX = 'worker_rail_model:';
-const modelKeyFor = (workspace) => `${MODEL_KEY_PREFIX}${String(workspace || '').toLowerCase().trim()}`;
 /** What the host stylesheets key their collapsed track off. */
 const RAIL_COLLAPSED_ATTR = 'data-worker-rail';
 
@@ -344,10 +291,112 @@ export function RailSheet({ id, workspace, onEvent, closeRef, style, children })
  * first three is ever drawn as $0.00. In Manual it is not drawn at all, as the
  * canvas says, and the label on the spine still names the rail.
  */
+/** The Manual card's line (AIRail canvas): what OFF means, in five words. */
+export const MANUAL_NOTE = 'No tokens. Page works alone.';
+
+/** A card's full rate line: per million tokens, or per audio minute. */
+export function rateLine(price) {
+  if (!price) return null;
+  return price.kind === 'audio'
+    ? `${formatRate(price.perMinute)} per audio minute`
+    : `${formatRate(price.pin)} / M in · ${formatRate(price.pout)} / M out`;
+}
+
+/** A compact row's rate, in the corner the canvas puts it. */
+export function inlineRate(price) {
+  if (!price) return null;
+  return price.kind === 'audio'
+    ? `${formatRate(price.perMinute)} / min`
+    : `${formatRate(price.pin)} / ${formatRate(price.pout)}`;
+}
+
 /**
- * The Usage block's per-page half (D552 step 3): this page's month, this
- * page's last run, and the month split by page. Its own component so each
- * honest state can be rendered and tested without the rail around it.
+ * One model in use (AIRail canvas, a DEFAULT card): its name, the badge when
+ * every job on it runs the router's own model, its id, what it does here,
+ * the jobs' tags, the rate, and for each job the founder's own average run
+ * (D16), measured and never modelled. `onPick` is set when picking the card
+ * would move a job onto it; the card is then a button.
+ */
+export function RailModelCard({ card, spend, onPick }) {
+  const tags = [...new Set(card.jobs.flatMap((j) => j.tags || []))];
+  const Tag = onPick ? 'button' : 'div';
+  return (
+    <Tag
+      {...(onPick ? { type: 'button', onClick: onPick } : {})}
+      className="fwr-model"
+      data-selected="true"
+      data-testid={`card-worker-rail-model-${card.id.split('/').pop()}`}
+    >
+      <span className="fwr-model-head">
+        <b>{card.name}</b>
+        {card.isDefault && <i className="fwr-badge">DEFAULT</i>}
+      </span>
+      <span className="fwr-model-id">{card.id}</span>
+      <span className="fwr-model-why">{card.jobs.map((j) => j.why).join(' ')}</span>
+      {tags.length > 0 && (
+        <span className="fwr-tags">{tags.map((t) => <i key={t}>{t}</i>)}</span>
+      )}
+      <span className="fwr-model-rate">{rateLine(card.price)}</span>
+      {card.jobs.map((j) => {
+        // The average is drawn from `by_task`; when that read failed the
+        // Worker says so (`by_task_recorded: false`, D401), and "no runs yet"
+        // would be a claim the page cannot support.
+        const label = card.jobs.length > 1 ? `${String(j.tags?.[0] || j.task).replace(/^Best for: /, '')} · ` : '';
+        if (spend?.by_task_recorded === false) {
+          return <span key={j.task} className="fwr-estimate fwr-absent">{`${label}Your average could not be read.`}</span>;
+        }
+        const observed = observedRunCost(spend, j.task);
+        return (
+          <span key={j.task} className="fwr-estimate" data-observed={observed ? 'true' : 'false'}>
+            {observed
+              ? `${label}≈ ${formatCost(observed.cost)} a run, your average over ${observed.calls}`
+              : `${label}No runs yet, so no average to show.`}
+          </span>
+        );
+      })}
+    </Tag>
+  );
+}
+
+/**
+ * The Usage card's head (AIRail canvas, "$14.20 of $40.00" and its bar): the
+ * month's included allowance spent, of the allowance, from the allowance
+ * ledger (D629). A failed read is Unreadable with a retry, never a $0.00 bar.
+ */
+export function RailAllowance({ reading }) {
+  if (reading.loading) return <p className="fwr-absent">Loading…</p>;
+  const month = allowanceMonth(reading.budget, reading.budgetError);
+  if (!month) {
+    return (
+      <div data-testid="text-worker-rail-spend">
+        <Unreadable
+          what="Your AI allowance"
+          claim="That is not a claim that nothing was spent."
+          onRetry={reading.reload}
+        />
+      </div>
+    );
+  }
+  const meter = month.cap > 0 ? spendMeter(month.spent, month.cap) : null;
+  return (
+    <>
+      <div className="fwr-usage-head">
+        <strong data-testid="text-worker-rail-spend">{microMoney(month.spent)}</strong>
+        {month.cap > 0 && <em>{`of ${microMoney(month.cap)}`}</em>}
+      </div>
+      {meter && (
+        <div className="fwr-meter" role="presentation">
+          <i className={meter.over ? 'fwr-over' : undefined} style={{ width: `${meter.fraction * 100}%` }} />
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * The Usage card's per-page half (D552 step 3): this page's month and this
+ * page's last run. Its own component so each honest state can be rendered and
+ * tested without the rail around it.
  *
  * `spend` is `/api/ai/me/spend` (the account read, known to be `recorded`);
  * `pageSpend` / `pageSpendError` are `useAiSpend`'s page read, null without
@@ -358,34 +407,26 @@ export function RailPageUsage({ spend, pagePath, pageSpend, pageSpendError, onRe
   // The page read, only when it answered. A report left from an earlier read
   // is not shown beside a failed one: both lines below go to Unreadable.
   const page = pageRecordable && !pageSpendError && pageSpend?.recorded === true ? pageSpend : null;
+  const calls = Number(page?.month?.calls) || 0;
   return (
     <>
       {/*
-        THIS PAGE (D552 step 3) — the canvas's "This page this
-        month" and this page's last run, from
-        `/api/ai/me/spend?surface=<pagePath>`: the caller's own
-        rows recorded against this page, and nobody else's. Before
-        D552 every AI call but two wrote no page, so a figure
-        derived from `by_surface` was a fraction of what the page
-        had cost; the read is now direct. Its honest states:
+        THIS PAGE (D552 step 3) — the canvas's "This page this month", from
+        `/api/ai/me/spend?surface=<pagePath>`: the caller's own rows recorded
+        against this page. Its honest states:
           · the read failed            → Unreadable, with a retry;
-          · runs this month            → their spend and count;
+          · runs this month            → their spend;
           · none, and none ever        → "No run on this page yet";
-          · none this month            → "No run on this page this
-            month", never "yet", which would be a claim;
-        and beside a zero, the month's runs that carry no page,
-        because some may be this page's from before it was
-        recorded (D404).
-
-        A path the router does not record (`isRecordablePage`) is
-        not read at all: its runs are stored with no page, and the
-        line says that rather than showing a refused read as a
+          · none this month            → "No run on this page this month",
+            never "yet", which would be a claim.
+        A path the router does not record (`isRecordablePage`) is not read
+        at all, and the line says so rather than showing a refused read as a
         failure.
       */}
       {!pageRecordable
         ? (
           <p className="fwr-page-spend" data-testid="text-worker-rail-page-spend">
-            Runs from this page are not recorded against it, so they count among the month's runs with no page.
+            Runs from this page are not recorded against it.
           </p>
         )
         : !page
@@ -400,23 +441,23 @@ export function RailPageUsage({ spend, pagePath, pageSpend, pageSpendError, onRe
           )
           : (
             <p className="fwr-page-spend" data-testid="text-worker-rail-page-spend">
-              {pageMonthLine(page)}
+              {calls > 0
+                ? <>This page this month · <b>{Number(page.month.spend_usd) >= 0.01 ? formatSpend(page.month.spend_usd) : formatCost(page.month.spend_usd)}</b></>
+                : `${page.last_run_recorded === true && !page.last_run
+                  ? 'No run on this page yet.'
+                  : 'No run on this page this month.'}${Number(page.unattributed?.calls) > 0
+                  // D404: runs with no page may include this page's.
+                  ? ' Some of this month\'s runs carry no page.'
+                  : ''}`}
             </p>
           )}
       {/*
-        THE LASTING RECEIPT (D401), now THIS PAGE's (D552 step 3):
-        the canvas's "Last run · in/out · cost", from the page
-        read's `last_run` — the caller's most recent run recorded
-        against this page, in any month. A failed read of it is
-        Unreadable, not "no runs"; the Worker reports the two apart
-        with `last_run_recorded`. With no run, the line above has
-        already said "No run on this page yet", so nothing is
-        drawn twice.
-
-        On a page whose path the router does not record there is
-        no page receipt to show, so the account's is shown, labelled
-        as the account's: a label that read as "this page" there
-        would state a fact the log lacks.
+        THE LASTING RECEIPT (D401), this page's: the canvas's "Last run ·
+        in/out · cost", from the page read's `last_run`, in any month. A
+        failed read of it is Unreadable, not "no runs"; the Worker reports
+        the two apart with `last_run_recorded`. On a page whose path the
+        router does not record, the account's is shown, labelled as the
+        account's.
       */}
       {pageRecordable
         ? (page && (page.last_run_recorded === false
@@ -431,8 +472,7 @@ export function RailPageUsage({ spend, pagePath, pageSpend, pageSpendError, onRe
           )
           : page.last_run && (
             <p className="fwr-last-run" data-testid="text-worker-rail-last-run">
-              <b>Last run · this page</b>
-              {lastRunReceipt(page.last_run, MODEL_COPY[page.last_run.model]?.name)}
+              {`Last run · ${lastRunReceipt(page.last_run, MODEL_COPY[page.last_run.model]?.name)}`}
             </p>
           )))
         : (spend.last_run_recorded === false
@@ -447,49 +487,9 @@ export function RailPageUsage({ spend, pagePath, pageSpend, pageSpendError, onRe
           )
           : spend.last_run && (
             <p className="fwr-last-run" data-testid="text-worker-rail-last-run">
-              <b>Last run · your account, any page</b>
-              {lastRunReceipt(spend.last_run, MODEL_COPY[spend.last_run.model]?.name)}
+              {`Last run · your account, any page · ${lastRunReceipt(spend.last_run, MODEL_COPY[spend.last_run.model]?.name)}`}
             </p>
           ))}
-      {/*
-        BY PAGE (D552 step 3) — the month split across the pages it
-        was spent on, from `by_surface` (migration 319's column,
-        grouped). The costliest few, this page among them wherever
-        it ranks, the rest folded into one line so the rows still
-        add up to the month, and the runs with no page as their own
-        row. A failed grouping is Unreadable, never an empty list.
-      */}
-      {spend.by_surface_recorded === false
-        ? (
-          <div data-testid="list-worker-rail-by-page">
-            <Unreadable
-              what="Spend by page"
-              claim="That is not a claim that no page has spent."
-              onRetry={onRetry}
-            />
-          </div>
-        )
-        : (() => {
-          const split = splitByPage(spend.by_surface, pagePath);
-          if (!split.rows.length) return null;
-          return (
-            <ul className="fwr-by-page" data-testid="list-worker-rail-by-page" aria-label="Spend by page this month">
-              {split.rows.map((r) => (
-                <li key={r.surface ?? '(none)'} className={r.current ? 'fwr-by-page-current' : undefined}
-                  aria-current={r.current ? 'page' : undefined}>
-                  <span>{r.label}</span>
-                  <span>{formatCost(r.spend_usd)} · {r.calls} run{r.calls === 1 ? '' : 's'}</span>
-                </li>
-              ))}
-              {split.rest && (
-                <li>
-                  <span>{split.rest.pages} more page{split.rest.pages === 1 ? '' : 's'}</span>
-                  <span>{formatCost(split.rest.spend_usd)} · {split.rest.calls} run{split.rest.calls === 1 ? '' : 's'}</span>
-                </li>
-              )}
-            </ul>
-          );
-        })()}
     </>
   );
 }
@@ -532,48 +532,25 @@ export function RailSpine({ aiOn, spendState }) {
   );
 }
 
+/**
+ * Props hosts still pass that fed blocks the AIRail canvas does not draw
+ * (owner, 2026-10-10): Coverage, the read-back, "Unavailable here", the scope
+ * chip and the guardrail footer. The rail reads none of them, and
+ * `branch_rail_mount.test.mjs` holds both halves: a mount may pass one of
+ * these, and nothing in the rail reads one. Taking them off the mounts is
+ * cleanup, not behaviour.
+ */
+export const RETIRED_RAIL_PROPS = ['stance', 'coverage', 'coverageNote', 'scope', 'scopeBranch', 'unavailable', 'action', 'footer'];
+
 export default function WorkerRail({
   workspace,
   role = 'founder',
   className = '',
-  stance,
+  /**
+   * The desk's own sentence for what "AI fills the blanks" does here (D424),
+   * printed inside the AI card the way the canvas prints its mode note.
+   */
   note,
-  coverage = [],
-  coverageNote,
-  /**
-   * WHICH SCOPE THE PAGE READ IN — H13 rule 1, "scope precedes the question".
-   *
-   * IT REPORTS, IT NEVER OFFERS, and that distinction is the whole decision.
-   * D150 refused a scope CHIP on the stated ground that "the page decides what
-   * it fetched before the rail runs, so both options produce the same read" —
-   * a picker whose options cannot differ is the `still_an_admin` mistake D134
-   * named. That was correct then and D153 made it false: under the view-as
-   * overlay the page routes its reads through ONE branch, so "All branches"
-   * and "Axal VC France" are now two genuinely different reads.
-   *
-   * What the canvas asks for is not a picker either — "the chip is what the
-   * viewing-as banner set". So this renders the scope the page was already in
-   * and changing it is the shell bar's job, one layer up, where the mode
-   * actually lives. A chip that offered a scope the rail cannot change would
-   * be the refused control wearing the accepted one's clothes.
-   *
-   * Absent means the page did not say, which is different from "everything":
-   * a rail with no scope draws no chip rather than claiming platform-wide.
-   */
-  scope,
-  /**
-   * The branch CODE behind that chip, when the scope is one branch.
-   *
-   * A SEPARATE PROP FROM `scope`, ON PURPOSE. `scope` is a LABEL — copy a
-   * person reads, "All branches" or a brand name — and this is an IDENTIFIER
-   * the route keys an audit row on. Conflating them would send the word "All
-   * branches" to the server as a branch code, which would either be dropped
-   * silently or, worse, logged as though a branch called that had been read.
-   * The rail sends this one and renders the other.
-   */
-  scopeBranch,
-  unavailable = [],
-  action = null,
   // Does THIS workspace have fill-the-blanks work? The surface declares the
   // capability and its copy; the host declares whether this page has any.
   // Passing it is what draws the second mode card and its switch, so the
@@ -581,7 +558,6 @@ export default function WorkerRail({
   // DECISIONS D17's rule, and the reason a globally-rendered toggle would
   // reintroduce the dead control D17 refused.
   fills = false,
-  footer = 'Read-only summary · no automated actions',
   'data-testid': testId = 'worker-rail',
 }) {
   const pathname = useRailPathname();
@@ -627,93 +603,35 @@ export default function WorkerRail({
     });
   }, []);
 
-  // The model card, from the router's table rather than from anything typed
-  // here. `priceForTask` returns null when either lookup misses, and the card
-  // is then absent — an unpriced run is unknown, not free.
   const surface = ASSIST_SURFACES[WORKSPACE_SURFACE];
-  const priced = priceForTask(pricing, surface.task);
-  const observed = observedRunCost(spend, surface.task);
-  // The menu, built from the ROUTER's `alternates` and joined to the copy in
-  // `railModels.js`. Empty until `/api/ai/pricing` answers, and empty forever
-  // for a task that offers no choice — in which case the block below falls
-  // back to the single `priced` card it has always drawn.
-  const models = modelsForTask(pricing, surface.task, { copy: MODEL_COPY });
 
-  // The founder's choice, read once for the first render so the menu does not
-  // flash the default before an effect corrects it. `safeReadJSON` because
-  // localStorage throws outright in some embedded contexts and a rail is not
-  // worth a blank page.
-  const [chosen, setChosen] = useState(() => safeReadJSON(modelKeyFor(workspace), null));
-  const chooseModel = useCallback((id) => {
-    setChosen(id);
-    safeWriteJSON(modelKeyFor(workspace), id);
+  // THE MODEL CARDS (AIRail canvas, "Model · this page"): the section's jobs
+  // from `railModels.js`, each on the router's model or the founder's stored
+  // pick, built by `railCards` from `/api/ai/pricing`. A pick is written per
+  // section and per task, and the bands that run the task read it
+  // (`ui/railModelChoice.js`). Re-read on every render, so a pick made here
+  // shows at once and a pick cleared by a refusal elsewhere shows next render.
+  const [, setPicks] = useState(0);
+  const view = railCards(pricing, jobsFor(workspace), {
+    copy: MODEL_COPY,
+    chosen: (task) => readRailModel(workspace, task),
+  });
+  const pick = useCallback((id, tasks) => {
+    for (const task of tasks) writeRailModel(workspace, task, id);
+    setPicks((n) => n + 1);
   }, [workspace]);
-  // A stored id the router no longer offers is not a selection. Falling back to
-  // the primary — `models[0]`, which `alternates` puts first — means the menu
-  // renders something selected rather than nothing, and the run that follows
-  // is one the worker will accept.
-  const activeModel = models.some((m) => m.id === chosen) ? chosen : (models[0]?.id ?? null);
 
   // ZONE OR ROOT (D402). On a zone below a workspace the model is the
-  // workspace's — the same stored key — and the rail shows it read-only with
+  // workspace's — the same stored keys — and the rail shows it read-only with
   // a link back to where it is chosen, rather than a menu whose every click
   // silently changes the whole workspace.
   const inherited = railInheritance(role, pathname);
-  const activeEntry = models.find((m) => m.id === activeModel) || null;
 
   // Shared with the page, which decides whether to offer proposals, through a
   // module store rather than a provider — see hooks/useAssistMode.js.
   const [fillsOn, setFillsOn] = useAssistMode(workspace);
   const modeChoice = surface.mode?.kind === 'choice' && fills ? surface.mode : null;
-
-  const [run, setRun] = useState({ state: 'idle', text: '', note: '', usage: null });
-  const canRun = coverage.length > 0;
-  const readBack = useCallback(async () => {
-    setRun({ state: 'running', text: '', note: '', usage: null });
-    try {
-      const r = await api.aiWorkspaceExplain({
-        workspace, zone: stance || '', coverage, model: activeModel || undefined,
-        // H13 RULE 4 — the scope travels with the question, which is what lets
-        // the route log a branch read-back. Sent only when the page named one:
-        // an unscoped run is not about a branch and must not write a row
-        // claiming it was (D150's reason, narrowed rather than reversed).
-        branch: scopeBranch || undefined,
-        // The page this run is asked from, recorded as its `surface` (D404) so
-        // "This page this month" below can count it. A path, never content.
-        page: pagePath || undefined,
-      });
-      setRun({ state: 'done', text: r?.text || '', note: '', usage: r?.usage || null });
-      // The run wrote a row, so the month's figures and the lasting "Last
-      // run" receipt below are now stale. Re-read them rather than patching
-      // them locally: the receipt is the LOG's most recent row, and only a
-      // read can say what that is (D401).
-      reload();
-      budgetReading.reload();
-    } catch (e) {
-      // A refusal is not a crash and must not read as one: the router returns
-      // a reason and a message for a spent budget or an unreachable model, and
-      // the rail shows that sentence rather than "something went wrong".
-      //
-      // `model_not_offered` is the one refusal the rail can act on rather than
-      // only report: the saved choice is the problem, so it goes. Leaving it
-      // would have every subsequent click fail the same way with no way out
-      // short of clearing site data.
-      //
-      // D258 — the body rides on `e.data` and its sentence is `e.message`.
-      // This read `e.body`, which nothing sets, so a stale model choice was
-      // never dropped and every later click failed the same way.
-      if (e?.data?.refusal === 'model_not_offered') {
-        setChosen(null);
-        safeWriteJSON(modelKeyFor(workspace), null);
-      }
-      setRun({
-        state: 'failed',
-        text: '',
-        note: e?.message || 'The model could not be reached. Nothing was run.',
-        usage: null,
-      });
-    }
-  }, [workspace, stance, coverage, activeModel, scopeBranch, reload, budgetReading.reload, pagePath]);
+  const safetyNote = surface.desks?.[workspace]?.safety || surface.safety;
 
   // `recorded` false, or no report at all, are the same thing to a reader: the
   // platform cannot say what has been spent. Neither draws a bar.
@@ -780,19 +698,20 @@ export default function WorkerRail({
   const body = (
       <div className="fwr-body" id={bodyId}>
         <section className="fwr-block">
-          <span>Mode</span>
-          {/* `stance` is each page's own one-line description of the manual
-              mode — "Read-only source coverage", "Manual operating view" —
-              kept from the rail it replaced. Every rail still opens with the
-              same word, which is the parity that matters.
+          {/* THE CANVAS'S TWO CARDS, with no heading above them: "Manual" and
+              "AI fills the blanks", the second carrying its switch and the
+              desk's own sentence for what the switch does here (`note`, D424).
 
-              Where there is nothing to fill in, this stays exactly what it
-              has always been: one line, no card, no switch. */}
+              Where there is nothing to fill in, the Manual card is drawn alone
+              and is not a control (D17): a second card there would be a
+              switch that changes nothing. */}
           {!modeChoice ? (
-            <>
-              <strong data-testid="text-worker-rail-mode">Manual{stance ? ` · ${stance}` : ''}</strong>
-              {note && <p>{note}</p>}
-            </>
+            <div className="fwr-modes">
+              <div className="fwr-mode" data-selected="false" data-testid="card-worker-rail-mode-manual">
+                <b data-testid="text-worker-rail-mode">Manual</b>
+                <span>{MANUAL_NOTE}</span>
+              </div>
+            </div>
           ) : (
             <div className="fwr-modes" role="radiogroup" aria-label={`Mode for ${workspace}`}>
               <button
@@ -804,8 +723,8 @@ export default function WorkerRail({
                 onClick={() => setFillsOn(false)}
                 data-testid="button-worker-rail-mode-manual"
               >
-                <b data-testid="text-worker-rail-mode">Manual{stance ? ` · ${stance}` : ''}</b>
-                <span>{modeChoice.manualNote}</span>
+                <b data-testid="text-worker-rail-mode">Manual</b>
+                <span>{MANUAL_NOTE}</span>
               </button>
               <button
                 type="button"
@@ -816,50 +735,23 @@ export default function WorkerRail({
                 onClick={() => setFillsOn(true)}
                 data-testid="button-worker-rail-mode-fills"
               >
-                <b>{modeChoice.label}</b>
-                <span>{modeChoice.note}</span>
+                <span className="fwr-mode-head">
+                  <b>{modeChoice.label}</b>
+                  <i className="fwr-switch" data-on={fillsOn ? 'true' : 'false'} aria-hidden="true" />
+                </span>
+                <span>{note || modeChoice.note}</span>
               </button>
             </div>
           )}
-          {note && modeChoice && <p>{note}</p>}
         </section>
 
-        <section className="fwr-block">
-          <span>Coverage</span>
-          {scope && (
-            <strong className="fwr-scope" data-testid="worker-rail-scope">
-              Scope: {scope}
-            </strong>
-          )}
-          {coverage.length
-            ? coverage.map((line) => <strong key={line}>{line}</strong>)
-            : <strong className="fwr-absent">Not recorded</strong>}
-          {coverageNote && <p>{coverageNote}</p>}
-          {action && <div className="fwr-action">{action}</div>}
-        </section>
-
-        {/*
-          The model block. Absent when the price lookup misses — an unpriced
-          run is unknown, not free — so this block cannot render a model
-          without a rate beside it.
-
-          WHERE THE PARTS COME FROM, because they come from three places and
-          mixing them up is how the old card came to quote a wrong rate for
-          months. The MENU and every id and price in it are the router's, over
-          `/api/ai/pricing`. The name, the sentence and the tags are editorial
-          and live in `railModels.js`. The ESTIMATE is neither: it is this
-          caller's own measured average, and it is deliberately NOT inside a
-          model's card — `/api/ai/me/spend` groups by task, not by model, so
-          printing it under one entry would attribute an average across models
-          to whichever one happens to be selected. It sits under the menu,
-          labelled for what it is.
-        */}
-        {/* THE PRICE LIST COULD NOT BE READ. This used to render nothing —
-            `priced` was null, so the whole model block vanished and a failed
-            read looked exactly like a page with no model to offer (D400). The
-            block is drawn with its label and says what failed, with a retry;
-            no model and no rate is named, because neither is known. */}
-        {!priced && pricingError && (
+        {/* MODEL · THIS PAGE (AIRail canvas). One card per model the
+            section's work runs on, the router's model unless the founder
+            moved a job that takes a pick, and the other models those jobs
+            offer as compact rows. Every id and rate is the router's, over
+            `/api/ai/pricing`; the sentences are `railModels.js`. A failed
+            price read says so with a retry rather than vanishing (D400). */}
+        {!view.cards.length && pricingError && (
           <section className="fwr-block" data-testid="worker-rail-model-unreadable">
             <span>Model · this page</span>
             <Unreadable
@@ -870,213 +762,75 @@ export default function WorkerRail({
           </section>
         )}
 
-        {priced && (
-          <section className="fwr-block">
+        {view.cards.length > 0 && (
+          <section className="fwr-block" data-testid="worker-rail-models">
             <span>Model · this page</span>
-            {surface.modeNote && <p className="fwr-mode-note">{surface.modeNote}</p>}
-
-            {inherited && models.length > 1 ? (
-              <>
-                {/* The canvas's dashed card and chip (DetailRail, EmberRail,
-                    and the Validate zones). Named after the WORKSPACE the page
-                    passed, because that is the key the choice is stored under —
-                    never after the zone, which is EmberRail's "Inherited from
-                    Analytics" defect. */}
-                <div className="fwr-inherited" data-testid="worker-rail-inherited">
-                  <i className="fwr-badge fwr-badge-inherited">INHERITED</i>
-                  <p>
-                    {`Inherited from ${workspace}. Mode and model are chosen on the workspace, not re-picked here. Change the model there and this page follows.`}
-                  </p>
-                  <RootLink to={inherited.to} className="fwr-inherited-link" data-testid="link-worker-rail-inherited">
-                    {`Change it on ${workspace}`}
-                  </RootLink>
-                </div>
-                {activeEntry && (
-                  <div className="fwr-model fwr-model-readonly" data-selected="true" data-testid="text-worker-rail-model">
-                    <span className="fwr-model-head">
-                      <b>{activeEntry.name}</b>
-                      {activeEntry.isDefault && <i className="fwr-badge">DEFAULT</i>}
-                    </span>
-                    <span className="fwr-model-id">{activeEntry.id}</span>
-                    <span className="fwr-model-rate">
-                      {`${formatRate(activeEntry.pin)} / M in · ${formatRate(activeEntry.pout)} / M out`}
-                    </span>
-                  </div>
-                )}
-              </>
-            ) : models.length > 1 ? (
-              <>
-                {/* Real radios, visually hidden behind the cards. A group of
-                    buttons would need arrow-key handling and an aria-checked
-                    dance to reach what a fieldset of radios gives for free. */}
-                <fieldset className="fwr-models">
-                  <legend className="fwr-sr">{`Model for ${workspace}`}</legend>
-                  {models.map((m) => (
-                    <label
-                      key={m.id}
-                      className="fwr-model"
-                      data-selected={m.id === activeModel ? 'true' : 'false'}
-                      data-testid={`option-worker-rail-model-${m.id.split('/').pop()}`}
-                    >
-                      <input
-                        type="radio"
-                        className="fwr-sr"
-                        name={`fwr-model-${bodyId}`}
-                        value={m.id}
-                        checked={m.id === activeModel}
-                        onChange={() => chooseModel(m.id)}
-                      />
-                      <span className="fwr-model-head">
-                        <b>{m.name}</b>
-                        {/* "Default": the router's own primary for this task,
-                            derived in `modelsForTask` (D400). It was
-                            RECOMMENDED, which the voice rule forbids about
-                            what the assistant produces, and it marked the
-                            router's default all along. */}
-                        {m.isDefault && <i className="fwr-badge">DEFAULT</i>}
-                        {!m.isDefault && (
-                          <i className="fwr-model-inline">
-                            {`${formatRate(m.pin)} / ${formatRate(m.pout)}`}
-                          </i>
-                        )}
-                      </span>
-                      {/* Id, tags and the full rate line only for the default
-                          entry — the canvas gates all three on the same flag as
-                          its badge, so the fuller treatment is what marks it
-                          out rather than the badge alone. */}
-                      {m.isDefault && <span className="fwr-model-id">{m.id}</span>}
-                      {m.why && <span className="fwr-model-why">{m.why}</span>}
-                      {m.isDefault && m.tags.length > 0 && (
-                        <span className="fwr-tags">
-                          {m.tags.map((t) => <i key={t}>{t}</i>)}
-                        </span>
-                      )}
-                      {m.isDefault && (
-                        <span className="fwr-model-rate">
-                          {`${formatRate(m.pin)} / M in · ${formatRate(m.pout)} / M out`}
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </fieldset>
-                <p data-testid="text-worker-rail-model-note">
-                  {`Remembered for ${workspace}. Every zone here uses it.`}
+            {inherited && view.pickable && (
+              <div className="fwr-inherited" data-testid="worker-rail-inherited">
+                <i className="fwr-badge fwr-badge-inherited">INHERITED</i>
+                <p>
+                  {`Inherited from ${workspace}. The model is chosen on the workspace, not re-picked here. Change it there and this page follows.`}
                 </p>
-              </>
-            ) : (
-              <>
-                <strong data-testid="text-worker-rail-model">{priced.model.split('/').pop()}</strong>
-                <p className="fwr-model-id">{priced.model}</p>
-                <p>{`${formatRate(priced.pin)} / M in · ${formatRate(priced.pout)} / M out`}</p>
-              </>
+                <RootLink to={inherited.to} className="fwr-inherited-link" data-testid="link-worker-rail-inherited">
+                  {`Change it on ${workspace}`}
+                </RootLink>
+              </div>
             )}
-
-            {/* Measured, never modelled (DECISIONS D16). Absent until they
-                have run it once, because a number nobody measured is worth
-                less than saying so. */}
-            {/* The average is drawn from `by_task`. When that read failed the
-                Worker says so (`by_task_recorded: false`, D401), and "no runs
-                of this yet" would be a claim the page cannot support. */}
-            {spend?.by_task_recorded === false
-              ? <Unreadable what="Your average for this" claim="That is not a claim that you have never run it." onRetry={reload} />
-              : (
-                <p className="fwr-estimate">
-                  {observed
-                    ? `Your runs of this have averaged ${formatCost(observed.cost)}, over ${observed.calls}.`
-                    : 'No runs of this yet, so there is no average to show.'}
-                </p>
-              )}
-            <div className="fwr-action">
-              <button
-                type="button"
-                className="fwr-run"
-                onClick={readBack}
-                disabled={!canRun || run.state === 'running'}
-                data-testid="button-worker-rail-run"
-              >
-                {run.state === 'running' ? 'Reading…' : 'Read this page back'}
-              </button>
+            <div className="fwr-models">
+              {view.cards.map((card) => (
+                <RailModelCard
+                  key={card.id}
+                  card={card}
+                  spend={spend}
+                  onPick={!inherited && card.tasks.length ? () => pick(card.id, card.tasks) : null}
+                />
+              ))}
+              {!inherited && view.alternates.map((alt) => (
+                <button
+                  key={alt.id}
+                  type="button"
+                  className="fwr-model fwr-model-alt"
+                  data-selected="false"
+                  onClick={() => pick(alt.id, alt.tasks)}
+                  data-testid={`option-worker-rail-model-${alt.id.split('/').pop()}`}
+                >
+                  <span className="fwr-model-head">
+                    <b>{alt.name}</b>
+                    <i className="fwr-model-inline">{inlineRate(alt.price)}</i>
+                  </span>
+                  {alt.why && <span className="fwr-model-why">{alt.why}</span>}
+                </button>
+              ))}
             </div>
-            {!canRun && (
-              <p className="fwr-absent">
-                Nothing to read back yet — this page has not loaded a summary.
-              </p>
-            )}
-            {run.state === 'done' && (run.text
-              ? (
-                <div className="fwr-draft" data-testid="text-worker-rail-draft">
-                  <p>{run.text}</p>
-                  {/*
-                    The receipt for THIS click. The lasting "Last run" line in
-                    the Usage block (D401) is the account's most recent row,
-                    which after this click is usually this run — but not
-                    always: another tab, another page, or a later call on the
-                    account can be newer. This one describes exactly the run
-                    whose text is above it, so both stay, each labelled for
-                    what it is. (Before D401 this said `/api/ai/me/spend`
-                    returned no latest row; it returned `last_run` without
-                    token counts, and now carries them.)
-
-                    `formatCost` and not `formatSpend`: a read-back costs
-                    fractions of a cent, and two decimal places round that to
-                    zero, which reads as free.
-                  */}
-                  {run.usage && (
-                    <p className="fwr-foot-note" data-testid="text-worker-rail-receipt">
-                      {MODEL_COPY[run.usage.model]?.name || run.usage.model.split('/').pop()}
-                      {typeof run.usage.prompt_tokens === 'number'
-                        && typeof run.usage.completion_tokens === 'number'
-                        ? ` · ${run.usage.prompt_tokens.toLocaleString()} in / ${run.usage.completion_tokens.toLocaleString()} out`
-                        : ''}
-                      {' · '}{formatCost(run.usage.est_cost_usd)}
-                      {run.usage.cached ? ' · cached' : ''}
-                      {/* Named, because it means the answer above is not from
-                          the model the founder picked. */}
-                      {run.usage.fallback_used ? ' · the model was busy, a smaller one answered' : ''}
-                    </p>
-                  )}
-                </div>
-              )
-              : <p className="fwr-absent">The model returned nothing. Nothing was kept.</p>
-            )}
-            {run.state === 'failed' && <p className="fwr-absent">{run.note}</p>}
+            <p className="fwr-models-note" data-testid="text-worker-rail-model-note">
+              {view.pickable
+                ? `Remembered for ${workspace}. Switching changes nothing already accepted.`
+                : 'The router\'s model for this work. It is not chosen here.'}
+            </p>
           </section>
         )}
 
         {/* NO CHAT IN THIS RAIL (owner, 2026-10-10). The rail is the AIRail
             canvas (`design/incoming/AIRail.dc.html`): mode, the page's models,
-            usage and the screening line. D652's "Ask Eadwyn" composer
-            (`EadwynComposer.jsx`, from the Connectors canvas's `rail` screen)
-            was mounted here on 2026-10-09 and is taken out again. It stays
-            unmounted, with its Worker routes, until a canvas gives the chat a
-            place of its own. */}
+            usage and the screening line, and nothing else. D652's "Ask
+            Eadwyn" composer (`EadwynComposer.jsx`, from the Connectors
+            canvas's `rail` screen) was mounted here on 2026-10-09 and is taken
+            out again; it stays unmounted, with its Worker routes, until a
+            canvas gives the chat a place of its own. The Coverage block, the
+            "Read this page back" run, the "Unavailable here" notes, the
+            spend-by-page list and the guardrail footer went the same day, for
+            the same reason: none of them is on the canvas. */}
 
-        {unavailable.length > 0 && (
-          <section className="fwr-block fwr-muted">
-            <span>Unavailable here</span>
-            {unavailable.map(([title, detail]) => (
-              <div key={title}><strong>{title}</strong><p>{detail}</p></div>
-            ))}
-          </section>
-        )}
-
-        <section className="fwr-block">
-          <AiBudgetUsage reading={budgetReading} />
-          <span>Usage this month</span>
-          <p>Estimated model cost, including paid runs.</p>
-          {loading
-            ? <strong className="fwr-absent">Loading…</strong>
-            : known
-              ? (
-                <>
-                  <strong data-testid="text-worker-rail-spend">
-                    {formatSpend(spend.month.spend_usd)}
-                  </strong>
-                  <p>
-                    {spend.month.calls
-                      ? `${spend.month.calls} run${spend.month.calls === 1 ? '' : 's'} across the platform this month.`
-                      : 'No runs recorded this month.'}
-                  </p>
+        {/* USAGE (AIRail canvas): the month's allowance spent, of the
+            allowance, a bar, then this page's month and its last run. */}
+        <section className="fwr-block" data-testid="worker-rail-usage">
+          <span>Usage</span>
+          <div className="fwr-usage">
+            <RailAllowance reading={budgetReading} />
+            {loading
+              ? <p className="fwr-absent">Loading…</p>
+              : known
+                ? (
                   <RailPageUsage
                     spend={spend}
                     pagePath={pagePath}
@@ -1084,47 +838,32 @@ export default function WorkerRail({
                     pageSpendError={pageSpendError}
                     onRetry={reload}
                   />
-                </>
-              )
-              : (
-                // EITHER READ FAILED: the request itself (`spendError`), or the
-                // Worker answered `recorded: false` because it could not read
-                // `ai_usage_logs`. Both are a failed read, so both are
-                // Unreadable with a retry — never "Not recorded", which says the
-                // store was read and holds nothing (D400; ui/Honesty.jsx).
-                <div data-testid="text-worker-rail-spend">
-                  <Unreadable
-                    what={spendError ? 'Your AI usage' : 'The usage log'}
-                    claim="That is not a claim that nothing was spent."
-                    onRetry={reload}
-                  />
-                </div>
-              )}
+                )
+                : (
+                  // EITHER READ FAILED: the request itself (`spendError`), or
+                  // the Worker answered `recorded: false` because it could not
+                  // read `ai_usage_logs`. Both are Unreadable with a retry,
+                  // never "Not recorded" (D400; ui/Honesty.jsx).
+                  <div data-testid="text-worker-rail-page-spend">
+                    <Unreadable
+                      what={spendError ? 'Your AI usage' : 'The usage log'}
+                      claim="That is not a claim that nothing was spent."
+                      onRetry={reload}
+                    />
+                  </div>
+                )}
+          </div>
         </section>
 
-        {/*
-          The safety row the canvas puts last. It is not the guardrail below it
-          and must not be folded into it: the guardrail is the product-wide
-          boundary on what Eadwyn will ever do, this is what happens to THIS
-          page's text. `ASSIST_SURFACES.workspace.footer` has carried the
-          sentence since the surface was registered and nothing on this rail
-          read it.
-        */}
-        {surface.footer?.kind === 'screened' && (
-          <div className="fwr-screened" data-testid="text-worker-rail-screened">
-            <i>Screened</i>
-            <p>{surface.footer.note}</p>
-          </div>
-        )}
-
-        <footer className="fwr-foot">
-          <ShieldCheck size={13} />
-          <div>
-            <strong>{EADWYN_GUARDRAIL.title}</strong>
-            <p>{EADWYN_GUARDRAIL.body}</p>
-            <p className="fwr-foot-note">{footer}</p>
-          </div>
-        </footer>
+        {/* THE SAFETY LINE the canvas puts last, in the desk's own words
+            (`ASSIST_SURFACES.workspace.desks`). The chip says "Drafts only",
+            not the canvas's "Screened": the runs this rail describes are not
+            passed through the guard model, and a chip saying they were would
+            be a claim the Worker does not make true. */}
+        <div className="fwr-screened" data-testid="text-worker-rail-screened">
+          <i>Drafts only</i>
+          <p>{safetyNote}</p>
+        </div>
       </div>
   );
 

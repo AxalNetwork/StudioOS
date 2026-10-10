@@ -33,10 +33,10 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 const HOOK = 'frontend/src/hooks/useAiSpend.js';
 
-/** The rendered `Usage this month` block of WorkerRail, from source. */
+/** The rendered `Usage` block of WorkerRail (AIRail canvas), from source. */
 function usageBlock() {
   const src = codeOnly(read(RAIL));
-  const from = src.indexOf('<span>Usage this month</span>');
+  const from = src.indexOf('<span>Usage</span>');
   assert.ok(from > 0, 'the usage block was not found');
   return src.slice(from, src.indexOf('</section>', from));
 }
@@ -81,9 +81,19 @@ test('WorkerRail: a failed usage read is Unreadable with a retry, never "Not rec
 
 test('WorkerRail: a failed pricing read draws the model block, saying so', () => {
   const src = codeOnly(read(RAIL));
-  const gate = /\{!priced && pricingError && \(\s*<section[^>]*>\s*<span>Model · this page<\/span>\s*<Unreadable[\s\S]{0,200}?onRetry=\{reload\}/;
+  const gate = /\{!view\.cards\.length && pricingError && \(\s*<section[^>]*>\s*<span>Model · this page<\/span>\s*<Unreadable[\s\S]{0,200}?onRetry=\{reload\}/;
   assert.match(src, gate,
     'a failed pricing read renders nothing — the model block vanishes and reads as "no model here"');
+});
+
+test('WorkerRail: a failed allowance read is Unreadable with a retry, never a $0.00 bar', () => {
+  const src = codeOnly(read(RAIL));
+  const fn = src.slice(src.indexOf('export function RailAllowance('), src.indexOf('export function RailPageUsage('));
+  assert.ok(fn.length > 100, 'RailAllowance could not be located');
+  assert.match(fn, /const month = allowanceMonth\(reading\.budget, reading\.budgetError\);\s*if \(!month\) \{[\s\S]{0,200}?<Unreadable[\s\S]{0,200}?onRetry=\{reading\.reload\}/,
+    'an unread allowance draws something other than Unreadable');
+  // No cap draws no "of $…" and no bar.
+  assert.match(fn, /month\.cap > 0 \? spendMeter\(month\.spent, month\.cap\) : null/);
 });
 
 test('WorkerRail: no zero stands in for the cap', () => {

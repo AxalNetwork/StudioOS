@@ -4,6 +4,7 @@
  * #1023), and the chip, the strip and the stated limit all say so instead of
  * counting a review that cannot exist. IP1 "Add follow-on" stays admin-only.
  */
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
@@ -21,11 +22,15 @@ test('IP2: the Parse review chip cannot be selected and says the decision is ope
   assert.match(chip.title, /not decided yet/);
 });
 
-test('IP2: the page’s rail says parsing is not decided, and never counts a review', () => {
+test('IP2: the page says parsing is not decided, and never counts a review', () => {
   // The first render is the page before its reads land: the rail is drawn, the
   // strip is not, and a figure for Parse review must not appear in either.
   const t = renderedText(renderToStaticMarkup(createElement(MemoryRouter, null, createElement(InvestorPortfolioUpdates))));
-  assert.match(t, /Parse reviewNo parse-review or extraction-rule fields are returned by the source, and whether updates are parsed at all is not decided yet\./);
+  // The page's own strip says it once the reads land. The rail said it too,
+  // in an "Unavailable here" note, until that block left with the AIRail
+  // canvas (owner, 2026-10-10).
+  const src = readFileSync(new URL('../src/pages/investor/InvestorPortfolioUpdates.jsx', import.meta.url), 'utf8');
+  assert.match(src, /<Stat label="Parse review" value="Not decided" note="Whether updates are parsed is the owner’s decision/);
   assert.doesNotMatch(t, /Parse review\s*\d/, 'parse review was counted');
 });
 

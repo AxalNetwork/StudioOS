@@ -87,7 +87,7 @@ test('no run is null, so the rail decides what absence looks like', () => {
 /** The Usage block of the rail, from source. */
 function usageBlock() {
   const src = codeOnly(read(RAIL));
-  const from = src.indexOf('<span>Usage this month</span>');
+  const from = src.indexOf('<span>Usage</span>');
   assert.ok(from > 0, 'the usage block was not found');
   return src.slice(from, src.indexOf('</section>', from));
 }
@@ -106,14 +106,12 @@ test('the Usage block mounts the per-page half, which draws the lasting receipt'
   const block = pageUsage();
   // D552 step 3: on a page the router records, the receipt is THIS PAGE's,
   // from the page read, and labelled so.
-  assert.match(block, /lastRunReceipt\(page\.last_run, MODEL_COPY\[page\.last_run\.model\]\?\.name\)/);
-  assert.match(block, /<b>Last run · this page<\/b>/);
+  assert.match(block, /`Last run · \$\{lastRunReceipt\(page\.last_run, MODEL_COPY\[page\.last_run\.model\]\?\.name\)\}`/,
+    'the page receipt is not the canvas\'s "Last run · …" line');
   // Elsewhere it is the account's, labelled as the account's. A label that
   // read as "this page" there would state a fact the log lacks.
-  assert.match(block, /lastRunReceipt\(spend\.last_run, MODEL_COPY\[spend\.last_run\.model\]\?\.name\)/,
-    'the receipt is not drawn from the spend report\'s last_run');
-  assert.match(block, /<b>Last run · your account, any page<\/b>/,
-    'the receipt is not labelled as the account\'s');
+  assert.match(block, /`Last run · your account, any page · \$\{lastRunReceipt\(spend\.last_run, MODEL_COPY\[spend\.last_run\.model\]\?\.name\)\}`/,
+    'the account receipt is not drawn from last_run, or is not labelled as the account\'s');
 });
 
 test('a failed last-run read is Unreadable with a retry, not "no runs"', () => {
@@ -126,19 +124,16 @@ test('a failed last-run read is Unreadable with a retry, not "no runs"', () => {
     'an unreadable page last run renders as if there were none');
 });
 
-test('a successful run re-reads the report, so the receipt is current', () => {
+test('the rail runs nothing of its own, so no receipt it draws can go stale behind a run', () => {
+  // The rail's read-back left with the AIRail canvas (owner, 2026-10-10). It
+  // used to re-read the report after its own run; it no longer runs one.
   const src = codeOnly(read(RAIL));
-  const body = src.slice(src.indexOf('const readBack = useCallback'), src.indexOf('} catch (e) {', src.indexOf('const readBack = useCallback')));
-  assert.match(body, /setRun\(\{ state: 'done'[^\n]*\n[\s\S]*?reload\(\);/,
-    'a run completes and the lasting receipt keeps describing the one before it');
-  // The dependency list, not its exact spelling: D404 added `pagePath` to it.
-  const deps = src.slice(src.indexOf('} catch (e) {', src.indexOf('const readBack = useCallback')));
-  assert.match(deps, /^[\s\S]*?\}, \[[^\]]*\breload\b[^\]]*\]\);/,
-    'readBack closes over a stale reload');
+  assert.doesNotMatch(src, /const readBack|setRun\(|api\.aiWorkspaceExplain/, 'the rail runs a model again');
 });
 
-test('an unreadable task breakdown does not claim "no runs of this yet"', () => {
+test('an unreadable task breakdown does not claim "no runs yet"', () => {
   const src = codeOnly(read(RAIL));
-  assert.match(src, /spend\?\.by_task_recorded === false\s*\?\s*<Unreadable[^>]*onRetry=\{reload\}/,
+  const card = src.slice(src.indexOf('export function RailModelCard('), src.indexOf('export function RailAllowance('));
+  assert.match(card, /if \(spend\?\.by_task_recorded === false\) \{\s*return <span[^>]*>\{`\$\{label\}Your average could not be read\.`\}<\/span>;/,
     'a failed by_task read renders the no-history sentence');
 });

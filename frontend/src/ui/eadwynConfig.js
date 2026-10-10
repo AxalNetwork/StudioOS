@@ -141,13 +141,35 @@ export const ASSIST_SURFACES = {
     // D551; Research's one run is Ask, which is a question pressed on
     // purpose, not a blank filled.
     desks: {
-      Validate: { fills: 'Transcribes recordings, tags logged phrases into your themes, and drafts hypothesis cards.' },
-      Build: { fills: 'Drafts a Monday plan from what moved, summarises the week on the board for a Friday retro, argues one roadmap ordering, and annotates the metric that moved most.' },
-      Raise: { fills: 'Reads your round back step by step, explains the clauses in stored documents, reads the data room, explains the order of payment, and phrases the fix for one narrative mismatch.' },
-      Grow: { fills: 'Ranks applicants with reasons, and drafts an outreach sequence opened on your own recorded pains.' },
-      Network: { fills: 'Drafts a re-engagement note to the contact going coldest, and an intro email for an accepted introduction.' },
-      Research: { none: 'No switch here. A question runs only when you press Ask, and is answered from your own library; nothing on this desk fills a blank.' },
+      Validate: {
+        fills: 'Transcribes recordings, tags logged phrases into your themes, and drafts hypothesis cards.',
+        safety: 'Nothing on this page is sent to anyone. Every AI result is a proposal until you accept it.',
+      },
+      Build: {
+        fills: 'Drafts a Monday plan from what moved, summarises the week on the board for a Friday retro, argues one roadmap ordering, and annotates the metric that moved most.',
+        safety: 'An internal page. Every draft is yours to keep or discard, and nothing is sent.',
+      },
+      Raise: {
+        fills: 'Reads your round back step by step, explains the clauses in stored documents, reads the data room, explains the order of payment, and phrases the fix for one narrative mismatch.',
+        safety: 'Drafts stay here until you use them. Nothing reaches an investor without your click.',
+      },
+      Grow: {
+        fills: 'Ranks applicants with reasons, and drafts an outreach sequence opened on your own recorded pains.',
+        safety: 'Outreach is drafted, never sent. Sending is always your click.',
+      },
+      Network: {
+        fills: 'Drafts a re-engagement note to the contact going coldest, and an intro email for an accepted introduction.',
+        safety: 'Intro emails are drafted, never sent. Sending is always your click.',
+      },
+      Research: {
+        none: 'No switch here. A question runs only when you press Ask, and is answered from your own library; nothing on this desk fills a blank.',
+        safety: 'Answers come from your own library and stay in your account.',
+      },
     },
+    // THE SAFETY LINE on every other rail (AIRail canvas, last row): what
+    // happens to a draft made on the page. A desk above says it in its own
+    // words.
+    safety: 'Drafted from this page only. Nothing is sent without your click.',
   },
   // `market` lived here until D317: the Spin-Out Lab's market page was its
   // only mount, and the Lab carries no Eadwyn rail. The page's own switch now

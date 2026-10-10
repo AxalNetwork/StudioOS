@@ -40,7 +40,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
-import { codeOnlyJsx } from './_codeOnly.mjs';
+import { codeOnly, codeOnlyJsx } from './_codeOnly.mjs';
 
 const ROOT = resolve(process.cwd());
 const SRC = resolve(ROOT, 'frontend/src');
@@ -209,10 +209,23 @@ test('no mount passes a prop WorkerRail does not declare', () => {
       .map((m) => m[1] || m[2])
       .filter(Boolean),
   );
-  assert.ok(declared.has('workspace') && declared.has('coverage') && declared.has('data-testid'),
+  assert.ok(declared.has('workspace') && declared.has('note') && declared.has('data-testid'),
     `the parameter list did not parse — got ${[...declared].join(', ')}`);
+  // RETIRED, NOT DISCARDED BY ACCIDENT (owner, 2026-10-10). The AIRail canvas
+  // dropped the blocks these fed; the component names them in one list, and
+  // the second half of this test proves it reads none of them.
+  const retiredList = /export const RETIRED_RAIL_PROPS = \[([^\]]*)\]/.exec(component);
+  assert.ok(retiredList, 'RETIRED_RAIL_PROPS is gone; every prop a mount passes must be declared again');
+  const retired = new Set([...retiredList[1].matchAll(/'([\w-]+)'/g)].map((m) => m[1]));
+  for (const name of retired) {
+    assert.ok(!declared.has(name), `${name} is retired and declared at once`);
+  }
+  const body = codeOnly(component.slice(open)).replace(/export const RETIRED_RAIL_PROPS[^\n]*/, '');
+  for (const name of retired) {
+    assert.doesNotMatch(body, new RegExp(`\\b${name}\\b`), `the rail reads the retired prop ${name}`);
+  }
 
-  const ALWAYS_OK = new Set(['key', 'ref']);
+  const ALWAYS_OK = new Set(['key', 'ref', ...retired]);
   const bad = [];
   for (const m of MOUNTS) {
     for (const name of m.attrs) {

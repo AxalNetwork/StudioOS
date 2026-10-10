@@ -21,26 +21,25 @@ const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 
 // The line this file used to pin, `pageSpendLine` over `by_surface`, is gone:
 // D552 step 3 reads the page's month directly (`?surface=`) and its sentence
-// is `pageMonthLine`, pinned with the rest of the per-page states in
+// is drawn by `RailPageUsage`, pinned with the rest of the per-page states in
 // `worker_rail_page_spend_d552.test.mjs`, the unattributed caveat included.
 
 // ── The rail ────────────────────────────────────────────────────────────
 
-test('the rail sends the page it sits on, in the shape the router stores', () => {
+test('the rail reads the page it sits on, in the shape the router stores', () => {
+  // The rail no longer runs a model (owner, 2026-10-10), so it sends no page;
+  // it still READS this page's spend, keyed the way normaliseSurface stores it.
   const src = codeOnly(read(RAIL));
-  assert.match(src, /page: pagePath \|\| undefined,/, 'the read-back does not send its page');
   assert.match(src, /const pagePath = String\(pathname \|\| ''\)\.replace\(\/\\\/\+\$\/, ''\)/,
     'the page is not normalised the way normaliseSurface stores it');
-  assert.match(src, /\}, \[workspace, stance, coverage, activeModel, scopeBranch, reload, budgetReading\.reload, pagePath\]\);/,
-    'readBack closes over a stale page');
+  assert.match(src, /useAiSpend\(\{ page: pagePath \}\)/, 'the rail does not read this page\'s spend');
+  // The read-back route keeps the page for any caller.
   const api = codeOnly(read('frontend/src/lib/api.js'));
   const method = api.slice(api.indexOf('aiWorkspaceExplain:'), api.indexOf('aiWorkspaceExplain:') + 400);
   assert.match(method, /JSON\.stringify\(\{[^}]*\bpage\b[^}]*\}\)/, 'the api method drops the page');
 });
 
-test('the rail splits the month by page from by_surface, and a failed grouping is Unreadable', () => {
+test('the rail draws no spend-by-page list: the AIRail canvas has none', () => {
   const src = codeOnly(read(RAIL));
-  assert.match(src, /spend\.by_surface_recorded === false\s*\?\s*\(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,200}?onRetry=\{onRetry\}/,
-    'a failed per-page read is not Unreadable with a retry');
-  assert.match(src, /splitByPage\(spend\.by_surface, pagePath\)/);
+  assert.doesNotMatch(src, /list-worker-rail-by-page|splitByPage/, 'the by-page list is drawn again');
 });

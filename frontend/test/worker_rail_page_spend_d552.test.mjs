@@ -20,7 +20,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { RailPageUsage } from '../src/ui/WorkerRail.jsx';
-import { RECORDABLE_PAGE_RE, isRecordablePage, pageMonthLine, splitByPage } from '../src/ui/assistCost.js';
+import { RECORDABLE_PAGE_RE, isRecordablePage } from '../src/ui/assistCost.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = '/research/funds/catalog/fund-42';
@@ -68,31 +68,29 @@ function part(html, id) {
 
 // ── This page's month ───────────────────────────────────────────────────
 
-test('a page with runs this month reads its own spend and run count', () => {
-  const h = render();
-  assert.equal(part(h, 'text-worker-rail-page-spend'), 'This page this month: $0.0005 over 1 run.');
-  assert.equal(pageMonthLine(report({ month: { spend_usd: 0.012, calls: 3 } })), 'This page this month: $0.0120 over 3 runs.');
+test('a page with runs this month reads its own spend (AIRail canvas: "This page this month · $…")', () => {
+  // A fraction of a cent keeps four places, because two would print $0.00 and
+  // read as free; a cent or more prints as money.
+  assert.equal(part(render(), 'text-worker-rail-page-spend'), 'This page this month · $0.0005');
+  assert.equal(part(render({ pageSpend: report({ month: { spend_usd: 2.27, calls: 3 } }) }), 'text-worker-rail-page-spend'),
+    'This page this month · $2.27');
 });
 
 test('a page with no run ever says "No run on this page yet", and names the runs with no page', () => {
   const h = render({ pageSpend: report({ month: { calls: 0, spend_usd: 0 }, last_run: null, last_run_reason: 'x' }) });
   const line = part(h, 'text-worker-rail-page-spend');
-  assert.match(line, /^No run on this page yet\. 2 runs this month carry no page/);
+  assert.equal(line, 'No run on this page yet. Some of this month\'s runs carry no page.');
   assert.doesNotMatch(line, /\$0\.0000/, 'a zero page drew a $0 figure');
   assert.equal(part(h, 'text-worker-rail-last-run'), null, 'no run, and a receipt was drawn anyway');
 });
 
 test('"yet" is said only when the last-run read found none', () => {
+  const line = (over) => part(render({ pageSpend: report({ month: { calls: 0, spend_usd: 0 }, ...over }) }), 'text-worker-rail-page-spend');
   // Runs before this month: the page has a last run, so "yet" would be false.
-  assert.equal(pageMonthLine(report({ month: { calls: 0, spend_usd: 0 }, unattributed: null })),
-    'No run on this page this month.');
+  assert.equal(line({ unattributed: null }), 'No run on this page this month.');
   // The last run could not be read: "yet" would be a claim.
-  assert.equal(pageMonthLine(report({ month: { calls: 0, spend_usd: 0 }, unattributed: null, last_run: null, last_run_recorded: false })),
-    'No run on this page this month.');
-  assert.equal(pageMonthLine(report({ month: { calls: 0, spend_usd: 0 }, unattributed: { calls: 0, spend_usd: 0 }, last_run: null })),
-    'No run on this page yet.');
-  assert.match(pageMonthLine(report({ month: { calls: 0, spend_usd: 0 }, unattributed: { calls: 1, spend_usd: 0.001 }, last_run: null })),
-    /^No run on this page yet\. 1 run this month carries no page/);
+  assert.equal(line({ unattributed: null, last_run: null, last_run_recorded: false }), 'No run on this page this month.');
+  assert.equal(line({ unattributed: { calls: 0, spend_usd: 0 }, last_run: null }), 'No run on this page yet.');
 });
 
 test('a failed page read is Unreadable with a retry, never a zero', () => {
@@ -113,9 +111,9 @@ test('a failed page read is Unreadable with a retry, never a zero', () => {
 
 // ── This page's last run ────────────────────────────────────────────────
 
-test('the receipt is this page\'s last run, labelled as this page\'s', () => {
+test('the receipt is this page\'s last run, under this page\'s month', () => {
   const line = part(render(), 'text-worker-rail-last-run');
-  assert.match(line, /^Last run · this page/);
+  assert.match(line, /^Last run · Llama 3\.3 70B Fast · /);
   assert.match(line, /120 in \/ 40 out · \$0\.0005/);
   assert.doesNotMatch(line, /900 in/, 'the account\'s last run was drawn as this page\'s');
 });
@@ -123,7 +121,7 @@ test('the receipt is this page\'s last run, labelled as this page\'s', () => {
 test('an unreadable page last run is Unreadable, not "no run"', () => {
   const h = render({ pageSpend: report({ last_run: null, last_run_recorded: false }) });
   assert.match(part(h, 'text-worker-rail-last-run'), /This page's last run could not be read\. That is not a claim that it has none\.\s*Retry/);
-  assert.match(part(h, 'text-worker-rail-page-spend'), /^This page this month:/);
+  assert.match(part(h, 'text-worker-rail-page-spend'), /^This page this month · /);
 });
 
 test('a path the router does not record is not read, and falls back to the account receipt, labelled so', () => {
@@ -136,43 +134,9 @@ test('a path the router does not record is not read, and falls back to the accou
 
 // ── The split by page ───────────────────────────────────────────────────
 
-test('the month is split by page, costliest first, this page marked, runs with no page their own row', () => {
-  const h = render();
-  const list = h.slice(h.indexOf('data-testid="list-worker-rail-by-page"'));
-  const rows = [...list.matchAll(/<li([^>]*)>([\s\S]*?)<\/li>/g)].map((m) => ({ attrs: m[1], text: renderedText(m[2]) }));
-  assert.deepEqual(rows.map((r) => r.text), [
-    '/validate$0.0090 · 3 runs',
-    'No page recorded$0.0060 · 2 runs',
-    '/research/ask$0.0045 · 3 runs',
-    `${PAGE}$0.0005 · 1 run`,
-  ]);
-  assert.deepEqual(rows.map((r) => /aria-current="page"/.test(r.attrs)), [false, false, false, true]);
-});
-
-test('beyond the limit the rest is one row that keeps the total, and this page is never folded into it', () => {
-  const many = Array.from({ length: 8 }, (_, i) => ({ surface: `/p${i}`, calls: 1, spend_usd: (10 - i) / 1000 }));
-  const { rows, rest } = splitByPage([...many, { surface: PAGE, calls: 2, spend_usd: 0.0001 }], PAGE);
-  assert.equal(rows.length, 5);
-  assert.equal(rows[4].surface, PAGE, 'this page fell into "more pages"');
-  assert.equal(rest.pages, 4);
-  assert.equal(rest.calls, 4);
-  assert.ok(Math.abs(rest.spend_usd - 0.018) < 1e-12, `rest spend ${rest.spend_usd}`);
-  const total = rows.reduce((n, r) => n + r.spend_usd, 0) + rest.spend_usd;
-  assert.ok(Math.abs(total - (many.reduce((n, r) => n + r.spend_usd, 0) + 0.0001)) < 1e-12, 'the rows do not add up to the month');
-  assert.deepEqual(splitByPage(many.slice(0, 3), PAGE).rest, null);
-  const h = render({ spend: { ...SPEND, by_surface: many } });
-  const list = h.slice(h.indexOf('data-testid="list-worker-rail-by-page"'));
-  const items = [...list.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => renderedText(m[1]));
-  assert.equal(items.length, 6);
-  assert.equal(items[5], '3 more pages$0.0120 · 3 runs', 'the folded pages were dropped from the split');
-  assert.equal(splitByPage([{ surface: null, calls: 1, spend_usd: 1 }], null).rows[0].current, false,
-    'the no-page row matched an empty page');
-});
-
-test('a failed grouping is Unreadable; an empty month draws no list', () => {
-  const failed = part(render({ spend: { ...SPEND, by_surface: [], by_surface_recorded: false } }), 'list-worker-rail-by-page');
-  assert.match(failed, /Spend by page could not be read\. That is not a claim that no page has spent\./);
-  assert.equal(part(render({ spend: { ...SPEND, by_surface: [] } }), 'list-worker-rail-by-page'), null);
+test('the rail draws no split by page: the AIRail canvas has none (owner, 2026-10-10)', () => {
+  assert.doesNotMatch(render(), /list-worker-rail-by-page/);
+  assert.doesNotMatch(render({ spend: { ...SPEND, by_surface: [], by_surface_recorded: false } }), /Spend by page/);
 });
 
 // ── The read ────────────────────────────────────────────────────────────
