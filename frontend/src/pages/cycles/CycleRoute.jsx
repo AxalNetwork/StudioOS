@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cyclesApi } from '../../lib/api/cycles';
 import { WorkerRail } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
+import ZoneDraft from '../../workspaces/ZoneDraft';
 import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
+import ShareUpdateSheet from '../founder/ShareUpdateSheet';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
+import DurabilityChecklist from './DurabilityChecklist';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import { cycleOf } from './cycleModel';
 import { MODULES } from './modules';
@@ -17,10 +21,10 @@ import { MODULES } from './modules';
 /**
  * D661 (#1474) — a cycle's overview and module pages, wired to its read.
  *
- * `/validate` draws the overview and `/validate/:slug` one module page, from
- * `GET /api/cycles/validate/…` (#1487) through `adapters/validate.js`. The
- * project is `?project_id=`, else the founder's first, as the Validate desk
- * this replaces chose it.
+ * `/<cycle>` draws the overview and `/<cycle>/:slug` one module page, from
+ * `GET /api/cycles/<cycle>/…` through `adapters/` (Validate #1487, Raise
+ * #1501, Grow #1488). The project is `?project_id=`, else the founder's
+ * first, as the desks these replace chose it.
  *
  * THE MODULES' WORKING TOOLS STAY WHERE THEY ARE. No canvas yet draws a
  * module's Add form, a record's edit view, or Validate's curation (merging
@@ -75,6 +79,51 @@ const CYCLE_DEFS = {
     add: toFnMap({}),
     fills: {},
   },
+  /**
+   * Grow's read (#1488, D664) carries its own shapes, so it has an adapter
+   * (`adapters/grow.js`), as Validate does. The primary action is D654's
+   * Share an update, the sheet the Grow desk opened.
+   *
+   * Grow's new stores (feedback, channels, partners, markets) have their
+   * Worker writes but no form yet, so those four link no tool and draw no
+   * Add; their editors follow on #1474. Revenue, roles and obligations link
+   * the pages that edit them today.
+   */
+  grow: {
+    modules: MODULES.grow,
+    action: (q, open) => ({ label: 'Share an update', onClick: open }),
+    sheet: ShareUpdateSheet,
+    tools: toFnMap({
+      'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
+      'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
+      'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
+    }),
+    add: toFnMap({
+      'team-expansion': () => ({ text: 'Post a role', href: '/jobs/new' }),
+    }),
+    fills: {},
+    // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
+    // read: the applicant ranking on Team expansion, the outreach sequence
+    // for sign-ups who have not converted on Distribution.
+    drafts: new Map([
+      ['team-expansion', {
+        surface: 'grow/talent', label: 'Match · why this one', run: 'Rank the applicants', accept: 'Keep this ranking',
+        empty: 'Nothing proposed yet. Eadwyn will rank your applicants and give reasons for the top one — each a receipt you can open and check in their own application.',
+        nothingToDraft: 'No live role has an applicant yet.',
+        foot: 'A reading only. Nothing here moves an application to a screen.',
+      }],
+      ['distribution', {
+        surface: 'grow/customers', label: 'Proposal · outreach sequence', run: 'Draft a sequence', accept: 'Accept sequence',
+        empty: 'Nothing proposed yet. Eadwyn will draft a sequence for the signups who have gone furthest without converting, opening each touch on a pain you have actually recorded.',
+        nothingToDraft: 'No customer signup is recorded for this startup yet.',
+        foot: 'Each opener quotes a pain from your own map, or says none fits.',
+      }],
+    ]),
+    // A module's further parts, drawn under its table from the module read.
+    parts: toFnMap({
+      'durable-company-building': (data) => <DurabilityChecklist items={data?.parts?.checklist} />,
+    }),
+  },
 };
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
@@ -108,6 +157,11 @@ export default function CycleRoute({ cycle }) {
   const name = cycleOf(cycle)?.name || 'Validate';
   const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
+  const navigate = useNavigate();
+  const [sharing, setSharing] = useState(false);
+  const draft = slug && def?.drafts instanceof Map ? def.drafts.get(slug) ?? null : null;
+  // The cost before a run (D424), read only while a band is drawn.
+  const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && draft) });
 
   const [overview, setOverview] = useState(null);
   const [overviewStatus, setOverviewStatus] = useState('loading');
@@ -154,7 +208,8 @@ export default function CycleRoute({ cycle }) {
   if (!def) return null;
   if (!known) return <Navigate to={`/${cycle}${q}`} replace />;
 
-  const action = def.action(q);
+  const action = def.action(q, projectId && def.sheet ? () => setSharing(true) : undefined);
+  const Sheet = def.sheet || null;
   const rail = (
     <WorkerRail
       workspace={name}
@@ -209,6 +264,10 @@ export default function CycleRoute({ cycle }) {
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} onApplied={() => setReload((n) => n + 1)} />
         )}
+        {draft && fillsOn && projectId && (
+          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
+        )}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module)}
       </CycleModulePage>
     );
   }
@@ -218,7 +277,12 @@ export default function CycleRoute({ cycle }) {
   // docks to the edge.
   return (
     <RailFrame rail={rail} data-testid={`cycle-route-${cycle}`}>
-      <div className="min-w-0">{body}</div>
+      <div className="min-w-0">
+        {body}
+        {Sheet && sharing && projectId && (
+          <Sheet projectId={projectId} onClose={() => setSharing(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />
+        )}
+      </div>
     </RailFrame>
   );
 }

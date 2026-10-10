@@ -49,7 +49,10 @@ function T({ x, y, children, size = 10, cls = MUTED, anchor = 'start', weight = 
   return <text x={x} y={y} fontSize={size} textAnchor={anchor} fontWeight={weight} className={cls}>{children}</text>;
 }
 
-const fmt = (v) => (typeof v === 'number' ? v.toLocaleString('en-US') : String(v ?? ''));
+// A spec may say `unit: 'usd'`: its numbers are dollars and read as $1,440.
+const fmt = (v, unit) => (typeof v === 'number'
+  ? (unit === 'usd' ? `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : v.toLocaleString('en-US'))
+  : String(v ?? ''));
 
 export function Legend({ items }) {
   if (!Array.isArray(items) || !items.length) return null;
@@ -76,8 +79,8 @@ function HBar({ spec, label }) {
         return (
           <g key={`${it.label}-${i}`}>
             <T x={0} y={y + 12} size={10.5} cls={INK}>{it.label}</T>
-            {w > 0 && <rect x={170} y={y + 3} width={w} height={12} rx={3} className={tone(it.tone)}><title>{`${it.label}: ${fmt(it.value)}`}</title></rect>}
-            <T x={176 + w} y={y + 13}>{typeof it.value === 'number' ? fmt(it.value) : 'Not recorded'}</T>
+            {w > 0 && <rect x={170} y={y + 3} width={w} height={12} rx={3} className={tone(it.tone)}><title>{`${it.label}: ${fmt(it.value, spec.unit)}`}</title></rect>}
+            <T x={176 + w} y={y + 13}>{typeof it.value === 'number' ? fmt(it.value, spec.unit) : 'Not recorded'}</T>
           </g>
         );
       })}
@@ -99,10 +102,10 @@ function VBars({ spec, label }) {
       <line x1={20} y1={100} x2={520} y2={100} className={AXIS} />
       {vals.map((v, i) => {
         const hh = share(v, mx, 86);
-        return hh > 0 ? <rect key={i} x={24 + i * bw} y={100 - hh} width={Math.max(1, bw - 5)} height={hh} rx={2} className={tone(spec.tone)}><title>{fmt(v)}</title></rect> : null;
+        return hh > 0 ? <rect key={i} x={24 + i * bw} y={100 - hh} width={Math.max(1, bw - 5)} height={hh} rx={2} className={tone(spec.tone)}><title>{fmt(v, spec.unit)}</title></rect> : null;
       })}
       <Axis labels={spec.labels} bw={bw} />
-      <T x={0} y={12} size={9.5}>{fmt(mx)}</T>
+      <T x={0} y={12} size={9.5}>{fmt(mx, spec.unit)}</T>
       <T x={0} y={100} size={9.5}>0</T>
     </Svg>
   );
@@ -121,11 +124,11 @@ function VStack({ spec, label }) {
         return (r || []).map((v, j) => {
           const hh = share(v, mx, 86);
           y -= hh;
-          return hh > 0 ? <rect key={`${i}-${j}`} x={24 + i * bw} y={y} width={Math.max(1, bw - 5)} height={hh} className={tone(spec.tones?.[j])}><title>{fmt(v)}</title></rect> : null;
+          return hh > 0 ? <rect key={`${i}-${j}`} x={24 + i * bw} y={y} width={Math.max(1, bw - 5)} height={hh} className={tone(spec.tones?.[j])}><title>{fmt(v, spec.unit)}</title></rect> : null;
         });
       })}
       <Axis labels={spec.labels} bw={bw} />
-      <T x={0} y={12} size={9.5}>{fmt(mx)}</T>
+      <T x={0} y={12} size={9.5}>{fmt(mx, spec.unit)}</T>
       <T x={0} y={100} size={9.5}>0</T>
     </Svg>
   );
@@ -201,7 +204,7 @@ function Line({ spec, label }) {
   return (
     <Svg h={122} label={label}>
       <line x1={30} y1={104} x2={510} y2={104} className={AXIS} />
-      <T x={0} y={14} size={9.5}>{fmt(Math.round(top / 1.1))}</T>
+      <T x={0} y={14} size={9.5}>{fmt(Math.round(top / 1.1), spec.unit)}</T>
       <T x={0} y={104} size={9.5}>0</T>
       {typeof spec.target === 'number' && (
         <g>
@@ -211,7 +214,7 @@ function Line({ spec, label }) {
       )}
       {plan.map((s, i) => <polyline key={`p${i}`} points={s.join(' ')} fill="none" strokeWidth={1.5} strokeDasharray="5 4" className="stroke-axal-muted" />)}
       {segs.map((s, i) => <polyline key={`s${i}`} points={s.join(' ')} fill="none" strokeWidth={2.2} className="stroke-axal-violet" />)}
-      {vals.map((v, i) => (typeof v === 'number' ? <circle key={i} cx={X(i)} cy={Y(v)} r={2.6} className={TONE.v1}><title>{fmt(v)}</title></circle> : null))}
+      {vals.map((v, i) => (typeof v === 'number' ? <circle key={i} cx={X(i)} cy={Y(v)} r={2.6} className={TONE.v1}><title>{fmt(v, spec.unit)}</title></circle> : null))}
       {typeof spec.mark === 'number' && spec.mark >= 0 && spec.mark < n && (
         <g>
           <line x1={X(spec.mark)} y1={8} x2={X(spec.mark)} y2={104} strokeDasharray="3 3" className="stroke-red-600" />
@@ -282,7 +285,7 @@ function Rows({ spec }) {
       {(spec.items || []).map((it, i) => (
         <div key={`${it.label}-${i}`} className="flex justify-between gap-2.5 border-b border-axal-ground py-[7px] text-[12px] last:border-b-0 dark:border-gray-800">
           <span className="font-semibold text-axal-ink dark:text-gray-100">{it.label}</span>
-          <span className={`text-right ${ROW_TONE[it.tone] || 'text-axal-muted dark:text-gray-400'}`}>{it.value == null ? 'Not recorded' : fmt(it.value)}</span>
+          <span className={`text-right ${ROW_TONE[it.tone] || 'text-axal-muted dark:text-gray-400'}`}>{it.value == null ? 'Not recorded' : fmt(it.value, spec.unit)}</span>
         </div>
       ))}
     </div>

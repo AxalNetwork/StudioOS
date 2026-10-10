@@ -3001,9 +3001,14 @@ function AppInner() {
           and a signed-out visitor goes to sign-in and back to this request. */}
       <Route path="/connect/assistant" element={user ? <ConnectAssistantPage /> : <Navigate to={assistantSignInPath(location)} replace />} />
       <Route path="/updates/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SentUpdatePage />)} />
+      {/* D661 (#1474): a founder's /grow is the cycle overview from #1488's
+          read, and /grow/<module> its module pages. The seven Grow pages
+          below are static and win over /grow/:slug; no module slug is one of
+          them. /build/team still opens the Grow desk until the desk cleanup. */}
       <Route path="/grow" element={founderGrowLanding
-        ? guard(['admin', 'founder'], <FounderGrowDesk />)
+        ? guard(['admin', 'founder'], <CycleRoute cycle="grow" />)
         : <Navigate to="/grow/focus" replace />} />
+      <Route path="/grow/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />

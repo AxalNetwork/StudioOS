@@ -4,6 +4,7 @@
  * whole overview again. `cloudflare-worker/test/cycle_adapters_d661.test.ts`
  * holds each list equal to the Worker's own.
  */
+import { MODULES as GROW } from './adapters/grow.js';
 import { MODULES as VALIDATE } from './adapters/validate.js';
 
 export const MODULES = {
@@ -19,4 +20,6 @@ export const MODULES = {
     { slug: 'use-of-funds', name: 'Use of funds' },
     { slug: 'capital-relationships', name: 'Capital relationships' },
   ],
+  // services/growCycle.ts
+  grow: GROW,
 };

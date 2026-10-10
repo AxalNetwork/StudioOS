@@ -21,7 +21,9 @@ import {
 import CycleOverview, { CycleCard, FigureTile } from '../src/pages/cycles/CycleOverview.jsx';
 import CycleModulePage, { RecordsTable } from '../src/pages/cycles/CycleModulePage.jsx';
 import { Chart } from '../src/pages/cycles/CycleCharts.jsx';
+import DurabilityChecklist from '../src/pages/cycles/DurabilityChecklist.jsx';
 import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixtures.mjs';
+import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/validate') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -135,6 +137,31 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
   assert.equal((route.match(/search=\{q\}/g) || []).length, 2, 'the overview and the module page are handed the venture');
+});
+
+test('GROW: money in a chart reads in dollars, the checklist says what ticked it, and Share an update opens the sheet', () => {
+  // `unit: 'usd'` on a spec: CAC, MRR movements and partner revenue.
+  const hbar = html(h(Chart, { spec: { kind: 'hbar', unit: 'usd', items: [{ label: 'LinkedIn', value: 600 }, { label: 'Ads', value: null }] }, label: 'CAC' }));
+  assert.match(hbar, />\$600</);
+  assert.match(hbar, />Not recorded</, 'a missing CAC is not $0');
+  assert.match(html(h(Chart, { spec: { kind: 'vbars', unit: 'usd', values: [800, 1200] }, label: 'Revenue' })), />\$1,200</);
+  assert.match(html(h(Chart, { spec: { kind: 'rows', unit: 'usd', items: [{ label: 'Partner-sourced revenue', value: 0 }] } })), />\$0</, 'a recorded zero is $0');
+  assert.match(html(h(Chart, { spec: { kind: 'hbar', items: [{ label: 'Talking', value: 6 }] }, label: 'Partners' })), />6</, 'a count has no $');
+  const list = html(h(DurabilityChecklist, { items: [
+    { key: 'ein_received', label: 'Tax ID (EIN) received', done: true, source: 'Spin-Out Lab', done_at: '2026-09-01T00:00:00Z' },
+    { key: 'key_person_cover', label: 'Key-person cover set up', done: true, source: 'manual', done_at: null },
+    { key: 'board_cadence', label: 'Board meeting cadence agreed', done: false, source: null, done_at: null },
+  ] }));
+  assert.match(text(list), /Durability checklist 2 of 3 done/);
+  assert.match(text(list), /Tax ID \(EIN\) received Done · Spin-Out Lab · 2026-09-01/);
+  assert.match(text(list), /Key-person cover set up Done · typed/);
+  assert.match(text(list), /Board meeting cadence agreed Not done/);
+  assert.equal(html(h(DurabilityChecklist, { items: null })), '', 'nothing to list draws nothing');
+  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', onClick: open \}\)/);
+  assert.match(route, /sheet: ShareUpdateSheet/);
+  assert.match(route, /<Sheet projectId=\{projectId\} onClose=\{\(\) => setSharing\(false\)\} onSent=\{\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`\)\} \/>/,
+    'a sent update opens its page, as it did from the Grow desk');
 });
 
 // ------------------------------------------------------------------ the screens
@@ -283,18 +310,23 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
 
 // ------------------------------------------------------------------ not mounted yet
 
-test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: Validate and Raise are; Build and Grow keep their desks', () => {
+test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: Validate, Raise and Grow are; Build keeps its desk', () => {
   const app = read('frontend/src/App.jsx');
   const cyclesApi = read('frontend/src/lib/api/cycles.js');
   // The one route component, mounted per cycle by a literal name.
   const mounted = [...app.matchAll(/<CycleRoute cycle="([a-z]+)" \/>/g)].map((m) => m[1]);
   const wired = [...cyclesApi.matchAll(/^ {2}([a-z]+): \{$/gm)].map((m) => m[1]);
-  assert.deepEqual([...new Set(mounted)].sort(), ['raise', 'validate'], 'only Validate and Raise are mounted');
+  assert.deepEqual([...new Set(mounted)].sort(), ['grow', 'raise', 'validate'], 'only Validate, Raise and Grow are mounted');
   for (const c of new Set(mounted)) assert.ok(wired.includes(c), `${c} is mounted with no read in lib/api/cycles.js`);
   assert.match(app, /<Route path="\/validate\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="validate" \/>\)\} \/>/, 'Validate has its module pages');
   assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="raise" \/>\)\} \/>/, 'Raise has its module pages');
   assert.match(app, /<Route path="\/build" element=\{founderBuildLanding/, '/build keeps its desk');
-  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding/, '/grow keeps its desk');
+  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/, "a founder's /grow is the Grow overview");
+  assert.match(app, /<Route path="\/grow\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)\} \/>/, 'Grow has its module pages');
+  // The seven Grow pages keep their static routes, and no module slug is one of them.
+  const growPages = ['focus', 'talent', 'customers', 'partnerships', 'capital-match', 'brand', 'launch'];
+  for (const page of growPages) assert.ok(app.includes(`<Route path="/grow/${page}"`), `/grow/${page} lost its route`);
+  for (const m of LIVE_MODULES.grow) assert.ok(!growPages.includes(m.slug), `${m.slug} would be shadowed by a Grow page`);
   // Raise's tools keep their static routes, which win over /raise/:slug.
   for (const tool of ['/raise/pitch', '/raise/data-room', '/raise/capital/cap-table', '/raise/capital/model', '/raise/capital/pipeline']) {
     assert.ok(app.includes(`<Route path="${tool}"`), `${tool} lost its route`);
@@ -305,7 +337,7 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: Validate and Raise are; Bu
     assert.match(app, new RegExp(`<Route path="/validate/${zone}" element=\\{guard\\([^)]*\\), <FounderValidateWorkspace />\\)\\} />`), `/validate/${zone} lost its working tool`);
   }
   assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'the cycle client lives in lib/api/cycles.js, not api.js');
-  for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx', 'adapters/index.js', 'adapters/validate.js']) {
+  for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx', 'DurabilityChecklist.jsx', 'adapters/index.js', 'adapters/validate.js', 'adapters/grow.js']) {
     assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|from '\.\.\/\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);
   }
 });

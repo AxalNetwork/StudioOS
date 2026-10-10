@@ -383,7 +383,8 @@ const WORKSPACES = {
   Build: ['/build', 'FounderBuildDesk'],
   // D661 (#1474): Raise's root is the cycle overview, wired to #1501's read.
   Raise: ['/raise', 'CycleRoute cycle="raise"'],
-  Grow: ['/grow', 'FounderGrowDesk'],
+  // D661 (#1474): Grow's root is the cycle overview, wired to #1488's read.
+  Grow: ['/grow', 'CycleRoute cycle="grow"'],
   Network: ['/network', 'FounderNetworkDesk'],
   Research: ['/research', 'FounderResearchDesk'],
 };

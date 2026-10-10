@@ -82,6 +82,8 @@ export function cardView(card) {
  *   bands     items: [{ label, value, source? }]   (total, serviceable, obtainable)
  *
  * Tones are names, never colours: v1, v2, v3, grey, ok, warn, bad, muted.
+ * `unit: 'usd'` on an hbar, vbars, vstack, line or rows spec says its numbers
+ * are dollars, so they read as $1,440 (Grow's CAC, MRR and partner revenue).
  */
 export const CHART_KINDS = ['hbar', 'vbars', 'vstack', 'funnel', 'stack', 'line', 'timeline', 'tiles', 'dots', 'rows', 'progress', 'big', 'heat', 'bands'];
 
