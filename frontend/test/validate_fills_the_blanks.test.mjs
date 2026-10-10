@@ -118,6 +118,8 @@ const CYCLES = {
       [/clauses/i, 'raise/legal'],
       [/data room/i, 'raise/data-room'],
       [/order of payment/i, 'raise/liquidity'],
+      // #1524 item 3 — on Investor narrative, the check's mismatch phrased.
+      [/narrative mismatch/i, 'raise/narrative-fix'],
     ],
   },
   Grow: {
