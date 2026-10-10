@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
 import { CardBody, CycleHeader } from './CycleOverview';
-import { cardView, cellView, cycleOf, pageButtons, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, nextHref, pageButtons, recordsCount, safeHref } from './cycleModel';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -143,7 +143,7 @@ export default function CycleModulePage({
   const view = cardView(card);
   const name = card?.name || data?.module?.name || slug;
   const next = card?.next;
-  const nextHref = safeHref(next?.href);
+  const nextLink = nextHref(next?.href, search);
   const toolHref = safeHref(tool?.href);
   const recs = records ?? data?.records;
   return (
@@ -160,11 +160,11 @@ export default function CycleModulePage({
               <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{name}</h2>
               {card?.range && <span className="text-[11px] text-axal-faint dark:text-gray-500">{card.range}</span>}
             </div>
-            <CardBody card={card} onRetry={onRetry} />
+            <CardBody card={card} onRetry={onRetry} search={search} />
             {view.state === 'ok' && card.caption && <span className="text-[12.5px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{card.caption}</span>}
             {view.state === 'ok' && next?.text && (
               <span className="text-[12px] text-axal-muted dark:text-gray-400">
-                Next: {nextHref ? <Link to={nextHref} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{next.text}</Link> : next.text}
+                Next: {nextLink ? <Link to={nextLink} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{next.text}</Link> : next.text}
               </span>
             )}
           </section>

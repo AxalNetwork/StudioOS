@@ -16,7 +16,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import {
   CARD_STATES, CHART_KINDS, CYCLES, MIN_POINTS, cardView, cellView, cycleOf, cycleTabs, drawable, drawableSeries,
-  figureDelta, figureValue, lineSegments, moduleQuery, pageButtons, recordsCount, safeHref, share, sparkDrawable,
+  figureDelta, figureValue, lineSegments, moduleQuery, nextHref, pageButtons, recordsCount, safeHref, share, sparkDrawable,
 } from '../src/pages/cycles/cycleModel.js';
 import CycleOverview, { CycleCard, FigureTile } from '../src/pages/cycles/CycleOverview.jsx';
 import CycleModulePage, { RecordsTable } from '../src/pages/cycles/CycleModulePage.jsx';
@@ -160,8 +160,38 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', onClick: open \}\)/);
   assert.match(route, /sheet: ShareUpdateSheet/);
-  assert.match(route, /<Sheet projectId=\{projectId\} onClose=\{\(\) => setSharing\(false\)\} onSent=\{\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`\)\} \/>/,
+  assert.match(route, /<Sheet projectId=\{projectId\} onClose=\{\(\) => setSheetOpen\(false\)\} onSent=\{\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`\)\} \/>/,
     'a sent update opens its page, as it did from the Grow desk');
+});
+
+test('BUILD: the one way to create a startup survives, next links keep the venture, and single-part stacks share a scale', () => {
+  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  // `/build?new=1` is the only address for creating a startup (sixteen links,
+  // the Command Palette's among them). The Build cycle page carries the form.
+  assert.match(route, /creates: true,/);
+  assert.match(route, /useState\(\(\) => creates && searchParams\.get\('new'\) === '1'\)/, 'seeded from ?new=1 on mount');
+  assert.match(route, /useEffect\(\(\) => \{\s*if \(creates && searchParams\.get\('new'\) === '1'\) setCreating\(true\);\s*\}, \[creates, searchParams\]\)/,
+    'and followed when ?new=1 arrives on an already-mounted page');
+  assert.match(route, /<CreateStartupForm\s+open=\{creating\}/);
+  assert.match(route, /onCreated=\{\(\) => setProjectsKey\(\(n\) => n \+ 1\)\}/, 'a new startup is read back');
+  assert.match(route, /to="\/build\?new=1" data-testid="cycle-create-venture"/, 'every other cycle with no venture points at the form');
+  assert.match(route, /action: \(q, open\) => \(\{ label: 'Connect a tool', onClick: open \}\),\s*sheet: ConnectToolSheet/);
+  for (const surface of ['build/roadmap', 'build/this-week', 'build/retro', 'build/kpi']) assert.ok(route.includes(`surface: '${surface}'`), `the Build desk's ${surface} band was dropped`);
+  // A read's next link with no query of its own keeps the chosen venture.
+  assert.equal(nextHref('/build/prototype-mvp', '?project_id=7'), '/build/prototype-mvp?project_id=7');
+  assert.equal(nextHref('/validate/problem-discovery?project=7', '?project_id=9'), '/validate/problem-discovery?project=7', 'a link that names its venture is left alone');
+  assert.equal(nextHref('https://evil.test/x', '?project_id=7'), null);
+  assert.equal(nextHref('/build/x', 'nope'), '/build/x');
+  const empty = { slug: 'company-creation', name: 'Company creation', state: 'empty', series: [], reason: 'No filings yet.', next: { text: 'Add a filing', href: '/build/company-creation' } };
+  assert.match(html(h(CycleCard, { cycle: 'build', card: empty, search: '?project_id=7' }), '/build'), /href="\/build\/company-creation\?project_id=7"/);
+  // Now / Next / Later: one part per row, so the rows share one scale.
+  const roadmap = html(h(Chart, { spec: { kind: 'stack', rows: [{ label: 'Now', parts: [6] }, { label: 'Next', parts: [3] }, { label: 'Later', parts: [0] }], tones: ['v1'] } }));
+  const widths = [...roadmap.matchAll(/<rect[^>]*width="([\d.]+)"/g)].map((m) => Number(m[1]));
+  assert.deepEqual(widths, [359, 179], 'Now is the longest bar and Next half of it; Later draws none');
+  assert.match(text(roadmap), /Later 0/, 'a recorded zero row says 0, not Not recorded');
+  const shares = html(h(Chart, { spec: { kind: 'stack', rows: [{ label: 'Spain', parts: [8, 2] }, { label: 'France', parts: [1, 1] }], tones: ['v1', 'v2'] } }));
+  const shareWidths = [...shares.matchAll(/<rect[^>]*width="([\d.]+)"/g)].map((m) => Number(m[1]));
+  assert.deepEqual(shareWidths, [287, 71, 179, 179], 'rows with several parts still split their own total');
 });
 
 // ------------------------------------------------------------------ the screens
@@ -310,17 +340,22 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
 
 // ------------------------------------------------------------------ not mounted yet
 
-test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: Validate, Raise and Grow are; Build keeps its desk', () => {
+test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with its module pages', () => {
   const app = read('frontend/src/App.jsx');
   const cyclesApi = read('frontend/src/lib/api/cycles.js');
   // The one route component, mounted per cycle by a literal name.
   const mounted = [...app.matchAll(/<CycleRoute cycle="([a-z]+)" \/>/g)].map((m) => m[1]);
   const wired = [...cyclesApi.matchAll(/^ {2}([a-z]+): \{$/gm)].map((m) => m[1]);
-  assert.deepEqual([...new Set(mounted)].sort(), ['grow', 'raise', 'validate'], 'only Validate, Raise and Grow are mounted');
+  assert.deepEqual([...new Set(mounted)].sort(), ['build', 'grow', 'raise', 'validate'], 'all four cycles are mounted');
   for (const c of new Set(mounted)) assert.ok(wired.includes(c), `${c} is mounted with no read in lib/api/cycles.js`);
   assert.match(app, /<Route path="\/validate\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="validate" \/>\)\} \/>/, 'Validate has its module pages');
   assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="raise" \/>\)\} \/>/, 'Raise has its module pages');
-  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding/, '/build keeps its desk');
+  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)/, "a founder's /build is the Build overview");
+  assert.match(app, /<Route path="\/build\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)\} \/>/, 'Build has its module pages');
+  // Every Build page keeps its static route, and no module slug is one of them.
+  const buildPages = [...app.matchAll(/<Route path="\/build\/([a-z-]+)"/g)].map((m) => m[1]);
+  for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.ok(buildPages.includes(page), `/build/${page} lost its route`);
+  for (const m of LIVE_MODULES.build) assert.ok(!buildPages.includes(m.slug), `${m.slug} would be shadowed by a Build page`);
   assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/, "a founder's /grow is the Grow overview");
   assert.match(app, /<Route path="\/grow\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)\} \/>/, 'Grow has its module pages');
   // The seven Grow pages keep their static routes, and no module slug is one of them.

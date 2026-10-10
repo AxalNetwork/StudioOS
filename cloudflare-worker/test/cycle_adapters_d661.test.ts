@@ -543,3 +543,134 @@ test('D661: an empty Grow venture draws nothing as 0, and a table that cannot be
   assert.equal(d.records.state, 'unreadable');
   assert.match(d.records.reason, /could not be read/);
 });
+
+// ── Build (#1475, D662): already in D661's shape, so it passes through ─────
+
+import cycleBuild from '../src/routes/cycle_build.ts';
+
+const BP = 101;
+
+/** The tables cycle_build_d662 builds its fixture from, plus migration 441. */
+function buildFixture() {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec(`
+    CREATE TABLE users(id INTEGER PRIMARY KEY, role TEXT, founder_id INTEGER, spinout_lab_active INTEGER DEFAULT 0, name TEXT, is_active INTEGER DEFAULT 1, jwt_min_iat INTEGER DEFAULT 0);
+    CREATE TABLE super_admins(user_id INTEGER PRIMARY KEY);
+    CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
+    CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
+    CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
+    CREATE TABLE projects(id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, incorporation_meta TEXT, cofounder_decision_meta TEXT, deleted_at TEXT);
+    CREATE TABLE mvp_features(id INTEGER PRIMARY KEY, project_id INTEGER, title TEXT, added_value TEXT DEFAULT 'High', effort TEXT DEFAULT 'M', delivery_status TEXT DEFAULT 'Backlog', sort_order INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE pain_groups(id INTEGER PRIMARY KEY, project_id INTEGER, title TEXT);
+    CREATE TABLE hypotheses(id INTEGER PRIMARY KEY, project_id INTEGER, claim TEXT);
+    CREATE TABLE roadmap_okrs(id INTEGER PRIMARY KEY, project_id INTEGER, objective TEXT, kanban_status TEXT, sort_order INTEGER DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE okr_column_moves(id INTEGER PRIMARY KEY, project_id INTEGER, okr_id INTEGER, to_status TEXT, moved_at TEXT);
+    CREATE TABLE cap_table_holders(id INTEGER PRIMARY KEY, user_id INTEGER, project_id INTEGER, name TEXT, shares REAL, ownership_pct REAL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE cap_table_vesting(id INTEGER PRIMARY KEY, user_id INTEGER, holder_id INTEGER, start_date TEXT, cliff_months INTEGER, total_months INTEGER, vested_shares REAL);
+    CREATE TABLE documents(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, template_name TEXT, created_at TEXT);
+    CREATE TABLE cofounder_agreement_parties(id INTEGER PRIMARY KEY, document_id INTEGER, user_id INTEGER);
+    CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
+    CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE integrations(id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT);
+    CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
+    CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
+    CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
+    CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, action TEXT, details TEXT, actor TEXT);
+    INSERT INTO users(id, role, founder_id, name) VALUES (${FOUNDER}, 'founder', 11, 'Fay');
+    INSERT INTO projects(id, founder_id, company_id, entity_id) VALUES (${BP}, 11, 10, 501);
+    INSERT INTO user_company_links VALUES (${FOUNDER}, 10);
+    INSERT INTO entities VALUES (501, 'DE');
+  `);
+  db.exec(sqlOf('441_build_cycle_stores.sql'));
+  return db;
+}
+
+/** All six modules given real rows. */
+function buildSeeded() {
+  const db = buildFixture();
+  const month = (n: number) => { const d = new Date(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - n, 3)).toISOString().slice(0, 10); };
+  db.exec(`
+    INSERT INTO pain_groups(id, project_id, title) VALUES (1, ${BP}, 'Manual reconciliation');
+    INSERT INTO hypotheses(id, project_id, claim) VALUES (1, ${BP}, 'Finance leads will pay to skip reconciliation');
+    INSERT INTO mvp_features(id, project_id, title, pain_group_id, hypothesis_id, is_must_have, delivery_status, done_at, owner_user_id, due_date) VALUES
+      (1, ${BP}, 'Bank sync', 1, 1, 1, 'Done', '${month(3)}', ${FOUNDER}, '${month(3)}'),
+      (2, ${BP}, 'Match rules', 1, NULL, 1, 'Done', '${month(2)}', ${FOUNDER}, '${month(2)}'),
+      (3, ${BP}, 'Exceptions queue', NULL, NULL, 1, 'Done', '${month(1)}', ${FOUNDER}, '${month(1)}'),
+      (4, ${BP}, 'Audit export', NULL, NULL, 1, 'Backlog', NULL, NULL, NULL);
+    UPDATE projects SET mvp_target_date = '${month(-2)}' WHERE id = ${BP};
+    INSERT INTO venture_risks(project_id, title, severity, state, created_by) VALUES (${BP}, 'Bank API access', 'high', 'open', ${FOUNDER}), (${BP}, 'Hiring', 'low', 'open', ${FOUNDER});
+    INSERT INTO roadmap_okrs(id, project_id, objective, kanban_status, owner_user_id, target_date, kpi_key) VALUES
+      (5, ${BP}, 'Self-serve onboarding', 'now', ${FOUNDER}, '${month(-1)}', 'activation'),
+      (6, ${BP}, 'Second bank', 'next', NULL, NULL, NULL),
+      (7, ${BP}, 'SOC 2', 'later', NULL, NULL, NULL),
+      (8, ${BP}, 'Pilot shipped', 'done', ${FOUNDER}, '${month(1)}', 'pilots');
+    INSERT INTO okr_column_moves(project_id, okr_id, to_status, moved_at) VALUES (${BP}, 8, 'done', '${month(1)} 10:00:00');
+    INSERT INTO cap_table_holders(id, user_id, project_id, name, shares, ownership_pct, founder_role) VALUES
+      (9, ${FOUNDER}, ${BP}, 'Fay', 6000, 60, 'CEO'), (10, 2, ${BP}, 'Gus', 4000, 40, 'CTO');
+    INSERT INTO cap_table_vesting(user_id, holder_id, start_date, cliff_months, total_months, vested_shares) VALUES (${FOUNDER}, 9, '${month(6)}', 12, 48, 750);
+    INSERT INTO formation_steps(project_id, title, due_date, state, created_by) VALUES (${BP}, 'File certificate', '${month(-1)}', 'doing', ${FOUNDER}), (${BP}, 'Get EIN', NULL, 'todo', ${FOUNDER});
+    INSERT INTO entity_obligations(id, entity_id, title, due_date, status, kind) VALUES (1, 501, 'Delaware franchise tax', '${month(-4)}', 'open', 'tax');
+    INSERT INTO integrations(id, user_id, provider_key, display_name, status, last_synced_at) VALUES (1, ${FOUNDER}, 'stripe', 'Stripe', 'active', '${month(0)}');
+    INSERT INTO integration_companies VALUES (1, 10, 1);
+    INSERT INTO project_core_systems(project_id, kind, integration_id, used_by, updated_by) VALUES (${BP}, 'crm', 1, 'Sales', ${FOUNDER});
+    INSERT INTO ritual_runs(project_id, run_date, state) VALUES (${BP}, date('now', '-14 days'), 'done'), (${BP}, date('now', '-7 days'), 'skipped');
+  `);
+  return db;
+}
+
+const buildApp = new Hono<any>();
+buildApp.route('/api/cycles/build', cycleBuild);
+buildApp.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
+
+async function buildCall(db: any, path: string) {
+  const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await buildApp.request(`/api/cycles/build${path}`, { headers: { Authorization: `Bearer ${token}` } },
+      { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+    return { status: res.status, body: await res.json().catch(() => null) as any };
+  } finally { [console.warn, console.error] = saved; }
+}
+
+test('D661: the page lists Build\'s modules as the Worker does', async () => {
+  const r = await buildCall(buildFixture(), `/overview?project=${BP}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(PAGE_CYCLE_MODULES.build.map((m: any) => [m.slug, m.name]), r.body.cards.map((c: any) => [c.slug, c.name]));
+});
+
+test('D661: Build\'s real read passes through untouched, and all six seeded cards draw', async () => {
+  for (const db of [buildFixture(), buildSeeded()]) {
+    const r = await buildCall(db, `/overview?project=${BP}`);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const o = adaptOverview('build', r.body);
+    assert.deepEqual(o.cards, r.body.cards, 'a read in D661\'s shape must pass through unchanged');
+    for (const c of o.cards) {
+      assert.ok((PAGE_STATES as string[]).includes(c.state), `${c.slug}: state ${c.state}`);
+      assert.ok(Array.isArray(c.series) && c.series.every(isSpec), `${c.slug}: series is not a list of chart specs`);
+    }
+  }
+  const seeded = adaptOverview('build', (await buildCall(buildSeeded(), `/overview?project=${BP}`)).body);
+  assert.deepEqual(seeded.cards.map((c: any) => `${c.slug}=${cardView(c).state}`), PAGE_CYCLE_MODULES.build.map((m: any) => `${m.slug}=ok`),
+    'every seeded Build card draws');
+  for (const f of seeded.figures) if (f.state === 'ok') assert.notEqual(figureValue(f), null, `${f.key} has a value the page cannot write`);
+  assert.equal(figureValue(seeded.figures.find((f: any) => f.key === 'must_haves_done')), '3 of 4');
+});
+
+test('D661: every Build module page\'s records are {key,label} columns and {id,cells} rows, each column filled', async () => {
+  const db = buildSeeded();
+  for (const m of PAGE_CYCLE_MODULES.build) {
+    const r = await buildCall(db, `/modules/${m.slug}?project=${BP}`);
+    assert.equal(r.status, 200, `${m.slug}: ${JSON.stringify(r.body)}`);
+    const d = adaptModule('build', m.slug, r.body);
+    assert.deepEqual(d.records, r.body.records, `${m.slug}: records changed on the way through`);
+    const keys = d.records.cols.map((c: any) => c.key);
+    assert.ok(keys.length > 0 && d.records.cols.every((c: any) => typeof c.key === 'string' && typeof c.label === 'string'), `${m.slug}: columns are not {key,label}`);
+    assert.ok(d.records.rows.length > 0, `${m.slug}: no seeded row`);
+    for (const row of d.records.rows) {
+      assert.ok(row.id != null && row.cells && typeof row.cells === 'object', `${m.slug}: a row is not {id,cells}`);
+      for (const k of Object.keys(row.cells)) assert.ok(keys.includes(k), `${m.slug}: a cell "${k}" has no column`);
+    }
+  }
+});

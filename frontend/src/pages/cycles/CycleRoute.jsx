@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cyclesApi } from '../../lib/api/cycles';
 import { WorkerRail } from '../../ui';
@@ -11,6 +11,8 @@ import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
 import ShareUpdateSheet from '../founder/ShareUpdateSheet';
+import ConnectToolSheet from '../account/ConnectToolSheet';
+import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
@@ -23,7 +25,7 @@ import { MODULES } from './modules';
  *
  * `/<cycle>` draws the overview and `/<cycle>/:slug` one module page, from
  * `GET /api/cycles/<cycle>/…` through `adapters/` (Validate #1487, Raise
- * #1501, Grow #1488). The project is `?project_id=`, else the founder's
+ * #1501, Grow #1488, Build #1475). The project is `?project_id=`, else the founder's
  * first, as the desks these replace chose it.
  *
  * THE MODULES' WORKING TOOLS STAY WHERE THEY ARE. No canvas yet draws a
@@ -106,29 +108,86 @@ const CYCLE_DEFS = {
     // read: the applicant ranking on Team expansion, the outreach sequence
     // for sign-ups who have not converted on Distribution.
     drafts: new Map([
-      ['team-expansion', {
+      ['team-expansion', [{
         surface: 'grow/talent', label: 'Match · why this one', run: 'Rank the applicants', accept: 'Keep this ranking',
         empty: 'Nothing proposed yet. Eadwyn will rank your applicants and give reasons for the top one — each a receipt you can open and check in their own application.',
         nothingToDraft: 'No live role has an applicant yet.',
         foot: 'A reading only. Nothing here moves an application to a screen.',
-      }],
-      ['distribution', {
+      }]],
+      ['distribution', [{
         surface: 'grow/customers', label: 'Proposal · outreach sequence', run: 'Draft a sequence', accept: 'Accept sequence',
         empty: 'Nothing proposed yet. Eadwyn will draft a sequence for the signups who have gone furthest without converting, opening each touch on a pain you have actually recorded.',
         nothingToDraft: 'No customer signup is recorded for this startup yet.',
         foot: 'Each opener quotes a pain from your own map, or says none fits.',
-      }],
+      }]],
     ]),
     // A module's further parts, drawn under its table from the module read.
     parts: toFnMap({
       'durable-company-building': (data) => <DurabilityChecklist items={data?.parts?.checklist} />,
     }),
   },
+  /**
+   * Build's read (#1475, D662) is already in D661's shape (chart specs,
+   * `{ key, label }` columns, `{ id, cells }` rows), so it passes through with
+   * no adapter, as Raise's does. The primary action is D650's Connect a tool,
+   * the sheet the Build desk opened.
+   *
+   * Build's new stores (features, risks, formation steps) have their Worker
+   * writes but no form yet, so Solution design, Prototype / MVP and Company
+   * creation link no tool; their editors follow on #1474. The roadmap, the cap
+   * table and the operating cadence link the pages that edit them today.
+   */
+  build: {
+    modules: MODULES.build,
+    // THE ONE PLACE A STARTUP IS CREATED. `/projects` is retired and the Build
+    // desk inherited the only `api.createProject` caller; sixteen links,
+    // the Command Palette's among them, address it as `/build?new=1`. The
+    // Build overview keeps it: `?new=1` opens the form, also when this page is
+    // already mounted.
+    creates: true,
+    action: (q, open) => ({ label: 'Connect a tool', onClick: open }),
+    sheet: ConnectToolSheet,
+    tools: toFnMap({
+      'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
+      'founding-team': () => ({ label: 'Open the cap table and vesting', href: '/raise/capital/cap-table' }),
+      'operating-systems': (q) => ({ label: 'Open the operating cadence', href: `/build/cadence${q}` }),
+    }),
+    add: toFnMap({}),
+    fills: {},
+    // The Build desk's four AI bands (ZoneDraft, D424, D510), on the modules
+    // they read: the roadmap tradeoff on Product roadmap; the Monday plan, the
+    // Friday retro and the KPI annotation on Operating systems, the weekly
+    // cadence they serve.
+    drafts: new Map([
+      ['product-roadmap', [{
+        surface: 'build/roadmap', label: 'Proposal · tradeoff, reasoned', run: 'Argue the ordering', accept: 'Accept the argument',
+        empty: 'Nothing proposed yet. Eadwyn will read the horizons and quarters you have set and argue the one ordering most worth changing — from the record, not from anything it knows about your market.',
+        nothingToDraft: 'There are no objectives to argue an order between yet.',
+        foot: 'This writes an argument, never an order. Reordering stays in Roadmap.',
+      }]],
+      ['operating-systems', [{
+        surface: 'build/this-week', label: 'Proposal · Monday plan', run: 'Draft a Monday plan', accept: 'Accept the plan',
+        empty: 'Nothing proposed yet. Eadwyn will read what actually moved — your current key results and the cards still open — and propose next week\'s commitments.',
+        nothingToDraft: 'There are no current objectives and no open cards to plan from yet.',
+        foot: 'Owners and risk are never proposed: neither is recorded.',
+      }, {
+        surface: 'build/retro', label: 'Proposal · retro summary', run: 'Draft a retro summary', accept: 'Accept the summary',
+        empty: 'Nothing proposed yet. Eadwyn will read this week on your board — the cards touched in the last seven days and the open ones past their due date — and summarise it for your Friday retro.',
+        nothingToDraft: 'There are no cards on this board to summarise yet.',
+        foot: 'The board keeps no history of its moves, so the summary never says how often a card moved.',
+      }, {
+        surface: 'build/kpi', label: 'Out of range · explain this?', run: 'Draft an annotation', accept: 'Keep this annotation',
+        empty: 'Nothing proposed yet. Eadwyn will name the figure that moved most between your last two snapshots and draft one line about the movement — never about its cause, which nothing here records.',
+        nothingToDraft: 'No metric snapshot is recorded for this startup yet.',
+        foot: 'Kept as wording only. The snapshot has no annotation field to attach it to.',
+      }]],
+    ]),
+  },
 };
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
 
-function useProject() {
+function useProject(reloadKey = 0) {
   const [searchParams, setSearchParams] = useSearchParams();
   // The read's own links (`next.href`) say `?project=`; the page's say
   // `?project_id=`. Either picks the venture.
@@ -146,22 +205,31 @@ function useProject() {
       if (first) setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(first.id)); return next; }, { replace: true });
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
-  }, [requested, setSearchParams]);
+  }, [requested, setSearchParams, reloadKey]);
   return { projectId, status };
 }
 
 export default function CycleRoute({ cycle }) {
   const { slug } = useParams();
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
-  const { projectId, status: projectStatus } = useProject();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [projectsKey, setProjectsKey] = useState(0);
+  const { projectId, status: projectStatus } = useProject(projectsKey);
+  const creates = Boolean(def?.creates);
+  const [creating, setCreating] = useState(() => creates && searchParams.get('new') === '1');
+  // Followed, not only seeded: the Command Palette can address `?new=1` from
+  // this very page, which changes the search without a remount.
+  useEffect(() => {
+    if (creates && searchParams.get('new') === '1') setCreating(true);
+  }, [creates, searchParams]);
   const name = cycleOf(cycle)?.name || 'Validate';
   const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
-  const [sharing, setSharing] = useState(false);
-  const draft = slug && def?.drafts instanceof Map ? def.drafts.get(slug) ?? null : null;
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const drafts = slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   // The cost before a run (D424), read only while a band is drawn.
-  const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && draft) });
+  const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && drafts.length) });
 
   const [overview, setOverview] = useState(null);
   const [overviewStatus, setOverviewStatus] = useState('loading');
@@ -208,7 +276,7 @@ export default function CycleRoute({ cycle }) {
   if (!def) return null;
   if (!known) return <Navigate to={`/${cycle}${q}`} replace />;
 
-  const action = def.action(q, projectId && def.sheet ? () => setSharing(true) : undefined);
+  const action = def.action(q, projectId && def.sheet ? () => setSheetOpen(true) : undefined);
   const Sheet = def.sheet || null;
   const rail = (
     <WorkerRail
@@ -224,7 +292,16 @@ export default function CycleRoute({ cycle }) {
 
   let body;
   if (projectStatus === 'none') {
-    body = <p className="m-0 rounded-xl border border-axal-hairline bg-white p-4 text-[13px] text-axal-muted dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400" data-testid="cycle-no-venture">There is no venture to show yet. {name} fills in once you have one.</p>;
+    // A founder with no venture yet is offered the one way to make one.
+    const createBtn = 'inline-flex w-fit items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
+    body = (
+      <div className="flex flex-col items-start gap-3 rounded-xl border border-axal-hairline bg-white p-4 text-[13px] text-axal-muted dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400" data-testid="cycle-no-venture">
+        <p className="m-0">There is no venture to show yet. {name} fills in once you have one.</p>
+        {creates
+          ? <button type="button" className={createBtn} onClick={() => setCreating(true)} data-testid="cycle-create-venture">Create your startup</button>
+          : <Link className={createBtn} to="/build?new=1" data-testid="cycle-create-venture">Create your startup</Link>}
+      </div>
+    );
   } else if (!slug) {
     body = (
       <>
@@ -264,9 +341,9 @@ export default function CycleRoute({ cycle }) {
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} onApplied={() => setReload((n) => n + 1)} />
         )}
-        {draft && fillsOn && projectId && (
+        {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
-        )}
+        )) : null}
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module)}
       </CycleModulePage>
     );
@@ -279,8 +356,21 @@ export default function CycleRoute({ cycle }) {
     <RailFrame rail={rail} data-testid={`cycle-route-${cycle}`}>
       <div className="min-w-0">
         {body}
-        {Sheet && sharing && projectId && (
-          <Sheet projectId={projectId} onClose={() => setSharing(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />
+        {creates && (
+          <CreateStartupForm
+            open={creating}
+            onOpenChange={(next) => {
+              setCreating(next);
+              // Drop ?new=1 once the form closes, so a reload does not reopen it.
+              if (!next && searchParams.get('new') === '1') {
+                setSearchParams((old) => { const params = new URLSearchParams(old); params.delete('new'); return params; }, { replace: true });
+              }
+            }}
+            onCreated={() => setProjectsKey((n) => n + 1)}
+          />
+        )}
+        {Sheet && sheetOpen && projectId && (
+          <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />
         )}
       </div>
     </RailFrame>

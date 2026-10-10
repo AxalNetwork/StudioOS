@@ -26,6 +26,10 @@ const READS = {
     overview: (projectId) => request(`/cycles/grow/overview?${query(projectId)}`),
     module: (projectId, slug, q) => request(`/cycles/grow/modules/${encodeURIComponent(slug)}?${query(projectId, q)}`),
   },
+  build: {
+    overview: (projectId) => request(`/cycles/build/overview?${query(projectId)}`),
+    module: (projectId, slug, q) => request(`/cycles/build/modules/${encodeURIComponent(slug)}?${query(projectId, q)}`),
+  },
 };
 
 /** The cycles whose read the page can draw. A cycle not here keeps its current page. */

@@ -265,6 +265,17 @@ export function cycleTabs(cycle, cards, active = null, search = '') {
     .concat((cards || []).filter((c) => c?.slug).map((c) => ({ key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug })));
 }
 
+/**
+ * A card's next action as a link that keeps the chosen venture: an in-app
+ * path with no query of its own gets `search`; one that names its own query
+ * (Validate's and Grow's `?project=`) is left as the read wrote it.
+ */
+export function nextHref(href, search = '') {
+  const safe = safeHref(href);
+  if (!safe) return null;
+  return safe.includes('?') ? safe : `${safe}${linkSearch(search)}`;
+}
+
 /** A query string a link may carry: `?…`, or nothing. */
 export function linkSearch(search) {
   return typeof search === 'string' && /^\?[^#]*$/.test(search) && search.length > 1 ? search : '';

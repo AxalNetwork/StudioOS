@@ -21,7 +21,9 @@ test('founder execution uses the A3 operating desk rather than the generic found
     'founder /execution no longer lands on A3 at /build');
   assert.ok(!route.includes('<FounderBuildDesk />'), '/execution is a second address for A3 again');
   assert.match(app, /const founderExecutionEditor = effectiveRole === 'founder'\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
-  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(\[[^\]]*\], <FounderBuildDesk \/>\)/);
+  // D661 (#1474): a founder's /build is the Build cycle overview now; the
+  // desk stays in the repo until the desk cleanup, and keeps its own contract.
+  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)/);
   assert.match(desk, /Operate the company this week/);
   assert.match(desk, /api\.listProjects\(\)/);
   assert.match(desk, /api\.pipelineActive\(\)/);
