@@ -9,16 +9,16 @@ const desk = read('frontend/src/pages/founder/FounderResearchDesk.jsx');
 const raw = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const app = read('frontend/src/App.jsx');
 
-test('A7 owns only bare founder signals and preserves detailed routes', () => {
+test('A7 owns the founder Research landing, and /signals only redirects to it', () => {
   assert.match(app, /founderResearchLanding = effectiveRole === 'founder'/);
   // D422. Bare `/signals` was a second address for A7; it redirects to
   // `/research` with the query kept (`?mode=landing`, `?project_id=`), and the
-  // desk is mounted at `/research` alone. Signals deep links and
-  // `?mode=workspace` keep the feed.
-  assert.match(app, /path="\/signals" element=\{guard\(\[[^\]]*\], founderResearchLanding\s*\? <Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\s*: founderWorkspace\('research'/);
+  // desk is mounted at `/research` alone. D670 retired the Signals feed
+  // itself, so the redirect now applies to everyone and nothing keeps the feed.
+  assert.match(app, /<Route path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\} \/>/);
   assert.match(app, /<Route path="\/research" element=\{founderResearchLanding\s*\? guard\([^)]*\), <FounderResearchDesk \/>\)/);
-  assert.match(app, /signalsMode.*workspace/);
-  assert.match(app, /signalsHasNonProjectQuery/);
+  assert.match(app, /researchMode.*workspace/);
+  assert.match(app, /researchHasNonProjectQuery/);
 });
 
 test('A7 uses only approved read sources and allSettled retention', () => {

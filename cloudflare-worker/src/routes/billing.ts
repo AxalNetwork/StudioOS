@@ -143,8 +143,9 @@ billing.post('/mi-pro/checkout', async (c) => {
     mode: 'subscription',
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
-    success_url: `${appUrl}/market-intel?upgraded=1`,
-    cancel_url: `${appUrl}/market-intel?upgrade_cancelled=1`,
+    // D670 retired /market-intel; MI Pro returns to Research.
+    success_url: `${appUrl}/research?upgraded=1`,
+    cancel_url: `${appUrl}/research?upgrade_cancelled=1`,
     'metadata[user_id]': String(user.id),
     'metadata[plan]': plan,
     'metadata[kind]': 'mi',                       // disambiguates from tier/investor in webhook
@@ -189,7 +190,7 @@ billing.post('/mi-pro/portal', async (c) => {
   try {
     const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
       customer: user.mi_stripe_customer_id,
-      return_url: `${appUrl}/market-intel`,
+      return_url: `${appUrl}/research`,
     });
     return c.json({ url: session.url });
   } catch (e) {
@@ -231,7 +232,7 @@ billing.all('/mi-pro/dev-upgrade', async (c) => {
   // redirect back to the app instead of returning JSON.
   if (c.req.method === 'GET') {
     const appUrl = c.env.APP_URL || 'http://localhost:5000';
-    return c.redirect(`${appUrl}/market-intel?upgraded=1`);
+    return c.redirect(`${appUrl}/research?upgraded=1`);
   }
   return c.json({ ok: true, status: 'active', plan, period_end: periodEnd });
 });

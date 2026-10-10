@@ -98,11 +98,12 @@ test('legacy investor deep links still highlight their owning workspace', () => 
     assert.ok(dealsMatch[1].includes(`'${p}'`),
       `legacy path ${p} no longer highlights the Deals row`);
   }
-  // Research absorbed /market-intel, which was its own row's target before.
+  // Research absorbed /market-intel, which was its own row's target before;
+  // D670 retired that page, and its route only redirects to /research now.
   const researchMatch = /label: 'Research',\s*\n?\s*match: \[([^\]]*)\]/.exec(investor);
   assert.ok(researchMatch, 'the Research row has no match array');
-  assert.ok(researchMatch[1].includes("'/market-intel'"),
-    '/market-intel no longer highlights the Research row');
+  assert.ok(researchMatch[1].includes("'/research'") && !researchMatch[1].includes("'/market-intel'"),
+    'the Research row matches /research, and not the retired /market-intel');
   assert.match(investor, /label: 'Portfolio', match: \['\/portfolio', '\/watchlist', '\/capital', '\/liquidity'\]/);
   assert.match(investor, /label: 'Fund', match: \['\/funds', '\/lp-reports'\]/);
   assert.match(investor, /label: 'Network', match: \['\/network', '\/relationships', '\/contacts'\]/);

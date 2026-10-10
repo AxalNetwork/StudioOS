@@ -121,13 +121,15 @@ test('the tab bar\'s clearance is on the scroll container, so the footer after t
   assert.doesNotMatch(css, /\[data-app-main\][^\n{]*\{/, 'the content block is still padded: the footer after it sits under the bar, or the page gets two clearances');
 });
 
-test('the FOUNDER_FULL_BLEED comment describes the three legacy routes as the redirects they are (D422)', () => {
-  const block = SIDEBAR.slice(SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED'), SIDEBAR.indexOf("'/build/discovery', '/execution', '/build/team', '/signals',"));
-  assert.match(block, /Since D422, bare `\/build\/discovery`, `\/execution` and\s*\/\/ `\/signals` are `<Navigate replace>` redirects/);
+test('the FOUNDER_FULL_BLEED comment describes the legacy routes as the redirects they are (D422)', () => {
+  const block = SIDEBAR.slice(SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED'), SIDEBAR.indexOf("'/build/discovery', '/execution', '/build/team',"));
+  assert.match(block, /Since D422, bare `\/build\/discovery` and `\/execution`\s*\/\/ are `<Navigate replace>` redirects/);
   assert.doesNotMatch(block, /keep rendering the same desk/, 'the old sentence said they still render the desk');
   // The claim is true of App.jsx: each bare route is a Navigate for a founder.
+  // (`/signals` was the third; D670 made it a redirect for everyone and it
+  // left the list.)
   assert.match(CODE, /path="\/execution" element=\{guard\(\['admin', 'founder'\], effectiveRole === 'founder' && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/);
-  assert.match(CODE, /path="\/signals" element=\{guard\(\[[^\]]*\], founderResearchLanding\s*\? <Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
+  assert.match(CODE, /path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\}/);
   const discovery = CODE.slice(CODE.indexOf('path="/build/discovery"'), CODE.indexOf('path="/build/discovery"') + 600);
   assert.match(discovery, /<Navigate to=\{`\/validate\$\{location\.search\}`\} replace \/>/);
 });

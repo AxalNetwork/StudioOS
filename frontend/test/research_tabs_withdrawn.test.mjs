@@ -79,7 +79,7 @@ test('no nav row links a withdrawn tab', () => {
     'twenty nav rows across five role navs were removed with the tabs');
 });
 
-test('every surviving Research group still offers Market', () => {
+test('every surviving Research destination lands on /research', () => {
   // An empty group is a worse outcome than a removed one — it reads as a
   // rendering bug. Admin's group was dropped for exactly this reason.
   //
@@ -91,6 +91,10 @@ test('every surviving Research group still offers Market', () => {
   // two rules it always was: it must offer Market, and it must not offer the
   // withdrawn advisor/research tabs. Nothing is relaxed — the count floor is
   // unchanged and a Research destination pointing anywhere else still fails.
+  //
+  // D670: "offer Market" meant reaching /market-intel, which the owner retired.
+  // Market lives inside /research now (the markets zone), so each destination
+  // must land on /research and none may offer the retired page.
   const nav = read('frontend/src/sidebarConfig.js');
   const groups = [...nav.matchAll(/\{ key: 'research', label: 'Research', items: \[([\s\S]*?)\]\}/g)]
     .map((m) => m[1]);
@@ -100,7 +104,8 @@ test('every surviving Research group still offers Market', () => {
   assert.ok(destinations.length >= 4,
     `expected the surviving Research destinations, found ${destinations.length}`);
   for (const d of destinations) {
-    assert.match(d, /market-intel/, 'a Research destination that does not offer Market is empty');
+    assert.match(d, /to: '\/research'/, 'a Research destination that does not land on /research is empty');
+    assert.doesNotMatch(d, /market-intel/, 'a Research destination offers the retired /market-intel');
     assert.doesNotMatch(d, /advisor\/research/);
   }
 });

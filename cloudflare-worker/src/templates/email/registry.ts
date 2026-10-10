@@ -206,8 +206,8 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     key: 'billing_subscribed_investor_pro', category: 'billing', severity: 'info',
     replyTo: 'billing@axal.vc', alwaysSend: true,
     subject: 'Welcome to Investor Pro',
-    text: `Hi {{name}},\n\nWelcome to the Investor Pro tier. Pipeline, deals, calendar, and the Market-Intel export are unlocked. Manage at {{manage_url}}.`,
-    html: `<p>Hi {{name}},</p><p>Welcome to the <strong>Investor Pro</strong> tier. Pipeline, deals, calendar, and the Market-Intel export are unlocked.</p><p><a href="{{{manage_url}}}" style="color:#111;">Manage subscription</a></p>`,
+    text: `Hi {{name}},\n\nWelcome to the Investor Pro tier. Pipeline, deals and calendar are unlocked. Manage at {{manage_url}}.`,
+    html: `<p>Hi {{name}},</p><p>Welcome to the <strong>Investor Pro</strong> tier. Pipeline, deals and calendar are unlocked.</p><p><a href="{{{manage_url}}}" style="color:#111;">Manage subscription</a></p>`,
   }),
   // vars: name, manage_url
   billing_subscribed_investor_inst: t({

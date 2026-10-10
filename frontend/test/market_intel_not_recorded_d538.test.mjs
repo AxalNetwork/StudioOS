@@ -27,7 +27,6 @@ import { matchSectorRow } from '../src/pages/SpinoutLabMarketPage.jsx';
 const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), p), 'utf8'));
 const FOUNDER = read('frontend/src/pages/founder/FounderResearchDesk.jsx');
 const INVESTOR = read('frontend/src/pages/investor/InvestorResearchWorkspace.jsx');
-const MI = read('frontend/src/pages/MarketIntelPage.jsx');
 const LAB = read('frontend/src/pages/SpinoutLabMarketPage.jsx');
 
 const REASON = 'No store of private funding rounds yet';
@@ -80,22 +79,4 @@ test('Spin-Out Lab: no "current leader" is crowned from unrecorded sectors, and 
   assert.match(LAB, /const picks = \(lens\?\.picks \|\| \[\]\)\.filter\(\(p\) => typeof p\.opportunity_gap === 'number'\)\.slice\(0, 3\);/);
   assert.match(LAB, /data-testid="market-dynamics-not-recorded">Not recorded · \{sectorMatch\.row\.composite_reason/);
   assert.match(LAB, /\{typeof d\.value === 'number' \? Math\.round\(d\.value\) : 'Not recorded'\}/);
-});
-
-test('Market Intelligence: legacy tabs draw a Not recorded panel; lens scores render through <Score>', () => {
-  for (const id of ['mi-pulse-not-recorded', 'mi-macro-not-recorded', 'mi-rounds-not-recorded', 'mi-conviction-not-recorded', 'mi-benchmarks-not-recorded', 'mi-compass-not-recorded', 'mi-geography-not-recorded']) {
-    assert.match(MI, new RegExp(`testId="${id}"`), `${id} panel missing`);
-  }
-  // The benchmark cards no longer render behind a not-recorded answer.
-  assert.match(MI, /\{tab === 'studio' && benchmarks && !notRecorded\.benchmarks && \(/);
-  // Every direct rounding of a lens value is gone from the tables; values go
-  // through <Score>, which prints Not recorded for null.
-  for (const raw of ['{Math.round(p.demand)}', '{Math.round(p.supply)}', '{Math.round(s.capital)}', '{Math.round(s.sentiment)}', '{s.score.toFixed(1)}</td>', '{Math.round(v.value)}']) {
-    assert.ok(!MI.includes(raw), `${raw} is back`);
-  }
-  assert.match(MI, /function Score\(\{ value, reason, digits = 0, className = '' \}\) \{\n\s*if \(typeof value !== 'number' \|\| !Number\.isFinite\(value\)\) \{\n\s*return <span[^>]*>Not recorded<\/span>;/);
-  // Picks and top lists are drawn only from recorded values.
-  assert.match(MI, /data\.sectors\.filter\(\(x\) => typeof x\.composite === 'number'\)\.sort/);
-  assert.match(MI, /data\.picks\.filter\(\(p\) => typeof p\.opportunity_gap === 'number'\)\.slice\(0, 5\)/);
-  assert.match(MI, /data\.ranked\.filter\(\(s\) => typeof s\.score === 'number'\)\.slice\(0, 5\)/);
 });

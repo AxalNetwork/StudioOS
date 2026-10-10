@@ -86,7 +86,8 @@ test('the page states the limits and does not stamp fixture data as SAMPLE', () 
   assert.match(page, /Accept writes nothing/);
   assert.match(page, /does not call a model/);
   assert.match(page, /Where these numbers come from/);
-  assert.match(page, /Sector signals live on/);
+  // "Sector signals live on Signals" left with the Signals page (D670).
+  assert.doesNotMatch(page, /to="\/signals"/);
   assert.match(page, /Record a fresh reading/);
   assert.doesNotMatch(page, /SAMPLE/);
   assert.doesNotMatch(page, /Add an engagement/);

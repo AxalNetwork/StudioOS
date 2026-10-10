@@ -5,8 +5,11 @@
  *   • load raw signals + companies (D1 first, seed fallback — see NOTE below),
  *   • apply the founder-facing filters,
  *   • rank via ./ranking.ts,
- *   • compute the KPI strip + filter facets,
  *   • run a best-effort background refresh via the source adapters.
+ *
+ * D670 retired the /signals page, and with it the KPI strip, the filter facets
+ * and the single-signal detail only that page read. Research reads the ranked
+ * list and the source health (routes/signals.ts) and the `signals` table.
  *
  * NOTE on the DB fallback: the `signals` tables ship as a migration
  * (sql/migrations/136_signals.sql) that may not be applied in every environment yet. So the
@@ -23,7 +26,6 @@ import type {
   Signal,
   NormalizedCompany,
   SignalFilters,
-  SignalKpis,
 } from './types';
 import { getSeedCompanies, getSeedSignals } from './seed';
 import { rankSignals, type RankBreakdown } from './ranking';
@@ -263,127 +265,13 @@ export async function getRankedSignals(
   return { ...payload, cached: false };
 }
 
-/** Full detail for one signal, including the ranking breakdown + company rows. */
-export async function getSignalDetail(
-  env: Env,
-  id: string,
-  mode: 'founder' | 'advisor' = 'founder',
-): Promise<
-  | null
-  | {
-      signal: RankedSignal;
-      companies: NormalizedCompany[];
-      sources: typeof SOURCE_REGISTRY;
-    }
-> {
-  const [companies, signals] = await Promise.all([loadCompanies(env), loadSignals(env)]);
-  const target = signals.find((s) => s.id === id);
-  if (!target) return null;
-  const [ranked] = rankSignals([target], companies, mode);
-  const companyRows = (target.related_companies || [])
-    .map((sym) => companies[sym])
-    .filter(Boolean) as NormalizedCompany[];
-  const usedSourceKeys = new Set(target.evidence_items.map((e) => e.source_key));
-  const sources = SOURCE_REGISTRY.filter((s) => usedSourceKeys.has(s.key));
-  return { signal: ranked, companies: companyRows, sources };
-}
-
-/** KPI strip payload. */
-export async function getKpis(env: Env, mode: 'founder' | 'advisor' = 'founder'): Promise<SignalKpis & { data_state: 'live' | 'illustrative' }> {
-  const [companies, loaded] = await Promise.all([loadCompanies(env), loadSignalsWithState(env)]);
-  const ranked = rankSignals(loaded.signals, companies, mode);
-
-  const regionCounts = new Map<string, number>();
-  const sectorCounts = new Map<string, number>();
-  let confSum = 0;
-  let freshest: number | null = null;
-  for (const s of ranked) {
-    regionCounts.set(s.region, (regionCounts.get(s.region) || 0) + 1);
-    sectorCounts.set(s.sector, (sectorCounts.get(s.sector) || 0) + 1);
-    confSum += s.confidence_score;
-    const t = Date.parse(s.updated_at);
-    if (isFinite(t) && (freshest == null || t > freshest)) freshest = t;
-  }
-
-  const top = (m: Map<string, number>, labelKey: 'region' | 'sector') =>
-    [...m.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([k, v]) => ({ [labelKey]: k, count: v } as any));
-
-  // Honest by construction: null until an ingestion has actually run. The old
-  // behaviour defaulted this to "now", which dressed the seed corpus up as a
-  // freshly-refreshed dataset on every page load.
-  let lastRefresh: string | null = null;
-  try {
-    const stamp = await env.RATE_LIMITS.get(REFRESH_STAMP_KEY);
-    if (stamp) lastRefresh = stamp;
-  } catch { /* ignore */ }
-
-  return {
-    active_signals: ranked.length,
-    top_regions: top(regionCounts, 'region'),
-    top_sectors: top(sectorCounts, 'sector'),
-    avg_confidence: ranked.length ? Math.round(confSum / ranked.length) : 0,
-    freshest_updated_at: freshest ? new Date(freshest).toISOString() : null,
-    last_refreshed_at: lastRefresh,
-    data_state: loaded.data_state,
-  };
-}
-
-/** Distinct filter facets present in the current dataset (drives the filter bar). */
-export async function getFacets(env: Env): Promise<Record<string, string[]>> {
-  const [companies, signals] = await Promise.all([loadCompanies(env), loadSignals(env)]);
-  const regions = new Set<string>();
-  const countries = new Set<string>();
-  const sectors = new Set<string>();
-  const industries = new Set<string>();
-  const niches = new Set<string>();
-  const capBands = new Set<string>();
-  const customerTypes = new Set<string>();
-  const stages = new Set<string>();
-  const types = new Set<string>();
-  const empBands = new Set<string>();
-
-  for (const s of signals) {
-    regions.add(s.region);
-    countries.add(s.country);
-    sectors.add(s.sector);
-    if (s.industry) industries.add(s.industry);
-    niches.add(s.niche);
-    capBands.add(s.market_cap_band);
-    if (s.maturity_stage) stages.add(s.maturity_stage);
-    types.add(s.type);
-    for (const c of s.target_customers || []) customerTypes.add(c);
-  }
-  for (const c of Object.values(companies)) {
-    if (c.employee_band) empBands.add(c.employee_band);
-  }
-
-  const sorted = (set: Set<string>) => [...set].sort();
-  return {
-    region: sorted(regions),
-    country: sorted(countries),
-    sector: sorted(sectors),
-    industry: sorted(industries),
-    niche: sorted(niches),
-    market_cap_band: sorted(capBands),
-    employee_band: sorted(empBands),
-    customer_type: sorted(customerTypes),
-    maturity_stage: sorted(stages),
-    type: sorted(types),
-  };
-}
-
 /**
  * Background refresh / ingestion job — the REAL pipeline (services/signals/
  * ingest.ts): fetch live evidence from the free public sources, gate each
  * thesis on the evidence threshold, and persist signals + evidence + companies
  * into D1 so the D1-first read path serves live data from here on.
  *
- * The per-source ingest-run audit rows and the cache-busting stamp are kept:
- * the stamp is also what lets the KPI strip report an honest
- * `last_refreshed_at` (null until this has run at least once).
+ * The per-source ingest-run audit rows and the cache-busting stamp are kept.
  */
 export async function runRefresh(env: Env): Promise<{
   ok: boolean;

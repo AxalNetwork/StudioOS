@@ -9,7 +9,8 @@
  * `/execution`, `/build/discovery` and `/signals` rendered, for a founder, the
  * same element `/build`, `/validate` and `/research` mount. They redirect, and
  * keep the query string, so `?new=1`, `?project_id=` and `?mode=landing` land
- * where they did.
+ * where they did. D670 then retired the Signals page itself, on the owner's
+ * call: `/signals` redirects to `/research` for everyone, query kept.
  *
  * WHAT COULD NOT, MEASURED. The editors behind those mounts are still the only
  * place a founder can make certain writes. The gap map's table retired them
@@ -44,7 +45,10 @@ function routeBlock(path) {
 }
 
 test('the three second addresses redirect to their desk, query string kept', () => {
-  for (const [path, desk] of [['/execution', '/build'], ['/build/discovery', '/validate'], ['/signals', '/research']]) {
+  // D670: `/signals` is a plain redirect for everyone now, the query still kept.
+  assert.ok(routeBlock('/signals').includes('<Route path="/signals" element={<Navigate to={`/research${location.search}`} replace />} />'),
+    '/signals no longer redirects everyone to /research with the query kept');
+  for (const [path, desk] of [['/execution', '/build'], ['/build/discovery', '/validate']]) {
     const block = routeBlock(path);
     assert.ok(block, `${path} is no longer routed — a retired route must redirect, never 404`);
     assert.ok(block.includes(`<Navigate to={\`${desk}\${location.search}\`} replace />`),
@@ -64,7 +68,10 @@ test('the three second addresses redirect to their desk, query string kept', () 
 const EDITORS = [
   { route: '/execution', mount: '<ExecutionPage />', writes: ['pipelineCreateTask', 'pipelineUpdateTask', 'pipelineAdvance', 'pipelineDecide', 'castVote', 'pipelineTriggerReview', 'pipelineSnapshot', 'createOkr', 'updateOkr', 'deleteOkr'] },
   { route: '/build/discovery', mount: '<DiscoveryPage initialTab="interviews" workspaceMode />', writes: ['updateInterview', 'deleteInterview', 'assignPain', 'renamePainGroup', 'deletePainGroup'] },
-  { route: '/signals', mount: '<SignalsPage user={user} />', writes: ['signals.list', 'signals.refresh'] },
+  // `/signals` stood here with `signals.list` and `signals.refresh`. D670
+  // retired the page on the owner's call rather than on this rule: the list is
+  // read by the Research desk, and the admin's manual refresh went with the
+  // page (the nightly cron still runs).
   { route: '/network', mount: '<NetworkPage />', writes: ['contactCreate', 'contactUpdate', 'contactAddTask', 'contactPromote', 'introAccept', 'introDecline', 'introSetTerms', 'partnerBookAdd', 'partnerBookLogInteraction'] },
 ];
 
@@ -78,11 +85,11 @@ test('an editor stays mounted while a founder zone lacks any of its writes', () 
   }
 });
 
-test('the editors keep their deep links: ?mode=workspace, Discovery ?tab=, Signals queries', () => {
+test('the editors keep their deep links: ?mode=workspace, Discovery ?tab=, and the Research landing', () => {
   assert.match(app, /const founderExecutionEditor = effectiveRole === 'founder'\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
   assert.match(app, /const founderDiscoveryEditor = effectiveRole === 'founder'\s*&& \(new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace'\s*\|\| \['leads', 'interviews', 'insights'\]\.includes\(new URLSearchParams\(location\.search\)\.get\('tab'\)\)\);/);
-  // Signals: any query beyond project_id, or ?mode=workspace, keeps the feed.
-  assert.match(app, /const founderResearchLanding = effectiveRole === 'founder'\s*&& \(signalsMode === 'landing' \|\| \(!signalsHasNonProjectQuery && signalsMode !== 'workspace'\)\);/);
+  // Research: any query beyond project_id, or ?mode=workspace, skips the desk.
+  assert.match(app, /const founderResearchLanding = effectiveRole === 'founder'\s*&& \(researchMode === 'landing' \|\| \(!researchHasNonProjectQuery && researchMode !== 'workspace'\)\);/);
   // AND THE PATHS THAT STILL LINK TO THEM GO TO THE EDITOR, not the redirect:
   // the Validate interviews zone sends ICP-fit edits to `?tab=interviews`, and
   // the Roadmap zone sends objective edits to `/execution/roadmap`.

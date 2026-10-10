@@ -83,13 +83,13 @@ it, where in their nav, and how do they get there.*
 | Research · Funds (directory) | `/research/funds` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Funds (fund profile) | `/research/funds/catalog/:id` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Revenue | `/spinout-lab/revenue` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Round Manager | `/raise/capital/pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Scoring Engine | `/spinout-lab/scoring` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Signals | `/signals` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Spin-Out Lab · Intro | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
 | Spin-Out Lab · Landing | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
 | Spin-Out Lab Workspace | `/spinout-lab` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
@@ -115,10 +115,10 @@ it, where in their nav, and how do they get there.*
 | Research · Companies | `/research/companies` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Company | `/research/companies/company/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Signals | `/signals` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 
 ## LP / Investor — 26 canvases
 
@@ -142,11 +142,11 @@ it, where in their nav, and how do they get there.*
 | Pages · Investor Fund | `/funds` · `/funds/calls` · `/funds/accounting` · `/funds/ledger` · `/lp-reports` | Headerless | Full page (proposed) | Sidebar → Headerless → Fund | PARTIAL | Low |
 | Pages · Investor Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | PARTIAL | High |
 | Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Headerless | Full page (proposed) | Sidebar → Headerless → Portfolio | UPGRADE | Low |
-| Pages · Investor Research | `/advisor/research*` · `/market-intel` · `/research/ask` | Headerless | Full page | Sidebar → Headerless → Research | RESKIN | High |
+| Pages · Investor Research | `/market-intel` · `/research` · `/advisor/research*` · `/research/ask` | Headerless | Full page | Sidebar → Headerless → Research | RESKIN | High |
 | Portfolio | `/portfolio/value-add` | Headerless | Full page | Sidebar → Headerless → Portfolio | UPGRADE | High |
 | Quarterly Report | `/lp-reports` · `/spinout-lab/investor-workspace` · `/lp-portal` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Axal VC Fund | UPGRADE | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
@@ -163,7 +163,7 @@ it, where in their nav, and how do they get there.*
 | Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Offers | NEW | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Research · Main | `/research` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
+| Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |

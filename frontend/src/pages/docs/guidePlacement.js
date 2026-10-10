@@ -104,7 +104,6 @@ export const GUIDE_PLACEMENT = {
   "validate-grow/cofounder-match": {"area": "building", "surface": "/cofounder", "appliesTo": ["founder"]},
   "validate-grow/expert-profiles": {"area": "advisors", "surface": null, "appliesTo": null},
   "validate-grow/wellbeing": {"area": "building", "surface": "/wellbeing", "appliesTo": ["founder"]},
-  "validate-grow/market-intel": {"area": "funds", "surface": "/research/markets", "appliesTo": null},
   "capital/fundraise": {"area": "raising", "surface": "/raise/capital", "appliesTo": ["founder"]},
   "capital/investors": {"area": "raising", "surface": "/raise/capital/pipeline", "appliesTo": ["founder"]},
   "capital/cap-table": {"area": "raising", "surface": "/build/captable", "appliesTo": ["founder"]},

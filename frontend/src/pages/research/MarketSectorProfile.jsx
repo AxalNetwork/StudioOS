@@ -80,9 +80,8 @@ export function LegacyMarketView({ market }) {
           <p className="mt-2 text-[12px] text-axal-muted">Showing {funds.length} of {market.fund_count}.</p></>}
     </Card>
     <Card>
-      <div className="flex items-center justify-between gap-2"><div><h2 className="text-sm font-extrabold tracking-tight">Signals</h2>
+      <div><h2 className="text-sm font-extrabold tracking-tight">Signals</h2>
         <p className="mt-1 text-[12px] text-axal-muted">Signals whose tags the crosswalk maps to this market.</p></div>
-        <Link to="/signals" className="text-[12px] font-semibold text-axal-violet underline">Open full signals feed</Link></div>
       {!signals.length
         ? <p className="mt-4 rounded-lg border border-dashed border-axal-hairline px-3 py-4 text-[12px] leading-relaxed text-axal-muted" data-testid="legacy-market-no-signals">No signal is recorded for this market. That is an evidence gap, not a conclusion about growth or risk.</p>
         : <div className="mt-4 space-y-3">{signals.map((s) => <div key={s.id} className="rounded-lg border border-axal-hairline p-3 dark:border-gray-800">

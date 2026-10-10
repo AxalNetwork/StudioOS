@@ -341,7 +341,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/network', icon: Handshake, label: 'Network',
         match: ['/network', '/relationships', '/contacts'] },
       { to: '/research', icon: Radar, label: 'Research',
-        match: ['/research', '/signals', '/market-intel'] },
+        match: ['/research'] },
     ]},
   ],
 
@@ -465,7 +465,7 @@ export const SIDEBAR_GROUPS = {
                 '/offers/catalog'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/my/jobs'] },
-      { to: '/research', icon: Radar, label: 'Research', match: ['/research', '/signals', '/market-intel'] },
+      { to: '/research', icon: Radar, label: 'Research', match: ['/research'] },
     ]},
   ],
 
@@ -498,7 +498,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
       { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/research', icon: Radar, label: 'Research', match: ['/research', '/market-intel'] },
+      { to: '/research', icon: Radar, label: 'Research', match: ['/research'] },
       { to: '/trust', icon: ShieldCheck, label: 'Trust' },
       // NO Company Settings row. The canvas asks for one; the shipped decision
       // is that /company-settings is the sidebar's PINNED FOOTER for every
@@ -541,7 +541,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/advisor/network', '/my/jobs'] },
       { to: '/research', icon: Radar, label: 'Research',
-        match: ['/research', '/signals', '/market-intel'] },
+        match: ['/research'] },
       // NO Trust row (it belongs to the user dropdown) and NO Practice Settings
       // row (the pinned footer is the single entry point). The canvas asks for
       // both; both are decisions already made against it.
@@ -632,14 +632,14 @@ function workspaceRoutes(role) {
  */
 export const FOUNDER_FULL_BLEED = [
   ...workspaceRoutes('founder'),
-  // The legacy paths. Since D422, bare `/build/discovery`, `/execution` and
-  // `/signals` are `<Navigate replace>` redirects for a founder — to
-  // `/validate`, `/build` and `/research` — and render a page only with
-  // `?mode=workspace` (the editors D422 kept); `/build/team?mode=workspace` is
-  // the Team workspace (D435). They stay listed so the editor each still
-  // mounts keeps the desk's width. These are the only hand-typed entries
-  // left, because they are exactly the routes the shell config does NOT claim.
-  '/build/discovery', '/execution', '/build/team', '/signals',
+  // The legacy paths. Since D422, bare `/build/discovery` and `/execution`
+  // are `<Navigate replace>` redirects for a founder — to `/validate` and
+  // `/build` — and render a page only with `?mode=workspace` (the editors D422
+  // kept); `/build/team?mode=workspace` is the Team workspace (D435). They stay
+  // listed so the editor each still mounts keeps the desk's width. These are
+  // the only hand-typed entries left, because they are exactly the routes the
+  // shell config does NOT claim. (`/signals` left with its page, D670.)
+  '/build/discovery', '/execution', '/build/team',
 ];
 
 /**
@@ -665,7 +665,6 @@ export const INVESTOR_FULL_BLEED = [
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
   '/portfolio/health', '/portfolio/growth', '/portfolio/performance',
   '/portfolio/risk-matrix', '/portfolio/reserves', '/portfolio/waterfall',
-  '/market-intel',
 ];
 
 /**

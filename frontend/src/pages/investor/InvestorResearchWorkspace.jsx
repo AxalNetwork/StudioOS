@@ -39,9 +39,9 @@ export default function InvestorResearchWorkspace() {
     setRefreshing(refresh);
     const results = await Promise.allSettled([
       api.miSectorCompass(), api.studioBenchmarks(), api.miSources(), api.privateRounds(),
-      api.listProjects(), api.miWatchlistList(),
+      api.listProjects(),
     ]);
-    const keys = ['compass', 'benchmarks', 'sources', 'rounds', 'projects', 'watchlist'];
+    const keys = ['compass', 'benchmarks', 'sources', 'rounds', 'projects'];
     const next = {}; const nextErrors = {};
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') next[keys[index]] = result.value;
@@ -77,7 +77,6 @@ export default function InvestorResearchWorkspace() {
   const rounds = useMemo(() => arrayOf(data?.rounds, ['rounds', 'items', 'data']), [data]);
   const projects = useMemo(() => arrayOf(data?.projects, ['projects', 'items', 'data']), [data]);
   const compass = useMemo(() => arrayOf(data?.compass, ['sectors', 'items', 'data']), [data]);
-  const watchlist = useMemo(() => arrayOf(data?.watchlist, ['rows', 'watchlist', 'items', 'data']), [data]);
   const lastUpdated = data?.sources?.updated_at
     || data?.sources?.computed_at
     || data?.compass?.updated_at
@@ -134,7 +133,7 @@ export default function InvestorResearchWorkspace() {
 
         <div className="ir-lower">
           <section className="ir-mini" id="research-benchmarks"><h2>Fund &amp; manager benchmarking</h2><p>Operating benchmark fields are displayed only when the benchmark contract returns them.</p><span data-testid="text-research-benchmark-status">{errors.benchmarks ? 'Benchmark service unavailable' : benchmarksReason ? `Not recorded · ${benchmarksReason}` : data?.benchmarks ? 'Benchmark record available for review' : 'Benchmark record not available'}</span></section>
-          <section className="ir-mini" id="research-markets"><h2>Market deep-dives</h2><p>Saved briefs and market records retain their source and freshness rather than becoming an inferred conviction score.</p><span data-testid="text-research-market-status">{errors.compass && errors.watchlist ? 'Market compass and saved list unavailable' : errors.compass ? `Market compass unavailable · ${watchlist.length} saved` : errors.watchlist ? `${recordedSectors ? `${recordedSectors} live sector records` : 'Sector records not recorded'} · saved list unavailable` : data ? `${recordedSectors ? `${recordedSectors} live sector records` : 'Sector records not recorded'} · ${watchlist.length} saved` : 'Loading sector records'}</span></section>
+          <section className="ir-mini" id="research-markets"><h2>Market deep-dives</h2><p>Market records retain their source and freshness rather than becoming an inferred conviction score.</p><span data-testid="text-research-market-status">{errors.compass ? 'Market compass unavailable' : data ? (recordedSectors ? `${recordedSectors} live sector records` : 'Sector records not recorded') : 'Loading sector records'}</span></section>
           <section className="ir-mini" id="research-companies"><h2>Company profiles</h2><p>Comparable context comes from the existing project and private-round services; no company identity is inferred.</p><span data-testid="text-research-company-status">{errors.projects ? 'Project context unavailable' : data ? `${projects.length} project records` : 'Loading project context'}</span></section>
         </div>
       </section>

@@ -14,7 +14,6 @@ import { fileURLToPath } from 'node:url';
 
 import { titleCase } from '../src/lib/absence.js';
 import { humanize } from '../src/lib/assessmentMeta.js';
-import { prettify } from '../src/lib/signalsMeta.js';
 import { prettyStage } from '../src/pages/pipeline/bucketing.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
@@ -46,7 +45,6 @@ const PAGES = {
 };
 
 test('hyphens now normalise to spaces where only underscores did', () => {
-  assert.equal(prettify('pre-seed'), 'Pre Seed');
   for (const k of ['fundPerformance', 'portfolioGrowth', 'fundLPs', 'fundLanding', 'fundReporting',
     'networkType', 'portfolioCanvas']) {
     assert.equal(PAGES[k]()('co-invest_round'), 'Co Invest Round', k);
@@ -57,7 +55,6 @@ test('hyphens now normalise to spaces where only underscores did', () => {
 });
 
 test('input is now trimmed before casing', () => {
-  assert.equal(prettify('  in_progress '), 'In Progress');
   for (const k of Object.keys(PAGES)) {
     assert.equal(PAGES[k]()('  in_progress '), 'In Progress', k);
   }
@@ -111,7 +108,7 @@ test('pageLabel keeps its route map and its empty string', () => {
 });
 
 test('no converted file declares its own caser', () => {
-  for (const rel of ['lib/advisor/router.js', 'lib/assessmentMeta.js', 'lib/signalsMeta.js',
+  for (const rel of ['lib/advisor/router.js', 'lib/assessmentMeta.js',
     'pages/FundPerformancePage.jsx', 'pages/PortfolioGrowthPage.jsx', 'pages/admin/AdminLpApplications.jsx',
     'pages/insights/InsightsPage.jsx', 'pages/investor/InvestorFundLPs.jsx', 'pages/investor/InvestorFundLanding.jsx',
     'pages/investor/InvestorFundReporting.jsx', 'pages/investor/InvestorNetworkWorkspace.jsx',

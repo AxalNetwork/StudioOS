@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from './BucketOverview';
@@ -53,7 +53,7 @@ import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
  * strip, no `advisor_note`. That was fixed, and then the zone turned out to be
  * about a different object altogether: the `pr3` artboard's comparable RANGES
  * for the firm's own service lines, not sector signals. `MarketZone` is that
- * page and the feed keeps `/signals`. `CompetitorAnalysisPage` had the same
+ * page; the feed kept `/signals` until D670 retired it. `CompetitorAnalysisPage` had the same
  * swallowed-props defect and keeps its fix — `Companies` takes a `chromeless`
  * flag that is deliberately not `embedded` (see `components/CompetitorAnalysis.jsx`).
  *
@@ -159,7 +159,6 @@ function ResearchOverview({ role }) {
   if (!bucket) return null;
   const board = boardFor(role, '/research', api);
   if (board) return <>
-    {role === 'advisor' && <Link to="/market-intel" className="mb-4 inline-block text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">Open Market Intelligence</Link>}
     {/* D536 — the Research overview (Research · Main canvas, D546) above the
         advisor and partner board. The board keeps its own sections. */}
     <ResearchOverviewPanel />
@@ -167,7 +166,6 @@ function ResearchOverview({ role }) {
   </>;
   return (
     <>
-    {role === 'advisor' && <Link to="/market-intel" className="mb-4 inline-block text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">Open Market Intelligence</Link>}
     <BucketOverview
       bucket={bucket}
       role={role}
@@ -196,9 +194,9 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       // `SignalsPage` embedded — the `market_intel_rows` sector feed — and the
       // `pr3` artboard is about comparable RANGES for the firm's own service
       // lines, each attachable to a proposal. A sector signal is not a price.
-      // The feed keeps its own route at `/signals`, which every licence that
-      // had it here still reaches, and `MarketZone` links to it in as many
-      // words rather than leaving a reader to find it.
+      // The feed kept its own route at `/signals` until D670 retired that
+      // page; the market directory and the founder desk still read the
+      // signals themselves.
       // `handlers` carries the page's own ops (D593): the partner row's
       // `Re-run stale` opens the directory's record-a-reading form.
       return (

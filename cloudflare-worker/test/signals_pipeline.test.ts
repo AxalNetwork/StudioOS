@@ -32,7 +32,7 @@ import {
   MIN_EVIDENCE_KINDS,
 } from '../src/services/signals/ingest';
 import { getSeedSignals, SEED_ANCHOR } from '../src/services/signals/seed';
-import { getRankedSignals, getKpis } from '../src/services/signals/engine';
+import { getRankedSignals } from '../src/services/signals/engine';
 import { SOURCE_REGISTRY } from '../src/services/signals/sources';
 import { EVIDENCE_KINDS } from '../src/services/signals/types';
 
@@ -206,8 +206,5 @@ test('engine: with no ingested rows the response is LABELED illustrative', async
   assert.ok(res.signals.length > 0, 'the labeled example corpus still renders');
 });
 
-test('engine: kpis report last_refreshed_at null before any ingestion — never "now"', async () => {
-  const k = await getKpis(stubEnv(), 'founder');
-  assert.equal(k.last_refreshed_at, null);
-  assert.equal(k.data_state, 'illustrative');
-});
+// 'engine: kpis report last_refreshed_at null before any ingestion' stood
+// here. The KPI strip and `getKpis` were retired with the /signals page (D670).

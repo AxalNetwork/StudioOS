@@ -493,9 +493,6 @@ export function MarketReadingView({
               <p>
                 A range is refused without the number of comparables and the date you ran it. Both travel onto any proposal.
               </p>
-              <p>
-                Sector signals live on <Link to="/signals" className={accentLink}>Signals</Link>. This page is about prices.
-              </p>
             </StatedLimit>
             <p className="text-[11px] text-axal-faint">
               Ageing starts after {AGE_AT} days and is still attachable. Stale, past {STALE_AT}, is blocked.

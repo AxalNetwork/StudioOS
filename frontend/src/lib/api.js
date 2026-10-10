@@ -329,7 +329,6 @@ export const SLOW_PATHS = [
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
   /^\/scoring\//,                        // score, deal-memo, generateMemo
-  /^\/signals\/refresh$/,
 ];
 
 /**
@@ -1421,11 +1420,12 @@ export const api = {
 
   founderSubmit: (data) => request('/projects/submit', { method: 'POST', body: JSON.stringify(data) }),
 
+  // The market-intelligence reads Research and the Spinout Lab still draw.
+  // D670 retired the /market-intel page, its sector digest and the reads only
+  // that page made.
   marketPulse: () => request('/market-intel/market-pulse'),
-  marketMacro: () => request('/market-intel/macro'),
   privateRounds: () => request('/market-intel/private-rounds'),
   studioBenchmarks: () => request('/market-intel/studio-benchmarks'),
-  competitiveIntelligence: () => request('/market-intel/competitive-intelligence'),
 
   // Task #15 (AA-2) — Aggregator-backed Market Intel surfaces. The worker
   // returns 402 {error:'tier_required', required} on gated endpoints; the
@@ -1435,8 +1435,6 @@ export const api = {
   // dimensional breakdown.
   miSectorCompass: () => request('/market-intel/sector-compass'),
   miFounderLens: () => request('/market-intel/founder-lens'),
-  miInvestorLens: () => request('/market-intel/investor-lens'),
-  miGeography: () => request('/market-intel/geography'),
   miCitations: (sector, limit = 50) => {
     const q = new URLSearchParams();
     if (sector) q.set('sector', sector);
@@ -1445,20 +1443,8 @@ export const api = {
     return request(`/market-intel/citations${qs ? `?${qs}` : ''}`);
   },
   miSources: () => request('/market-intel/sources'),
-  miWatchlistList: () => request('/market-intel/watchlist'),
-  miWatchlistAdd: (sector, geo = 'global', cadence = 'weekly') =>
-    request('/market-intel/watchlist', { method: 'POST', body: JSON.stringify({ sector, geo, cadence }) }),
-  miWatchlistRemove: (id) =>
-    request(`/market-intel/watchlist/${id}`, { method: 'DELETE' }),
-  // Task #32 — pause/resume sector-digest emails without unpinning.
-  // `until`: ISO string | 'indefinite' | null (null = resume).
-  miWatchlistPause: (until) =>
-    request('/market-intel/watchlist/pause', {
-      method: 'POST',
-      body: JSON.stringify({ until }),
-    }),
 
-  // Task #4 — Investor Signals + profiling chatbot
+  // Task #4 — the investor profile (profiling chatbot)
   getInvestorProfile: () => request('/investor-profile/me'),
   saveInvestorProfile: (data) => request('/investor-profile/me', { method: 'PUT', body: JSON.stringify(data) }),
 
@@ -1470,26 +1456,9 @@ export const api = {
     method: 'POST', body: JSON.stringify({ opt_out: !!opt_out }),
   }),
 
-  // Task #1 (AT-2) — Read endpoints for the 8 new MI tabs. All return
-  // `{ items: [...], k_min: 5 }` (or `{ matches, note?, k_min }` for fit
-  // endpoints). Cells with n<5 are suppressed server-side; tabs surface
-  // `<MIInsufficientData />` whenever items[] is empty or every cell is
-  // suppressed.
-  miSentiment: (weeks = 8) => request(`/market-intel/sentiment?weeks=${weeks}`),
-  miTalc: (months = 6) => request(`/market-intel/talc?months=${months}`),
-  miDemandSupply: (sector) => request(`/market-intel/demand-supply${sector ? `?sector=${encodeURIComponent(sector)}` : ''}`),
-  miSectorHeat: (weeks = 8) => request(`/market-intel/sector-heat?weeks=${weeks}`),
-  miSentimentGeo: (weeks = 4) => request(`/market-intel/sentiment-geo?weeks=${weeks}`),
-  miCapitalVelocity: (months = 6) => request(`/market-intel/capital-velocity?months=${months}`),
-  miPartnerPulse: () => request('/market-intel/partner-pulse'),
+  // Task #1 (AT-2) — a venture's fit against the anonymised cohort. Returns
+  // `{ matches, note?, k_min }`; cells with n<5 are suppressed server-side.
   miFitFounder: (projectId) => request(`/market-intel/fit/founder/${projectId}`),
-  miFitInvestor: () => request('/market-intel/fit/investor/me'),
-  miPlatformPersonas: () => request('/market-intel/platform-personas'),
-  miPlatformPersonasExportUrl: (format = 'csv') =>
-    `/api/market-intel/platform-personas/export?format=${encodeURIComponent(format)}`,
-
-  optOutInvestorSignals: () => request('/investor-profile/me/opt-out', { method: 'POST' }),
-  getInvestorSignals: () => request('/investor-signals/latest'),
 
   // Task #26 — Financial Model Builder
   getFinancialModel: (projectId) => request(`/financials/${projectId}`),
@@ -1880,9 +1849,9 @@ export const api = {
   insightsNewsletterUnsubscribe: () => request('/insights/newsletter/unsubscribe', { method: 'POST' }),
   insightsNewsletterPreview: () => request('/insights/newsletter/preview'),
 
-  // Signals — founder decision engine over public-market evidence. Worker-only
-  // (dev FastAPI has no /api/signals). Shared by Founder + Advisor modes;
-  // `mode` only changes ordering + copy, never the underlying data.
+  // Signals — the ranked list and its sources, read by Research's founder desk
+  // and market directory. Worker-only (dev FastAPI has no /api/signals). The
+  // /signals page and the reads only it made were retired by D670.
   signals: {
     list: (params = {}) => {
       const qs = new URLSearchParams(
@@ -1890,12 +1859,7 @@ export const api = {
       ).toString();
       return request('/signals' + (qs ? `?${qs}` : ''));
     },
-    get: (id, mode = 'founder') => request(`/signals/${encodeURIComponent(id)}?mode=${mode}`),
-    filters: () => request('/signals/filters'),
-    kpis: (mode = 'founder') => request(`/signals/kpis?mode=${mode}`),
     sources: () => request('/signals/sources'),
-    meta: () => request('/signals/meta'),
-    refresh: () => request('/signals/refresh', { method: 'POST' }),
   },
 
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),

@@ -1,5 +1,11 @@
 # Signals — founder decision engine
 
+**D670 retired the `/signals` page** and the reads only it made (`/filters`,
+`/kpis`, `/meta`, `/:id`, the admin's manual `/refresh`). The engine stays:
+the nightly cron still refreshes the `signals` table, and Research reads it —
+the overview, markets and sectors (`routes/research_*.ts`), and the founder
+desk and market directory through `GET /api/signals` and `/api/signals/sources`.
+
 A decision-support engine that surfaces **founder-actionable startup
 opportunities** from **public** company data (public companies, markets,
 sectors, countries, customer segments). It is deliberately **not** a stock/
@@ -24,16 +30,9 @@ cloudflare-worker/
 │  ├─ sources.ts                         # source registry + swappable adapters
 │  ├─ ranking.ts                         # ranking + confidence engine
 │  ├─ seed.ts                            # sample seeded signals + companies
-│  ├─ engine.ts                          # load → filter → rank → KPIs → refresh
+│  ├─ engine.ts                          # load → filter → rank → refresh
 │  └─ README.md                          # (this file)
 └─ sql/migrations/136_signals.sql        # D1 schema (additive, idempotent)
-
-frontend/src/
-├─ pages/SignalsPage.jsx                 # the "Signals" dashboard page (/signals)
-├─ components/signals/                   # SignalCard, SignalFilterBar,
-│                                        # SignalEvidencePanel, SignalModeToggle,
-│                                        # SignalKPIStrip
-└─ lib/signalsMeta.js                    # shared labels / icons / tones
 ```
 
 ## Data model (normalized)
@@ -59,7 +58,7 @@ public companies". `signal_ingest_runs` is the background-refresh audit trail.
 
 The engine reads from D1 first and **transparently falls back to the in-code
 seed corpus** (`seed.ts`) when the tables are missing or empty. This keeps the
-`/signals` page fully functional before any ingestion has run, and means no code
+reads working before any ingestion has run, and means no code
 change is needed once the tables fill — seed and live rows share one shape.
 
 ## Source layer (swappable adapters)
@@ -132,17 +131,12 @@ Mode only affects the **tie-break**: founder → higher practicality first, advi
 
 ## API
 
-All endpoints require an authenticated Axal member; `POST /refresh` is admin-only.
+Both endpoints require an authenticated Axal member.
 
 | Method & path                | Purpose                                             |
 | ---------------------------- | --------------------------------------------------- |
 | `GET  /api/signals`          | ranked + filtered signal cards (list view)          |
-| `GET  /api/signals/filters`  | available facets + controlled vocabularies          |
-| `GET  /api/signals/kpis`     | KPI-strip payload                                   |
 | `GET  /api/signals/sources`  | source registry (confidence transparency)           |
-| `GET  /api/signals/meta`     | signal-type catalog + rank-weight explanation       |
-| `GET  /api/signals/:id`      | one signal's detail (evidence, companies, sources)  |
-| `POST /api/signals/refresh`  | background ingestion refresh (admin only)           |
 
 **Filters** (all optional, AND-combined): `region`, `country`, `sector`,
 `industry`, `niche`, `market_cap_band`, `employee_band`, `customer_type`,
@@ -156,7 +150,7 @@ re-stamps `last_refreshed_at` and lets the short-TTL keys expire.
 - **Add a data provider:** implement a `SourceAdapter` in `sources.ts`, register
   its `SignalSource`, add it to `LIVE_ADAPTERS`. Nothing else changes.
 - **Add a signal type:** append to `SIGNAL_TYPES` + `SIGNAL_TYPE_LABELS` in
-  `types.ts` and add an icon in `frontend/src/lib/signalsMeta.js`.
+  `types.ts`.
 - **Add a country/region:** regions are a vocab in `types.ts`; countries are free
   text on each signal, so no schema change is needed to cover a new market.
 - **Persist derived signals:** a scheduled Cron would call `runRefresh`, upsert

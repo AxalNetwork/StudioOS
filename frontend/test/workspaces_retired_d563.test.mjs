@@ -72,9 +72,10 @@ const DESK = {
 // board registered, BucketOverview. Both draw the list for their own bucket.
 const BUCKET_BODIES = ['frontend/src/workspaces/BucketBoard.jsx', 'frontend/src/workspaces/BucketOverview.jsx'];
 
-test('the mapping covers exactly the 28 pages, and every line names a profile, a row and a door', () => {
+test('the mapping covers exactly the 26 pages, and every line names a profile, a row and a door', () => {
   assert.deepEqual(Object.keys(PAGE_HOMES).sort(), WORKSPACES.map((w) => w.route).sort());
-  assert.equal(WORKSPACES.length, 28);
+  // 28 until D670 retired Market Intelligence and Signals.
+  assert.equal(WORKSPACES.length, 26);
   for (const [route, homes] of Object.entries(PAGE_HOMES)) {
     assert.ok(homes.length > 0, `${route} has no home`);
     for (const [role, row, door] of homes) {

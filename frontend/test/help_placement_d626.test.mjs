@@ -61,7 +61,9 @@ test('old hashes and page addresses still resolve every same guide, with admin e
 });
 
 test('home renders task areas, four previews, surface labels and single-role badges', () => {
-  assert.deepEqual(helpAreas(visible).map((a) => a.badge), [null, 'FOUNDER', null, null, null, null, null, null, null, null, null]);
+  // Funds & portfolio reads INVESTOR for a founder since D670 removed the
+  // Market Intelligence guide, the one guide in that area for every role.
+  assert.deepEqual(helpAreas(visible).map((a) => a.badge), [null, 'FOUNDER', null, null, null, 'INVESTOR', null, null, null, null, null]);
   const output = html(BrowseByTask, { sections: visible });
   assert.deepEqual([...output.matchAll(/<h3[^>]*>(.*?)<\/h3>/gs)].map((m) => renderedText(m[1])), labels.slice(0, -1));
   const lab = output.slice(output.indexOf('The Spin-Out Lab'), output.indexOf('Building your startup'));
