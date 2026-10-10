@@ -139,134 +139,119 @@ test('the rail types no rate and no model name', () => {
   assert.doesNotMatch(src, /@cf\//, 'a model id was typed into the rail');
   // Both sides of every rate go through the one formatter, so what is shown is
   // what the price list says rather than a rounding of it.
-  assert.match(src, /formatRate\(m\.pin\)/);
-  assert.match(src, /formatRate\(m\.pout\)/);
+  assert.match(src, /formatRate\(price\.pin\)/);
+  assert.match(src, /formatRate\(price\.pout\)/);
+  assert.match(src, /formatRate\(price\.perMinute\)/);
   assert.doesNotMatch(src, /\.toFixed\(/, 'the rail is formatting a figure by hand');
 });
 
-test('the menu is built from the router, not from the copy table', () => {
-  const src = codeOnly(read(RAIL));
-  assert.match(src, /modelsForTask\(pricing, surface\.task/,
-    'the menu must be derived from the task the surface declares');
-  // The single-model card the rail has always drawn is still the fallback for
-  // a task that offers no choice, and three other test files require this
-  // exact call to be present.
-  assert.match(src, /priceForTask\(pricing, surface\.task\)/);
+// ── The AIRail canvas's cards (owner, 2026-10-10) ───────────────────────
 
-  const hook = codeOnly(read('frontend/src/hooks/useAiSpend.js'));
-  // `.map` over `route.alternates`, not merely a mention of it. An earlier
-  // version of this matched the bare name and a mutation that returned
-  // `Object.keys(copy)` walked straight past it — the guard clause above the
-  // return still says `route.alternates`, so the name was there either way.
-  assert.match(hook, /return route\.alternates\s*\n\s*\.map\(/,
-    'the menu must be MAPPED from the router\'s alternates, not from the copy table');
-  assert.doesNotMatch(hook, /Object\.keys\(copy\)|Object\.entries\(copy\)/,
-    'the copy table must never decide which models exist');
-  assert.match(hook, /if \(!p \|\| typeof p\.in !== 'number' \|\| typeof p\.out !== 'number'\) return null;[\s\S]{0,400}?\.filter\(Boolean\)/,
-    'an unpriced model must be dropped from the menu, never rendered at zero');
+const L70 = 'm/seventy', L8 = 'm/eight', L3 = 'm/three', WH = 'm/whisper';
+const PRICING = {
+  prices: { [L70]: { in: 0.293, out: 2.253 }, [L8]: { in: 0.152, out: 0.287 }, [L3]: { in: 0.051, out: 0.335 } },
+  audio_prices: { [WH]: 0.0005, 'm/nova': 0.0052 },
+  routes: {
+    transcribe: { model: WH, alternates: [WH, 'm/nova', 'm/unpriced'] },
+    tag: { model: L70, alternates: [L70, L8, L3] },
+    draft: { model: L70, alternates: [L70, L8] },
+    ask: { model: L70, alternates: [] },
+  },
+};
+const JOBS = [
+  { task: 'transcribe', pick: false, why: 'T.', tags: ['Best for: transcription'] },
+  { task: 'tag', pick: true, why: 'Tag.', tags: ['Best for: tagging'] },
+  { task: 'draft', pick: true, why: 'Draft.', tags: ['Best for: drafting'] },
+];
+
+test('railCards: one card per model in use, jobs on one model share it, DEFAULT from the router', async () => {
+  const { railCards } = await import('../src/hooks/useAiSpend.js');
+  const v = railCards(PRICING, JOBS, { copy: { [L70]: { name: 'Seventy' } } });
+  assert.deepEqual(v.cards.map((c) => [c.id, c.isDefault, c.jobs.map((j) => j.task)]),
+    [[WH, true, ['transcribe']], [L70, true, ['tag', 'draft']]]);
+  assert.equal(v.cards[1].name, 'Seventy');
+  assert.equal(v.cards[0].name, 'whisper', 'a model with no copy renders on its id, never blank');
+  assert.deepEqual(v.cards[0].price, { kind: 'audio', perMinute: 0.0005 });
+  // A job that takes no pick offers no alternates: Whisper's unpriced and
+  // priced siblings never appear, whatever the router lists.
+  assert.deepEqual(v.alternates.map((a) => [a.id, a.tasks]), [[L8, ['tag', 'draft']], [L3, ['tag']]]);
+  assert.equal(v.pickable, true);
 });
 
-test('the fuller treatment is what the default entry gets, gated on the flag', () => {
-  // The canvas gates the id, the tags and the full rate line on the same
-  // flag as its badge (design/incoming/AIRail.dc.html, three <sc-if> blocks),
-  // so the badge is a label on a difference rather than the difference itself.
-  // The render check proves a non-recommended entry shows none of the three;
-  // this proves the source still asks.
+test('railCards: a pick moves only the jobs that offer it, and is not the default', async () => {
+  const { railCards } = await import('../src/hooks/useAiSpend.js');
+  const v = railCards(PRICING, JOBS, { chosen: (t) => (t === 'tag' ? L3 : null) });
+  assert.deepEqual(v.cards.map((c) => [c.id, c.isDefault, c.jobs.map((j) => j.task)]),
+    [[WH, true, ['transcribe']], [L3, false, ['tag']], [L70, true, ['draft']]]);
+  // The 70B card is a choice for tagging again; the 3B card is no choice for
+  // drafting, which does not offer it.
+  assert.deepEqual(v.cards.find((c) => c.id === L70).tasks, ['tag']);
+  assert.deepEqual(v.cards.find((c) => c.id === L3).tasks, []);
+  assert.deepEqual(v.alternates.map((a) => a.id), [L8]);
+});
+
+test('railCards: a stale or unoffered pick is not a selection, and an unpriced model draws nothing', async () => {
+  const { railCards } = await import('../src/hooks/useAiSpend.js');
+  const stale = railCards(PRICING, JOBS, { chosen: () => 'm/gone' });
+  assert.deepEqual(stale.cards.map((c) => c.id), [WH, L70], 'a pick the router stopped offering stranded a job');
+  // A job that takes no pick ignores a stored one.
+  const ignored = railCards(PRICING, [{ ...JOBS[0] }], { chosen: () => 'm/nova' });
+  assert.deepEqual(ignored.cards.map((c) => c.id), [WH], 'a job that takes no pick ran a stored one');
+  assert.deepEqual(ignored.alternates, [], 'a job that takes no pick offered its router siblings');
+  // An unpriced router model draws no card: unknown, not free.
+  const unpriced = railCards({ ...PRICING, routes: { x: { model: 'm/unpriced', alternates: [] } } }, [{ task: 'x', pick: true }]);
+  assert.deepEqual(unpriced.cards, []);
+  assert.equal(railCards(null, JOBS).cards.length, 0, 'no pricing read draws no card');
+});
+
+test('the cards are drawn the canvas way: full card in use, compact rows for the rest', () => {
   const src = codeOnly(read(RAIL));
-  // Each of the three named, not a count of gates. Counting let a mutation
-  // that ungated the id line pass, because the badge's own gate kept the
-  // total above the threshold.
-  for (const [what, re] of [
-    ['the @cf id line', /\{m\.isDefault && <span className="fwr-model-id">/],
-    ['the tags row', /\{m\.isDefault && m\.tags\.length > 0 && \(/],
-    ['the full rate line', /\{m\.isDefault && \(\s*\n\s*<span className="fwr-model-rate">/],
-  ]) {
-    assert.match(src, re, `${what} is not gated on m.isDefault`);
-  }
-  assert.match(src, /\{!m\.isDefault && \(/,
-    'a non-default entry must still carry its inline rate');
+  const card = src.slice(src.indexOf('export function RailModelCard('), src.indexOf('export function RailAllowance('));
+  assert.match(card, /\{card\.isDefault && <i className="fwr-badge">DEFAULT<\/i>\}/, 'the default card lost its badge');
+  assert.match(card, /<span className="fwr-model-id">\{card\.id\}<\/span>/);
+  assert.match(card, /<span className="fwr-model-rate">\{rateLine\(card\.price\)\}<\/span>/);
+  assert.match(src, /<i className="fwr-model-inline">\{inlineRate\(alt\.price\)\}<\/i>/, 'a compact row lost its inline rate');
+  assert.match(src, /railCards\(pricing, jobsFor\(workspace\), \{\s*copy: MODEL_COPY,/);
 });
 
 test('the badge says Default, and the rail never says "recommend" (D400)', () => {
-  // The voice rule forbids "recommendation" about what the assistant
-  // produces. The old bare RECOMMENDED passed the regulated-wording scanner
-  // only because the scanner treats a one-word literal as an identifier, and
-  // the badge marked the router's default all along. Every form of the word is
-  // now out of the rendered rail, including identifiers — an identifier is
-  // where the next badge would be read from.
   const src = codeOnly(read(RAIL));
   assert.deepEqual([...new Set([...src.matchAll(/\brecommend\w*\b/gi)].map((m) => m[0]))], [],
     'a form of "recommend" is back in the rail');
-  assert.match(src, /\{m\.isDefault && <i className="fwr-badge">DEFAULT<\/i>\}/,
-    'the default entry no longer carries its badge');
+  const hook = codeOnly(read('frontend/src/hooks/useAiSpend.js'));
+  assert.match(hook, /if \(j\.model !== j\.routerDefault\) card\.isDefault = false;/,
+    'DEFAULT is no longer derived from the router\'s own model');
 });
 
-test('the chosen model reaches the worker', () => {
-  // Two links in one chain, and dropping either is silent: the rail renders
-  // the 3b selected and its rate, the 70b runs, and every figure on screen is
-  // wrong by eight times. Neither end had a source assertion — the browser
-  // check caught it, and a browser check is not what CI runs.
-  const rail = codeOnly(read(RAIL));
-  assert.match(rail, /api\.aiWorkspaceExplain\(\{[\s\S]{0,200}?model: activeModel \|\| undefined/,
-    'the rail no longer sends the model it is showing as selected');
-
-  const api = codeOnly(read('frontend/src/lib/api.js'));
-  const method = api.slice(api.indexOf('aiWorkspaceExplain:'), api.indexOf('aiWorkspaceExplain:') + 400);
-  assert.ok(method.length > 100, 'aiWorkspaceExplain was not found in api.js');
-  // RE-AIMED IN D154, AND THE RE-AIM IS THE POINT. This pinned the parameter
-  // list as an EXACT TUPLE — `({ workspace, zone, coverage, model })` — so
-  // adding a fifth field failed it while changing nothing about the model. The
-  // property it exists for is narrower and survives: the method must ACCEPT a
-  // model and must FORWARD it, and dropping either end is the silent break its
-  // header describes (the rail shows the 3b selected, the 70b runs, and every
-  // figure on screen is wrong by eight times).
-  assert.match(method, /aiWorkspaceExplain: \(\{[^}]*\bmodel\b[^}]*\}\) =>/,
-    'the api method no longer accepts a model');
-  assert.match(method, /JSON\.stringify\(\{[^}]*\bmodel\b[^}]*\}\)/,
-    'the api method accepts a model and drops it before the request');
-});
-
-test('the estimate is measured, and is not attributed to one model', () => {
-  // D16: the caller's own observed average, absent until they have one. And
-  // OUTSIDE the menu — `/api/ai/me/spend` groups by task, not by model, so an
-  // average printed inside a card claims to be that model's when it is the
-  // average across every model this caller has run the task on.
-  const src = read(RAIL);
-  assert.match(src, /observedRunCost\(spend, surface\.task\)/);
-  const fieldset = src.slice(src.indexOf('<fieldset'), src.indexOf('</fieldset>'));
-  assert.ok(fieldset.length > 200, 'the menu markup was not found');
-  assert.doesNotMatch(fieldset, /observed/,
-    'the observed average is rendered inside a model card, where it reads as that model\'s');
-  assert.match(src, /No runs of this yet/,
+test('the estimate is measured, per job, and never modelled (D16)', () => {
+  const src = codeOnly(read(RAIL));
+  assert.match(src, /const observed = observedRunCost\(spend, j\.task\);/);
+  assert.match(read(RAIL), /No runs yet, so no average to show\./,
     'with no history the rail must say so rather than print a zero');
-  assert.doesNotMatch(codeOnly(src), /tin:|tout:/,
-    'a modelled token count reached the rail (D16)');
+  assert.doesNotMatch(src, /tin:|tout:/, 'a modelled token count reached the rail (D16)');
 });
 
-test('the choice is remembered the way every other rail preference is', () => {
+test('a pick is stored per section and per task, the way every other rail preference is', () => {
   const src = codeOnly(read(RAIL));
   assert.doesNotMatch(src, /localStorage\./,
     'localStorage throws outright in some embedded contexts; use safeReadJSON/safeWriteJSON');
-  assert.match(src, /safeReadJSON\(modelKeyFor\(workspace\)/);
-  assert.match(src, /safeWriteJSON\(modelKeyFor\(workspace\)/);
-  // Per workspace, not per zone: the Validate canvas settles this — "Mode and
-  // model are chosen on the workspace, not re-picked here."
-  assert.match(src, /const modelKeyFor = \(workspace\)/);
+  assert.match(src, /for \(const task of tasks\) writeRailModel\(workspace, task, id\);/);
+  const store = codeOnly(read('frontend/src/ui/railModelChoice.js'));
+  assert.match(store, /safeReadJSON\(railModelKey\(workspace, task\), null\)/);
+  assert.match(store, /safeWriteJSON\(railModelKey\(workspace, task\), id \|\| null\)/);
 });
 
-test('a stored model the router stopped offering cannot strand the rail', () => {
-  // Two halves, and both are needed. Before a run: a stale id is not treated
-  // as a selection, so the menu renders the primary selected rather than
-  // nothing. After a refused run: the stored id is dropped, or every later
-  // click fails identically with no way out short of clearing site data.
-  const src = codeOnly(read(RAIL));
-  assert.match(src, /models\.some\(\(m\) => m\.id === chosen\) \? chosen : \(models\[0\]\?\.id \?\? null\)/,
-    'a stale stored id must fall back to the primary');
-  assert.match(src, /refusal === 'model_not_offered'/,
-    'the rail must recognise the one refusal it can act on');
-  const branch = src.slice(src.indexOf("refusal === 'model_not_offered'"));
-  assert.match(branch.slice(0, 300), /setChosen\(null\)/,
-    'the rail recognises the refusal and keeps the choice that caused it');
+test('each section names only work its pages run, on router tasks', () => {
+  const copy = codeOnly(read(COPY));
+  const alts = alternatesByTask();
+  for (const task of [...copy.matchAll(/task: '([a-z_]+)'/g)].map((m) => m[1])) {
+    assert.ok(alts.has(task), `railModels.js names ${task}, which is not a ROUTE entry`);
+  }
+  // A job that takes a pick must offer one; a pick with nowhere to go is the
+  // dead control D17 refused.
+  for (const m of copy.matchAll(/task: '([a-z_]+)',\s*pick: true/g)) {
+    assert.ok((alts.get(m[1]) || []).length > 1, `${m[1]} takes a pick and the router offers none`);
+  }
 });
 
 test('formatRate prints the published figure, not a rounding of it', async () => {

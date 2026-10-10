@@ -146,13 +146,17 @@ const DESKS = {
 /** Every host's bands, cycles and desks alike. */
 const ALL = { ...CYCLES, ...DESKS };
 
-/** `desks: { Name: { fills|none: '…' } }` out of the config, as text. */
+/**
+ * `desks: { Name: { fills|none: '…', safety: '…' } }` out of the config, as
+ * text. Each desk also carries its safety line for the rail's last row
+ * (AIRail canvas, owner, 2026-10-10), which this file does not check.
+ */
 function deskCopy() {
   const cfg = codeOnly(read(CFG));
   const at = cfg.indexOf('desks: {');
   assert.ok(at > 0, 'the workspace surface declares no per-desk copy');
   const block = cfg.slice(at, cfg.indexOf('\n    },', at));
-  return Object.fromEntries([...block.matchAll(/^ {6}(\w+): \{ (fills|none): '([^']+)' \},$/gm)]
+  return Object.fromEntries([...block.matchAll(/^ {6}(\w+): \{\n {8}(fills|none): '([^']+)',\n {8}safety: '[^']+',\n {6}\},$/gm)]
     .map(([, name, kind, text]) => [name, { kind, text }]));
 }
 
@@ -241,17 +245,23 @@ test('nothing proposes on mount — a visit must not spend anything', () => {
   assert.match(band, /const propose = async \(\) => \{/);
 });
 
-test('the band sends no model, because these are not the rail menu\'s task', () => {
-  // The rail's menu is scoped to `workspace_explain`. These are two other task
-  // classes with their own `alternates` — the 3b the rail offers for a
-  // read-back is not offered for drafting a claim at all — so forwarding the
-  // read-back's choice would ask the router for a model this task does not
-  // offer, and it would rightly refuse.
+test('the band sends the rail\'s pick for its own task, and nothing when there is none', () => {
+  // The rail draws one card per task's model (AIRail canvas, owner,
+  // 2026-10-10) and stores a pick per section and PER TASK, so the 3B picked
+  // for tagging never reaches drafting, which does not offer it. The band
+  // reads the pick for the task the registry names for its kind.
   const band = codeOnly(read(BAND));
-  assert.match(band, /api\.proposeValidate\(projectId, \{ kind \}\)/,
-    'the band sends something other than the kind');
-  assert.doesNotMatch(band, /worker_rail_model|activeModel/,
-    'the band is reaching for the rail\'s model choice');
+  assert.match(band, /const task = kinds\?\.\[kind\]\?\.task;/, 'the band no longer reads its kind\'s task');
+  assert.match(band, /const model = task \? readRailModel\(workspace, task\) : null;/,
+    'the band reads a pick that is not its own task\'s');
+  assert.match(band, /api\.proposeValidate\(projectId, model \? \{ kind, model \} : \{ kind \}\)/,
+    'no pick must send no model, so the router runs its default');
+  // A refused pick is cleared, so the next press runs the default instead of
+  // failing the same way.
+  assert.match(band, /refusal === 'model_not_offered'[\s\S]{0,120}writeRailModel\(workspace, kinds\[kind\]\.task, null\)/);
+  // The store is per task: the key names the task.
+  const store = codeOnly(read('frontend/src/ui/railModelChoice.js'));
+  assert.match(store, /`\$\{RAIL_MODEL_PREFIX\}\$\{[^`]*\}:\$\{task\}`/);
 });
 
 test('which model wrote a proposal is read from the row, not assumed', () => {

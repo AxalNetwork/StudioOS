@@ -41,20 +41,14 @@ const OVERLAY = codeOnly(read('frontend/src/pages/hq/HqBranchOverlay.jsx'));
 const API = codeOnly(read('frontend/src/lib/api.js'));
 const AI = codeOnly(read('cloudflare-worker/src/routes/ai.ts'));
 
-test('rule 1 — the rail reports its scope and never offers it', () => {
-  assert.match(RAIL, /\n  scope,/, 'the rail lost its scope prop');
-  assert.match(RAIL, /data-testid="worker-rail-scope"/, 'the chip is not rendered');
-  // THE CHIP IS NOT A CONTROL. D150 refused a picker; the canvas asks for a
-  // report. Asserted as the absence of anything clickable in the chip, not as
-  // the absence of a word — a `<button>` or a `<select>` here would be exactly
-  // the refused control wearing the accepted one's name.
-  const chip = RAIL.slice(RAIL.indexOf('{scope && ('), RAIL.indexOf('{coverage.length'));
-  assert.ok(chip.length > 40, 'the chip could not be located — this assertion stopped checking anything');
-  assert.doesNotMatch(chip, /<(button|select|a)\b/, 'the scope chip became a control the rail cannot honour');
-  assert.doesNotMatch(chip, /onClick|onChange/, 'the scope chip took a handler, so it offers what it can only report');
-  // Absent means the page did not say, which is not the same as platform-wide.
-  assert.match(RAIL, /\{scope && \(/, 'a rail with no scope draws a chip anyway');
-  assert.match(CSS, /\.fwr-scope \{/, 'the chip has no style, so it renders as a coverage line');
+test('rule 1 — the rail draws no scope chip, and offers no scope either', () => {
+  // THE CHIP LEFT WITH THE COVERAGE BLOCK IT HEADED (owner, 2026-10-10): the
+  // rail is the AIRail canvas's four blocks, and the scope the page read in is
+  // the viewing-as banner's to state. What D150 refused still holds: nothing
+  // on the rail may offer a scope it cannot change.
+  assert.doesNotMatch(RAIL, /worker-rail-scope|\{scope && \(/, 'the scope chip is drawn again');
+  assert.match(RAIL, /RETIRED_RAIL_PROPS = \[[^\]]*'scope'/, 'scope is no longer listed as retired');
+  assert.doesNotMatch(RAIL, /<select\b/, 'the rail grew a picker');
 });
 
 test('rule 1 — both HQ scopes are named, and they are two different reads', () => {
@@ -69,11 +63,11 @@ test('rule 1 — both HQ scopes are named, and they are two different reads', ()
 test('rule 2 — the cost line is per run, and the multiplier is refused with its measurement', () => {
   assert.match(OVERLAY, /A per-scope cost multiplier/, 'the refused multiplier stopped being stated');
   assert.match(OVERLAY, /One run, one price/, 'the reason for refusing it is gone');
-  // And nothing multiplies: the rail sends one request per run whatever the
-  // scope. A second call here would be the fan-out the refusal says does not
-  // happen.
+  // And nothing multiplies: since 2026-10-10 the rail runs nothing at all —
+  // its read-back left with the AIRail canvas — so it sends no request of its
+  // own whatever the scope.
   const calls = [...RAIL.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(calls)].sort(), ['aiWorkspaceExplain']);
+  assert.deepEqual(calls, [], 'the rail runs a model again');
 });
 
 test('rule 3 — unreadable is a word in the answer, on both surfaces', () => {
@@ -87,10 +81,9 @@ test('rule 3 — unreadable is a word in the answer, on both surfaces', () => {
 });
 
 test('rule 4 — a named branch is logged, and an unscoped run still is not', () => {
-  // The identifier travels separately from the label, because one is copy and
-  // the other is what an audit row is keyed on.
-  assert.match(RAIL, /\n  scopeBranch,/, 'the rail lost the branch identifier');
-  assert.match(RAIL, /branch: scopeBranch \|\| undefined,/, 'the scope never reaches the request');
+  // The rail no longer runs the read-back (owner, 2026-10-10), so it sends no
+  // branch; the route and the api method below keep the rule for any caller.
+  assert.doesNotMatch(RAIL, /branch: scopeBranch/, 'the rail sends a branch again');
   // RE-AIMED IN D404: this pinned the parameter list as an exact tuple, so
   // adding `page` failed it while changing nothing about the branch. The
   // property is that the method ACCEPTS a branch and FORWARDS it.
@@ -98,7 +91,6 @@ test('rule 4 — a named branch is logged, and an unscoped run still is not', ()
     'the api method stopped carrying the branch');
   assert.match(API, /aiWorkspaceExplain:[\s\S]{0,300}?JSON\.stringify\(\{[^}]*\bbranch\b[^}]*\}\)/,
     'the api method accepts a branch and drops it before the request');
-  assert.match(OVERLAY, /scopeBranch=\{code\}/, 'the overlay sends no branch, so its read-back is not logged');
   // HQ Home's fan-out rail names a scope and sends NO branch — "All branches"
   // is not a branch, and a row claiming one was read would be the false audit
   // entry D150 refused to write.

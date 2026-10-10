@@ -9,7 +9,7 @@ import { bucketForPath } from '../workspaces/shellConfig';
  * DetailRail and EmberRail draw the same thing on every zone page: a dashed
  * "Inherited from {workspace}" card, an INHERITED chip, and "Change the model
  * there and this page follows". The STORE already behaves that way — the
- * choice is keyed per workspace (`worker_rail_model:<workspace>`), so a zone
+ * choice is keyed per workspace (`worker_rail_model:<workspace>:<task>`), so a zone
  * reads the same key as its root. What was wrong was the screen: every zone
  * drew the full menu, so a founder could "change the model for Interviews"
  * and change it for all of Validate without being told.

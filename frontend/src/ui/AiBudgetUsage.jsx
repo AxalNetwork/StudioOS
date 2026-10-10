@@ -7,11 +7,17 @@ const money=n=>{
   const fraction=(micro%1000000n).toString().padStart(6,'0').replace(/0+$/,'').padEnd(2,'0');
   return `$${(micro/1000000n).toLocaleString('en-US')}.${fraction}`;
 };
+export const microMoney=money;
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
+const BUDGET_KEYS=['daily_microusd','monthly_microusd','day_spend_microusd','month_spend_microusd','balance_microusd','day_reserved_microusd','month_reserved_microusd','topup_reserved_microusd'];
+const budgetKnown=(b,budgetError)=>!!b && !budgetError && typeof b.licence==='string' && BUDGET_KEYS.every(key=>integer(b[key]));
+/** The month's allowance, spent and cap in micro-USD, or null when unread (the Worker AI rail's Usage card). */
+export function allowanceMonth(b,budgetError){
+  return budgetKnown(b,budgetError) ? {spent:b.month_spend_microusd,cap:b.monthly_microusd} : null;
+}
 export function AiBudgetUsage({reading}) {
   const {budget:b,product:p,loading,budgetError,productError,reload}=reading;
-  const known=b && !budgetError && typeof b.licence==='string' &&
-    ['daily_microusd','monthly_microusd','day_spend_microusd','month_spend_microusd','balance_microusd','day_reserved_microusd','month_reserved_microusd','topup_reserved_microusd'].every(key=>integer(b[key]));
+  const known=budgetKnown(b,budgetError);
   if (loading) return <div aria-busy="true" className="text-xs text-gray-500 dark:text-gray-400">Loading AI allowance…</div>;
   if (!known) return <Unreadable what="Unreadable: your AI allowance and top-up balance" claim="Retry to read the recorded figures." onRetry={reload} />;
   const held=b.day_reserved_microusd+b.month_reserved_microusd+b.topup_reserved_microusd>0;

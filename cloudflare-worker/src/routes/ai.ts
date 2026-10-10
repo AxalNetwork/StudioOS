@@ -124,6 +124,10 @@ ai.get('/pricing', async (c) => {
     // states, so no conversion happens at the boundary.
     unit: 'usd_per_1m_tokens',
     prices: PRICE_USD_PER_1M_TOKENS,
+    // USD per audio minute, for the tasks billed by the minute (`transcribe`).
+    // The Worker AI rail draws Whisper's card from this, so its rate is the
+    // one the receipt is computed from, never a typed copy.
+    audio_prices: PRICE_USD_PER_AUDIO_MINUTE,
     routes,
   });
 });

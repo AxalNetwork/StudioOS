@@ -493,40 +493,30 @@ test('the Worker AI rail is one component, and every founder workspace has it', 
   }
   assert.deepEqual(own, [], 'these pages hand-build a rail again instead of using the shared one');
 
-  // What the shared rail says. The canvas (A1) specifies mode, model, meter and
-  // safety, and all four are now present — the model block last, once a route
-  // existed for it to describe.
+  // What the shared rail says: the AIRail canvas's four blocks and nothing
+  // else (owner, 2026-10-10) — the mode cards, "Model · this page", the Usage
+  // card and the safety row. Coverage and the guardrail footer are gone.
   const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
-  for (const block of ['>Mode<', '>Coverage<', '>Model · this page<', '>Usage this month<']) {
+  for (const block of ['MANUAL_NOTE', '>Model · this page<', '>Usage<', 'fwr-screened']) {
     assert.ok(rail.includes(block), `the rail lost its ${block} block`);
   }
-  assert.match(rail, /EADWYN_GUARDRAIL/,
-    'the safety block must import the product-wide guardrail, not restate it');
-  assert.match(rail, /useAiSpend/, 'the usage meter must read the live spend endpoint');
-  // THE RULE DID NOT LOOSEN, THE FACTS CHANGED. This used to assert that the
-  // rail names no model and no price at all, because `ASSIST_SURFACES` keys a
-  // surface to an aiRouter task class, that key decides the model, and no
-  // workspace ran one — so a card here would have named a model for a page
-  // that never called it.
-  //
-  // `POST /api/ai/workspace/explain` is what changed. The rule is now the
-  // stronger one it always stood for: the rail may name a model only for a
-  // surface that is registered AND has a worker route running that task, and
-  // the figures must come from the router's table rather than from a canvas.
-  // The canvases quote `$0.293 / M in · $2.253 / M out` for this model; the
-  // router's PRICE_USD_PER_1M_TOKENS says 0.50 / 0.50. Whichever is right, the
-  // rail must show the one that will actually be charged.
-  const cfg = codeOnly(read('frontend/src/ui/eadwynConfig.js'));
-  const task = /workspace:\s*\{[^}]*task:\s*'([a-z_]+)'/.exec(cfg)?.[1];
-  assert.ok(task, 'the workspace surface must be registered in ASSIST_SURFACES');
+  for (const gone of ['>Coverage<', '>Usage this month<', 'EADWYN_GUARDRAIL', '>Unavailable here<']) {
+    assert.ok(!rail.includes(gone), `the rail draws ${gone} again, which the AIRail canvas does not`);
+  }
+  assert.match(rail, /useAiSpend/, 'the usage card must read the live spend endpoint');
+  // THE MODEL CARDS NAME ONLY WHAT RUNS, at the router's rate. Each section's
+  // jobs are router tasks (`railModels.js`), every one a real ROUTE entry, and
+  // the cards are built by `railCards` from `/api/ai/pricing`, never typed.
   const router = read('cloudflare-worker/src/services/aiRouter.ts');
-  assert.ok(new RegExp(`^\\s*${task}:\\s*\\{`, 'm').test(router),
-    `${task} must be a real entry in the router's ROUTE table`);
-  assert.match(read('cloudflare-worker/src/routes/ai.ts'), new RegExp(`task: '${task}'`),
-    `a worker route must actually run ${task}, or the card names a model nothing calls`);
-  // Derived from the router, never typed here.
-  assert.match(rail, /priceForTask\(pricing, surface\.task\)/,
-    'the model and its rate come from the router\'s own table');
+  const jobs = codeOnly(read('frontend/src/ui/railModels.js'));
+  const tasks = [...new Set([...jobs.matchAll(/task: '([a-z_]+)'/g)].map((m) => m[1]))];
+  assert.ok(tasks.length >= 4, `the section jobs did not parse — got ${tasks.join(', ')}`);
+  for (const task of tasks) {
+    assert.ok(new RegExp(`^\\s*${task}:\\s*\\{`, 'm').test(router),
+      `${task} must be a real entry in the router's ROUTE table, or the card names a model nothing runs`);
+  }
+  assert.match(rail, /railCards\(pricing, jobsFor\(workspace\)/,
+    'the models and their rates come from the router\'s own tables');
   assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
     'the canvas figures are not the router figures');
 });

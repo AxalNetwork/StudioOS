@@ -47,17 +47,90 @@
 export const MODEL_COPY = {
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast': {
     name: 'Llama 3.3 70B Fast',
-    why: 'Reads every line on the page together and writes one summary. The most careful of the three, and the dearest to answer with.',
-    tags: ['Best for: reading a page back', 'Long context'],
+    why: 'Reads everything it is given together. The most careful of the three, and the dearest to answer with.',
+    tags: ['Long context'],
   },
   '@cf/meta/llama-3.1-8b-instruct-fp8': {
     name: 'Llama 3.1 8B',
-    why: 'A fifth the price of the 70b, with a wider window. Shorter, plainer answers.',
-    tags: ['Best for: a quick read', 'Cheaper'],
+    why: 'A fifth the price of the 70B, with a wide window. Shorter, plainer answers.',
+    tags: ['Cheaper'],
   },
   '@cf/meta/llama-3.2-3b-instruct': {
     name: 'Llama 3.2 3B',
-    why: 'Six times cheaper again, and shallower with it. Enough for a page with a handful of lines on it.',
-    tags: ['Best for: short pages', 'Cheapest'],
+    why: 'Fast tagging. Six times cheaper again, and shallower with it.',
+    tags: ['Cheapest'],
+  },
+  '@cf/openai/whisper-large-v3-turbo': {
+    name: 'Whisper Large v3 Turbo',
+    why: 'Turns a recorded interview into searchable text.',
+    tags: ['Audio'],
   },
 };
+
+/**
+ * WHAT EACH SECTION'S AI WORK IS, and which router task does it (AIRail
+ * canvas, "Model · this page"). Editorial, like the table above: the task
+ * names are the router's, and the model, its id and its rate are read for each
+ * one from `GET /api/ai/pricing`. A task the router does not price draws no
+ * card, because an unpriced run is unknown, not free.
+ *
+ * ONLY THE WORK THE SECTION RUNS. The canvas lists a menu per page, and some of
+ * its models (DeepSeek V4 Pro on Raise, GPT-OSS on Grow, BGE-M3 on Validate)
+ * are not models the router runs. A card for one would name a model no click
+ * on the page can reach, so each section lists the tasks its pages really call.
+ *
+ * `pick` is whether the rail's choice reaches the run. It does for Validate's
+ * two fill bands, which send it (`FillProposals`). It does not for the zone
+ * drafts (`/api/research/drafts` takes no model), for Ask, or for
+ * transcription, whose model is picked on the recording sheet. Those draw the
+ * router's model and no alternates: a menu there would be a setting that
+ * changes nothing (D17).
+ */
+export const SECTION_JOBS = {
+  Validate: [
+    {
+      task: 'transcribe',
+      pick: false,
+      why: 'Turns every recorded interview into text you can search and quote. You pick the model when you record.',
+      tags: ['Best for: transcription', 'Audio'],
+    },
+    {
+      task: 'validate_tag_pains',
+      pick: true,
+      why: 'Tags the phrases you logged to the pain themes you named, as proposals you accept or discard.',
+      tags: ['Best for: tagging pains'],
+    },
+    {
+      task: 'validate_draft_hypotheses',
+      pick: true,
+      why: 'Reads your pain map and drafts hypothesis cards, as proposals you accept or discard.',
+      tags: ['Best for: hypothesis cards'],
+    },
+  ],
+  Research: [
+    {
+      task: 'research_ask',
+      pick: false,
+      why: 'Answers a question you ask from your own library, with its sources.',
+      tags: ['Best for: Ask'],
+    },
+    {
+      task: 'workspace_explain',
+      pick: false,
+      why: 'Drafts the reading on a zone band when you press its button.',
+      tags: ['Best for: zone drafts'],
+    },
+  ],
+};
+
+/** Every other section, on every licence: the zone drafts. */
+export const DEFAULT_JOBS = [
+  {
+    task: 'workspace_explain',
+    pick: false,
+    why: 'Drafts the reading on a zone band when you press its button. It is given the figures beside it and nothing else.',
+    tags: ['Best for: zone drafts'],
+  },
+];
+
+export const jobsFor = (workspace) => SECTION_JOBS[workspace] || DEFAULT_JOBS;

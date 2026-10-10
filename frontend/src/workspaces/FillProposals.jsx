@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
+import { readRailModel, writeRailModel } from '../ui/railModelChoice';
 
 /**
  * What Eadwyn suggested, and the THREE decisions a founder makes about each one.
@@ -45,13 +46,13 @@ import RunEstimate from './RunEstimate';
  * `validate_tag_pains` and a hypothesis band `validate_draft_hypotheses`, never
  * one for the other. The receipt below still says what the run just done cost.
  *
- * NO MODEL IS SENT, and that is deliberate rather than an omission. The rail's
- * menu is scoped to `workspace_explain` — the read-back — and these are two
- * different task classes with their own `alternates`; the 3b the rail offers
- * for a read-back is not offered for drafting a claim at all. Forwarding the
- * read-back's choice would ask the router for a model this task does not
- * offer, and it would rightly refuse. Per-task menus are a real thing to want
- * and are not this change.
+ * THE MODEL IS THE RAIL'S PICK FOR THIS TASK (owner, 2026-10-10). The Worker
+ * AI rail draws the AIRail canvas's "Model · this page" cards per task, and a
+ * founder's pick is stored per section and per task (`ui/railModelChoice.js`),
+ * so the 3B picked for tagging is never sent to drafting, which does not offer
+ * it. No pick sends no model and the router runs its default. A refusal of
+ * the pick (`model_not_offered`) clears it, so the next press runs the default
+ * rather than failing the same way.
  */
 
 const BAND = 'rounded-[10px] border border-violet-200 bg-violet-50/60 p-3 '
@@ -115,7 +116,7 @@ function Citation({ citation }) {
   );
 }
 
-export default function FillProposals({ projectId, kind, enabled, onApplied, ai }) {
+export default function FillProposals({ projectId, kind, enabled, onApplied, ai, workspace = 'Validate' }) {
   const [items, setItems] = useState([]);
   const [kinds, setKinds] = useState(null);
   const [busy, setBusy] = useState('');
@@ -143,7 +144,9 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai 
   const propose = async () => {
     setBusy('run'); setNote(''); setReceipt(null);
     try {
-      const r = await api.proposeValidate(projectId, { kind });
+      const task = kinds?.[kind]?.task;
+      const model = task ? readRailModel(workspace, task) : null;
+      const r = await api.proposeValidate(projectId, model ? { kind, model } : { kind });
       setReceipt(r?.usage || null);
       if (!r?.proposals?.length) {
         setNote('Nothing new to propose from what is logged so far.');
@@ -154,6 +157,9 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai 
       // model could not be reached", and both are sentences worth showing —
       // one is about the venture's evidence, the other about the platform.
       // D258 — that sentence is `e.message`; nothing sets `e.body`.
+      if (e?.data?.refusal === 'model_not_offered' && kinds?.[kind]?.task) {
+        writeRailModel(workspace, kinds[kind].task, null);
+      }
       setNote(e?.message || 'That could not be run. Nothing was charged.');
     } finally {
       setBusy('');
