@@ -359,7 +359,7 @@ async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
   return res.results || [];
 }
 
-const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
+export const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
 /** One mismatch as a sentence that names both figures and both sources. */
 export function mismatchSentence(m: Mismatch): string {
   return `${FIGURE_LABEL[m.figure]}: ${fmtFigure(m.figure, m.stated_value)} in ${m.stated_source}, ${fmtFigure(m.figure, m.metric_value)} in ${m.metric_source}`;

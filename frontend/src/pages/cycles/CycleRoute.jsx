@@ -90,7 +90,8 @@ const CYCLE_DEFS = {
     // read: the round and its order of payment on Cap table, which holds the
     // scenario both read; the room and the clauses on Fundraising readiness,
     // which scores the data room and the documents. Data room has no module
-    // page of its own (its tool's route wins), so its band sits here too.
+    // page of its own (its tool's route wins), so its band sits here too. The
+    // narrative band sits on Investor narrative, whose check it phrases.
     drafts: new Map([
       ['cap-table', [{
         surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',
@@ -115,6 +116,15 @@ const CYCLE_DEFS = {
         // A reading of your own documents, and the footnote says what it is
         // rather than what it is not (D424's voice rule).
         foot: 'A reading of your documents, not counsel’s review. Counsel is on the Team page.',
+      }]],
+      // #1524 item 3 (D663): the consistency check lists each figure the
+      // narrative states differently from the stored metrics; on request,
+      // Eadwyn phrases the fix for the first one, citing both sides.
+      ['investor-narrative', [{
+        surface: 'raise/narrative-fix', tone: 'warn', label: 'Mismatch · phrase the fix', run: 'Phrase the fix', accept: 'Keep this wording',
+        empty: 'Nothing proposed yet. Eadwyn will phrase the fix for the first mismatch the consistency check found in your newest narrative version, naming both figures and where each was read.',
+        nothingToDraft: 'The consistency check found no mismatch in your newest narrative version.',
+        foot: 'Neither figure is taken as the right one. Keeping the wording changes neither the narrative nor the metrics.',
       }]],
     ]),
   },

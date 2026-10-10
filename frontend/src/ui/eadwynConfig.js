@@ -143,7 +143,7 @@ export const ASSIST_SURFACES = {
     desks: {
       Validate: { fills: 'Transcribes recordings, tags logged phrases into your themes, and drafts hypothesis cards.' },
       Build: { fills: 'Drafts a Monday plan from what moved, summarises the week on the board for a Friday retro, argues one roadmap ordering, and annotates the metric that moved most.' },
-      Raise: { fills: 'Reads your round back step by step, explains the clauses in stored documents, reads the data room, and explains the order of payment.' },
+      Raise: { fills: 'Reads your round back step by step, explains the clauses in stored documents, reads the data room, explains the order of payment, and phrases the fix for one narrative mismatch.' },
       Grow: { fills: 'Ranks applicants with reasons, and drafts an outreach sequence opened on your own recorded pains.' },
       Network: { fills: 'Drafts a re-engagement note to the contact going coldest, and an intro email for an accepted introduction.' },
       Research: { none: 'No switch here. A question runs only when you press Ask, and is answered from your own library; nothing on this desk fills a blank.' },

@@ -93,6 +93,10 @@ diligence checklist and the narrative consistency check (fixed patterns, no
 model). `raiseWriters.ts` has one writer per migration 442 record.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
+`narrativeFix.ts` (#1524) hands one stored mismatch to the
+`raise/narrative-fix` draft band and holds the wording to it: a draft quoting a
+figure the check did not find is refused, and every kept one ends with the
+check's own sentence.
 
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:
