@@ -43,6 +43,7 @@ export interface ToolRun {
 
 export interface McpTool {
   name: string;
+  requiredScope: 'validate:read' | 'validate:write';
   title: string;
   description: string;
   /** A zod raw shape; the SDK turns it into the tool's JSON schema. */
@@ -65,20 +66,21 @@ export const registeredTools = () => [...REGISTRY];
 const text = (value: unknown, isError = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) });
 
 /** Run one tool call under the grant's checks. Exported for tests. */
-export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>) {
+export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = []) {
   let user: Awaited<ReturnType<typeof grantUser>> | null = null;
   let companyId: number | null = null;
   const log = (outcome: 'ok' | 'refused' | 'error' | 'rate_limited') =>
     user ? logToolCall(env, user, { tool: tool.name, company: companyId, client: props.clientName, outcome }) : Promise.resolve();
   try {
     user = await grantUser(env, props);
+    if (!scope.includes(tool.requiredScope)) throw new ToolRefused(`This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`);
     if (grantId && !(await withinGrantLimit(env, grantId))) {
       await log('rate_limited');
       return text({ error: 'Too many calls from this connection. Wait a minute and try again.' }, true);
     }
     let company: ToolRun['company'] = null;
     if (tool.company) {
-      company = await grantCompany(env, props, user, args.company);
+      company = await grantCompany(env, props, user, args.company, tool.requiredScope === 'validate:write');
       companyId = company.id;
     }
     // The granted companies that still pass the check; one the user has lost drops out.
@@ -96,13 +98,14 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       await log('refused');
       return text({ error: e.sentence }, true);
     }
+    if (e instanceof ToolError) { await log('refused'); return text({ error: e.sentence, code: e.code, status: e.status }, true); }
     console.error('[mcp] tool failed:', tool.name, (e as Error)?.message);
     await log('error');
     return text({ error: 'StudioOS could not complete that call.' }, true);
   }
 }
 
-export function createServer(env: Env, props: GrantProps, grantId: string | null): McpServer {
+export function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = []): McpServer {
   const server = new McpServer({ name: 'StudioOS', version: '1.0.0' }, { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
   for (const tool of REGISTRY) {
     server.registerTool(tool.name, {
@@ -110,7 +113,7 @@ export function createServer(env: Env, props: GrantProps, grantId: string | null
       description: tool.description,
       inputSchema: tool.inputSchema,
       annotations: { readOnlyHint: tool.readOnly !== false, destructiveHint: false, openWorldHint: false },
-    }, (async (args: Record<string, unknown>) => callTool(env, props, grantId, tool, args ?? {})) as any);
+    }, (async (args: Record<string, unknown>) => callTool(env, props, grantId, tool, args ?? {}, scope)) as any);
   }
   return server;
 }
@@ -120,7 +123,8 @@ export const mcpApiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // The provider sets ctx.props to what completeAuthorization stored.
     const props = (ctx as unknown as { props: GrantProps }).props;
-    const server = createServer(env, props, grantIdOf(request));
+    const scope = (ctx as unknown as { auth?: { scope?: string[] } }).auth?.scope ?? [];
+    const server = createServer(env, props, grantIdOf(request), scope);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(request);
@@ -130,3 +134,8 @@ export const mcpApiHandler = {
 // The read tools are part of the server from the start.
 import { READ_TOOLS } from './tools/context';
 registerMcpTools(READ_TOOLS);
+
+// The interview handlers register through the same gate as the reads.
+import { INTERVIEW_TOOLS } from './tools/interviews';
+import { ToolError } from '../services/assistantInterviews';
+registerMcpTools(INTERVIEW_TOOLS);

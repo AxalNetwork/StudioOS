@@ -1,11 +1,11 @@
 /**
  * D666 (#1496) — the SPA's half of connecting an AI assistant (D665):
  *
- *   GET    /api/mcp/consent/:id            the parked request: client, redirect host, scopes, grantable companies
+ *   GET    /api/mcp/consent/:id            the parked request: client, full redirect URI, scopes, grantable companies
  *   POST   /api/mcp/consent/:id/approve    { companies: [id…] } → { redirectTo }
  *   POST   /api/mcp/consent/:id/deny       → { redirectTo } carrying access_denied
  *   GET    /api/connectors/assistants      the caller's grants (never a token)
- *   DELETE /api/connectors/assistants/:id  revoke one grant, at once
+ *   DELETE /api/connectors/assistants/:id  revoke one grant (KV reaches other edges within about a minute)
  *
  * All signed in (`requireAuth`), and all 404 with MCP_SERVER_ENABLED off.
  *
@@ -15,15 +15,16 @@
  * compare-and-set, so two answers racing within KV's propagation window could
  * both read the request; both would be the same signed-in user's own answer.
  *
- * NOTHING IS AUTO-APPROVED. The redirect host is returned beside the client's
+ * NOTHING IS AUTO-APPROVED. The full redirect URI is returned beside the client's
  * self-declared name so the page can show where the connection goes.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
 import { logActorAct } from '../services/actorLog';
-import { CONSENT_TTL_SECONDS, SCOPES, consentKey, mcpEnabled, oauthHelpers, type ParkedRequest } from '../mcp/oauth';
+import { CONSENT_TTL_SECONDS, requestedScopes, consentKey, mcpEnabled, oauthHelpers, type ParkedRequest } from '../mcp/oauth';
+import { assistantIdentity } from '../mcp/assistantIdentity';
 import { grantableCompanies, lastUsedKey, type GrantProps } from '../mcp/grants';
 
 type C = Context<{ Bindings: Env }>;
@@ -65,7 +66,9 @@ mcpConsent.get('/:id', async (c) => {
   return c.json({
     client_name: client?.clientName?.trim() || null,
     redirect_host: hostOf(p.authRequest.redirectUri),
-    scopes: [...SCOPES],
+    redirect_uri: p.authRequest.redirectUri,
+    ...assistantIdentity(p.authRequest.redirectUri),
+    scopes: requestedScopes(p.authRequest.scope),
     companies: await grantableCompanies(c.env, user),
     expires_at: new Date(p.createdAt + CONSENT_TTL_SECONDS * 1000).toISOString(),
   });
@@ -73,6 +76,7 @@ mcpConsent.get('/:id', async (c) => {
 
 mcpConsent.post('/:id/approve', async (c) => {
   const user = await signedIn(c); if (user instanceof Response) return user;
+  if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'A support session cannot answer assistant consent.' }, 403);
   const id = c.req.param('id');
   const p = await parked(c, id); if (p instanceof Response) return p;
   const body = (await c.req.json().catch(() => ({}))) as { companies?: unknown };
@@ -80,21 +84,22 @@ mcpConsent.post('/:id/approve', async (c) => {
   if (!asked.length || asked.some((n) => !Number.isInteger(n) || n <= 0)) return c.json({ detail: 'Tick at least one company' }, 400);
   // Checked again here: the page's list is not trusted.
   const allowed = new Set((await grantableCompanies(c.env, user)).map((x) => x.id));
-  if (asked.some((n) => !allowed.has(n))) return c.json({ detail: 'You can only connect companies you can write to' }, 403);
+  if (asked.some((n) => !allowed.has(n))) return c.json({ detail: 'You can only connect companies you can read in Validate' }, 403);
   const helpers = oauthHelpers(c.env);
   const client = await helpers.lookupClient(p.authRequest.clientId);
   if (!client) return c.json({ detail: 'This assistant is no longer registered. Start again from your assistant.' }, 410);
+  const scope = requestedScopes(p.authRequest.scope);
+  if (!scope.length) return c.json({ detail: 'Request validate:read or validate:write.' }, 400);
   await spend(c, id);
   const companies = [...new Set(asked)];
   const props: GrantProps = {
-    userId: Number(user.id), companies, clientName: client.clientName?.trim() || null,
-    redirectHost: hostOf(p.authRequest.redirectUri), grantedAt: Math.floor(Date.now() / 1000),
+    userId: Number(user.id), clientId: p.authRequest.clientId, companies, clientName: client.clientName?.trim() || null,
+    redirectHost: hostOf(p.authRequest.redirectUri), redirectUri: p.authRequest.redirectUri, grantedAt: Math.floor(Date.now() / 1000),
   };
-  const scope = (p.authRequest.scope || []).filter((s) => (SCOPES as readonly string[]).includes(s));
   const { redirectTo } = await helpers.completeAuthorization({
     request: p.authRequest, userId: String(user.id),
-    metadata: { clientName: props.clientName, redirectHost: props.redirectHost, companies, grantedAt: props.grantedAt },
-    scope: scope.length ? scope : [...SCOPES], props,
+    metadata: { clientId: props.clientId, clientName: props.clientName, redirectHost: props.redirectHost, companies, grantedAt: props.grantedAt },
+    scope, props, revokeExistingGrants: false,
   });
   await logActorAct(c.env, user, 'mcp_grant_approved', { client: props.clientName, redirect_host: props.redirectHost, companies });
   return c.json({ redirectTo });
@@ -102,6 +107,7 @@ mcpConsent.post('/:id/approve', async (c) => {
 
 mcpConsent.post('/:id/deny', async (c) => {
   const user = await signedIn(c); if (user instanceof Response) return user;
+  if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'A support session cannot answer assistant consent.' }, 403);
   const id = c.req.param('id');
   const p = await parked(c, id); if (p instanceof Response) return p;
   await spend(c, id);

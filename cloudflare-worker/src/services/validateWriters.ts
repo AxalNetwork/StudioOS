@@ -493,7 +493,7 @@ export async function setHypothesisPlan(
 /** The strength of one evidence link, or `null` to clear it. */
 export async function setEvidenceStrength(
   env: Env,
-  input: { projectId: number; userId: number | null; linkId: number; strength: unknown },
+  input: { projectId: number; userId: number | null; linkId: number; strength: unknown; expectedStrength?: string | null },
 ): Promise<void> {
   const strength = input.strength === null ? null : String(input.strength ?? '');
   if (strength !== null && !(EVIDENCE_STRENGTHS as readonly string[]).includes(strength)) {
@@ -501,8 +501,9 @@ export async function setEvidenceStrength(
   }
   const res = await env.DB.prepare(
     `UPDATE hypothesis_pain_links SET strength = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND hypothesis_id IN (SELECT id FROM hypotheses WHERE project_id = ?)`,
-  ).bind(strength, input.linkId, input.projectId).run();
-  if (!res.meta?.changes) throw new WriterError(404, 'Evidence link not found on this project');
+      WHERE id = ? AND hypothesis_id IN (SELECT id FROM hypotheses WHERE project_id = ?)
+        AND (? = 0 OR strength IS ?)`,
+  ).bind(strength, input.linkId, input.projectId, input.expectedStrength === undefined ? 0 : 1, input.expectedStrength ?? null).run();
+  if (!res.meta?.changes) throw new WriterError(input.expectedStrength === undefined ? 404 : 409, 'Evidence link changed or is no longer on this project. Review its strength in Experiments.');
   await recordActor(env, input.userId, input.projectId, 'evidence_strength_set', `link ${input.linkId} → ${strength ?? 'none'}`);
 }

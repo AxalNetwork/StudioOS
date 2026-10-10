@@ -21,7 +21,7 @@ const p = (id, kind, module, payload, extra = {}) => ({
 export const RUN_A = [
   p(1, 'pain_severity', 'problem_discovery', { phrase: 'reconciling two systems', severity: 'severe' }),
   p(2, 'icp_fit', 'customer_research', { fit: 'strong', reason: 'Runs ops at a 40-person logistics firm.' }),
-  p(3, 'evidence', 'experiments', { hypothesis_id: 4, pain_group_id: 9, direction: 'supports', strength: 'pattern' }),
+  p(3, 'evidence', 'experiments', { hypothesis_id: 4, pain_group_id: 9, direction: 'supports', strength: 'pattern' }, { evidence_context: { hypothesis: { id: 4, code: 'H4', claim: 'Ops teams reconcile weekly' }, pain_group: { id: 9, title: 'Manual reconciliation' } } }),
   p(4, 'market_fact', 'market_intelligence', { fact: 'Most firms their size use two tools.', source: 'the interviewee' }, { can_accept: false }),
   p(5, 'competitor_mention', 'market_intelligence', { name: 'Ledgerly', context: 'tried it, dropped it' }),
 ];

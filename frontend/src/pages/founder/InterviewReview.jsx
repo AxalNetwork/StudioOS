@@ -65,7 +65,11 @@ export function placementText(p) {
     case 'icp_fit': return `${FIT[v.fit] || 'Fit not recorded'} · ${v.reason || ''}`.replace(/ · $/, '');
     case 'segment': return `Segment: ${v.name}`;
     case 'demand_signal': return `${DEMAND[v.signal] || 'Signal not recorded'}${v.detail ? ` · ${v.detail}` : ''}`;
-    case 'evidence': return `${v.direction === 'refutes' ? 'Refutes' : 'Supports'} hypothesis #${v.hypothesis_id} through pain group #${v.pain_group_id} · ${STRENGTH[v.strength] || 'Strength not recorded'}`;
+    case 'evidence': {
+      const h = p.evidence_context?.hypothesis;
+      const g = p.evidence_context?.pain_group;
+      return `${v.direction === 'refutes' ? 'Refutes' : 'Supports'} ${h ? `${h.code} · ${h.claim}` : 'Hypothesis not recorded'} through ${g?.title || 'Pain group not recorded'} · ${STRENGTH[v.strength] || 'Strength not recorded'}`;
+    }
     case 'competitor_mention': return `${v.name}${v.context ? ` · ${v.context}` : ''}`;
     case 'market_fact': return `${v.fact} · source: ${v.source}`;
     default: return 'Unreadable: this placement has a shape the page does not know.';

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { assistantsApi } from '../../lib/api/assistants.js';
-import { ASSISTANT_LIMITS, ASSISTANT_SCOPES, approveBody, canApprove, consentState, hostOf, safeRedirect } from './assistantConsentModel.js';
+import { ASSISTANT_LIMITS, scopesOf, approveBody, canApprove, consentState, hostOf, safeRedirect } from './assistantConsentModel.js';
 
 /**
  * D668 (#1498) — `/connect/assistant?request=:id`: a founder approves an AI
@@ -64,22 +64,24 @@ export function ConsentView({ request, error, loading = false, busy = false, sen
       <h1 className="mt-1 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">
         {name ? <><span data-testid="consent-client-name">{name}</span> wants to connect to StudioOS</> : 'An assistant wants to connect to StudioOS'}
       </h1>
+      <p className="mt-2 text-[12px] font-bold text-amber-800 dark:text-amber-300" data-testid="consent-assistant-identity">{request.verified_assistant || 'Unverified assistant'}</p>
+      <p className="mt-1 text-[12px] text-axal-muted dark:text-gray-400">Approving another company keeps your earlier connections.</p>
       <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-900 dark:bg-amber-950/30" data-testid="consent-redirect-host">
         <div className="text-[11px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">It returns to</div>
-        <div className="font-mono text-[16px] font-bold text-axal-ink dark:text-gray-100">{host || 'Not recorded'}</div>
+        <div className="break-all font-mono text-[16px] font-bold text-axal-ink dark:text-gray-100">{host || 'Not recorded'}</div>
         <div className="mt-0.5 text-[12px] text-amber-900/80 dark:text-amber-200/80">An assistant names itself; this address is where the connection goes. Approve only if you recognise it.</div>
       </div>
 
       <h2 className="mt-5 text-[11px] font-bold uppercase tracking-wide text-axal-faint">It may</h2>
       <ul className="mt-1.5 space-y-1 text-[13.5px] text-axal-ink dark:text-gray-200" data-testid="consent-scopes">
-        {ASSISTANT_SCOPES.map((s) => <li key={s} className="flex gap-2"><span aria-hidden="true" className="text-emerald-600">✓</span>{s}</li>)}
+        {scopesOf(request).map((s) => <li key={s} className="flex gap-2"><span aria-hidden="true" className="text-emerald-600">✓</span>{s}</li>)}
       </ul>
       <p className="mt-2 text-[13px] text-axal-muted dark:text-gray-400" data-testid="consent-limits">{ASSISTANT_LIMITS}</p>
 
       <h2 className="mt-5 text-[11px] font-bold uppercase tracking-wide text-axal-faint">For these companies</h2>
       {state === 'empty' ? (
         <p className="mt-1.5 text-[13px] text-axal-muted dark:text-gray-400" data-testid="consent-no-companies">
-          You have no company you can write to, so there is nothing to connect it to. <Link to="/studio" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Go to your studio</Link>
+          You have no company you can read in Validate, so there is nothing to connect it to. <Link to="/studio" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Go to your studio</Link>
         </p>
       ) : (
         <ul className="mt-1.5 space-y-1" data-testid="consent-companies">

@@ -27,8 +27,11 @@ import { mcpApiHandler } from './server';
 
 export const MCP_PATH = '/api/mcp';
 export const OAUTH_PATHS = { authorize: '/api/oauth/authorize', token: '/api/oauth/token', register: '/api/oauth/register' } as const;
-export const SCOPES = ['validate:read', 'interviews:submit'] as const;
+export const SCOPES = ['validate:read', 'validate:write'] as const;
 export const CONSENT_TTL_SECONDS = 600;
+export const CLIENT_REGISTRATION_TTL_SECONDS = 7 * 86_400;
+export const PUBLIC_OAUTH_LIMITS = { register: 10, authorize: 30 } as const;
+export const requestedScopes = (scope: readonly string[] | undefined) => [...new Set(scope ?? [])].filter((s) => (SCOPES as readonly string[]).includes(s));
 const HOUR = 3600;
 const DAY = 86_400;
 
@@ -69,6 +72,9 @@ async function authorize(request: Request, env: Env, helpers: ReturnType<typeof 
   if (!authRequest.codeChallenge || authRequest.codeChallengeMethod !== 'S256') {
     return Response.json({ error: 'invalid_request', detail: 'PKCE with S256 is required' }, { status: 400 });
   }
+  const scopes = requestedScopes(authRequest.scope);
+  if (!scopes.length) return Response.json({ error: 'invalid_scope', detail: 'Request validate:read or validate:write.' }, { status: 400 });
+  authRequest.scope = scopes;
   const client = await helpers.lookupClient(authRequest.clientId);
   if (!client) return Response.json({ error: 'invalid_client', detail: 'Unknown client' }, { status: 400 });
   const id = crypto.randomUUID().replace(/-/g, '');
@@ -86,6 +92,7 @@ export function providerOptions(env: Env): OAuthProviderOptions<Env> {
     authorizeEndpoint: `${origin}${OAUTH_PATHS.authorize}`,
     tokenEndpoint: `${origin}${OAUTH_PATHS.token}`,
     clientRegistrationEndpoint: `${origin}${OAUTH_PATHS.register}`,
+    clientRegistrationTTL: CLIENT_REGISTRATION_TTL_SECONDS,
     accessTokenTTL: HOUR,
     refreshTokenTTL: 30 * DAY,
     refreshTokenIdleTTL: 30 * DAY,
@@ -106,5 +113,23 @@ export const oauthHelpers = (env: Env) => getOAuthApi(providerOptions(env), env)
 /** Answer an MCP or OAuth path, or 404 with the flag off. */
 export async function routeMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!mcpEnabled(env)) return new Response(JSON.stringify({ detail: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+  const path = new URL(request.url).pathname;
+  const bucket = path === OAUTH_PATHS.register ? 'register' : path === OAUTH_PATHS.authorize ? 'authorize' : null;
+  if (bucket && !(await withinPublicOAuthLimit(env, request, bucket))) {
+    return Response.json({ error: 'rate_limited', detail: 'Too many requests. Wait a minute.' }, { status: 429, headers: { 'Retry-After': '60' } });
+  }
   return new OAuthProvider(providerOptions(env)).fetch(request, env, ctx);
+}
+
+/** Edge per-IP throttle, before the provider; fail closed when the counter is unavailable.
+ * KV counters are best effort across edges. Durable D1 guards protect stored daily quotas.
+ */
+export async function withinPublicOAuthLimit(env: Env, request: Request, bucket: keyof typeof PUBLIC_OAUTH_LIMITS, now = Date.now()): Promise<boolean> {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const key = `mcp_public:${bucket}:${ip}:${Math.floor(now / 60_000)}`;
+  try {
+    const count = Number((await env.RATE_LIMITS.get(key)) || 0) + 1;
+    await env.RATE_LIMITS.put(key, String(count), { expirationTtl: 120 });
+    return count <= PUBLIC_OAUTH_LIMITS[bucket];
+  } catch { return false; }
 }

@@ -13,7 +13,7 @@ missing, every path answers 404.
 
 | Folder | What it holds |
 | --- | --- |
-| `tools/` | The tools, one file per group. `context.ts` holds the read tools |
+| `tools/` | The tools, one file per group. `context.ts` holds the reads and `interviews.ts` the three interview tools |
 
 ## Rules
 
@@ -21,10 +21,12 @@ missing, every path answers 404.
   and sends the founder to `/connect/assistant`; the grant is made by
   `../routes/mcp_consent.ts`, signed in.
 - **A grant is re-checked on every call:** the account, the session floor
-  (`jwt_min_iat`), the company in the grant, and write access to it.
+  (`jwt_min_iat`), the company in the grant, and the app's Validate read or write rule, according to the tool.
 - **A tool result is data.** It never carries an instruction, and never an
   interviewee's name or contact.
 - **A log line names the tool, the company, the client and the outcome.**
   Never an argument or a result.
-- **A new tool registers through `registerMcpTools`** (#1497 adds the
-  interview tools), with a plain description and a typed input schema.
+- **A new tool registers through `registerMcpTools`**, with a required scope, plain description and typed input schema. All reads use the app's `canReadBoard`; interview writes use `canWrite`. The grant's company numbers are project ids.
+- **Consent identifies callbacks** through `assistantIdentity.ts`; a self-declared name never establishes a vendor identity. Full redirect URI and requested scopes are shown.
+- **Limits**: register 10/IP/minute, authorize 30/IP/minute; dynamic registrations 7 days; interview submissions 20/client/user/day, atomic in D1; pending session placements 100 and assistant placements 500/user/day.
+- **Revocation propagates across edges in about a minute**, because grants use KV.
