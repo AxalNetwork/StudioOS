@@ -46,7 +46,12 @@ export function Cell({ cell, first = false }) {
   return <span className={first ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-ink/80 dark:text-gray-300'}>{text}</span>;
 }
 
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add }) {
+/**
+ * `rowAction(row)` → `{ text, label, onClick }` or null: one control at the
+ * end of each row the caller can act on (Edit). A row it returns null for
+ * draws an empty cell, so the columns stay aligned.
+ */
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -56,7 +61,9 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
   const addBtn = add || records?.add;
   const addHref = safeHref(addBtn?.href);
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
-  const grid = { gridTemplateColumns: cols.map((_, i) => (i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)')).join(' ') || '1fr' };
+  const acts = typeof rowAction === 'function';
+  const tracks = cols.map((_, i) => (i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)'));
+  const grid = { gridTemplateColumns: [...tracks, ...(acts && tracks.length ? ['auto'] : [])].join(' ') || '1fr' };
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
 
   return (
@@ -97,6 +104,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
           {cols.length > 0 && (
             <div role="row" className="hidden gap-2.5 border-b border-axal-hairline bg-axal-ground/60 px-4 py-2 text-[10.5px] font-bold uppercase tracking-[.06em] text-axal-muted md:grid dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400" style={grid}>
               {cols.map((c) => <span key={c.key} role="columnheader">{c.label}</span>)}
+              {acts && <span role="columnheader" className="sr-only">Actions</span>}
             </div>
           )}
           {rows.length === 0 && (
@@ -112,6 +120,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
                   <Cell cell={r.cells?.[c.key]} first={ci === 0} />
                 </span>
               ))}
+              {acts && <RowAction action={rowAction(r)} />}
             </div>
           ))}
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5" data-testid="records-count">
@@ -133,9 +142,22 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
   );
 }
 
+function RowAction({ action }) {
+  return (
+    <span role="cell" className="col-span-2 md:col-span-1 md:justify-self-end">
+      {action?.text && typeof action.onClick === 'function' && (
+        <button type="button" onClick={action.onClick} aria-label={action.label || action.text} data-testid="records-row-action"
+          className="rounded-[9px] border border-axal-hairline px-2.5 py-1 text-[11.5px] font-semibold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:text-violet-300 dark:hover:bg-violet-900/30">
+          {action.text}
+        </button>
+      )}
+    </span>
+  );
+}
+
 export default function CycleModulePage({
   cycle, slug, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, tool, children, search = '',
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, children, search = '',
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -183,6 +205,7 @@ export default function CycleModulePage({
             onQuery={onQuery}
             onRetry={onRetryRecords || onRetry}
             add={add}
+            rowAction={rowAction}
           />
           {children}
         </>

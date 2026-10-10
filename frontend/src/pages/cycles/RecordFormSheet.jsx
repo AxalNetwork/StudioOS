@@ -11,7 +11,8 @@ import { initialValues, validate } from './forms';
  * Worker refuses, its own sentence is shown, on the field it names when it
  * names one. Saving closes the sheet and the page reads the module again.
  *
- *   form      a form from `forms.js`
+ *   form      a form from `forms.js`, an Add form or an Edit form
+ *   current   an Edit form's starting values (`form.valuesOf(row)`)
  *   cycle     the cycle's name, for the header
  *   onSubmit  (values) => Promise — the form's writes, already bound to the venture
  *   onSaved   after a save
@@ -48,8 +49,8 @@ function Field({ field, value, error, onChange }) {
   );
 }
 
-export default function RecordFormSheet({ form, cycle, onSubmit, onSaved, onClose }) {
-  const [values, setValues] = useState(() => initialValues(form));
+export default function RecordFormSheet({ form, current = null, cycle, onSubmit, onSaved, onClose }) {
+  const [values, setValues] = useState(() => initialValues(form, current));
   const [errors, setErrors] = useState({});
   const [refusal, setRefusal] = useState('');
   const [busy, setBusy] = useState(false);

@@ -23,7 +23,7 @@ import CycleModulePage, { RecordsTable } from '../src/pages/cycles/CycleModulePa
 import { Chart } from '../src/pages/cycles/CycleCharts.jsx';
 import DurabilityChecklist from '../src/pages/cycles/DurabilityChecklist.jsx';
 import RecordFormSheet from '../src/pages/cycles/RecordFormSheet.jsx';
-import { FORMS, formFor } from '../src/pages/cycles/forms.js';
+import { EDITS, FORMS, editFor, formFor } from '../src/pages/cycles/forms.js';
 import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixtures.mjs';
 import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
 
@@ -208,7 +208,7 @@ test('ADD FORMS: one side sheet draws each form, the module offers it, and the c
   assert.match(channel, /inputMode="decimal"/, 'money is typed as an amount');
   // Every module with a form, and no other, offers Add from it.
   assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
-    ['build/company-creation', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
+    ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /add=\{fnOf\(def\.add, slug\)\?\.\(q\) \|\| \(form && projectId \? \{ text: form\.button, onClick: \(\) => setFormOpen\(true\) \} : undefined\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => form\.submit\(cyclesWrite, projectId, values\)\}/);
@@ -224,6 +224,37 @@ test('ADD FORMS: one side sheet draws each form, the module offers it, and the c
   assert.match(ticks, /data-testid="checklist-untick-key_person_cover"/);
   assert.doesNotMatch(ticks, /checklist-(un)?tick-ein_received/, 'a Lab milestone is not undone by hand');
   assert.doesNotMatch(html(h(DurabilityChecklist, { items })), /checklist-tick/, 'read-only without onToggle');
+});
+
+test('ROW EDITS: a row the route can change draws Edit, the sheet starts from the row, and the save reads the module again', () => {
+  const recs = { cols: [{ key: 'channel', label: 'Channel' }, { key: 'state', label: 'State' }], rows: [
+    { id: 'c1', cells: { channel: 'Podcasts', state: 'Active' } },
+    { id: 'c2', cells: { channel: null, state: 'Paused' } },
+    { id: 'c3', cells: { channel: 'Read only', state: 'Active' } },
+  ], total: 3, page: 1, page_size: 25 };
+  const rowAction = (row) => (row.id === 'c3' ? null : { text: 'Edit', label: `Edit ${row.cells.channel || 'this row'}`, onClick() {} });
+  const table = html(h(RecordsTable, { title: 'Channels', records: recs, rowAction }));
+  assert.equal((table.match(/data-testid="records-row-action"/g) || []).length, 2, 'one Edit per row it can change, none on the third');
+  assert.match(table, /aria-label="Edit Podcasts"/);
+  assert.match(table, /aria-label="Edit this row"/, 'a row with no name still says what it edits');
+  assert.match(table, /role="columnheader" class="sr-only">Actions</);
+  assert.equal((table.match(/role="cell"/g) || []).length, 9, 'every row keeps one cell per column, the action cell included');
+  assert.doesNotMatch(html(h(RecordsTable, { title: 'Channels', records: recs })), /records-row-action|Actions</, 'no rowAction, no column');
+  // The sheet starts from the row's own values, as text.
+  const market = editFor('grow', 'market-expansion');
+  const sheet = html(h(RecordFormSheet, { form: market, current: { state: 'entering', decision: 'enter', demand_score: 7, demand_source: 'Waitlist' }, cycle: 'Grow', onSubmit: async () => {}, onClose() {} }));
+  assert.match(sheet, /aria-label="Edit market"/);
+  assert.match(sheet, /id="cycle-form-demand_score"[^>]*value="7"/);
+  assert.match(sheet, /id="cycle-form-demand_source"[^>]*value="Waitlist"/);
+  assert.match(sheet, /<option value="entering" selected="">Entering<\/option>/);
+  // Every module with an Edit form, and the page wiring.
+  assert.deepEqual(Object.entries(EDITS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
+    ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
+  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  assert.match(route, /rowAction=\{edit && projectId \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change');
+  assert.match(route, /<RecordFormSheet key=\{String\(editing\.id\)\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
+  assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
+  assert.match(route, /useEffect\(\(\) => \{ setFormOpen\(false\); setEditing\(null\); \}, \[slug\]\);/, 'a sheet does not follow the founder to another module');
 });
 
 // ------------------------------------------------------------------ the screens

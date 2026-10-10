@@ -559,8 +559,8 @@ function buildFixture() {
     CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
-    CREATE TABLE projects(id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, incorporation_meta TEXT, cofounder_decision_meta TEXT, deleted_at TEXT);
-    CREATE TABLE mvp_features(id INTEGER PRIMARY KEY, project_id INTEGER, title TEXT, added_value TEXT DEFAULT 'High', effort TEXT DEFAULT 'M', delivery_status TEXT DEFAULT 'Backlog', sort_order INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE projects(id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, incorporation_meta TEXT, cofounder_decision_meta TEXT, deleted_at TEXT);
+    CREATE TABLE mvp_features(id INTEGER PRIMARY KEY, project_id INTEGER, title TEXT, added_value TEXT DEFAULT 'High', effort TEXT DEFAULT 'M', priority_reason TEXT, delivery_status TEXT DEFAULT 'Backlog', sort_order INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE pain_groups(id INTEGER PRIMARY KEY, project_id INTEGER, title TEXT);
     CREATE TABLE hypotheses(id INTEGER PRIMARY KEY, project_id INTEGER, claim TEXT);
     CREATE TABLE roadmap_okrs(id INTEGER PRIMARY KEY, project_id INTEGER, objective TEXT, kanban_status TEXT, sort_order INTEGER DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -677,8 +677,14 @@ test('D661: every Build module page\'s records are {key,label} columns and {id,c
 
 // ── The Add forms (forms.js), through the real Worker routes ───────────────
 
-import { FORMS, formFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
+import { EDITS, FORMS, editFor, formFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
+import progress from '../src/routes/progress.ts';
+
+// MVP scope (`progress.ts`) adds the feature a must-have marks.
+const progressApp = new Hono<any>();
+progressApp.route('/api/progress', progress);
+progressApp.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, String(err?.message) === 'Forbidden' ? 403 : 500));
 
 /** The app's `request`, answered by the Grow and Build routes on SQLite: a refusal throws like the app's does. */
 function routeRequest(grow: any, buildDb: any) {
@@ -690,6 +696,12 @@ function routeRequest(grow: any, buildDb: any) {
       const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
       const res = await buildApp.request(`/api${path}`, { method: opts.method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: opts.body },
+        { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(buildDb) } as any);
+      r = { status: res.status, body: await res.json().catch(() => null) };
+    } else if (path.startsWith('/progress/')) {
+      const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+      const res = await progressApp.request(`/api${path}`, { method: opts.method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: opts.body },
         { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(buildDb) } as any);
       r = { status: res.status, body: await res.json().catch(() => null) };
     } else throw new Error(`no route for ${path}`);
@@ -708,6 +720,7 @@ const SAMPLES: Record<string, Record<string, Record<string, string>>> = {
   },
   build: {
     'solution-design': { title: 'Key-person dependency', severity: 'high', mitigation: 'Document the bank integration' },
+    'prototype-mvp': { title: 'Reconciliation report', added_value: 'High', effort: 'S', delivery_status: 'In Progress', due_date: dayFrom(30) },
     'company-creation': { title: 'Register for payroll', due_date: dayFrom(45) },
   },
 };
@@ -742,6 +755,9 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
   assert.deepEqual(risks.map((r: any) => [r.title, r.severity, r.mitigation]), [['Key-person dependency', 'high', 'Document the bank integration']]);
   const steps = (await buildCall(buildDb, `/modules/company-creation?project=${BP}`)).body.records.rows;
   assert.ok(steps.some((r: any) => r.cells.filing === 'Register for payroll' && r.cells.due === dayFrom(45)));
+  // A must-have: MVP scope adds the feature, D662's route marks it and dates it.
+  const musts = (await buildCall(buildDb, `/modules/prototype-mvp?project=${BP}`)).body.records.rows;
+  assert.deepEqual(musts.map((r: any) => [r.cells.must_have, r.cells.state, r.cells.due]), [['Reconciliation report', 'In Progress', dayFrom(30)]]);
   // The checklist tick, and its undo.
   await w.grow.checklist(GP, 'board_cadence', true);
   let parts = (await growCall(grow, 'GET', `/modules/durable-company-building?project=${GP}`)).body.parts.checklist;
@@ -792,4 +808,103 @@ test('D661: the forms refuse what the Worker would, and show the Worker\'s own s
   const values = { ...initialValues(channel), name: 'LinkedIn', utm_source: 'linkedin' };
   await channel.submit(w, GP, values);
   await assert.rejects(channel.submit(w, GP, { ...values, name: 'LinkedIn again' }), (e: any) => e.status === 409 && e.field === 'utm_source' && /already uses that UTM source/.test(e.message));
+});
+
+// ── Edit a row (forms.js EDITS), through the real Worker routes ────────────
+
+/** What each Grow edit changes, on the row its Add form made. */
+const EDITED: Record<string, Record<string, string>> = {
+  'product-improvement': { status: 'shipped', theme: 'Identity', roadmap_item_label: '' },
+  distribution: { name: 'Podcasts (paused)', state: 'paused' },
+  'partner-network': { stage: 'signed', type: 'reseller', terms: 'Net 30' },
+  'market-expansion': { decision: 'enter', regulation_score: '5', regulation_source: 'Counsel memo' },
+  'durable-company-building': { status: 'done', owner_name: 'Gus', due_at: dayFrom(5) },
+};
+
+test('D661: every Grow Edit form starts from its row, and the change reads back with nothing else moved', async () => {
+  const grow = await growFixture();
+  const w = makeCycleWrites(routeRequest(grow, buildFixture()));
+  const now = new Date();
+  for (const [slug, form] of Object.entries(FORMS.grow as Record<string, any>)) {
+    await form.submit(w, GP, { ...initialValues(form), ...SAMPLES.grow[slug] }, now);
+  }
+  const read = async (slug: string) => (await growCall(grow, 'GET', `/modules/${slug}?project=${GP}`)).body;
+  assert.deepEqual(Object.keys(EDITED).sort(), Object.keys(EDITS.grow).sort(), 'a Grow Edit form has no case here');
+  for (const [slug, change] of Object.entries(EDITED)) {
+    const edit = editFor('grow', slug);
+    const rows = adaptModule('grow', slug, await read(slug)).records.rows;
+    const row = rows.find((r: any) => edit.idOf(r) != null);
+    assert.ok(row, `${slug}: no row offers Edit`);
+    const current = initialValues(edit, edit.valuesOf(row));
+    assert.deepEqual(validate(edit, current), {}, `${slug}: the row's own values do not pass its form`);
+    await edit.submit(w, GP, edit.idOf(row), { ...current, ...change });
+  }
+  const raw = async (slug: string) => (await read(slug)).records.rows[0];
+  const fb = await raw('product-improvement');
+  assert.deepEqual([fb.status, fb.theme, fb.roadmap_item_label, fb.body, fb.source], ['shipped', 'Identity', null, 'Needs single sign-on', 'customer'],
+    'an emptied field is cleared, and what the form does not hold is left as logged');
+  const ch = await raw('distribution');
+  assert.deepEqual([ch.name, ch.state, ch.utm_source, ch.spend_cents], ['Podcasts (paused)', 'paused', 'podcast', 125050]);
+  const pa = await raw('partner-network');
+  assert.deepEqual([pa.name, pa.type, pa.stage, pa.terms, pa.revenue_cents], ['Initech', 'reseller', 'signed', 'Net 30', 30000]);
+  const mk = await raw('market-expansion');
+  assert.deepEqual([mk.decision, mk.demand_score, mk.demand_source, mk.regulation_score, mk.regulation_source, mk.partners_score],
+    ['enter', 7, 'Waitlist by country', 5, 'Counsel memo', null], 'a scored part keeps its score; an unscored one stays null');
+  const ob = await raw('durable-company-building');
+  assert.deepEqual([ob.title, ob.status, ob.owner_name, String(ob.due_at).slice(0, 10)], ['Annual report', 'done', 'Gus', dayFrom(5)]);
+});
+
+test('D661: Build\'s Edit forms change formation steps and the must-have mark, and only their own rows', async () => {
+  const buildDb = buildSeeded();
+  const w = makeCycleWrites(routeRequest(await growFixture(), buildDb));
+  const rows = async (slug: string) => adaptModule('build', slug, (await buildCall(buildDb, `/modules/${slug}?project=${BP}`)).body).records.rows;
+
+  // Formation steps share their table with the Lab's steps and the entity's
+  // filings; only a `step-<id>` row is one this route changes.
+  const step = editFor('build', 'company-creation');
+  const filings = await rows('company-creation');
+  assert.ok(filings.some((r: any) => String(r.id).startsWith('obligation-')), 'the fixture has an obligation row to refuse');
+  for (const r of filings) assert.equal(step.idOf(r) != null, String(r.id).startsWith('step-'), `${r.id} offers Edit wrongly`);
+  const ein = filings.find((r: any) => r.cells.filing === 'Get EIN');
+  const current = initialValues(step, step.valuesOf(ein));
+  assert.deepEqual(current, { title: 'Get EIN', due_date: '', state: 'todo' });
+  await step.submit(w, BP, step.idOf(ein), { ...current, state: 'done', due_date: dayFrom(10) });
+  assert.deepEqual((await rows('company-creation')).filter((r: any) => r.cells.filing === 'Get EIN').map((r: any) => [r.cells.state, r.cells.due]), [['done', dayFrom(10)]]);
+
+  // A must-have's date, and taking one off the list; the feature stays in scope.
+  const must = editFor('build', 'prototype-mvp');
+  const before = await rows('prototype-mvp');
+  const exceptions = before.find((r: any) => r.cells.must_have === 'Exceptions queue');
+  await must.submit(w, BP, must.idOf(exceptions), { ...initialValues(must, must.valuesOf(exceptions)), due_date: dayFrom(20) });
+  const audit = before.find((r: any) => r.cells.must_have === 'Audit export');
+  assert.deepEqual(initialValues(must, must.valuesOf(audit)), { is_must_have: 'yes', due_date: '' });
+  await must.submit(w, BP, must.idOf(audit), { is_must_have: 'no', due_date: '' });
+  const after = await rows('prototype-mvp');
+  assert.deepEqual(after.map((r: any) => r.cells.must_have).sort(), ['Bank sync', 'Exceptions queue', 'Match rules']);
+  assert.equal(after.find((r: any) => r.cells.must_have === 'Exceptions queue').cells.due, dayFrom(20));
+  assert.ok((await rows('solution-design')).some((r: any) => r.cells.feature === 'Audit export'), 'taking off the mark removed the feature');
+
+  // And back on, from the feature table, where nothing is pre-chosen.
+  const mark = editFor('build', 'solution-design');
+  const feature = (await rows('solution-design')).find((r: any) => r.cells.feature === 'Audit export');
+  assert.deepEqual(validate(mark, initialValues(mark, mark.valuesOf(feature))), { is_must_have: 'Must-have for the MVP is required.' });
+  await mark.submit(w, BP, mark.idOf(feature), { is_must_have: 'yes' });
+  assert.ok((await rows('prototype-mvp')).some((r: any) => r.cells.must_have === 'Audit export'));
+});
+
+test('D661: an Edit is refused for a row the venture does not hold, and the slug never reaches an inherited form', async () => {
+  const grow = await growFixture();
+  const buildDb = buildSeeded();
+  const w = makeCycleWrites(routeRequest(grow, buildDb));
+  const channel = editFor('grow', 'distribution');
+  await assert.rejects(channel.submit(w, GP, 'no-such-uid', { name: 'X', state: 'active' }), (e: any) => e.status === 404);
+  const step = editFor('build', 'company-creation');
+  await assert.rejects(step.submit(w, BP, 9999, { title: 'X', due_date: '', state: 'todo' }), (e: any) => e.status === 404);
+  for (const slug of ['constructor', 'toString', '__proto__']) assert.equal(editFor('grow', slug), null);
+  assert.equal(editFor('constructor', 'x'), null);
+  // A Grow row the read gave no store id offers no Edit: the adapter gives it no `edit`.
+  const read = { module: 'distribution', card: null, records: { cols: ['Channel', 'State', 'Spend · 30 d', 'Customers', 'CAC'],
+    rows: [{ name: 'No id', state: 'active' }, { uid: 'g1', name: 'Has id', state: 'paused' }], total: 2, page: 1, page_size: 25 } };
+  const rows = adaptModule('grow', 'distribution', read).records.rows;
+  assert.deepEqual(rows.map((r: any) => [r.edit, channel.idOf(r)]), [[null, null], [{ uid: 'g1', name: 'Has id', state: 'paused' }, 'g1']]);
 });
