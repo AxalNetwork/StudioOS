@@ -11,7 +11,6 @@ import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, pageMonthLine, splitByPage } from './assistCost';
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY } from './railModels';
-import EadwynComposer from './EadwynComposer';
 import { Unreadable } from './Honesty';
 import { railInheritance } from './railInheritance';
 import { ACCENT } from '../workspaces/shellConfig';
@@ -1044,16 +1043,13 @@ export default function WorkerRail({
           </section>
         )}
 
-        {/* D652 (#1464) — the composer: a conversation, its connector
-            switches, and the Send/Cancel card. It runs on the same model the
-            block above shows, and its runs are counted the same way, so the
-            spend below is re-read after each one. */}
-        <EadwynComposer
-          workspace={workspace}
-          model={activeModel || undefined}
-          page={pagePath || undefined}
-          onRan={() => { reload(); budgetReading.reload(); }}
-        />
+        {/* NO CHAT IN THIS RAIL (owner, 2026-10-10). The rail is the AIRail
+            canvas (`design/incoming/AIRail.dc.html`): mode, the page's models,
+            usage and the screening line. D652's "Ask Eadwyn" composer
+            (`EadwynComposer.jsx`, from the Connectors canvas's `rail` screen)
+            was mounted here on 2026-10-09 and is taken out again. It stays
+            unmounted, with its Worker routes, until a canvas gives the chat a
+            place of its own. */}
 
         {unavailable.length > 0 && (
           <section className="fwr-block fwr-muted">
