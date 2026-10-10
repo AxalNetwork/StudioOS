@@ -20,6 +20,7 @@ const render=(Component,props)=>renderedText(markup(Component,props));
 const checks={
  destination(m){const html=markup(m.consent.ConsentView,{request});const text=renderedText(html);const uri=html.match(/data-testid="consent-redirect-host"[^]*?<div class="break-all[^"]*">([^<]*)<\/div>/)?.[1];assert.deepEqual([uri,text.includes('Unverified assistant'),text.includes('Claude wants to connect'),text.includes('keeps your earlier connections')],[request.redirect_uri,true,true,true]);},
  scopes(m){const text=render(m.consent.ConsentView,{request});assert.deepEqual([text.includes('Read your Validate context'),text.includes('Submit interviews for your review')],[true,false]);},
+ ownedEmpty(m){const text=render(m.consent.ConsentView,{request:{...request,companies:[]}});assert.match(text,/You have no company you own/);},
  evidence(m){const p={kind:'evidence',payload:{hypothesis_id:31,pain_group_id:41,direction:'supports',strength:'pattern'},evidence_context:{hypothesis:{id:31,code:'H4',claim:'Finance leads reconcile weekly'},pain_group:{id:41,title:'Manual close'}}};
   assert.deepEqual(m.review.placementText(p),'Supports H4 · Finance leads reconcile weekly through Manual close · Pattern');},
 };
@@ -44,6 +45,7 @@ const probes=[
  ['destination','model','request?.redirect_uri','request?.redirect_host'],
  ['destination','consent','keeps your earlier connections','ends your earlier connections'],
  ['scopes','model','new Set(request?.scopes || [])',"new Set(['validate:read','validate:write'])"],
+ ['ownedEmpty','consent','You have no company you own','You have no company you can read in Validate'],
  ['evidence','review','h.code','h.id'],
  ['evidence','review','h.claim',"'Not recorded'"],
  ['evidence','review','g?.title',"'Not recorded'"],

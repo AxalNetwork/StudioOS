@@ -81,7 +81,7 @@ export function ConsentView({ request, error, loading = false, busy = false, sen
       <h2 className="mt-5 text-[11px] font-bold uppercase tracking-wide text-axal-faint">For these companies</h2>
       {state === 'empty' ? (
         <p className="mt-1.5 text-[13px] text-axal-muted dark:text-gray-400" data-testid="consent-no-companies">
-          You have no company you can read in Validate, so there is nothing to connect it to. <Link to="/studio" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Go to your studio</Link>
+          You have no company you own, so there is nothing to connect it to. <Link to="/studio" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Go to your studio</Link>
         </p>
       ) : (
         <ul className="mt-1.5 space-y-1" data-testid="consent-companies">

@@ -7,11 +7,11 @@
  * re-checks the access each tool needs to the project, so a grant outlives neither the
  * account, nor a "sign out everywhere", nor the founder's place on the venture.
  *
- * "Company" means projects.id. Read tools and consent choices follow the
- * app's canReadBoard rule; write tools separately require canWrite.
+ * "Company" means projects.id. Consent choices require venture ownership;
+ * read tools still use canReadBoard and write tools require canWrite.
  */
 import type { Env, User } from '../types';
-import { canReadBoard, canWrite } from '../routes/_founder_validate_helpers';
+import { canReadBoard, canWrite, ownsVenture } from '../routes/_founder_validate_helpers';
 import { logActorAct } from '../services/actorLog';
 
 /** What the founder approved, stored (encrypted) on the grant by the provider. */
@@ -63,12 +63,12 @@ export async function grantCompany(env: Env, props: GrantProps, user: UserRow, r
   return { id: p.id, name: p.name || `Company #${p.id}` };
 }
 
-/** Grant exactly the live projects the app's Validate board allows this user to read. */
+/** Grant exactly the live ventures this user owns. */
 export async function grantableCompanies(env: Env, user: User): Promise<Array<{ id: number; name: string }>> {
   const r = await env.DB.prepare(
     'SELECT id, name, founder_id FROM projects WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE, id',
   ).all<{ id: number; name: string | null; founder_id: number | null }>();
-  return (r.results || []).filter((p) => canReadBoard(p, user))
+  return (r.results || []).filter((p) => ownsVenture(p, user))
     .map((p) => ({ id: p.id, name: p.name || `Company #${p.id}` }));
 }
 
