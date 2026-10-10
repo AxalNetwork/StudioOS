@@ -151,9 +151,13 @@ test('the frame is the founder panel: docked, stretched, seamed, grounded, colla
   assert.match(col, /background:\s*#fff/, 'the panel ground');
   assert.match(col, /padding:\s*18px 18px 28px/, 'the panel inset');
   const dock = rule('.fwr-frame-dock');
-  assert.match(dock, /position:\s*sticky/);
-  assert.match(dock, /overflow-y:\s*auto/, 'a rail taller than the window must scroll inside its panel');
-  assert.match(dock, /max-height:/);
+  // The rail has no scrollbar of its own: it flows with the page, so a rail
+  // taller than the window is read with the page's one scrollbar.
+  assert.ok(dock, 'the dock rule is gone');
+  assert.doesNotMatch(dock, /position:\s*sticky/, 'a sticky dock needs its own scroll to reach its foot');
+  assert.doesNotMatch(dock, /overflow(-y)?:\s*(auto|scroll)/, 'the rail must not scroll on its own');
+  assert.doesNotMatch(dock, /max-height:/, 'a height cap is what made the rail scroll');
+  assert.doesNotMatch(CSS_CODE, /\.fwr-frame-(rail|dock)[^{]*\{[^}]*overflow(-y)?:\s*(auto|scroll)/, 'no scroll on the rail column either');
   assert.match(CSS_CODE, /\.dark \.fwr-frame-rail\s*\{[^}]*border-left-color:[^}]*background:/, 'the panel needs its dark pair');
 });
 
