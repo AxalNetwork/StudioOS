@@ -4,12 +4,11 @@
  *
  * A GRANT IS NEVER TRUSTED ON ITS OWN. Its props say which user and which
  * companies the founder ticked, but every tool call re-reads the user and
- * re-checks write access to the company, so a grant outlives neither the
+ * re-checks the access each tool needs to the project, so a grant outlives neither the
  * account, nor a "sign out everywhere", nor the founder's place on the venture.
  *
- * "Company" here is a project the founder can write to: Validate is per
- * project. Staff roles see every project through `canAccessProject`, so the
- * consent page offers only the projects the person owns or co-founds.
+ * "Company" means projects.id. Read tools and consent choices follow the
+ * app's canReadBoard rule; write tools separately require canWrite.
  */
 import type { Env, User } from '../types';
 import { canReadBoard, canWrite } from '../routes/_founder_validate_helpers';
@@ -50,7 +49,7 @@ export async function grantUser(env: Env, props: GrantProps): Promise<UserRow> {
   return user;
 }
 
-/** The company, if this grant covers it and the user can still write to it; otherwise a refusal. */
+/** The company, if this grant covers it and the user retains the access the tool needs; otherwise a refusal. */
 export async function grantCompany(env: Env, props: GrantProps, user: UserRow, raw: unknown, write = false): Promise<{ id: number; name: string }> {
   const id = Number(raw);
   if (!Number.isInteger(id) || id <= 0 || !props.companies.map(Number).includes(id)) {

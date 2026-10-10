@@ -223,7 +223,7 @@ const probes=[
  ['user','server','user = await grantUser(env, props);',"user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(props.userId).first() as any;"],
  ['project','assistant',".bind(company).first<ProjectRef", ".bind(15).first<ProjectRef"],
  ['session','assistant','!grant.companies.map(Number).includes(Number(session.project_id))','false'],
- ['readable','grants','write ? canWrite(p, user as User) : canReadBoard(p, user as User)','canWrite(p, user as User)'],
+ ['readable','grants','write ? canWrite(p, user as unknown as User) : canReadBoard(p, user as unknown as User)','canWrite(p, user as unknown as User)'],
  ['cofounder','grants','.filter((p) => canReadBoard(p, user))','.filter(() => true)'],
  ['consentScopes','consent','scopes: requestedScopes(p.authRequest.scope)','scopes: [\'validate:read\',\'validate:write\']'],
  ['emptyScope','consent','if (!scope.length)','if (false)'],
