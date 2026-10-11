@@ -15,10 +15,18 @@ permissions:
   security-events: write
   actions: read
 
-# Requires GitHub Advanced Security on the repo (confirmed enabled by repo
-# owner). Analyses both the worker (TS) and the FastAPI dev backend (Python)
-# even though FastAPI is not deployed — Python supply-chain issues still hit
+# Analyses both the worker (TS) and the FastAPI dev backend (Python) even
+# though FastAPI is not deployed — Python supply-chain issues still hit
 # Replit dev sessions.
+#
+# NO UPLOAD TO CODE SCANNING (D672). The repository is private, and code
+# scanning on a private repository needs GitHub Code Security, which is not
+# on: since 2026-10-10 every upload was refused ("Code Security must be
+# enabled for this repository to use code scanning") and this job went red
+# on every PR. The analysis still runs; its SARIF stays in the workspace and
+# scripts/sarif-summary.py lists the findings in the job summary. Findings
+# never fail the job, as before. To go back to the Security tab, turn Code
+# Security on and delete `upload: never` and the report step.
 jobs:
   analyze:
     name: analyze (${{ matrix.language }})
@@ -45,3 +53,7 @@ jobs:
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           category: '/language:${{ matrix.language }}'
+          upload: never
+          output: codeql-results
+      - name: Report findings
+        run: python3 scripts/sarif-summary.py "CodeQL (${{ matrix.language }})" codeql-results

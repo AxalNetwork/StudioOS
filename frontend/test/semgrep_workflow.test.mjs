@@ -1,8 +1,14 @@
 /**
  * `.github/workflows/semgrep.yml` must keep the property that makes its
- * red/green mean something, and the one that stops it destroying the alert
- * history. Both were absent until D170, and neither is visible in a diff
- * unless you know what the three deleted settings did together.
+ * red/green mean something, and the one that stops it reporting a crashed
+ * scan as a clean one. Both were absent until D170, and neither is visible in
+ * a diff unless you know what the three deleted settings did together.
+ *
+ * D672: the repository is private and code scanning is off, so the last step
+ * now lists the findings in the job summary instead of uploading the SARIF.
+ * The upload is what made a resultless SARIF close every open alert; the
+ * report step keeps the same rule, because a resultless SARIF would still
+ * read as "0 findings" after a scan that never ran.
  *
  * THE FAILURE THIS GUARDS, stated once so a future edit cannot re-introduce
  * it by accident:
@@ -74,7 +80,7 @@ function steps() {
 
 const scanStep = () => steps().find((s) => s.name.startsWith('Run semgrep'));
 const stripStep = () => steps().find((s) => s.name.startsWith('Drop nosemgrep'));
-const uploadStep = () => steps().find((s) => s.name.startsWith('Upload SARIF'));
+const reportStep = () => steps().find((s) => s.name.startsWith('Report findings'));
 
 test('the scan step passes no --error, so its exit code means something', () => {
   const step = scanStep();
@@ -83,7 +89,7 @@ test('the scan step passes no --error, so its exit code means something', () => 
     !/--error\b/.test(step.code),
     '`--error` makes semgrep exit 1 on ANY finding, so the step fails on every '
       + 'run and a real scanner crash becomes indistinguishable from the ~40 '
-      + 'standing findings. Report findings through the SARIF upload, not the '
+      + 'standing findings. Report findings through the job summary, not the '
       + 'exit code.',
   );
   // The explanation of why it is absent is allowed to name it — and must,
@@ -98,12 +104,12 @@ test('nothing in the job continues past a failed scan', () => {
   assert.ok(
     !/continue-on-error/.test(src),
     '`continue-on-error: true` on the scan step lets a scanner that could not '
-      + 'run reach the SARIF upload, which would close every open Semgrep '
-      + 'alert as fixed. A scan that failed must fail the job.',
+      + 'run reach the report, which would read "0 findings" for a scan that '
+      + 'never ran. A scan that failed must fail the job.',
   );
 });
 
-for (const [label, get] of [['strip', stripStep], ['upload', uploadStep]]) {
+for (const [label, get] of [['strip', stripStep], ['report', reportStep]]) {
   test(`the ${label} step is unreachable from a failed scan`, () => {
     const step = get();
     assert.ok(step, `no ${label} step found in ${WORKFLOW}`);
@@ -118,18 +124,18 @@ for (const [label, get] of [['strip', stripStep], ['upload', uploadStep]]) {
   });
 }
 
-test('the suppressed-results strip still runs, between the scan and the upload', () => {
+test('the suppressed-results strip still runs, between the scan and the report', () => {
   // GOTCHAS.md warns against removing this step to "see everything": it would
   // re-open ~49 alerts that each already carry a written justification in the
   // source. Nothing pinned its presence before this test.
   const names = steps().map((s) => s.name);
   const scan = names.findIndex((n) => n.startsWith('Run semgrep'));
   const strip = names.findIndex((n) => n.startsWith('Drop nosemgrep'));
-  const upload = names.findIndex((n) => n.startsWith('Upload SARIF'));
+  const report = names.findIndex((n) => n.startsWith('Report findings'));
   assert.ok(strip > -1, 'the nosemgrep-strip step must exist');
   assert.ok(
-    scan < strip && strip < upload,
-    `order must be scan -> strip -> upload; got ${JSON.stringify(names)}`,
+    scan < strip && strip < report,
+    `order must be scan -> strip -> report; got ${JSON.stringify(names)}`,
   );
 });
 
