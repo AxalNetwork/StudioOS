@@ -20,14 +20,17 @@ permissions:
 # required SEMGREP_APP_TOKEN + SEMGREP_DEPLOYMENT_ID secrets which were
 # never set on this repo — that's why every run was red.
 #
-# Findings show up in the Security tab via SARIF upload. To stop running
-# Semgrep entirely, delete this file — no other workflow depends on it.
+# Findings are listed in this job's summary page (D672). They used to go to
+# the Security tab via SARIF upload, but the repository is private and code
+# scanning there needs GitHub Code Security, which is not on: since
+# 2026-10-10 every upload was refused and this job went red on every PR. To
+# stop running Semgrep entirely, delete this file — no other workflow
+# depends on it.
 #
 # WHAT THIS JOB'S RED/GREEN MEANS, because it used to mean nothing.
-# Findings do NOT fail it: there are ~40 standing ones and the SARIF upload
-# is how they are reported, not the exit code. A SCANNER THAT COULD NOT RUN
-# does fail it, and then nothing is uploaded. See the two comments below —
-# the second is the one that matters.
+# Findings do NOT fail it: there are ~40 standing ones and the summary is
+# how they are reported, not the exit code. A SCANNER THAT COULD NOT RUN
+# does fail it, and then nothing is reported. See the two comments below.
 jobs:
   scan:
     name: Scan
@@ -88,7 +91,9 @@ jobs:
       # like backend/app/models/migrations.py:2793 came back as open "Error"
       # alerts with the silencing comment visible in the reported snippet.
       #
-      # Strip them so the upload matches the finding count semgrep reported.
+      # Strip them so the report matches the finding count semgrep printed.
+      # (sarif-summary.py skips suppressed results too; this step keeps the
+      # SARIF itself honest for anyone who reads it.)
       - name: Drop nosemgrep-suppressed results from SARIF
         run: |
           # `semgrep` is itself a Python console script, so this image ships an
@@ -96,25 +101,22 @@ jobs:
           # image layout is not ours to depend on.
           PY="$(command -v python3 || command -v python)"
           "$PY" scripts/strip-suppressed-sarif.py semgrep.sarif
-      # NO `if: always()` ON EITHER OF THESE TWO STEPS, and it is the whole
-      # safety property of this job.
+      # NO `if: always()` ON EITHER OF THESE TWO STEPS.
       #
-      # A SARIF upload REPLACES this tool's alert set for the ref: every alert
-      # absent from the payload is closed as "fixed". And a fatally-failed
-      # semgrep still writes a SARIF — measured on 1.176.1, a bad config exits
-      # 7 having written a structurally VALID file, `runs[0].tool.driver.name`
-      # = "Semgrep OSS", with zero results. That payload is indistinguishable
-      # from a legitimate clean scan, so no amount of inspecting the file can
-      # tell them apart: ONLY THE EXIT CODE CAN. Uploading it would silently
-      # resolve every open Semgrep alert on the strength of a scan that never
-      # ran.
+      # A fatally-failed semgrep still writes a SARIF — measured on 1.176.1, a
+      # bad config exits 7 having written a structurally VALID file,
+      # `runs[0].tool.driver.name` = "Semgrep OSS", with zero results. That
+      # payload is indistinguishable from a legitimate clean scan, so no
+      # amount of inspecting the file can tell them apart: ONLY THE EXIT CODE
+      # CAN. A report built from it would read "0 findings" after a scan that
+      # never ran.
       #
       # So both steps take the default `if: success()`. A scan that failed,
-      # was cancelled, or timed out stops here, the job goes red, and the
-      # existing alerts are left alone. (A scan that dies before writing
-      # anything was already safe: strip-suppressed-sarif.py prints "nothing
-      # to filter" and the upload then fails on the missing file.)
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
-        with:
-          sarif_file: semgrep.sarif
+      # was cancelled, or timed out stops here and the job goes red. (Until
+      # D672 the last step was a SARIF upload, which REPLACES the tool's alert
+      # set, so that payload would also have closed every open alert as
+      # "fixed". Nothing is uploaded now; the rule stays for the report.)
+      - name: Report findings
+        run: |
+          PY="$(command -v python3 || command -v python)"
+          "$PY" scripts/sarif-summary.py "Semgrep" semgrep.sarif
