@@ -543,12 +543,10 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       }
       return;
     }
-    case 'flagged_score_digest': {
-      // Daily digest of flagged-but-unreviewed snapshots older than 24h.
-      const { digestUnreviewedFlaggedScores } = await import('./notifications');
-      await digestUnreviewedFlaggedScores(env);
+    case 'flagged_score_digest':
+      // D671: the daily digest is retired and nothing enqueues it. A job
+      // enqueued before the deploy drains here without sending anything.
       return;
-    }
     case 'mi_extract': {
       // Task #6 (AT-1) — runs the six extractors over one advisor answer.
       // Idempotent via UNIQUE(extractor, user_id, advisor_answer_id, content_hash).

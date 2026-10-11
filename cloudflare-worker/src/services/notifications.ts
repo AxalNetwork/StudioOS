@@ -1,10 +1,8 @@
 // Epic 5 — Admin alerts for tampered/anomalous scores.
 //
-// Two surfaces:
-//   1. Real-time notification + email when admin_review_status flips to
-//      'flagged' (anomaly detection or HMAC mismatch).
-//   2. Daily digest summarising any flagged snapshots that have sat
-//      unreviewed for >24h, so they don't quietly age out.
+// One surface: a real-time notification + email when admin_review_status
+// flips to 'flagged' (anomaly detection or HMAC mismatch). The daily digest
+// of flagged snapshots unreviewed for >24h was retired by D671 (#1540).
 //
 // Idempotency model: every notification carries a `dedupe_key`, and the
 // (user_id, kind, dedupe_key) tuple is UNIQUE. We use `INSERT OR IGNORE`
@@ -12,11 +10,10 @@
 // === 1`). This makes the whole notify call atomic and safe under
 // concurrent submit + nightly audit + retried jobs.
 import type { Env } from '../types';
-import { sendFlaggedScoreEmail, sendFlaggedScoreDigestEmail } from './email';
+import { sendFlaggedScoreEmail } from './email';
 import { bindingKey } from '../util/schemaBootstrap';
 
 const NOTIFY_KIND_FLAGGED = 'flagged_score_alert';
-const NOTIFY_KIND_DIGEST = 'flagged_score_digest';
 
 const NOTIF_MIGRATED = new WeakMap<object, boolean>();
 async function ensureNotificationsSchema(env: Env): Promise<boolean> {
@@ -162,77 +159,4 @@ export async function notifyAdminsOfFlaggedScore(env: Env, alert: FlaggedAlert):
       console.error('[notifications] admin alert email failed', e);
     }
   }
-}
-
-/**
- * Daily digest: every flagged snapshot still sitting at admin_review_status='flagged'
- * older than 24h gets summarised once per admin per UTC day. Dedupe ledger
- * lives in the same notifications table (kind=flagged_score_digest) keyed
- * on the UTC date so concurrent cron drains can't double-send.
- */
-export async function digestUnreviewedFlaggedScores(env: Env): Promise<{ admins: number; items: number }> {
-  const ready = await ensureNotificationsSchema(env);
-  if (!ready) return { admins: 0, items: 0 };
-  const admins = await getAdmins(env);
-  if (admins.length === 0) return { admins: 0, items: 0 };
-
-  let items: any[] = [];
-  try {
-    const r: any = await env.DB.prepare(
-      `SELECT s.id AS snapshot_id, s.project_id, s.total_score, s.created_at,
-              s.anomaly_flags, p.name AS project_name
-         FROM score_snapshots s
-         LEFT JOIN projects p ON p.id = s.project_id
-        WHERE s.admin_review_status = 'flagged'
-          AND s.is_sandbox = 0
-          AND s.created_at < datetime('now', '-1 day')
-        ORDER BY s.created_at ASC
-        LIMIT 200`,
-    ).all();
-    items = r?.results || [];
-  } catch (e) {
-    console.error('[notifications] digest query failed', e);
-    return { admins: admins.length, items: 0 };
-  }
-  if (items.length === 0) return { admins: admins.length, items: 0 };
-
-  const summarised = items.map((row: any) => {
-    let flags: any[] = [];
-    try { flags = row.anomaly_flags ? JSON.parse(row.anomaly_flags) : []; } catch {}
-    return {
-      snapshot_id: row.snapshot_id,
-      project_id: row.project_id,
-      project_name: row.project_name || `project #${row.project_id}`,
-      total_score: row.total_score,
-      created_at: row.created_at,
-      flag_summary: summarizeFlags(flags),
-    };
-  });
-
-  const appUrl = env.APP_URL || 'https://axal.vc';
-  const queueUrl = `${appUrl.replace(/\/$/, '')}/monitoring?tab=integrity`;
-  const dedupeKey = `digest:${new Date().toISOString().slice(0, 10)}`; // YYYY-MM-DD UTC
-
-  const title = `${summarised.length} flagged score${summarised.length === 1 ? '' : 's'} awaiting review`;
-  const body = summarised.slice(0, 5)
-    .map(it => `• ${it.project_name} — snapshot #${it.snapshot_id} (${it.flag_summary.join(', ') || 'integrity issue'})`)
-    .join('\n');
-  const metaJson = JSON.stringify({
-    count: summarised.length,
-    snapshot_ids: summarised.map(s => s.snapshot_id),
-    digest_date: dedupeKey.slice('digest:'.length),
-  });
-
-  for (const admin of admins) {
-    const inserted = await insertNotificationOnce(
-      env, admin.id, NOTIFY_KIND_DIGEST, dedupeKey, title, body, queueUrl, metaJson,
-    );
-    if (!inserted) continue; // already digested this admin today
-    try {
-      await sendFlaggedScoreDigestEmail(env, admin.email, admin.name || admin.email, summarised, queueUrl);
-    } catch (e) {
-      console.error('[notifications] digest send failed', e);
-    }
-  }
-  return { admins: admins.length, items: items.length };
 }
