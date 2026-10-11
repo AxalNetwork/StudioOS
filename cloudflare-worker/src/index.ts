@@ -1749,11 +1749,10 @@ export default {
           // approved snapshot using id-cursor (no LIMIT cap on coverage).
           try { await Jobs.enqueue(env, 'score_hash_audit', { page_size: 500 }); } catch {}
         }
-        // Daily admin digest for flagged-but-unreviewed scores (>24h old).
-        // Runs at 14:00 UTC so US/EU admins see it in the morning.
-        if (now.getUTCHours() === 14 && now.getUTCMinutes() === 0) {
-          try { await Jobs.enqueue(env, 'flagged_score_digest', {}); } catch {}
-        }
+        // D671: the daily 14:00 UTC digest of flagged-but-unreviewed scores
+        // is retired at the owner's request. It re-sent the same unreviewed
+        // list every day. Flagged scores still wait in Monitoring › Integrity,
+        // and the one-time alert when a score is first flagged still goes out.
         // Founder Signals live ingestion — nightly at 04:20 UTC. Fetches real
         // evidence from the free public sources (HN/Algolia, Stack Exchange,
         // GitHub, Federal Register, SEC EDGAR FTS) and persists promoted
