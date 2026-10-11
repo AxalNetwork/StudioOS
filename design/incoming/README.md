@@ -14,8 +14,8 @@ exists for each — not by how far each has been built. Counts as of 2026-10-10:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 88 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
-| `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
+| `canvases/integrated/` | 89 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/backlog/` | 29 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
@@ -38,7 +38,10 @@ founder's `/studio` was built to it (D564), and 76 / 28 / 26 until
 `Help Ticket Screen` arrived beside `Help Center`, whose new export imports it
 (D599), 77 / 28 / 26 until `Ops · Boards` and `Ops Page` graduated with
 all five of their areas built (D607), and 79 / 28 / 26 until the Eadwyn
-Tickets canvas's two files arrived with their routes built (D606).
+Tickets canvas's two files arrived with their routes built (D606). It read
+88 / 28 / 26 until the public website's export brought `Spin-Out Lab Page`
+(to `integrated/`) and `Eadwyn Intelligence Page` (to `backlog/`) on
+2026-10-11 (D673).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to

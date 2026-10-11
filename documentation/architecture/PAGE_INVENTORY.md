@@ -13,7 +13,7 @@ canvas behind it still shows up here.
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | Headerless | Studio | `/studio` | Founder Studio |
-| Headerless | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Workspace |
+| Headerless | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Page, Spin-Out Lab Workspace |
 | Headerless | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
 | Headerless | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
 | Headerless | Raise | `/raise` | Founder Workspaces Canvas |
@@ -149,4 +149,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Settings (`/branch/settings`)
 
-**Canvas corpus:** 141. **Workspace assignments:** 185.
+**Canvas corpus:** 143. **Workspace assignments:** 187.

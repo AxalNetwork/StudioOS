@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    .ei-in{max-width:1080px;margin:0 auto;padding-left:32px;padding-right:32px}
+    @media (max-width:760px){.ei-in{padding-left:20px;padding-right:20px}.ei-h1{font-size:48px!important}.ei-2,.ei-3{grid-template-columns:1fr!important}.ei-row{grid-template-columns:1fr!important;gap:4px!important}.ei-rail{display:none!important}}
+  </style>
+</helmet>
+<div style="font-family:Inter,system-ui,sans-serif;color:#141118;background:#fff">
+
+<section style="position:relative;overflow:hidden;background:#1a1328;color:#fff">
+  <img src="{{ eadHero }}" alt="" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 40%">
+  <div aria-hidden="true" style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 50% 48%,rgba(20,14,34,.72) 0%,rgba(20,14,34,.5) 55%,rgba(20,14,34,.35) 100%),linear-gradient(180deg,rgba(20,14,34,.35) 0%,rgba(20,14,34,.15) 40%,rgba(20,14,34,.6) 100%)"></div>
+<div class="ei-in" style="position:relative;padding-top:120px;padding-bottom:110px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px">
+  <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:19px;letter-spacing:-.02em;text-shadow:0 1px 12px rgba(0,0,0,.45)">Eadwyn</div>
+  <img src="eadwyn-ai.png" alt="Eadwyn mark: a pixel-art eye holding a landscape, inside a violet compass ring" style="width:124px;height:124px;image-rendering:pixelated;filter:drop-shadow(0 6px 24px rgba(0,0,0,.45))">
+  <h1 class="ei-h1" style="margin:0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:76px;line-height:1;font-weight:700;letter-spacing:-.035em;text-shadow:0 2px 24px rgba(0,0,0,.5)">Intelligence</h1>
+  <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:rgba(124,58,237,.85);border-radius:99px;padding:7px 14px">Beta 1.0</div>
+  <p style="margin:4px 0 0;max-width:680px;font-size:19px;line-height:1.55;color:rgba(255,255,255,.94);text-wrap:pretty;text-shadow:0 1px 14px rgba(0,0,0,.55)">Eadwyn is the Personal Assistant inside Axal VC.</p>
+  
+  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:8px">
+    <a href="https://app.axal.vc/studio" style="font-size:15px;font-weight:600;color:#fff;background:#6d28d9;border-radius:12px;padding:14px 22px;text-decoration:none">Try Eadwyn</a>
+    <a href="#ei-research" style="font-size:15px;font-weight:600;color:#141118;background:#fff;border:1px solid #fff;border-radius:12px;padding:14px 22px;text-decoration:none">See Research</a>
+  </div>
+</div>
+</section>
+
+<section class="ei-in" style="padding-top:64px;padding-bottom:72px">
+  <p style="margin:0 0 48px;max-width:760px;font-family:'Space Grotesk',system-ui,sans-serif;font-size:26px;line-height:1.35;font-weight:500;letter-spacing:-.02em;color:#141118;text-wrap:balance">Eadwyn keeps every profile's backlog in order, lets you choose the model behind each feature, and reads a research base of markets, companies, and funds.</p>
+  <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">01 · Backlog</div>
+  <h2 style="margin:12px 0 0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:36px;line-height:1.1;font-weight:700;letter-spacing:-.03em;max-width:720px;text-wrap:balance">The next task, across every feature you use.</h2>
+  <p style="margin:14px 0 0;max-width:680px;font-size:16px;line-height:1.65;color:#4a4553">In Studio, Eadwyn reads the open work from every feature in your profile and sorts it into Proposed, Pending, and Completed. The oldest and most blocking item rises first. You decide what moves.</p>
+  <div class="ei-2" style="display:grid;grid-template-columns:minmax(0,5fr) minmax(0,4fr);gap:20px;margin-top:32px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ profiles }}" as="p" hint-placeholder-count="5">
+        <div style="border:1px solid #e8e6ee;border-radius:14px;padding:16px 18px;display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;align-items:baseline" class="ei-row">
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:{{ p.dot }};flex:none"></span><span style="font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:15px">{{ p.name }}</span></div>
+          <div style="font-size:14px;line-height:1.6;color:#4a4553">{{ p.features }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div aria-hidden="true" style="border:1px solid #e8e6ee;border-radius:16px;background:#faf9fc;padding:18px;display:flex;flex-direction:column;gap:14px">
+      <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6b6577">Studio · task list (illustration)</div>
+      <sc-for list="{{ buckets }}" as="b" hint-placeholder-count="3">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:12px;font-weight:700;color:{{ b.color }};letter-spacing:.06em;text-transform:uppercase">{{ b.label }}</div>
+          <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="2">
+            <div style="background:#fff;border:1px solid #e8e6ee;border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;gap:10px;font-size:13px"><span>{{ it.t }}</span><span style="color:#6b6577;white-space:nowrap">{{ it.f }}</span></div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section style="background:#faf9fc;border-top:1px solid #f0eff3;border-bottom:1px solid #f0eff3">
+  <div class="ei-in" style="padding-top:72px;padding-bottom:72px">
+    <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">02 · Models</div>
+    <h2 style="margin:12px 0 0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:36px;line-height:1.1;font-weight:700;letter-spacing:-.03em;max-width:720px;text-wrap:balance">Pick the model behind each feature page.</h2>
+    <p style="margin:14px 0 0;max-width:680px;font-size:16px;line-height:1.65;color:#4a4553">Every feature page has a side rail. It shows which model is answering, lets you switch to another for that page, and states the cost before a run. Nothing swaps silently. A safety screen (Llama Guard) runs before any answer is shown.</p>
+    <div class="ei-2" style="display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:24px;margin-top:32px;align-items:start">
+      <div style="background:#fff;border:1px solid #e8e6ee;border-radius:16px;overflow:hidden">
+        <div class="ei-row" style="display:grid;grid-template-columns:minmax(0,4fr) minmax(0,4fr) minmax(0,4fr);gap:16px;padding:12px 20px;background:#f4f3f7;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b6577"><div>Axal VC function</div><div>Default model</div><div>Why</div></div>
+        <sc-for list="{{ models }}" as="m" hint-placeholder-count="9">
+          <div class="ei-row" style="display:grid;grid-template-columns:minmax(0,4fr) minmax(0,4fr) minmax(0,4fr);gap:16px;padding:14px 20px;border-top:1px solid #f0eff3;font-size:14px;line-height:1.5">
+            <div style="font-weight:600">{{ m.fn }}</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:#6d28d9;word-break:break-word">{{ m.model }}</div>
+            <div style="color:#4a4553">{{ m.why }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="ei-rail" aria-hidden="true" style="background:#fff;border:1px solid #e8e6ee;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6b6577">Rail · Pitch deck</div>
+        <div style="display:flex;gap:6px"><span style="flex:1;text-align:center;font-size:12px;font-weight:600;padding:7px;border-radius:8px;border:1px solid #e8e6ee;color:#6b6577">Manual</span><span style="flex:1;text-align:center;font-size:12px;font-weight:600;padding:7px;border-radius:8px;background:#6d28d9;color:#fff">Eadwyn</span></div>
+        <div style="font-size:11px;font-weight:700;color:#6b6577;letter-spacing:.08em;text-transform:uppercase">Model</div>
+        <sc-for list="{{ railModels }}" as="r" hint-placeholder-count="3">
+          <div style="border:1px solid {{ r.border }};background:{{ r.bg }};border-radius:10px;padding:9px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px">{{ r.name }}</div>
+        </sc-for>
+        <div style="font-size:12px;color:#6b6577;border-top:1px solid #f0eff3;padding-top:10px">Spend on this page: no runs yet</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ei-in" style="padding-top:72px;padding-bottom:72px">
+  <div class="ei-2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;align-items:center">
+    <div>
+      <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">03 · Language</div>
+      <h2 style="margin:12px 0 0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:36px;line-height:1.1;font-weight:700;letter-spacing:-.03em;text-wrap:balance">It answers in the way you speak.</h2>
+      <p style="margin:14px 0 0;font-size:16px;line-height:1.65;color:#4a4553">When you talk with Eadwyn, it finds the formulation best adapted to your language: the language you write in, the terms your profile uses, and the level of detail you ask for. Voice notes are transcribed, and replies can be read back aloud.</p>
+    </div>
+    <div aria-hidden="true" style="display:flex;flex-direction:column;gap:10px">
+      <div style="align-self:flex-end;max-width:82%;background:#6d28d9;color:#fff;border-radius:14px 14px 4px 14px;padding:12px 14px;font-size:14px;line-height:1.5">Peux-tu m'expliquer mon score de préparation ?</div>
+      <div style="align-self:flex-start;max-width:86%;background:#f4f3f7;border-radius:14px 14px 14px 4px;padding:12px 14px;font-size:14px;line-height:1.5">Votre score s'appuie sur trois éléments : les entretiens clients, la table de capitalisation et le deck. Le point le plus faible est le deck.</div>
+      <div style="align-self:flex-end;max-width:70%;background:#6d28d9;color:#fff;border-radius:14px 14px 4px 14px;padding:12px 14px;font-size:14px;line-height:1.5">Summarise it for my co-founder in English.</div>
+    </div>
+  </div>
+</section>
+
+<section style="background:#faf9fc;border-top:1px solid #f0eff3;border-bottom:1px solid #f0eff3">
+  <div class="ei-in" style="padding-top:72px;padding-bottom:72px">
+    <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">04 · Persona</div>
+    <h2 style="margin:12px 0 0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:36px;line-height:1.1;font-weight:700;letter-spacing:-.03em;max-width:760px;text-wrap:balance">It learns who you are from the work, not a form.</h2>
+    <p style="margin:14px 0 0;max-width:680px;font-size:16px;line-height:1.65;color:#4a4553">Eadwyn builds your persona from the conversations you have with it and the work you do in the platform. It is the canonical profile the other tools read: matching, scoring, and the order of your backlog. Each part shows how sure it is, and what would make it surer.</p>
+    <div class="ei-2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:30px">
+      <sc-for list="{{ persona }}" as="p" hint-placeholder-count="5">
+        <div style="background:#fff;border:1px solid #e8e6ee;border-radius:16px;padding:22px 22px 20px;display:flex;flex-direction:column;gap:10px;{{ p.span }}">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+            <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:20px;font-weight:700;letter-spacing:-.02em">{{ p.t }}</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#6d28d9">{{ p.src }}</div>
+          </div>
+          <p style="margin:0;font-size:14.5px;line-height:1.65;color:#4a4553">{{ p.d }}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
+            <sc-for list="{{ p.chips }}" as="c" hint-placeholder-count="4"><span style="font-size:12px;font-weight:600;color:#3f3a49;background:#f4f3f7;border-radius:99px;padding:5px 10px">{{ c }}</span></sc-for>
+          </div>
+          <div style="font-size:12.5px;color:#6b6577;border-top:1px solid #f0eff3;padding-top:10px;margin-top:2px">{{ p.feeds }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:18px 0 0;max-width:720px;font-size:13.5px;line-height:1.6;color:#6b6577">Your persona is yours to read, and to correct. Nothing in it is shown to another member unless you publish it on your profile.</p>
+  </div>
+</section>
+
+<section id="ei-research" style="position:relative;overflow:hidden;background:#141118;color:#fff">
+  <img src="{{ eadMap }}" alt="" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;opacity:.55">
+  <div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,17,24,.88) 0%,rgba(20,17,24,.72) 45%,rgba(20,17,24,.9) 100%)"></div>
+  <div class="ei-in" style="position:relative;padding-top:80px;padding-bottom:80px">
+    <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#a78bfa">05 · Research</div>
+    <h2 style="margin:12px 0 0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:40px;line-height:1.08;font-weight:700;letter-spacing:-.03em;max-width:760px;text-wrap:balance">A research base for the decisions that matter.</h2>
+    <p style="margin:14px 0 0;max-width:680px;font-size:16px;line-height:1.65;color:rgba(255,255,255,.78)">Intelligence includes Research: a large database of markets, companies, and funds. Use it to size a market, compare yourself with competitors, and find where to raise. Every figure carries its source and date. Eadwyn cites the rows it read.</p>
+    <div class="ei-3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:36px">
+      <sc-for list="{{ research }}" as="r" hint-placeholder-count="3">
+        <div style="border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:12px">
+          <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:22px;font-weight:700;letter-spacing:-.02em">{{ r.t }}</div>
+          <div style="font-size:14px;font-weight:600;color:#c4b5fd">{{ r.q }}</div>
+          <p style="margin:0;font-size:14.5px;line-height:1.65;color:rgba(255,255,255,.75)">{{ r.d }}</p>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:20px;font-size:13.5px;color:rgba(255,255,255,.6)">Ask Research anything in plain language. Answers without a retrievable source are shown as unanswered, not guessed.</div>
+  </div>
+</section>
+
+<section class="ei-in" style="padding-top:72px;padding-bottom:40px">
+  <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">06 · Architecture</div>
+  <h2 style="margin:12px 0 0;font-family:'Space Grotesk',system-ui,sans-serif;font-size:36px;line-height:1.1;font-weight:700;letter-spacing:-.03em;max-width:720px;text-wrap:balance">An open, federated model, grown by everyone who contributes.</h2>
+  <p style="margin:14px 0 0;max-width:680px;font-size:16px;line-height:1.65;color:#4a4553">Eadwyn is built as a federated model. Nodes learn locally and keep their data where it lives; only model updates travel. Updates are merged, reviewed, and published as a versioned checkpoint, which serves the answers you see.</p>
+  <div class="ei-3" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:30px">
+    <sc-for list="{{ layers }}" as="l" hint-placeholder-count="5">
+      <div style="border:1px solid #e8e6ee;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#6d28d9;font-weight:600">{{ l.n }}</div>
+        <div style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:15.5px;font-weight:700">{{ l.t }}</div>
+        <div style="font-size:13px;line-height:1.55;color:#4a4553">{{ l.d }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="ei-in" style="padding-top:64px;padding-bottom:80px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px">
+  <img src="eadwyn-ai.png" alt="" style="width:44px;height:44px;image-rendering:pixelated">
+  <p style="margin:0;max-width:640px;font-family:'Space Grotesk',system-ui,sans-serif;font-size:24px;line-height:1.35;font-weight:500;letter-spacing:-.02em;text-wrap:balance">Eadwyn never acts for you. It drafts, explains and summarises. Sending, signing and voiding are always a human click.</p>
+  <a href="https://app.axal.vc/studio" style="margin-top:8px;font-size:15px;font-weight:600;color:#fff;background:#6d28d9;border-radius:12px;padding:14px 22px;text-decoration:none">Open on axal.vc</a>
+  <p style="margin:0;font-size:14px;color:#6b6577">Beta 1.0 · the beta can be withdrawn.</p>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() { const R = window.__resources || {}; return Object.assign(this.eadBase(), { eadHero: R['ead-hero'] || '../../../frontend/public/site/ead-hero.webp', eadMap: R['ead-map'] || '../../../frontend/public/site/ead-map.webp' }); }
+  eadBase() {
+    return {
+      profiles: [
+        { name: 'Founders', dot: '#7c3aed', features: 'Validate, Build, Raise, Grow: discovery interviews, roadmap, cap table, pitch deck, data room, Spin-Out Lab gates.' },
+        { name: 'Investors & LPs', dot: '#4f46e5', features: 'Deals, Portfolio, Fund: pipeline stages, diligence pulls, overdue updates, capital calls, reporting.' },
+        { name: 'Operating Partners', dot: '#059669', features: 'Pipeline, Delivery, Offers: live requests, proposals, engagements, status reports, renewals.' },
+        { name: 'Advisors', dot: '#d97706', features: 'Practice, Cohorts, Expertise: guidance asks, session prep, client briefs, profile gaps.' },
+        { name: 'Administrators', dot: '#334155', features: 'Accounts, Approvals, Programs, Contracts: the oldest queue item, programme deadlines, templates to instantiate.' },
+      ],
+      buckets: [
+        { label: 'Proposed', color: '#6d28d9', items: [{ t: 'Log two more discovery interviews', f: 'Validate' }, { t: 'Answer the co-founder agreement draft', f: 'Raise' }] },
+        { label: 'Pending', color: '#b45309', items: [{ t: 'Pitch deck: problem slide', f: 'Raise' }] },
+        { label: 'Completed', color: '#047857', items: [{ t: 'Cap table: founder stock issued', f: 'Raise' }] },
+      ],
+      models: [
+        { fn: 'Default assistant and workflow automation', model: 'zai-org/glm-4.7-flash', why: 'Fast, multilingual, tool calling, coding' },
+        { fn: 'Investment memos and complex reasoning', model: 'moonshotai/kimi-k2.6', why: 'Strong reasoning, vision, agentic workflows' },
+        { fn: 'Financial documents, pitch decks, screenshots', model: 'google/gemma-4-26b-a4b-it', why: 'Vision, tool calling, efficient open model' },
+        { fn: 'Coding and code auditing', model: 'openai/gpt-oss-120b · qwen/qwen2.5-coder-32b-instruct', why: 'Coding, debugging, technical analysis' },
+        { fn: 'Long documents and broad context', model: '@meta/llama-4-scout-17b-16-instruct', why: 'Multimodal generalist with large context' },
+        { fn: 'Embeddings for founder and investor search', model: 'qwen/qwen3-embedding-0.6b · baai/bge-m3', why: 'Semantic search and multilingual retrieval' },
+        { fn: 'Search-result quality', model: 'baai/bge-reranker-base', why: 'Reranks retrieved documents by relevance' },
+        { fn: 'Voice notes and meeting transcription', model: 'openai/whisper-large-v3-turbo', why: 'Speech-to-text' },
+        { fn: 'Voice responses', model: 'deepgram/aura-1', why: 'Text-to-speech' },
+      ],
+      railModels: [
+        { name: 'google/gemma-4-26b-a4b-it', border: '#c4b5fd', bg: '#f4f0fe' },
+        { name: 'moonshotai/kimi-k2.6', border: '#e8e6ee', bg: '#fff' },
+        { name: 'zai-org/glm-4.7-flash', border: '#e8e6ee', bg: '#fff' },
+      ],
+      research: [
+        { t: 'Markets', q: 'How big is it, and is it moving?', d: 'Sector and stage data with sources and run dates. A stale figure shows its age instead of passing as current.' },
+        { t: 'Companies', q: 'Who else is building this?', d: 'Competitor profiles, direct or adjacent, with the public sources behind them. Compare positioning and pricing side by side.' },
+        { t: 'Funds', q: 'Who writes this cheque?', d: 'Funds by thesis, stage, and cheque range, with the path in: warm, cold, or not yet assessed.' },
+      ],
+      persona: [
+        { t: 'Skills', src: 'from answers and work', span: '',
+          d: 'What you are strong at and where the evidence is thin, scored per dimension with a confidence level for each.',
+          chips: ['Product', 'Technical', 'Sales and GTM', 'Fundraising', 'Operations', 'Leadership'],
+          feeds: 'Feeds co-founder matching, advisor matching, and the Team score.' },
+        { t: 'Values', src: 'from answers', span: '',
+          d: 'How you make decisions: risk, pace, ownership, and what the company is for.',
+          chips: ['Ambition', 'Speed', 'Ownership', 'Transparency', 'Long-term thinking'],
+          feeds: 'Feeds values alignment between co-founders, advisors, and investors.' },
+        { t: 'Archetypes', src: 'from skills and values', span: '',
+          d: 'A primary archetype and a secondary one where the evidence supports it, with the strengths and blind spots that come with them.',
+          chips: ['Founder', 'Investor', 'Operating partner', 'Advisor'],
+          feeds: 'Feeds which complementary archetypes are suggested as matches.' },
+        { t: 'Profiling', src: 'in Studio', span: '',
+          d: 'The questions Eadwyn asks in Studio, and what is still unanswered. Completion and confidence are shown per section, so you know which answers move your profile most.',
+          chips: ['Answered', 'Remaining', 'Confidence by section'],
+          feeds: 'Continue in Studio. Every answer updates the persona.' },
+        { t: 'Activity', src: 'from the platform', span: 'grid-column:1/-1;',
+          d: 'What you actually do: the tools you open, the deliverables you complete, the sessions you book, and the gates you pass. Activity turns stated answers into evidenced ones.',
+          chips: ['Tools used', 'Deliverables completed', 'Sessions held', 'Gates passed', 'Last active'],
+          feeds: 'Raises or lowers confidence on skills and values, and orders the backlog in Studio.' },
+      ],
+      layers: [
+        { n: '01', t: 'Local nodes', d: 'Pods, homes, or devices train locally. Data stays local.' },
+        { n: '02', t: 'Coordination', d: 'Tracks nodes, rounds, versions, and sync state.' },
+        { n: '03', t: 'Aggregation', d: 'Receives updates and builds candidate merges.' },
+        { n: '04', t: 'Governance', d: 'Reviews merges, votes, approves, or rejects.' },
+        { n: '05', t: 'Published model', d: 'A versioned checkpoint serves inference.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

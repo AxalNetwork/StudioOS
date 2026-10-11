@@ -91,7 +91,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // `Cycle Action.dc.html` (`action=update`) in `design/incoming/`.
   // 141 the same day (D660, #1473): `Validate · Record a session`, the sheet,
   // the Interview Session page and the Recording View.
-  assert.equal(recs.length, 141);
+  // 143 on 2026-10-11 (D673, #1546): the public website's export brought two
+  // imported canvases, `Eadwyn Intelligence Page` and `Spin-Out Lab Page`.
+  assert.equal(recs.length, 143);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);
