@@ -85,6 +85,12 @@
      every signed-in surface through `html.app-type` (ProtectedLayout sets
      it); the public site keeps --font-sans. */
   --font-app: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+  /* The public site's two faces (D674), as the owner's website canvas names
+     them: Public Sans for text, Bricolage Grotesque for headings. Only
+     `components/site/site.css` uses them, under `.ax-site`; --font-sans
+     stays Inter for every page that has not moved to the new shell. */
+  --font-site: 'Public Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-site-display: 'Bricolage Grotesque', 'Public Sans', system-ui, sans-serif;
 
   /* Radii — the spec scale, confirmed dominant across the corpus.
      99px and 999px tie in practice (50 vs 57); both render as a pill. */

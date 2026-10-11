@@ -1,92 +1,120 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import {
+  Menu, X, ChevronDown, FileText, Network, CalendarDays, Users, Briefcase,
+} from 'lucide-react';
 import AxalLogo from './AxalLogo';
+import { DOOR_LINKS, NETWORK_LINKS, SITE_ACTIONS } from '../lib/siteLinks';
+import './site/site.css';
 
-const LINKS = [
-  { label: 'Platform', href: '/#platform' },
-  { label: 'Directory', href: '/directory' },
-  { label: 'Events', href: '/events' },
-  { label: 'Circles', href: '/circles' },
-  { label: 'Spin-Out Lab', href: '/spinout-lab' },
-  { label: 'Jobs', href: '/jobs' },
-];
+/**
+ * The public nav, from the NAV of the owner's canvas (D674, #1548).
+ *
+ * Fixed rather than sticky, and 64px tall: the twenty-odd public pages that
+ * render it pad their tops by `pt-16` to clear it, so it must not grow.
+ * At 1060px and below the links fold into the burger menu, as in the canvas.
+ */
+const NET_ICONS = {
+  overview: Network,
+  articles: FileText,
+  directory: Users,
+  events: CalendarDays,
+  circles: Users,
+  jobs: Briefcase,
+};
 
 export default function PublicNav() {
-  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [netOpen, setNetOpen] = useState(false);
+  const netRef = useRef(null);
+
+  // A route change closes both menus.
+  useEffect(() => { setMenuOpen(false); setNetOpen(false); }, [pathname]);
+
+  // The Network menu closes on Escape or a click outside it.
+  useEffect(() => {
+    if (!netOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setNetOpen(false); };
+    const onDown = (e) => { if (netRef.current && !netRef.current.contains(e.target)) setNetOpen(false); };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [netOpen]);
+
+  const current = (to) => (pathname === to || pathname.startsWith(`${to}/`) ? 'page' : undefined);
+  const inNetwork = NETWORK_LINKS.some((l) => current(l.to));
 
   return (
-    <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-        <Link to="/" className="flex items-center">
-          <AxalLogo size="md" />
+    <nav className="ax-site-chrome ax-navbar" aria-label="Main">
+      <div className="ax-wrap ax-navbar-row">
+        <Link to="/" aria-label="Axal VC home" className="flex items-center flex-none">
+          <AxalLogo size="sm" onLight />
         </Link>
 
-        <div className="hidden md:flex items-center gap-7">
-          {LINKS.map((l) => (
-            <a
-              key={l.label}
-              href={l.href}
-              className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              {l.label}
-            </a>
+        <div className="ax-navlinks">
+          {DOOR_LINKS.map((l) => (
+            <Link key={l.to} to={l.to} className="ax-navlink" aria-current={current(l.to)}>{l.label}</Link>
           ))}
+          <div className="ax-netmenu-wrap" ref={netRef}>
+            <button
+              type="button"
+              className="ax-navlink"
+              aria-expanded={netOpen}
+              aria-haspopup="true"
+              aria-current={inNetwork ? 'page' : undefined}
+              onClick={() => setNetOpen((v) => !v)}
+            >
+              Network <ChevronDown size={14} aria-hidden="true" />
+            </button>
+            {netOpen && (
+              <div className="ax-netmenu">
+                {NETWORK_LINKS.map((l) => {
+                  const Icon = NET_ICONS[l.icon] || Network;
+                  return (
+                    <Link key={l.to} to={l.to} onClick={() => setNetOpen(false)}>
+                      <span className="ax-netmenu-icon"><Icon size={17} aria-hidden="true" /></span>
+                      <span>
+                        <span className="ax-netmenu-t">{l.label}</span>
+                        <span className="ax-netmenu-b" style={{ display: 'block' }}>{l.blurb}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-3">
-          <Link
-            to="/login"
-            className="text-sm text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-400 transition-colors px-4 py-2 rounded-lg"
+        <div className="ax-nav-actions">
+          <Link to={SITE_ACTIONS.lpLogin} className="ax-lp">LP login</Link>
+          <Link to={SITE_ACTIONS.apply} className="ax-btn ax-btn-sm ax-btn-primary">Apply →</Link>
+          <button
+            type="button"
+            className="ax-burger"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
           >
-            Sign In
-          </Link>
-          <Link
-            to="/register"
-            className="text-sm bg-violet-600 hover:bg-violet-700 transition-colors text-white px-5 py-2 rounded-lg font-medium"
-          >
-            Join Axal VC
-          </Link>
+            {menuOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
         </div>
-
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          className="md:hidden text-gray-700 p-2 rounded-lg hover:bg-gray-100"
-        >
-          {open ? <X size={20} /> : <Menu size={20} />}
-        </button>
       </div>
 
-      {open && (
-        <div className="md:hidden border-t border-gray-200 bg-white">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-3">
-            {LINKS.map((l) => (
-              <a
-                key={l.label}
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className="text-sm text-gray-600 hover:text-gray-900 py-1"
-              >
-                {l.label}
-              </a>
+      {menuOpen && (
+        <div className="ax-mobilemenu">
+          <div className="ax-wrap" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {DOOR_LINKS.map((l) => (
+              <Link key={l.to} to={l.to} aria-current={current(l.to)}>{l.label}</Link>
             ))}
-            <div className="flex gap-2 pt-2 border-t border-gray-200 mt-2">
-              <Link
-                to="/login"
-                onClick={() => setOpen(false)}
-                className="flex-1 text-center text-sm text-gray-700 px-4 py-2 rounded-lg border border-gray-300"
-              >
-                Sign In
-              </Link>
-              <Link
-                to="/register"
-                onClick={() => setOpen(false)}
-                className="flex-1 text-center text-sm bg-violet-600 text-white px-4 py-2 rounded-lg font-medium"
-              >
-                Join Axal VC
-              </Link>
-            </div>
+            <div className="ax-mobilemenu-h">Network</div>
+            {NETWORK_LINKS.map((l) => (
+              <Link key={l.to} to={l.to} aria-current={current(l.to)}>{l.label}</Link>
+            ))}
+            <Link to={SITE_ACTIONS.lpLogin} className="ax-mobilemenu-sep">{SITE_ACTIONS.lpLabel}</Link>
           </div>
         </div>
       )}
