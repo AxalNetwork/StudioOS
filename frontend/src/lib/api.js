@@ -186,6 +186,11 @@ export function isPublicPath(pathname) {
     || currentPath === '/team'
     || currentPath === '/platform'
     || currentPath === '/administrators'
+    // D678, D679 — the Methodology, Intelligence and Resources pages of the
+    // public site.
+    || currentPath === '/methodology'
+    || currentPath === '/intelligence'
+    || currentPath === '/resources'
     || currentPath === '/contact'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-
