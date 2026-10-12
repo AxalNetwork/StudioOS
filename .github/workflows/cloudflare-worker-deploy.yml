@@ -30,9 +30,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A RUNNING DEPLOY IS NEVER CANCELLED. With `cancel-in-progress: true`, two
+# merges a minute apart (#1558, then #1557, on 2026-10-12) killed the first
+# run 29 seconds into `wrangler deploy`; the second then failed, and
+# production was left on a half-published version — pages from the new
+# build, its main stylesheet missing. Queued instead, a newer push waits for
+# the running deploy to finish and then ships; GitHub keeps only the newest
+# pending run, so main's head is still what lands last.
 concurrency:
   group: cloudflare-worker-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
