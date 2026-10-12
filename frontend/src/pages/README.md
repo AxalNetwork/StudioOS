@@ -16,6 +16,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 
 | Folder | What lives there |
 | --- | --- |
+| `site/` | The public site's pages from the owner's website canvas (D673–D680): each renders in `SitePage` (`frontend/src/components/site/SitePage.jsx`) and draws only live data or the owner's copy. |
 | `admin/` | Admin console screens and their tabs. |
 | `advisor/` | The advisor's own practice surfaces. |
 | `founder/` | The founder shell's workspace tab bars. |
