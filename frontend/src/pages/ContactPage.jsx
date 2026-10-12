@@ -19,6 +19,10 @@ import './site/contact.css';
  * which is why the canvas's confidentiality line could not ship until then.
  * The canvas's "Cohort 5" is an example; the cohort is the Lab's own rule,
  * `openCohortCopy()`, as on the front page.
+ *
+ * The form is the only way in (owner, 2026-10-12): the canvas's three mail
+ * addresses are not printed. Each intent still reaches its own mailbox,
+ * server-side (`CONTACT_MAILBOX` in contact.ts).
  */
 
 const TURNSTILE_SITE_KEY =
@@ -45,27 +49,6 @@ export function intentsFor(topic) {
 /** The pill pressed on arrival: Licence for `?topic=licence`, else the canvas's default. */
 export function initialIntent(topic) {
   return topic === 'licence' ? LICENCE_INTENT.value : INTENTS[0].value;
-}
-
-/** The three ways in, with the canvas's addresses. `cohort` is `openCohortCopy()`'s answer or null. */
-export function contactRoutes(cohort) {
-  return [
-    {
-      t: 'Founder applications',
-      d: `${cohort ? `Cohort ${cohort.cohortNum} applications` : 'Cohort applications'}, Office Hours requests, and programme questions.`,
-      email: 'founders@axal.vc',
-    },
-    {
-      t: 'Investor relations',
-      d: 'Fund I access, LP onboarding, and reporting. Guillaume Lauzier, General Partner.',
-      email: 'guillaume.lauzier@axal.vc',
-    },
-    {
-      t: 'Advisors & partners',
-      d: 'Advisor applications and service-partner enquiries for the Lab network.',
-      email: 'network@axal.vc',
-    },
-  ];
 }
 
 /**
@@ -224,15 +207,6 @@ export default function ContactPage() {
             <p className="ax-contact-lede">
               Three sentences is enough. We read everything and reply within five business days — including when the answer is no.
             </p>
-            <ul className="ax-contact-routes" aria-label="Who to write to">
-              {contactRoutes(cohort).map((r) => (
-                <li key={r.email} className="ax-contact-route">
-                  <div className="ax-contact-route-t">{r.t}</div>
-                  <div className="ax-contact-route-d">{r.d}</div>
-                  <a className="ax-mono" href={`mailto:${r.email}`}>{r.email}</a>
-                </li>
-              ))}
-            </ul>
           </div>
 
           <div className="ax-contact-card">
