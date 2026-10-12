@@ -109,3 +109,12 @@ test('the step runs after the migrations, and is the one line that deploys HQ', 
   assert.match(script, /^set -o pipefail$/m);
   assert.match(script, /grep -qE '\\\[code: 10013\\\]' deploy\.log/, 'the retry is no longer limited to 10013');
 });
+
+test('a running deploy is never cancelled by a newer push', () => {
+  // 2026-10-12: with cancel-in-progress, #1557's push killed #1558's deploy
+  // 29s into `wrangler deploy` and production was left half-published.
+  const block = /\nconcurrency:\n([\s\S]*?)\n\S/.exec(WF);
+  assert.ok(block, 'the deploy workflow declares its concurrency');
+  assert.match(block[1], /group: cloudflare-worker-\$\{\{ github\.ref \}\}/);
+  assert.match(block[1], /cancel-in-progress: false\b/);
+});

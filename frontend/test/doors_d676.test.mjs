@@ -72,6 +72,18 @@ test('four doors, at their paths, each in its accent', () => {
   }
 });
 
+test('each door\'s hero is its own lane picture from the home page', () => {
+  // The owner's call (2026-10-12): the founders door shows the cloaked
+  // founders of the home page's founders lane, as the other three doors show
+  // their lanes. The canvas's wide landscape (door-founders.webp) stays the
+  // home page's closing band and CtaBand's default.
+  for (const k of DOOR_ORDER) {
+    assert.equal(DOORS[k].img, `/site/lane-${k}.webp`, `${k} heroes its lane picture`);
+    assert.ok(existsSync(resolve(ROOT, `frontend/public${DOORS[k].img}`)), `${DOORS[k].img} ships`);
+    assert.ok(PAGES[k].includes(DOORS[k].img), `${k} draws it`);
+  }
+});
+
 test('each door renders the canvas sections in order', () => {
   for (const k of DOOR_ORDER) {
     const door = DOORS[k];

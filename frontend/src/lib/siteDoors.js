@@ -37,7 +37,7 @@ export const DOORS = {
     soft: '#f4f0fe',
     catalogue: 'founder',
     label: 'For Founders',
-    img: '/site/door-founders.webp',
+    img: '/site/lane-founders.webp',
     imgAlt: 'Two founders in violet cloaks look out over a valley city at sunset, beside a workshop of builders.',
     imgPos: '68% 38%',
     closePos: '50% 62%',
