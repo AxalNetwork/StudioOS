@@ -5,8 +5,8 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 88 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
-| `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
+| `integrated/` | 89 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `backlog/` | 29 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
 | `assets/`, `scraps/`, `uploads/` | — | Images and stale duplicates from the export. Not part of the 107. |
@@ -317,3 +317,20 @@ frame drew only its screen id. The three files were replaced where they sat:
 - **The board keeps all ten sets.** Both shares carried an older board without
   `hq` and `pieces`. Only their `contracts` and `usage` sets were added here,
   and `deals` stays the default.
+
+**2026-10-11 (D673, #1546), the public website.** The owner's new export of
+`Axal VC Website` (artifact `QAG7sVsvni2VFiyMNdMsZm`) replaced the committed
+canvas in place, which moves no number. It now draws the whole public site, and
+it imports two canvases that arrived with it:
+- **`Spin-Out Lab Page` went to `integrated/`,** because `/spinout-lab` is live:
+  **`integrated/` went 88 → 89.** It is a board of that page, graded `UPGRADE`.
+- **`Eadwyn Intelligence Page` went to `backlog/`,** because `/intelligence`
+  does not exist yet: **`backlog/` went 28 → 29.** D678 moves it when the page ships.
+
+The export's 24 images, and the two the Lab board inlined, are WebP files in
+`frontend/public/site/`, the copy the pages ship. The three canvases point at
+them with `../../../frontend/public/site/<name>.webp`, so the repository holds
+each image once. The website's `dc-import` of `Eadwyn Intelligence Page`
+resolves only when both files sit in one folder, which they will once D678
+moves it.
+

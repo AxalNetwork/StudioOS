@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 141 canonical canvases at `design/canvases/`, listed
-185 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 143 canonical canvases at `design/canvases/`, listed
+187 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 66 canvases
+## Founder — 67 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -92,6 +92,7 @@ it, where in their nav, and how do they get there.*
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Spin-Out Lab · Intro | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
 | Spin-Out Lab · Landing | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
+| Spin-Out Lab Page | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
 | Spin-Out Lab Workspace | `/spinout-lab` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
@@ -241,13 +242,14 @@ it, where in their nav, and how do they get there.*
 | Trust Center | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Trust Center v2 | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Public (pre-login) — 10 canvases
+## Public (pre-login) — 11 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\|investor\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Axal VC Website | `/` · `/about` · `/for-founders` · `/for-investors` · `/spinout-lab/brief` · `/contact` · `/articles` · `/directory` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
+| Eadwyn Intelligence Page | `/intelligence` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | — (not routed) | Full page (proposed) | Not reachable yet | CURRENT | Low |
 | Pricing | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -266,9 +268,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 103 | Live route, reachable from that workspace’s sidebar. |
+| High | 104 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 42 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 40 | Not routed. Proposed route only. |
+| Low | 41 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
