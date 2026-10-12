@@ -30,6 +30,7 @@ const LANDING_SRC = read('frontend/src/pages/LandingPage.jsx');
 const APP = read('frontend/src/App.jsx');
 
 const { default: LandingPage, heroFigures, figure } = await import('../src/pages/LandingPage.jsx');
+const { PLATFORM_MODULE_COUNT } = await import('../src/lib/siteModules.js');
 const { default: PublicNav } = await import('../src/components/PublicNav.jsx');
 const { default: PublicFooter } = await import('../src/components/PublicFooter.jsx');
 const links = await import('../src/lib/siteLinks.js');
@@ -50,15 +51,17 @@ test('the page renders the canvas sections in order', () => {
   assert.doesNotMatch(html, /class="ax-stats"/, 'no figures are drawn before the stats read answers');
 });
 
-test('the hero draws only the figures the endpoint returns, in the canvas order', () => {
-  assert.deepEqual(heroFigures(null), []);
-  assert.deepEqual(heroFigures({ partners: 200, deals_scored: 900 }), [], 'old fields are not hero figures');
-  const got = heroFigures({ funds: 4, users: '640', companies: 0, tools: 'n/a' });
-  assert.deepEqual(got.map((f) => [f.key, f.value]), [['users', 640], ['funds', 4]],
-    'a zero, a missing or a non-numeric count is not drawn');
-  assert.deepEqual(heroFigures({ tools: 152, users: 640, companies: 410, funds: 4 }).map((f) => f.label),
-    ['Tools in the platform', 'Users', 'Companies', 'Active funds']);
-  assert.equal(figure({ tools: 151.6 }, 'tools'), 152);
+test('the hero draws the module count and the figures the endpoint returns, in the canvas order', () => {
+  assert.deepEqual(heroFigures(null), [], 'nothing is drawn before the stats read answers');
+  assert.deepEqual(heroFigures({ partners: 200, deals_scored: 900 }).map((f) => f.key), ['modules'],
+    'old fields are not hero figures; the module count is the platform\'s own');
+  const got = heroFigures({ funds: 4, users: '640', companies: 0, modules: 9999 });
+  assert.deepEqual(got.map((f) => [f.key, f.value]), [['modules', PLATFORM_MODULE_COUNT], ['users', 640], ['funds', 4]],
+    'a zero or missing count is not drawn, and the endpoint cannot replace the derived module count');
+  assert.deepEqual(heroFigures({ users: 640, companies: 410, funds: 4 }).map((f) => f.label),
+    ['Modules', 'Users', 'Companies', 'Active funds']);
+  assert.equal(heroFigures({ funds: 1 }).find((f) => f.key === 'funds').label, 'Active fund', 'one fund reads singular');
+  assert.equal(figure({ users: 151.6 }, 'users'), 152);
 });
 
 test('no figure or cohort from the canvas is typed into the page', () => {
