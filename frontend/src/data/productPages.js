@@ -382,8 +382,10 @@ export const PRODUCT_PAGES = {
     slug: 'service-partners',
     path: '/for-service-partners',
     navLabel: 'For Service Partners',
+    // D676: the door is "Operating Partners" on the site (the canvas's name, and
+    // the nav's). `lib/ogRegistry.js` mirrors this title.
     meta: {
-      title: 'For Service Partners',
+      title: 'For Operating Partners',
       description:
         'List your services in the Axal VC marketplace, get in front of funded founders, and turn network trust into inbound leads. Distribution for legal, design, GTM and technical partners.',
     },
