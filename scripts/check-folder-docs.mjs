@@ -81,6 +81,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
+  ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],

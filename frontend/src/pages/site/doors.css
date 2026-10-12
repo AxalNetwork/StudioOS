@@ -1,0 +1,225 @@
+/*
+ * The four door pages (DoorPage.jsx; D676, #1550), from the DOORS view of the
+ * owner's canvas `design/canvases/integrated/Axal VC Website.dc.html`.
+ *
+ * Each page sets `--door-accent` and `--door-soft` on `.ax-door`; everything
+ * that the canvas colours with `door.accent` or `door.soft` reads them. The
+ * buttons stay the site's violet, as in the canvas. Faces come from the
+ * site's classes (`ax-display`, `ax-mono`, h1–h3 under `.ax-site`); nothing
+ * here sets one. Breakpoints are the canvas's: 1060px and 640px.
+ */
+.ax-door { --door-accent: var(--ax-violet); --door-soft: #f4f0fe; }
+.ax-door-wrap { max-width: 1200px; margin: 0 auto; padding-left: 34px; padding-right: 34px; }
+.ax-door .ax-door-lbl { color: var(--door-accent); }
+.ax-door h2.ax-door-lblh { font-family: inherit; margin: 0; }
+.ax-door ol, .ax-door ul { margin: 0; padding: 0; list-style: none; }
+
+/* Hero */
+.ax-door-hero { position: relative; overflow: hidden; background: var(--ax-ink); color: #fff; }
+.ax-door-hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ax-door-hero-veil {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(90deg, rgba(20,17,24,.84) 0%, rgba(20,17,24,.56) 42%, rgba(20,17,24,.12) 76%, rgba(20,17,24,0) 100%),
+    linear-gradient(0deg, rgba(20,17,24,.88) 0%, rgba(20,17,24,.22) 46%, rgba(20,17,24,.04) 100%);
+}
+.ax-door-hero-body {
+  position: relative; padding-top: 180px; padding-bottom: 76px; min-height: 620px;
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.ax-door-hero-text { max-width: 680px; }
+.ax-door-badge {
+  display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: #fff; background: var(--door-accent); padding: 7px 12px; border-radius: 999px;
+}
+.ax-door-hero .ax-h1 {
+  margin-top: 22px; font-size: 68px; line-height: .96; font-weight: 900; letter-spacing: -.045em;
+  color: #fff; text-shadow: 0 2px 28px rgba(0,0,0,.35);
+}
+.ax-door-who { margin: 20px 0 0; font-size: 17px; line-height: 1.6; color: rgba(255,255,255,.84); max-width: 580px; text-wrap: pretty; }
+.ax-door .ax-row-btns { gap: 12px; }
+.ax-door-hero .ax-row-btns { margin-top: 30px; }
+.ax-door .ax-btn-ghost { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.1); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.ax-door .ax-btn-ghost:hover { background: rgba(255,255,255,.2); filter: none; }
+
+/* The problem, and what you get */
+.ax-door-problem { border-bottom: 1px solid var(--ax-line); }
+.ax-door-2 {
+  display: grid; grid-template-columns: minmax(0,6fr) minmax(0,6fr); gap: 36px 72px; align-items: start;
+  padding-top: 64px; padding-bottom: 64px;
+}
+.ax-door-problem-t { margin: 16px 0 0; font-size: 32px; line-height: 1.16; font-weight: 900; letter-spacing: -.032em; text-wrap: balance; }
+.ax-door .ax-door-facts { display: flex; flex-direction: column; margin-top: 8px; }
+.ax-door-fact {
+  display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 12px; padding: 16px 0;
+  border-bottom: 1px solid var(--ax-line-2); align-items: baseline;
+}
+.ax-door-fact-n { font-size: 13px; font-weight: 700; color: var(--door-accent); }
+.ax-door-fact-t { font-size: 16px; font-weight: 700; line-height: 1.45; text-wrap: pretty; }
+
+/* How it works */
+.ax-door-how { padding-top: 88px; padding-bottom: 40px; }
+.ax-door .ax-door-h2 { margin: 14px 0 0; font-size: 40px; line-height: 1.08; font-weight: 900; letter-spacing: -.035em; max-width: 760px; }
+.ax-door .ax-door-chapters { margin-top: 40px; border-top: 1px solid var(--ax-line-2); }
+.ax-door-chap {
+  display: grid; grid-template-columns: 220px minmax(0,1fr); gap: 16px 56px; padding: 44px 0;
+  border-bottom: 1px solid var(--ax-line-2);
+}
+.ax-door-chap-head { display: flex; flex-direction: column; gap: 10px; }
+.ax-door-chap-n { font-size: 60px; line-height: 1; font-weight: 900; letter-spacing: -.04em; color: var(--door-accent); }
+.ax-door-chap-t { font-size: 30px; line-height: 1.08; font-weight: 900; letter-spacing: -.035em; max-width: 720px; }
+.ax-door-chap-d { margin: 14px 0 0; font-size: 16.5px; line-height: 1.65; color: var(--ax-body); max-width: 680px; text-wrap: pretty; }
+.ax-door .ax-door-flow { display: flex; align-items: center; gap: 8px; margin-top: 22px; flex-wrap: wrap; }
+.ax-door-flow li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ax-door-arrow { color: #b8b3c9; }
+.ax-door-chip {
+  font-size: 12.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
+  border: 1px solid var(--ax-line-3); background: #fff; color: var(--ax-ink);
+}
+.ax-door-chip.is-last { background: var(--door-accent); border-color: var(--door-accent); color: #fff; }
+.ax-door .ax-door-list {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 22px; max-width: 720px;
+}
+.ax-door-li {
+  display: flex; gap: 10px; align-items: baseline; font-size: 14.5px; font-weight: 600; padding: 12px 14px;
+  border-radius: 12px; background: var(--ax-wash); border: 1px solid var(--ax-line);
+}
+.ax-door-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--door-accent); }
+.ax-door-soon {
+  margin-top: 18px; display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 700; color: var(--ax-body);
+  padding: 6px 11px; border: 1px dashed #b8b3c9; border-radius: 999px;
+}
+.ax-door-eadwyn {
+  display: flex; gap: 16px; align-items: flex-start; margin-top: 28px; padding: 22px 24px;
+  border-radius: 16px; background: #faf8ff; border: 1px solid #efe9fb;
+}
+.ax-door-eadwyn-mark {
+  flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--ax-violet); color: #fff; font-weight: 800;
+}
+.ax-door-eadwyn-t { font-weight: 800; font-size: 15px; }
+.ax-door-eadwyn-d { margin: 4px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; }
+
+/* In the product */
+.ax-door-status { padding-top: 56px; padding-bottom: 72px; }
+.ax-door-split { display: grid; grid-template-columns: minmax(0,4fr) minmax(0,8fr); gap: 28px 64px; align-items: start; }
+.ax-door .ax-door-h2-sm { margin: 14px 0 0; font-size: 32px; line-height: 1.12; font-weight: 900; letter-spacing: -.032em; }
+.ax-door-note { margin: 14px 0 0; font-size: 15.5px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; }
+.ax-door .ax-door-status-list { background: #fff; border: 1px solid var(--ax-line-2); border-radius: 20px; overflow: hidden; }
+.ax-door-status-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 15px 22px;
+  border-top: 1px solid var(--ax-line); font-size: 15px; font-weight: 600; color: var(--ax-ink);
+}
+.ax-door-status-row:first-child { border-top: 0; }
+.ax-door-status-row > span:first-child { min-width: 0; }
+.ax-door-status-row.is-soon { color: var(--ax-muted); }
+.ax-door-pill {
+  flex: none; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 999px; background: var(--door-soft); color: var(--door-accent); border: 1px solid transparent;
+}
+.ax-door-pill.is-soon { background: #fff; color: var(--ax-body); border: 1px dashed #b8b3c9; }
+
+/* Plans */
+.ax-door-plans { background: #faf8ff; border-top: 1px solid var(--ax-line); border-bottom: 1px solid var(--ax-line); }
+.ax-door-plans-in { padding-top: 80px; padding-bottom: 80px; }
+.ax-door-lede { margin: 14px 0 0; font-size: 16px; color: var(--ax-body); line-height: 1.65; max-width: 640px; text-wrap: pretty; }
+.ax-door-plan-grid {
+  display: grid; grid-template-columns: repeat(var(--plan-cols, 3), minmax(0, 1fr)); gap: 16px;
+  margin-top: 40px; align-items: stretch;
+}
+.ax-door-plan {
+  position: relative; border: 2px solid #e8e6ee; border-radius: 22px; padding: 30px 28px;
+  display: flex; flex-direction: column; gap: 16px; background: #fff; color: var(--ax-ink); min-width: 0;
+}
+.ax-door-plan.is-hi { border-color: var(--door-accent); }
+.ax-door-plan-tag {
+  position: absolute; top: -13px; left: 24px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: #fff; background: var(--door-accent); padding: 5px 11px; border-radius: 99px;
+}
+.ax-door-plan-head { display: flex; flex-direction: column; gap: 5px; }
+.ax-door-plan-step { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--door-accent); }
+.ax-door-plan-name { font-size: 20px; font-weight: 900; letter-spacing: -.02em; }
+.ax-door-plan-desc { font-size: 14px; color: var(--ax-muted); line-height: 1.5; }
+.ax-door-plan-price { display: flex; align-items: baseline; gap: 8px; }
+.ax-door-plan-amt { font-size: 44px; font-weight: 900; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.ax-door-plan-per { font-size: 14px; font-weight: 600; color: var(--ax-muted); }
+.ax-door .ax-door-plan-feats {
+  display: flex; flex-direction: column; gap: 9px; flex: 1; padding-top: 14px; border-top: 1px solid var(--ax-line-2);
+}
+.ax-door-plan-feats li { display: flex; gap: 10px; align-items: baseline; font-size: 14.5px; line-height: 1.5; }
+.ax-door-tick { flex: none; font-weight: 800; color: var(--door-accent); }
+.ax-door-plan-cta {
+  padding: 13px 18px; border-radius: 12px; font-size: 14.5px; background: #fff;
+  color: var(--ax-ink) !important; border-color: var(--ax-line-3);
+}
+.ax-door-plan.is-hi .ax-door-plan-cta { background: var(--door-accent); border-color: var(--door-accent); color: #fff !important; }
+.ax-door-plan-note { margin: 20px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--ax-muted); text-wrap: pretty; }
+
+/* The aside */
+.ax-door-aside { padding-top: 16px; padding-bottom: 72px; }
+.ax-door-aside-box {
+  display: grid; grid-template-columns: minmax(0,5fr) minmax(0,7fr); gap: 28px 56px; padding: 40px;
+  border-radius: 24px; background: var(--door-soft);
+}
+.ax-door .ax-door-aside-t { margin-top: 0; font-size: 32px; line-height: 1.1; }
+.ax-door-aside-cta { margin-top: 22px; }
+.ax-door .ax-door-aside-items { display: flex; flex-direction: column; gap: 10px; }
+.ax-door-aside-item {
+  display: flex; gap: 12px; align-items: baseline; padding: 16px 18px; border-radius: 14px; background: #fff;
+  border: 1px solid rgba(20,17,24,.06); font-size: 15.5px; line-height: 1.5; font-weight: 600;
+}
+.ax-door-aside-item .ax-door-dot { width: 8px; height: 8px; }
+
+/* Questions */
+.ax-door-faq { border-top: 1px solid var(--ax-line); }
+.ax-door-faq-in { padding-top: 80px; padding-bottom: 80px; }
+.ax-door .ax-door-faq-list { border-top: 1px solid var(--ax-line-2); }
+.ax-door-faq-row {
+  display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 8px 16px; padding: 26px 0;
+  border-bottom: 1px solid var(--ax-line-2);
+}
+.ax-door-faq-n { font-size: 13px; font-weight: 700; color: var(--door-accent); padding-top: 5px; }
+.ax-door-faq-q { font-size: 21px; line-height: 1.2; font-weight: 800; letter-spacing: -.02em; }
+.ax-door-faq-a { margin: 10px 0 0; font-size: 16px; line-height: 1.65; color: var(--ax-body); max-width: 640px; text-wrap: pretty; }
+
+/* The closing band */
+.ax-door-close { position: relative; overflow: hidden; background: var(--ax-ink); color: #fff; }
+.ax-door-close-img { position: absolute; inset: 0; background-size: cover; background-repeat: no-repeat; }
+.ax-door-close-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,17,24,.62) 0%, rgba(20,17,24,.86) 100%); }
+.ax-door-close-body {
+  position: relative; padding-top: 110px; padding-bottom: 110px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px;
+}
+.ax-door-close h2 {
+  font-size: 48px; line-height: 1.04; font-weight: 900; letter-spacing: -.04em; max-width: 780px;
+  color: #fff; text-shadow: 0 2px 24px rgba(0,0,0,.4);
+}
+.ax-door-close-note { margin: 0; font-size: 16px; color: rgba(255,255,255,.82); }
+.ax-door-close .ax-row-btns { justify-content: center; margin-top: 6px; }
+
+@media (max-width: 1060px) {
+  .ax-door-2, .ax-door-split, .ax-door-chap, .ax-door-aside-box { grid-template-columns: minmax(0,1fr); }
+  .ax-door-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .ax-door-wrap { padding-left: 16px; padding-right: 16px; }
+  .ax-door-hero-body { padding-top: 72px; padding-bottom: 64px; min-height: 0; }
+  .ax-door-hero .ax-h1 { font-size: 38px; }
+  .ax-door-2 { padding-top: 48px; padding-bottom: 48px; }
+  .ax-door-problem-t { font-size: 26px; }
+  .ax-door-how { padding-top: 64px; }
+  .ax-door .ax-door-h2, .ax-door .ax-door-h2-sm, .ax-door .ax-door-aside-t { font-size: 28px; }
+  .ax-door-chap { padding: 32px 0; }
+  .ax-door-chap-n { font-size: 40px; }
+  .ax-door-chap-t { font-size: 24px; }
+  .ax-door-eadwyn { padding: 18px; }
+  .ax-door-status-row { padding: 14px 16px; }
+  .ax-door-plans-in, .ax-door-faq-in { padding-top: 56px; padding-bottom: 56px; }
+  .ax-door-plan-grid { grid-template-columns: minmax(0, 1fr); }
+  .ax-door-plan { padding: 26px 20px; }
+  .ax-door-aside-box { padding: 24px 20px; }
+  .ax-door-faq-row { grid-template-columns: 34px minmax(0,1fr); }
+  .ax-door-faq-q { font-size: 18px; }
+  .ax-door-close-body { padding-top: 72px; padding-bottom: 72px; }
+  .ax-door-close h2 { font-size: 32px; }
+}

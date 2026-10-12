@@ -4,8 +4,8 @@
  * Three audience CTAs: product demo, investor brief, partnership intro.
  * If `VITE_CALENDLY_URL` is set, embeds the Calendly inline widget;
  * otherwise renders a lightweight form that POSTs to
- * `/api/public/demo-request` (worker creates a GitHub Issue and emails
- * an acknowledgement via the existing transactional pipeline).
+ * `/api/public/demo-request` (the worker stores the request, emails the
+ * team and emails the lead an acknowledgement; D680).
  */
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';

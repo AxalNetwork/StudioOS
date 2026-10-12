@@ -29,6 +29,7 @@ export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/memberCredits.js';
+export * from './api/publicAiModels.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
@@ -180,6 +181,16 @@ export function isPublicPath(pathname) {
     || currentPath === '/communities'
     || currentPath === '/roadmap'
     || currentPath === '/about'
+    // D677 — the Firm page took /about; the team page moved to /team, and
+    // Platform and Administrators are new public pages beside it.
+    || currentPath === '/team'
+    || currentPath === '/platform'
+    || currentPath === '/administrators'
+    // D678, D679 — the Methodology, Intelligence and Resources pages of the
+    // public site.
+    || currentPath === '/methodology'
+    || currentPath === '/intelligence'
+    || currentPath === '/resources'
     || currentPath === '/contact'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-

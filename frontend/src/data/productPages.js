@@ -1,11 +1,12 @@
 /**
  * Audience product pages — single source of truth.
  *
- * Four conversion pages ("For Founders", "For Investors / LPs",
- * "For Service Partners", "For Advisors") all render from this config via
- * `frontend/src/pages/ProductAudiencePage.jsx`. Centralising the copy,
- * feature split and pricing here keeps the four surfaces from drifting and
- * makes them trivial to edit without touching JSX.
+ * The four doors ("For Founders", "For Investors / LPs", "For Operating
+ * Partners", "For Advisors"). Since D676 they render
+ * `frontend/src/pages/site/DoorPage.jsx` with the owner's canvas copy from
+ * `frontend/src/lib/siteDoors.js`; this file still carries each door's path,
+ * nav label and page meta, which the footer, the OG registry check
+ * (`scripts/validate-og-tags.mjs`) and the founders' promise test read.
  *
  * Honesty rules baked into the data:
  *   - `liveFeatures`  = capabilities that exist on the platform today. Every
@@ -382,8 +383,10 @@ export const PRODUCT_PAGES = {
     slug: 'service-partners',
     path: '/for-service-partners',
     navLabel: 'For Service Partners',
+    // D676: the door is "Operating Partners" on the site (the canvas's name, and
+    // the nav's). `lib/ogRegistry.js` mirrors this title.
     meta: {
-      title: 'For Service Partners',
+      title: 'For Operating Partners',
       description:
         'List your services in the Axal VC marketplace, get in front of funded founders, and turn network trust into inbound leads. Distribution for legal, design, GTM and technical partners.',
     },

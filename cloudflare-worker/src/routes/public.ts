@@ -18,6 +18,10 @@ import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { bindingKey } from '../util/schemaBootstrap';
 import { likeNeedleLower } from '../util/likeSearch';
 import { refuse } from '../util/refusal';
+import { ROUTE, type TaskClass } from '../services/aiRouter';
+import { TASK_LABELS, MODEL_NAMES } from '../services/aiCatalog';
+import { sendNotificationEmail } from '../services/email';
+import { CONTACT_MAILBOX, DEFAULT_CONTACT_MAILBOX } from './contact';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -27,8 +31,32 @@ const publicRoutes = new Hono<{ Bindings: Env }>();
 // as the origin of truth on a full miss. Never throws — any query failure
 // falls back to 0 for that field so the page still renders.
 const STATS_L1_TTL_MS = 30_000;
+
+/**
+ * D675 (#1549): the figures the public site prints. The four Task #18 fields
+ * stay as they were; three are added for the new site's hero and Network
+ * pages, each counted from D1 with the definition beside it:
+ *   - users            — accounts with `is_active = 1`, the same rule every
+ *                        other user count in the worker uses;
+ *   - companies        — ventures (`projects`) not deleted;
+ *   - members_verified — the rows `/directory` lists, by the SAME predicate
+ *                        `GET /partners` below uses (DIRECTORY_LISTED_WHERE),
+ *                        so the figure and the list can never disagree.
+ * Countries, LPs & funds, operators & advisors and a tool count are not
+ * served: the directory has no country or member-type column, and the app
+ * keeps no single registry of tools. A page draws only the figures this
+ * returns.
+ */
+type PublicStats = {
+  partners: number; funds: number; deals_scored: number; spinouts: number;
+  users: number; companies: number; members_verified: number;
+};
+export const DIRECTORY_LISTED_WHERE = `status = 'active' AND directory_listed = 1`;
+
+/** Tests only: drop the per-isolate copy so each case reads D1 afresh. */
+export function _resetPublicStatsCache(): void { statsL1.map.clear(); }
 const STATS_KV_TTL_SEC = 300;
-const statsL1 = createL1<{ partners: number; funds: number; deals_scored: number; spinouts: number }>(STATS_L1_TTL_MS);
+const statsL1 = createL1<PublicStats>(STATS_L1_TTL_MS);
 const STATS_KV_KEY = 'cache:public-stats';
 
 async function countOrZero(env: Env, label: string, sql: string, params: any[] = []): Promise<number> {
@@ -47,21 +75,27 @@ publicRoutes.get('/stats', async (c) => {
   if (l1Hit && l1Hit.exp > now) return c.json(l1Hit.v);
 
   if (c.env.TOKENS) {
-    const kvHit = await kvGetJSON<{ partners: number; funds: number; deals_scored: number; spinouts: number }>(c.env.TOKENS, STATS_KV_KEY);
+    const kvHit = await kvGetJSON<PublicStats>(c.env.TOKENS, STATS_KV_KEY);
     if (kvHit) {
       statsL1.map.set(STATS_KV_KEY, { v: kvHit, exp: now + STATS_L1_TTL_MS });
       return c.json(kvHit);
     }
   }
 
-  const [partners, funds, dealsScored, spinouts] = await Promise.all([
+  const [partners, funds, dealsScored, spinouts, users, companies, membersVerified] = await Promise.all([
     countOrZero(c.env, 'partners', `SELECT COUNT(*) as n FROM partners WHERE status = 'active'`),
     countOrZero(c.env, 'funds', `SELECT COUNT(*) as n FROM vc_funds WHERE status = 'active'`),
     countOrZero(c.env, 'deals_scored', `SELECT COUNT(DISTINCT project_id) as n FROM score_snapshots WHERE is_sandbox = 0`),
     countOrZero(c.env, 'spinouts', `SELECT COUNT(*) as n FROM projects WHERE status = 'spinout' AND deleted_at IS NULL`),
+    countOrZero(c.env, 'users', `SELECT COUNT(*) as n FROM users WHERE is_active = 1`),
+    countOrZero(c.env, 'companies', `SELECT COUNT(*) as n FROM projects WHERE deleted_at IS NULL`),
+    countOrZero(c.env, 'members_verified', `SELECT COUNT(*) as n FROM partners WHERE ${DIRECTORY_LISTED_WHERE}`),
   ]);
 
-  const payload = { partners, funds, deals_scored: dealsScored, spinouts };
+  const payload: PublicStats = {
+    partners, funds, deals_scored: dealsScored, spinouts,
+    users, companies, members_verified: membersVerified,
+  };
   statsL1.map.set(STATS_KV_KEY, { v: payload, exp: now + STATS_L1_TTL_MS });
   if (c.env.TOKENS) {
     const ctx = (c.executionCtx as any);
@@ -69,6 +103,42 @@ publicRoutes.get('/stats', async (c) => {
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
   }
   return c.json(payload);
+});
+
+// ---------- /ai-models (D678, #1552) --------------------------------
+// The model registry as the public Intelligence page shows it: one row per
+// task the router runs, with its label, its default model and that model's
+// provider. Read from `ROUTE` and `aiCatalog.ts` on the first request, never
+// copied, so the page cannot name a model the router does not default to.
+//
+// ONLY THE SAFE FIELDS. No price, no fallback chain, no alternates, no cache
+// setting, no budget: what a logged-out reader is told is which model does
+// which job. The signed-in reads (`/api/ai/pricing`, `/api/ai/rates`) keep the
+// rest.
+//
+// CACHED LIKE /stats, WITHOUT ITS KV STEP. /stats caches because its origin is
+// D1; this one's origin is a constant in the bundle, so the per-isolate copy is
+// the whole cache and the shared copy is the edge's, for the same five minutes
+// /stats keeps in KV.
+export type PublicAiModel = { feature: string; model: string; name: string; provider: string };
+let aiModelsL1: PublicAiModel[] | null = null;
+
+export function publicAiModels(): PublicAiModel[] {
+  return (Object.keys(ROUTE) as TaskClass[]).map((task) => {
+    const entry = ROUTE[task];
+    return {
+      feature: TASK_LABELS[task] ?? task,
+      model: entry.model,
+      name: MODEL_NAMES[entry.model] ?? entry.model,
+      provider: entry.provider,
+    };
+  });
+}
+
+publicRoutes.get('/ai-models', (c) => {
+  if (!aiModelsL1) aiModelsL1 = publicAiModels();
+  c.header('Cache-Control', `public, max-age=${STATS_KV_TTL_SEC}, s-maxage=${STATS_KV_TTL_SEC}`);
+  return c.json({ ok: true, models: aiModelsL1 });
 });
 
 // ------------------------------------------------------------------
@@ -406,7 +476,7 @@ publicRoutes.get('/partners', async (c) => {
   await ensurePartnerDirectoryColumns(c.env);
   const q = String(c.req.query('q') || '').trim().toLowerCase();
   const params: any[] = [];
-  let where = `status = 'active' AND directory_listed = 1`;
+  let where = DIRECTORY_LISTED_WHERE;
   if (q) {
     // `1`, not the helper's default: this search accepts a single character
     // today and D128 is a de-duplication, not a behaviour change.
@@ -788,9 +858,15 @@ publicRoutes.delete('/roadmap/votes', async (c) => {
 });
 
 // ---------- /demo-request ------------------------------------------
-// Persists the lead and, when GITHUB_TOKEN + GITHUB_REPO are configured,
-// opens an Issue on the support repo. The HTTP response NEVER waits on
-// GitHub — the issue creation runs after the response is queued.
+// Persists the lead, emails them a confirmation and emails the team (D680).
+// The HTTP response never waits on either email.
+
+/** D680 — who reads each demo topic: the contact form's mailboxes. */
+export const DEMO_MAILBOX: Record<string, string> = {
+  product: DEFAULT_CONTACT_MAILBOX,
+  investor: CONTACT_MAILBOX.invest,
+  partnership: CONTACT_MAILBOX.advise,
+};
 
 publicRoutes.post('/demo-request', async (c) => {
   await ensureMarketingSchema(c.env);
@@ -814,7 +890,7 @@ publicRoutes.post('/demo-request', async (c) => {
 
   // Anti-spam: dedupe by (email, topic) — if a request landed in the last
   // 5 minutes we silently treat the second submit as a no-op success.
-  // This caps GitHub issue spam even though the global /api/* rate limit
+  // This caps duplicate team emails even though the global /api/* rate limit
   // (cloudflare-worker/src/middleware/rateLimit.ts) is already in front
   // of this route.
   try {
@@ -891,44 +967,33 @@ publicRoutes.post('/demo-request', async (c) => {
     }
   })());
 
-  // Optional: open a GitHub Issue out-of-band.
-  const env = c.env as unknown as { GITHUB_TOKEN?: string; GITHUB_REPO?: string };
-  if (env.GITHUB_TOKEN && env.GITHUB_REPO && insertedId) {
+  // D680 — the team hears of the request by email, from the same mailboxes the
+  // contact form uses. It is never filed to GitHub: the repository is public
+  // and the request carries the lead's name, email and message.
+  if (insertedId) {
     c.executionCtx.waitUntil((async () => {
       try {
-        const issueBody = [
-          `**Topic:** ${topic}`,
-          `**Name:** ${name}`,
-          `**Email:** ${email}`,
-          company ? `**Company:** ${company}` : '',
+        const lines = [
+          'A new request from the axal.vc demo form.',
           '',
-          message || '_(no additional message)_',
+          `Topic: ${TOPIC_LABEL[topic] || topic}`,
+          `From: ${name} <${email}>`,
+          ...(company ? [`Company: ${company}`] : []),
           '',
-          `_Submitted via /demo · request #${insertedId}_`,
-        ].filter(Boolean).join('\n');
-        const ghRes = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}/issues`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/vnd.github+json',
-            Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-            'User-Agent': 'axal-studioos-demo',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: `[demo:${topic}] ${name}${company ? ` — ${company}` : ''}`,
-            body: issueBody,
-            labels: ['demo-request', `topic:${topic}`],
-          }),
-        });
-        if (ghRes.ok) {
-          const issue = await ghRes.json<{ html_url?: string }>().catch(() => ({} as any));
-          if (issue?.html_url) {
-            await c.env.DB.prepare(
-              `UPDATE demo_requests SET github_issue_url = ? WHERE id = ?`,
-            ).bind(issue.html_url, insertedId).run();
-          }
-        }
-      } catch { /* swallow — request already succeeded for the user */ }
+          message || '(no message)',
+          '',
+          `Reference: request #${insertedId} (demo_requests)`,
+        ];
+        const sent = await sendNotificationEmail(
+          c.env,
+          DEMO_MAILBOX[topic] || DEFAULT_CONTACT_MAILBOX,
+          `[Demo] ${TOPIC_LABEL[topic] || topic} — ${company || name}`.slice(0, 200),
+          lines.join('\n'),
+        );
+        if (!sent) console.warn(`[demo-request] request #${insertedId} stored but not emailed to the team; read it from demo_requests`);
+      } catch {
+        console.warn(`[demo-request] request #${insertedId} stored but not emailed to the team; read it from demo_requests`);
+      }
     })());
   }
   return c.json({ ok: true, id: insertedId });

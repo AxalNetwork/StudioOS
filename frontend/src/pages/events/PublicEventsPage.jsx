@@ -1,36 +1,36 @@
+/**
+ * `/events` — Programs & Events, built to the owner's canvas (D679, #1553;
+ * `design/canvases/integrated/Axal VC Website.dc.html`, PROGRAMS & EVENTS).
+ *
+ * Two live reads and nothing typed:
+ *   - the Programs row is the Spin-Out Lab's open cohort, from the Lab's own
+ *     cohort rule and cohort record. The canvas's other two cards (an advisor
+ *     intake and Fund I onboarding) have no source, so they are not drawn;
+ *   - the events are the public feed, with its filters, its archive, its paging
+ *     and its calendar file, exactly as before this rebuild.
+ */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Calendar, MapPin, Clock, Download, Search, Filter, Loader2, AlertTriangle,
-  Repeat, Video, Users, ArrowRight,
-} from 'lucide-react';
-import PublicNav from '../../components/PublicNav';
-import PublicFooter from '../../components/PublicFooter';
-import NetworkSubNav from '../../components/NetworkSubNav';
+import { CalendarPlus, Search } from 'lucide-react';
+import SitePage from '../../components/site/SitePage';
+import NetworkSubNav from '../../components/site/NetworkSubNav';
+import { EmptyNote, FilterPills } from '../../components/site/SiteBlocks';
 import { eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import {
-  PROGRAMS, PROGRAM_CATEGORIES, AUDIENCES, FORMATS,
-} from '../../data/network';
+import { FORMATS } from '../../data/network';
 import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
 import { formatEventPrice } from '../../lib/money';
+import { COHORT_WEEKS, openCohortCopy, useCohortPlaces } from '../../lib/spinoutLab';
+import { EVENTS_COPY, eventDateParts, eventTypeTone } from '../../lib/siteNetwork2';
+import '../site/network2.css';
 
 const EVENT_TYPES = EVENT_TYPE_FILTERS;
-
-const PROGRAM_CAT_LABEL = Object.fromEntries(PROGRAM_CATEGORIES.map((c) => [c.id, c.label]));
+const TYPE_LABEL = Object.fromEntries(EVENT_TYPES.filter((t) => t.id).map((t) => [t.id, t.label]));
 const FORMAT_LABEL = Object.fromEntries(FORMATS.map((f) => [f.id, f.label]));
+const WHEN_OPTIONS = [{ value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }];
 
-function formatDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-}
-
-function formatTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
+/** The Lab's sprint length, from the cohort timing the Worker runs, never typed. */
+const COHORT_DAYS = COHORT_WEEKS * 7;
 
 // One server page. The feed used to be requested with the API's default
 // LIMIT 20 and no offset handling at all, so a 21st public event simply did
@@ -43,19 +43,14 @@ const PAGE_SIZE = 50;
 function groupByMonth(list) {
   const out = [];
   for (const ev of list) {
-    const d = new Date(ev.starts_at);
-    if (Number.isNaN(d.getTime())) continue;
-    // Local month, deliberately: the tile and the time on every card already
-    // render in the viewer's timezone, so bucketing by UTC would file a
-    // late-evening event under the previous month it is shown in.
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    // The event's own zone, deliberately: the tile and the time on every row
+    // render in it, so bucketing by UTC (or by the viewer's zone) would file a
+    // late-evening event under a month its own tile does not show.
+    const when = eventDateParts(ev.starts_at, ev.timezone);
+    if (!when) continue;
     let bucket = out[out.length - 1];
-    if (!bucket || bucket.key !== key) {
-      bucket = {
-        key,
-        name: d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
-        items: [],
-      };
+    if (!bucket || bucket.key !== when.monthKey) {
+      bucket = { key: when.monthKey, name: when.monthName, items: [] };
       out.push(bucket);
     }
     bucket.items.push(ev);
@@ -63,21 +58,13 @@ function groupByMonth(list) {
   return out;
 }
 
-// The calendar tile on each row.
-function DateTile({ iso }) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
+// The calendar tile on each row: day and month in the event's zone.
+function DateTile({ when }) {
+  if (!when) return <div className="ax-n2-date" aria-hidden="true" />;
   return (
-    <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-2">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
-        {d.toLocaleDateString(undefined, { month: 'short' })}
-      </span>
-      <span className="text-lg font-bold leading-none text-slate-900 dark:text-slate-100">
-        {d.getDate()}
-      </span>
-      <span className="text-[10px] uppercase text-slate-500">
-        {d.toLocaleDateString(undefined, { weekday: 'short' })}
-      </span>
+    <div className="ax-n2-date">
+      <div className="ax-mono ax-n2-day">{when.day}</div>
+      <div className="ax-lbl-q ax-n2-mon">{when.mon}</div>
     </div>
   );
 }
@@ -91,128 +78,71 @@ function eventFormat(ev) {
   return 'in_person';
 }
 
-function FormatBadge({ format }) {
-  const online = format === 'online';
+/**
+ * The Spin-Out Lab card. Its cohort number and start date come from the Lab's
+ * cohort rule (`openCohortCopy`), its length from `COHORT_WEEKS`, and its
+ * places from the cohort record (`useCohortPlaces`). A fact that is not read is
+ * not drawn.
+ */
+export function LabProgramCard() {
+  const cohort = openCohortCopy();
+  const places = useCohortPlaces();
+  const facts = [];
+  if (cohort?.startLabel) facts.push({ k: 'Starts', v: cohort.startLabel });
+  facts.push({ k: 'Duration', v: `${COHORT_DAYS} days` });
+  if (places.status === 'ok' && places.places > 0) facts.push({ k: 'Places', v: String(places.places) });
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-      {online ? <Video className="w-2.5 h-2.5" /> : <MapPin className="w-2.5 h-2.5" />}
-      {FORMAT_LABEL[format] || format}
-    </span>
+    <article className="ax-card ax-n2-program">
+      <span className="ax-chip ax-n2-chip-green">Applications open</span>
+      <h3 className="ax-n2-program-t">{cohort ? `Spin-Out Lab · Cohort ${cohort.cohortNum}` : 'Spin-Out Lab · Next cohort'}</h3>
+      <p className="ax-n2-program-d">
+        The {COHORT_DAYS}-day formation programme. Idea to incorporated, 83(b)-filed, cap-table-clean, with verified discovery and revenue proof.
+      </p>
+      <dl className="ax-n2-facts">
+        {facts.map((f) => (
+          <div key={f.k}><dt>{f.k}</dt><dd className="ax-mono">{f.v}</dd></div>
+        ))}
+      </dl>
+      <Link to="/spinout-lab/apply" className="ax-btn ax-btn-primary ax-n2-program-cta">
+        {cohort ? `Apply to Cohort ${cohort.cohortNum}` : 'Apply to the next cohort'}
+      </Link>
+    </article>
   );
 }
 
-// ---- Programs (curated, recurring series) --------------------------------
-function ProgramCard({ p }) {
-  const open = p.status === 'open';
+/** One event row: the tile, the title and its type, the summary, the time, the way in. */
+export function EventRow({ ev, isPast }) {
+  const when = eventDateParts(ev.starts_at, ev.timezone);
+  const fmt = eventFormat(ev);
+  const place = fmt === 'online' ? 'Virtual' : ev.location_text || 'TBA';
   return (
-    <div className="flex flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 dark:bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-          {PROGRAM_CAT_LABEL[p.category] || 'Program'}
-        </span>
-        <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-          <Repeat className="w-3 h-3" /> {p.cadence}
-        </span>
+    <div className="ax-n2-row">
+      <DateTile when={when} />
+      <div className="ax-n2-main">
+        <div className="ax-n2-title-row">
+          <h3 className="ax-n2-row-t"><Link to={`/events/${ev.slug}`}>{ev.title}</Link></h3>
+          {ev.type && <span className={eventTypeTone(ev.type)}>{TYPE_LABEL[ev.type] || String(ev.type).replace(/_/g, ' ')}</span>}
+        </div>
+        {ev.summary ? <p className="ax-n2-row-d">{ev.summary}</p> : null}
+        <p className="ax-n2-row-m">{FORMAT_LABEL[fmt] || fmt} · {place}</p>
       </div>
-      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{p.name}</h3>
-      <p className="mt-1 flex-1 text-sm text-slate-600 dark:text-slate-400">{p.description}</p>
-
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <FormatBadge format={p.format} />
-        {(p.audience || []).map((a) => (
-          <span key={a} className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium capitalize text-slate-600 dark:text-slate-300">
-            <Users className="w-2.5 h-2.5" />{a}
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-4 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
-        <span className="text-xs text-slate-500 dark:text-slate-400">{p.nextSession}</span>
-        {open ? (
-          <Link to="/register?intent=program" className="inline-flex items-center gap-1 text-sm font-medium text-violet-700 dark:text-violet-300 hover:underline">
-            RSVP <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        ) : (
-          <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Coming soon
-          </span>
-        )}
+      <div className="ax-n2-side">
+        <div className="ax-n2-when">
+          {when && <div className="ax-mono">{when.time}</div>}
+          {!isPast && (ev.price_cents > 0 ? (
+            <div>{formatEventPrice(ev.price_cents, ev.currency)}</div>
+          ) : (
+            <div className="is-free">Free</div>
+          ))}
+        </div>
+        <Link to={`/events/${ev.slug}`} className="ax-n2-row-cta">
+          {/* Not "View recap": no recording_url or replay
+              column exists on `events`, so a past event's
+              detail page is the same detail page. */}
+          {isPast ? 'View details' : 'Register'}
+        </Link>
       </div>
     </div>
-  );
-}
-
-function ProgramsSection() {
-  const [audience, setAudience] = useState('');
-  const [format, setFormat] = useState('');
-  const [category, setCategory] = useState('');
-
-  const filtered = useMemo(() => PROGRAMS.filter((p) => {
-    if (audience && !(p.audience || []).includes(audience)) return false;
-    if (format && p.format !== format) return false;
-    if (category && p.category !== category) return false;
-    return true;
-  }), [audience, format, category]);
-
-  const Chip = ({ active, onClick, children }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-        active
-          ? 'border-violet-500 bg-violet-50 text-violet-700 dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300'
-          : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400'
-      }`}
-    >
-      {children}
-    </button>
-  );
-
-  return (
-    <section className="mb-12">
-      <div className="mb-1 flex items-center gap-2">
-        <Repeat className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Programs</h2>
-      </div>
-      <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
-        Recurring series across the network — office hours, roundtables, workshops, demo days, and
-        community-hosted sessions.
-      </p>
-
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Audience</span>
-        <div className="flex flex-wrap gap-1.5">
-          <Chip active={!audience} onClick={() => setAudience('')}>All</Chip>
-          {AUDIENCES.map((a) => (
-            <Chip key={a.id} active={audience === a.id} onClick={() => setAudience(a.id)}>{a.label}</Chip>
-          ))}
-        </div>
-        <span className="ml-0 sm:ml-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Format</span>
-        <div className="flex flex-wrap gap-1.5">
-          <Chip active={!format} onClick={() => setFormat('')}>All</Chip>
-          {FORMATS.map((f) => (
-            <Chip key={f.id} active={format === f.id} onClick={() => setFormat(f.id)}>{f.label}</Chip>
-          ))}
-        </div>
-        <span className="ml-0 sm:ml-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Category</span>
-        <div className="flex flex-wrap gap-1.5">
-          <Chip active={!category} onClick={() => setCategory('')}>All</Chip>
-          {PROGRAM_CATEGORIES.map((c) => (
-            <Chip key={c.id} active={category === c.id} onClick={() => setCategory(c.id)}>{c.label}</Chip>
-          ))}
-        </div>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-          No programs match these filters.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => <ProgramCard key={p.id} p={p} />)}
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -278,235 +208,129 @@ export default function PublicEventsPage() {
   const monthSections = useMemo(() => groupByMonth(visibleEvents), [visibleEvents]);
 
   const hasEventFilters = filterType || filterFormat || filterFrom || filterTo || searchQ;
+  const isPast = when === 'past';
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
-      <PublicNav />
+    <SitePage title={EVENTS_COPY.title}>
       <NetworkSubNav />
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-5xl mx-auto px-6 py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold">Programs &amp; Events</h1>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                Recurring programs and one-off events across the network — open to founders,
-                investors, partners, and advisors.
-              </p>
-            </div>
-            <a
-              href={eventsPublic.icsUrl()}
-              download="axal-events.ics"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
-            >
-              <Download className="w-4 h-4" /> Add to calendar
-            </a>
+      <div className="ax-wrap ax-n2-page">
+        <header className="ax-n2-head">
+          <div>
+            <div className="ax-lbl-q">{EVENTS_COPY.eyebrow}</div>
+            <h1 className="ax-n2-h1">{EVENTS_COPY.title}</h1>
+            <p className="ax-n2-lede">{EVENTS_COPY.lede}</p>
           </div>
-        </div>
-      </header>
+          <a href={eventsPublic.icsUrl()} download="axal-events.ics" className="ax-btn ax-btn-md ax-btn-quiet">
+            <CalendarPlus size={15} aria-hidden="true" /> Add to calendar
+          </a>
+        </header>
 
-      <main className="flex-1">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <ProgramsSection />
+        <section aria-labelledby="ax-n2-programs">
+          <h2 id="ax-n2-programs" className="ax-n2-k">Programs</h2>
+          <div className="ax-grid-3">
+            <LabProgramCard />
+          </div>
+        </section>
 
-          {/* Events */}
-          <section>
-            <div className="mb-1 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Events</h2>
-            </div>
-            <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
-              Scheduled sessions you can register for.
-            </p>
+        <section aria-labelledby="ax-n2-events">
+          <h2 id="ax-n2-events" className="ax-n2-k is-gap">{isPast ? 'Past events' : 'Upcoming events'}</h2>
+          <FilterPills label="Upcoming or past" options={WHEN_OPTIONS} value={when} onChange={setWhen} />
+          <div className="ax-n2-tools">
+            <label className="ax-n2-search" style={{ position: 'relative', display: 'flex' }}>
+              <span className="sr-only">Search events</span>
+              <Search size={15} aria-hidden="true" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ax-faint)' }} />
+              <input
+                type="search"
+                placeholder="Search events..."
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                className="ax-n2-input"
+                style={{ width: '100%', paddingLeft: 34 }}
+              />
+            </label>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="ax-n2-select"
+              aria-label="Event category"
+            >
+              {EVENT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+            <select
+              value={filterFormat}
+              onChange={(e) => setFilterFormat(e.target.value)}
+              className="ax-n2-select"
+              aria-label="Event format"
+            >
+              <option value="">All formats</option>
+              {FORMATS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={(e) => setFilterFrom(e.target.value)}
+              className="ax-n2-input"
+              aria-label="From date"
+            />
+            <input
+              type="date"
+              value={filterTo}
+              onChange={(e) => setFilterTo(e.target.value)}
+              className="ax-n2-input"
+              aria-label="To date"
+            />
+          </div>
 
-            {/* Upcoming / Past toggle */}
-            <div className="mb-4 inline-flex rounded-lg border border-slate-300 dark:border-slate-700 p-0.5 bg-white dark:bg-slate-900">
-              {['upcoming', 'past'].map((w) => (
+          {loading && offset === 0 ? (
+            <EmptyNote>Loading events…</EmptyNote>
+          ) : error ? (
+            <p role="alert" className="ax-n2-alert">{error}</p>
+          ) : visibleEvents.length === 0 ? (
+            <div>
+              <EmptyNote>
+                {isPast ? 'No past events match your filters.' : 'No upcoming events match your filters.'}
+              </EmptyNote>
+              {hasEventFilters && (
                 <button
-                  key={w}
                   type="button"
-                  onClick={() => setWhen(w)}
-                  className={`rounded-md px-4 py-1.5 text-sm font-medium capitalize transition ${
-                    when === w
-                      ? 'bg-violet-600 text-white'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100'
-                  }`}
+                  onClick={() => { setFilterType(''); setFilterFormat(''); setFilterFrom(''); setFilterTo(''); setSearchQ(''); }}
+                  className="ax-n2-textlink"
                 >
-                  {w}
+                  Clear filters
                 </button>
-              ))}
+              )}
             </div>
-
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="search"
-                  placeholder="Search events..."
-                  value={searchQ}
-                  onChange={(e) => setSearchQ(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  aria-label="Event category"
-                >
-                  {EVENT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                </select>
-                <select
-                  value={filterFormat}
-                  onChange={(e) => setFilterFormat(e.target.value)}
-                  className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  aria-label="Event format"
-                >
-                  <option value="">All formats</option>
-                  {FORMATS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-                </select>
-                <input
-                  type="date"
-                  value={filterFrom}
-                  onChange={(e) => setFilterFrom(e.target.value)}
-                  className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  aria-label="From date"
-                />
-                <input
-                  type="date"
-                  value={filterTo}
-                  onChange={(e) => setFilterTo(e.target.value)}
-                  className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  aria-label="To date"
-                />
-              </div>
-            </div>
-
-            {loading && offset === 0 ? (
-              <div className="text-center text-slate-500 py-20 flex flex-col items-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin" /> Loading events…
-              </div>
-            ) : error ? (
-              <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{error}</span>
-              </div>
-            ) : visibleEvents.length === 0 ? (
-              <div className="text-center text-slate-500 py-20">
-                <p className="text-sm">
-                  {when === 'past' ? 'No past events match your filters.' : 'No upcoming events match your filters.'}
-                </p>
-                {hasEventFilters && (
-                  <button
-                    type="button"
-                    onClick={() => { setFilterType(''); setFilterFormat(''); setFilterFrom(''); setFilterTo(''); setSearchQ(''); }}
-                    className="mt-3 text-sm text-violet-700 dark:text-violet-300 hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-8">
+          ) : (
+            <>
+              <ul className="ax-n2-list">
                 {monthSections.map((section) => (
-                  <div key={section.key}>
-                    <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-1.5">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
-                        {section.name}
-                      </h3>
-                      <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                  <li key={section.key}>
+                    <div className="ax-n2-month">
+                      <h3 className="ax-lbl-q ax-n2-month-t">{section.name}</h3>
+                      <span className="ax-mono ax-n2-muted">
                         {section.items.length} {section.items.length === 1 ? 'event' : 'events'}
                       </span>
                     </div>
-                    <div className="space-y-4">
-                {section.items.map((ev) => {
-                  const fmt = eventFormat(ev);
-                  const isPast = when === 'past';
-                  return (
-                    <div
-                      key={ev.id}
-                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex flex-col sm:flex-row">
-                        {ev.cover_url ? (
-                          <div className="sm:w-48 h-40 sm:h-auto shrink-0">
-                            <img src={ev.cover_url} alt={ev.title} className="w-full h-full object-cover" />
-                          </div>
-                        ) : null}
-                        <div className="flex-1 p-5 flex flex-col justify-between">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
-                              <DateTile iso={ev.starts_at} />
-                              <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium uppercase tracking-wide">
-                                {ev.type?.replace(/_/g, ' ')}
-                              </span>
-                              <FormatBadge format={fmt} />
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" /> {formatDate(ev.starts_at)}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" /> {formatTime(ev.starts_at)}
-                              </span>
-                            </div>
-                            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                              <Link to={`/events/${ev.slug}`} className="hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
-                                {ev.title}
-                              </Link>
-                            </h3>
-                            {ev.summary ? (
-                              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{ev.summary}</p>
-                            ) : null}
-                            <div className="mt-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                              <MapPin className="w-3 h-3" />
-                              {fmt === 'online' ? 'Virtual' : ev.location_text || 'TBA'}
-                            </div>
-                          </div>
-                          <div className="mt-4 flex items-center gap-3">
-                            <Link
-                              to={`/events/${ev.slug}`}
-                              className="inline-flex items-center gap-1 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors"
-                            >
-                              {/* Not "View recap": no recording_url or replay
-                                  column exists on `events`, so a past event's
-                                  detail page is the same detail page. */}
-                              {isPast ? 'View details' : 'Register'}
-                            </Link>
-                            {!isPast && (ev.price_cents > 0 ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {formatEventPrice(ev.price_cents, ev.currency)}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Free</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                    </div>
-                  </div>
+                    {section.items.map((ev) => <EventRow key={ev.id} ev={ev} isPast={isPast} />)}
+                  </li>
                 ))}
-                {hasMore && (
-                  <div className="pt-2 text-center">
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => setOffset((o) => o + PAGE_SIZE)}
-                      className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-violet-400 disabled:opacity-50"
-                    >
-                      {loading ? 'Loading…' : 'Load more events'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-      </main>
-      <PublicFooter />
-    </div>
+              </ul>
+              {hasMore && (
+                <div className="ax-n2-more">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setOffset((o) => o + PAGE_SIZE)}
+                    className="ax-btn ax-btn-md ax-btn-quiet"
+                  >
+                    {loading ? 'Loading…' : 'Load more events'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </div>
+    </SitePage>
   );
 }

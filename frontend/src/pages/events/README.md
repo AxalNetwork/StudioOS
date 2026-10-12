@@ -11,4 +11,6 @@ Unreadable, never a zero count. `eventOrganiser.css` owns only these cards.
 shows the signed-in member's own registration. Signed-in numeric event paths
 use the authenticated detail endpoint; public slug paths use the public reader.
 `MyEventsPage.jsx` lists hosted and attended events. `EventEditorPage.jsx`
-edits event details. `PublicEventsPage.jsx` is the public event feed.
+edits event details. `PublicEventsPage.jsx` is the public Programs & Events page (D679): the
+Spin-Out Lab's open cohort, read from `frontend/src/lib/spinoutLab.js`, above the public
+event feed with its filters, archive, paging and calendar file.

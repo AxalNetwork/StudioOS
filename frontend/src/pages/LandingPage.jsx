@@ -7,6 +7,8 @@ import { track } from '../lib/funnel';
 import { DOOR_LINKS } from '../lib/siteLinks';
 import { openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
 import { numberWordCap } from '../lib/numberWords';
+import { DIMENSIONS } from '../lib/scoringViewModel';
+import { SLIDE_META } from '../lib/pitchDeckViewModel';
 import '../components/site/site.css';
 
 /**
@@ -55,7 +57,9 @@ const LANES = [
     desc: 'Back companies whose formation you can read, on a record the founder built.',
     items: [
       'A curated pipeline instead of cold inbound',
-      'Venture-readiness score with the evidence behind it; numbers verified via Stripe and Plaid',
+      // D676: ", numbers verified via Stripe and Plaid" is cut, as on the
+      // investors' door: there is no Plaid integration.
+      'Venture-readiness score with the evidence behind it',
       'Pipeline, relationships, and notes are the CRM',
     ] },
   { title: 'Operating Partners', img: 'lane-partners', cta: 'List your services',
@@ -63,7 +67,8 @@ const LANES = [
     items: [
       'A provider profile in the marketplace and the public directory',
       'Founders post needs; you answer live requests',
-      'KYB, conflicts, and contracts handled; payouts through Stripe Connect',
+      // D676: "KYB, conflicts, and contracts handled; payouts through Stripe
+      // Connect" is dropped, as on the partners' door: none of it runs.
     ] },
   { title: 'Advisors', img: 'lane-advisors', cta: 'Create an account',
     desc: 'Work with the founders you were built to help.',
@@ -88,15 +93,19 @@ const LAB_WEEKS = [
   { n: 'Week 4', title: 'Incorporate & Capital', desc: 'Entity, founder stock, 83(b), use of funds, investor intros' },
 ];
 
+// The canvas's card copy, corrected where the code says otherwise (D677's
+// checks on the Platform page): the scoring engine's dimension count and the
+// deck's slide count are read from the engines, not typed, and the capital
+// card names only what runs (no warm-intro routing, no SAFE generation).
 const TOOLS = [
   { img: 'tool-profiling', title: 'Profiling', desc: 'Skills, values, and archetype assessment that drives every downstream match.' },
   { img: 'tool-discovery', title: 'Customer Discovery', desc: 'Structured interview logs, pain severity, ICP fit, deck-eligible quotes.' },
-  { img: 'tool-scoring', title: 'Scoring Engine', desc: 'Nine weighted dimensions with evidence-confidence bands per score.' },
+  { img: 'tool-scoring', title: 'Scoring Engine', desc: `${numberWordCap(DIMENSIONS.length)} weighted dimensions, each with the evidence behind its score.` },
   { img: 'tool-market', title: 'Market Intel', desc: 'TAM/SAM/SOM with methodology, sources, and competitive positioning.' },
   { img: 'tool-captable', title: 'Cap Table', desc: 'Founder stock, vesting, SAFEs, option pool, and dilution modelling.' },
   { img: 'tool-incorporate', title: 'Incorporate', desc: 'Entity recommendation with rationale, formation docs, filing tracker, EIN.' },
-  { img: 'tool-capital', title: 'Capital', desc: 'Investor pipeline, warm-intro routing, data room, SAFE generation.' },
-  { img: 'tool-pitch', title: 'Pitch Deck Builder', desc: 'Eleven slides assembled from your own recorded data, not a template.' },
+  { img: 'tool-capital', title: 'Capital', desc: 'Investor pipeline and data room.' },
+  { img: 'tool-pitch', title: 'Pitch Deck Builder', desc: `${numberWordCap(SLIDE_META.length)} slides assembled from your own recorded data, not a template.` },
 ];
 
 const img = (name) => `/site/${name}.webp`;
@@ -345,11 +354,11 @@ function Platform({ stats }) {
       </div>
       <div className="ax-tools">
         {TOOLS.map((t) => (
-          <div key={t.title} className="ax-card ax-tool">
+          <Link key={t.title} to="/platform" className="ax-card ax-tool">
             <div className="ax-tool-art"><img src={img(t.img)} alt="" loading="lazy" /></div>
             <h3 className="ax-tool-t">{t.title}</h3>
             <p className="ax-tool-d" style={{ marginBottom: 0 }}>{t.desc}</p>
-          </div>
+          </Link>
         ))}
       </div>
     </section>

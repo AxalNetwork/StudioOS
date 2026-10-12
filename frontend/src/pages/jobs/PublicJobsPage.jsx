@@ -1,20 +1,51 @@
-// Task #68 — Public Job Board: public feed (no auth).
-// Mirrors PublicEventsPage: slate palette, pt-16, PublicNav + PublicFooter,
-// violet accents. Lists admin-approved published roles with light filtering.
+/**
+ * `/jobs` — Jobs, built to the owner's canvas (D679, #1553;
+ * `design/canvases/integrated/Axal VC Website.dc.html`, JOBS).
+ *
+ * The rows are the public job feed (`GET /api/public/jobs`): roles a founder
+ * posted against their company and an admin approved. The canvas's filter
+ * pills (Engineering, Go-to-market, Operations) name a field no posting has;
+ * the pills here are the posting's own `employment_type`, and the search,
+ * level and remote filters this page already had stay beside them.
+ */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, MapPin, Globe, Search, Loader2, AlertTriangle } from 'lucide-react';
-import PublicNav from '../../components/PublicNav';
-import PublicFooter from '../../components/PublicFooter';
+import { Briefcase, Search } from 'lucide-react';
+import SitePage from '../../components/site/SitePage';
+import NetworkSubNav from '../../components/site/NetworkSubNav';
+import { EmptyNote, FilterPills } from '../../components/site/SiteBlocks';
 import { jobsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import {
+  JOBS_COPY, JOB_TYPE_FILTERS, EMPLOYMENT_LABELS, SENIORITY_LABELS, avatarTone, companyInitials, jobGeo,
+} from '../../lib/siteNetwork2';
+import '../site/network2.css';
 
-const EMPLOYMENT_LABELS = {
-  full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract',
-};
-const SENIORITY_LABELS = {
-  intern: 'Intern', junior: 'Junior', mid: 'Mid-level', senior: 'Senior', lead: 'Lead', executive: 'Executive',
-};
+/** Where "Post a role" goes: the job editor, behind sign-in (the founder workspace's own "Post a role"). */
+export const POST_ROLE_HREF = '/jobs/new';
+
+/** One role, as the canvas's row: initials, title, company, type, place, View role. */
+export function JobRow({ job }) {
+  const initials = companyInitials(job.startup_name);
+  const line = [job.startup_name, SENIORITY_LABELS[job.seniority]].filter(Boolean).join(' · ');
+  const geo = jobGeo(job);
+  return (
+    <Link to={`/jobs/${job.slug}`} className="ax-n2-row">
+      <span className="ax-avatar ax-n2-av" aria-hidden="true" style={{ background: avatarTone(job.startup_name || job.title) }}>
+        {initials || <Briefcase size={16} />}
+      </span>
+      <div className="ax-n2-main">
+        <h2 className="ax-n2-row-t">{job.title}</h2>
+        {line && <p className="ax-n2-row-d">{line}</p>}
+      </div>
+      <div className="ax-n2-side">
+        <span className="ax-chip ax-chip-quiet">{EMPLOYMENT_LABELS[job.employment_type] || job.employment_type}</span>
+        {geo && <span className="ax-n2-geo">{geo}</span>}
+        <span className="ax-n2-row-cta">View role</span>
+      </div>
+    </Link>
+  );
+}
 
 export default function PublicJobsPage() {
   const [jobs, setJobs] = useState([]);
@@ -52,119 +83,75 @@ export default function PublicJobsPage() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [q, employmentType, seniority, remoteOnly]);
 
+  const hasFilters = q || employmentType || seniority || remoteOnly;
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
-      <PublicNav />
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-10">
-        <header className="mb-8">
-          <div className="flex items-center gap-2 text-violet-600 dark:text-violet-400 mb-2">
-            <Briefcase size={20} />
-            <span className="text-sm font-semibold uppercase tracking-wide">Job Board</span>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Open roles across the studio</h1>
-          <p className="mt-2 text-slate-600 dark:text-slate-400 max-w-2xl">
-            Founders in the Axal network are hiring. Browse open roles and apply directly —
-            no account required.
-          </p>
+    <SitePage title={JOBS_COPY.title}>
+      <NetworkSubNav />
+      <div className="ax-wrap ax-n2-page">
+        <header>
+          <div className="ax-lbl-q">{JOBS_COPY.eyebrow}</div>
+          <h1 className="ax-n2-h1">{JOBS_COPY.title}</h1>
+          <p className="ax-n2-lede">{JOBS_COPY.lede}</p>
         </header>
 
-        <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="relative sm:col-span-2 lg:col-span-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search roles"
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
+        <div style={{ marginTop: 30 }}>
+          <FilterPills label="Job type" options={JOB_TYPE_FILTERS} value={employmentType} onChange={setEmploymentType} />
+          <div className="ax-n2-tools">
+            <label className="ax-n2-search" style={{ position: 'relative', display: 'flex' }}>
+              <span className="sr-only">Search roles</span>
+              <Search size={15} aria-hidden="true" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ax-faint)' }} />
+              <input
+                type="text"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search roles, companies or cities"
+                className="ax-n2-input"
+                style={{ width: '100%', paddingLeft: 34 }}
+              />
+            </label>
+            <select
+              value={seniority}
+              onChange={(e) => setSeniority(e.target.value)}
+              className="ax-n2-select"
+              aria-label="Level"
+            >
+              <option value="">All levels</option>
+              {Object.entries(SENIORITY_LABELS).map(([id, label]) => (
+                <option key={id} value={id}>{label}</option>
+              ))}
+            </select>
+            <label className="ax-n2-check">
+              <input
+                type="checkbox"
+                checked={remoteOnly}
+                onChange={(e) => setRemoteOnly(e.target.checked)}
+              />
+              <span>Remote only</span>
+            </label>
           </div>
-          <select
-            value={employmentType}
-            onChange={(e) => setEmploymentType(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-          >
-            <option value="">All types</option>
-            {Object.entries(EMPLOYMENT_LABELS).map(([id, label]) => (
-              <option key={id} value={id}>{label}</option>
-            ))}
-          </select>
-          <select
-            value={seniority}
-            onChange={(e) => setSeniority(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-          >
-            <option value="">All levels</option>
-            {Object.entries(SENIORITY_LABELS).map(([id, label]) => (
-              <option key={id} value={id}>{label}</option>
-            ))}
-          </select>
-          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={remoteOnly}
-              onChange={(e) => setRemoteOnly(e.target.checked)}
-              className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-            />
-            <span>Remote only</span>
-          </label>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-slate-500">
-            <Loader2 className="animate-spin mr-2" size={20} /> Loading roles…
-          </div>
+          <EmptyNote>Loading roles…</EmptyNote>
         ) : error ? (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-4 py-3">
-            <AlertTriangle size={18} /> {error}
-          </div>
+          <p role="alert" className="ax-n2-alert">{error}</p>
         ) : jobs.length === 0 ? (
-          <div className="text-center py-20 text-slate-500 dark:text-slate-400">
-            <Briefcase size={32} className="mx-auto mb-3 opacity-50" />
-            <p className="font-medium">No open roles right now</p>
-            <p className="text-sm mt-1">Check back soon — new roles are posted regularly.</p>
-          </div>
+          <EmptyNote>{hasFilters ? 'No open roles match these filters.' : 'No open roles right now.'}</EmptyNote>
         ) : (
-          <ul className="space-y-3">
-            {jobs.map((job) => (
-              <li key={job.id}>
-                <Link
-                  to={`/jobs/${job.slug}`}
-                  className="block rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 hover:border-violet-400 dark:hover:border-violet-500 hover:shadow-sm transition"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">
-                        {job.title}
-                      </h2>
-                      {job.startup_name ? (
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{job.startup_name}</p>
-                      ) : null}
-                    </div>
-                    <span className="shrink-0 text-xs font-medium px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
-                      {EMPLOYMENT_LABELS[job.employment_type] || job.employment_type}
-                    </span>
-                  </div>
-                  {job.summary ? (
-                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{job.summary}</p>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                    {job.seniority ? (
-                      <span>{SENIORITY_LABELS[job.seniority] || job.seniority}</span>
-                    ) : null}
-                    {job.remote ? (
-                      <span className="inline-flex items-center gap-1"><Globe size={13} /> Remote</span>
-                    ) : job.location_text ? (
-                      <span className="inline-flex items-center gap-1"><MapPin size={13} /> {job.location_text}</span>
-                    ) : null}
-                  </div>
-                </Link>
-              </li>
-            ))}
+          <ul className="ax-n2-list">
+            {jobs.map((job) => <li key={job.id}><JobRow job={job} /></li>)}
           </ul>
         )}
-      </main>
-      <PublicFooter />
-    </div>
+
+        <section className="ax-n2-band" aria-labelledby="ax-n2-post">
+          <div>
+            <h2 id="ax-n2-post" className="ax-n2-band-t">{JOBS_COPY.bandTitle}</h2>
+            <p className="ax-n2-band-d">{JOBS_COPY.bandCopy}</p>
+          </div>
+          <Link to={POST_ROLE_HREF} className="ax-btn ax-btn-md ax-btn-primary">Post a role →</Link>
+        </section>
+      </div>
+    </SitePage>
   );
 }

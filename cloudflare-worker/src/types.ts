@@ -197,7 +197,6 @@ export interface Env {
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
-  GITHUB_ISSUES_TOKEN?: string;
   // Task #9 — ticket↔GitHub sync loop prevention + assignee mapping.
   // GITHUB_SYNC_BOT_LOGIN: the GitHub login of the identity behind
   // GITHUB_ACCESS_TOKEN; webhook events from this actor are our own echoes

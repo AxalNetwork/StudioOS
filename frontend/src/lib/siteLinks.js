@@ -6,12 +6,10 @@
  * (`design/canvases/integrated/Axal VC Website.dc.html`, NAV and FOOTER), with
  * one rule the canvas cannot know: **a list holds only routes that exist.**
  *
- * The canvas also links pages that are still being built under #1546. Each
- * page's task adds its entry here in the same PR that adds its route:
- *   - Overview `/resources` goes at the top of NETWORK_LINKS (D679, #1553);
- *   - Intelligence `/intelligence` and Methodology `/methodology` go after
- *     Spin-Out Lab in BUILD_LINKS (D678, #1552);
- *   - Administrators `/administrators` goes last in BUILD_LINKS (D677, #1551).
+ * Every page the canvas's nav and footer link now exists (D675–D680, #1546):
+ * Overview `/resources` heads NETWORK_LINKS (D679); Intelligence, Methodology
+ * and Administrators complete BUILD_LINKS (D677, D678). A page added later
+ * adds its entry here in the same PR that adds its route.
  *
  * `site_links_d674.test.mjs` fails if any entry points at a path that `App.jsx`
  * does not route, so a link can never land on the 404 page.
@@ -26,12 +24,14 @@ export const DOOR_LINKS = [
 ];
 
 /**
- * The Network menu, and the footer's "Network" column. `icon` names a
- * lucide-react icon that `PublicNav` maps to its component.
+ * The Network menu, the footer's "Network" column and the Network pages'
+ * sub-nav (`components/site/NetworkSubNav.jsx`). `icon` names a lucide-react
+ * icon that `PublicNav` and `NetworkSubNav` map to their components.
  */
 export const NETWORK_LINKS = [
+  { label: 'Overview', to: '/resources', icon: 'overview', blurb: 'The network at a glance' },
   { label: 'Articles', to: '/articles', icon: 'articles', blurb: 'Writing on formation and pre-seed underwriting' },
-  { label: 'Directory', to: '/directory', icon: 'directory', blurb: 'Verified partners, LPs, founders, operators' },
+  { label: 'Directory', to: '/directory', icon: 'directory', blurb: 'Operating partners listed in the network' },
   { label: 'Programs & Events', to: '/events', icon: 'events', blurb: 'Cohorts, demo days, LP briefings, office hours' },
   { label: 'Communities & Circles', to: '/circles', icon: 'circles', blurb: 'Closed peer groups on a fixed cadence' },
   { label: 'Jobs', to: '/jobs', icon: 'jobs', blurb: 'Open roles across portfolio companies' },
@@ -41,6 +41,9 @@ export const NETWORK_LINKS = [
 export const BUILD_LINKS = [
   { label: 'Firm', to: '/about' },
   { label: 'Spin-Out Lab', to: '/spinout-lab' },
+  { label: 'Intelligence', to: '/intelligence' },
+  { label: 'Methodology', to: '/methodology' },
+  { label: 'Administrators', to: '/administrators' },
 ];
 
 /**

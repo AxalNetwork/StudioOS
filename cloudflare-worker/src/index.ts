@@ -1229,8 +1229,9 @@ app.route('/api/public', teamPublic);
 // roster). Mounted under /api/public, so no auth or admin gate runs in front
 // of it; the route itself serves only active profiles.
 app.route('/api/public', networkPublic);
-// Public contact form → GitHub Issues. No auth; honeypot + email validation
-// + global per-IP rate cap; returns 503 when GITHUB_ISSUES_TOKEN is unset.
+// Public contact form → D1 `contact_submissions` + an email to the firm (D680;
+// never GitHub, whose repo is public). No auth; Turnstile + honeypot +
+// validation + global per-IP rate cap.
 app.route('/api', contactRoutes);
 // Task #2 — Public + author-facing /api/news. Public GETs are CORS-open
 // to axal.vc and edge-cached 60d; author writes self-gate on trust>=70.
@@ -1493,6 +1494,8 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
  */
 const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   '/api/public/stats',
+  // D678: the model registry the Intelligence page reads; no D1 at all.
+  '/api/public/ai-models',
   '/api/public/circles',
   '/api/public/partners',
   '/api/public/status',

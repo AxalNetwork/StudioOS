@@ -324,10 +324,17 @@ const ProductsPage = lazy(() => import('./pages/ProductsPage'));
 // Products one-time cart checkout + post-checkout confirmation.
 const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
 const CheckoutConfirmationPage = lazy(() => import('./pages/CheckoutConfirmationPage'));
-// Audience product pages (For Founders / Investors & LPs / Service Partners /
-// Advisors) — one data-driven component rendered per slug from
-// data/productPages.js; footer links live in components/PublicFooter.jsx.
-const ProductAudiencePage = lazy(() => import('./pages/ProductAudiencePage'));
+// The four audience doors (D676) render pages/site/DoorPage.jsx, which reads
+// its meta from data/productPages.js and its copy from lib/siteDoors.js.
+// D675–D680 (#1546) — the public site's pages, built to the owner's website
+// canvas. Each renders inside components/site/SitePage.jsx.
+const DoorPage = lazy(() => import('./pages/site/DoorPage'));
+const FirmPage = lazy(() => import('./pages/site/FirmPage'));
+const PlatformPage = lazy(() => import('./pages/site/PlatformPage'));
+const AdministratorsPage = lazy(() => import('./pages/site/AdministratorsPage'));
+const MethodologyPage = lazy(() => import('./pages/site/MethodologyPage'));
+const IntelligencePage = lazy(() => import('./pages/site/IntelligencePage'));
+const ResourcesPage = lazy(() => import('./pages/site/ResourcesPage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
@@ -2390,11 +2397,11 @@ function AppInner() {
           brochure with no sidebar/nav. Public: it's marketing collateral. */}
       <Route path="/spinout-lab/brief" element={<SpinoutLabBriefPage />} />
       {/* Audience product pages — public marketing surface. */}
-      <Route path="/for-founders" element={<ProductAudiencePage slug="founders" />} />
-      <Route path="/for-investors" element={<ProductAudiencePage slug="investors" />} />
-      <Route path="/for-service-partners" element={<ProductAudiencePage slug="service-partners" />} />
+      <Route path="/for-founders" element={<DoorPage door="founders" />} />
+      <Route path="/for-investors" element={<DoorPage door="investors" />} />
+      <Route path="/for-service-partners" element={<DoorPage door="partners" />} />
       <Route path="/for-mentors" element={<Navigate to="/for-advisors" replace />} />
-      <Route path="/for-advisors" element={<ProductAudiencePage slug="advisors" />} />
+      <Route path="/for-advisors" element={<DoorPage door="advisors" />} />
       <Route path="/pricing/investor" element={<InvestorPricingPage />} />
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
       <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
@@ -3426,6 +3433,8 @@ function AppInner() {
           per React Router v6 path ranking, so authenticated users still
           land on the internal CRM at /partners. */}
       <Route path="/directory" element={<PublicDirectoryPage />} />
+      {/* D679 — the Network section's hub. /network stays the signed-in workspace. */}
+      <Route path="/resources" element={<ResourcesPage />} />
       {/* Task #9 — Public Network layer: Communities & Circles (curated). */}
       <Route path="/circles" element={<CirclesPage />} />
       <Route path="/communities" element={<Navigate to="/circles" replace />} />
@@ -3480,8 +3489,14 @@ function AppInner() {
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
-      <Route path="/about" element={<TeamPage />} />
-      <Route path="/team" element={<Navigate to="/about" replace />} />
+      {/* D677 — /about is the Firm page; the team page moved to /team. */}
+      <Route path="/about" element={<FirmPage />} />
+      <Route path="/team" element={<TeamPage />} />
+      <Route path="/platform" element={<PlatformPage />} />
+      <Route path="/administrators" element={<AdministratorsPage />} />
+      {/* D678 — the Methodology and Eadwyn Intelligence pages. */}
+      <Route path="/methodology" element={<MethodologyPage />} />
+      <Route path="/intelligence" element={<IntelligencePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
       {/* Task #4 (ID) — Public marketing surfaces. No auth. */}

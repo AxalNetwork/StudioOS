@@ -125,7 +125,7 @@ const ROUTES = [
   },
   {
     path: '/for-service-partners',
-    title: 'For Service Partners',
+    title: 'For Operating Partners',
     description:
       'List your services in the Axal VC marketplace, get in front of funded founders, and turn network trust into inbound leads. Distribution for legal, design, GTM and technical partners.',
     key: 'product-service-partners',
@@ -162,11 +162,51 @@ const ROUTES = [
   },
   {
     path: '/about',
-    title: 'About',
+    title: 'Firm',
+    description:
+      'Axal VC is a Geneva-based venture firm investing at pre-seed in technology companies with durable, systemic problems to solve.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/team',
+    title: 'Team',
     description:
       'Who we are, how the studio operates, and why we build companies alongside the founders we back.',
     type: 'website',
     section: 'company',
+  },
+  {
+    path: '/methodology',
+    title: 'Methodology',
+    description:
+      'Axal VC gives ventures the system, network, and operating discipline to move from an uncertain opportunity to a validated, built, funded, and growing company.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/platform',
+    title: 'Platform',
+    description:
+      'One system. Founders, partners, and capital — working from the same record. Every tool writes into a shared model.',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/administrators',
+    title: 'For Administrators',
+    description:
+      'Run your territory from one console. For an Axal VC subsidiary or a white-label operator — both use the same console.',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/intelligence',
+    title: 'Intelligence',
+    description:
+      'Eadwyn is the Personal Assistant inside Axal VC. Intelligence includes Research: a large database of markets, companies, and funds.',
+    type: 'website',
+    section: 'product',
   },
   {
     path: '/contact',
@@ -198,7 +238,7 @@ const ROUTES = [
   {
     path: '/jobs',
     title: 'Jobs',
-    description: 'Open roles across Axal VC portfolio companies and the studio.',
+    description: 'Open roles across Axal VC portfolio companies and the firm itself.',
     key: 'jobs',
     type: 'website',
     section: 'content',
@@ -206,15 +246,15 @@ const ROUTES = [
   },
   {
     path: '/events',
-    title: 'Events',
-    description: 'Demo days, office hours, and community sessions across the Axal VC network.',
+    title: 'Programs & Events',
+    description: 'Cohorts, demo days, LP briefings, and office hours.',
     type: 'website',
     section: 'content',
     prefix: true,
   },
   {
     path: '/circles',
-    title: 'Circles',
+    title: 'Communities & Circles',
     description: 'Focused communities inside the Axal VC network.',
     type: 'website',
     section: 'content',
@@ -223,10 +263,17 @@ const ROUTES = [
   {
     path: '/directory',
     title: 'Directory',
-    description: 'Browse founders, investors, advisors, and service partners in the network.',
+    description: 'Operating partners listed in the Axal VC network.',
     type: 'website',
     section: 'content',
     prefix: true,
+  },
+  {
+    path: '/resources',
+    title: 'Resources',
+    description: 'Directory, writing, programs, circles, and open roles across the Axal VC network.',
+    type: 'website',
+    section: 'content',
   },
   {
     path: '/authors',
