@@ -27,8 +27,32 @@ const publicRoutes = new Hono<{ Bindings: Env }>();
 // as the origin of truth on a full miss. Never throws — any query failure
 // falls back to 0 for that field so the page still renders.
 const STATS_L1_TTL_MS = 30_000;
+
+/**
+ * D675 (#1549): the figures the public site prints. The four Task #18 fields
+ * stay as they were; three are added for the new site's hero and Network
+ * pages, each counted from D1 with the definition beside it:
+ *   - users            — accounts with `is_active = 1`, the same rule every
+ *                        other user count in the worker uses;
+ *   - companies        — ventures (`projects`) not deleted;
+ *   - members_verified — the rows `/directory` lists, by the SAME predicate
+ *                        `GET /partners` below uses (DIRECTORY_LISTED_WHERE),
+ *                        so the figure and the list can never disagree.
+ * Countries, LPs & funds, operators & advisors and a tool count are not
+ * served: the directory has no country or member-type column, and the app
+ * keeps no single registry of tools. A page draws only the figures this
+ * returns.
+ */
+type PublicStats = {
+  partners: number; funds: number; deals_scored: number; spinouts: number;
+  users: number; companies: number; members_verified: number;
+};
+export const DIRECTORY_LISTED_WHERE = `status = 'active' AND directory_listed = 1`;
+
+/** Tests only: drop the per-isolate copy so each case reads D1 afresh. */
+export function _resetPublicStatsCache(): void { statsL1.map.clear(); }
 const STATS_KV_TTL_SEC = 300;
-const statsL1 = createL1<{ partners: number; funds: number; deals_scored: number; spinouts: number }>(STATS_L1_TTL_MS);
+const statsL1 = createL1<PublicStats>(STATS_L1_TTL_MS);
 const STATS_KV_KEY = 'cache:public-stats';
 
 async function countOrZero(env: Env, label: string, sql: string, params: any[] = []): Promise<number> {
@@ -47,21 +71,27 @@ publicRoutes.get('/stats', async (c) => {
   if (l1Hit && l1Hit.exp > now) return c.json(l1Hit.v);
 
   if (c.env.TOKENS) {
-    const kvHit = await kvGetJSON<{ partners: number; funds: number; deals_scored: number; spinouts: number }>(c.env.TOKENS, STATS_KV_KEY);
+    const kvHit = await kvGetJSON<PublicStats>(c.env.TOKENS, STATS_KV_KEY);
     if (kvHit) {
       statsL1.map.set(STATS_KV_KEY, { v: kvHit, exp: now + STATS_L1_TTL_MS });
       return c.json(kvHit);
     }
   }
 
-  const [partners, funds, dealsScored, spinouts] = await Promise.all([
+  const [partners, funds, dealsScored, spinouts, users, companies, membersVerified] = await Promise.all([
     countOrZero(c.env, 'partners', `SELECT COUNT(*) as n FROM partners WHERE status = 'active'`),
     countOrZero(c.env, 'funds', `SELECT COUNT(*) as n FROM vc_funds WHERE status = 'active'`),
     countOrZero(c.env, 'deals_scored', `SELECT COUNT(DISTINCT project_id) as n FROM score_snapshots WHERE is_sandbox = 0`),
     countOrZero(c.env, 'spinouts', `SELECT COUNT(*) as n FROM projects WHERE status = 'spinout' AND deleted_at IS NULL`),
+    countOrZero(c.env, 'users', `SELECT COUNT(*) as n FROM users WHERE is_active = 1`),
+    countOrZero(c.env, 'companies', `SELECT COUNT(*) as n FROM projects WHERE deleted_at IS NULL`),
+    countOrZero(c.env, 'members_verified', `SELECT COUNT(*) as n FROM partners WHERE ${DIRECTORY_LISTED_WHERE}`),
   ]);
 
-  const payload = { partners, funds, deals_scored: dealsScored, spinouts };
+  const payload: PublicStats = {
+    partners, funds, deals_scored: dealsScored, spinouts,
+    users, companies, members_verified: membersVerified,
+  };
   statsL1.map.set(STATS_KV_KEY, { v: payload, exp: now + STATS_L1_TTL_MS });
   if (c.env.TOKENS) {
     const ctx = (c.executionCtx as any);
@@ -406,7 +436,7 @@ publicRoutes.get('/partners', async (c) => {
   await ensurePartnerDirectoryColumns(c.env);
   const q = String(c.req.query('q') || '').trim().toLowerCase();
   const params: any[] = [];
-  let where = `status = 'active' AND directory_listed = 1`;
+  let where = DIRECTORY_LISTED_WHERE;
   if (q) {
     // `1`, not the helper's default: this search accepts a single character
     // today and D128 is a de-duplication, not a behaviour change.
