@@ -180,6 +180,11 @@ export function isPublicPath(pathname) {
     || currentPath === '/communities'
     || currentPath === '/roadmap'
     || currentPath === '/about'
+    // D677 — the Firm page took /about; the team page moved to /team, and
+    // Platform and Administrators are new public pages beside it.
+    || currentPath === '/team'
+    || currentPath === '/platform'
+    || currentPath === '/administrators'
     || currentPath === '/contact'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-

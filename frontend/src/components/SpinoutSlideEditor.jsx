@@ -31,7 +31,7 @@ const sources = (projectId) => ({
   roadmap: { label: 'Roadmap', href: '/build/roadmap' },
   captable: { label: 'Cap Table', href: '/build/captable' },
   incorporation: { label: 'Incorporation', href: '/incorporate' },
-  team: { label: 'Team', href: '/about' },
+  team: { label: 'Team', href: '/team' },
 });
 
 /* ----------------------------------------------------------------- helpers -- */
