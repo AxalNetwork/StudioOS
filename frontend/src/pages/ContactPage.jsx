@@ -13,15 +13,12 @@ import './site/contact.css';
  * The form posts to the existing `POST /api/contact` (cloudflare-worker/src/
  * routes/contact.ts) through `request()`, with the Turnstile widget and the
  * honeypot it always had. D680 taught that route the form's intent, company
- * and link; it derives the issue's subject from them.
- *
- * WHAT IS NOT PRINTED, AND WHY. The canvas closes the form with "Everything
- * you send is confidential. We do not share applications outside the fund
- * team." The route files each submission as an issue on the repository named
- * in wrangler.toml, AxalNetwork/StudioOS, which is public, so the sentence is
- * not true of the code and is left out until submissions go somewhere private
- * (D680). The canvas's "Cohort 5" is an example; the cohort is the Lab's own
- * rule, `openCohortCopy()`, as on the front page.
+ * and link, and moved where a submission goes: it is stored in D1
+ * (`contact_submissions`, migration 448) and emailed to the firm's mailbox for
+ * its intent. It used to be filed as an issue on a public GitHub repository,
+ * which is why the canvas's confidentiality line could not ship until then.
+ * The canvas's "Cohort 5" is an example; the cohort is the Lab's own rule,
+ * `openCohortCopy()`, as on the front page.
  */
 
 const TURNSTILE_SITE_KEY =
@@ -130,7 +127,7 @@ export default function ContactPage() {
   const intent = picked.topic === topic ? picked.value : initialIntent(topic);
   const setIntent = (value) => setPicked({ topic, value });
   const [form, setForm] = useState(EMPTY);
-  const [status, setStatus] = useState({ state: 'idle', error: '', issueUrl: '', intent: '' });
+  const [status, setStatus] = useState({ state: 'idle', error: '', reference: '', intent: '' });
   const [turnstileToken, setTurnstileToken] = useState('');
 
   const turnstileRef = useRef(null);
@@ -186,7 +183,7 @@ export default function ContactPage() {
     };
   }, [formVisible]);
 
-  const fail = (error) => setStatus({ state: 'error', error, issueUrl: '', intent: '' });
+  const fail = (error) => setStatus({ state: 'error', error, reference: '', intent: '' });
 
   const submit = async (e) => {
     e.preventDefault();
@@ -198,13 +195,13 @@ export default function ContactPage() {
       fail(REFUSALS.invalid_link);
       return;
     }
-    setStatus({ state: 'sending', error: '', issueUrl: '', intent: '' });
+    setStatus({ state: 'sending', error: '', reference: '', intent: '' });
     try {
       const res = await request('/contact', {
         method: 'POST',
         body: JSON.stringify(contactPayload({ intent, form, turnstileToken })),
       });
-      setStatus({ state: 'sent', error: '', issueUrl: res?.issue_url || '', intent });
+      setStatus({ state: 'sent', error: '', reference: typeof res?.reference === 'string' ? res.reference : '', intent });
       setForm(EMPTY);
       setTurnstileToken('');
     } catch (err) {
@@ -245,13 +242,13 @@ export default function ContactPage() {
                 <div className="ax-contact-sent-t">Received.</div>
                 <p className="ax-contact-sent-d">{sentNote(status.intent, cohort)}</p>
                 <div className="ax-contact-sent-more">
-                  {status.issueUrl ? (
-                    <span>Reference: <a className="ax-link" href={status.issueUrl} target="_blank" rel="noopener noreferrer">tracking link</a>.</span>
+                  {status.reference ? (
+                    <span>Reference <span className="ax-mono ax-contact-ref">{status.reference}</span></span>
                   ) : null}
                   <button
                     type="button"
                     className="ax-link ax-contact-again"
-                    onClick={() => setStatus({ state: 'idle', error: '', issueUrl: '', intent: '' })}
+                    onClick={() => setStatus({ state: 'idle', error: '', reference: '', intent: '' })}
                   >
                     Send another enquiry
                   </button>
@@ -346,6 +343,7 @@ export default function ContactPage() {
                 >
                   {status.state === 'sending' ? 'Sending…' : 'Send enquiry →'}
                 </button>
+                <p className="ax-contact-fine">Everything you send is confidential. We do not share applications outside the fund team.</p>
               </form>
             )}
           </div>

@@ -1,5 +1,5 @@
 /**
- * Public contact form → GitHub Issues.
+ * Public contact form → D1, then an email to the firm (D680).
  *
  * POST /api/contact   { name, email, message, subject?, intent?, company?, link?,
  *                       kind?, hp?, turnstileToken? }
@@ -14,21 +14,25 @@
  *     500 characters, else 400 {code:'invalid_link'}. It is never truncated:
  *     a cut URL is a different URL.
  *   - hp is a honeypot field — non-empty submissions are silently dropped
- *   - turnstileToken is verified via verifyTurnstile() before any issue is
- *     created — 403 {code:'turnstile_failed'} on failure (fail-closed in prod,
+ *   - turnstileToken is verified via verifyTurnstile() before anything is
+ *     stored — 403 {code:'turnstile_failed'} on failure (fail-closed in prod,
  *     fail-open in dev when TURNSTILE_SECRET_KEY is unset)
- *   - Creates a GitHub Issue in GITHUB_REPO_OWNER/GITHUB_REPO_NAME
- *   - Returns 503 {code:'github_token_missing'} when the secret is unset
+ *   - Stores the submission in `contact_submissions` (migration 448), then
+ *     emails it to the mailbox for its intent (CONTACT_MAILBOX). Answers
+ *     200 {ok:true, reference} once the row is stored, whether or not the email
+ *     went: with no mail credentials the row is still there, `notified_at`
+ *     stays NULL, and a warning without personal data is logged.
+ *   - 500 {code:'store_failed'} when the row cannot be written.
  *
- * Token: GITHUB_ISSUES_TOKEN (Worker secret, scope: `repo` or fine-grained
- * `issues:write` on the StudioOS repo).
+ * WHY NOT GITHUB (D680). This route used to file each submission as a GitHub
+ * issue on GITHUB_REPO_OWNER/GITHUB_REPO_NAME — AxalNetwork/StudioOS, a PUBLIC
+ * repository — with the sender's name, email, message, IP and user agent.
+ * AGENTS.md forbids personal data on GitHub, and /contact promises "Everything
+ * you send is confidential". None was ever filed; the route now makes no
+ * GitHub call and reads no GitHub setting.
  *
- * WHERE A SUBMISSION GOES (D680). `wrangler.toml` sets GITHUB_REPO_OWNER and
- * GITHUB_REPO_NAME to AxalNetwork/StudioOS in both [vars] and
- * [env.production.vars], and that repository is public. So the issue this
- * route files — name, email, message, company, link, IP and user agent — is
- * readable by anyone. That is why /contact does not print the canvas's
- * "Everything you send is confidential" line.
+ * The IP is never stored: `ip_hash` is a SHA-256 of the UTC day, the worker's
+ * JWT_SECRET and the IP — enough to see one source sending many in a day.
  *
  * Abuse: the global `ip` bucket in middleware/rateLimit.ts caps every IP at
  * 200/min across /api/*. There is no dedicated `contact` bucket (an earlier
@@ -38,6 +42,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
+import { sendNotificationEmail } from '../services/email';
 
 const contact = new Hono<{ Bindings: Env }>();
 
@@ -63,6 +68,37 @@ export const CONTACT_INTENTS: Record<string, string> = {
   licence: 'Licence',
 };
 
+/**
+ * D680 — who reads each enquiry: the canvas's three addresses (its CONTACT
+ * view's `contactRoutes`). Investing goes to investor relations; advising and
+ * licences to the network desk; the Lab, a support request and a submission
+ * with no intent to the founders' desk.
+ */
+export const CONTACT_MAILBOX: Record<string, string> = {
+  lab: 'founders@axal.vc',
+  invest: 'guillaume.lauzier@axal.vc',
+  advise: 'network@axal.vc',
+  licence: 'network@axal.vc',
+};
+export const DEFAULT_CONTACT_MAILBOX = 'founders@axal.vc';
+
+export function contactMailbox(intent: string, kind: string): string {
+  if (kind === 'support' || !intent) return DEFAULT_CONTACT_MAILBOX;
+  return CONTACT_MAILBOX[intent] || DEFAULT_CONTACT_MAILBOX;
+}
+
+/** SHA-256 hex of the UTC day, the worker's secret and the IP. Null without an IP. */
+export async function contactIpHash(secret: string, ip: string | undefined, now = new Date()): Promise<string | null> {
+  if (!ip) return null;
+  const day = now.toISOString().slice(0, 10);
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${day}:${secret}:${ip}`));
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 export const MAX_CONTACT_LINK = 500;
 
 /**
@@ -83,8 +119,8 @@ export function contactLink(input: unknown): string | null {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
   if (!url.hostname) return null;
-  // `href` percent-encodes spaces and the like, so the link cannot break out
-  // of its line in the issue's markdown.
+  // `href` percent-encodes spaces and the like, so the stored link is one
+  // unbroken token.
   return url.href.length > MAX_CONTACT_LINK ? null : url.href;
 }
 
@@ -123,8 +159,8 @@ contact.post('/contact', async (c) => {
     }, 400);
   }
 
-  // A form that names its intent need not type a subject; the issue title is
-  // then the intent and who is asking.
+  // A form that names its intent need not type a subject; the subject is then
+  // the intent and who is asking.
   const subject = sanitize(body.subject, 200)
     || (intentLabel && name ? `${intentLabel} — ${company || name}`.slice(0, 200) : '');
 
@@ -147,58 +183,59 @@ contact.post('/contact', async (c) => {
     return c.json({ error: 'turnstile_failed', code: 'turnstile_failed' }, 403);
   }
 
-  const token = c.env.GITHUB_ISSUES_TOKEN;
-  const owner = c.env.GITHUB_REPO_OWNER;
-  const repo = c.env.GITHUB_REPO_NAME;
-  if (!token || !owner || !repo) {
-    return c.json({ error: 'github_token_missing', code: 'github_token_missing' }, 503);
+  const storedKind = kind === 'support' ? 'support' : 'contact';
+  const uid = crypto.randomUUID();
+  const ipHash = await contactIpHash(c.env.JWT_SECRET || '', clientIp);
+  const ua = (c.req.header('User-Agent') || '').slice(0, 200) || null;
+
+  // Stored first, so a mail outage never loses an enquiry.
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO contact_submissions
+         (uid, kind, intent, name, email, company, link, subject, message, ip_hash, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(uid, storedKind, intent || null, name, email, company || null, link || null, subject, message, ipHash, ua).run();
+  } catch (err) {
+    console.error('contact: could not store the submission', (err as Error)?.message || 'unknown');
+    return c.json({ error: 'store_failed', code: 'store_failed', message: 'We could not take your message just now. Please try again.' }, 500);
   }
 
-  const labelKind = kind === 'support' ? 'support' : 'contact-form';
-  const issueTitle = `[${labelKind}] ${subject}`;
-  const ip = c.req.header('CF-Connecting-IP') || 'unknown';
-  const ua = (c.req.header('User-Agent') || 'unknown').slice(0, 200);
-  const issueBody = [
-    `**From:** ${name} <${email}>`,
-    `**Kind:** ${labelKind}`,
-    ...(intentLabel ? [`**Intent:** ${intentLabel}`] : []),
-    ...(company ? [`**Company or project:** ${company}`] : []),
-    ...(link ? [`**Link:** ${link}`] : []),
+  // Then the firm's own mailbox for the intent. Personal data is fine there.
+  const to = contactMailbox(intent, storedKind);
+  const lines = [
+    'A new enquiry from the axal.vc contact form.',
     '',
-    '---',
+    `Intent: ${intentLabel || 'none given'}`,
+    `Kind: ${storedKind}`,
+    `From: ${name} <${email}>`,
+    ...(company ? [`Company or project: ${company}`] : []),
+    ...(link ? [`Link: ${link}`] : []),
+    `Subject: ${subject}`,
     '',
     message,
     '',
-    '---',
-    `_Submitted via axal.vc contact form · IP ${ip} · UA ${ua}_`,
-  ].join('\n');
-
+    `Reference: ${uid} (contact_submissions)`,
+  ];
+  const text = lines.join('\n');
+  const html = `<div style="font-family:sans-serif;font-size:14px;color:#111;line-height:1.5">${lines.map((l) => escapeHtml(l)).join('<br>')}</div>`;
+  let sent = false;
   try {
-    const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'User-Agent': 'axal-studioos-contact-form',
-      },
-      body: JSON.stringify({
-        title: issueTitle,
-        body: issueBody,
-        labels: [labelKind],
-      }),
-    });
-    if (!ghRes.ok) {
-      const text = await ghRes.text().catch(() => '');
-      console.error('contact: github issue create failed', ghRes.status, text.slice(0, 500));
-      return c.json({ error: 'github_create_failed', status: ghRes.status }, 502);
-    }
-    const json = (await ghRes.json().catch(() => ({}))) as { number?: number; html_url?: string };
-    return c.json({ ok: true, issue_number: json.number ?? null, issue_url: json.html_url ?? null });
-  } catch (err) {
-    console.error('contact: github request error', err);
-    return c.json({ error: 'github_request_failed' }, 502);
+    sent = await sendNotificationEmail(c.env, to, `[Contact] ${subject}`, text, { html });
+  } catch {
+    sent = false;
   }
+  if (sent) {
+    try {
+      await c.env.DB.prepare(
+        `UPDATE contact_submissions SET notified_at = datetime('now'), updated_at = datetime('now') WHERE uid = ?`,
+      ).bind(uid).run();
+    } catch { /* the row and the email both exist; the stamp is bookkeeping */ }
+  } else {
+    // No personal data in the log: the reference and the intent only.
+    console.warn(`contact: submission ${uid} stored but not emailed (intent ${intent || 'none'}); read it from contact_submissions`);
+  }
+
+  return c.json({ ok: true, reference: uid });
 });
 
 export default contact;

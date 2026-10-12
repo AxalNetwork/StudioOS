@@ -8,8 +8,8 @@
  *     `?topic=licence` asks for it, each one a key the Worker route accepts;
  *   - the form posting through the existing `request('/contact')` to the
  *     existing route, with the fields that route reads, its Turnstile and its
- *     honeypot; no sample cohort typed, and no confidentiality claim while
- *     submissions land on a public repository;
+ *     honeypot; no sample cohort typed; the canvas's confidentiality line,
+ *     printed only while the route keeps submissions off GitHub;
  *   - option A on the legal pages: each page's own text, date and address in
  *     the canvas layout, and none of the canvas's legal text;
  *   - every cookie row is a category the code really gates, every gate has a
@@ -176,17 +176,19 @@ test('the three mail routes are the canvas\'s addresses, and no canvas cohort is
     'the cohort sentence is about Lab applications only');
 });
 
-test('no confidentiality claim while the route files to a public repository', () => {
-  // The route files each submission as a GitHub issue on GITHUB_REPO_OWNER/
-  // GITHUB_REPO_NAME. Production names AxalNetwork/StudioOS, which is public,
-  // so the canvas's "Everything you send is confidential" is not true of the
-  // code. When submissions move somewhere private, this assertion goes with it.
-  const toml = read('wrangler.toml');
-  const prod = toml.slice(toml.indexOf('[env.production.vars]'));
-  assert.match(prod, /GITHUB_REPO_NAME\s*=\s*"StudioOS"/);
+test('the canvas\'s confidentiality line is printed, and the route it describes keeps submissions off GitHub', () => {
+  // The line is true only because the route stores a submission in D1 and
+  // emails the firm's own mailbox (migration 448). It used to file each one as
+  // an issue on AxalNetwork/StudioOS, a public repository; if a GitHub call
+  // comes back, the line is false again and this fails.
   const html = render(React.createElement(ContactPage), '/contact');
-  assert.doesNotMatch(html, /confidential/i);
-  assert.doesNotMatch(codeOnly(CONTACT_SRC), /confidential/i);
+  assert.ok(text(html).includes('Everything you send is confidential. We do not share applications outside the fund team.'),
+    'the canvas\'s line is missing');
+  const routeCode = ROUTE_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(routeCode, /api\.github\.com/, 'contact.ts calls GitHub');
+  assert.doesNotMatch(routeCode, /GITHUB_/, 'contact.ts reads a GitHub setting');
+  assert.match(routeCode, /INSERT INTO contact_submissions/, 'the route stores the submission');
+  assert.match(routeCode, /sendNotificationEmail\(/, 'the route emails the firm');
 });
 
 // ---------------------------------------------------------------- Legal pages
