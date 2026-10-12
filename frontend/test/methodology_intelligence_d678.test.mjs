@@ -139,9 +139,11 @@ test('methodology: on a phone each blueprint scrolls inside its frame and the pa
     'below 900px the blueprint keeps the canvas\'s 1000px and the hint shows');
   assert.match(METHOD_HTML, /class="ax-m-only">Scroll sideways to read the blueprint</);
   assert.match(CSS, /\.ax-m \{ overflow-x: clip; \}/, 'the page clips, so nothing can push it sideways');
-  for (const grid of ['ax-m-2', 'ax-m-4', 'ax-m-5', 'ax-m-loop']) {
-    const rule = new RegExp(`\\.${grid} \\{[^}]*grid-template-columns: [^;]*minmax\\(0,`);
-    assert.match(CSS, rule, `.${grid} tracks are minmax(0, …), so a wide child cannot widen them`);
+  // Every flexible track is minmax(0, …), so a 1000px blueprint cannot widen its column.
+  const tracks = [...CSS.matchAll(/grid-template-columns:([^;]+);/g)].map((m) => m[1]);
+  assert.ok(tracks.length >= 15, 'the grids are read');
+  for (const t of tracks) {
+    assert.doesNotMatch(t.replace(/minmax\(0,\s*[\d.]*fr\)/g, ''), /fr\b/, `a bare fr track: "${t.trim()}"`);
   }
   assert.match(CSS, /@media \(max-width: 640px\) \{\s*\.ax-m-wrap \{ padding-left: 16px; padding-right: 16px; \}/, 'the 16px phone gutter');
 });

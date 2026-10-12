@@ -182,7 +182,7 @@
   transition: background .25s;
 }
 .ax-m-week:hover { background: rgba(255,255,255,.09); }
-.ax-m-week-bar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.ax-m-week-bar { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 4px; }
 .ax-m-week-bar span { height: 6px; border-radius: 2px; }
 .ax-m-week-n { margin-top: 22px; }
 .ax-site .ax-m-week-t { margin-top: 8px; font-size: 28px; font-weight: 900; letter-spacing: -.03em; line-height: 1.1; }
