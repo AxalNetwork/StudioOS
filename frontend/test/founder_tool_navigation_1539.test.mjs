@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -29,7 +29,10 @@ async function changed(kind,old,replacement,index) {
     let js=code;
     for(const match of imports){
       const [all,q,spec]=match;let target;
-      try{target=spec.startsWith('.')?resolve(dirname(full),spec):req.resolve(spec);}catch{continue;}
+      try{target=spec.startsWith('.')?resolve(dirname(full),spec):req.resolve(spec);
+        if(existsSync(target)&&statSync(target).isDirectory())target=['index.js','index.jsx'].map(name=>resolve(target,name)).find(existsSync)||target;
+        else if(!existsSync(target))target=['.js','.jsx','.ts'].map(ext=>target+ext).find(existsSync)||target;
+      }catch{continue;}
       const destination=overrides.has(target)?await url(target):pathToFileURL(target).href;
       js=js.replace(all,'from '+q+destination+q);
     }

@@ -14,7 +14,6 @@ export const FOUNDER_TOOLS = [
   { path: '/build/marketplace', cycle: 'validate', module: 'customer-research' },
   { path: '/advisory', cycle: 'validate', module: 'customer-research' },
   { path: '/execution', cycle: 'build', module: 'product-roadmap' },
-  { path: '/execution/cadence', cycle: 'build', module: 'operating-systems' },
   { path: '/build/metrics', cycle: 'build', module: 'operating-systems' },
   { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
   { path: '/comarketing', cycle: 'grow', module: 'distribution' },

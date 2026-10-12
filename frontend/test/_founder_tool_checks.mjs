@@ -35,7 +35,6 @@ export const RETURNS = [
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
   ['/execution/board','/build/product-roadmap','← Build › Product roadmap'],
   ['/execution/roadmap','/build/product-roadmap','← Build › Product roadmap'],
-  ['/execution/cadence','/build/operating-systems','← Build › Operating systems'],
   ['/build/metrics','/build/operating-systems','← Build › Operating systems'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
   ['/comarketing','/grow/distribution','← Grow › Distribution'],
