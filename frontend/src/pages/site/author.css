@@ -1,0 +1,43 @@
+/*
+ * The author page (owner, 2026-10-12): the profile, then the author's
+ * articles in the Articles page's cards. Scoped under `.ax-au`; the site
+ * frame supplies type and colour tokens (site.css). Light only.
+ */
+.ax-au .ax-au-back { display: inline-block; margin-top: 4px; font-size: 13.5px; color: var(--ax-muted); }
+.ax-au .ax-au-back:hover { color: var(--ax-violet); }
+
+.ax-au .ax-au-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 36px; align-items: start;
+  margin-top: 28px; padding-bottom: 40px; border-bottom: 1px solid var(--ax-line-2);
+}
+.ax-au .ax-au-photo {
+  display: block; flex: none; width: 132px; height: 132px; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--ax-line-3); background: var(--ax-wash);
+  box-shadow: 0 10px 30px rgba(20, 17, 24, .08);
+}
+.ax-au .ax-au-initials {
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  font-size: 40px; font-weight: 700; letter-spacing: -.02em; border: 0;
+}
+.ax-au .ax-au-id { min-width: 0; }
+.ax-au .ax-au-name { margin-top: 6px; }
+.ax-au .ax-au-headline { margin: 10px 0 0; font-size: 17px; line-height: 1.5; color: var(--ax-ink-2); max-width: 62ch; }
+.ax-au .ax-au-facts {
+  display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 16px 0 0; padding: 0; list-style: none;
+  font-size: 13.5px; color: var(--ax-muted);
+}
+.ax-au .ax-au-facts li { display: inline-flex; align-items: center; gap: 6px; }
+.ax-au .ax-au-bio { margin: 18px 0 0; font-size: 15.5px; line-height: 1.7; color: var(--ax-body); max-width: 68ch; white-space: pre-line; }
+.ax-au .ax-au-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.ax-au .ax-au-link {
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 999px;
+  border: 1px solid var(--ax-line-3); font-size: 13px; font-weight: 600; color: var(--ax-ink-2); background: #fff;
+}
+.ax-au .ax-au-link:hover { border-color: var(--ax-lilac); color: var(--ax-violet); }
+.ax-au .ax-au-h2 { margin: 40px 0 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+
+@media (max-width: 640px) {
+  .ax-au .ax-au-head { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .ax-au .ax-au-photo { width: 104px; height: 104px; }
+  .ax-au .ax-au-initials { font-size: 32px; }
+}

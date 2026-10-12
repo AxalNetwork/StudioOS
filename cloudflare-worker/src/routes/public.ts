@@ -1081,17 +1081,67 @@ publicRoutes.post('/analytics/pageview', async (c) => {
 
 // Task #5 — Public author profile page. Accepts numeric user ID and returns
 // the live profile from the users table (not the legacy author_websites table)
-// plus the author's published articles. Powers /authors/:userId in the SPA.
+// plus the author's published articles. Powers /authors/:key in the SPA.
 // No auth required — fields here are limited to the public display set.
+//
+// Owner, 2026-10-12: an author is also reachable by a name slug —
+// /authors/guillaumelauzier — and the payload names that slug so the page can
+// show it as the address. The slug is the display name lower-cased, accents
+// dropped, letters and digits only. Two published authors with the same slug:
+// the lower user id keeps it, the other is `<slug>-<id>`. The photo honours the
+// author's own privacy choice, as /u/:handle and the photo route already do.
+
+/** An author's name as a URL slug: `Guillaume Lauzier` → `guillaumelauzier`. */
+export function authorSlugBase(name: unknown): string {
+  return String(name || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/** Every published author's slug, by user id; a clash goes to the lower id. */
+export function authorSlugs(rows: Array<{ id: number; name?: string | null; display_name?: string | null }>): Map<number, string> {
+  const taken = new Set<string>();
+  const out = new Map<number, string>();
+  for (const r of [...rows].sort((a, b) => a.id - b.id)) {
+    const base = authorSlugBase(r.display_name || r.name) || 'author';
+    const slug = taken.has(base) ? `${base}-${r.id}` : base;
+    taken.add(slug);
+    out.set(r.id, slug);
+  }
+  return out;
+}
+
+async function publishedAuthorSlugs(env: Env): Promise<Map<number, string>> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT DISTINCT u.id, u.name, u.display_name
+         FROM users u JOIN articles a ON a.author_user_id = u.id
+        WHERE a.status = 'published' AND u.is_active = 1`,
+    ).all<{ id: number; name: string | null; display_name: string | null }>();
+    return authorSlugs(res.results || []);
+  } catch {
+    return new Map();
+  }
+}
+
 publicRoutes.get('/authors/:userId', async (c) => {
-  const userId = Number(c.req.param('userId'));
-  if (!Number.isInteger(userId) || userId <= 0) return c.json({ detail: 'invalid' }, 400);
+  const key = String(c.req.param('userId') || '').trim().toLowerCase();
+  const slugs = await publishedAuthorSlugs(c.env);
+  let userId = /^\d+$/.test(key) ? Number(key) : 0;
+  if (!userId && /^[a-z0-9-]{1,120}$/.test(key)) {
+    for (const [id, slug] of slugs) if (slug === key) { userId = id; break; }
+  }
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return /^[a-z0-9-]{1,120}$/.test(key) ? c.json({ detail: 'Not found' }, 404) : c.json({ detail: 'invalid' }, 400);
+  }
 
   let userRow: any = null;
   try {
     userRow = await c.env.DB.prepare(
       `SELECT u.id, u.uid, u.name, u.display_name, u.headline, u.bio, u.socials,
-              u.headshot_r2_key, u.city, u.country, u.role
+              u.headshot_r2_key, u.city, u.country, u.role, u.privacy_prefs
          FROM users u
         WHERE u.id = ? AND u.is_active = 1 LIMIT 1`,
     ).bind(userId).first<any>();
@@ -1149,7 +1199,9 @@ publicRoutes.get('/authors/:userId', async (c) => {
       role: userRow.role || null,
       headline: userRow.headline || null,
       bio: userRow.bio || null,
-      headshot_url: userRow.headshot_r2_key ? `/api/settings/headshot/${userRow.uid}` : null,
+      slug: slugs.get(userRow.id) || null,
+      headshot_url: userRow.headshot_r2_key && effectiveFlags(userRow.privacy_prefs, String(userRow.role || '').toLowerCase()).headshot
+        ? `/api/settings/headshot/${userRow.uid}` : null,
       location,
       company,
       socials: {
