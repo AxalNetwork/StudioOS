@@ -27,7 +27,7 @@ test('the Discovery editor stays reachable for a founder at the route', () => {
   // THE EDITOR LEFT THE DESK (D422) and is mounted at the route: a founder's
   // `?mode=workspace` or Discovery `?tab=` still opens DiscoveryPage on its
   // interviews tab, in workspace mode — nothing a founder could reach is lost.
-  assert.match(app, /founderDiscoveryEditor\s*\? founderWorkspace\('validate', <DiscoveryPage initialTab="interviews" workspaceMode \/>\)/,
+  assert.match(app, /founderDiscoveryEditor\s*\? founderWorkspace\('validate', founderEditor\(<DiscoveryPage initialTab="interviews" workspaceMode \/>\)\)/,
     'the founder Discovery editor is no longer reachable');
   assert.match(app, /\['leads', 'interviews', 'insights'\]\.includes\(new URLSearchParams\(location\.search\)\.get\('tab'\)\)/,
     'a Discovery ?tab= deep link no longer opens the editor');

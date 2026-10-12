@@ -130,7 +130,8 @@ const PROFILES = {
     excluded: [],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
-    live: (route) => route.replace(/^\//, ''),
+    // #1539 moves FG5's existing body/controls to Raise; its artboard remains the visual source.
+    live: (route) => (route === '/grow/capital-match' ? 'raise/capital-match' : route.replace(/^\//, '')),
   },
   investor: {
     table: 'frontend/src/workspaces/investorZoneActions.js',

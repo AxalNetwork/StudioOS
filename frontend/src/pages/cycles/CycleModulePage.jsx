@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
 import { CardBody, CycleHeader } from './CycleOverview';
+import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
 import { cardView, cellView, cycleOf, nextHref, pageButtons, recordsCount, safeHref } from './cycleModel';
 
 /**
@@ -157,7 +158,7 @@ function RowAction({ action }) {
 
 export default function CycleModulePage({
   cycle, slug, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, children, search = '',
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '',
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -166,7 +167,7 @@ export default function CycleModulePage({
   const name = card?.name || data?.module?.name || slug;
   const next = card?.next;
   const nextLink = nextHref(next?.href, search);
-  const toolHref = safeHref(tool?.href);
+  const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
   const recs = records ?? data?.records;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
@@ -190,11 +191,11 @@ export default function CycleModulePage({
               </span>
             )}
           </section>
-          {toolHref && (
-            <Link to={toolHref} className="flex items-center justify-between gap-3 rounded-xl border border-axal-lavender-edge bg-axal-lavender px-4 py-3 text-[13px] font-semibold text-axal-violet-deep hover:underline dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300" data-testid="cycle-module-tool">
-              {tool.label || `Open ${name}`} <span aria-hidden="true">›</span>
+          {toolLinks.map((item) => (
+            <Link key={item.href} to={item.href} className={MODULE_LINK_CLASS} data-testid="cycle-module-tool">
+              {item.label || `Open ${name}`}
             </Link>
-          )}
+          ))}
           <RecordsTable
             key={`${meta.key}/${slug}`}
             title={data?.module?.records_title || name}

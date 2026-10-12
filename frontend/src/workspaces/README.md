@@ -67,7 +67,7 @@ exactly that and lit the first pill on every overview; see `DECISIONS.md` D44 an
 
 **One licence's chrome never renders on another's route.** The role decides,
 once, in `shellConfig.js` — which is the whole reason this folder replaced
-`FounderWorkspaceTabs`, `PartnerWorkspaceTabs`, `WorkspaceTabs` and three bespoke
+`FounderModuleBackLink`, `PartnerWorkspaceTabs`, `WorkspaceTabs` and three bespoke
 investor workspaces all solving the same problem four ways.
 
 **A zone header's actions come from the canvas, and each one is either wired or

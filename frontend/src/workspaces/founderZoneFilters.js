@@ -480,7 +480,7 @@ export const FOUNDER_ZONE_FILTERS = {
   ],
   // Prospects carry a stage, and the stored stages become the chips. Warm paths
   // are the Network relationship book's, and nothing joins the two records.
-  'grow/capital-match': [
+  'raise/capital-match': [
     { canvas: 'Best fit', key: 'all', label: 'All prospects' },
     // "NOTHING JOINS A PROSPECT TO A RELATIONSHIP" WAS FALSE, and the join even has
     // its own migration: 128_contact_promotion.sql adds `raise_prospects.contact_id`

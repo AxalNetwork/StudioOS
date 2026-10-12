@@ -28,6 +28,6 @@ test('founder /execution redirects to the Build cycle, and the editor keeps its 
   // THE EDITOR LEFT THE DESK (D422): `/execution?mode=workspace` mounts
   // ExecutionPage at the route.
   const fullRoute = app.slice(app.indexOf('<Route path="/execution"'), app.indexOf('<Route path="/build/this-week"'));
-  assert.match(fullRoute, /: founderWorkspace\('build', <FounderWorkspaceTabs set="build" user=\{user\}><ExecutionPage \/><\/FounderWorkspaceTabs>\)/,
+  assert.match(fullRoute, /: founderWorkspace\('build', founderEditor\(<ExecutionPage \/>\)\)/,
     'the execution editor is no longer reachable at /execution?mode=workspace');
 });

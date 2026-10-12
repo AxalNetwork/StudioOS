@@ -196,7 +196,7 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'New proposal', to: '/comarketing' },
     { label: 'Export terms', kind: 'export' },
   ],
-  'grow/capital-match': [
+  'raise/capital-match': [
     { label: 'Draft outreach', unbuilt: 'no outreach drafting runs on this desk' },
     { label: 'Export shortlist', kind: 'export' },
   ],

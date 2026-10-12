@@ -78,7 +78,7 @@ export default function FounderGrowLaunch() {
   }), [events]);
   const visible = view === 'events' ? events : upcoming;
   const leadsAttributed = attributions.filter((row) => String(row.event_kind || '').toLowerCase() === 'lead').length;
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-launch" data-testid="founder-grow-launch"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
