@@ -50,7 +50,6 @@ globalThis.sessionStorage = memoryStorage();
 
 const contact = await import('../src/pages/ContactPage.jsx');
 const { default: ContactPage } = contact;
-const { openCohortCopy } = await import('../src/lib/spinoutLab.js');
 const consent = await import('../src/lib/cookieConsent.js');
 const { default: CookieConsent, CookiePreferencesDialog } = await import('../src/components/CookieConsent.jsx');
 
