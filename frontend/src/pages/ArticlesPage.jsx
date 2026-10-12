@@ -1,13 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  FileText, Loader2, Search, Star, ChevronLeft, ChevronRight,
-} from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
-import PublicNav from '../components/PublicNav';
-import PublicFooter from '../components/PublicFooter';
-import NetworkSubNav from '../components/NetworkSubNav';
+import SitePage from '../components/site/SitePage';
+import NetworkSubNav from '../components/site/NetworkSubNav';
+import { FilterPills, EmptyNote } from '../components/site/SiteBlocks';
+import { articleFilterOptions, articleMeta, initials, sectorLabel, tintFor } from '../lib/siteResources';
+import './site/network.css';
+
+/**
+ * Articles — the public reading surface (D679, #1553), drawn to the canvas's
+ * ARTICLES view: the Network sub-nav, the "Insight / Articles" header, the
+ * filter pills and two-column cards.
+ *
+ * The pills are the live article taxonomy (`GET /api/articles/sectors`), the
+ * field each article carries as `sector`; the canvas's categories are
+ * examples. Search, the author-role filter, the featured strip and pagination
+ * are the page's own behaviour, kept. Authoring (drafts, the editor, "My
+ * Articles") lives in the writing workspace at /articles/draft.
+ */
 
 const ROLE_FILTERS = [
   { id: '', label: 'All authors' },
@@ -21,67 +33,39 @@ const ROLE_FILTERS = [
 
 const PAGE_SIZE = 12;
 
-function ArticleCard({ a, featured }) {
+/** One card: category, date and read time, title, excerpt, author, Read →. */
+export function ArticleCard({ a, category, featured = false }) {
+  const meta = articleMeta(a);
+  const excerpt = a.excerpt || a.subtitle;
   return (
-    <Link
-      to={`/articles/${a.slug}`}
-      className={`group rounded-xl border bg-white dark:bg-slate-900 overflow-hidden transition flex flex-col ${
-        featured
-          ? 'border-violet-300 dark:border-violet-700 hover:border-violet-500 shadow-sm'
-          : 'border-slate-200 dark:border-slate-800 hover:border-violet-400 dark:hover:border-violet-600'
-      }`}
-    >
-      {a.cover_url ? (
-        <img
-          src={a.cover_url}
-          alt=""
-          className="w-full aspect-[16/9] object-cover bg-slate-100 dark:bg-slate-800"
-          loading="lazy"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
-      ) : (
-        <div className="w-full aspect-[16/9] bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-900/30 dark:to-slate-800 flex items-center justify-center">
-          <FileText className="w-10 h-10 text-violet-400" />
+    <article className="ax-card ax-art-card">
+      <div className="ax-art-body">
+        <div className="ax-art-top">
+          {featured && <span className="ax-chip ax-chip-amber">Featured</span>}
+          {category && <span className="ax-chip">{category}</span>}
+          {meta && <span className="ax-mono ax-art-date">{meta}</span>}
         </div>
-      )}
-      <div className="p-4 flex-1 flex flex-col">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-          {featured && (
-            <span className="inline-flex items-center gap-1 text-violet-700 dark:text-violet-300 font-semibold">
-              <Star className="w-3 h-3 fill-current" /> Featured
-            </span>
-          )}
-          {featured && (a.sector || a.read_minutes) ? <span>·</span> : null}
-          {a.sector && <span>{a.sector.replace(/_/g, ' ')}</span>}
-          {a.sector && a.read_minutes ? <span>·</span> : null}
-          {a.read_minutes ? <span>{a.read_minutes} min read</span> : null}
-        </div>
-        <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100 group-hover:text-violet-700 dark:group-hover:text-violet-300 line-clamp-2">
-          {a.title}
-        </h3>
-        {a.subtitle && (
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{a.subtitle}</p>
-        )}
-        <div className="mt-auto pt-3 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 flex-wrap">
-          <span>by</span>
-          <span className="font-medium text-slate-700 dark:text-slate-300">{a.author || '—'}</span>
-          {a.author_role && <span className="ml-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">{a.author_role}</span>}
-          {a.published_at && (
-            <>
-              <span>·</span>
-              <span>{new Date(a.published_at).toLocaleDateString()}</span>
-            </>
-          )}
-        </div>
+        <h3 className="ax-art-t"><Link to={`/articles/${a.slug}`}>{a.title}</Link></h3>
+        {excerpt && <p className="ax-art-x">{excerpt}</p>}
       </div>
-    </Link>
+      <div className="ax-art-foot">
+        {a.author && (
+          <span className="ax-nw-av ax-nw-av-sm" style={{ background: tintFor(a.author_user_id ?? a.author) }} aria-hidden="true">
+            {initials(a.author)}
+          </span>
+        )}
+        {a.author && (a.author_user_id
+          ? <Link to={`/authors/${a.author_user_id}`} className="ax-art-author">{a.author}</Link>
+          : <span className="ax-art-author">{a.author}</span>)}
+        <span className="ax-art-read" aria-hidden="true">Read →</span>
+      </div>
+    </article>
   );
 }
 
-// Browse tab — the public feed of everyone's published articles, with search,
-// role/sector filters, a featured strip, and pagination. Self-contained so it
-// only fetches when this tab is mounted.
-function BrowseTab() {
+// The public feed of everyone's published articles, with search, the live
+// sector pills, the author-role filter, a featured strip and pagination.
+function BrowseArticles() {
   const [items, setItems] = useState([]);
   const [featuredItems, setFeaturedItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -140,119 +124,94 @@ function BrowseTab() {
   useEffect(() => { load(); }, [load]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
+  const pills = useMemo(() => articleFilterOptions(sectors), [sectors]);
+  const category = (key) => sectorLabel(sectors, key);
+  const featuredShown = showFeatured && featuredItems.length > 0;
 
   return (
     <>
-      <div className="max-w-6xl mx-auto px-6 pt-6 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <div className="ax-art-pills">
+        <FilterPills options={pills} value={sector} onChange={setSector} label="Article categories" />
+      </div>
+      <div className="ax-nw-tools">
+        <div className="ax-nw-search">
+          <Search size={15} aria-hidden="true" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search articles…"
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            aria-label="Search articles"
+            className="ax-nw-input"
           />
         </div>
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          className="text-xs px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900"
-        >
+        <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Author" className="ax-nw-select">
           {ROLE_FILTERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-        </select>
-        <select
-          value={sector}
-          onChange={(e) => setSector(e.target.value)}
-          className="text-xs px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900"
-        >
-          <option value="">All sectors</option>
-          {sectors.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
       </div>
 
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-10">
-        {showFeatured && featuredItems.length > 0 && (
-          <section>
-            <div className="flex items-center gap-2 mb-4">
-              <Star className="w-4 h-4 text-violet-600 fill-violet-600" />
-              <h2 className="text-lg font-semibold">Featured</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {featuredItems.map((a) => <ArticleCard key={`f-${a.id}`} a={a} featured />)}
-            </div>
-          </section>
-        )}
-
-        <section>
-          {showFeatured && featuredItems.length > 0 && (
-            <h2 className="text-lg font-semibold mb-4">Latest</h2>
-          )}
-          {loading ? (
-            <div className="text-center text-slate-500 py-20 flex flex-col items-center gap-3">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              Loading…
-            </div>
-          ) : items.length === 0 ? (
-            <div className="text-center text-slate-500 py-20">
-              {debouncedQ ? `No articles matching “${debouncedQ}”.` : 'No articles yet. Be the first to publish.'}
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {items.map((a) => <ArticleCard key={a.id} a={a} />)}
-              </div>
-              {totalPages > 1 && (
-                <div className="mt-8 flex items-center justify-center gap-3 text-sm">
-                  <button
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    <ChevronLeft className="w-4 h-4" /> Previous
-                  </button>
-                  <span className="text-slate-500">Page {page + 1} of {totalPages}</span>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                    disabled={page >= totalPages - 1}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    Next <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+      {featuredShown && (
+        <section aria-labelledby="ax-art-featured-h">
+          <h2 id="ax-art-featured-h" className="ax-lbl-q ax-nw-panel-k ax-art-k">Featured</h2>
+          <div className="ax-art-grid">
+            {featuredItems.map((a) => <ArticleCard key={`f-${a.id}`} a={a} category={category(a.sector)} featured />)}
+          </div>
         </section>
-      </main>
+      )}
+
+      <section aria-labelledby={featuredShown ? 'ax-art-latest-h' : undefined}>
+        {featuredShown && <h2 id="ax-art-latest-h" className="ax-lbl-q ax-nw-panel-k ax-art-k">Latest</h2>}
+        {loading ? (
+          <EmptyNote>Loading…</EmptyNote>
+        ) : items.length === 0 ? (
+          <EmptyNote>
+            {debouncedQ ? `No articles matching “${debouncedQ}”.` : 'No articles yet. Be the first to publish.'}
+          </EmptyNote>
+        ) : (
+          <>
+            <div className="ax-art-grid">
+              {items.map((a) => <ArticleCard key={a.id} a={a} category={category(a.sector)} />)}
+            </div>
+            {totalPages > 1 && (
+              <div className="ax-nw-pager">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="ax-btn ax-btn-sm ax-btn-quiet"
+                >
+                  <ChevronLeft size={15} aria-hidden="true" /> Previous
+                </button>
+                <span>Page {page + 1} of {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="ax-btn ax-btn-sm ax-btn-quiet"
+                >
+                  Next <ChevronRight size={15} aria-hidden="true" />
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </>
   );
 }
 
-// Articles — the public reading surface. A clean feed of everyone's published
-// articles for visitors and signed-in users alike. Authoring (drafts, the
-// editor, "My Articles") lives in the writing workspace at /articles/draft.
 export default function ArticlesPage() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
-      <PublicNav />
+    <SitePage title="Articles">
       <NetworkSubNav />
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <FileText className="w-7 h-7 text-violet-600" /> Articles
-          </h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Long-form writing from the Axal VC network — founders, investors, partners, advisors, and the studio.
-          </p>
-        </div>
-      </header>
-
-      <div className="flex-1">
-        <BrowseTab />
+      <div className="ax-wrap ax-nw">
+        <div className="ax-lbl-q ax-nw-eyebrow">Insight</div>
+        <h1 className="ax-nw-h1">Articles</h1>
+        <p className="ax-nw-lede">
+          Writing on company formation, pre-seed underwriting, and what we learn from running cohorts. Published as we learn it, not on a content calendar.
+        </p>
+        <BrowseArticles />
       </div>
-
-      <PublicFooter />
-    </div>
+    </SitePage>
   );
 }

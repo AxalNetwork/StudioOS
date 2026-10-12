@@ -12,8 +12,11 @@
  * "preview of this listing", not "this person is fictional", and the chip does
  * not travel with a screenshot of one card.
  *
- * The cards now show the FIELD SHAPE of a future listing with the identity
- * slot left blank. This file keeps it that way.
+ * The cards then showed the FIELD SHAPE of a future listing with the identity
+ * slot left blank. D679 (#1553) rebuilt the page to the owner's canvas and
+ * went one step further: a type nobody is listed under is not offered at all,
+ * so the page draws no placeholder card of any kind. This file keeps both: the
+ * preview data names nobody, and the page draws only live rows.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -54,19 +57,20 @@ test('the invented listings are gone from the source', () => {
   }
 });
 
-test('the card renders a blank identity, not a name', () => {
+test('the page draws no placeholder listing, blank or named', () => {
+  // D679: the not-yet-live tabs and their field-shape cards are gone. A card
+  // that stands in for a listing, even a blank one, is not drawn.
   const s = read('frontend/src/pages/PublicDirectoryPage.jsx');
-  const i = s.indexOf('function PreviewCard');
-  const body = s.slice(i, s.indexOf('function ComingSoonTab'));
-  assert.ok(!body.includes('p.name'), 'the card must not render a name');
-  assert.match(body, /aria-hidden className="h-4 w-2\/3 rounded bg-gray-200/,
-    'the identity slot must be a blank rule');
-  assert.match(body, />\s*Example\s*</, 'the badge must read Example, not Preview');
+  assert.doesNotMatch(s, /DIRECTORY_PREVIEWS|function PreviewCard|function ComingSoonTab/,
+    'the page must not draw preview cards');
+  assert.doesNotMatch(s, />\s*(Example|Preview)\s*</, 'no row is badged as an example');
 });
 
-test('the tab banner says nobody is listed yet', () => {
+test('a type nobody is listed under is not offered, and an empty directory says so', () => {
   const s = read('frontend/src/pages/PublicDirectoryPage.jsx');
-  assert.match(s, /Nobody is listed yet/,
+  assert.match(s, /directoryTypeOptions\(partners\)/,
+    'the type filters are the types the live rows carry');
+  assert.match(s, /No one is listed in the directory yet\./,
     'the absence must be stated plainly, not implied by a chip');
 });
 
