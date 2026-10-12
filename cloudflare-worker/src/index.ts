@@ -1493,6 +1493,8 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
  */
 const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   '/api/public/stats',
+  // D678: the model registry the Intelligence page reads; no D1 at all.
+  '/api/public/ai-models',
   '/api/public/circles',
   '/api/public/partners',
   '/api/public/status',

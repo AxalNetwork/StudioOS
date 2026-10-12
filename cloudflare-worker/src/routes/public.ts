@@ -18,6 +18,8 @@ import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { bindingKey } from '../util/schemaBootstrap';
 import { likeNeedleLower } from '../util/likeSearch';
 import { refuse } from '../util/refusal';
+import { ROUTE, type TaskClass } from '../services/aiRouter';
+import { TASK_LABELS, MODEL_NAMES } from '../services/aiCatalog';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -99,6 +101,42 @@ publicRoutes.get('/stats', async (c) => {
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
   }
   return c.json(payload);
+});
+
+// ---------- /ai-models (D678, #1552) --------------------------------
+// The model registry as the public Intelligence page shows it: one row per
+// task the router runs, with its label, its default model and that model's
+// provider. Read from `ROUTE` and `aiCatalog.ts` on the first request, never
+// copied, so the page cannot name a model the router does not default to.
+//
+// ONLY THE SAFE FIELDS. No price, no fallback chain, no alternates, no cache
+// setting, no budget: what a logged-out reader is told is which model does
+// which job. The signed-in reads (`/api/ai/pricing`, `/api/ai/rates`) keep the
+// rest.
+//
+// CACHED LIKE /stats, WITHOUT ITS KV STEP. /stats caches because its origin is
+// D1; this one's origin is a constant in the bundle, so the per-isolate copy is
+// the whole cache and the shared copy is the edge's, for the same five minutes
+// /stats keeps in KV.
+export type PublicAiModel = { feature: string; model: string; name: string; provider: string };
+let aiModelsL1: PublicAiModel[] | null = null;
+
+export function publicAiModels(): PublicAiModel[] {
+  return (Object.keys(ROUTE) as TaskClass[]).map((task) => {
+    const entry = ROUTE[task];
+    return {
+      feature: TASK_LABELS[task] ?? task,
+      model: entry.model,
+      name: MODEL_NAMES[entry.model] ?? entry.model,
+      provider: entry.provider,
+    };
+  });
+}
+
+publicRoutes.get('/ai-models', (c) => {
+  if (!aiModelsL1) aiModelsL1 = publicAiModels();
+  c.header('Cache-Control', `public, max-age=${STATS_KV_TTL_SEC}, s-maxage=${STATS_KV_TTL_SEC}`);
+  return c.json({ ok: true, models: aiModelsL1 });
 });
 
 // ------------------------------------------------------------------
