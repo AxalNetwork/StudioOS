@@ -89,7 +89,7 @@ export const checks = {
       ]);
   },
   returns(m=actual) {
-    assert.deepEqual(RETURNS.map(([path,href,label])=>{
+    assert.deepEqual(RETURNS.map(([path])=>{
       const html=render(m.FounderModuleBackLink,{user:founder},path+'?project_id=41&mode=workspace&tab=old');
       return [path,links(html,'founder-module-back'), /<nav\b/.test(html)];
     }),RETURNS.map(([path,href,label])=>[path,[{href:href+'?project_id=41',label,quiet:true}],false]));

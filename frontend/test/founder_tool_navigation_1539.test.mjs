@@ -50,7 +50,7 @@ async function changed(kind,old,replacement,index) {
 }
 const probes=[
  ['gates','navigation','hasTier(user, tool.requiredTier)','true'],
- ['gates','navigation',"if (!['admin', 'founder'].includes(user?.role)) return [];","if (false) return [];"],
+ ['gates','navigation',"if (!['admin', 'founder'].includes(user?.role)) return [];","if (!user) return [];"],
  ['returns','back','to={link.href}','to="/wrong-module"'],
  ['returns','back','data-testid="founder-module-back"','data-testid="lost-back-link"'],
  ['project','navigation',"params.get('project_id') || params.get('project')","params.get('project_id')"],
