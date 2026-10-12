@@ -45,8 +45,13 @@ test('no page stylesheet sets its own face', () => {
   for (const file of cssFiles(SRC)) {
     const rel = relative(SRC, file);
     if (rel === 'index.css') continue;
+    // D674: the public site's stylesheet takes the public site's two faces,
+    // which are tokens in index.css like every other face. No other file may.
+    const allowed = rel === join('components', 'site', 'site.css')
+      ? /var\(--font-(app|mono|site|site-display)\)|inherit/
+      : /var\(--font-(app|mono)\)|inherit/;
     for (const [decl] of readFileSync(file, 'utf8').matchAll(/font-family:[^;}]+/g)) {
-      if (!/var\(--font-(app|mono)\)|inherit/.test(decl)) bad.push(`${rel}: ${decl}`);
+      if (!allowed.test(decl)) bad.push(`${rel}: ${decl}`);
     }
   }
   assert.deepEqual(bad, [], 'use var(--font-app) for text and var(--font-mono) for labels');

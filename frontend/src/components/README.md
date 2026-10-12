@@ -29,6 +29,7 @@ building blocks.
 | `profile/` | Profile blocks shared across personas. |
 | `scoring/` | The scoring engine's panels. |
 | `spinout/` | Spin-Out Lab shared pieces. |
+| `site/` | The public site's stylesheet (`site.css`, D674): the tokens and classes of the owner's website canvas, scoped to `.ax-site` on pages and `.ax-site-chrome` on `PublicNav` and `PublicFooter`. Its links live in `frontend/src/lib/siteLinks.js`. |
 
 ## Top-level shell pieces
 

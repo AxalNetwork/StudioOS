@@ -1,290 +1,449 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Zap, Banknote, Globe, Handshake, Rocket, ArrowRight, ChevronRight,
-  Sparkles, GraduationCap, BadgeCheck, LockKeyhole,
-  UserPlus, Calendar,
-} from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { track } from '../lib/funnel';
+import { DOOR_LINKS } from '../lib/siteLinks';
+import { openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
+import { numberWordCap } from '../lib/numberWords';
+import '../components/site/site.css';
 
-const THESIS_PILLS = ['AI', 'Blockchain', 'Quantum', 'Digital Infrastructure', 'Frontier Software'];
+/**
+ * The public front page, from the HOME view of the owner's canvas (D674, #1548):
+ * `design/canvases/integrated/Axal VC Website.dc.html`.
+ *
+ * The copy is the owner's. Every figure is read live, never typed:
+ *   - the hero's four figures come from `GET /api/public/stats`, and a figure
+ *     the endpoint does not return (or returns as 0) is not drawn. D675 (#1549)
+ *     adds `tools`, `users` and `companies`;
+ *   - the Lab band's cohort number, deadline and places come from the same
+ *     cohort rule and record the Lab's own pages use;
+ *   - the articles and events are the live published lists.
+ * The canvas's own numbers ("488+", "656", "Cohort 5 · September 12") are
+ * examples. `landing_home_d674.test.mjs` refuses them in this file.
+ */
 
+const HERO_FIGURES = [
+  { key: 'tools', label: 'Tools in the platform' },
+  { key: 'users', label: 'Users' },
+  { key: 'companies', label: 'Companies' },
+  { key: 'funds', label: 'Active funds' },
+];
+
+// Story ranking, in order: build, collaborate, then capital. Capital takes the
+// neutral rule, so nothing violet points at it.
+const PILLARS = [
+  { eyebrow: 'Build', title: 'Venture tools', capital: false,
+    desc: 'Spin-Out Lab, discovery, scoring, cap table, incorporation — the work that makes a company real.' },
+  { eyebrow: 'Collaborate', title: 'Global partner network', capital: false,
+    desc: 'Verified partners, advisors, and operators working with founders across borders, not a vendor directory.' },
+  { eyebrow: 'Capital', title: 'When the record is ready', capital: true,
+    desc: 'Fund I and the LP workspace see the same evidence the company was built on.' },
+];
+
+// Four doors, every one first-class. Each goes to its door page.
 const LANES = [
-  {
-    id: 'founder',
-    title: 'For Founders',
-    bullets: [
-      'Idea to incorporated company in the 28-day Spin-Out Lab',
-      'Pitch deck → cap table → fundraise for existing companies',
-      'Personal Advisor, advisor track, and investor exposure',
-    ],
-    cta: 'Apply as Founder',
-    href: '/register?lane=founder',
-    color: '#a66fd2',
-    icon: Rocket,
-  },
-  {
-    id: 'lp',
-    title: 'For Investors & LPs',
-    bullets: [
-      'Disciplined, evidence-backed deal flow',
-      'Founder numbers verified via Stripe + Plaid',
-      'One ledger for commitments, calls, and distributions',
-    ],
-    cta: 'Open LP Account',
-    href: '/register?lane=lp',
-    color: '#b771e4',
-    icon: Banknote,
-  },
-  {
-    id: 'partner',
-    title: 'For Partners',
-    bullets: [
-      'Source thesis-aligned companies',
-      'Offer services to portfolio companies and co-invest',
-      'KYB, conflicts, and contracts handled for you',
-    ],
-    cta: 'Apply as Partner',
-    href: '/register?lane=partner',
-    color: '#c790e4',
-    icon: Handshake,
-  },
-  {
-    id: 'advisor',
-    title: 'For Advisors',
-    bullets: [
-      'Share time on your own schedule',
-      'Office Hours and one-off advisor sessions',
-      'Pick the sectors and stages you care about',
-    ],
-    cta: 'Become an Advisor',
-    href: '/register?lane=advisor',
-    color: '#926dc0',
-    icon: GraduationCap,
-  },
+  { title: 'Founders', img: 'lane-founders', cta: 'Start free',
+    desc: 'Enter with an idea or an operating company. Leave with one that survives diligence.',
+    items: [
+      'The 28-day Spin-Out Lab takes an idea to an incorporated company',
+      'Pitch deck, cap table, and fundraise in one workspace for existing companies',
+      'Introductions are earned and proceed under a three-way NDA',
+    ] },
+  { title: 'Investors & LPs', img: 'lane-investors', cta: 'Create an investor account',
+    desc: 'Back companies whose formation you can read, on a record the founder built.',
+    items: [
+      'A curated pipeline instead of cold inbound',
+      'Venture-readiness score with the evidence behind it; numbers verified via Stripe and Plaid',
+      'Pipeline, relationships, and notes are the CRM',
+    ] },
+  { title: 'Operating Partners', img: 'lane-partners', cta: 'List your services',
+    desc: 'Get in front of funded founders who need what you do.',
+    items: [
+      'A provider profile in the marketplace and the public directory',
+      'Founders post needs; you answer live requests',
+      'KYB, conflicts, and contracts handled; payouts through Stripe Connect',
+    ] },
+  { title: 'Advisors', img: 'lane-advisors', cta: 'Create an account',
+    desc: 'Work with the founders you were built to help.',
+    items: [
+      'A public profile with expertise and availability',
+      'Matching by sector, expertise, and availability',
+      'Office hours and one-off sessions in one workspace',
+    ] },
+].map((lane, i) => ({ ...lane, to: DOOR_LINKS[i].to }));
+
+// Step two is "get matched", not "get verified": people browse on email first.
+const STEPS = [
+  { n: '01', title: 'Join', desc: 'A 30-second intake: who you are, what you are building or bringing, where you are.' },
+  { n: '02', title: 'Get matched', desc: 'The record routes you to the founders, partners, or advisors your profile actually fits.' },
+  { n: '03', title: 'Unlock the network', desc: 'Collaborate from one workspace. Capital reads the same record when the work is ready.' },
 ];
 
-const HOW_IT_WORKS = [
-  {
-    week: 'Step 1',
-    title: 'Join the lane that fits',
-    icon: UserPlus,
-    desc: 'Founder, investor, partner, advisor, or coach — pick the door that matches what you do.',
-  },
-  {
-    week: 'Step 2',
-    title: 'Get matched',
-    icon: BadgeCheck,
-    desc: 'Browse and match with just your email — verification comes later, only when you invest or sign.',
-  },
-  {
-    week: 'Step 3',
-    title: 'Unlock the network',
-    icon: LockKeyhole,
-    desc: 'Introductions and deal data open up, gated by signed NDAs and evidence-backed scoring.',
-  },
+const LAB_WEEKS = [
+  { n: 'Week 1', title: 'Idea & Customer', desc: 'Problem definition, ICP, market sizing, ≥5 logged interviews' },
+  { n: 'Week 2', title: 'Solution & Roadmap', desc: 'MVP scope, 90-day OKRs, brand v1, pitch deck v1' },
+  { n: 'Week 3', title: 'Validate & Team', desc: 'Readiness score, advisor cadence, co-founder decision, revenue proof' },
+  { n: 'Week 4', title: 'Incorporate & Capital', desc: 'Entity, founder stock, 83(b), use of funds, investor intros' },
 ];
 
-// Top of the platform, curated. Every link points at a public page or the
-// join flow — no card lands a logged-out visitor on a login wall.
-const PLATFORM_FEATURES = [
-  { icon: Rocket, title: 'Spin-Out Lab', desc: 'A 28-day venture sprint — go from idea to funded company in four weeks.', to: '/spinout-lab' },
-  { icon: Globe, title: 'Public Directory', desc: 'Browse founders, partners, and investors already building in the network.', to: '/directory' },
-  { icon: Calendar, title: 'Programs & Events', desc: 'Office Hours, demo days, and workshops — open across the network.', to: '/events' },
-  { icon: Sparkles, title: 'Personal AI Advisor', desc: 'An always-on advisor with full founder context for strategy, GTM, and fundraising.', to: '/register?lane=founder' },
-  { icon: Banknote, title: 'Capital & LP Portal', desc: 'Capital calls, LP ledger, TVPI/DPI by vintage, and distributions in one place.', to: '/register?lane=lp' },
-  { icon: Handshake, title: 'Partner Marketplace', desc: 'Services-for-equity or -fee partners, referral tracking, and co-marketing.', to: '/register?lane=partner' },
+const TOOLS = [
+  { img: 'tool-profiling', title: 'Profiling', desc: 'Skills, values, and archetype assessment that drives every downstream match.' },
+  { img: 'tool-discovery', title: 'Customer Discovery', desc: 'Structured interview logs, pain severity, ICP fit, deck-eligible quotes.' },
+  { img: 'tool-scoring', title: 'Scoring Engine', desc: 'Nine weighted dimensions with evidence-confidence bands per score.' },
+  { img: 'tool-market', title: 'Market Intel', desc: 'TAM/SAM/SOM with methodology, sources, and competitive positioning.' },
+  { img: 'tool-captable', title: 'Cap Table', desc: 'Founder stock, vesting, SAFEs, option pool, and dilution modelling.' },
+  { img: 'tool-incorporate', title: 'Incorporate', desc: 'Entity recommendation with rationale, formation docs, filing tracker, EIN.' },
+  { img: 'tool-capital', title: 'Capital', desc: 'Investor pipeline, warm-intro routing, data room, SAFE generation.' },
+  { img: 'tool-pitch', title: 'Pitch Deck Builder', desc: 'Eleven slides assembled from your own recorded data, not a template.' },
 ];
 
-const FALLBACK_STATS = { partners: 200, funds: 4, deals_scored: 1200, spinouts: 38 };
+const img = (name) => `/site/${name}.webp`;
 
-function useCountUp(target, durationMs = 600) {
-  const [value, setValue] = useState(0);
-  const startedRef = useRef(false);
-  useEffect(() => {
-    if (startedRef.current) return;
-    if (typeof target !== 'number' || Number.isNaN(target)) return;
-    startedRef.current = true;
-    const start = performance.now();
-    let raf;
-    const tick = (now) => {
-      const t = Math.min(1, (now - start) / durationMs);
-      setValue(Math.round(target * (0.5 - 0.5 * Math.cos(Math.PI * t))));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, durationMs]);
-  return value;
-}
-
-function StatCard({ value, label, suffix }) {
-  const n = useCountUp(value);
-  return (
-    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center dark:border-gray-800">
-      <div className="text-2xl md:text-3xl font-bold text-violet-600 tabular-nums">
-        {n.toLocaleString()}<span className="text-lg">{suffix || ''}</span>
-      </div>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">{label}</div>
-    </div>
-  );
-}
-
-function StatsBar() {
-  const [stats, setStats] = useState(FALLBACK_STATS);
+/** The figures `/api/public/stats` returns, or null while loading or on failure. */
+function useSiteStats() {
+  const [stats, setStats] = useState(null);
   useEffect(() => {
     const ctrl = new AbortController();
-    (async () => {
-      try {
-        const res = await fetch('/api/public/stats', { signal: ctrl.signal });
-        if (!res.ok) throw new Error('non-200');
-        const data = await res.json();
-        setStats({
-          partners: Number(data?.partners ?? FALLBACK_STATS.partners),
-          funds: Number(data?.funds ?? FALLBACK_STATS.funds),
-          deals_scored: Number(data?.deals_scored ?? FALLBACK_STATS.deals_scored),
-          spinouts: Number(data?.spinouts ?? FALLBACK_STATS.spinouts),
-        });
-      } catch { /* silent */ }
-    })();
+    fetch('/api/public/stats', { signal: ctrl.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setStats(data && typeof data === 'object' ? data : null))
+      .catch(() => {});
     return () => ctrl.abort();
   }, []);
+  return stats;
+}
+
+/** A count the endpoint returned, as a positive integer, or null. */
+export function figure(stats, key) {
+  const n = Number(stats?.[key]);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/** The hero's figures that have a real value, in the canvas's order. */
+export function heroFigures(stats) {
+  return HERO_FIGURES
+    .map((f) => ({ ...f, value: figure(stats, f.key) }))
+    .filter((f) => f.value != null);
+}
+
+function useLiveList(load) {
+  const [items, setItems] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    load().then((list) => { if (alive) setItems(list); }).catch(() => { if (alive) setItems([]); });
+    return () => { alive = false; };
+  }, [load]);
+  return items;
+}
+
+const loadArticles = () => import('../lib/api').then(({ articles }) => articles.list({ limit: 3 }))
+  .then((r) => (Array.isArray(r?.items) ? r.items : []));
+const loadEvents = () => import('../lib/api').then(({ eventsPublic }) => eventsPublic.list({ limit: 3 }))
+  .then((r) => (Array.isArray(r) ? r : Array.isArray(r?.events) ? r.events : Array.isArray(r?.items) ? r.items : []));
+
+const words = (s) => String(s || '').replace(/_/g, ' ');
+
+function dateParts(iso, timeZone) {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return null;
+  const fmt = (opts) => {
+    try { return new Intl.DateTimeFormat('en-US', { ...opts, timeZone: timeZone || 'UTC' }).format(d); } catch {
+      return new Intl.DateTimeFormat('en-US', opts).format(d);
+    }
+  };
+  return {
+    day: fmt({ day: '2-digit' }),
+    mon: fmt({ month: 'short' }),
+    time: fmt({ hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }),
+    long: fmt({ month: 'short', day: 'numeric', year: 'numeric' }),
+  };
+}
+
+function Hero({ stats }) {
+  const figures = heroFigures(stats);
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-20 max-w-3xl mx-auto">
-      <StatCard value={stats.partners} label="Network Partners" suffix="+" />
-      <StatCard value={stats.funds} label="Active Funds" />
-      <StatCard value={stats.deals_scored} label="Deals Scored" suffix="+" />
-      <StatCard value={stats.spinouts} label="Spin-Outs Completed" />
-    </div>
+    <section className="ax-hero" aria-labelledby="ax-hero-h">
+      <img className="ax-hero-img" src={img('home-hero')} alt="" />
+      <div className="ax-hero-veil" aria-hidden="true" />
+      <div className="ax-wrap ax-hero-body">
+        <div className="ax-lbl">The global venture creation network</div>
+        <h1 id="ax-hero-h" className="ax-h1">Where we <em>build</em> the rails for the next generation of ventures</h1>
+        <p className="ax-hero-copy">
+          Axal VC is the operating platform for venture creation: venture tools, a verified global partner network,
+          and capital when you’re ready to scale, all in one system for turning an idea into an organization.
+        </p>
+        <div className="ax-row-btns" style={{ marginTop: 34 }}>
+          <Link to="/register" className="ax-btn ax-btn-lg ax-btn-primary">Join Axal VC →</Link>
+          <Link to="/directory" className="ax-btn ax-btn-lg ax-btn-quiet">Explore the network</Link>
+        </div>
+        {figures.length > 0 && (
+          <ul className="ax-stats" style={{ listStyle: 'none', paddingLeft: 0, paddingRight: 0, marginBottom: 0 }}>
+            {figures.map((f) => (
+              <li key={f.key}>
+                <div className="ax-mono ax-stat-v">{f.value.toLocaleString('en-US')}</div>
+                <div className="ax-lbl-q ax-stat-k">{f.label}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 
-function LatestArticles() {
-  const [items, setItems] = React.useState(null);
-  React.useEffect(() => {
-    let alive = true;
-    import('../lib/api').then(({ articles }) =>
-      articles.list({ limit: 3 })
-        .then((r) => { if (alive) setItems(r.items || []); })
-        .catch(() => { if (alive) setItems([]); }),
-    );
-    return () => { alive = false; };
-  }, []);
-  if (!items || items.length === 0) return null;
+function Pillars() {
   return (
-    <section className="py-20 px-6 bg-white dark:bg-gray-900">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100">Latest from the network</h2>
-            <p className="mt-2 text-sm text-gray-600">Long-form writing from Axal VC founders, investors, partners, and the studio.</p>
+    <section className="ax-wrap ax-section" aria-labelledby="ax-pillars-h">
+      <div className="ax-lbl">What Axal VC is</div>
+      <h2 id="ax-pillars-h" className="ax-h2" style={{ margin: '16px 0 10px' }}>Build. Collaborate. Scale.</h2>
+      <p className="ax-lede" style={{ margin: 0 }}>Make the earliest stage of company-building legible — to founders first, and to capital second.</p>
+      <div className="ax-pillars">
+        {PILLARS.map((p) => (
+          <div key={p.eyebrow} className={`ax-pillar${p.capital ? ' is-capital' : ''}`}>
+            <div className="ax-lbl-q">{p.eyebrow}</div>
+            <h3 className="ax-pillar-t">{p.title}</h3>
+            <p className="ax-pillar-d" style={{ marginBottom: 0 }}>{p.desc}</p>
           </div>
-          <Link to="/articles" className="hidden sm:inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium">
-            All articles <ChevronRight size={14} />
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {items.map((a) => (
-            <Link
-              key={a.id}
-              to={`/articles/${a.slug}`}
-              className="group block rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-violet-400 transition dark:border-gray-800 dark:bg-gray-900"
-            >
-              {a.cover_url ? (
-                <img src={a.cover_url} alt="" className="w-full aspect-[16/9] object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              ) : (
-                <div className="w-full aspect-[16/9] bg-gradient-to-br from-violet-100 to-violet-50" />
-              )}
-              <div className="p-4">
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-gray-500 mb-2">
-                  {a.sector && <span>{a.sector.replace(/_/g, ' ')}</span>}
-                  {a.read_minutes ? <><span>·</span><span>{a.read_minutes} min</span></> : null}
-                </div>
-                <h3 className="font-semibold text-base text-gray-900 group-hover:text-violet-700 line-clamp-2 dark:text-gray-100">{a.title}</h3>
-                {a.subtitle && <p className="mt-1 text-sm text-gray-600 line-clamp-2">{a.subtitle}</p>}
-                <p className="mt-3 text-xs text-gray-500">by {a.author || '—'}</p>
-              </div>
+        ))}
+      </div>
+      <p className="ax-aside">
+        Axal VC is a venture firm and an operating platform. The firm’s underwriting view is on
+        the <Link to="/about" className="ax-link">Firm</Link> and <Link to="/for-investors" className="ax-link">Investors</Link> pages.
+      </p>
+    </section>
+  );
+}
+
+function Lanes() {
+  return (
+    <section className="ax-band" aria-labelledby="ax-lanes-h">
+      <div className="ax-wrap" style={{ paddingTop: 88, paddingBottom: 88 }}>
+        <div className="ax-lbl">Where you fit</div>
+        <h2 id="ax-lanes-h" className="ax-h2" style={{ margin: '16px 0 8px', maxWidth: 620 }}>Four doors into the same system.</h2>
+        <p className="ax-lede" style={{ margin: 0, maxWidth: 560 }}>
+          Each door has a defined entry point, a defined decision, and a defined outcome. Nothing here is a mailing list.
+        </p>
+        <div className="ax-lanes">
+          {LANES.map((l) => (
+            <Link key={l.title} to={l.to} className="ax-card ax-lane">
+              <div className="ax-lane-img" role="img" aria-hidden="true" style={{ backgroundImage: `url("${img(l.img)}")` }} />
+              <h3 className="ax-lane-t">{l.title}</h3>
+              <p className="ax-lane-d" style={{ marginBottom: 0 }}>{l.desc}</p>
+              <ul className="ax-lane-items">
+                {l.items.map((it) => <li key={it}>{it}</li>)}
+              </ul>
+              <span className="ax-lane-cta">{l.cta} →</span>
             </Link>
           ))}
-        </div>
-        <div className="mt-6 text-center sm:hidden">
-          <Link to="/articles" className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium">
-            All articles <ChevronRight size={14} />
-          </Link>
         </div>
       </div>
     </section>
   );
 }
 
-// Landing "Upcoming events" teaser (public feed). Public surface — renders a
-// graceful empty state and never breaks the page on a fetch error.
-function UpcomingEventsTeaser() {
-  const [events, setEvents] = React.useState(null);
-  React.useEffect(() => {
-    let alive = true;
-    import('../lib/api').then(({ eventsPublic }) =>
-      eventsPublic.list({ limit: 3 })
-        .then((r) => {
-          const list = Array.isArray(r) ? r
-            : Array.isArray(r?.events) ? r.events
-            : Array.isArray(r?.items) ? r.items
-            : [];
-          if (alive) setEvents(list);
-        })
-        .catch(() => { if (alive) setEvents([]); }),
-    );
-    return () => { alive = false; };
-  }, []);
-
-  const fmt = (v) => {
-    if (!v) return 'Date TBD';
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return v;
-    try { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return v; }
-  };
-
+function HowItWorks() {
   return (
-    <section className="py-20 px-6 bg-gray-50 dark:bg-gray-900/40">
-      <div className="max-w-3xl mx-auto">
-        {/* Upcoming events */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Upcoming events</h2>
-            <Link to="/events" className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium dark:text-violet-300">
-              All events <ChevronRight size={14} />
-            </Link>
+    <section className="ax-wrap" style={{ paddingTop: 88, paddingBottom: 88 }} aria-labelledby="ax-how-h">
+      <div className="ax-split">
+        <div>
+          <div className="ax-lbl">How it works</div>
+          <h2 id="ax-how-h" className="ax-h2" style={{ marginTop: 16, fontSize: 31 }}>Three steps: join, get matched, unlock the network.</h2>
+        </div>
+        <ol className="ax-steps">
+          {STEPS.map((s) => (
+            <li key={s.n} className="ax-card ax-step">
+              <div className="ax-mono ax-step-n">{s.n}</div>
+              <h3 className="ax-step-t">{s.title}</h3>
+              <p className="ax-step-d" style={{ marginBottom: 0 }}>{s.desc}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The cohort strip under the Lab band. The cohort number and deadline come from
+ * the Lab's cohort rule (`openCohortCopy`), the places from the cohort record
+ * (`useCohortPlaces`). A value it could not read is left out, never guessed.
+ */
+function CohortStrip() {
+  const cohort = openCohortCopy();
+  const places = useCohortPlaces();
+  const parts = [];
+  if (places.status === 'ok' && places.places > 0) parts.push(`${numberWordCap(places.places)} places.`);
+  if (cohort?.deadlineLabel) parts.push(`Applications close ${cohort.deadlineLabel}.`);
+  return (
+    <div className="ax-cohort">
+      <div className="ax-cohort-text">
+        <div className="ax-cohort-k">{cohort ? `Cohort ${cohort.cohortNum} · Open` : 'Next cohort · Open'}</div>
+        {parts.length > 0 && <div className="ax-cohort-v">{parts.join(' ')}</div>}
+        <div className="ax-cohort-n">No equity for access.</div>
+      </div>
+      <div className="ax-row-btns" style={{ gap: 10 }}>
+        <Link to="/spinout-lab/apply" className="ax-btn ax-btn-md ax-btn-bright">
+          {cohort ? `Apply to Cohort ${cohort.cohortNum} →` : 'Apply to the next cohort →'}
+        </Link>
+        <Link to="/for-founders" className="ax-btn ax-btn-md ax-btn-ghost">Founder overview</Link>
+      </div>
+    </div>
+  );
+}
+
+function LabBand() {
+  return (
+    <section className="ax-lab" aria-labelledby="ax-lab-h">
+      <img className="ax-lab-img" src={img('lab-band')} alt="" loading="lazy" />
+      <div className="ax-lab-veil" aria-hidden="true" />
+      <div className="ax-lab-glow" aria-hidden="true" />
+      <div className="ax-wrap ax-lab-body">
+        <div className="ax-lab-split">
+          <div>
+            <div className="ax-lab-eyebrow">Flagship · The Spin-Out Lab</div>
+            <h2 id="ax-lab-h">Spin-Out Lab<br />28-day venture sprint.</h2>
+            <p className="ax-lab-copy">
+              Founders arrive with a thesis and leave with an incorporated entity, clean cap table, filed 83(b),
+              evidenced discovery, revenue proof, and a deck built from their own data.
+            </p>
+            <div className="ax-row-btns" style={{ marginTop: 22 }}>
+              <Link to="/spinout-lab" className="ax-btn ax-btn-md ax-btn-bright">See the full Lab →</Link>
+            </div>
           </div>
-          {events === null ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
-          ) : events.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No upcoming events right now — check back soon.</p>
-          ) : (
-            <ul className="space-y-3">
-              {events.map((ev) => (
-                <li key={ev.id || ev.slug}>
-                  <Link
-                    to={`/events/${ev.slug || ev.id}`}
-                    className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:border-violet-300 transition-colors dark:border-gray-800 dark:hover:border-violet-700"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0 dark:bg-violet-900/40">
-                      <Calendar size={18} className="text-violet-600 dark:text-violet-300" />
+          <ol className="ax-weeks">
+            {LAB_WEEKS.map((w) => (
+              <li key={w.n} className="ax-week">
+                <div className="ax-mono ax-week-n">{w.n}</div>
+                <div className="ax-week-t">{w.title}</div>
+                <div className="ax-week-d">{w.desc}</div>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <CohortStrip />
+      </div>
+    </section>
+  );
+}
+
+function Platform({ stats }) {
+  const tools = figure(stats, 'tools');
+  return (
+    <section className="ax-wrap ax-section" aria-labelledby="ax-platform-h">
+      <div style={{ maxWidth: 640 }}>
+        <div className="ax-lbl">The platform</div>
+        <h2 id="ax-platform-h" className="ax-h2" style={{ margin: '16px 0 8px' }}>Everything you need, in one place</h2>
+        <p className="ax-lede" style={{ margin: 0, maxWidth: 'none' }}>
+          The tools to form a company, the network to build it with, capital when you’re ready. The data model is the
+          product: every tool writes into one shared record, nothing is re-entered.
+        </p>
+      </div>
+      <div className="ax-tools-k">
+        {tools ? `A sample of the ${tools.toLocaleString('en-US')} tools inside` : 'A sample of the tools inside'}
+      </div>
+      <div className="ax-tools">
+        {TOOLS.map((t) => (
+          <div key={t.title} className="ax-card ax-tool">
+            <div className="ax-tool-art"><img src={img(t.img)} alt="" loading="lazy" /></div>
+            <h3 className="ax-tool-t">{t.title}</h3>
+            <p className="ax-tool-d" style={{ marginBottom: 0 }}>{t.desc}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NetworkTeaser() {
+  const articles = useLiveList(loadArticles);
+  const events = useLiveList(loadEvents);
+  return (
+    <section className="ax-band" aria-labelledby="ax-net-h">
+      <div className="ax-wrap" style={{ paddingTop: 84, paddingBottom: 84 }}>
+        <div className="ax-net-head">
+          <div>
+            <div className="ax-lbl">The network</div>
+            <h2 id="ax-net-h" className="ax-h2" style={{ marginTop: 14, fontSize: 34 }}>What we are writing, and what is on the calendar.</h2>
+          </div>
+          <Link to="/articles" className="ax-link" style={{ fontSize: 13.5 }}>All articles →</Link>
+        </div>
+        <div className="ax-net-grid">
+          <div className="ax-articles">
+            {articles === null && <p className="ax-meta">Loading the latest writing…</p>}
+            {articles !== null && articles.length === 0 && (
+              <p className="ax-meta">No articles are published yet.</p>
+            )}
+            {(articles || []).map((a) => {
+              const when = dateParts(a.published_at, 'UTC');
+              const meta = [when?.long, a.read_minutes ? `${a.read_minutes} min read` : null].filter(Boolean).join(' · ');
+              return (
+                <Link key={a.id || a.slug} to={`/articles/${a.slug}`} className="ax-card ax-article">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {a.sector && <span className="ax-chip">{words(a.sector)}</span>}
+                    {meta && <span className="ax-meta">{meta}</span>}
+                  </div>
+                  <h3 className="ax-article-t">{a.title}</h3>
+                  {a.subtitle && <p className="ax-article-d" style={{ marginBottom: 0 }}>{a.subtitle}</p>}
+                </Link>
+              );
+            })}
+          </div>
+          <div className="ax-cal">
+            <div className="ax-cal-head">
+              <div className="ax-cal-k">Next on the calendar</div>
+              <Link to="/events" className="ax-link" style={{ fontSize: 12 }}>All events →</Link>
+            </div>
+            {events === null && <div className="ax-cal-empty">Loading the calendar…</div>}
+            {events !== null && events.length === 0 && (
+              <div className="ax-cal-empty">Nothing is scheduled right now. Check back soon.</div>
+            )}
+            {(events || []).map((ev) => {
+              const when = dateParts(ev.starts_at, ev.timezone);
+              return (
+                <Link key={ev.id || ev.slug} to={`/events/${ev.slug || ev.id}`} className="ax-cal-row">
+                  <div className="ax-cal-date">
+                    <div className="ax-cal-day">{when?.day || '—'}</div>
+                    <div className="ax-cal-mon">{when?.mon || ''}</div>
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="ax-cal-t">{ev.title}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 5 }}>
+                      {ev.type && <span className="ax-chip ax-chip-quiet">{words(ev.type)}</span>}
+                      {when?.time && <span className="ax-meta">{when.time}</span>}
                     </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{ev.title}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {fmt(ev.starts_at)}
-                        {ev.location_text ? ` · ${ev.location_text}` : (ev.location_kind ? ` · ${ev.location_kind}` : '')}
-                      </div>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+                  </div>
+                </Link>
+              );
+            })}
+            <div className="ax-cal-foot">
+              <div className="ax-meta" style={{ fontSize: 12.5, color: 'var(--ax-body)', maxWidth: 240, lineHeight: 1.55 }}>
+                Circles meet on a fixed cadence, capped so the room stays useful.
+              </div>
+              <Link to="/circles" className="ax-link" style={{ fontSize: 12.5 }}>Circles →</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ClosingCta() {
+  return (
+    <section className="ax-wrap" style={{ paddingTop: 64, paddingBottom: 96 }} aria-labelledby="ax-close-h">
+      <div className="ax-close" style={{ backgroundImage: `url("${img('door-founders')}")` }}>
+        <div className="ax-close-veil" aria-hidden="true" />
+        <div style={{ position: 'relative', maxWidth: 560 }}>
+          <h2 id="ax-close-h">Join the network building what’s next.</h2>
+          <p className="ax-close-copy" style={{ margin: 0 }}>
+            Founder, partner, investor, or advisor — start with a 30-second intake and get matched to the right side of the network.
+          </p>
+        </div>
+        <div className="ax-row-btns" style={{ position: 'relative' }}>
+          <Link to="/register" className="ax-btn ax-btn-lg ax-btn-bright">Join Axal VC →</Link>
+          <Link to="/contact" className="ax-btn ax-btn-lg ax-btn-ghost">Talk to us</Link>
         </div>
       </div>
     </section>
@@ -293,288 +452,25 @@ function UpcomingEventsTeaser() {
 
 export default function LandingPage() {
   useForcedLightTheme();
+  const stats = useSiteStats();
   // Task #2 — funnel: top of the signup funnel. First-touch attribution
   // (utm_*, ref, lane…) is captured by the tracker itself on page load.
   useEffect(() => {
     track('landing_view');
   }, []);
   return (
-    <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className="ax-site">
       <PublicNav />
-
-      {/* HERO — one clear promise, one primary action. */}
-      <section className="pt-32 pb-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-100 border border-violet-300 rounded-full text-xs text-violet-700 mb-8">
-              <Zap size={12} /> Axal VC · Global Venture Network
-            </div>
-            <h1
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              className="text-5xl md:text-7xl font-bold leading-tight mb-6 text-gray-900 dark:text-gray-100"
-            >
-              Where venture builders meet{' '}
-              <span className="text-violet-600">capital</span>
-              <br />globally.
-            </h1>
-            <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-8 leading-relaxed">
-              Axal VC is one verified network for founders, investors, and partners —
-              from first idea to funded company. Join the side that fits you.
-            </p>
-
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
-              {THESIS_PILLS.map((p) => (
-                <span key={p} className="text-xs px-3 py-1 rounded-full bg-gray-100 border border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-300">
-                  {p}
-                </span>
-              ))}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link
-                to="/register"
-                className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20 hover:shadow-violet-600/40"
-              >
-                Join Axal VC <ArrowRight size={16} />
-              </Link>
-              <Link
-                to="/directory"
-                className="flex items-center gap-2 bg-white hover:bg-violet-50 dark:hover:bg-violet-900/30 border border-violet-300 text-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium dark:bg-gray-900"
-              >
-                Explore the network <ChevronRight size={16} />
-              </Link>
-            </div>
-          </div>
-
-          <StatsBar />
-        </div>
-      </section>
-
-      {/* WHO IT'S FOR — five lanes into the network. */}
-      <section id="lanes" className="py-20 px-6 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mx-auto text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-              Built for every side of venture.
-            </h2>
-            <p className="text-gray-600">
-              Pick the door that fits — every lane is a first-class citizen.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {LANES.map((lane) => {
-              const Icon = lane.icon;
-              return (
-                <div key={lane.id} className="rounded-2xl border p-6 flex flex-col bg-white dark:bg-gray-900" style={{ borderColor: lane.color }}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
-                      <Icon size={18} className="text-violet-700" />
-                    </div>
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{lane.title}</h3>
-                  </div>
-                  <ul className="space-y-2 mb-6 flex-1">
-                    {lane.bullets.map((b, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
-                        <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
-                        <span>{b}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Link
-                    to={lane.href}
-                    className="inline-flex items-center justify-center gap-2 text-white text-sm font-medium rounded-xl px-4 py-2.5 transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: lane.color }}
-                  >
-                    {lane.cta} <ArrowRight size={14} />
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* HOW THE NETWORK WORKS */}
-      <section className="py-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">How it works.</h2>
-            <p className="text-gray-600 max-w-xl mx-auto">
-              Three steps: join, get verified, unlock the network.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-4">
-            {HOW_IT_WORKS.map((step, i) => (
-              <div key={i} className="relative bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg hover:border-violet-300 transition-all dark:bg-gray-900 dark:border-gray-800">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-violet-600 rounded-t-2xl" />
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs text-gray-500 font-medium">{step.week}</div>
-                  <step.icon size={16} className="text-violet-500" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{step.title}</h3>
-                <p className="text-sm text-gray-600 leading-relaxed">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SPIN-OUT LAB — flagship product highlight.
-          Copy aligned 1:1 with /spinout-lab; deep-links into the full Lab page. */}
-      <section className="py-20 px-6 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="rounded-3xl border-2 border-violet-200 bg-violet-50/40 p-10 md:p-14 grid md:grid-cols-3 gap-10">
-            <div className="md:col-span-2 space-y-8">
-              <div>
-                <span className="inline-block text-[11px] uppercase tracking-wider font-semibold text-violet-700 bg-violet-100 px-2.5 py-1 rounded">
-                  Flagship product
-                </span>
-                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-4 mb-4 dark:text-gray-100">
-                  Spin-Out Lab — 28-day venture sprint.
-                </h2>
-                <p className="text-base text-gray-700 leading-relaxed dark:text-gray-300">
-                  For founders with an idea and no incorporated company yet. Four weeks. Four
-                  milestones. Ends with a Delaware C-Corp (or alt), cap table, 83(b), pitch deck,
-                  and venture-readiness score.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-2">
-                  What you get
-                </h3>
-                <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">
-                  A high-touch spin-out program with advisor support, warm intros,
-                  advisor matching, and the tooling founders need to move fast.{' '}
-                  <Link
-                    to="/spinout-lab#what-you-get"
-                    className="inline-flex items-center gap-1 text-violet-700 hover:text-violet-900 font-medium"
-                  >
-                    See full list <ArrowRight size={12} />
-                  </Link>
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-2">
-                  What we look for
-                </h3>
-                <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">
-                  Strong founder-market fit, deep domain insight, customer access,
-                  full-time commitment, and clear reasons to say yes or no.{' '}
-                  <Link
-                    to="/spinout-lab#what-we-look-for"
-                    className="inline-flex items-center gap-1 text-violet-700 hover:text-violet-900 font-medium"
-                  >
-                    See full criteria <ArrowRight size={12} />
-                  </Link>
-                </p>
-              </div>
-
-              <Link
-                to="/spinout-lab"
-                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-colors px-6 py-3 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20"
-              >
-                See the full Lab <ArrowRight size={16} />
-              </Link>
-            </div>
-
-            {/* The 4-week playbook — one line per week. */}
-            <div className="md:col-span-1">
-              <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-4">
-                The 4-week playbook
-              </h3>
-              <ol className="space-y-4">
-                {[
-                  { n: 1, title: 'Idea & Customer', desc: 'Frame the problem, size the market, log ≥5 customer interviews.' },
-                  { n: 2, title: 'Solution & Roadmap', desc: 'Scope the MVP, set 90-day OKRs, draft brand v1 + deck v1.' },
-                  { n: 3, title: 'Validate & Team', desc: 'First venture-readiness score, advisor cadence, co-founder track.' },
-                  { n: 4, title: 'Incorporate & Capital', desc: 'Incorporate, vest, file 83(b), lock the ask, three warm intros.' },
-                ].map((w) => (
-                  <li key={w.n} className="flex gap-3">
-                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-violet-600 text-white text-xs font-bold flex items-center justify-center">
-                      {w.n}
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        Week {w.n} — {w.title}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-0.5">{w.desc}</div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* WHAT'S INSIDE — top of the platform, curated. */}
-      <section id="platform" className="py-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">Everything you need, in one place</h2>
-            <p className="text-gray-600 max-w-xl mx-auto">
-              From incorporation to capital — the tools and network behind every venture.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {PLATFORM_FEATURES.map((f, i) => (
-              <Link
-                key={i}
-                to={f.to}
-                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all group dark:bg-gray-900 dark:border-gray-800"
-              >
-                <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
-                  <f.icon size={18} className="text-violet-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold mb-1 text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
-                    {f.title}
-                    <ChevronRight size={12} className="text-gray-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" />
-                  </h3>
-                  <p className="text-xs text-gray-600 leading-relaxed">{f.desc}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Upcoming-events teaser (public surface). */}
-      <UpcomingEventsTeaser />
-
-      {/* Latest from the network (3 most recent published articles).
-          Public surface; renders nothing on empty/fetch error so it never breaks the page. */}
-      <LatestArticles />
-
-      {/* CTA */}
-      <section className="py-20 px-6 bg-gray-900 text-white">
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Join the network building <span className="text-violet-400">what&apos;s next</span>.
-          </h2>
-          <p className="text-gray-300 max-w-2xl mx-auto mb-8 leading-relaxed">
-            Founder, investor, or partner — start with a 30-second intake and
-            get matched to the right side of the network.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link
-              to="/register"
-              className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30"
-            >
-              Join Axal VC <ArrowRight size={16} />
-            </Link>
-            <Link
-              to="/contact"
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-white"
-            >
-              Talk to us <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
+      <main className="ax-home ax-in">
+        <Hero stats={stats} />
+        <Pillars />
+        <Lanes />
+        <HowItWorks />
+        <LabBand />
+        <Platform stats={stats} />
+        <NetworkTeaser />
+        <ClosingCta />
+      </main>
       <PublicFooter />
     </div>
   );
