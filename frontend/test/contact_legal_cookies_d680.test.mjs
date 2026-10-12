@@ -50,7 +50,6 @@ globalThis.sessionStorage = memoryStorage();
 
 const contact = await import('../src/pages/ContactPage.jsx');
 const { default: ContactPage } = contact;
-const { openCohortCopy } = await import('../src/lib/spinoutLab.js');
 const consent = await import('../src/lib/cookieConsent.js');
 const { default: CookieConsent, CookiePreferencesDialog } = await import('../src/components/CookieConsent.jsx');
 
@@ -154,20 +153,17 @@ test('the link check matches the route: empty, or http(s) up to 500 characters',
   assert.equal(contact.MAX_LINK, 500);
 });
 
-test('the three mail routes are the canvas\'s addresses, and no canvas cohort is typed', () => {
-  const canvasRoutes = CANVAS.slice(CANVAS.indexOf('const contactRoutes = ['), CANVAS.indexOf('];', CANVAS.indexOf('const contactRoutes = [')));
-  const canvasEmails = [...canvasRoutes.matchAll(/email:'([^']+)'/g)].map((m) => m[1]);
-  assert.equal(canvasEmails.length, 3);
-  const cohort = openCohortCopy();
-  const routes = contact.contactRoutes(cohort);
-  assert.deepEqual(routes.map((r) => r.email), canvasEmails);
+test('the form is the only way in: no mail address is printed, and no canvas cohort is typed', () => {
+  // Owner, 2026-10-12: "Remove the emails here, just keep the form." The
+  // canvas's three addresses still route each intent server-side.
   const html = render(React.createElement(ContactPage), '/contact');
-  for (const e of canvasEmails) assert.ok(html.includes(`href="mailto:${e}"`), `${e} is not a mail link`);
+  assert.doesNotMatch(html, /mailto:/, 'the contact page links no mailbox');
+  assert.doesNotMatch(text(html), /@axal\.vc/, 'the contact page prints no address');
+  assert.equal(contact.contactRoutes, undefined, 'the address list is gone, not hidden');
+  assert.match(html, /<form/, 'the form stays');
+  assert.match(ROUTE_SRC, /export const CONTACT_MAILBOX/, 'each intent still reaches its mailbox');
 
   assert.doesNotMatch(codeOnly(CONTACT_SRC), /Cohort 5/, 'the canvas\'s cohort is an example');
-  // The cohort number is the Lab's own rule, as on the front page.
-  if (cohort) assert.match(text(html), new RegExp(`Cohort ${cohort.cohortNum} applications`));
-  assert.match(contact.contactRoutes(null)[0].d, /^Cohort applications,/);
   assert.equal(contact.sentNote('lab', { cohortNum: 9 }),
     'We reply within five business days. If Cohort 9 is full, we will tell you which cohort you are being held for.');
   assert.equal(contact.sentNote('lab', null),
