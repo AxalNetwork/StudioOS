@@ -122,8 +122,10 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
       className="relative overflow-hidden text-white"
       style={{ backgroundColor: LAB_PANEL_HEX }}
     >
+      {/* D678: the `Spin-Out Lab Page` board's copy of the same picture, as
+          WebP (193 KB against the PNG's 688 KB). */}
       <img
-        src="/axal-vc-future.png"
+        src="/site/lab-board-2.webp"
         alt=""
         aria-hidden="true"
         className="absolute inset-0 h-full w-full object-cover object-[72%_58%]"
@@ -138,6 +140,13 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
             `linear-gradient(94deg, ${LAB_PANEL_HEX}f2 0%, ${LAB_PANEL_HEX}e0 46%,`
             + ` ${LAB_PANEL_HEX}85 70%, ${LAB_PANEL_HEX}38 100%)`,
         }}
+      />
+      {/* D678: the board's second scrim, which darkens the lower half so the
+          cohort panel reads against the water and the terrace. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 bottom-0 h-[56%]"
+        style={{ background: `linear-gradient(180deg, transparent, ${LAB_PANEL_HEX}8c)` }}
       />
       <div
         className={`relative mx-auto grid max-w-[1240px] gap-10 px-6 pb-12 sm:px-10

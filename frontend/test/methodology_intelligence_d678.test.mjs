@@ -252,3 +252,30 @@ test('intelligence: images keep the canvas\'s alt text, and the canvas\'s sample
   assert.match(INTEL_HTML, /href="#ei-research"[^>]*>See Research</);
   assert.match(INTEL_HTML, /<section id="ei-research"/);
 });
+
+// ---------------------------------------------------------------- Spin-Out Lab
+
+const { LabHero } = await import('../src/components/spinout/LabIntro.jsx');
+const LAB_BOARD = read('design/canvases/integrated/Spin-Out Lab Page.dc.html');
+const LAB_SRC = read('frontend/src/components/spinout/LabIntro.jsx');
+
+test('lab: the hero draws the board\'s image and reads every cohort figure from the record', () => {
+  assert.match(LAB_BOARD, /src="\.\.\/\.\.\/\.\.\/frontend\/public\/site\/lab-board-2\.webp"/, 'the board names this image');
+  const ok = render(React.createElement(LabHero, {
+    surface: 'public', applyHref: '/register', briefHref: '/spinout-lab/brief',
+    cohort: { status: 'ok', cohort: { open: true, name: 'Read-Name', startLabel: 'Read-Start', endLabel: 'Read-End', deadlineLabel: 'Read-Close' } },
+  }), '/spinout-lab');
+  assert.match(ok, /<img src="\/site\/lab-board-2\.webp" alt="" aria-hidden="true"/);
+  assert.ok(existsSync(resolve(ROOT, 'frontend/public/site/lab-board-2.webp')));
+  for (const [id, v] of [['hero-cohort', 'Read-Name'], ['hero-starts', 'Read-Start'], ['hero-ends', 'Read-End'], ['hero-applications-close', 'Read-Close']]) {
+    assert.match(ok, new RegExp(`data-testid="${id}"[^>]*>${v}<`), `${id} shows the record's value`);
+  }
+  assert.match(ok, />Apply to the Read-Name cohort →</, 'the apply button names the cohort the record names');
+  const failed = render(React.createElement(LabHero, { surface: 'public', applyHref: '/register', briefHref: '/b', cohort: { status: 'error', retry() {} } }));
+  assert.equal((failed.match(/>Could not be read</g) || []).length, 4, 'a failed read is said, never filled');
+  // The board's placeholders and sample cohort never ship.
+  assert.doesNotMatch(code(LAB_SRC), /\{cohort\.(name|start_date|end_date|close_at|company_count)\}/, 'no board placeholder ships');
+  for (const literal of ['Halyard', 'Verity Health', 'LoopSense', 'Kelp Bio', 'Meridian Robotics']) {
+    assert.ok(!code(LAB_SRC).includes(literal), `the board's "${literal}" is not in the page`);
+  }
+});
