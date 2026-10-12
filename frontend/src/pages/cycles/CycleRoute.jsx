@@ -21,6 +21,8 @@ import { editFor, formFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
+import { useAuth } from '../../hooks/useAuthSync';
+import { moduleToolLinks } from './founderToolNavigation.js';
 
 /**
  * D661 (#1474) — a cycle's overview and module pages, wired to its read.
@@ -263,6 +265,7 @@ function useProject(reloadKey = 0) {
 
 export default function CycleRoute({ cycle }) {
   const { slug } = useParams();
+  const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
@@ -401,6 +404,7 @@ export default function CycleRoute({ cycle }) {
           onClick: () => setEditing(row),
         }) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
+        tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
       >
         {fillKind && projectId && (

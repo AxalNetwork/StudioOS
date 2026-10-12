@@ -63,7 +63,7 @@ function helpers() {
 
 test('the Team page is mounted in workspace mode, the old page is gone, and the founder redirects carry mode=workspace', () => {
   const route = APP.split('\n').find((l) => l.includes('path="/build/team"'));
-  assert.match(route, /<FounderWorkspaceTabs set="grow" user=\{user\}><FounderTeamPage \/><\/FounderWorkspaceTabs>/);
+  assert.match(route, /founderEditor\(<FounderTeamPage \/>\)/);
   // The Grow desk owned a founder's bare route until D661 (#1474) retired it;
   // Grow's landing is /grow, so the bare route is the Team workspace too.
   assert.doesNotMatch(route, /founderGrowLanding|FounderGrowDesk/, 'the bare route branches on a retired desk');

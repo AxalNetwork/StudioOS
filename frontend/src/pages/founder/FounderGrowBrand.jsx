@@ -74,7 +74,7 @@ export default function FounderGrowBrand() {
   const liveCount = pages.filter(isLive).length;
   const pageAttributionAvailable = pages.some((page) => signups.some((signup) => signup.landing_page_id != null && String(signup.landing_page_id) === String(page.id)));
   const bestPage = pageAttributionAvailable ? pages.map((page) => ({ page, leads: pageLeads(page, signups), views: Number(page.views_count || 0) })).filter(({ views, leads }) => views > 0 && leads > 0).map((item) => ({ ...item, rate: item.leads / item.views })).sort((a, b) => b.rate - a.rate)[0] : null;
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-brand" data-testid="founder-grow-brand"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-brand-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Brand</b></div><div><h1>Brand &amp; landing</h1><p>Landing pages, templates and captured leads.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-brand-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Brand' ? 'is-active' : ''}>{label}</LensLink>)}</nav>

@@ -108,7 +108,7 @@ test('investor-owned deep links keep the investor workspace shell', () => {
     'the retired investor drawer is mounted again');
   assert.match(
     dataRoom,
-    /founderWorkspace\('raise', <FounderWorkspaceTabs/,
+    /founderWorkspace\('raise', founderEditor\(/,
     'the founder arm keeps its own workspace tab bar',
   );
   // And the room the redirect's list links into keeps the investor shell.

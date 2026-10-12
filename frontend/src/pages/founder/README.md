@@ -3,7 +3,8 @@
 This folder contains the founder-specific workspace shell and the dedicated canvas landing pages that replace generic route wrappers for active Founder View.
 
 - `FounderWorkspacePage.jsx` provides the shared founder workspace frame used by routes that have not graduated to a dedicated canvas landing.
-- `FounderWorkspaceTabs.jsx` preserves access to the detailed tools grouped under each founder workspace.
+- `FounderModuleBackLink.jsx` gives older editor pages one quiet return to their cycle module. `../cycles/founderToolNavigation.js` is the shared map for module doors and editor returns (#1539). The old sibling-tool tab sets and wrapper are removed.
+- `FounderGrowCapitalMatch.jsx` retains its historical file name and styles, but Investor match is under Raise at `/raise/capital-match`, returning to Capital relationships; `/grow/capital-match` redirects with its query and hash preserved.
 - The Validate, Build, Raise and Grow landings are the cycle pages in `../cycles/` (D661, #1474); the four desks that held them here are retired, with their own stylesheets. A founder's bare `/build/discovery` still redirects to `/validate` and bare `/execution` to `/build`, and `?mode=workspace` mounts the Discovery and Execution editors at those routes (D422). `founderGrowDesk.css` stays: the seven `/grow/*` zone pages draw their header from it.
 - `ShareUpdateSheet.jsx` is Grow's "Share an update" side sheet (D654), opened from the Grow cycle overview's primary action: Period, Metrics, Highlights, Asks, Audience and Preview, plus the `nometrics` and `nothing` states of `Cycle Action.dc.html` (`action=update`). It writes the founder's `portfolio_updates` row through `../../lib/api/shareUpdate.js`.
 - `SentUpdatePage.jsx` is `/updates/:uid` (D654): the author sees replies to each ask and the module each became an item in, who opened it, and "Ask again" after 14 days with no reply; a recipient sees what their audience may read and replies in place.

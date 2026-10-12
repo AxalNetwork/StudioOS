@@ -56,7 +56,7 @@ test('the four desks and their own stylesheets are gone, and nothing imports the
 test('a founder\'s bare /build/team is the Team workspace, and the Grow landing is /grow', () => {
   const app = read('frontend/src/App.jsx');
   const team = app.match(/<Route path="\/build\/team"[^\n]*/)?.[0] || '';
-  assert.match(team, /guard\(\['admin', 'founder'\], founderWorkspace\('grow', <FounderWorkspaceTabs set="grow" user=\{user\}><FounderTeamPage \/><\/FounderWorkspaceTabs>\)\)/);
+  assert.match(team, /guard\(\['admin', 'founder'\], founderWorkspace\('grow', founderEditor\(<FounderTeamPage \/>\)\)\)/);
   assert.doesNotMatch(team, /founderGrowLanding/, 'the bare route branches on a landing it no longer has');
   assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/);
 });

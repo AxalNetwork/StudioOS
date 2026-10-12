@@ -56,6 +56,7 @@ test('founder Raise zones match Pages · Founder Raise (FR1–FR6)', () => {
     ['status', 'ANALYTICS'],
     ['pitch', 'COLLECTION'],
     ['capital', 'LEDGER'],
+    ['capital-match', 'MATCH ENGINE'],
     ['legal', 'COLLECTION'],
     ['data-room', 'COLLECTION'],
     ['liquidity', 'LEDGER'],
@@ -69,7 +70,6 @@ test('founder Grow zones match Pages · Founder Grow (FG1–FG7)', () => {
     ['talent', 'MATCH ENGINE'],
     ['customers', 'WORK BOARD'],
     ['partnerships', 'WORK BOARD'],
-    ['capital-match', 'MATCH ENGINE'],
     ['brand', 'COLLECTION'],
     ['launch', 'FEED'],
   ]);

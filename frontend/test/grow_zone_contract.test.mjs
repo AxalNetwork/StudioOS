@@ -99,7 +99,7 @@ test('Stalled is live, and computed from the stamps the route returns', () => {
 });
 
 test('Warm path only is live, and a warm path is the stored contact id', () => {
-  const block = zoneBlock(FILTERS, 'grow/capital-match');
+  const block = zoneBlock(FILTERS, 'raise/capital-match');
   assert.match(block, /canvas: 'Warm path only', key: 'warm'/);
   assert.ok(CAPITAL.includes("view === 'warm'"), 'nothing branches on the warm view');
   // Nothing is inferred from a shared domain or a similar name — the join is a
@@ -124,7 +124,7 @@ test('the two dynamic-group reasons are the correct use of one, not a leftover',
   assert.match(TALENT, /dynamic: \{ roles: jobs\./, 'the talent page stopped supplying role chips');
   assert.match(CAPITAL, /dynamic: \{ stages: stages\./, 'the capital page stopped supplying stage chips');
   assert.match(zoneBlock(FILTERS, 'grow/talent'), /unbuilt: 'no job post is linked to this startup yet'/);
-  assert.match(zoneBlock(FILTERS, 'grow/capital-match'), /unbuilt: 'no prospect records a stage yet'/);
+  assert.match(zoneBlock(FILTERS, 'raise/capital-match'), /unbuilt: 'no prospect records a stage yet'/);
 });
 
 test('the refusals that survive still describe something absent', () => {

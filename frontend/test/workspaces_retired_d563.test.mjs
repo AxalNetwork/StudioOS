@@ -1,3 +1,4 @@
+import { actual, checks } from './_founder_tool_checks.mjs';
 /**
  * The Workspaces launcher is retired; its 28 pages live in the profile
  * sidebars (D563, #1164).
@@ -195,7 +196,7 @@ test('the one retired page redirects a founder to the zone that replaced it, and
   // The query and the hash travel, as D422's redirects do; only `mode` is set.
   assert.match(APP, /const liquidityParams = new URLSearchParams\(location\.search\);\n\s*liquidityParams\.set\('mode', 'workspace'\);/,
     'the redirect must keep the query it arrived with and set mode=workspace');
-  assert.match(block, /: <FounderWorkspaceTabs set="raise" user=\{user\}><LiquidityPage currentUser=\{user\} \/><\/FounderWorkspaceTabs>/,
+  assert.match(block, /: founderEditor\(<LiquidityPage currentUser=\{user\} \/>\)/,
     'a partner or investor no longer lands on /liquidity');
   assert.ok(guardRoles('/raise/liquidity').includes('founder'), 'the redirect lands on a route the founder cannot open');
   assert.match(routeBlock(APP, '/raise/liquidity'), /get\('mode'\) === 'workspace'\s*\?[^:]*<LiquidityPage/,
@@ -204,11 +205,8 @@ test('the one retired page redirects a founder to the zone that replaced it, and
   const raise = rowsOf('founder').find((r) => r.label === 'Raise');
   assert.ok(!raise.match.includes('/liquidity'), 'founder Raise still matches /liquidity');
   assert.ok(lights(raise, '/raise/liquidity'), 'founder Raise does not light the redirect target');
-  // The Raise tab bar lights Liquidity on the address the founder lands on.
-  const tabs = read('frontend/src/pages/founder/FounderWorkspaceTabs.jsx');
-  assert.match(tabs, /to: '\/liquidity', label: 'Liquidity', icon: TrendingUp, match: \['\/liquidity', '\/raise\/liquidity'\]/);
-  assert.match(tabs, /tabs\.map\(\(\{ to, label, icon, match \}\) => \(\{ to, label, icon, match \}\)\)/,
-    'FounderWorkspaceTabs drops a tab\'s match before WorkspaceTabs sees it');
+  // The editor returns to Raise's Cap table with its selected project.
+  checks.returns(actual);
 });
 
 test('no launcher: the component is gone and nothing in the header renders it', () => {

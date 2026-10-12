@@ -16,7 +16,7 @@
  *     /execution  /signals  /build/team
  *     /build/metrics  /network-effects  /raise/capital
  *
- * `FounderWorkspaceTabs` is what makes them survive the collapse. Every
+ * The cycle module doors and quiet editor returns preserve navigation after the desks retire. Every
  * assertion below reads that file, or App.jsx,
  * rather than trusting the sidebar's own comments — because `match` decides
  * which row highlights, and does not create a link.
@@ -28,6 +28,7 @@ import { resolve } from 'node:path';
 import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { FOUNDER_FULL_BLEED } from '../src/sidebarConfig.js';
+import { actual, checks } from './_founder_tool_checks.mjs';
 import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
 // D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
 import { readRoutesSource } from './_routesSource.mjs';
@@ -41,9 +42,8 @@ const rows = [...founder.matchAll(/\{ to: '([^']*)'[^}]*label: '([^']+)'/g)]
 const targets = rows.map((r) => r.to);
 const labels = rows.map((r) => r.label);
 
-const bar = codeOnly(read('frontend/src/pages/founder/FounderWorkspaceTabs.jsx'));
+const toolNavigation = codeOnly(read('frontend/src/pages/cycles/founderToolNavigation.js'));
 const app = codeOnly(readRoutesSource());
-const tabsTo = (p) => bar.includes(`to: '${p}'`);
 
 test('the canvas rows are present, in the canvas order', () => {
   // Canvas ROWS: Home · Validate · Build · Raise · Grow · Network · Research.
@@ -68,147 +68,11 @@ test('the shell is eight rows, not twenty-one', () => {
   assert.equal(rows.length, 8, `founder shell drifted off eight rows: ${JSON.stringify(labels)}`);
 });
 
-test('every destination the old nav reached still has a door', () => {
-  // The twenty-one items the pre-canvas founder nav carried, verbatim.
-  const BEFORE = [
-    '/studio', '/spinout-lab',
-    '/execution', '/signals', '/build/team', '/build/metrics', '/spinout-lab/brand',
-    '/build/discovery', '/build/marketplace', '/advisory',
-    '/network', '/market-intel',
-    '/raise/pitch', '/raise/capital', '/raise/legal-engine', '/raise/data-room',
-    '/comarketing',
-    '/network-effects', '/liquidity', '/perks',
-  ];
-  // A Spin-Out Lab tool's door is the Lab: the `Spin-Out Lab` row opens the
-  // Lab workspace, whose tool card links the tool. `/spinout-lab/brand` is
-  // one — it stopped being a Grow tab when the Lab tool and Grow's own Brand
-  // page (`/grow/brand`) were separated, so it no longer dresses as Grow.
-  const labTools = codeOnly(read('frontend/src/pages/SpinoutLabWorkspace.jsx'));
-  const labDoor = (p) => p.startsWith('/spinout-lab/') && targets.includes('/spinout-lab')
-    && labTools.includes(`to: '${p}'`);
-  // D670 retired two of them outright, on the owner's call; they only
-  // redirect to /research now, so they need no door.
-  const RETIRED = ['/signals', '/market-intel'];
-  const doorless = BEFORE.filter((p) => !RETIRED.includes(p) && !targets.includes(p) && !tabsTo(p) && !labDoor(p));
-  assert.deepEqual(doorless, [], 'no nav row, no workspace tab and no Lab tool card — reachable only by typed URL');
-  assert.ok(labDoor('/spinout-lab/brand') && !tabsTo('/spinout-lab/brand'),
-    'the Lab brand tool is reached from the Lab, and not from a Grow tab');
-  assert.ok(tabsTo('/grow/brand'), "Grow's Brand tab opens Grow's own Brand page");
-});
+test('the missing tools have doors from their cycle modules',()=>checks.doors(actual));
 
-test('the seven doorless destinations are exactly the ones the bar rescues', () => {
-  // If any of these loses its tab, it becomes unreachable outright — there is
-  // no second door anywhere in frontend/src. This is the assertion that would
-  // have caught the regression in #350.
-  // `/signals` stood here until D670 retired it.
-  for (const p of ['/execution', '/build/team', '/build/metrics',
-    '/network-effects', '/raise/capital']) {
-    assert.ok(tabsTo(p), `${p} has no inbound link anywhere else — the tab IS the door`);
-  }
-  assert.ok(!targets.includes('/messages'), 'Messages is intentionally outside the eight-row canvas shell');
-});
+test('the former sibling-bar editors return to their own modules',()=>checks.returns(actual));
 
-test('each row that owns sections is actually wrapped at its routes', () => {
-  // A tab set that no route renders is a list, not a bar; a tab that no route
-  // answers is a dead door. Both are what this test exists to catch.
-  //
-  // The set membership is now READ FROM `FounderWorkspaceTabs.jsx` rather than
-  // hand-copied here. The copy had already drifted — it listed /market-intel
-  // as the whole of `research` while the component's own bar carries Signals
-  // too, and it omitted /raise/pitch from `raise` — so the "exact" list was
-  // checking a subset and quietly missing the rest. Deriving it means a tab
-  // added to the bar is checked the day it is added.
-  const tabsSrc = read('frontend/src/pages/founder/FounderWorkspaceTabs.jsx');
-  const setsBody = tabsSrc.slice(tabsSrc.indexOf('const SETS = {'), tabsSrc.indexOf('\n};'));
-  assert.ok(setsBody.length > 200, 'could not read the SETS table');
-  const SITES = {};
-  let current = null;
-  for (const line of setsBody.split('\n')) {
-    const head = /^  (\w+): \[/.exec(line);
-    if (head) { current = head[1]; SITES[current] = []; continue; }
-    const to = /\{ to: '([^']+)'/.exec(line);
-    if (to && current) SITES[current].push(to[1]);
-  }
-  // Research's set (Market and Signals) left with both pages (D670).
-  assert.deepEqual(Object.keys(SITES), ['validate', 'build', 'raise', 'grow'],
-    'the four workspace rows that own sections are the four tab sets');
-
-  // Two ways a route can belong to a row, and the shell ships both:
-  //
-  //   1. it renders the row's bar — `<FounderWorkspaceTabs set="raise">`; or
-  //   2. it is wrapped in `founderWorkspace('raise', …)`, which mounts
-  //      `<FounderWorkspacePage page="raise">` and puts the same row in the
-  //      shell around a page that carries its own navigation.
-  //
-  // (2) is what the dedicated zone pages use — /build/roadmap renders
-  // `FounderBuildRoadmap` under `founderWorkspace('build', …)` alongside
-  // /build/board, /build/this-week, /build/cadence and /build/kpi. Reading
-  // only (1) called that unowned, which it is not. What must never happen is
-  // a route claiming the WRONG row, and each branch below pins the set name,
-  // so a Raise page wrapped in the Build shell still fails.
-  //
-  // A route's `element` used to always fit on the line carrying `path="..."`.
-  // It stopped being safe to assume that the day an investor branch was added
-  // ahead of the founder one (/network, /market-intel — both gained a
-  // dedicated Investor*Workspace branch and Prettier wrapped the ternary
-  // across lines). So routeBlock reads a bounded WINDOW of lines starting at
-  // the route and stops at the next <Route, so it cannot walk into a
-  // neighbour's markup and false-positive.
-  // A third mechanism: a route whose page draws its own full-bleed canvas and
-  // carries its own section row renders that page directly, with no shell
-  // wrapper, because the page IS the surface. Every such route is spelled out
-  // here rather than skipped, so repointing one at a different component
-  // still fails.
-  //
-  // /build/roadmap joined the list when the Build sections stopped being
-  // wrapped in `founderWorkspace('build', …)`. That wrapper mounts
-  // FounderWorkspacePage, whose `.founder-frame` caps the page at 1440px and
-  // pads it 22/24/34px, then draws `.founder-stage`'s border around it. Around
-  // a page that already sets `min-height: 100dvh` that is a card inside a card
-  // which cannot fit the dashboard — the "Build doesn't fit full width and
-  // height" report. Raise's and Grow's section pages never had it; Build's no
-  // longer do either.
-  // `/build/discovery` left this table in D422: it stopped being A2's second
-  // address (a founder is redirected to `/validate`) and its editor mounts in
-  // `founderWorkspace('validate', …)`, which the shell branch below accepts.
-  // `/grow/brand` is Grow's own Brand page: it draws the Grow section row
-  // itself, so it renders directly, like the other `/grow/*` section pages.
-  const OWN_LANDING = {
-    '/build/roadmap': '<FounderBuildRoadmap />',
-    '/grow/brand': '<FounderGrowBrand />',
-    // /perks is in the Grow bar and draws its own full-bleed canvas. The
-    // founderWorkspace frame would pad that canvas back into a card, so the
-    // route renders PerksPage directly. A partner is redirected before the
-    // page mounts.
-    '/perks': '<PerksPage ',
-  };
-
-  const rendersBar = new Set();
-  for (const [set, paths] of Object.entries(SITES)) {
-    for (const p of paths) {
-      const block = routeBlock(app, p);
-      assert.ok(block, `no route for ${p} — the ${set} bar links a dead door`);
-      const bar = block.includes(`<FounderWorkspaceTabs set="${set}"`);
-      const shell = block.includes(`founderWorkspace('${set}'`);
-      const landing = OWN_LANDING[p] && block.includes(OWN_LANDING[p]);
-      assert.ok(bar || shell || landing,
-        `${p} is in the ${set} bar but its route neither renders that bar, nor `
-        + `wraps in founderWorkspace('${set}'), nor is the row's own landing `
-        + `page — the row cannot own it`);
-      if (bar) rendersBar.add(set);
-    }
-  }
-  // The original claim, now checked directly instead of by proxy.
-  for (const set of Object.keys(SITES)) {
-    assert.ok(rendersBar.has(set),
-      `no route renders the ${set} bar — it is a list, not a bar`);
-  }
-
-  for (const [path, element] of Object.entries(OWN_LANDING)) {
-    assert.ok(routeBlock(app, path)?.includes(element),
-      `${path} must be owned by its dedicated landing page ${element}`);
-  }
-});
+test('each editor route mounts its module return',()=>checks.bindings(actual));
 
 test('A4 owns the founder Raise landing while workspace mode retains its detailed editor', () => {
   // The landing MOVED, from /raise/pitch to /raise, and the reason is worth
@@ -237,7 +101,7 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   assert.match(app, /founderRaiseLanding = effectiveRole === 'founder'[\s\S]*?get\('mode'\) !== 'workspace'/);
   // D661 (#1474): the landing a founder gets is the Raise cycle overview now.
   assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <CycleRoute cycle="raise" \/>\)/);
-  assert.match(app, /FounderWorkspaceTabs set="raise" user=\{user\}><PitchWorkspacePage \/>/);
+  assert.match(app, /founderEditor\(<PitchWorkspacePage \/>\)/);
   // The desk is an overview OVER the sections, not instead of them.
   assert.match(routeBlock(app, '/raise/pitch'), /<FounderRaisePitch \/>/,
     'the Pitch section page must survive the desk being mounted');
@@ -258,7 +122,7 @@ test('a founder never gets two tab bars on one page', () => {
   // /comarketing already carried the Partner Offers bar. The fix is a branch,
   // not a second bar stacked on the first.
   const comarketing = app.split('\n').find((l) => l.includes('path="/comarketing"'));
-  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', <FounderWorkspaceTabs/,
+  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', founderEditor\(/,
     '/comarketing must serve founders the Grow bar INSTEAD of the Partner bar');
   assert.ok(comarketing.includes('<PartnerWorkspaceTabs set="offers"'),
     '/comarketing must still serve everyone else the Partner bar');
@@ -272,41 +136,9 @@ test('a founder never gets two tab bars on one page', () => {
     '/perks must not stack a second tab bar on the canvas');
 });
 
-test("liquidity's tier gate moved onto the tab rather than being dropped", () => {
-  // The /liquidity ROUTE has no tier gate — the sidebar row was the whole
-  // gate. Folding the row into an ungated tab would have widened who sees it.
-  assert.match(bar, /to: '\/liquidity'[^}]*requiredTier: 'studio'/s);
-  assert.match(bar, /hasTier\(user, t\.requiredTier\)/, 'the filter must apply the gate');
-  const line = app.split('\n').find((l) => l.includes('path="/liquidity"'));
-  assert.ok(!/requiredTier/.test(line), 'if the route ever gains its own gate, revisit this');
-});
+test('liquidity keeps its Studio navigation gate on the module door',()=>checks.gates(actual));
 
-test('every tab carries the guard its route carries', () => {
-  // A tab that bounces the viewer off a route guard is worse than an absent
-  // one. Each tab's `roles` must be a subset of its route's guard list.
-  const sets = [...bar.matchAll(/\{ to: '([^']+)', label: '[^']+', icon: \w+,\s*roles: \[([^\]]*)\](, labOnlyFor: \[([^\]]*)\])?/g)];
-  assert.ok(sets.length >= 15, `only found ${sets.length} tabs — the regex went stale`);
-  for (const [, to, rolesRaw, , labRaw] of sets) {
-    const line = app.split('\n').find((l) => l.includes(`path="${to}"`));
-    assert.ok(line, `no route for tab ${to}`);
-    const guardList = line.slice(line.indexOf('guard(')).match(/\[([^\]]*)\]/);
-    assert.ok(guardList, `could not read the guard for ${to}`);
-    const allowed = new Set(guardList[1].split(',').map((x) => x.trim().replace(/'/g, '')));
-    // `labRoles(...)` widens the guard at runtime to admit the viewer's own
-    // role while spinout_lab_active === 1. A tab may rely on that ONLY by
-    // declaring labOnlyFor, which makes it disappear when the widening does
-    // not apply — otherwise it would offer a route that bounces the viewer.
-    const labWidened = new Set((labRaw || '').split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean));
-    if (labWidened.size) {
-      assert.ok(line.includes('labRoles('),
-        `tab ${to} declares labOnlyFor but its route is not wrapped in labRoles()`);
-    }
-    for (const r of rolesRaw.split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean)) {
-      assert.ok(allowed.has(r) || labWidened.has(r),
-        `tab ${to} offers '${r}' but its route guard is ${[...allowed].join(', ')}`);
-    }
-  }
-});
+test('every module tool door carries its route\'s access rule',()=>checks.guards(actual));
 
 test('Home is /studio, no role root invented', () => {
   assert.equal(rows[0].to, '/studio');
@@ -341,7 +173,7 @@ test('the Research row lands somewhere every founder can actually open', () => {
     `${research.to} must admit 'founder' outright, not only Lab-active ones`);
   // /market-intel and its Lab-only Market tab were the other half of this
   // test; D670 retired the page, and the route only redirects to /research.
-  assert.doesNotMatch(bar, /to: '\/market-intel'/, 'the retired Market tab is back');
+  assert.doesNotMatch(toolNavigation, /path: '\/market-intel'/, 'the retired Market tab is back');
 });
 
 test('Trust stays out of the sidebar', () => {
@@ -460,7 +292,7 @@ test('every founder zone page\'s section row switches lenses on a phone (D575)',
     }
   }
   // Twenty-seven until D661 (#1474) retired four desks, each with one row.
-  assert.ok(rows.length >= 23, `only ${rows.length} founder section rows are lens switchers`);
+  assert.ok(rows.length >= 22, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {

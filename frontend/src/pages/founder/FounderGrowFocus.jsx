@@ -120,7 +120,7 @@ export default function FounderGrowFocus() {
     return snapshots.slice(0, 1);
   }, [snapshots, view]);
   const current = latest?.mrr != null ? `${moneyValue(latest.mrr)} MRR` : latest?.active_users != null ? `${numberValue(latest.active_users)} active users` : latest ? 'Snapshot recorded' : 'Not recorded';
-  const nav = [['Focus', `/grow/focus${query}`], ['Customers', `/grow/customers${query}`], ['Talent', `/grow/talent${query}`], ['Brand', `/grow/brand${query}`], ['Capital match', `/grow/capital-match${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = [['Focus', `/grow/focus${query}`], ['Customers', `/grow/customers${query}`], ['Talent', `/grow/talent${query}`], ['Brand', `/grow/brand${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-focus" data-testid="founder-grow-focus"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-focus-crumb"><Link to={`/build/team${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Focus</b></div><div><h1>This month&apos;s focus</h1><p>The month&apos;s metric, targets, and experiment log.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-focus-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Focus' ? 'is-active' : ''}>{label}</LensLink>)}</nav>

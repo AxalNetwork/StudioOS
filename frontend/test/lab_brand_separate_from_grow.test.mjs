@@ -1,3 +1,4 @@
+import { actual, checks } from './_founder_tool_checks.mjs';
 /**
  * Two brand pages, kept apart: the Spin-Out Lab tool at `/spinout-lab/brand`
  * and Grow's own Brand page at `/grow/brand`.
@@ -47,10 +48,7 @@ test('the Lab brand page mounts no Eadwyn rail', () => {
 
 test('Grow\'s own Brand page stays Grow\'s, and is its tab', () => {
   assert.match(routeBlock(APP, '/grow/brand'), /guard\(\['admin', 'founder'\], <FounderGrowBrand \/>\)/);
-  const tabs = read('frontend/src/pages/founder/FounderWorkspaceTabs.jsx');
-  const grow = tabs.slice(tabs.indexOf('  grow: ['), tabs.indexOf('],', tabs.indexOf('  grow: [')));
-  assert.match(grow, /\{ to: '\/grow\/brand', label: 'Brand'/);
-  assert.ok(!grow.includes('/spinout-lab/brand'), 'a Grow tab opens the Lab tool');
+  checks.doors(actual);
 });
 
 test('nothing on the Grow side links or claims the Lab tool', () => {

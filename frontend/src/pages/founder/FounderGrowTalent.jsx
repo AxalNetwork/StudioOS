@@ -76,7 +76,7 @@ export default function FounderGrowTalent() {
   const applicantCount = applications.length;
   const shortlistCount = applications.filter(shortlisted).length;
   const selectedJob = jobs.find((job) => String(job.id) === String(view)) || jobs[0];
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-talent" data-testid="founder-grow-talent"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-talent-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Talent</b></div><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</LensLink>)}</nav>

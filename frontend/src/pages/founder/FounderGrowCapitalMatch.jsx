@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ChevronRight, CircleDot, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ChevronRight, CircleDot, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
@@ -9,7 +9,7 @@ import './founderGrowCapitalMatch.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
-import { LensLink } from '../../workspaces/lens';
+import FounderModuleBackLink from './FounderModuleBackLink';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -24,7 +24,7 @@ const dateLabel = (value) => {
 const labelStage = (value) => titleCase(value) || 'Stage not recorded';
 const normalizedStage = (row) => String(row.stage || row.status || '').toLowerCase();
 
-export default function FounderGrowCapitalMatch() {
+export default function FounderGrowCapitalMatch({ user }) {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
   const [project, setProject] = useState(null);
@@ -76,13 +76,12 @@ export default function FounderGrowCapitalMatch() {
   }, [prospects, view]);
   const passedCount = prospects.filter((row) => normalizedStage(row) === 'passed').length;
   const contactedCount = prospects.filter((row) => !['', 'to_contact', 'new'].includes(normalizedStage(row))).length;
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-capital-match" data-testid="founder-grow-capital-match"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-capital-match-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Capital match</b></div><div><h1>Capital match</h1><p>Investor fit, warm paths and outreach state.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-capital-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Capital match' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
+    <header className="a5-grow-hero"><FounderModuleBackLink user={user} /><div><h1>Investor match</h1><p>Investor fit, warm paths and outreach state.</p></div>
     <ZoneToolbar
-              filters={founderZoneFilters('grow/capital-match', { value: view, onChange: setView, dynamic: { stages: stages.filter((stage) => stage !== 'passed').map((stage) => ({ key: stage, label: labelStage(stage) })) } })}
-              actions={founderZoneActions('grow/capital-match', { query, view: { scope: project?.name, header: ['Fund or prospect', 'Firm', 'Email', 'Stage', 'Status', 'Updated'], rows: visible, cells: (r) => [r.name, r.firm, r.email, r.stage, r.status, r.updated_at] } })}
+              filters={founderZoneFilters('raise/capital-match', { value: view, onChange: setView, dynamic: { stages: stages.filter((stage) => stage !== 'passed').map((stage) => ({ key: stage, label: labelStage(stage) })) } })}
+              actions={founderZoneActions('raise/capital-match', { query, view: { scope: project?.name, header: ['Fund or prospect', 'Firm', 'Email', 'Stage', 'Status', 'Updated'], rows: visible, cells: (r) => [r.name, r.firm, r.email, r.stage, r.status, r.updated_at] } })}
             /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-capital-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <CapitalSkeleton /> : !project ? <EmptyCapital /> : <CapitalContent project={project} prospects={prospects} visible={visible} stages={stages} view={view} setView={setView} query={query} error={error} passedCount={passedCount} contactedCount={contactedCount} warmCount={warmCount} />}
@@ -110,7 +109,7 @@ function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><di
 function Stat({ label, value, note, muted }) { return <div className={`fg-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function CapitalRail({ project, prospects, error }) {
   return <WorkerRail
-    workspace="Grow"
+    workspace="Raise"
     className="a5-rail"
     stance="Read-only match board"
     note="This rail summarizes stored raise prospects. It does not score funds, draft outreach, or record commitments."
