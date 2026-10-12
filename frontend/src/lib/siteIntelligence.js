@@ -75,6 +75,8 @@ export const INTEL_CLAIMS = [
     instead: 'A fund directory row cites its list and publisher but no date (`citationOf` in pages/research/fundDirectoryRead.js).' },
   { id: 'research-rows', kept: false, text: 'Eadwyn cites the rows it read.',
     instead: 'Research Ask cites the member’s own documents; no code has Eadwyn cite research rows.' },
+  { id: 'research-markets-data', kept: false, text: 'Sector and stage data with sources and run dates.',
+    instead: 'Markets carry sources and run dates, but no stage dimension was found in them.' },
   { id: 'research-stale', kept: true, text: 'A stale figure shows its age instead of passing as current.',
     evidence: ['frontend/src/pages/research/MarketZone.jsx', 'AGE IS A GATE, NOT A LABEL'] },
   { id: 'research-companies', kept: true, text: 'Competitor profiles, direct or adjacent, with the public sources behind them.',
