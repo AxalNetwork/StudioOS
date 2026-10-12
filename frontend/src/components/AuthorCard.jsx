@@ -39,7 +39,7 @@ function GlobeIcon({ size = 16 }) {
   return <Globe width={size} height={size} />;
 }
 
-const SOCIALS = [
+export const SOCIALS = [
   { key: 'linkedin',  label: 'LinkedIn',  Icon: LinkedinIcon },
   { key: 'twitter',   label: 'X',         Icon: XIcon },
   { key: 'website',   label: 'Website',   Icon: GlobeIcon },

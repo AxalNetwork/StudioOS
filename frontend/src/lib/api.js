@@ -154,6 +154,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/register'
     || currentPath === '/verify-email'
     || currentPath.startsWith('/b/')
+    // An author's public page, by id or by name slug (owner, 2026-10-12).
+    || currentPath.startsWith('/authors/')
     || /^\/advisors\/[^/]+$/.test(currentPath)
     || currentPath === '/spinout-lab'
     // Printable Program Brief — public brochure page; /spinout-lab/apply
