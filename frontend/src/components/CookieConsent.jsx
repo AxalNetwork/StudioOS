@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Cookie, Check, X } from 'lucide-react';
+import { Cookie, X } from 'lucide-react';
 import {
   isDecided,
   getConsent,
   acceptAll,
   rejectAll,
   saveConsent,
+  COOKIE_ROWS,
   OPEN_PREFERENCES_EVENT,
 } from '../lib/cookieConsent';
+import './cookieConsent.css';
 
 // Task #13 — Discreet cookie consent banner.
 //
@@ -16,12 +18,15 @@ import {
 // only when no choice is recorded, or when reopened from the footer "Cookie
 // preferences" link. Mounted globally in App.jsx inside a SafeMount so a render
 // error degrades to "banner missing" rather than blanking the app.
+//
+// D680 — "More choices" and the footer's "Cookie preferences" open the owner's
+// canvas dialog (COOKIE PREFERENCES), `CookiePreferencesDialog` below. It draws
+// one row per entry in COOKIE_ROWS (lib/cookieConsent.js), which holds only the
+// categories the site really sets. The first-visit banner keeps its look and
+// its three choices; the canvas has no banner of its own.
 
-const TOGGLEABLE = [
-  { key: 'functional', label: 'Functional', desc: 'Remember your preferences and settings.' },
-  { key: 'analytics', label: 'Analytics', desc: 'Help us understand how the platform is used.' },
-  { key: 'advertising', label: 'Advertising', desc: 'Support measuring or tailoring marketing.' },
-];
+// The optional purposes the banner names: the rows with a switch.
+const OPTIONAL_PURPOSES = COOKIE_ROWS.filter((r) => !r.locked).map((r) => r.title.toLowerCase());
 
 function prefsFromConsent() {
   const c = getConsent();
@@ -37,6 +42,7 @@ export default function CookieConsent() {
   const [open, setOpen] = useState(() => !isDecided());
   const [view, setView] = useState('basic'); // 'basic' | 'prefs'
   const [prefs, setPrefs] = useState(prefsFromConsent);
+  const [saved, setSaved] = useState(false);
   const dialogRef = useRef(null);
   const focusOnOpenRef = useRef(false);
 
@@ -55,6 +61,7 @@ export default function CookieConsent() {
   useEffect(() => {
     const onOpen = () => {
       setPrefs(prefsFromConsent());
+      setSaved(false);
       setView('prefs');
       focusOnOpenRef.current = true;
       setOpen(true);
@@ -66,13 +73,14 @@ export default function CookieConsent() {
   const close = useCallback(() => {
     setOpen(false);
     setView('basic');
+    setSaved(false);
   }, []);
 
-  // Dismissing via ✕ or Esc records an explicit "essential only" decision when
-  // the visitor hasn't chosen yet, so the banner stops re-prompting on every
-  // refresh/navigation. No consent is inferred for non-essential categories.
-  // If a choice already exists (banner reopened from the footer link), dismissing
-  // leaves the saved choice untouched.
+  // Dismissing via ✕, Esc or the dialog's backdrop records an explicit
+  // "essential only" decision when the visitor hasn't chosen yet, so the banner
+  // stops re-prompting on every refresh/navigation. No consent is inferred for
+  // non-essential categories. If a choice already exists (reopened from the
+  // footer link, or saved in the dialog), dismissing leaves it untouched.
   const dismiss = useCallback(() => {
     if (!isDecided()) rejectAll();
     close();
@@ -90,8 +98,21 @@ export default function CookieConsent() {
 
   const onAcceptAll = () => { acceptAll(); close(); };
   const onRejectAll = () => { rejectAll(); close(); };
-  const onConfirm = () => { saveConsent(prefs); close(); };
-  const toggle = (key) => setPrefs((p) => ({ ...p, [key]: !p[key] }));
+  const openPrefs = () => { focusOnOpenRef.current = true; setView('prefs'); };
+
+  if (view === 'prefs') {
+    return (
+      <CookiePreferencesDialog
+        dialogRef={dialogRef}
+        prefs={prefs}
+        saved={saved}
+        onToggle={(key) => { setPrefs((p) => ({ ...p, [key]: !p[key] })); setSaved(false); }}
+        onSave={() => { saveConsent(prefs); setSaved(true); }}
+        onAcceptAll={() => { const next = acceptAll(); setPrefs({ ...next.categories }); setSaved(true); }}
+        onClose={dismiss}
+      />
+    );
+  }
 
   const titleId = 'cookie-consent-title';
   const primaryBtn =
@@ -134,112 +155,109 @@ export default function CookieConsent() {
         <X size={16} />
       </button>
 
-      {view === 'basic' ? (
-        <>
-          <div className="flex items-center gap-2 pr-6">
-            <Cookie size={18} className="shrink-0 text-gray-700 dark:text-gray-300" />
-            <h2 id={titleId} className="text-base font-semibold text-gray-900 dark:text-white">
-              We use cookies
-            </h2>
+      <div className="flex items-center gap-2 pr-6">
+        <Cookie size={18} className="shrink-0 text-gray-700 dark:text-gray-300" />
+        <h2 id={titleId} className="text-base font-semibold text-gray-900 dark:text-white">
+          We use cookies
+        </h2>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+        {/* D680 — names only the optional purposes the site has (COOKIE_ROWS);
+            it used to list functional and advertising, which nothing sets. */}
+        By clicking “Accept all”, you agree to the storing of cookies on your device for{' '}
+        {OPTIONAL_PURPOSES.join(' and ')} purposes.
+      </p>
+
+      <div className="mt-4 flex gap-2">
+        <button type="button" onClick={onAcceptAll} className={primaryBtn}>Accept all</button>
+        <button type="button" onClick={onRejectAll} className={secondaryBtn}>Reject all</button>
+      </div>
+      <button
+        type="button"
+        onClick={openPrefs}
+        className={`${secondaryBtn} mt-2 w-full`}
+      >
+        More choices
+      </button>
+
+      <div className="mt-3 text-center">
+        <Link to="/privacy" className={linkBtn}>See our privacy policy</Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * D680 — the canvas's COOKIE PREFERENCES dialog. Presentational: the caller
+ * owns the choice and what saving does. `rows` defaults to COOKIE_ROWS; when it
+ * holds no optional row the dialog says the site sets none and offers no
+ * switch to flip.
+ */
+export function CookiePreferencesDialog({
+  rows = COOKIE_ROWS, prefs, saved, onToggle, onSave, onAcceptAll, onClose, dialogRef,
+}) {
+  const titleId = 'cookie-prefs-title';
+  const optional = rows.filter((r) => !r.locked);
+  return (
+    <div className="ax-ck-overlay" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="ax-ck"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="ax-ck-head">
+          <div>
+            <h2 id={titleId} className="ax-ck-title">Cookie preferences</h2>
+            <p className="ax-ck-intro">
+              We use a minimal set of cookies. Essential cookies keep the workspaces signed in and cannot be
+              disabled. Everything else is optional and off by default.
+            </p>
           </div>
-          <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-            By clicking “Accept all”, you agree to the storing of cookies on your device for
-            functional, analytics, and advertising purposes.
-          </p>
+          <button type="button" className="ax-ck-x" aria-label="Close cookie preferences" onClick={onClose}>×</button>
+        </div>
 
-          <div className="mt-4 flex gap-2">
-            <button type="button" onClick={onAcceptAll} className={primaryBtn}>Accept all</button>
-            <button type="button" onClick={onRejectAll} className={secondaryBtn}>Reject all</button>
-          </div>
-          <button
-            type="button"
-            onClick={() => setView('prefs')}
-            className={`${secondaryBtn} mt-2 w-full`}
-          >
-            More choices
-          </button>
-
-          <div className="mt-3 text-center">
-            <Link to="/privacy" className={linkBtn}>See our privacy policy</Link>
-          </div>
-        </>
-      ) : (
-        <>
-          <h2 id={titleId} className="pr-6 text-base font-semibold text-gray-900 dark:text-white">
-            What can we use data for?
-          </h2>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Essential cookies keep the platform working and are always on.
-          </p>
-
-          <div className="mt-3 space-y-1">
-            {/* Essential — always on, not toggleable. */}
-            <div
-              role="checkbox"
-              aria-checked="true"
-              aria-disabled="true"
-              aria-label="Essential — always on"
-              className="flex items-start gap-3 rounded-lg px-2 py-2"
-            >
-              <span
-                aria-hidden="true"
-                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded
-                           bg-gray-300 text-white dark:bg-gray-600"
-              >
-                <Check size={13} strokeWidth={3} />
-              </span>
-              <span className="flex-1">
-                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-                  Essential <span className="text-xs font-normal text-gray-400">· always on</span>
-                </span>
-                <span className="block text-xs text-gray-500 dark:text-gray-400">
-                  Required for sign-in, security, and remembering your choices.
-                </span>
-              </span>
-            </div>
-
-            {TOGGLEABLE.map(({ key, label, desc }) => {
-              const checked = prefs[key];
-              return (
+        <ul className="ax-ck-rows">
+          {rows.map((row) => {
+            const on = row.locked ? true : Boolean(prefs?.[row.key]);
+            const tId = `ax-ck-${row.key}-t`;
+            const dId = `ax-ck-${row.key}-d`;
+            return (
+              <li key={row.key} className="ax-ck-row" data-category={row.key}>
+                <div className="ax-ck-text">
+                  <div id={tId} className="ax-ck-t">{row.title}</div>
+                  <div id={dId} className="ax-ck-d">{row.description}</div>
+                </div>
                 <button
-                  key={key}
                   type="button"
-                  role="checkbox"
-                  aria-checked={checked}
-                  onClick={() => toggle(key)}
-                  className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left
-                             hover:bg-gray-50 dark:hover:bg-gray-800"
+                  role="switch"
+                  aria-checked={on}
+                  aria-labelledby={tId}
+                  aria-describedby={dId}
+                  disabled={row.locked}
+                  className={`ax-ck-switch${on ? ' is-on' : ''}${row.locked ? ' is-locked' : ''}`}
+                  onClick={row.locked ? undefined : () => onToggle(row.key)}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border
-                      ${checked
-                        ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900'
-                        : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900'}`}
-                  >
-                    {checked && <Check size={13} strokeWidth={3} />}
-                  </span>
-                  <span className="flex-1">
-                    <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">{label}</span>
-                    <span className="block text-xs text-gray-500 dark:text-gray-400">{desc}</span>
-                  </span>
+                  <span className="ax-ck-knob" aria-hidden="true" />
                 </button>
-              );
-            })}
-          </div>
+              </li>
+            );
+          })}
+        </ul>
 
-          <button type="button" onClick={onConfirm} className={`${primaryBtn} mt-4 w-full`}>
-            Confirm
-          </button>
-
-          <div className="mt-3 flex items-center justify-between">
-            <button type="button" onClick={() => setView('basic')} className={linkBtn}>
-              Simpler choices
-            </button>
-            <Link to="/privacy" className={linkBtn}>See our privacy policy</Link>
+        {optional.length === 0 ? (
+          <p className="ax-ck-none">The site sets no optional cookies, so there is nothing to switch off.</p>
+        ) : (
+          <div className="ax-ck-actions">
+            <button type="button" className="ax-ck-save" onClick={onSave}>Save preferences</button>
+            <button type="button" className="ax-ck-all" onClick={onAcceptAll}>Accept all</button>
           </div>
-        </>
-      )}
+        )}
+        {saved && <p className="ax-ck-saved" role="status">Preferences saved.</p>}
+      </div>
     </div>
   );
 }

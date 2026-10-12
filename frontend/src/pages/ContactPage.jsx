@@ -1,20 +1,136 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mail, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
-import PublicNav from '../components/PublicNav';
-import PublicFooter from '../components/PublicFooter';
+import { useSearchParams } from 'react-router-dom';
+import SitePage from '../components/site/SitePage';
+import { Eyebrow, FilterPills } from '../components/site/SiteBlocks';
 import { request } from '../lib/api';
 import { loadTurnstile } from '../lib/turnstile';
+import { openCohortCopy } from '../lib/spinoutLab';
+import './site/contact.css';
 
-const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+/**
+ * `/contact` — the owner's canvas CONTACT view (D680, #1554).
+ *
+ * The form posts to the existing `POST /api/contact` (cloudflare-worker/src/
+ * routes/contact.ts) through `request()`, with the Turnstile widget and the
+ * honeypot it always had. D680 taught that route the form's intent, company
+ * and link; it derives the issue's subject from them.
+ *
+ * WHAT IS NOT PRINTED, AND WHY. The canvas closes the form with "Everything
+ * you send is confidential. We do not share applications outside the fund
+ * team." The route files each submission as an issue on the repository named
+ * in wrangler.toml, AxalNetwork/StudioOS, which is public, so the sentence is
+ * not true of the code and is left out until submissions go somewhere private
+ * (D680). The canvas's "Cohort 5" is an example; the cohort is the Lab's own
+ * rule, `openCohortCopy()`, as on the front page.
+ */
 
-const KINDS = [
-  { id: 'contact', label: 'General enquiry' },
-  { id: 'support', label: 'Support request' },
+const TURNSTILE_SITE_KEY =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_TURNSTILE_SITE_KEY) || '';
+
+/** The canvas's three intents, keyed as `contact.ts`'s CONTACT_INTENTS keys them. */
+export const INTENTS = [
+  { value: 'lab', label: 'Spin-Out Lab' },
+  { value: 'invest', label: 'Investing / LP' },
+  { value: 'advise', label: 'Advising' },
 ];
 
+/**
+ * The fourth intent. The Administrators page's "Request a licence" links to
+ * `/contact?topic=licence`; the pill is drawn only then, so a visitor who came
+ * for anything else sees the canvas's three (D680).
+ */
+export const LICENCE_INTENT = { value: 'licence', label: 'Licence' };
+
+export function intentsFor(topic) {
+  return topic === 'licence' ? [...INTENTS, LICENCE_INTENT] : INTENTS;
+}
+
+/** The pill pressed on arrival: Licence for `?topic=licence`, else the canvas's default. */
+export function initialIntent(topic) {
+  return topic === 'licence' ? LICENCE_INTENT.value : INTENTS[0].value;
+}
+
+/** The three ways in, with the canvas's addresses. `cohort` is `openCohortCopy()`'s answer or null. */
+export function contactRoutes(cohort) {
+  return [
+    {
+      t: 'Founder applications',
+      d: `${cohort ? `Cohort ${cohort.cohortNum} applications` : 'Cohort applications'}, Office Hours requests, and programme questions.`,
+      email: 'founders@axal.vc',
+    },
+    {
+      t: 'Investor relations',
+      d: 'Fund I access, LP onboarding, and reporting. Guillaume Lauzier, General Partner.',
+      email: 'guillaume.lauzier@axal.vc',
+    },
+    {
+      t: 'Advisors & partners',
+      d: 'Advisor applications and service-partner enquiries for the Lab network.',
+      email: 'network@axal.vc',
+    },
+  ];
+}
+
+/**
+ * What the sent state says. The held-for-a-cohort sentence is about Lab
+ * applications, so it follows only the Spin-Out Lab intent.
+ */
+export function sentNote(intent, cohort) {
+  const reply = 'We reply within five business days.';
+  if (intent !== 'lab') return reply;
+  const which = cohort ? `Cohort ${cohort.cohortNum}` : 'the open cohort';
+  return `${reply} If ${which} is full, we will tell you which cohort you are being held for.`;
+}
+
+export const MAX_LINK = 500;
+
+/** The route's rule for the optional link: empty, or an http(s) URL of at most 500 characters. */
+export function isHttpLink(value) {
+  const s = String(value || '').trim();
+  if (!s) return true;
+  if (s.length > MAX_LINK) return false;
+  try {
+    const u = new URL(s);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && Boolean(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** The body `POST /api/contact` receives. `message` is the about box. */
+export function contactPayload({ intent, form, turnstileToken }) {
+  return {
+    intent,
+    name: form.name,
+    email: form.email,
+    company: form.company,
+    link: String(form.link || '').trim(),
+    message: form.about,
+    hp: form.hp,
+    turnstileToken,
+  };
+}
+
+const EMPTY = { name: '', email: '', company: '', link: '', about: '', hp: '' };
+
+const REFUSALS = {
+  turnstile_failed: 'Verification failed — please complete the challenge again.',
+  invalid_link: 'The link must start with http:// or https:// and be at most 500 characters.',
+};
+
 export default function ContactPage() {
-  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '', kind: 'contact', hp: '' });
-  const [status, setStatus] = useState({ state: 'idle', error: '', issueUrl: '' });
+  const [params] = useSearchParams();
+  const topic = params.get('topic');
+  const intents = intentsFor(topic);
+  const cohort = openCohortCopy();
+
+  // The pressed pill belongs to the topic it was pressed under: a link that
+  // changes `?topic=` in place starts again from that topic's default.
+  const [picked, setPicked] = useState({ topic, value: initialIntent(topic) });
+  const intent = picked.topic === topic ? picked.value : initialIntent(topic);
+  const setIntent = (value) => setPicked({ topic, value });
+  const [form, setForm] = useState(EMPTY);
+  const [status, setStatus] = useState({ state: 'idle', error: '', issueUrl: '', intent: '' });
   const [turnstileToken, setTurnstileToken] = useState('');
 
   const turnstileRef = useRef(null);
@@ -38,7 +154,7 @@ export default function ContactPage() {
         sitekey: TURNSTILE_SITE_KEY,
         callback: (token) => setTurnstileToken(token),
         'expired-callback': () => setTurnstileToken(''),
-        theme: 'auto',
+        theme: 'light',
       });
     };
 
@@ -70,24 +186,30 @@ export default function ContactPage() {
     };
   }, [formVisible]);
 
+  const fail = (error) => setStatus({ state: 'error', error, issueUrl: '', intent: '' });
+
   const submit = async (e) => {
     e.preventDefault();
     if (TURNSTILE_SITE_KEY && !turnstileToken) {
-      setStatus({ state: 'error', error: 'Please complete the verification challenge.', issueUrl: '' });
+      fail('Please complete the verification challenge.');
       return;
     }
-    setStatus({ state: 'sending', error: '', issueUrl: '' });
+    if (!isHttpLink(form.link)) {
+      fail(REFUSALS.invalid_link);
+      return;
+    }
+    setStatus({ state: 'sending', error: '', issueUrl: '', intent: '' });
     try {
-      const res = await request('/contact', { method: 'POST', body: JSON.stringify({ ...form, turnstileToken }) });
-      setStatus({ state: 'sent', error: '', issueUrl: res?.issue_url || '' });
-      setForm({ name: '', email: '', subject: '', message: '', kind: form.kind, hp: '' });
+      const res = await request('/contact', {
+        method: 'POST',
+        body: JSON.stringify(contactPayload({ intent, form, turnstileToken })),
+      });
+      setStatus({ state: 'sent', error: '', issueUrl: res?.issue_url || '', intent });
+      setForm(EMPTY);
       setTurnstileToken('');
     } catch (err) {
       // D258 — the refusal's code is `err.code`; `err.message` is its sentence.
-      const msg = err?.code === 'turnstile_failed'
-        ? 'Verification failed — please complete the challenge again.'
-        : (err?.message || 'Something went wrong. Please try again.');
-      setStatus({ state: 'error', error: msg, issueUrl: '' });
+      fail(REFUSALS[err?.code] || err?.message || 'Something went wrong. Please try again.');
       if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
         try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
         setTurnstileToken('');
@@ -96,139 +218,139 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
-      <PublicNav />
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-3xl mx-auto px-6 py-10">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Mail className="w-7 h-7 text-violet-600" /> Contact us
-          </h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            Send us a message — it lands directly in our team queue.
-            For account-specific issues, please pick <em>Support request</em>.
-          </p>
-        </div>
-      </header>
+    <SitePage title="Contact">
+      <div className="ax-wrap ax-contact">
+        <div className="ax-contact-grid">
+          <div>
+            <Eyebrow>Get in touch</Eyebrow>
+            <h1 className="ax-contact-h1">Tell us what you are building.</h1>
+            <p className="ax-contact-lede">
+              Three sentences is enough. We read everything and reply within five business days — including when the answer is no.
+            </p>
+            <ul className="ax-contact-routes" aria-label="Who to write to">
+              {contactRoutes(cohort).map((r) => (
+                <li key={r.email} className="ax-contact-route">
+                  <div className="ax-contact-route-t">{r.t}</div>
+                  <div className="ax-contact-route-d">{r.d}</div>
+                  <a className="ax-mono" href={`mailto:${r.email}`}>{r.email}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-      <main className="flex-1">
-        <div className="max-w-3xl mx-auto px-6 py-10">
-          {status.state === 'sent' ? (
-            <div className="rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-6">
-              <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300 font-semibold">
-                <CheckCircle2 className="w-5 h-5" /> Message received
+          <div className="ax-contact-card">
+            {status.state === 'sent' ? (
+              <div className="ax-contact-sent" role="status">
+                <div className="ax-contact-tick" aria-hidden="true">✓</div>
+                <div className="ax-contact-sent-t">Received.</div>
+                <p className="ax-contact-sent-d">{sentNote(status.intent, cohort)}</p>
+                <div className="ax-contact-sent-more">
+                  {status.issueUrl ? (
+                    <span>Reference: <a className="ax-link" href={status.issueUrl} target="_blank" rel="noopener noreferrer">tracking link</a>.</span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ax-link ax-contact-again"
+                    onClick={() => setStatus({ state: 'idle', error: '', issueUrl: '', intent: '' })}
+                  >
+                    Send another enquiry
+                  </button>
+                </div>
               </div>
-              <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
-                Thanks — we'll be in touch shortly.
-                {status.issueUrl ? <> Reference: <a href={status.issueUrl} target="_blank" rel="noopener noreferrer" className="underline">tracking link</a>.</> : null}
-              </p>
-              <button
-                type="button"
-                onClick={() => setStatus({ state: 'idle', error: '', issueUrl: '' })}
-                className="mt-4 text-sm font-medium text-violet-700 dark:text-violet-300 hover:underline"
-              >
-                Send another message
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={submit} className="space-y-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Your name</span>
-                  <input
-                    type="text"
-                    required
-                    maxLength={120}
-                    value={form.name}
-                    onChange={update('name')}
-                    className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Email</span>
-                  <input
-                    type="email"
-                    required
-                    maxLength={254}
-                    value={form.email}
-                    onChange={update('email')}
-                    className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                </label>
-              </div>
+            ) : (
+              <form className="ax-contact-form" onSubmit={submit} aria-labelledby="ax-contact-k">
+                <div id="ax-contact-k" className="ax-lbl-q ax-contact-k">Application enquiry</div>
+                <FilterPills options={intents} value={intent} onChange={setIntent} label="What the enquiry is about" />
 
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Kind</span>
-                <select
-                  value={form.kind}
-                  onChange={update('kind')}
-                  className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                >
-                  {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Subject</span>
+                <label className="ax-vh" htmlFor="ax-contact-name">Full name</label>
                 <input
+                  id="ax-contact-name"
+                  className="ax-contact-input"
+                  type="text"
+                  required
+                  maxLength={120}
+                  autoComplete="name"
+                  placeholder="Full name"
+                  value={form.name}
+                  onChange={update('name')}
+                />
+                <label className="ax-vh" htmlFor="ax-contact-email">Email</label>
+                <input
+                  id="ax-contact-email"
+                  className="ax-contact-input"
+                  type="email"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  placeholder="Email"
+                  value={form.email}
+                  onChange={update('email')}
+                />
+                <label className="ax-vh" htmlFor="ax-contact-company">Company or project name</label>
+                <input
+                  id="ax-contact-company"
+                  className="ax-contact-input"
                   type="text"
                   required
                   maxLength={200}
-                  value={form.subject}
-                  onChange={update('subject')}
-                  className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  autoComplete="organization"
+                  placeholder="Company or project name"
+                  value={form.company}
+                  onChange={update('company')}
                 />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Message</span>
+                <label className="ax-vh" htmlFor="ax-contact-link">Website, repo, or deck link (optional)</label>
+                <input
+                  id="ax-contact-link"
+                  className="ax-contact-input"
+                  type="url"
+                  inputMode="url"
+                  maxLength={MAX_LINK}
+                  autoComplete="url"
+                  placeholder="Website, repo, or deck link (optional)"
+                  value={form.link}
+                  onChange={update('link')}
+                />
+                <label className="ax-vh" htmlFor="ax-contact-about">What you are building</label>
                 <textarea
+                  id="ax-contact-about"
+                  className="ax-contact-input"
                   required
                   minLength={10}
                   maxLength={5000}
-                  rows={8}
-                  value={form.message}
-                  onChange={update('message')}
-                  className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  rows={4}
+                  placeholder="What are you building, and what is the hardest unresolved question in it right now?"
+                  value={form.about}
+                  onChange={update('about')}
                 />
-              </label>
 
-              {/* Honeypot — hidden from real users; bots fill everything. */}
-              <input
-                type="text"
-                name="hp"
-                value={form.hp}
-                onChange={update('hp')}
-                tabIndex={-1}
-                autoComplete="off"
-                aria-hidden="true"
-                className="absolute -left-[9999px] w-px h-px opacity-0"
-              />
+                {/* Honeypot — hidden from real users; bots fill everything. */}
+                <input
+                  type="text"
+                  name="hp"
+                  value={form.hp}
+                  onChange={update('hp')}
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  className="ax-contact-hp"
+                />
 
-              {status.state === 'error' && (
-                <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                  <span>{status.error}</span>
-                </div>
-              )}
+                {status.state === 'error' && <p className="ax-contact-error" role="alert">{status.error}</p>}
 
-              {TURNSTILE_SITE_KEY && (
-                <div ref={turnstileRef} className="flex justify-start" />
-              )}
+                {TURNSTILE_SITE_KEY && <div ref={turnstileRef} />}
 
-              <div className="flex items-center justify-end gap-4 pt-2">
                 <button
                   type="submit"
-                  disabled={status.state === 'sending' || (TURNSTILE_SITE_KEY && !turnstileToken)}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="ax-btn ax-btn-lg ax-btn-primary ax-contact-send"
+                  disabled={status.state === 'sending' || Boolean(TURNSTILE_SITE_KEY && !turnstileToken)}
                 >
-                  {status.state === 'sending' ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : 'Send message'}
+                  {status.state === 'sending' ? 'Sending…' : 'Send enquiry →'}
                 </button>
-              </div>
-            </form>
-          )}
+              </form>
+            )}
+          </div>
         </div>
-      </main>
-      <PublicFooter />
-    </div>
+      </div>
+    </SitePage>
   );
 }

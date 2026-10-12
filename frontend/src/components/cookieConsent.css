@@ -1,0 +1,66 @@
+/*
+ * The cookie preferences dialog (D680), from the owner's website canvas
+ * (`design/canvases/integrated/Axal VC Website.dc.html`, COOKIE PREFERENCES).
+ *
+ * The dialog is mounted once for the whole app (App.jsx → CookieConsent), so it
+ * sits outside `.ax-site` and cannot read the site's `--ax-*` tokens; its
+ * colours are written out, the canvas's own. It is light in both themes, as the
+ * public site is, and keeps the page's face (no `font-family` here).
+ */
+.ax-ck-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(20,17,24,.5);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.ax-ck {
+  width: 100%; max-width: 520px; max-height: 86vh; overflow: auto;
+  background: #fff; color: #141118; border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(20,17,24,.3); padding: 30px 32px; outline: none;
+  text-align: left;
+}
+.ax-ck *, .ax-ck *::before, .ax-ck *::after { box-sizing: border-box; }
+.ax-ck-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.ax-ck-title { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 800; letter-spacing: -.02em; color: #141118; }
+.ax-ck-intro { margin: 7px 0 0; font-size: 13px; color: #4a4553; line-height: 1.62; }
+.ax-ck-x {
+  flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1px solid #dedce4; background: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1; color: #6b6577;
+  cursor: pointer; font-family: inherit;
+}
+.ax-ck-x:hover { border-color: #c9c2e6; color: #141118; }
+.ax-ck-rows { display: flex; flex-direction: column; gap: 2px; margin: 22px 0 0; padding: 0; list-style: none; }
+.ax-ck-row { display: flex; align-items: flex-start; gap: 14px; padding: 15px 0; border-bottom: 1px solid #f0eff3; }
+.ax-ck-text { min-width: 0; flex: 1; }
+.ax-ck-t { font-size: 14px; font-weight: 700; color: #141118; }
+.ax-ck-d { font-size: 12.5px; color: #4a4553; line-height: 1.55; margin-top: 3px; }
+.ax-ck-switch {
+  flex: none; width: 40px; height: 23px; border-radius: 99px; padding: 2px; border: 0;
+  display: flex; align-items: center; background: #dedce4; cursor: pointer;
+}
+.ax-ck-switch.is-on { background: #6d28d9; }
+.ax-ck-switch.is-locked { opacity: .5; cursor: not-allowed; }
+.ax-ck-knob {
+  width: 19px; height: 19px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(20,17,24,.25); margin-left: 0; transition: margin-left .16s;
+}
+.ax-ck-switch.is-on .ax-ck-knob { margin-left: 17px; }
+.ax-ck-actions { display: flex; gap: 9px; margin-top: 22px; flex-wrap: wrap; }
+.ax-ck-save, .ax-ck-all {
+  flex: 1; min-width: 150px; padding: 12px 0; border-radius: 10px; font-size: 13px; font-weight: 700;
+  text-align: center; cursor: pointer; font-family: inherit;
+}
+.ax-ck-save { background: #6d28d9; color: #fff; border: 1px solid #6d28d9; }
+.ax-ck-save:hover { background: #5b21b6; border-color: #5b21b6; }
+.ax-ck-all { background: #fff; color: #3f3b47; border: 1px solid #dedce4; }
+.ax-ck-all:hover { border-color: #c9c2e6; }
+.ax-ck-none { margin: 18px 0 0; font-size: 13px; color: #4a4553; line-height: 1.6; }
+.ax-ck-saved { margin: 14px 0 0; font-size: 12.5px; color: #0f766e; font-weight: 600; }
+.ax-ck :focus-visible { outline: 2px solid #6d28d9; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .ax-ck-knob { transition: none; }
+}
+@media (max-width: 640px) {
+  .ax-ck-overlay { padding: 16px; }
+  .ax-ck { padding: 24px 20px; }
+  .ax-ck-save, .ax-ck-all { min-width: 0; flex-basis: 100%; }
+}
