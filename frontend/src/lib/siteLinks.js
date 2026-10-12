@@ -26,8 +26,9 @@ export const DOOR_LINKS = [
 ];
 
 /**
- * The Network menu, and the footer's "Network" column. `icon` names a
- * lucide-react icon that `PublicNav` maps to its component.
+ * The Network menu, the footer's "Network" column and the Network pages'
+ * sub-nav (`components/site/NetworkSubNav.jsx`). `icon` names a lucide-react
+ * icon that `PublicNav` and `NetworkSubNav` map to their components.
  */
 export const NETWORK_LINKS = [
   { label: 'Articles', to: '/articles', icon: 'articles', blurb: 'Writing on formation and pre-seed underwriting' },

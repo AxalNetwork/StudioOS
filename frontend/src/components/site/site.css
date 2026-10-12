@@ -395,3 +395,14 @@ a.ax-card:hover, .ax-card-link:hover {
   .ax-grid-3, .ax-grid-4 { grid-template-columns: 1fr; }
   .ax-faq-row { grid-template-columns: 34px 1fr; }
 }
+
+/* ---------- Network sub-nav (NetworkSubNav; D679) ---------- */
+.ax-subnav { border-bottom: 1px solid var(--ax-line); background: #fff; }
+.ax-subnav-row { display: flex; align-items: center; gap: 22px; height: 46px; overflow-x: auto; scrollbar-width: none; }
+.ax-subnav-row::-webkit-scrollbar { display: none; }
+.ax-subnav-k { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; color: var(--ax-muted); flex: none; }
+.ax-subnav-link {
+  display: inline-flex; align-items: center; gap: 7px; flex: none; height: 46px; white-space: nowrap;
+  font-size: 13.5px; font-weight: 500; color: var(--ax-body) !important; border-bottom: 2px solid transparent;
+}
+.ax-subnav-link[aria-current='page'] { font-weight: 700; color: var(--ax-violet) !important; border-bottom-color: var(--ax-violet); }
