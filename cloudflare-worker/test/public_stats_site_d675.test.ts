@@ -7,7 +7,8 @@
  *   - members_verified counts exactly the rows `GET /partners` (the public
  *     directory) lists, because both read DIRECTORY_LISTED_WHERE;
  *   - one failing count returns 0 for that field and leaves the others intact;
- *   - the four Task #18 fields are unchanged.
+ *   - the four Task #18 fields are unchanged, but for funds, which counts every
+ *     fund raising or investing (OPEN_FUND_WHERE).
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/public_stats_site_d675.test.ts
@@ -15,7 +16,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeD1 } from './_d1_sqlite.mjs';
-import publicRoutes, { _resetPublicStatsCache, DIRECTORY_LISTED_WHERE } from '../src/routes/public.ts';
+import publicRoutes, { _resetPublicStatsCache, DIRECTORY_LISTED_WHERE, OPEN_FUND_WHERE } from '../src/routes/public.ts';
 
 const SCHEMA = `
   CREATE TABLE users (id INTEGER PRIMARY KEY, is_active INTEGER);
@@ -32,7 +33,7 @@ const SEED = `
   INSERT INTO partners (uid, name, status, directory_listed) VALUES
     ('p1', 'Listed A', 'active', 1), ('p2', 'Listed B', 'active', 1),
     ('p3', 'Unlisted', 'active', 0), ('p4', 'Inactive', 'pending', 1);
-  INSERT INTO vc_funds (status) VALUES ('active'), ('closed');
+  INSERT INTO vc_funds (status) VALUES ('active'), ('fundraising'), ('closed'), ('wound_down');
   INSERT INTO score_snapshots (project_id, is_sandbox) VALUES (1, 0), (1, 0), (2, 1);
 `;
 
@@ -48,9 +49,9 @@ test('each figure counts what its definition says', async () => {
   assert.equal(s.users, 3, 'active accounts only');
   assert.equal(s.companies, 2, 'ventures not deleted');
   assert.equal(s.members_verified, 2, 'active AND listed partners only');
-  // Task #18's fields are unchanged.
+  // Task #18's fields are unchanged, but for funds: open or investing.
   assert.equal(s.partners, 3);
-  assert.equal(s.funds, 1);
+  assert.equal(s.funds, 2, 'a fund raising counts, a closed or wound-down one does not');
   assert.equal(s.deals_scored, 1);
   assert.equal(s.spinouts, 1);
 });
@@ -62,6 +63,7 @@ test('the directory figure agrees with the directory list', async () => {
   const list = await res.json() as { partners: unknown[] };
   assert.equal(s.members_verified, list.partners.length);
   assert.match(DIRECTORY_LISTED_WHERE, /status = 'active' AND directory_listed = 1/);
+  assert.equal(OPEN_FUND_WHERE, `status IN ('fundraising', 'active')`);
 });
 
 test('one failing count is 0 and the others survive', async () => {

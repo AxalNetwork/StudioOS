@@ -34,7 +34,7 @@ const STATS_L1_TTL_MS = 30_000;
 
 /**
  * D675 (#1549): the figures the public site prints. The four Task #18 fields
- * stay as they were; three are added for the new site's hero and Network
+ * stay as they were, but for `funds` (below); three are added for the new site's hero and Network
  * pages, each counted from D1 with the definition beside it:
  *   - users            — accounts with `is_active = 1`, the same rule every
  *                        other user count in the worker uses;
@@ -42,11 +42,18 @@ const STATS_L1_TTL_MS = 30_000;
  *   - members_verified — the rows `/directory` lists, by the SAME predicate
  *                        `GET /partners` below uses (DIRECTORY_LISTED_WHERE),
  *                        so the figure and the list can never disagree.
- * Countries, LPs & funds, operators & advisors and a tool count are not
- * served: the directory has no country or member-type column, and the app
- * keeps no single registry of tools. A page draws only the figures this
- * returns.
+ * `funds` counts every fund still open or investing (OPEN_FUND_WHERE): a
+ * fund raising its first close is as live as one deploying, and only a
+ * closed or wound-down fund is not. Until 2026-10-12 it counted `active`
+ * alone, so the home page's "Active funds" hid Fund I, which is raising.
+ *
+ * Countries, LPs & funds and operators & advisors are not served: the
+ * directory has no country or member-type column. The module count the home
+ * page prints is derived in the frontend from the registries that serve each
+ * module (`frontend/src/lib/siteModules.js`), not here. A page draws only the
+ * figures this returns.
  */
+export const OPEN_FUND_WHERE = `status IN ('fundraising', 'active')`;
 type PublicStats = {
   partners: number; funds: number; deals_scored: number; spinouts: number;
   users: number; companies: number; members_verified: number;
@@ -84,7 +91,7 @@ publicRoutes.get('/stats', async (c) => {
 
   const [partners, funds, dealsScored, spinouts, users, companies, membersVerified] = await Promise.all([
     countOrZero(c.env, 'partners', `SELECT COUNT(*) as n FROM partners WHERE status = 'active'`),
-    countOrZero(c.env, 'funds', `SELECT COUNT(*) as n FROM vc_funds WHERE status = 'active'`),
+    countOrZero(c.env, 'funds', `SELECT COUNT(*) as n FROM vc_funds WHERE ${OPEN_FUND_WHERE}`),
     countOrZero(c.env, 'deals_scored', `SELECT COUNT(DISTINCT project_id) as n FROM score_snapshots WHERE is_sandbox = 0`),
     countOrZero(c.env, 'spinouts', `SELECT COUNT(*) as n FROM projects WHERE status = 'spinout' AND deleted_at IS NULL`),
     countOrZero(c.env, 'users', `SELECT COUNT(*) as n FROM users WHERE is_active = 1`),

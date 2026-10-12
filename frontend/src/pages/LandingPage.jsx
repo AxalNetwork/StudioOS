@@ -9,6 +9,7 @@ import { openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
 import { numberWordCap } from '../lib/numberWords';
 import { DIMENSIONS } from '../lib/scoringViewModel';
 import { SLIDE_META } from '../lib/pitchDeckViewModel';
+import { PLATFORM_MODULE_COUNT } from '../lib/siteModules';
 import '../components/site/site.css';
 
 /**
@@ -16,9 +17,12 @@ import '../components/site/site.css';
  * `design/canvases/integrated/Axal VC Website.dc.html`.
  *
  * The copy is the owner's. Every figure is read live, never typed:
- *   - the hero's four figures come from `GET /api/public/stats`, and a figure
- *     the endpoint does not return (or returns as 0) is not drawn. D675 (#1549)
- *     adds `tools`, `users` and `companies`;
+ *   - the hero's figures come from `GET /api/public/stats`, and a figure the
+ *     endpoint does not return (or returns as 0) is not drawn. D675 (#1549)
+ *     adds `users` and `companies`; `funds` counts every fund still open or
+ *     investing. The module count is the platform's own, derived from the
+ *     registries that serve each module (`lib/siteModules.js`), and is drawn
+ *     beside them once the read answers;
  *   - the Lab band's cohort number, deadline and places come from the same
  *     cohort rule and record the Lab's own pages use;
  *   - the articles and events are the live published lists.
@@ -27,10 +31,10 @@ import '../components/site/site.css';
  */
 
 const HERO_FIGURES = [
-  { key: 'tools', label: 'Tools in the platform' },
+  { key: 'modules', label: 'Modules' },
   { key: 'users', label: 'Users' },
   { key: 'companies', label: 'Companies' },
-  { key: 'funds', label: 'Active funds' },
+  { key: 'funds', label: 'Active funds', one: 'Active fund' },
 ];
 
 // Story ranking, in order: build, collaborate, then capital. Capital takes the
@@ -130,10 +134,19 @@ export function figure(stats, key) {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
 }
 
-/** The hero's figures that have a real value, in the canvas's order. */
+/**
+ * The hero's figures that have a real value, in the canvas's order: the
+ * platform's module count, then the stats read's counts. Nothing is drawn
+ * until the read answers, so the row appears whole.
+ */
 export function heroFigures(stats) {
+  if (!stats) return [];
+  const counts = { ...stats, modules: PLATFORM_MODULE_COUNT };
   return HERO_FIGURES
-    .map((f) => ({ ...f, value: figure(stats, f.key) }))
+    .map((f) => {
+      const value = figure(counts, f.key);
+      return { key: f.key, label: value === 1 && f.one ? f.one : f.label, value };
+    })
     .filter((f) => f.value != null);
 }
 
@@ -337,8 +350,7 @@ function LabBand() {
   );
 }
 
-function Platform({ stats }) {
-  const tools = figure(stats, 'tools');
+function Platform() {
   return (
     <section className="ax-wrap ax-section" aria-labelledby="ax-platform-h">
       <div style={{ maxWidth: 640 }}>
@@ -350,7 +362,7 @@ function Platform({ stats }) {
         </p>
       </div>
       <div className="ax-tools-k">
-        {tools ? `A sample of the ${tools.toLocaleString('en-US')} tools inside` : 'A sample of the tools inside'}
+        {`A sample of the ${PLATFORM_MODULE_COUNT.toLocaleString('en-US')} modules inside`}
       </div>
       <div className="ax-tools">
         {TOOLS.map((t) => (
@@ -476,7 +488,7 @@ export default function LandingPage() {
         <Lanes />
         <HowItWorks />
         <LabBand />
-        <Platform stats={stats} />
+        <Platform />
         <NetworkTeaser />
         <ClosingCta />
       </main>
