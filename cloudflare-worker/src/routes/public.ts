@@ -20,6 +20,8 @@ import { likeNeedleLower } from '../util/likeSearch';
 import { refuse } from '../util/refusal';
 import { ROUTE, type TaskClass } from '../services/aiRouter';
 import { TASK_LABELS, MODEL_NAMES } from '../services/aiCatalog';
+import { sendNotificationEmail } from '../services/email';
+import { CONTACT_MAILBOX, DEFAULT_CONTACT_MAILBOX } from './contact';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -856,9 +858,15 @@ publicRoutes.delete('/roadmap/votes', async (c) => {
 });
 
 // ---------- /demo-request ------------------------------------------
-// Persists the lead and, when GITHUB_TOKEN + GITHUB_REPO are configured,
-// opens an Issue on the support repo. The HTTP response NEVER waits on
-// GitHub — the issue creation runs after the response is queued.
+// Persists the lead, emails them a confirmation and emails the team (D680).
+// The HTTP response never waits on either email.
+
+/** D680 — who reads each demo topic: the contact form's mailboxes. */
+export const DEMO_MAILBOX: Record<string, string> = {
+  product: DEFAULT_CONTACT_MAILBOX,
+  investor: CONTACT_MAILBOX.invest,
+  partnership: CONTACT_MAILBOX.advise,
+};
 
 publicRoutes.post('/demo-request', async (c) => {
   await ensureMarketingSchema(c.env);
@@ -882,7 +890,7 @@ publicRoutes.post('/demo-request', async (c) => {
 
   // Anti-spam: dedupe by (email, topic) — if a request landed in the last
   // 5 minutes we silently treat the second submit as a no-op success.
-  // This caps GitHub issue spam even though the global /api/* rate limit
+  // This caps duplicate team emails even though the global /api/* rate limit
   // (cloudflare-worker/src/middleware/rateLimit.ts) is already in front
   // of this route.
   try {
@@ -959,44 +967,33 @@ publicRoutes.post('/demo-request', async (c) => {
     }
   })());
 
-  // Optional: open a GitHub Issue out-of-band.
-  const env = c.env as unknown as { GITHUB_TOKEN?: string; GITHUB_REPO?: string };
-  if (env.GITHUB_TOKEN && env.GITHUB_REPO && insertedId) {
+  // D680 — the team hears of the request by email, from the same mailboxes the
+  // contact form uses. It is never filed to GitHub: the repository is public
+  // and the request carries the lead's name, email and message.
+  if (insertedId) {
     c.executionCtx.waitUntil((async () => {
       try {
-        const issueBody = [
-          `**Topic:** ${topic}`,
-          `**Name:** ${name}`,
-          `**Email:** ${email}`,
-          company ? `**Company:** ${company}` : '',
+        const lines = [
+          'A new request from the axal.vc demo form.',
           '',
-          message || '_(no additional message)_',
+          `Topic: ${TOPIC_LABEL[topic] || topic}`,
+          `From: ${name} <${email}>`,
+          ...(company ? [`Company: ${company}`] : []),
           '',
-          `_Submitted via /demo · request #${insertedId}_`,
-        ].filter(Boolean).join('\n');
-        const ghRes = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}/issues`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/vnd.github+json',
-            Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-            'User-Agent': 'axal-studioos-demo',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: `[demo:${topic}] ${name}${company ? ` — ${company}` : ''}`,
-            body: issueBody,
-            labels: ['demo-request', `topic:${topic}`],
-          }),
-        });
-        if (ghRes.ok) {
-          const issue = await ghRes.json<{ html_url?: string }>().catch(() => ({} as any));
-          if (issue?.html_url) {
-            await c.env.DB.prepare(
-              `UPDATE demo_requests SET github_issue_url = ? WHERE id = ?`,
-            ).bind(issue.html_url, insertedId).run();
-          }
-        }
-      } catch { /* swallow — request already succeeded for the user */ }
+          message || '(no message)',
+          '',
+          `Reference: request #${insertedId} (demo_requests)`,
+        ];
+        const sent = await sendNotificationEmail(
+          c.env,
+          DEMO_MAILBOX[topic] || DEFAULT_CONTACT_MAILBOX,
+          `[Demo] ${TOPIC_LABEL[topic] || topic} — ${company || name}`.slice(0, 200),
+          lines.join('\n'),
+        );
+        if (!sent) console.warn(`[demo-request] request #${insertedId} stored but not emailed to the team; read it from demo_requests`);
+      } catch {
+        console.warn(`[demo-request] request #${insertedId} stored but not emailed to the team; read it from demo_requests`);
+      }
     })());
   }
   return c.json({ ok: true, id: insertedId });
