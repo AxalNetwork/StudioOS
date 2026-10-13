@@ -375,7 +375,7 @@ export async function storeVoiceTranscript(
 ): Promise<'session' | 'pending' | 'empty' | 'gone'> {
   const still = await env.DB.prepare(`SELECT thread_id FROM channel_thread_messages WHERE id = ? AND uid = ? AND voice_ref_enc IS NOT NULL`)
     .bind(note.id, note.uid).first<{ thread_id: number }>();
-  let thread = still ? await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(still.thread_id).first<ThreadRow>() : null;
+  const thread = still ? await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(still.thread_id).first<ThreadRow>() : null;
   if (!thread || thread.status === 'ignored') return 'gone';
   const drop = env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(note.id);
   const text = clip(transcript, CHANNEL_LIMITS.maxTextChars);
@@ -394,7 +394,8 @@ export async function storeVoiceTranscript(
       return 'session';
     } catch (err) {
       if (!(err instanceof IntakeError) || err.status !== 404) throw err;
-      thread = await detach(env, thread);
+      // The interview is gone: the chat goes back to pending, and the note with it.
+      await detach(env, thread);
     }
   }
   const enc = await encryptColumn(env, MSG_TABLE, 'text_enc', note.uid, text);
