@@ -97,17 +97,23 @@ export async function createInterview(env: Env, userId: number, projectId: numbe
 /**
  * A new session on a scoped interview, marked with its channel of origin.
  * Text channels start empty and become `transcribed` on their first append;
- * a meeting session waits as `draft` until its transcript is imported.
+ * a meeting session waits as `draft` until its transcript is imported. A call
+ * records the interviewee's consent when it is scheduled (`consent.method`,
+ * one of CONSENT_METHODS): without it #1470's rule keeps the AI off the
+ * transcript, as it does for a recording.
  */
 export async function openSession(
   env: Env, scoped: ScopedInterview, provider: ChannelProvider, channel: 'text' | 'video',
+  consent: { method: string } | null = null,
 ): Promise<SessionRow> {
   const uid = crypto.randomUUID();
   const row = await env.DB.prepare(
     `INSERT INTO interview_sessions
-       (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, submitted_via, submitted_via_name)
-     VALUES (?, ?, ?, ?, ?, 'draft', 'not_recorded', ?, ?) RETURNING id`,
-  ).bind(uid, scoped.interview.id, scoped.project.id, scoped.member.id, channel, provider, PROVIDER_LABEL[provider])
+       (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
+        submitted_via, submitted_via_name)
+     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END, ?, ?) RETURNING id`,
+  ).bind(uid, scoped.interview.id, scoped.project.id, scoped.member.id, channel,
+    consent ? 'given' : 'not_recorded', consent?.method ?? null, consent?.method ?? null, provider, PROVIDER_LABEL[provider])
     .first<{ id: number }>();
   const session = row ? await loadSession(env, Number(row.id)) : null;
   if (!session) throw new IntakeError(500, 'not_stored', 'The session could not be created.');

@@ -259,6 +259,10 @@ import cycleValidate from './routes/cycle_validate';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
+// D684 (#1575) — interview channels: business Telegram and WhatsApp
+// conversations (S19), Zoom and Google Meet calls from an interview (S18).
+import channels, { channelsAdmin } from './routes/channels';
+import founderValidateMeetings, { zoomWebhook } from './routes/founder_validate_meetings';
 // The operating cadence (#176 FB4) — rituals, the runs that archive them, and
 // the templates they are conducted from. Migration 250.
 import founderCadence from './routes/founder_cadence';
@@ -840,6 +844,9 @@ app.route('/api/admin/network-profiles', adminNetworkProfiles);
 // nested `/api/admin/telegram/*` routes resolve here rather than 404ing
 // inside the generic admin router.
 app.route('/api/admin/telegram', adminTelegram);
+// D684 — the channels bot's setWebhook, super admin only. Before the catch-all
+// `/api/admin` for the same reason as the line above.
+app.route('/api/admin/channels', channelsAdmin);
 // D557 (#1158) — authoring the Learning center; Super Admin only.
 app.route('/api/admin/learning', adminLearningRoutes);
 // D559 (#1160) — authoring exercises and exams, and reviewing submissions.
@@ -1268,6 +1275,13 @@ app.route('/api/partner/delivery', partnerDelivery);
 // D657 — interview sessions: recording, live and final speech-to-text.
 app.route('/api/founder/validate', founderValidateSessions);
 app.route('/api/founder/validate', founderValidate);
+// D684 — Zoom and Meet calls scheduled from an interview (S18). The Zoom
+// webhook mounts before the channels router, which owns the rest of
+// `/api/channels`: member routes plus the public Telegram and WhatsApp webhooks
+// (each verifies its provider's signature or secret before reading anything).
+app.route('/api/founder/validate', founderValidateMeetings);
+app.route('/api/channels', zoomWebhook);
+app.route('/api/channels', channels);
 // D659 (#1472) — the Validate cycle's shared read (#1469's contract: four
 // figures, six cards, a records table per module) and the manual writes for
 // migration 440's records. Same two predicates as the founder board.
@@ -1706,6 +1720,10 @@ export default {
           try {
             const { runChannelSweeps } = await import('./services/channels/jobs');
             await runChannelSweeps(env, now);
+            // Assigned chats that gained messages and went quiet are
+            // structured again (at most every six hours each).
+            const { sweepQuietChats } = await import('./services/sessionAutoStructure');
+            await sweepQuietChats(env, now);
           } catch (e) {
             console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
           }

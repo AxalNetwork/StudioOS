@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ASSISTANTS_HREF, ASSISTANT_CONSENT, ASSISTANT_STEPS, sessionBadge, starterPrompt } from './assistantSession.js';
+import {
+  ASSISTANTS_HREF, ASSISTANT_CONSENT, ASSISTANT_STEPS, sessionBadge, starterPrompt,
+} from './assistantSession.js';
 
 /**
  * D668 (#1498) — Record a session's "From an AI assistant" (D665): three
@@ -30,7 +32,10 @@ export function AssistantEntry({ companyName, copy = (t) => navigator.clipboard?
   );
 }
 
-/** The badge a session from an assistant carries in the session list. */
+/**
+ * The badge an assistant's session carries (violet, with its host). A D684
+ * channel session carries `ChannelOriginBadge` instead, never this one.
+ */
 export function AssistantBadge({ session }) {
   const text = sessionBadge(session);
   if (!text) return null;

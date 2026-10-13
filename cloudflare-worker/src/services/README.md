@@ -138,3 +138,7 @@ into an interview. It reloads the member and re-checks the venture on every
 write, takes the interview only from an id already scoped to the member, and
 stores text where the paste-in Text chat stores it, so Structure and Ask work
 on a channel session unchanged. `channels/` holds the rest.
+`sessionAutoStructure.ts` runs D658's Structure without the button: when a
+call's transcript is imported, when a chat is assigned, and when an assigned
+chat goes quiet. Its findings are proposals for the founder to review. It keeps
+#1470's consent rule and the D640 budget, and re-runs at most every six hours.

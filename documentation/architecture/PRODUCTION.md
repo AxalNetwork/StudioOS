@@ -134,7 +134,12 @@ It's not part of the production deploy path.
   - `TELEGRAM_CHANNEL_BOT_TOKEN`, `TELEGRAM_CHANNEL_BOT_USERNAME`, `TELEGRAM_CHANNEL_WEBHOOK_SECRET` – the Telegram Business bot. It is a separate bot from `TELEGRAM_BOT_TOKEN`, and needs Business Mode switched on in @BotFather.
   - `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` – the Meta app (Tech Provider) for Embedded Signup and the Cloud API webhook.
   - `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN` – the Zoom General app.
-  - Google Meet uses the existing `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+  - Google Meet uses the existing Google Calendar client (`GOOGLE_CAL_CLIENT_*`, else `GOOGLE_CLIENT_*`).
+  - **Provider setup, owner-run, once each.** None of these is done by a deploy:
+    - **Telegram.** `TELEGRAM_CHANNEL_WEBHOOK_SECRET` may use only `A–Z a–z 0–9 _ -`, up to 256 characters (Telegram's rule). With the three secrets set, a super admin calls `POST /api/admin/channels/telegram/webhook` once to register the webhook.
+    - **Meta app.** Callback `https://axal.vc/api/channels/whatsapp/webhook`, with `WHATSAPP_VERIFY_TOKEN` as the verify token. Subscribe the fields `messages` and `smb_message_echoes`.
+    - **Zoom app.** Redirect `<callback base>/api/integrations/oauth/zoom/callback`. Event endpoint `/api/channels/zoom/webhook`, for the events `meeting.ended` and `recording.transcript_completed`. The scopes are exactly the registry's three; the callback refuses a wider grant.
+    - **Google Meet transcripts.** They need `meetings.space.readonly`, which no member's grant carries yet (#1577 follow-up). Scheduling a Meet call works without it.
 
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.

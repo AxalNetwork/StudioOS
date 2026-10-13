@@ -38,7 +38,10 @@ export type JobType =
   // D684 — interview channels' slow work, dispatched by the payload's
   // `provider` through services/channels/jobs.ts.
   | 'channel_followup'
-  | 'meeting_import';
+  | 'meeting_import'
+  // D684 — a session's transcript structured by the Worker AI as soon as it
+  // arrives (services/sessionAutoStructure.ts); proposals still await review.
+  | 'session_structure';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

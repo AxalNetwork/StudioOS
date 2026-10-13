@@ -15,7 +15,7 @@
   <sc-if value="{{ phone }}" hint-placeholder-val="{{ false }}"><span style="width:36px;height:4px;border-radius:99px;background:#ececf1;align-self:center;margin-top:8px;flex:none"></span></sc-if>
   <sc-if value="{{ isSheet }}" hint-placeholder-val="{{ true }}"><div style="padding:16px 20px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex:none">
     <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><sc-if value="{{ isPage }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:#6d28d9;margin-bottom:4px">‹ {{ cycle }}</span></sc-if><sc-if value="{{ isSheet }}" hint-placeholder-val="{{ true }}"><span style="font-size:10px;font-weight:700;color:#6b6577;text-transform:uppercase;letter-spacing:.1em">{{ cycle }}</span></sc-if><span style="font-weight:700;font-size:18px;letter-spacing:-.02em">{{ title }}</span><span style="font-size:12.5px;color:#6b6577;line-height:1.45">{{ sub }}</span></div>
-    <sc-if value="{{ isSheet }}" hint-placeholder-val="{{ true }}"><span style="width:30px;height:30px;border-radius:50%;border:1px solid #ececf1;display:grid;place-items:center;color:#6b6577;flex:none;font-size:15px">×</span></sc-if>
+    <sc-if value="{{ isSheet }}" hint-placeholder-val="{{ true }}"><span onClick="{{ onClose }}" role="button" aria-label="Close" style="width:30px;height:30px;border-radius:50%;border:1px solid #ececf1;display:grid;place-items:center;color:#6b6577;flex:none;font-size:15px;cursor:pointer">×</span></sc-if>
   </div></sc-if>
   <sc-if value="{{ hasSteps }}" hint-placeholder-val="{{ false }}"><div class="ca-steps" style="{{ sx.steps }}"><sc-for list="{{ steps }}" as="s" hint-placeholder-count="5"><span style="{{ s.style }}">{{ s.t }}</span></sc-for></div></sc-if>
   <sc-if value="{{ banner }}" hint-placeholder-val="{{ false }}"><div style="{{ bannerStyle }};{{ sx.banner }}">{{ banner }}</div></sc-if>
@@ -48,6 +48,7 @@
 class Component extends DCLogic {
   renderVals() {
     const action = this.props.action ?? 'connect', view = this.props.view ?? 'list', phone = !!this.props.phone;
+    const onClose = typeof this.props.onClose === 'function' ? this.props.onClose : () => {};
     const pill = (fg, bg, bd, dash) => 'font-size:10.5px;font-weight:600;border-radius:99px;padding:2px 8px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px ' + (dash ? 'dashed ' : 'solid ') + bd;
     const P = { ok: pill('#047857', '#ecfdf5', '#a7f3d0'), grey: pill('#6b6577', '#f4f3f7', '#ececf1'), bad: pill('#b91c1c', '#fef2f2', '#fecaca'), amb: pill('#92400e', '#fffbeb', '#fcd34d'), vio: pill('#6d28d9', '#f4f0fe', '#ddd0fb'), nr: pill('#6b6577', '#f4f3f7', '#d4d1dc', 1), pro: 'font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#7c3aed;border-radius:99px;padding:2px 7px' };
     const B = { primary: 'font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 13px;white-space:nowrap', ghost: 'font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:9px;border:1px solid #ececf1;white-space:nowrap', danger: 'font-size:12.5px;font-weight:700;color:#b91c1c;padding:8px 13px;border-radius:9px;border:1px solid #fecaca;white-space:nowrap', link: 'font-size:12.5px;font-weight:700;color:#6d28d9;white-space:nowrap', off: 'font-size:12.5px;font-weight:700;color:#a1a1aa;background:#f4f3f7;border-radius:9px;padding:8px 13px;white-space:nowrap' };
@@ -136,6 +137,7 @@ class Component extends DCLogic {
     const page = !!this.props.page;
     const sx = page ? { steps: 'display:flex;gap:6px;flex-wrap:wrap', banner: 'margin:0', body: 'display:flex;flex-direction:column;gap:14px', foot: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px' } : { steps: 'display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid #ececf1;flex:none', banner: '', body: 'padding:16px 20px;display:flex;flex-direction:column;gap:12px;flex:1', foot: 'padding:14px 20px;border-top:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:8px;flex:none;flex-wrap:wrap' };
     const root = page ? "position:relative;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;display:flex;flex-direction:column;gap:14px" : "position:absolute;inset:0;background:#fff;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;display:flex;flex-direction:column;overflow:auto;" + (phone ? 'border-radius:18px 18px 0 0' : '');
+    o.onClose = onClose;
     return Object.assign(o, { phone: phone && !page, btnGhost: B.ghost, root, sx, isPage: page, isSheet: !page });
   }
 }
