@@ -13,6 +13,7 @@ import useAiSpend from '../../hooks/useAiSpend';
 import ShareUpdateSheet from '../founder/ShareUpdateSheet';
 import ConnectToolSheet from '../account/ConnectToolSheet';
 import RecordLightbox from '../founder/RecordLightbox';
+import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
@@ -277,6 +278,7 @@ export function underModule(modules, path) {
  * cannot be found opens the lightbox with Who empty rather than not at all.
  */
 function RecordMount({ projectId, interviewId, onClose, onStarted }) {
+  const { recorder } = useActiveRecording();
   const [interview, setInterview] = useState(interviewId ? undefined : null);
   useEffect(() => {
     if (!interviewId) { setInterview(null); return undefined; }
@@ -287,7 +289,7 @@ function RecordMount({ projectId, interviewId, onClose, onStarted }) {
     return () => { alive = false; };
   }, [projectId, interviewId]);
   if (interview === undefined) return null;
-  return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} />;
+  return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} />;
 }
 
 /** The module slug of a Validate path (`/validate/customer-research?…`), or null for the overview. */
@@ -501,7 +503,10 @@ export default function CycleRoute({ cycle, record = false }) {
         )}
         {record && cycle === 'validate' && projectId && (
           <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={closeRecord}
-            onStarted={(session, interview) => navigate(`/validate/session/${session.id}`, { state: { interview } })} />
+            onStarted={(session, interview, where) => (where === 'live'
+              // D685 §5.6: the recording view replaces /record in history, so Back does not reopen the setup.
+              ? navigate(`/validate/record/live?session=${encodeURIComponent(session.id)}`, { replace: true })
+              : navigate(`/validate/session/${session.id}`, { state: { interview } }))} />
         )}
         {Sheet && sheetOpen && projectId && (
           <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />

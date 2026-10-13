@@ -8,7 +8,7 @@ import { AssistantEntry } from './AssistantEntry';
 import { ConnectPanel, SchedulePanel } from './InterviewChannels';
 import { INBOX_HREF } from '../account/channelsModel';
 import {
-  CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, chipStatus, consentNote, defaultProvider, estimate,
+  CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, callLabel, chipStatus, consentNote, defaultProvider, estimate,
   hasMeetingLink, meetingLinkProblem, modeOf, sessionBody, startState, talkingPoints,
 } from './recordSetup.js';
 
@@ -80,6 +80,8 @@ function Section({ title, children, testId }) {
 export default function RecordLightbox({
   projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels = null, fields = SETUP_FIELDS,
   initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, returnFocusTo,
+  // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
+  recorder = null,
 }) {
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
@@ -149,6 +151,12 @@ export default function RecordLightbox({
     sending.current = true;
     setBusy(true); setError(null);
     let made = null;
+    // In person and Audio call: the microphone and the AudioContext are asked
+    // for inside this click, before anything is awaited, so iOS Safari does not
+    // start the context suspended (D685 §5.6.5). A video call asks in its own
+    // second click, "Share the call's tab" (§5.8.1).
+    const handsOver = !!recorder && m.audio;
+    if (handsOver && mode !== 'video') recorder.prepare();
     try {
       let target = interview;
       if (!target) {
@@ -157,8 +165,15 @@ export default function RecordLightbox({
       }
       const body = sessionBody({ mode, consent, live, final, conversation, provider, link, points: picked.map((p) => p.id) }, fields);
       const r = await sessions.create(target.id, body);
+      if (handsOver) {
+        const who = { id: target.id, interviewee_name: target.interviewee_name ?? name.trim(), interviewee_company: target.interviewee_company ?? (company.trim() || null) };
+        recorder.begin({ session: r.session, interview: who, callLabel: callLabel(mode, provider), points: picked.map((p) => ({ id: p.id, text: p.text, covered: false })), video: mode === 'video' });
+        onStarted?.(r.session, who, 'live');
+        return;
+      }
       onStarted?.(r.session, target);
     } catch (e) {
+      recorder?.release();
       // A refused Start leaves nothing behind: the interview made for it goes too.
       if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the Worker's refusal is the message */ } }
       setError(e?.message || 'The session could not be created.');

@@ -7,6 +7,7 @@
  */
 import { api } from './api';
 import { reloadWithinBudget } from './reloadGuard';
+import { whenIdle } from './captureGuard';
 import { reportWarn } from './log';
 
 // The service-worker update reload's budget. One is the whole intent — "reload
@@ -89,7 +90,8 @@ export function registerServiceWorker() {
   // browser that refuses `sessionStorage` writes.
   if (navigator.serviceWorker.controller) {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      reloadWithinBudget(SW_RELOAD_KEY, SW_RELOAD_PARAM, MAX_SW_RELOADS);
+      // Never under a running recording (D685 §5.6.8): the reload waits until it ends.
+      reloadWithinBudget(SW_RELOAD_KEY, SW_RELOAD_PARAM, MAX_SW_RELOADS, whenIdle);
     });
   }
   // Register after first paint to avoid blocking LCP.
