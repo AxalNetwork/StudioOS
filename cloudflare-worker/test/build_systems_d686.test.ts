@@ -77,7 +77,7 @@ const checks=[
  {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
  const action=r.body.parts.tools.rows.find((row:any)=>row.id==='tool-1').cells.action;
- snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next.text,r.body.card.next.href,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.feeds],
+ snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next?.text ?? null,r.body.card.next?.href ?? null,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.feeds],
  [2,1,3,'Reconnect Salesforce','/build/connect?tool=salesforce',{text:'Open',href:'/build/connect?tool=salesforce'},'Capital relationships · Network']);db.close();}},
 
  {name:'The five tiles and rows name Workspace',before:"workspace: 'Workspace'",after:"workspace: 'Analytics'",run:async(route:any)=>{
