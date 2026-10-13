@@ -405,13 +405,15 @@ test('a channel session carries its channel’s badge, not the assistant’s, an
   const tg = { submitted_via: 'telegram', submitted_via_name: 'Telegram', channel: 'text', status: 'transcribed' };
   assert.equal(channelOf(tg), 'telegram');
   assert.deepEqual(sessionOrigin(tg), { kind: 'channel', provider: 'telegram', text: 'From Telegram' });
-  assert.equal(sessionBadge(tg), 'From Telegram');
+  // The assistant badge's text is the assistant's alone (#1578); the channel's
+  // own badge reads `sessionOrigin`'s text through `ChannelOriginBadge`.
+  assert.equal(sessionBadge(tg), null);
   assert.equal(openingStep(tg), 'transcript', 'its words are already there; Structure comes after them');
   assert.equal(openingStep({ ...tg, status: 'draft' }), 'channel', 'nothing yet: the page says what it waits for, never the recorder');
   const zoom = { submitted_via: 'zoom', submitted_via_name: 'Zoom', channel: 'video', status: 'draft' };
   assert.equal(openingStep(zoom), 'channel');
   assert.equal(openingStep({ ...zoom, status: 'transcribed' }), 'transcript');
-  assert.equal(sessionBadge({ submitted_via: 'google_meet', submitted_via_name: 'Google Meet' }), 'From Google Meet');
+  assert.equal(sessionOrigin({ submitted_via: 'google_meet', submitted_via_name: 'Google Meet' }).text, 'From Google Meet');
   assert.match(channelBadgeTitle('zoom'), /Imported from the Zoom call’s transcript/);
   assert.match(channelBadgeTitle('whatsapp'), /Arrived from your connected WhatsApp account/);
   // The assistant path is unchanged; an assistant that calls itself "Telegram" is still an assistant.

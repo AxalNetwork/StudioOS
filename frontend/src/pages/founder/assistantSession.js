@@ -6,6 +6,7 @@
  * AN ASSISTANT'S OUTPUT IS A PROPOSAL FROM THAT ASSISTANT, NEVER A FACT. Its
  * name is self-declared, so a label always carries the redirect host too.
  */
+import { CHANNEL_ORIGINS, channelOrigin } from './channelOrigin.js';
 
 /** The three steps the sheet shows. */
 export const ASSISTANT_STEPS = [
@@ -69,17 +70,15 @@ export function runLabel(run) {
  * channels. The intake (`services/interviewIntake.ts`) sets `submitted_via` to
  * the provider key and `submitted_via_name` to its label; an assistant's
  * `submitted_via` is its OAuth client id, a random hex string, so the key alone
- * tells the two apart. A channel session is the member's own conversation,
- * not an assistant's proposal: it gets its own badge, never the assistant's.
+ * tells the two apart (`channelOrigin.js`). A channel session is the member's
+ * own conversation, not an assistant's proposal: it gets its own badge
+ * (`ChannelOriginBadge.jsx`), never the assistant's.
  */
-export const CHANNEL_SOURCES = { telegram: 'Telegram', whatsapp: 'WhatsApp', zoom: 'Zoom', google_meet: 'Google Meet' };
+export const CHANNEL_SOURCES = CHANNEL_ORIGINS;
 const MEETING_SOURCES = new Set(['zoom', 'google_meet']);
 
 /** The channel a session came through, or null for one recorded here or sent by an assistant. */
-export function channelOf(session) {
-  const key = String(session?.submitted_via || '').trim();
-  return Object.hasOwn(CHANNEL_SOURCES, key) ? key : null;
-}
+export const channelOf = channelOrigin;
 
 /** Where a session came from: `{ kind: 'channel', provider, text }`, `{ kind: 'assistant', text }`, or null. */
 export function sessionOrigin(session) {
@@ -89,9 +88,13 @@ export function sessionOrigin(session) {
   return name ? { kind: 'assistant', text: `From ${name}` } : null;
 }
 
-/** The badge's text for a session from a channel or an assistant, or null for a session recorded here. */
+/**
+ * The assistant badge's text, or null for a session recorded here or from a
+ * channel: a channel session carries the channel badge instead.
+ */
 export function sessionBadge(session) {
-  return sessionOrigin(session)?.text || null;
+  const origin = sessionOrigin(session);
+  return origin?.kind === 'assistant' ? origin.text : null;
 }
 
 /** The channel badge's tooltip: how the words reached the session. */

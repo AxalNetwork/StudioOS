@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ASSISTANTS_HREF, ASSISTANT_CONSENT, ASSISTANT_STEPS, channelBadgeTitle, channelOf, sessionBadge, sessionOrigin, starterPrompt,
+  ASSISTANTS_HREF, ASSISTANT_CONSENT, ASSISTANT_STEPS, sessionBadge, starterPrompt,
 } from './assistantSession.js';
 
 /**
@@ -33,21 +33,13 @@ export function AssistantEntry({ companyName, copy = (t) => navigator.clipboard?
 }
 
 /**
- * The badge a session carries for where it came from: an assistant's (violet,
- * with its host), or, for D684's channels, the channel's own (`ChannelBadge`).
+ * The badge an assistant's session carries (violet, with its host). A D684
+ * channel session carries `ChannelOriginBadge` instead, never this one.
  */
 export function AssistantBadge({ session }) {
-  const origin = sessionOrigin(session);
-  if (!origin) return null;
-  if (origin.kind === 'channel') return <ChannelBadge session={session} />;
-  return <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10.5px] font-bold text-violet-800 dark:bg-violet-950/40 dark:text-violet-200" data-testid="assistant-badge" title={session.submitted_via_host || 'host not recorded'}>{sessionBadge(session)}</span>;
-}
-
-/** D684: "From Telegram", "From Zoom"…: the member's own channel, never an assistant. */
-export function ChannelBadge({ session }) {
-  const provider = channelOf(session);
-  if (!provider) return null;
-  return <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[10.5px] font-bold text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200" data-testid="channel-badge" data-provider={provider} title={channelBadgeTitle(provider)}>{sessionBadge(session)}</span>;
+  const text = sessionBadge(session);
+  if (!text) return null;
+  return <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10.5px] font-bold text-violet-800 dark:bg-violet-950/40 dark:text-violet-200" data-testid="assistant-badge" title={session.submitted_via_host || 'host not recorded'}>{text}</span>;
 }
 
 export default AssistantEntry;

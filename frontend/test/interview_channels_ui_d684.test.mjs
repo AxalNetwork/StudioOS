@@ -22,6 +22,7 @@ import { channelCard, readOverview } from '../src/pages/account/channelsModel.js
 import ChannelsInboxPage, { AssignControls, MessageList, ReplyComposer } from '../src/pages/founder/ChannelsInbox.jsx';
 import { ChannelSessionPanel, ConnectPanel, MeetingRow, SchedulePanel } from '../src/pages/founder/InterviewChannels.jsx';
 import { AssistantBadge } from '../src/pages/founder/AssistantEntry.jsx';
+import { ChannelOriginBadge } from '../src/pages/founder/ChannelOriginBadge.jsx';
 import RecordSessionSheet from '../src/pages/founder/RecordSessionSheet.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 
@@ -456,11 +457,16 @@ test('Record a session offers "From Telegram or WhatsApp" and "Schedule a Zoom o
 // ------------------------------------------------------------------ the session page
 
 test('the badge: "From Telegram" is the channel’s, never the assistant’s violet badge or "host not recorded"', () => {
-  const tg = html(h(AssistantBadge, { session: { submitted_via: 'telegram', submitted_via_name: 'Telegram' } }));
-  assert.match(tg, /data-testid="channel-badge"/);
+  const session = { submitted_via: 'telegram', submitted_via_name: 'Telegram' };
+  // One badge each (#1578): the assistant badge draws nothing for a channel
+  // session, and the channel's own badge says where it came from.
+  assert.equal(html(h(AssistantBadge, { session })), '');
+  const tg = html(h(ChannelOriginBadge, { session }));
+  assert.match(tg, /data-testid="channel-origin-badge"/);
   assert.match(tg, />From Telegram</);
+  assert.match(tg, /title="Arrived from your connected Telegram account"/);
   assert.doesNotMatch(tg, /assistant-badge|host not recorded|violet/);
-  assert.match(html(h(AssistantBadge, { session: { submitted_via: 'zoom', submitted_via_name: 'Zoom' } })), /title="Imported from the Zoom call’s transcript"/);
+  assert.match(html(h(ChannelOriginBadge, { session: { submitted_via: 'zoom', submitted_via_name: 'Zoom' } })), /title="Imported from the Zoom call’s transcript"/);
   const claude = html(h(AssistantBadge, { session: { submitted_via: 'abc123def456', submitted_via_name: 'Claude', submitted_via_host: 'claude.ai' } }));
   assert.match(claude, /data-testid="assistant-badge"[^>]*title="claude\.ai">From Claude</);
 });
