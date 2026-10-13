@@ -929,6 +929,7 @@ export async function importZoomRef(env: Env, ref: MeetingRef, hint: Record<stri
       try { instances = await pastInstances(env, conn, ref.external_ref); }
       catch (e) {
         if (!(e instanceof MeetingProviderError)) throw e;
+        if (ref.status !== 'imported') return importMeetingRef(env, ref, async () => ({ kind: 'error', code: e.code, retryable: e.retryable }));
         // An already-imported first part stays intact, while a missing grant is visible on the call.
         await env.DB.prepare("UPDATE interview_channel_refs SET last_error = ?, updated_at = datetime('now') WHERE id = ? AND status <> 'cancelled'")
           .bind(MEETING_ERRORS[e.code], ref.id).run();

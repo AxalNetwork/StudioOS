@@ -213,6 +213,14 @@ async function withFetch(routes:Record<string,Handler>,run:()=>Promise<void>){
 const part=(uuid:string,started:string)=>json({uuid,start_time:started,recording_files:[{file_type:'TRANSCRIPT',status:'completed',download_url:'https://zoom.us/rec/download/'+uuid}]});
 async function ready(f:World){await connectZoom(f);const ref=await seedRef(f,{status:'ended'});f.db.prepare("UPDATE interview_sessions SET consent_status='given',consent_method='verbal' WHERE id=?").run(ref.sessionId);return ref;}
 const checks=[
+ {name:'A failed discovery marks an unimported call failed and preserves an imported first part',module:'zoom',before:"if (ref.status !== 'imported') return importMeetingRef",after:"if (false) return importMeetingRef",run:async m=>{
+ const f=world(),ref=await ready(f);await withFetch({['GET https://api.zoom.us/v2/past_meetings/'+MEETING_ID+'/instances']:()=>json({},403)},async()=>{
+ const out=await m.zoom.importZoomRef(f.env,refRow(f,ref.uid));const row=refRow(f,ref.uid);
+ snap([out.status,row.status,m.meeting.errorCodeOf(row.last_error)],['failed','failed','zoom_reconnect']);
+ f.db.prepare("UPDATE interview_channel_refs SET status='imported' WHERE uid=?").run(ref.uid);
+ const retained=await m.zoom.importZoomRef(f.env,refRow(f,ref.uid));snap([retained.status,refRow(f,ref.uid).status],['failed','imported']);
+ });f.db.close();}},
+
  {name:'Later lookup failures persist on the instance without replacing the imported first part',module:'zoom',before:"if (named) {\n        const instance = await bindInstance",after:"if (false) {\n        const instance = await bindInstance",run:async m=>{
  const f=world(),ref=await ready(f),start=String(refRow(f,ref.uid).starts_at);let status=403;
  await withFetch({'GET https://api.zoom.us/v2/meetings/first/recordings':()=>part('first',start),'GET https://zoom.us/rec/download/first':()=>new Response(VTT),
