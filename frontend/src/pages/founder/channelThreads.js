@@ -331,8 +331,17 @@ export function defaultMeetingForm(now = Date.now()) {
     time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
     duration: 30,
     topic: '',
+    consent: '',
   };
 }
+
+/** How the interviewee agreed to be recorded and transcribed: the Worker's CONSENT_METHODS. */
+export const MEETING_CONSENT = [
+  ['verbal', 'Said yes, out loud'],
+  ['written', 'In writing'],
+  ['in_app', 'In the app'],
+  ['pre_agreed', 'Agreed beforehand'],
+];
 
 /**
  * The schedule form as the Worker's body, or the reason it cannot be sent.
@@ -346,8 +355,13 @@ export function meetingBody(form, now = Date.now()) {
   if (start.getTime() <= now) return { error: 'Choose a time in the future.' };
   const duration = Number(form.duration);
   if (!Number.isInteger(duration) || duration < 5 || duration > 240) return { error: 'Choose how long the call lasts.' };
+  // No consent, no AI over the transcript (#1470): the Worker refuses the call without it.
+  if (!MEETING_CONSENT.some(([m]) => m === form?.consent)) return { error: 'Record how the interviewee agreed to be recorded and transcribed.' };
   const topic = str(form.topic).slice(0, 200);
-  return { body: { provider: form.provider, starts_at: start.toISOString(), duration_min: duration, ...(topic ? { topic } : {}) } };
+  return { body: {
+    provider: form.provider, starts_at: start.toISOString(), duration_min: duration, ...(topic ? { topic } : {}),
+    consent: { status: 'given', method: form.consent },
+  } };
 }
 
 /**

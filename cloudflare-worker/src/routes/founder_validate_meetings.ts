@@ -38,6 +38,7 @@ import {
 import * as zoom from '../services/channels/zoom';
 import * as meet from '../services/channels/googleMeet';
 import { googleOAuthAvailable } from '../services/calendar';
+import { CONSENT_METHODS } from '../services/interviewSessions';
 
 const meetings = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -145,6 +146,18 @@ meetings.post('/interviews/:id/meetings', async (c) => {
   if (!Number.isInteger(duration) || duration < MIN_DURATION || duration > MAX_DURATION) {
     return refuse(c, 400, { code: 'duration_invalid', message: `Choose a length from ${MIN_DURATION} to ${MAX_DURATION} minutes.` });
   }
+  // The point of the call is its transcript, and #1470's rule is no consent, no
+  // AI over a recording: the interviewee's consent is recorded here, with how
+  // it was given, or the call is not scheduled.
+  const consent = body?.consent && typeof body.consent === 'object' ? body.consent as Record<string, unknown> : null;
+  const consentMethod = String(consent?.method ?? '');
+  if (consent?.status !== 'given' || !(CONSENT_METHODS as readonly string[]).includes(consentMethod)) {
+    return refuse(c, 400, {
+      code: 'consent_required',
+      message: 'Record how the interviewee agreed to be recorded and transcribed before you schedule the call.',
+      extra: { accepted: CONSENT_METHODS },
+    });
+  }
   // Neutral by default: the topic is visible to everyone the member invites.
   const topic = String(body?.topic ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TOPIC) || 'Customer interview';
   const input = { topic, startsAt: new Date(startMs).toISOString(), durationMin: duration, autoRecord: body?.auto_record === true };
@@ -174,7 +187,7 @@ meetings.post('/interviews/:id/meetings', async (c) => {
 
   let sessionId: number | null = null;
   try {
-    const session = await openSession(c.env, s.scoped, provider, 'video');
+    const session = await openSession(c.env, s.scoped, provider, 'video', { method: consentMethod });
     sessionId = session.id;
     const uid = crypto.randomUUID();
     await c.env.DB.prepare(

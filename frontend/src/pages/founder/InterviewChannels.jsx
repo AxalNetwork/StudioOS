@@ -6,7 +6,7 @@ import { TelegramChannelCard, WhatsAppChannelCard, useChannelsOverview } from '.
 import { CHANNELS_HREF, INBOX_HREF, MESSAGING_PROVIDERS, channelCard } from '../account/channelsModel';
 import { channelOf } from './assistantSession.js';
 import {
-  DURATIONS, MEETING_PROVIDERS, PROVIDER_LABEL, assignedSentence, callWhen, defaultMeetingForm, meetingBody, meetingItems,
+  DURATIONS, MEETING_CONSENT, MEETING_PROVIDERS, PROVIDER_LABEL, assignedSentence, callWhen, defaultMeetingForm, meetingBody, meetingItems,
   meetingProviders, meetingStatus, providerNote, safeJoinUrl, scheduleRefusal, sessionHref, threadItems, threadRow,
 } from './channelThreads.js';
 
@@ -244,6 +244,19 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
         <label className="space-y-1 text-[12px] text-axal-faint">Title (optional)<input type="text" maxLength={200} className={FIELD} value={form.topic} placeholder={`Interview${interview?.interviewee_name ? ` with ${interview.interviewee_name}` : ''}`} onChange={set('topic')} /></label>
       </div>
       <p className={NOTE}>Your local time. Share the join link with the person you are interviewing.</p>
+      <fieldset className="space-y-1.5" data-testid="meeting-consent">
+        <legend className="text-[12px] font-semibold text-axal-ink">How did they agree to be recorded and transcribed?</legend>
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="How the interviewee agreed to be recorded and transcribed">
+          {MEETING_CONSENT.map(([m, label]) => (
+            <button key={m} type="button" role="radio" aria-checked={form.consent === m} data-testid={`meeting-consent-${m}`}
+              onClick={() => setForm((f) => ({ ...f, consent: m }))}
+              className={`rounded-full border px-3 py-1 text-[12px] font-semibold ${form.consent === m ? 'border-violet-700 bg-violet-700 text-white dark:border-violet-400 dark:bg-violet-500' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className={NOTE}>After the call, its transcript lands in this interview and the Worker AI proposes the pain points and other findings for you to review. Nothing is added to Validate until you accept it.</p>
+      </fieldset>
       {note && (
         <p className="text-[12px] text-amber-800 dark:text-amber-300" data-testid="schedule-provider-note">
           {note}{refs.providers[form.provider]?.available !== false && <> <Link to={CHANNELS_HREF} className="underline">Open Connectors</Link></>}

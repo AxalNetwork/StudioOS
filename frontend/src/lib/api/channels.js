@@ -13,7 +13,7 @@
 //   ignore           POST   /channels/threads/:uid/ignore  { ignored }
 //   reply            POST   /channels/threads/:uid/reply   { text, client_key }
 //   meetings         GET    /founder/validate/interviews/:id/meetings
-//   scheduleMeeting  POST   /founder/validate/interviews/:id/meetings  { provider, starts_at, duration_min, topic? }
+//   scheduleMeeting  POST   /founder/validate/interviews/:id/meetings  { provider, starts_at, duration_min, topic?, consent }
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
 //
@@ -66,11 +66,11 @@ export const channelsApi = {
     method: 'POST', body: JSON.stringify({ text, client_key: clientKey }),
   }),
   meetings: (interviewId) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings`),
-  scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic }) => {
+  scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic, consent }) => {
     if (!MEETING_PROVIDERS.has(p)) throw new Error(`Unknown meeting provider: ${p}`);
     return request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
       method: 'POST',
-      body: JSON.stringify({ provider: p, starts_at, duration_min: Number(duration_min), ...(topic ? { topic } : {}) }),
+      body: JSON.stringify({ provider: p, starts_at, duration_min: Number(duration_min), ...(topic ? { topic } : {}), consent }),
     });
   },
   cancelMeeting: (interviewId, refUid) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}`, { method: 'DELETE' }),

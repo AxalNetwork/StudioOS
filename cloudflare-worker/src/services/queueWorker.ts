@@ -596,6 +596,13 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await startIncorporationPacket(env, id);
       return;
     }
+    case 'session_structure': {
+      // D684 — Structure without the button. A refusal (budget, no consent,
+      // no transcript) is an outcome recorded on the session, not a retry.
+      const { runSessionStructureJob } = await import('./sessionAutoStructure');
+      await runSessionStructureJob(env, payload);
+      return;
+    }
     case 'channel_followup':
     case 'meeting_import': {
       // D684 — each provider's adapter registered its handler at module load.

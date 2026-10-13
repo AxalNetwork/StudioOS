@@ -30,6 +30,7 @@ import {
 import type { ChannelConnection } from './connections';
 import { refKey } from './events';
 import { isOurSend } from './outbound';
+import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
   CHANNEL_LIMITS, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide, type MessagingProvider,
 } from './types';
@@ -307,6 +308,9 @@ export async function assignThread(
       const drop = rows.map((r) => env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(r.id));
       moved += await appendSegments(env, userId, session.id, segments, thread.provider, [...drop, setSession]);
     }
+    // The chat's text is in the interview: the Worker AI proposes its findings
+    // now; later messages are picked up by the quiet-chat sweep.
+    if (moved > 0) await enqueueSessionStructure(env, session.id, userId, 'chat_assigned');
     return { interviewId, sessionId: session.id, moved };
   } catch (err) {
     // If the first move never landed, nothing moved (each move is one batch

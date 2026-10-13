@@ -476,12 +476,15 @@ test('a bare error code is mapped or left out, never printed alone', () => {
 
 test('the schedule form: local time to UTC, a future time, a duration; the refusal points at Connectors when connecting is the fix', () => {
   const now = Date.parse('2026-10-13T08:00:00Z');
-  const ok = meetingBody({ provider: 'google_meet', date: '2026-10-20', time: '09:30', duration: 45, topic: '  Interview with Ada ' }, now);
+  const ok = meetingBody({ provider: 'google_meet', date: '2026-10-20', time: '09:30', duration: 45, topic: '  Interview with Ada ', consent: 'written' }, now);
   assert.equal(ok.body.provider, 'google_meet');
+  assert.deepEqual(ok.body.consent, { status: 'given', method: 'written' }, 'how the interviewee agreed travels with the call');
+  assert.match(meetingBody({ provider: 'zoom', date: '2026-10-20', time: '09:30', duration: 30 }, now).error, /agreed to be recorded and transcribed/);
+  assert.match(meetingBody({ provider: 'zoom', date: '2026-10-20', time: '09:30', duration: 30, consent: 'telepathy' }, now).error, /agreed to be recorded/);
   assert.equal(ok.body.starts_at, new Date('2026-10-20T09:30:00').toISOString());
   assert.equal(ok.body.duration_min, 45);
   assert.equal(ok.body.topic, 'Interview with Ada');
-  assert.equal('topic' in meetingBody({ provider: 'zoom', date: '2026-10-20', time: '09:30', duration: 30, topic: '' }, now).body, false);
+  assert.equal('topic' in meetingBody({ provider: 'zoom', date: '2026-10-20', time: '09:30', duration: 30, topic: '', consent: 'verbal' }, now).body, false);
   assert.match(meetingBody({ provider: 'zoom', date: '2020-01-01', time: '09:00', duration: 30 }, now).error, /in the future/);
   assert.match(meetingBody({ provider: 'teams', date: '2026-10-20', time: '09:00', duration: 30 }, now).error, /Zoom or Google Meet/);
   assert.match(meetingBody({ provider: 'zoom', date: '', time: '09:00', duration: 30 }, now).error, /date and a time/);

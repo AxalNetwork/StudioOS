@@ -50,6 +50,8 @@ import { CONNECTOR_METADATA, getDescriptor, getProviderImpl } from '../src/integ
 import { decryptCredentials, encryptCredentials } from '../src/integrations/secrets.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
 
+/** How the interviewee agreed: a call is scheduled only with consent recorded (#1470's rule). */
+const CONSENT = { status: 'given', method: 'verbal' };
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 
@@ -318,6 +320,10 @@ test('transcript_completed queues one import; the job imports the VTT with speak
   assert.deepEqual({ ...session }, { status: 'transcribed', final_model: 'zoom_transcript', submitted_via: 'zoom', channel: 'video' });
   assert.match(f.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, /reconciling invoices/);
   assert.deepEqual({ ...f.db.prepare('SELECT status, last_error FROM interview_channel_refs WHERE uid = ?').get(uid) }, { status: 'imported', last_error: null });
+  // The transcript is in, so the Worker AI's Structure pass is queued for this session, as its member.
+  assert.equal(f.jobs.length, 2);
+  assert.deepEqual((f.jobs[1] as any).payload, { session_id: sessionId, user_id: ME, trigger: 'call_imported' });
+  assert.equal((f.jobs[1] as any).job_type, 'session_structure');
   assert.equal(logged.join('\n').includes('invoices'), false, 'no transcript text in the logs');
   const events = JSON.stringify(f.db.prepare('SELECT * FROM channel_events').all());
   assert.equal(events.includes('invoices'), false);
@@ -325,7 +331,7 @@ test('transcript_completed queues one import; the job imports the VTT with speak
   // Imported is settled: a late duplicate under another uuid is acknowledged and dropped.
   const late = await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'another-instance'));
   assert.deepEqual(late.body, { ok: true, ignored: 'imported' });
-  assert.equal(f.jobs.length, 1);
+  assert.equal(f.jobs.length, 2, 'nothing more is queued for a settled call');
 });
 
 test('an unknown meeting is ignored; meeting.ended moves only a scheduled call; no transcript says why', async (t) => {
@@ -471,7 +477,7 @@ test('a Meet call is a Calendar event with a hangoutsMeet conference request', a
     'POST https://www.googleapis.com/calendar/v3/calendars/primary/events': () => json(calendarEvent()),
   });
   const startsAt = iso(2 * HOUR);
-  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider: 'google_meet', starts_at: startsAt, duration_min: 45, topic: 'Ledger chat' });
+  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'google_meet', starts_at: startsAt, duration_min: 45, topic: 'Ledger chat' });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const create = calls.find((c) => c.key.startsWith('POST https://www.googleapis.com/calendar'))!;
   assert.equal(create.url.searchParams.get('conferenceDataVersion'), '1');
@@ -503,7 +509,7 @@ test('Meet: a grant without the transcript scope still schedules, and says Googl
     'GET https://www.googleapis.com/calendar/v3/calendars/primary/events/evt0123abc': () => json(pending ? calendarEvent() : calendarEvent({ hangoutLink: undefined, conferenceData: {} })),
     'DELETE https://www.googleapis.com/calendar/v3/calendars/primary/events/evt0123abc': () => new Response(null, { status: 204 }),
   });
-  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider: 'google_meet', starts_at: iso(HOUR) });
+  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'google_meet', starts_at: iso(HOUR) });
   assert.equal(r.status, 201);
   assert.deepEqual(r.body.notice, { code: 'meet_scope_missing', message: MEETING_ERRORS.meet_scope_missing });
   assert.equal(r.body.meeting.error_code, 'meet_scope_missing');
@@ -513,7 +519,7 @@ test('Meet: a grant without the transcript scope still schedules, and says Googl
   pending = false;
   f.db.exec('DELETE FROM interview_channel_refs');
   const sessionsBefore = count(f.db, 'SELECT COUNT(*) n FROM interview_sessions');
-  const none = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider: 'google_meet', starts_at: iso(HOUR) });
+  const none = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'google_meet', starts_at: iso(HOUR) });
   assert.equal(none.status, 502);
   assert.equal(none.body.error, 'meet_link_unavailable');
   assert.ok(calls.some((c) => c.key.startsWith('DELETE https://www.googleapis.com/calendar')), 'the link-less event is deleted');
@@ -648,7 +654,7 @@ test('schedule, list, cancel and retry a Zoom call', async (t) => {
   });
   const deletes = () => calls.filter((c) => c.key === 'DELETE https://api.zoom.us/v2/meetings/85746065432').length;
   const startsAt = new Date(Date.now() + 3 * HOUR + 123).toISOString();
-  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider: 'zoom', starts_at: startsAt });
+  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'zoom', starts_at: startsAt });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const sent = JSON.parse(calls.find((c) => c.key === 'POST https://api.zoom.us/v2/users/me/meetings')!.body!);
   assert.equal(sent.type, 2);
@@ -665,9 +671,9 @@ test('schedule, list, cancel and retry a Zoom call', async (t) => {
   assert.equal(Date.parse(m.ends_at) - Date.parse(m.starts_at), 30 * 60_000);
   assert.equal(JSON.stringify(f.db.prepare('SELECT * FROM interview_channel_refs').all()).includes('SECRET-HOST-TOKEN'), false);
   const session = f.db.prepare('SELECT channel, status, submitted_via, consent_status FROM interview_sessions WHERE id = ?').get(r.body.session_id);
-  assert.deepEqual({ ...session }, { channel: 'video', status: 'draft', submitted_via: 'zoom', consent_status: 'not_recorded' });
+  assert.deepEqual({ ...session }, { channel: 'video', status: 'draft', submitted_via: 'zoom', consent_status: 'given' });
 
-  const rec = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider: 'zoom', starts_at: startsAt, auto_record: true, topic: '  Ledger\n chat ' });
+  const rec = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'zoom', starts_at: startsAt, auto_record: true, topic: '  Ledger\n chat ' });
   assert.equal(rec.status, 409, 'Zoom gave the same id again: refused, and undone at Zoom');
   assert.equal(rec.body.error, 'meeting_conflict');
   assert.equal(deletes(), 1, 'the duplicate was cancelled at Zoom');
@@ -721,7 +727,7 @@ test('another member’s interview is not there, and nor are another member’s 
     ['DELETE', `/interviews/${THEIR_INTERVIEW}/meetings/${uid}`],
     ['POST', `/interviews/${THEIR_INTERVIEW}/meetings/${uid}/import`],
   ] as const) {
-    const r = await call(f.env, ME, method, path, method === 'POST' && !path.endsWith('import') ? { provider: 'zoom', starts_at: iso(HOUR) } : undefined);
+    const r = await call(f.env, ME, method, path, method === 'POST' && !path.endsWith('import') ? { consent: CONSENT, provider: 'zoom', starts_at: iso(HOUR) } : undefined);
     assert.equal(r.status, 404, `${method} ${path}`);
     assert.equal(r.body.error, 'interview_not_found');
   }
@@ -743,7 +749,7 @@ test('a provider that is not set up answers 503; a member who has not connected 
   const dark = world({ ZOOM_WEBHOOK_SECRET_TOKEN: undefined, GOOGLE_CLIENT_ID: undefined });
   await connectZoom(dark);
   for (const provider of ['zoom', 'google_meet']) {
-    const r = await call(dark.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider, starts_at: iso(HOUR) });
+    const r = await call(dark.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider, starts_at: iso(HOUR) });
     assert.equal(r.status, 503, provider);
     assert.equal(r.body.error, 'provider_unavailable');
     assert.match(r.body.message, /not available on Axal yet/);
@@ -755,7 +761,7 @@ test('a provider that is not set up answers 503; a member who has not connected 
 
   const f = world();
   for (const provider of ['zoom', 'google_meet']) {
-    const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider, starts_at: iso(HOUR) });
+    const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider, starts_at: iso(HOUR) });
     assert.equal(r.status, 409, provider);
     assert.equal(r.body.error, 'connect_first');
   }
@@ -778,13 +784,13 @@ test('a provider refusal at scheduling stores nothing and shows no provider text
   await connectZoom(f);
   let status = 401;
   mockFetch(t, { 'POST https://api.zoom.us/v2/users/me/meetings': () => json({ code: 124, message: 'Invalid access token.' }, status) });
-  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider: 'zoom', starts_at: iso(HOUR) });
+  const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'zoom', starts_at: iso(HOUR) });
   assert.equal(r.status, 409);
   assert.equal(r.body.error, 'zoom_reconnect');
   assert.equal(r.body.message, MEETING_ERRORS.zoom_reconnect);
   assert.equal(JSON.stringify(r.body).includes('Invalid access token'), false);
   status = 503;
-  const busy = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { provider: 'zoom', starts_at: iso(HOUR) });
+  const busy = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'zoom', starts_at: iso(HOUR) });
   assert.equal(busy.status, 503);
   assert.equal(busy.body.error, 'zoom_unreachable');
   assert.equal(count(f.db, 'SELECT COUNT(*) n FROM interview_sessions'), 0);
@@ -826,4 +832,19 @@ test('Zoom is a Connectors provider: PKCE on the authorize URL, Basic auth on th
 
   const dark: any = { env: { ...f.env, ZOOM_CLIENT_ID: undefined } };
   await assert.rejects(impl.buildAuthorizeUrl!(dark, { id: ME } as any, 's'), /^Error: zoom_oauth_unconfigured/);
+});
+
+test('a call is scheduled only with the interviewee\'s consent recorded, and how it was given', async (t) => {
+  const f = world();
+  await connectZoom(f);
+  for (const consent of [undefined, { status: 'not_recorded' }, { status: 'given' }, { status: 'given', method: 'telepathy' }]) {
+    const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent, provider: 'zoom', starts_at: iso(HOUR) });
+    assert.deepEqual([r.status, r.body.error], [400, 'consent_required']);
+  }
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM interview_sessions').get().n, 0, 'nothing is created without consent');
+  mockFetch(t, { 'POST https://api.zoom.us/v2/users/me/meetings': () => json({ id: 81122334455, join_url: 'https://zoom.us/j/81122334455', start_time: iso(HOUR) }) });
+  const ok = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: { status: 'given', method: 'written' }, provider: 'zoom', starts_at: iso(HOUR) });
+  assert.equal(ok.status, 201);
+  const s = f.db.prepare('SELECT consent_status, consent_method, consent_at FROM interview_sessions WHERE id = ?').get(ok.body.session_id);
+  assert.deepEqual([s.consent_status, s.consent_method, typeof s.consent_at], ['given', 'written', 'string']);
 });

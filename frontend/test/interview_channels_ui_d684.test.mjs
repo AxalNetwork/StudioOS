@@ -364,15 +364,23 @@ test('Schedule a call: Zoom or Meet, the body the Worker reads, and a refusal th
     meetings: async () => ({ meetings: [], providers: [{ provider: 'zoom', available: true, connected: true }, { provider: 'google_meet', available: false, connected: false }] }),
     scheduleMeeting: async (id, body) => { sent.push([id, body]); throw Object.assign(new Error('Zoom no longer accepts Axal’s access. Reconnect Zoom in Account › Connectors, then retry.'), { status: 409, code: 'zoom_reconnect' }); },
   };
-  const form = { provider: 'zoom', date: '2099-01-05', time: '10:00', duration: 30, topic: '' };
-  const m = await mount(h(SchedulePanel, { interview: { id: 7, interviewee_name: 'Dana' }, api, initialForm: form }));
+  const form = { provider: 'zoom', date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: '' };
+  const bare = await mount(h(SchedulePanel, { interview: { id: 7, interviewee_name: 'Dana' }, api, initialForm: form }));
+  try {
+    await bare.flush();
+    assert.match(bare.text(), /Calls over Telegram or WhatsApp cannot be recorded this way/);
+    assert.match(bare.text(), /Google Meet · not set up on Axal yet/);
+    assert.equal(bare.props(bare.byTestId('meeting-provider-google_meet')).disabled, true);
+    assert.match(bare.text(), /the Worker AI proposes the pain points and other findings for you to review/);
+    await bare.click('button-schedule-meeting');
+    assert.deepEqual(sent, [], 'no consent recorded, nothing sent');
+    assert.match(bare.text(), /Record how the interviewee agreed to be recorded and transcribed/);
+  } finally { await bare.unmount(); }
+  const m = await mount(h(SchedulePanel, { interview: { id: 7, interviewee_name: 'Dana' }, api, initialForm: { ...form, consent: 'verbal' } }));
   try {
     await m.flush();
-    assert.match(m.text(), /Calls over Telegram or WhatsApp cannot be recorded this way/);
-    assert.match(m.text(), /Google Meet · not set up on Axal yet/);
-    assert.equal(m.props(m.byTestId('meeting-provider-google_meet')).disabled, true);
     await m.click('button-schedule-meeting');
-    assert.deepEqual(sent, [[7, { provider: 'zoom', starts_at: new Date('2099-01-05T10:00:00').toISOString(), duration_min: 30 }]]);
+    assert.deepEqual(sent, [[7, { provider: 'zoom', starts_at: new Date('2099-01-05T10:00:00').toISOString(), duration_min: 30, consent: { status: 'given', method: 'verbal' } }]]);
     assert.match(m.text(), /Zoom no longer accepts Axal’s access\. .* Open Connectors/);
   } finally { await m.unmount(); }
 });
@@ -384,7 +392,7 @@ test('Schedule a call says what to fix before pressing, and repeats the Worker�
     meetings: async () => { listed += 1; return { meetings: [], providers: [{ provider: 'zoom', available: true, connected: false }, { provider: 'google_meet', available: true, connected: true, transcript_access: 'missing' }] }; },
     scheduleMeeting: async () => ({ meeting: { uid: 'r9' }, session_id: 50, notice: { code: 'meet_scope_missing', message: notice } }),
   };
-  const form = (provider) => ({ provider, date: '2099-01-05', time: '10:00', duration: 30, topic: '' });
+  const form = (provider) => ({ provider, date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: 'pre_agreed' });
   const z = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form('zoom') }));
   try {
     await z.flush();

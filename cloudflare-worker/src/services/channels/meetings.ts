@@ -21,6 +21,7 @@
  */
 import type { Env } from '../../types';
 import { IntakeError, importTranscript } from '../interviewIntake';
+import { enqueueSessionStructure } from '../sessionAutoStructure';
 import type { ChannelJobPayload } from './jobs';
 import type { ImportedSegment, MeetingProvider } from './types';
 
@@ -218,6 +219,9 @@ export async function importMeetingRef(
   try {
     const n = await importTranscript(env, Number(ref.user_id), Number(ref.session_id), got.segments, ref.provider);
     await setRefStatus(env, ref.id, 'imported', null);
+    // The transcript is in: the Worker AI proposes its findings (pain points
+    // and the rest) for the founder to review, without waiting for a button.
+    await enqueueSessionStructure(env, Number(ref.session_id), Number(ref.user_id), 'call_imported');
     return { status: 'imported', code: null, retryable: false, segments: n };
   } catch (e) {
     let code: MeetingErrorCode = 'import_failed';
