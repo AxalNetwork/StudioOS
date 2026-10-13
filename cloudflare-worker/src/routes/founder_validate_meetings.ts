@@ -168,7 +168,10 @@ async function attachCall(c: C, s: { user: User; scoped: ScopedInterview }, body
   let session: Awaited<ReturnType<typeof writableSession>>['session'];
   try {
     session = (await writableSession(c.env, s.user.id, sessionId)).session;
-  } catch (e) { return e instanceof IntakeError ? intakeRefusal(c, e) : Promise.reject(e); }
+  } catch (e) {
+    if (e instanceof IntakeError) return intakeRefusal(c, e);
+    throw e;
+  }
   const meta = await c.env.DB.prepare('SELECT submitted_via FROM interview_sessions WHERE id = ?')
     .bind(sessionId).first<{ submitted_via: string | null }>();
   if (Number(session.interview_id) !== Number(s.scoped.interview.id) || Number(session.created_by_user_id) !== Number(s.user.id)) {
@@ -190,7 +193,10 @@ async function attachCall(c: C, s: { user: User; scoped: ScopedInterview }, body
       : await meet.verifyHostedMeet(c.env, googleConn!, link.joinUrl, session.started_at || session.created_at);
     if (!hosted) return refuse(c, 409, { code: 'meeting_not_hosted',
       message: 'Axal can import only a call hosted by the account you connected. Record this call in-app instead.' });
-  } catch (e) { return e instanceof MeetingProviderError ? providerRefusal(c, e) : Promise.reject(e); }
+  } catch (e) {
+    if (e instanceof MeetingProviderError) return providerRefusal(c, e);
+    throw e;
+  }
   try {
     const uid = crypto.randomUUID();
     await c.env.DB.prepare(

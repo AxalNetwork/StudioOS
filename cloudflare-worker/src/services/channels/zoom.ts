@@ -56,7 +56,7 @@ import { claimEvent, finishEvent, releaseEvent } from './events';
 import { enqueueChannelJob, registerChannelJob, registerChannelSweep } from './jobs';
 import { providerAvailable } from './connections';
 import {
-  MeetingProviderError, cancelRef, dueRefs, importMeetingRef, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef, withinCallSlot,
+  MEETING_ERRORS, MeetingProviderError, cancelRef, dueRefs, importMeetingRef, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef, withinCallSlot,
   type ImportOutcome, type MeetingErrorCode, type MeetingRef, type TranscriptFetch, type TranscriptFetcher,
 } from './meetings';
 import type { ImportedSegment } from './types';
@@ -524,7 +524,7 @@ export async function handleZoomWebhook(env: Env, rawBody: string, headers: Head
     if (clientId && clientId !== env.ZOOM_CLIENT_ID) return { status: 200, body: { ok: true, ignored: 'other_app' } };
     const userId = String(event.payload?.user_id ?? '').trim().slice(0, 200);
     const accountId = String(event.payload?.account_id ?? '').trim().slice(0, 200);
-    if (!userId && !accountId) return { status: 400, body: { error: 'malformed', message: 'The deauthorization has no account.' } };
+    if (!userId) return { status: 400, body: { error: 'malformed', message: 'The deauthorization has no user.' } };
     const key = String(event.event_id || `${name}:${accountId}:${userId}:${event.event_ts || ''}`).slice(0, 200);
     const claim = await claimEvent(env, 'zoom', key, 'connection');
     if (claim == null) return { status: 200, body: { ok: true, duplicate: true } };
@@ -543,7 +543,7 @@ export async function handleZoomWebhook(env: Env, rawBody: string, headers: Head
         await env.DB.prepare(
           `UPDATE interview_channel_refs SET status = 'failed', join_url = NULL, last_error = ?, updated_at = datetime('now')
             WHERE provider = 'zoom' AND user_id = ? AND status IN ('scheduled', 'ended', 'transcript_ready')`,
-        ).bind('Zoom is not connected to your Axal account. Connect it in Account › Connectors, then retry.', row.user_id).run();
+        ).bind(MEETING_ERRORS.zoom_not_connected, row.user_id).run();
       }
       await finishEvent(env, claim, rows.length ? 'done' : 'ignored', { userId: rows[0]?.user_id });
       return { status: 200, body: { ok: true } };

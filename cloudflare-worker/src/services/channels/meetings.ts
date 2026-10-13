@@ -175,7 +175,7 @@ export async function closeAttachedRefs(env: Env, sessionId: number): Promise<nu
     `UPDATE interview_channel_refs SET starts_at = COALESCE(?, starts_at), ends_at = ?,
        status = CASE WHEN status = 'scheduled' THEN 'ended' ELSE status END,
        updated_at = datetime('now')
-     WHERE session_id = ? AND ends_at IS NULL AND status NOT IN ('cancelled', 'imported')`,
+     WHERE session_id = ? AND ends_at IS NULL AND status <> 'cancelled'`,
   ).bind(session.started_at, session.stopped_at, sessionId).run();
   return Number(result.meta?.changes ?? 0);
 }

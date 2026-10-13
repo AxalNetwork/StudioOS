@@ -9,6 +9,7 @@ import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
 import meetingsRouter, { zoomWebhook } from '../src/routes/founder_validate_meetings.ts';
+import channelsRouter from '../src/routes/channels.ts';
 import calendarRouter, { buildGoogleOAuthStartResponse } from '../src/routes/calendar.ts';
 import { GOOGLE_MEET_TRANSCRIPT_SCOPE } from '../src/services/calendar.ts';
 import { closeAttachedRefs, importMeetingRef, loadRef } from '../src/services/channels/meetings.ts';
@@ -73,6 +74,7 @@ const app = (() => {
   const a = new Hono();
   a.route('/api/founder/validate', meetingsRouter as any);
   a.route('/api/channels', zoomWebhook as any);
+  a.route('/api/channels', channelsRouter as any);
   a.route('/api/calendar', calendarRouter as any);
   a.onError((err: any, c) => c.json({ detail: err?.message }, 500));
   return a;
@@ -99,14 +101,15 @@ function recording(f: World, id = INTERVIEW) {
     .get(uid, id, id === INTERVIEW ? 7 : 8, ME);
   return Number(row.id);
 }
-async function zoomConnected(f: World) {
-  const encrypted = await encryptCredentials(f.env, 'zoom-test', {
+async function zoomConnected(f: World, userId = ME) {
+  const uid = `zoom-test-${userId}`;
+  const encrypted = await encryptCredentials(f.env, uid, {
     access_token: 'fixture-access', refresh_token: 'fixture-refresh', token_type: 'bearer', expires_at: Date.now() + 3600000,
   });
   f.db.prepare(`INSERT INTO integrations
     (uid, user_id, provider_key, status, auth_type, credentials_enc, external_account_id, config_json)
-    VALUES ('zoom-test', ?, 'zoom', 'active', 'oauth2', ?, 'host-1', '{"zoom_account_id":"account-1"}')`)
-    .run(ME, encrypted);
+    VALUES (?, ?, 'zoom', 'active', 'oauth2', ?, ?, '{"zoom_account_id":"account-1"}')`)
+    .run(uid, userId, encrypted, userId === ME ? 'host-1' : 'host-2');
 }
 async function meetConnected(f: World, scope = `https://www.googleapis.com/auth/calendar.events ${GOOGLE_MEET_TRANSCRIPT_SCOPE}`) {
   f.db.prepare('INSERT INTO google_oauth_tokens (user_id, refresh_token, scope) VALUES (?, ?, ?)')
@@ -150,6 +153,26 @@ test('attached Zoom call verifies its host, rejects reuse, and closes at recordi
   assert.equal(await closeAttachedRefs(f.env, sessionId), 1);
   assert.ok((await loadRef(f.env, ref!.uid))?.ends_at);
   assert.equal(await closeAttachedRefs(f.env, sessionId), 0);
+});
+
+test('channel status reports only this member’s Zoom and Meet connections, including transcript access', async () => {
+  const f = world();
+  const get = async () => {
+    const response = await app.fetch(new Request('http://x/api/channels', { headers: await auth() }), f.env);
+    assert.equal(response.status, 200);
+    return await response.json() as any;
+  };
+  const empty = await get();
+  assert.equal(empty.connections.zoom, undefined);
+  assert.equal(empty.connections.google_meet, undefined);
+  await zoomConnected(f);
+  await meetConnected(f, 'https://www.googleapis.com/auth/calendar.events');
+  const connected = await get();
+  assert.deepEqual(connected.connections.zoom, { status: 'active' });
+  assert.deepEqual(connected.connections.google_meet, { status: 'active', transcript_access: 'missing' });
+  f.db.prepare('UPDATE google_oauth_tokens SET scope = ? WHERE user_id = ?')
+    .run(GOOGLE_MEET_TRANSCRIPT_SCOPE, ME);
+  assert.equal((await get()).connections.google_meet.transcript_access, 'granted');
 });
 
 test('attached call refuses another host and another interview without storing a ref', async (t) => {
@@ -207,6 +230,24 @@ test('attached Meet verifies own Calendar event; import creates provider session
     'Recorder words');
 });
 
+test('attached Meet refuses a call organised by another account', async (t) => {
+  const f = world();
+  const sessionId = recording(f);
+  await meetConnected(f);
+  mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'fixture-access' }),
+    'GET https://www.googleapis.com/calendar/v3/calendars/primary/events': () => json({ items: [
+      { organizer: { self: false }, hangoutLink: `https://meet.google.com/${MEET_CODE}` },
+    ] }),
+  });
+  const response = await request(f, 'POST', `/interviews/${INTERVIEW}/meetings`, {
+    attach: { join_url: `https://meet.google.com/${MEET_CODE}` }, session_id: sessionId,
+  });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error, 'meeting_not_hosted');
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM interview_channel_refs').get().n, 0);
+});
+
 test('Meet transcript scope is requested only by incremental consent, and missing grant leaves old token', async (t) => {
   const f = world();
   await meetConnected(f, 'https://www.googleapis.com/auth/calendar.events');
@@ -228,9 +269,35 @@ test('Meet transcript scope is requested only by incremental consent, and missin
   assert.equal(transcriptAccess(await googleConnection(f.env, ME)), 'missing');
 });
 
+test('explicit Meet consent callback stores the grant and returns to Record', async (t) => {
+  const f = world();
+  await meetConnected(f, 'https://www.googleapis.com/auth/calendar.events');
+  const start = await app.fetch(new Request('http://x/api/calendar/google/meet-transcripts/connect?return_to=record', {
+    method: 'POST', headers: await auth(),
+  }), f.env);
+  assert.equal(start.status, 200);
+  assert.match(start.headers.get('set-cookie') || '', /studioos_cal_return=record/);
+  const url = new URL((await start.json() as any).redirect_url);
+  assert.ok(url.searchParams.get('scope')?.includes(GOOGLE_MEET_TRANSCRIPT_SCOPE));
+  mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'fixture-access', refresh_token: 'new-refresh',
+      scope: `https://www.googleapis.com/auth/calendar.events ${GOOGLE_MEET_TRANSCRIPT_SCOPE}` }),
+    'GET https://www.googleapis.com/oauth2/v2/userinfo': () => json({}),
+  });
+  const state = url.searchParams.get('state');
+  const callback = await app.fetch(new Request(
+    `http://x/api/calendar/google/callback?code=fixture-code&state=${encodeURIComponent(state!)}`,
+    { headers: { Cookie: 'studioos_cal_return=record' } },
+  ), f.env);
+  assert.equal(callback.status, 302);
+  assert.match(callback.headers.get('location') || '', /^https:\/\/axal\.test\/validate\/record\?google=connected/);
+  assert.equal(transcriptAccess(await googleConnection(f.env, ME)), 'granted');
+});
+
 test('signed Zoom deauthorization removes only the matched member connection and is idempotent', async () => {
   const f = world();
   await zoomConnected(f);
+  await zoomConnected(f, OTHER);
   const payload = JSON.stringify({ event: 'app_deauthorized', event_id: 'event-1', event_ts: Date.now(),
     payload: { client_id: f.env.ZOOM_CLIENT_ID, user_id: 'host-1', account_id: 'account-1' } });
   const ts = Math.floor(Date.now() / 1000);
@@ -240,11 +307,27 @@ test('signed Zoom deauthorization removes only the matched member connection and
     method: 'POST', headers: h, body: payload,
   }), f.env);
   assert.equal((await post({})).status, 401);
-  assert.equal(f.db.prepare("SELECT status FROM integrations WHERE provider_key = 'zoom'").get().status, 'active');
+  assert.equal(f.db.prepare("SELECT status FROM integrations WHERE provider_key = 'zoom' AND user_id = ?").get(ME).status, 'active');
   assert.equal((await post(headers)).status, 200);
-  const row = f.db.prepare("SELECT status, credentials_enc, external_account_id FROM integrations WHERE provider_key = 'zoom'").get();
+  const row = f.db.prepare("SELECT status, credentials_enc, external_account_id FROM integrations WHERE provider_key = 'zoom' AND user_id = ?").get(ME);
   assert.equal(row.status, 'disconnected');
   assert.equal(row.credentials_enc, null);
   assert.equal(row.external_account_id, null);
+  assert.equal(f.db.prepare("SELECT status FROM integrations WHERE provider_key = 'zoom' AND user_id = ?").get(OTHER).status,
+    'active');
   assert.equal((await post(headers)).status, 200);
+});
+
+test('deauthorization with only an account id cannot disconnect every user in that Zoom account', async () => {
+  const f = world();
+  await zoomConnected(f);
+  const payload = JSON.stringify({ event: 'app_deauthorized', event_id: 'event-account-only',
+    payload: { client_id: f.env.ZOOM_CLIENT_ID, account_id: 'account-1' } });
+  const ts = Math.floor(Date.now() / 1000);
+  const signature = createHmac('sha256', WEBHOOK_KEY).update(`v0:${ts}:${payload}`).digest('hex');
+  const response = await app.fetch(new Request('http://x/api/channels/zoom/webhook', {
+    method: 'POST', headers: { 'x-zm-signature': `v0=${signature}`, 'x-zm-request-timestamp': String(ts) }, body: payload,
+  }), f.env);
+  assert.equal(response.status, 400);
+  assert.equal(f.db.prepare("SELECT status FROM integrations WHERE provider_key = 'zoom'").get().status, 'active');
 });
