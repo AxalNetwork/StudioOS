@@ -7,9 +7,8 @@
  * the member scheduled it, and nothing a provider sends later can change them.
  * A Zoom webhook finds the row by (provider, meeting id); the Meet sweep reads
  * it directly. Both then hand the row to `importMeetingRef`, which asks the
- * adapter for the transcript with the member's own token and writes it through
- * `interviewIntake.importTranscript` — which re-checks the member and the
- * venture — so Structure and Ask work on it as on any other session.
+ * adapter for the transcript with the member's own token and writes normalized final segments after
+ * `interviewIntake.writableSession` re-checks the member and the venture — so Structure and Ask work on it as on any other session.
  *
  *   scheduled → ended → transcript_ready → imported
  *                     ↘ no_transcript (the provider made none, with the reason)
@@ -83,6 +82,8 @@ export const MEETING_ERRORS = {
   transcript_too_large: 'The transcript is larger than Axal imports. Paste the part you need instead.',
   interview_gone: 'The interview or its session no longer exists, or is no longer yours, so nothing was imported.',
   member_inactive: 'The Axal account that scheduled this call is no longer active, so nothing was imported.',
+  zoom_cancel_confirmed: 'Zoom confirmed cancellation of this call.',
+  meet_cancel_confirmed: 'Google confirmed cancellation of this call.',
   zoom_cancel_unconfirmed: 'Axal stopped importing this call, but Zoom did not confirm cancellation. Cancel it in Zoom too.',
   meet_cancel_unconfirmed: 'Axal stopped importing this call, but Google did not confirm cancellation. Cancel it in Google Calendar too.',
   import_failed: 'The transcript could not be imported. Try again in a minute.',
@@ -371,9 +372,12 @@ export function meetingImportHandler(provider: MeetingProvider, importer: Meetin
 
 /** Wire one meeting into the scheduling response: the ref with its reason, never a token or text. */
 export function meetingView(ref: MeetingRef, label: string) {
+  const code = errorCodeOf(ref.last_error);
+  const confirmed = ref.status === 'cancelled' && ['zoom_cancel_confirmed','meet_cancel_confirmed'].includes(code ?? '');
+  const unconfirmed = ref.status === 'cancelled' && ['zoom_cancel_unconfirmed','meet_cancel_unconfirmed'].includes(code ?? '');
   return {
     uid: ref.uid, provider: ref.provider, label, join_url: ref.join_url, starts_at: ref.starts_at, ends_at: ref.ends_at,
-    status: ref.status, provider_cancelled: ref.status === 'cancelled' && ['zoom_cancel_unconfirmed','meet_cancel_unconfirmed'].includes(errorCodeOf(ref.last_error) ?? '') ? false : null, error: ref.last_error, error_code: errorCodeOf(ref.last_error),
+    status: ref.status, provider_cancelled: confirmed ? true : unconfirmed ? false : null, error: confirmed ? null : ref.last_error, error_code: confirmed ? null : code,
     interview_id: Number(ref.interview_id), session_id: Number(ref.session_id),
     created_at: ref.created_at, updated_at: ref.updated_at,
   };

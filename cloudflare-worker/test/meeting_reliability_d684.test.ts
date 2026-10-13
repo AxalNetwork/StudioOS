@@ -213,6 +213,13 @@ async function withFetch(routes:Record<string,Handler>,run:()=>Promise<void>){
 const part=(uuid:string,started:string)=>json({uuid,start_time:started,recording_files:[{file_type:'TRANSCRIPT',status:'completed',download_url:'https://zoom.us/rec/download/'+uuid}]});
 async function ready(f:World){await connectZoom(f);const ref=await seedRef(f,{status:'ended'});f.db.prepare("UPDATE interview_sessions SET consent_status='given',consent_method='verbal' WHERE id=?").run(ref.sessionId);return ref;}
 const checks=[
+ {name:'Confirmed cancellation is still confirmed after reload without a warning',module:'meeting',before:"provider_cancelled: confirmed ? true",after:"provider_cancelled: confirmed ? false",run:async m=>{
+ const f=world();await connectZoom(f);const ref=await seedRef(f,{ends_at:iso(HOUR)});
+ await withFetch({['DELETE https://api.zoom.us/v2/meetings/'+MEETING_ID]:()=>new Response(null,{status:204})},async()=>{
+ const first=await http(m.route,f.env,'DELETE','/interviews/'+INTERVIEW+'/meetings/'+ref.uid);const stored=m.meeting.meetingView(refRow(f,ref.uid),'Zoom');
+ snap([first.status,first.body.provider_cancelled,stored.provider_cancelled,stored.error,stored.error_code],[200,true,true,null,null]);
+ });f.db.close();}},
+
  {name:'A failed discovery marks an unimported call failed and preserves an imported first part',module:'zoom',before:"if (ref.status !== 'imported') return importMeetingRef",after:"if (false) return importMeetingRef",run:async m=>{
  const f=world(),ref=await ready(f);await withFetch({['GET https://api.zoom.us/v2/past_meetings/'+MEETING_ID+'/instances']:()=>json({},403)},async()=>{
  const out=await m.zoom.importZoomRef(f.env,refRow(f,ref.uid));const row=refRow(f,ref.uid);
@@ -252,7 +259,7 @@ const checks=[
  });}finally{globalThis.setTimeout=saved;}
  const row:any=f.db.prepare("SELECT uid,credentials_enc FROM integrations WHERE provider_key='zoom'").get(),creds:any=await decryptCredentials(f.env,row.uid,row.credentials_enc);
  snap([timers[0],signal,code,creds.refresh_lease??null,creds.refresh_token],[10000,true,'zoom_unreachable',null,'zoom-rt']);f.db.close();}},
- {name:'An unconfirmed cancellation survives GET and a repeated cancel',module:'route',before:"providerCancelled === false ? (ref.provider === 'zoom' ? 'zoom_cancel_unconfirmed' : 'meet_cancel_unconfirmed') : null",after:"null",run:async m=>{
+ {name:'An unconfirmed cancellation survives GET and a repeated cancel',module:'route',before:"providerCancelled === false ? (ref.provider === 'zoom' ? 'zoom_cancel_unconfirmed' : 'meet_cancel_unconfirmed') : providerCancelled === true ? (ref.provider === 'zoom' ? 'zoom_cancel_confirmed' : 'meet_cancel_confirmed') : null",after:"null",run:async m=>{
  const f=world();await connectZoom(f);const ref=await seedRef(f,{ends_at:iso(HOUR)});
  await withFetch({['DELETE https://api.zoom.us/v2/meetings/'+MEETING_ID]:()=>json({},503)},async()=>{
  const path='/interviews/'+INTERVIEW+'/meetings/'+ref.uid;const first=await http(m.route,f.env,'DELETE',path),list=await http(m.route,f.env,'GET','/interviews/'+INTERVIEW+'/meetings'),second=await http(m.route,f.env,'DELETE',path);

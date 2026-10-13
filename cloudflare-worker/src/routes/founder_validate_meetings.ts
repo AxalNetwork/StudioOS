@@ -340,7 +340,7 @@ meetings.delete('/interviews/:id/meetings/:refUid', async (c) => {
       }
     } catch { /* stays false: the page tells the member to cancel it there too */ }
   }
-  await cancelRef(c.env, ref.id, providerCancelled === false ? (ref.provider === 'zoom' ? 'zoom_cancel_unconfirmed' : 'meet_cancel_unconfirmed') : null);
+  await cancelRef(c.env, ref.id, providerCancelled === false ? (ref.provider === 'zoom' ? 'zoom_cancel_unconfirmed' : 'meet_cancel_unconfirmed') : providerCancelled === true ? (ref.provider === 'zoom' ? 'zoom_cancel_confirmed' : 'meet_cancel_confirmed') : null);
   const fresh = await loadRef(c.env, ref.uid);
   return c.json({ meeting: fresh ? view(fresh) : null, provider_cancelled: providerCancelled });
 });
