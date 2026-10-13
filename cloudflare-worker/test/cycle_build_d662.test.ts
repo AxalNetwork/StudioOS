@@ -32,7 +32,7 @@ function fixture() {
     CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
     CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE integrations(id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT);
+    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT);
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
@@ -43,6 +43,8 @@ function fixture() {
     INSERT INTO entities VALUES (501, 'DE'), (502, 'NY');
   `);
   db.exec(migration);
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/455_core_systems_workspace.sql', 'utf8'));
+  db.exec('CREATE TABLE google_oauth_tokens(user_id INTEGER PRIMARY KEY); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER PRIMARY KEY)');
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any;
   return { db, env };
 }
@@ -77,9 +79,9 @@ test('missing MVP target date is not_recorded, not zero days; status transition 
 
 test('only company-enabled connectors count; a failed system keeps the last good sync', async () => {
   const { db, env } = fixture();
-  db.exec(`INSERT INTO integrations VALUES (1, 1, 'hubspot', 'HubSpot', 'active', '2026-10-01');
-    INSERT INTO integrations VALUES (2, 1, 'payroll_tool', 'Payroll', 'error', '2026-10-03');
-    INSERT INTO integrations VALUES (3, 1, 'private_bank', 'Private bank', 'active', '2026-10-04');
+  db.exec(`INSERT INTO integrations(id,user_id,provider_key,display_name,status,last_synced_at) VALUES (1, 1, 'hubspot', 'HubSpot', 'active', '2026-10-01');
+    INSERT INTO integrations(id,user_id,provider_key,display_name,status,last_synced_at) VALUES (2, 1, 'payroll_tool', 'Payroll', 'error', '2026-10-03');
+    INSERT INTO integrations(id,user_id,provider_key,display_name,status,last_synced_at) VALUES (3, 1, 'private_bank', 'Private bank', 'active', '2026-10-04');
     INSERT INTO integration_companies VALUES (1, 10, 1), (2, 10, 1), (3, 10, 0);
     INSERT INTO project_core_systems(project_id, kind, integration_id, updated_by) VALUES (101, 'crm', 1, 1), (101, 'payroll', 2, 1), (101, 'bank', 3, 1);`);
   const module = await call(env, '/api/cycles/build/modules/operating-systems?project=101');
@@ -162,7 +164,7 @@ test('new fields reject cross-project links and disabled or foreign connector ma
   const { db, env } = fixture();
   db.exec(`INSERT INTO mvp_features(id,project_id,title) VALUES (1,101,'Build');
     INSERT INTO pain_groups VALUES (10,202,'Their pain');
-    INSERT INTO integrations VALUES (11,1,'hubspot','CRM','active',NULL);
+    INSERT INTO integrations(id,user_id,provider_key,display_name,status,last_synced_at) VALUES (11,1,'hubspot','CRM','active',NULL);
     INSERT INTO integration_companies VALUES (11,10,0);`);
   let r = await call(env, '/api/cycles/build/features/1?project=101', 1, 'PATCH', { pain_group_id: 10 });
   assert.equal(r.status, 400);

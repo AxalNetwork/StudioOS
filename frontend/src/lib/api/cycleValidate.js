@@ -18,6 +18,8 @@ export const cycleValidateApi = {
   addDemandSignal: (projectId, data) => request(`/cycles/validate/demand-signals?${q(projectId)}`, { method: 'POST', body: JSON.stringify(data) }),
   setDemandSignalStatus: (projectId, signalId, status) => request(`/cycles/validate/demand-signals/${signalId}/status?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ status }) }),
   setWaitlistTarget: (projectId, value) => request(`/cycles/validate/waitlist-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  // D685 §5.12: the monthly interviews target Validate's phone meter reads; null clears it.
+  setInterviewsTarget: (projectId, value) => request(`/cycles/validate/interviews-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   addCompetitorMention: (projectId, data) => request(`/cycles/validate/competitor-mentions?${q(projectId)}`, { method: 'POST', body: JSON.stringify(data) }),
   setMarketMark: (projectId, item, done) => request(`/cycles/validate/market-marks/${encodeURIComponent(item)}?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ done }) }),
   addMarketSource: (projectId, data) => request(`/cycles/validate/market-sources?${q(projectId)}`, { method: 'POST', body: JSON.stringify(data) }),

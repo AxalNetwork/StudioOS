@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
+import { reviewPath } from '../../lib/activeRecording';
 import { useAuth } from '../../hooks/useAuthSync';
+import useAssistMode from '../../hooks/useAssistMode';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView from './RecordingView';
 
@@ -13,15 +15,18 @@ import RecordingView from './RecordingView';
  *
  * × "Exit full screen" goes back to where the founder was and leaves the
  * recording running: the pill keeps it in the corner (`RecordingPill.jsx`).
- * When processing finishes here, the founder lands on the session's review.
+ * When processing finishes here, the founder lands on the interview's review
+ * (`/validate/interviews/:id`, D685 §5.9.6); minimised, the pill says "Ready
+ * to review" instead and nobody is moved.
  */
+
 
 /** Where the live route sends a request it cannot serve. */
 export function liveRedirect(state, sessionParam) {
   const sid = state?.session?.id;
   const asked = sessionParam ? String(sessionParam) : null;
   if (state?.phase === 'discarded') return '/validate/interviews';
-  if (sid != null && (!asked || asked === String(sid))) return state.phase === 'ready' ? `/validate/session/${encodeURIComponent(sid)}` : null;
+  if (sid != null && (!asked || asked === String(sid))) return state.phase === 'ready' ? reviewPath(state.session) : null;
   if (asked && /^\d+$/.test(asked)) return `/validate/session/${asked}`;
   return '/validate';
 }
@@ -46,6 +51,9 @@ export default function RecordLivePage() {
   const { user } = useAuth() || {};
   const theme = useDarkTheme();
   const now = useNow(state.phase === 'recording');
+  // The rail's Manual mode (off by default) stops the Worker after Transcribing (§5.9, `auto: false`).
+  const [auto] = useAssistMode('Validate');
+  const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: () => recorder.confirmStop({ auto }) }), [recorder, auto]);
   const to = liveRedirect(state, params.get('session'));
   if (to) return <Navigate to={to} replace state={state.phase === 'ready' ? { interview: state.interview } : undefined} />;
 
@@ -57,6 +65,6 @@ export default function RecordLivePage() {
 
   return (
     <RecordingView st={state} now={now} theme={theme} reduced={prefersReducedMotion()} you={user?.name || user?.full_name || ''}
-      onExit={exit} actions={recorder} />
+      onExit={exit} actions={actions} />
   );
 }

@@ -172,7 +172,7 @@ export default function RoundCallSheet({projectId,onClose,initialCall=null}) {
 
 export function OpenCallNotice({call}) {
   return <div role="status" className="space-y-3"><p className="font-semibold">This venture has an open call · {call.name} · closes {callDate(call.target_close)}</p>
-    <Link className={primary} to={'/round-calls/'+encodeURIComponent(call.uid)}>Open the call</Link></div>;
+    <Link className={primary} to={'/raise/calls/'+encodeURIComponent(call.uid)}>Open the call</Link></div>;
 }
 
 function Row({label,value,editing,onEdit,children}) {
@@ -277,7 +277,7 @@ export function RoundCallSheetView({state:s,on}) {
       {s.step===4&&s.page&&<SendStep s={s} on={on} missing={missing} approved={approved}/>}
     </fieldset>
     {s.error&&<p role="alert" className="text-red-700 dark:text-red-300">{s.error}</p>}
-    {s.outcome?<p role="status">The call is available to {s.outcome.recipients} verified recipients; {s.outcome.notified} notified, {s.outcome.not_delivered} not delivered. <Link className="underline" to={'/round-calls/'+s.uid}>Open the call</Link></p>:
+    {s.outcome?<p role="status">The call is available to {s.outcome.recipients} verified recipients; {s.outcome.notified} notified, {s.outcome.not_delivered} not delivered. <Link className="underline" to={'/raise/calls/'+s.uid}>Open the call</Link></p>:
       <div className="flex items-center justify-between gap-2 border-t border-axal-hairline pt-3"><span className="text-xs text-axal-muted">Step {s.step+1} of 5</span>
         <div className="flex gap-2">{s.step>0&&<button type="button" className={callButton} disabled={s.busy} onClick={on.back}>{s.step===4&&missing.length?'Finish them first':'Back'}</button>}
         {s.step<4?<button type="button" className={primary} disabled={s.busy} onClick={on.next}>Next</button>:<button type="button" className={primary} disabled={s.busy||!approved} onClick={on.send}>{missing.length?'Send anyway':'Send the call'}</button>}</div></div>}
