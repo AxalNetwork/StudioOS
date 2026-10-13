@@ -67,7 +67,7 @@ test('D659: the client names the project on every call and the routes the Worker
   assert.deepEqual(Object.keys(cycleValidateApi).sort(), [
     'addCompetitorMention', 'addDemandSignal', 'addMarketSource', 'addSegment', 'marketReadiness', 'module',
     'overview', 'removeMarketSource', 'setDemandSignalStatus', 'setEvidenceStrength', 'setHypothesisPlan',
-    'setInterviewSegment', 'setInterviewStage', 'setMarketMark', 'setWaitlistTarget',
+    'setInterviewSegment', 'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setWaitlistTarget',
   ]);
   const src = raw('frontend/src/lib/api/cycleValidate.js');
   for (const line of src.split('\n').filter((l) => l.includes('request(`'))) {
