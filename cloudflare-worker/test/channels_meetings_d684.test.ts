@@ -230,10 +230,10 @@ const TRANSCRIPT_FILE = { file_type: 'TRANSCRIPT', file_extension: 'VTT', status
 
 test('Zoom url_validation is answered only when signed, and only for a well-formed token', async () => {
   const f = world();
-  const challenge = { event: 'endpoint.url_validation', event_ts: Date.now(), payload: { plainToken: 'qgg8vlvZRS6UYooatFL8Aw' } };
+  const challenge = { event: 'endpoint.url_validation', event_ts: Date.now(), payload: { plainToken: 'test-challenge-0001' } };
   const ok = await zoomPost(f.env, challenge);
   assert.equal(ok.status, 200);
-  assert.deepEqual(ok.body, { plainToken: 'qgg8vlvZRS6UYooatFL8Aw', encryptedToken: hmac(WEBHOOK_SECRET, 'qgg8vlvZRS6UYooatFL8Aw') });
+  assert.deepEqual(ok.body, { plainToken: 'test-challenge-0001', encryptedToken: hmac(WEBHOOK_SECRET, 'test-challenge-0001') });
 
   const raw = JSON.stringify(challenge);
   assert.equal((await zoomPost(f.env, raw, { 'content-type': 'application/json' })).status, 401, 'unsigned');
