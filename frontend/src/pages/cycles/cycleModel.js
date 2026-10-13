@@ -23,10 +23,14 @@
 
 /** The four cycles, in the sidebar's order. `question` and `outcome` are the canvas's words. */
 export const CYCLES = {
-  validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session' },
-  build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool' },
-  raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Call for Capital' },
-  grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update' },
+  validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session',
+    history: { key: 'interviews', name: 'Interviews', path: '/validate/interviews', hash: '', live: true } },
+  build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
+    history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: false } },
+  raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Call for Capital',
+    history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships', hash: '#calls', live: false } },
+  grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update',
+    history: { key: 'updates', name: 'Updates', path: '/grow/durable-company-building', hash: '#updates', live: false } },
 };
 
 export const CARD_STATES = ['ok', 'empty', 'too_little', 'not_recorded', 'unreadable'];
@@ -261,13 +265,16 @@ export function safeHref(href) {
 export function cycleTabs(cycle, cards, active = null, search = '') {
   const base = `/${cycle}`;
   const s = linkSearch(search);
-  // D685 §3.1: Validate's second tab is the interview log, `/validate/interviews`,
-  // the parent of the review. It is not a module: Customer research stays the
-  // module page with its Interviews list.
-  const log = cycle === 'validate' ? [{ key: 'interviews', name: 'Interviews', href: `${base}/interviews${s}`, active: active === 'interviews' }] : [];
-  return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }]
-    .concat(log)
-    .concat((cards || []).filter((c) => c?.slug).map((c) => ({ key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug })));
+  // D686 §5.1: each cycle's history is its second tab (Validate's interview
+  // log, Build's Tools, Raise's Calls, Grow's Updates), drawn once it is live
+  // and the cycle has module tabs. It is never current outside Validate: the
+  // module tab it lands on keeps `aria-current`.
+  const cardTabs = (cards || []).filter((c) => c?.slug).map((c) => ({ key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug }));
+  const hist = CYCLES[cycle]?.history;
+  const history = hist?.live && cardTabs.length && !cardTabs.some((t) => t.name === hist.name)
+    ? [{ key: hist.key, name: hist.name, href: `${hist.path}${s}${hist.hash}`, active: cycle === 'validate' && active === hist.key }]
+    : [];
+  return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }].concat(history, cardTabs);
 }
 
 /**

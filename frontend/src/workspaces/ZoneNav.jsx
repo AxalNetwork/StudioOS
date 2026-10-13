@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { ACCENT, zonePath, zoneForPath } from './shellConfig';
 import { LensNavLink } from './lens';
+import { projectSearch } from '../pages/cycles/founderToolNavigation';
 
 /**
  * The zone row — the pill strip under a workspace heading.
@@ -58,7 +59,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
         return (
           <LensNavLink
             key={zone.slug}
-            to={zonePath(bucket, zone)}
+            to={`${zonePath(bucket, zone)}${projectSearch(location.search)}`}
             aria-current={on ? 'page' : undefined}
             data-testid={`link-zone-${zone.slug}`}
             // HOVER AND FOCUS (D403). The colours used to be inline `color` /

@@ -134,8 +134,10 @@ test('Grow\'s header opens the sheet, and /updates/:uid is routed', () => {
   // Grow's header is the Grow cycle overview's primary action since the A5
   // desk retired (D661, #1474); a sent update opens its own page.
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', onClick: open \}\),\s*sheet: ShareUpdateSheet,/);
-  assert.match(route, /<Sheet projectId=\{projectId\} onClose=\{\(\) => setSheetOpen\(false\)\} onSent=\{\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`\)\} \/>/);
+  // D686 §5.1: at /grow/update over the page; a sent update replaces it with its page.
+  assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
+  assert.match(route, /<ShareUpdateSheet projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>/);
+  assert.match(route, /\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`, \{ replace: true \}\)/);
   assert.match(readFileSync('frontend/src/App.jsx', 'utf8'), /path="\/updates\/:uid" element=\{guard\(\[[^\]]+\], <SentUpdatePage \/>\)\}/);
 });
 

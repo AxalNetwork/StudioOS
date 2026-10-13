@@ -31,7 +31,8 @@ write a bordered white box with a title, it already exists here.
 - The assistant is called **Eadwyn**. Its copy must avoid regulated wording —
   "advisor", "advice", "recommendation", "fiduciary" are lint-enforced out of
   AI naming and surfaces.
-- Every primitive supports dark mode. A new one that does not will fail
-  `check-dark-mode`.
+- Every primitive supports dark mode. `check-dark-mode` scans `pages/` and
+  `components/` only, not this folder, so each primitive's own test asserts its
+  `dark:` classes (`ActionSheet` and `Lightbox` do).
 
-`Lightbox.jsx` (D685) is the one lightbox shell: a centred dialog, a full-screen sheet on a phone, with a focus trap, Escape and backdrop close, focus returned to what opened it, an inert background and no scroll bleed. `lightboxFocus.js` holds its rules as pure functions. Record a session is its first user; Build's, Raise's and Grow's cycle CTAs reuse it.
+`Lightbox.jsx` (D685) is the one lightbox shell: a centred dialog, a full-screen sheet on a phone, with a focus trap, Escape and backdrop close, focus returned to what opened it, an inert background and no scroll bleed. `lightboxFocus.js` holds its rules as pure functions. Record a session is its first user; Build's, Raise's and Grow's cycle CTAs reuse it. D686 (#1596) gives it `size="tall"` (a fixed height whose child owns the scroll) and `onEscape`; one Escape closes one layer, because `components/useEscapeClose.js` shares its stack. `ActionSheet.jsx` (D686) is the body every cycle lightbox draws inside a tall `Lightbox`: Cycle Action's header (eyebrow, an h2 title, sub, a round ×), step pills with `aria-current`, a banner, a body that scrolls on its own, and a footer with a note and actions, plus the shared `primary`, `ghost` and `danger` button classes.

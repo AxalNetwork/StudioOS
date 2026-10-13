@@ -42,7 +42,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, search
         <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{title || meta.name}</h1>
         {action?.onClick
           ? <button type="button" className={btn} onClick={action.onClick} data-testid="cycle-action">{label}</button>
-          : href ? <Link className={btn} to={href} data-testid="cycle-action" onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
+          : href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
       </div>
       <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{meta.outcome}</p>
       <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 md:flex" data-testid="cycle-tabs">
@@ -55,9 +55,10 @@ export function CycleHeader({ cycle, cards, active = null, action, title, search
       </nav>
       <label className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3.5 md:hidden dark:border-gray-700 dark:bg-gray-900">
         <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>Module</span>
-        <select className="min-w-0 flex-1 bg-transparent text-sm font-bold text-axal-ink outline-none dark:text-gray-100" value={current.href}
-          onChange={(e) => navigate(e.target.value)} aria-label={`${meta.name} module`}>
-          {tabs.map((t) => <option key={t.key || 'overview'} value={t.href}>{t.name}</option>)}
+        {/* Keyed by tab, not href (D686): a history tab and its module tab can share one path. */}
+        <select className="min-w-0 flex-1 bg-transparent text-sm font-bold text-axal-ink outline-none dark:text-gray-100" value={current.key || 'overview'}
+          onChange={(e) => { const to = tabs.find((t) => (t.key || 'overview') === e.target.value); if (to) navigate(to.href); }} aria-label={`${meta.name} module`}>
+          {tabs.map((t) => <option key={t.key || 'overview'} value={t.key || 'overview'}>{t.name}</option>)}
         </select>
       </label>
     </header>

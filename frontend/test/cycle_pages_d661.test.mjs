@@ -161,9 +161,11 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
   assert.match(text(list), /Board meeting cadence agreed Not done/);
   assert.equal(html(h(DurabilityChecklist, { items: null })), '', 'nothing to list draws nothing');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', onClick: open \}\)/);
-  assert.match(route, /sheet: ShareUpdateSheet/);
-  assert.match(route, /<Sheet projectId=\{projectId\} onClose=\{\(\) => setSheetOpen\(false\)\} onSent=\{\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`\)\} \/>/,
+  // D686 §5.1: Share an update opens at /grow/update over the page; a sent
+  // update replaces that address with its own page, so Back never reopens it.
+  assert.match(route, /path: 'update',\s*Mount: GrowMount,\s*action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
+  assert.match(route, /return <ShareUpdateSheet projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>;/);
+  assert.match(route, /cycle === 'grow' \? \(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`, \{ replace: true \}\)/,
     'a sent update opens its page, as it did from the Grow desk');
 });
 
@@ -178,7 +180,7 @@ test('BUILD: the one way to create a startup survives, next links keep the ventu
   assert.match(route, /<CreateStartupForm\s+open=\{creating\}/);
   assert.match(route, /onCreated=\{\(\) => setProjectsKey\(\(n\) => n \+ 1\)\}/, 'a new startup is read back');
   assert.match(route, /to="\/build\?new=1" data-testid="cycle-create-venture"/, 'every other cycle with no venture points at the form');
-  assert.match(route, /action: \(q, open\) => \(\{ label: 'Connect a tool', onClick: open \}\),\s*sheet: ConnectToolSheet/);
+  assert.match(route, /path: 'connect',\s*Mount: BuildMount,\s*action: \(q, open\) => \(\{ label: 'Connect a tool', href: `\/build\/connect\$\{q\}`, onOpen: open \}\)/);
   for (const surface of ['build/roadmap', 'build/this-week', 'build/retro', 'build/kpi']) assert.ok(route.includes(`surface: '${surface}'`), `the Build desk's ${surface} band was dropped`);
   // A read's next link with no query of its own keeps the chosen venture.
   assert.equal(nextHref('/build/prototype-mvp', '?project_id=7'), '/build/prototype-mvp?project_id=7');
@@ -211,7 +213,7 @@ test('ADD FORMS: one side sheet draws each form, the module offers it, and the c
   assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /add=\{fnOf\(def\.add, slug\)\?\.\(q, openRecord\) \|\| \(form && projectId \? \{ text: form\.button, onClick: \(\) => setFormOpen\(true\) \} : undefined\)\}/);
+  assert.match(route, /add=\{fnOf\(def\.add, slug\)\?\.\(q, openAction\) \|\| \(form && projectId \? \{ text: form\.button, onClick: \(\) => setFormOpen\(true\) \} : undefined\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => form\.submit\(cyclesWrite, projectId, values\)\}/);
   assert.match(route, /onSaved=\{\(\) => setReload\(\(n\) => n \+ 1\)\}/, 'a save reads the module again');
   // The checklist: tick an open item, undo your own tick, never undo the Lab's.
@@ -432,9 +434,11 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   }
   // The four zone pages stay mounted: each module page links to the one that
   // edits it until canvases for Add and a record's edit view exist.
-  for (const zone of ['interviews', 'pain-map', 'hypotheses', 'verdict']) {
+  for (const zone of ['pain-map', 'hypotheses', 'verdict']) {
     assert.match(app, new RegExp(`<Route path="/validate/${zone}" element=\\{guard\\([^)]*\\), <FounderValidateWorkspace />\\)\\} />`), `/validate/${zone} lost its working tool`);
   }
+  // D686: the interview log is a founder tool, with its one return to Customer research.
+  assert.match(app, /<Route path="\/validate\/interviews" element=\{guard\([^)]*\), founderEditor\(<FounderValidateWorkspace \/>\)\)\} \/>/, '/validate/interviews lost its working tool');
   assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'the cycle client lives in lib/api/cycles.js, not api.js');
   for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx', 'DurabilityChecklist.jsx', 'adapters/index.js', 'adapters/validate.js', 'adapters/grow.js']) {
     assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|from '\.\.\/\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);

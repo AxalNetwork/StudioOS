@@ -512,6 +512,14 @@ const ROLE_DEFAULT_PATH = {
 // Legacy /dashboard → /studio. Preserve the query string and hash so old links
 // and server-driven OAuth callbacks (?google=ok, ?advisor=1, ?profile_pending=1)
 // keep working after the rename.
+// D686 §3.2 item 2: a cycle's history address (/build/tools, /raise/calls,
+// /grow/updates) is its module section, the query kept and the hash added, as
+// D571's redirects keep theirs.
+export function HistoryRedirect({ to, hash }) {
+  const location = useLocation();
+  return <Navigate replace to={{ pathname: to, search: location.search, hash }} />;
+}
+
 function DashboardRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
@@ -2521,11 +2529,11 @@ function AppInner() {
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)
         : <Navigate to="/validate/interviews" replace />} />
       {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
-      <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
+      <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
       {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
       <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
-      <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), founderEditor(<FounderValidateWorkspace />))} />
       {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings. */}
       <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
@@ -2818,6 +2826,9 @@ function AppInner() {
       <Route path="/build" element={founderBuildLanding
         ? guard(['admin', 'founder'], <CycleRoute cycle="build" />)
         : <Navigate to="/build/this-week" replace />} />
+      {/* D686 §5.1: Connect a tool, the Build page with its lightbox open; /build/tools is the history's address. */}
+      <Route path="/build/connect" element={guard(['admin', 'founder'], <CycleRoute cycle="build" lightbox />)} />
+      <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
       <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
         ? <Navigate to={`/build${location.search}`} replace />
@@ -3037,6 +3048,9 @@ function AppInner() {
       <Route path="/grow" element={founderGrowLanding
         ? guard(['admin', 'founder'], <CycleRoute cycle="grow" />)
         : <Navigate to="/grow/focus" replace />} />
+      {/* D686 §5.1: Share an update, the Grow page with its lightbox open; /grow/updates is the history's address. */}
+      <Route path="/grow/update" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" lightbox />)} />
+      <Route path="/grow/updates" element={guard(['admin', 'founder'], <HistoryRedirect to="/grow/durable-company-building" hash="#updates" />)} />
       <Route path="/grow/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
@@ -3368,6 +3382,9 @@ function AppInner() {
         : <Navigate to="/raise/capital/pipeline" replace />} />
       {/* D686 §3.1 item 14: a founder's call inside the Raise shell; investors and counsel stay on /round-calls/:uid. */}
       <Route path="/raise/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
+      {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
+      <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
+      <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       {/* Advisors were the one signed-in licence this guard omitted, and the

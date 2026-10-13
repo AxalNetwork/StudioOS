@@ -412,12 +412,14 @@ test('the doors: the user menu under Usage, the Account section after Usage, and
   assert.match(settings, /\{safeActive === 'connectors' && <ConnectorsTab \/>\}/);
   assert.match(settings, /function ConnectorsTab\(\) \{[\s\S]*?<ConnectorsSection \/>\s*<Card title="API keys"/);
   // Build's header is the Build cycle overview's primary action since the A3
-  // desk retired (D661, #1474): "Connect a tool" opens the same sheet.
+  // desk retired (D661, #1474): "Connect a tool" opens the same sheet, now at
+  // /build/connect over the page (D686 §5.1), mounted by the one lightbox mount.
   const build = read('frontend/src/pages/cycles/CycleRoute.jsx');
   const def = build.slice(build.indexOf('\n  build: {'), build.indexOf('\n};', build.indexOf('\n  build: {')));
-  assert.match(def, /action: \(q, open\) => \(\{ label: 'Connect a tool', onClick: open \}\),\s*sheet: ConnectToolSheet,/);
+  assert.match(def, /path: 'connect',\s*Mount: BuildMount,\s*action: \(q, open\) => \(\{ label: 'Connect a tool', href: `\/build\/connect\$\{q\}`, onOpen: open \}\),/);
+  assert.match(build, /function BuildMount\(\{ onClose \}\) \{\s*return <ConnectToolSheet onClose=\{onClose\} \/>;/);
   assert.match(build, /import ConnectToolSheet from '\.\.\/account\/ConnectToolSheet';/);
-  assert.match(build, /\{Sheet && sheetOpen && projectId && \(\s*<Sheet projectId=\{projectId\} onClose=\{\(\) => setSheetOpen\(false\)\}/);
+  assert.match(build, /\{lightbox && Mount && projectId && \(\s*<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\}/);
 });
 
 test('IntegrationsPage.jsx is retired, and nothing in the app links to the old addresses', () => {

@@ -13,6 +13,7 @@ import { Lock, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import QuotaCard from './QuotaCard';
+import { useEscapeClose } from './useEscapeClose';
 
 // Task #4 (ID) — Exported so the public /pricing page can derive its
 // feature lists from the same source-of-truth instead of duplicating
@@ -133,13 +134,8 @@ export default function PaywallModal({ user }) {
     return () => window.removeEventListener('studioos:tier_required', onEvt);
   }, []);
 
-  // Esc to close.
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  // Esc to close: on the one dialog stack, so only the top dialog acts (D686).
+  useEscapeClose(() => setOpen(false), { active: open });
 
   const isInvestorMode = INVESTOR_TIERS.has(required);
 
