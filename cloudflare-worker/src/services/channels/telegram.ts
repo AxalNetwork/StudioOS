@@ -87,7 +87,7 @@ export function normaliseTelegram(payload: unknown, ownerId: string | null = nul
     const id = numeric(sender.id), chatId = numeric(chat.id);
     const command = typeof privateMessage.text === 'string'
       ? /^\/start(?:@[A-Za-z0-9_]+)? ([A-Za-z0-9_-]{24})$/.exec(privateMessage.text.trim()) : null;
-    if (chat.type !== 'private' || sender.is_bot || !id || !chatId || !command) return ignored();
+    if (chat.type !== 'private' || sender.is_bot || !id || !chatId || id !== chatId || !command) return ignored();
     return {
       kind: 'link', provider: 'telegram', eventId: updateId, telegramUserId: id, chatId, code: command[1],
       displayName: text(sender.username ? '@' + sender.username : sender.first_name, CHANNEL_LIMITS.maxNameChars),

@@ -453,8 +453,8 @@ const checks: Check[] = [
       });
       const thread = db.prepare('SELECT uid FROM channel_threads').get();
       const view = await readThread(env, ME, thread.uid);
-      snap([downloads, ai.length, view.messages.map(x => [x.kind, x.text]), db.prepare('SELECT user_id, task FROM ai_usage_logs').all().map((x: any) => [x.user_id, x.task])],
-        [1, 1, [['voice', 'Voice transcript fixture.']], [[ME, 'transcribe']]]);
+      snap([downloads, ai.length, view.messages.map(x => [x.kind, x.text]), db.prepare('SELECT user_id, task, surface FROM ai_usage_logs').all().map((x: any) => [x.user_id, x.task, x.surface])],
+        [1, 1, [['voice', 'Voice transcript fixture.']], [[ME, 'transcribe', '/validate/interviews']]]);
     },
   },
   {
@@ -499,7 +499,7 @@ const checks: Check[] = [
   },
   {
     name: 'Disconnect removes pending conversations and encrypted tokens',
-    module: 'routes', before: "await forgetConnection(c.env, conn.integrationId);", after: "await Promise.resolve();",
+    module: 'routes', before: "await forgetConnection(c.env, owned.id);", after: "await Promise.resolve();",
     run: async m => {
       const { env, db } = world(); await waCredentials(env, db);
       await waPost(env, m.routes.channels, waText());
@@ -542,6 +542,47 @@ const checks: Check[] = [
       }, async () => {
         try { await m.whatsapp.exchangeWhatsAppSignup(env, { code: 'code-fixture', wabaId: '20001', phoneNumberId: '10001' }); } catch (e: any) { failure = e.message; }
         snap([failure, subscriptions], ['signup_number_mismatch', 0]);
+      });
+    },
+  },
+
+  {
+    name: 'Signup route stores only encrypted credentials and masks the number',
+    module: 'routes', before: "const enc = await encryptCredentials(c.env, uid, { access_token: result.accessToken });",
+    after: "const enc = result.accessToken;",
+    run: async m => {
+      const { env, db } = world();
+      await mocked(url => {
+        if (url.includes('/oauth/access_token')) return respond({ access_token: 'signup-token-fixture' });
+        if (url.includes('/debug_token')) return respond({ data: { is_valid: true, app_id: '55555', scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'], granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['20001'] }] } });
+        if (url.includes('/phone_numbers')) return respond({ data: [{ id: '10001', display_phone_number: '+44 7000 000001' }] });
+        if (url.includes('/subscribed_apps')) return respond({ success: true });
+        throw new Error('unexpected_provider_call');
+      }, async () => {
+        const r = await signed(env, m.routes.channels, '/whatsapp/connect', { code: 'code-fixture', waba_id: '20001', phone_number_id: '10001' });
+        const response = await r.json();
+        const row = db.prepare("SELECT credentials_enc, external_account_name FROM integrations WHERE uid = 'wa-me'").get();
+        snap([r.status, JSON.stringify(response).includes('signup-token-fixture'), row.credentials_enc.startsWith('v1.'),
+          row.credentials_enc.includes('signup-token-fixture'), row.external_account_name], [200, false, true, false, '••••0001']);
+      });
+    },
+  },
+  {
+    name: 'Voice budget denial keeps the job retryable and writes no transcript',
+    module: 'routes', before: "if (!result.ok) throw new Error('voice_transcription_unavailable');",
+    after: "if (false) throw new Error('voice_transcription_unavailable');",
+    run: async m => {
+      const { env, db, jobs, ai } = world(); await waCredentials(env, db);
+      await waPost(env, m.routes.channels, waText({ type: 'audio', audio: { id: '12345', mime_type: 'audio/ogg' } }));
+      db.exec("INSERT INTO ai_topup_accounts(user_id, balance_microusd) VALUES(2,0) ON CONFLICT(user_id) DO NOTHING;");
+      // Free member's daily/monthly included allowance is exhausted.
+      const day = new Date().toISOString().slice(0,10), month = day.slice(0,7);
+      db.prepare("INSERT INTO ai_included_spend(user_id,period_kind,period_key,spend_microusd) VALUES(2,'day',?,1000000000),(2,'month',?,1000000000) ON CONFLICT(user_id,period_kind,period_key) DO UPDATE SET spend_microusd = excluded.spend_microusd").run(day,month);
+      await mocked(url => url.includes('/12345') ? respond({ file_size: 16, url: 'https://lookaside.fbsbx.com/voice' }) : new Response(new Uint8Array(16)), async () => {
+        let failure = '';
+        try { await m.routes.channelFollowup(env, jobs[0].payload); } catch (e: any) { failure = e.message; }
+        snap([failure, ai.length, counts(db), db.prepare('SELECT status FROM channel_events').get().status],
+          ['voice_transcription_unavailable', 0, { events: 1, messages: 0, threads: 0 }, 'stored']);
       });
     },
   },

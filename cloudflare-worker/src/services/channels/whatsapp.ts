@@ -35,6 +35,7 @@ export function normaliseWhatsApp(payload: unknown): InboundEvent[] {
   if (root.object !== 'whatsapp_business_account') return [];
   const events: InboundEvent[] = [];
   for (const entry of array(root.entry)) for (const change of array(entry.changes)) {
+    if (!['messages', 'smb_message_echoes'].includes(change.field)) continue;
     const value = object(change.value), connectionRef = graphId(object(value.metadata).phone_number_id);
     if (!connectionRef) continue;
     const echo = change.field === 'smb_message_echoes';

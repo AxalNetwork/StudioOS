@@ -185,6 +185,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/founder_validate.ts': ['AI_SURFACE.validate', 'AI_SURFACE.validateInterviews'],
   // D657 — a session's final transcript, on the same page as the interview log.
   'routes/founder_validate_sessions.ts': ['AI_SURFACE.validateInterviews'],
+  'routes/channels.ts': ['AI_SURFACE.validateInterviews'], // D684 voice note follows the interview capture budget/surface
   'routes/research.ts': ['AI_SURFACE.researchAsk'],
   'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'],
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],

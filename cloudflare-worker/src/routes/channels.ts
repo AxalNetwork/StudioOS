@@ -186,6 +186,7 @@ channels.get('/whatsapp/webhook', async c => {
     : error(result.status === 503 ? 'provider_unavailable' : 'invalid_signature', result.status);
 });
 channels.post('/whatsapp/webhook', async c => {
+  if (!secret(c.env, 'WHATSAPP_APP_SECRET')) return error('provider_unavailable', 503);
   const bytes = await bodyBytes(c.req.raw);
   const verified = await verifyWhatsApp(c.env, bytes, c.req.header('X-Hub-Signature-256') ?? null);
   if (verified !== 'ok') return error(verified === 'unavailable' ? 'provider_unavailable' : 'invalid_signature', verified === 'unavailable' ? 503 : 401);
@@ -247,16 +248,17 @@ channels.post('/whatsapp/connect', async c => {
 channels.delete('/:provider', async c => {
   const member = await user(c), provider = c.req.param('provider');
   if (!messaging(provider)) return error('unknown_provider', 404);
-  const conn = await memberConnection(c.env, member.id, provider);
-  if (conn) {
-    await forgetConnection(c.env, conn.integrationId);
+  const owned = await c.env.DB.prepare('SELECT id FROM integrations WHERE user_id = ? AND provider_key = ?')
+    .bind(member.id, provider).first<{ id: number }>();
+  if (owned) {
+    await forgetConnection(c.env, owned.id);
+    await c.env.DB.prepare("UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, external_account_name = NULL, config_json = '{}' WHERE id = ? AND user_id = ?")
+      .bind(owned.id, member.id).run();
+  }
+  if (provider === 'telegram') {
     await c.env.DB.batch([
-      c.env.DB.prepare("UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, external_account_name = NULL, config_json = '{}' WHERE id = ? AND user_id = ?")
-        .bind(conn.integrationId, member.id),
-      c.env.DB.prepare('UPDATE telegram_business_connections SET user_id = NULL, is_enabled = 0, can_reply = 0 WHERE user_id = ?')
-        .bind(provider === 'telegram' ? member.id : -1),
-      c.env.DB.prepare("UPDATE channel_link_codes SET used_at = datetime('now') WHERE user_id = ? AND provider = ? AND used_at IS NULL")
-        .bind(member.id, provider),
+      c.env.DB.prepare('UPDATE telegram_business_connections SET user_id = NULL, is_enabled = 0, can_reply = 0 WHERE user_id = ?').bind(member.id),
+      c.env.DB.prepare("UPDATE channel_link_codes SET used_at = datetime('now') WHERE user_id = ? AND provider = 'telegram' AND used_at IS NULL").bind(member.id),
     ]);
   }
   return ack();
