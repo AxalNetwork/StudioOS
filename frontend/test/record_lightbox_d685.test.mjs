@@ -214,6 +214,8 @@ const spies = (over = {}) => {
         models: async () => MODELS,
         create: async (id, body) => { calls.create.push([id, body]); return { session: { id: 501, interview_id: id } }; },
       },
+      // #1586: the chips' read. Unreadable unless a test says otherwise.
+      channelsSource: { overview: async () => { calls.overview = (calls.overview || 0) + 1; throw new Error('unread'); } },
       ...over,
     },
   };
@@ -363,4 +365,35 @@ test('Cancel and × close and call nothing', async () => {
     assert.equal(closed.length, 2);
     assert.equal(s.calls.createInterview.length + s.calls.create.length + s.calls.deleteInterview.length, 0);
   } finally { await m.unmount(); }
+});
+
+test('#1586 the lightbox reads GET /api/channels itself, and the Text chips show it', async () => {
+  const read = {
+    providers: [{ provider: 'telegram', available: true }, { provider: 'whatsapp', available: true }],
+    connections: { whatsapp: { status: 'active', external_account_name: 'Ledger Co' }, telegram: { status: 'active', business_connected: false } },
+  };
+  let asked = 0;
+  const s = spies();
+  const m = await mount({ ...s.props, initialMode: 'text', channelsSource: { overview: async () => { asked += 1; return read; } } });
+  try {
+    assert.equal(asked, 1, 'read once');
+    const t = m.text();
+    assert.match(t, /WhatsApp · Connected/);
+    assert.match(t, /Telegram · Connect\b/, 'Telegram Business not linked yet');
+    assert.match(t, /Signal · Not available yet/);
+  } finally { await m.unmount(); }
+
+  // Unreadable: the chips say so rather than guessing.
+  const s2 = spies();
+  const m2 = await mount({ ...s2.props, initialMode: 'text' });
+  try { assert.match(m2.text(), /WhatsApp · Not available yet/); } finally { await m2.unmount(); }
+
+  // A read passed in is used as is: nothing is fetched.
+  let fetched = 0;
+  const s3 = spies();
+  const m3 = await mount({ ...s3.props, initialMode: 'text', channels: read, channelsSource: { overview: async () => { fetched += 1; return null; } } });
+  try {
+    assert.equal(fetched, 0);
+    assert.match(m3.text(), /WhatsApp · Connected/);
+  } finally { await m3.unmount(); }
 });

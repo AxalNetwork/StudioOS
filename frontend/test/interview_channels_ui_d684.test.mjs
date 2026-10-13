@@ -18,7 +18,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 
 import { ChannelsGroup, TelegramChannelCard, TelegramLinkSteps, WhatsAppChannelCard, ConnectedActions } from '../src/pages/account/ChannelsGroup.jsx';
-import { channelCard, readOverview } from '../src/pages/account/channelsModel.js';
+import { callsLine, channelCard, readOverview } from '../src/pages/account/channelsModel.js';
 import ChannelsInboxPage, { AssignControls, MessageList, ReplyComposer } from '../src/pages/founder/ChannelsInbox.jsx';
 import { ChannelSessionPanel, ConnectPanel, MeetingRow, SchedulePanel } from '../src/pages/founder/InterviewChannels.jsx';
 import { AssistantBadge } from '../src/pages/founder/AssistantEntry.jsx';
@@ -624,4 +624,22 @@ test('mounted: the inbox route, the Connectors group, the sheet’s two ways in;
   assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /http-equiv="Content-Security-Policy"/i);
   // The SDK is never a static script on the page: only the click adds it.
   assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /connect\.facebook\.net/);
+});
+
+test('#1586 the WhatsApp card says the number\'s own "Calls: not yet, because …" from the read', () => {
+  const line = 'Calls: not yet, because Axal does not answer or place WhatsApp calls yet; this number can start 1,000 conversations a day, and WhatsApp Calling needs at least 2,000.';
+  const overview = readOverview({
+    providers: [{ provider: 'whatsapp', available: true }],
+    connections: { whatsapp: { status: 'active', external_account_name: 'Ledger Co', can_reply: true, calls: { available: false, sentence: line } } },
+  });
+  const card = channelCard('whatsapp', overview);
+  assert.equal(card.calls, line);
+  const out = text(h(WhatsAppChannelCard, { card, pending: 0, config: null, api: {}, onChanged() {} }));
+  assert.match(out, /Calls: not yet, because Axal does not answer or place WhatsApp calls yet; this number can start 1,000 conversations a day/);
+  assert.match(out, /record a call with the in-app recorder instead/);
+  // No read of it, or something that is not our line: the fixed words.
+  assert.equal(callsLine('whatsapp', { calls: { sentence: 'Calls: yes!' } }), '');
+  assert.equal(callsLine('telegram', { calls: { sentence: line } }), '');
+  const plain = channelCard('whatsapp', readOverview({ providers: [{ provider: 'whatsapp', available: true }], connections: { whatsapp: { status: 'active' } } }));
+  assert.match(text(h(WhatsAppChannelCard, { card: plain, pending: 0, config: null, api: {}, onChanged() {} })), /Calls: not yet\. WhatsApp calls do not reach Axal/);
 });
