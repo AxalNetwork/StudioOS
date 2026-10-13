@@ -204,6 +204,6 @@ test('channels are words: all four, the old manual rows, an unknown one as writt
 test('the Worker already filters the interview log on channel (bound), so the filter needs no new route', () => {
   const svc = read('cloudflare-worker/src/services/cycleValidate.ts');
   assert.match(svc, /AND \(\? = '' OR channel = \?\)/);
-  assert.match(svc, /const channel = f\.channel \? f\.channel : '';/);
+  assert.match(svc, /const channel = \['in_person', 'video', 'phone', 'text', 'manual'\]\.includes\(f\.channel\) \? f\.channel : '';/);
   assert.ok(renderedText(html(h(RecordsTable, { title: 'Interviews', records: { cols: [{ key: 'a', label: 'A' }], rows: [], total: 0, page: 1, page_size: 25, filters: [{ key: 'channel', label: 'Channel', options: [{ value: 'video', label: 'Video call' }] }] } }))).includes('Channel: all'));
 });
