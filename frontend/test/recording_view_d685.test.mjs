@@ -148,15 +148,19 @@ test('dark: the canvas\'s ground and vignette, and dark pairs for the pill and t
   assert.match(tag(out, 'tile-you'), /dark:bg-\[#130b22\]/);
 });
 
-test('the drawer: "[n] of [m] covered", one checkbox each, its empty sentence, and not saved until the Worker stores it', () => {
+test('the drawer: "[n] of [m] covered", one checkbox each, its empty sentence, ticks saved by the Worker, and a refusal said', () => {
   const pts = [{ id: 1, text: 'H1 · They lose a day', covered: true }, { id: 2, text: 'H2 · They would pay', covered: false }, { id: 3, text: 'H3', covered: false }];
-  const out = view({ drawer: true, points: pts });
+  const out = view({ drawer: true, points: pts }, { actions: { tick() {} } });
   assert.match(out, /data-testid="points-count">1(<!-- -->)? of (<!-- -->)?3(<!-- -->)? covered</);
   assert.match(tag(out, 'points-count'), /aria-live="polite"/);
   assert.equal((out.match(/type="checkbox"/g) || []).length, 3);
   assert.match(out, /line-through opacity-50/, 'a covered row is struck and dimmed');
-  assert.ok(renderedText(out).includes('Not saved yet: the Worker does not store this field.'));
-  assert.match(out, /type="checkbox"[^>]*disabled=""/);
+  assert.doesNotMatch(out, /type="checkbox"[^>]*disabled=""/, 'the Worker stores the ticks (#1591)');
+  assert.doesNotMatch(renderedText(out), /Not saved yet/);
+  assert.match(view({ drawer: true, points: pts }), /type="checkbox"[^>]*disabled=""/, 'nothing to save a tick with: disabled');
+  const refused = view({ drawer: true, points: pts, pointError: 'That tick was not saved. Try again.' }, { actions: { tick() {} } });
+  assert.match(tag(refused, 'points-error'), /role="alert"/);
+  assert.ok(renderedText(refused).includes('That tick was not saved. Try again.'));
   assert.ok(renderedText(view({ drawer: true, points: [] })).includes('No talking points were picked for this session.'));
   assert.doesNotMatch(view({ drawer: true, points: [] }), /Not recorded/);
   assert.match(tag(view({ drawer: true }), 'button-drawer'), /aria-expanded="true"/);
@@ -218,12 +222,16 @@ test('focus: into the view on open; into the confirm on Keep recording, Escape k
 
 test('focus in the drawer: into it on open, Escape closes it, focus goes back to the button', async () => {
   const calls = [];
-  const m = await mountView(ST({ points: [{ id: 1, text: 'H1' }] }), { toggleDrawer: (v) => calls.push(v) });
+  const m = await mountView(ST({ points: [{ id: 1, text: 'H1' }] }), { toggleDrawer: (v) => calls.push(v), tick: (id, on) => calls.push(['tick', id, on]) });
   try {
     await m.render(ST({ drawer: true, points: [{ id: 1, text: 'H1' }] }));
     assert.ok(m.focused.at(-1) === m.by('points-close'), 'focus moves into the sheet');
     m.key('points-drawer', 'Escape');
     assert.deepEqual(calls, [false]);
+    await m.render(ST({ drawer: true, points: [{ id: 1, text: 'H1', covered: false }, { id: 9, text: 'H9', covered: true }] }));
+    m.pr(m.by('point-1')).onChange();
+    m.pr(m.by('point-9')).onChange();
+    assert.deepEqual(calls.slice(1), [['tick', 1, true], ['tick', 9, false]], 'a tick is sent with the Worker\'s point id, and an untick');
     await m.render(ST());
     assert.ok(m.focused.at(-1) === m.by('button-drawer'), 'focus returns to Talking points');
   } finally { await m.unmount(); }
@@ -309,10 +317,11 @@ test('the lightbox hands its draft over: the mic is opened in the Start click, t
   const recorder = {
     prepare: () => order.push('prepare'),
     release: () => order.push('release'),
-    begin: (arg) => { order.push(['begin', arg.callLabel, arg.video, arg.points.length]); return Promise.resolve('recording'); },
+    begin: (arg) => { order.push(['begin', arg.callLabel, arg.video, arg.points.map((p) => p.id)]); return Promise.resolve('recording'); },
   };
   const api = { createInterview: async () => { order.push('createInterview'); return { id: 41, interviewee_name: 'Dana' }; }, deleteInterview: async () => {}, getValidationBoard: async () => ({ hypotheses: [] }) };
-  const sessions = { models: async () => ({}), create: async () => { order.push('create'); return { session: { id: 501, status: 'draft' } }; } };
+  // The Worker answers with its own point rows: their ids are not the hypotheses'.
+  const sessions = { models: async () => ({}), create: async () => { order.push('create'); return { session: { id: 501, status: 'draft' }, call_label: 'Audio call · as the Worker words it', points: [{ id: 88, hypothesis_id: 2, text: 'H2 · They would pay', covered: false }] }; } };
   const started = [];
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
@@ -330,7 +339,7 @@ test('the lightbox hands its draft over: the mic is opened in the Start click, t
       assert.equal(order[0], 'prepare', 'synchronously, inside the click: before anything is awaited');
       await pending;
     });
-    assert.deepEqual(order.slice(1), ['createInterview', 'create', ['begin', 'Audio call · This phone, on speaker', false, 0]]);
+    assert.deepEqual(order.slice(1), ['createInterview', 'create', ['begin', 'Audio call · as the Worker words it', false, [88]]], 'the Worker\'s label, and the drawer ticks the Worker\'s rows');
     assert.equal(started[0][2], 'live');
     order.length = 0; started.length = 0;
     await mount('video');
@@ -347,6 +356,7 @@ test('the lightbox hands its draft over: the mic is opened in the Start click, t
 test('the session page hands its recording to the recorder and no longer owns a capture', () => {
   const page = readFileSync('frontend/src/pages/founder/InterviewSessionPage.jsx', 'utf8');
   assert.doesNotMatch(page, /createCapture|indexedDbQueue|<RecordingView/, 'the capture lives above the routes now');
-  assert.match(page, /recorder\.begin\(\{ session, interview, video: session\.channel === 'video' \}\)/);
-  assert.match(page, /recorder\.adopt\(\{ session, interview, storedSeqs: chunks\.map\(\(c\) => c\.seq\) \}\)/, 'an interrupted recording resumes after the audio already saved');
+  assert.match(page, /recorder\.begin\(\{ session, interview, callLabel: data\.call_label \?\? null, points: data\.points \|\| \[\], video: session\.channel === 'video' \}\)/, 'the session read\'s points reach the drawer');
+  assert.match(page, /recorder\.adopt\(\{ session, interview, callLabel: data\.call_label \?\? null, points: data\.points \|\| \[\], storedSeqs: chunks\.map\(\(c\) => c\.seq\) \}\)/, 'an interrupted recording resumes after the audio already saved, with its points');
+  assert.match(page, /const interview = location\.state\?\.interview \|\| data\.interview \|\| null;/, 'after a reload the name comes from the session read');
 });
