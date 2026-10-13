@@ -521,7 +521,9 @@ test('Meet: a grant without the transcript scope still schedules, and says Googl
 });
 
 function meetApi(over: { records?: unknown[]; transcripts?: unknown[]; status?: number; body?: unknown } = {}): Record<string, Handler> {
-  const records = over.records ?? [{ name: 'conferenceRecords/rec1', startTime: '2026-10-13T10:00:00Z', endTime: '2026-10-13T10:30:00Z' }];
+  const start = iso(-2 * HOUR);
+  const offset = (milliseconds: number) => new Date(Date.parse(start) + milliseconds).toISOString();
+  const records = over.records ?? [{ name: 'conferenceRecords/rec1', startTime: start, endTime: offset(30 * 60_000) }];
   const transcripts = over.transcripts ?? [{ name: 'conferenceRecords/rec1/transcripts/t1', state: 'FILE_GENERATED' }];
   const fail = over.status ? () => json(over.body ?? {}, over.status) : null;
   return {
@@ -534,11 +536,11 @@ function meetApi(over: { records?: unknown[]; transcripts?: unknown[]; status?: 
     ] }),
     'GET https://meet.googleapis.com/v2/conferenceRecords/rec1/transcripts/t1/entries': (url) => url.searchParams.get('pageToken') === 'page-2'
       ? json({ transcriptEntries: [
-        { participant: 'conferenceRecords/rec1/participants/p1', text: 'Who signs off?', startTime: '2026-10-13T10:00:09Z', endTime: '2026-10-13T10:00:10Z' },
-        { participant: 'conferenceRecords/rec1/participants/p9', text: 'Can you hear me?', startTime: '2026-10-13T10:00:11Z', endTime: '2026-10-13T10:00:12Z' },
+        { participant: 'conferenceRecords/rec1/participants/p1', text: 'Who signs off?', startTime: offset(9000), endTime: offset(10000) },
+        { participant: 'conferenceRecords/rec1/participants/p9', text: 'Can you hear me?', startTime: offset(11000), endTime: offset(12000) },
       ] })
       : json({ transcriptEntries: [
-        { participant: 'conferenceRecords/rec1/participants/p2', text: 'We lose a day a month.', startTime: '2026-10-13T10:00:05Z', endTime: '2026-10-13T10:00:08.500Z' },
+        { participant: 'conferenceRecords/rec1/participants/p2', text: 'We lose a day a month.', startTime: offset(5000), endTime: offset(8500) },
       ], nextPageToken: 'page-2' }),
   };
 }
@@ -566,6 +568,29 @@ test('the Meet sweep queues a generated transcript; the import labels speakers a
   assert.equal(refRow(f, uid).status, 'imported');
   assert.equal(f.db.prepare('SELECT final_model FROM interview_sessions WHERE id = ?').get(sessionId).final_model, 'google_meet_transcript');
   assert.deepEqual(await sweepMeet(f.env, new Date()), [], 'imported: never swept again');
+});
+
+test('a reused Meet link imports only the conference scheduled for this interview', async (t) => {
+  const f = world();
+  await connectGoogle(f, GRANTED);
+  const { uid, sessionId } = await seedRef(f, { provider: 'google_meet' });
+  const old = { name: 'conferenceRecords/old', startTime: iso(-3 * 24 * HOUR) };
+  const current = { name: 'conferenceRecords/rec1', startTime: refRow(f, uid).starts_at };
+  const routes = {
+    ...meetApi({ records: [current] }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords': (url: URL) => url.searchParams.get('pageToken') === 'next'
+      ? json({ conferenceRecords: [current] })
+      : json({ conferenceRecords: [old], nextPageToken: 'next' }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords/old/transcripts': () => json({ transcripts: [
+      { name: 'conferenceRecords/old/transcripts/old', state: 'FILE_GENERATED' },
+    ] }),
+  };
+  const calls = mockFetch(t, routes);
+  assert.deepEqual(await sweepMeet(f.env, new Date()), ['queued']);
+  assert.equal(calls.some((c) => c.key.includes('/old/transcripts')), false, 'another call on this link is never read');
+  await runChannelJob(f.env, 'meeting_import', f.jobs[0].payload);
+  assert.equal(refRow(f, uid).status, 'imported');
+  assert.equal(count(f.db, 'SELECT COUNT(*) n FROM interview_transcript_segments WHERE session_id = ?', sessionId), 3);
 });
 
 test('the Meet sweep waits for a transcript not there yet, and settles a call with none after a day', async (t) => {
