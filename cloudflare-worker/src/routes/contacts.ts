@@ -1425,7 +1425,7 @@ r.post('/:uid/promote', async (c) => {
         const cnt = await db.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
           .bind(row.project_id).first<{ n: number }>();
         if (Number(cnt?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews) {
-          return c.json({ detail: `Free tier is capped at ${FREE_TIER_LIMITS.discoveryInterviews} customer interviews. Upgrade to Growth to promote more.` }, 402);
+          return c.json({ detail: `Free tier is capped at ${FREE_TIER_LIMITS.discoveryInterviews} customer interviews. Upgrade to Validate + Build to promote more.` }, 402);
         }
       }
 

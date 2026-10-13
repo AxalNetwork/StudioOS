@@ -30,7 +30,8 @@ import { FOUNDER_TIERS, INVESTOR_TIERS } from './pricing';
 //
 // Every quantitative claim is grounded in real enforcement:
 //   - Founder free-tier limits: middleware/requireTier.ts (FREE_TIER_LIMITS)
-//     and the Growth/Studio feature split in PaywallModal.TIER_PLANS.
+//     and the Validate + Build / Raise + Grow feature split (tiers growth and
+//     studio, D683) in PaywallModal.TIER_PLANS.
 //   - Investor quotas: middleware/requireInvestorTier.ts (INVESTOR_QUOTAS —
 //     free 3 intros/qtr + 1 dealroom, pro 25 + 5, institutional 100 + ∞ + 4 seats).
 //   - Partner/Advisor: there is NO quota table in accountPlans.ts and no

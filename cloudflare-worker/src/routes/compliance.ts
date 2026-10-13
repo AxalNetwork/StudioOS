@@ -354,8 +354,9 @@ compliance.get('/events', async (c) => {
 });
 
 compliance.post('/events', async (c) => {
-  // Task #6 — compliance event creation is Growth-tier (reads stay free).
-  ensureTier(await requireAuth(c), 'growth');
+  // Task #6 — compliance event creation (reads stay free). D683: legal is
+  // Raise work, on the Raise + Grow plan (`studio`).
+  ensureTier(await requireAuth(c), 'studio');
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
   const projectId = Number(body?.project_id);

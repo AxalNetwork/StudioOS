@@ -311,7 +311,7 @@ marketIntel.get('/founder-lens', async (c) => {
     return c.json({
       error: 'tier_required',
       required: 'growth',
-      message: 'The founder lens needs the Growth tier or higher.',
+      message: 'The founder lens needs the Validate + Build plan or higher.',
       checkout_path: '/api/billing/checkout',
     }, 402);
   }

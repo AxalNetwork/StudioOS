@@ -182,19 +182,20 @@ export const DOORS = {
     // OAuth store exists in production.
     soon: ['AI slide reviewer', 'Connecting your own AI assistant'],
     // The canvas drew a four-step ladder (Validate, + Build, + Raise, + Grow)
-    // that the catalogue never had. Owner, 2026-10-13: the page shows the
-    // plans /pricing sells, each with what it is for in plain words, and how
-    // AI use is paid (tokens) under them. The name is the catalogue's.
-    plansTitle: 'A plan for the workspace. Tokens for the AI.',
-    plansSub: 'Your plan decides what the workspace opens. AI use beyond what your plan includes is paid in tokens, separately.',
+    // that the catalogue never had. Owner, 2026-10-13: the founder plans are
+    // the cycles in two groups (D683), the second keeping everything in the
+    // first, each said in plain words, with how AI use is paid (tokens) under
+    // them. The name, price and features are the catalogue's.
+    plansTitle: 'Pay for the cycles you are in.',
+    plansSub: 'Start free. Validate + Build covers proving the idea and building the company; Raise + Grow adds raising money and growing it, and keeps everything below it. AI use beyond what your plan includes is paid in tokens.',
     plans: [
-      { name: 'Free', tier: 'free', desc: 'One startup, taken through the 28-day Spin-Out Lab, with your public profile.', cta: 'Start free' },
-      { name: 'Growth', tier: 'growth', desc: 'Build and pitch: unlimited projects and interviews, the pitch deck with share links, cap table scenarios, and advisor time.', cta: 'Start with Growth', highlight: true, tag: 'Recommended' },
-      { name: 'Studio', tier: 'studio', desc: 'Raise and stay legal: capital, legal and the 83(b), liquidity, and co-founder matching, on top of Growth.', cta: 'Start with Studio' },
+      { name: 'Free', tier: 'free', desc: 'Start validating one idea, apply to the Spin-Out Lab, and be found by investors.', cta: 'Start free' },
+      { name: 'Validate + Build', tier: 'growth', desc: 'Prove the idea and build the company, with no limits on startups, interviews, or OKRs.', cta: 'Start Validate + Build', highlight: true, tag: 'Recommended' },
+      { name: 'Raise + Grow', tier: 'studio', desc: 'Everything in Validate + Build, plus the pitch deck, cap table, capital, legal, and the tools to grow.', cta: 'Start Raise + Grow' },
     ],
     tokens: AI_TOKENS,
     faq: [
-      { q: 'Do I pay to start?', a: 'No. The Free plan takes one startup through the Spin-Out Lab and stays free. Growth and Studio are monthly plans for when you need more.' },
+      { q: 'Do I pay to start?', a: 'No. The Free plan lets you start validating one idea, apply to the Spin-Out Lab, and be found by investors, and it stays free. Validate + Build and Raise + Grow are monthly plans for the cycles you are in.' },
       { q: 'What are tokens?', a: 'Tokens pay for AI use, apart from your plan. Every plan includes an AI allowance each day and each month; if you use it up, you add tokens, and each dollar you add is a dollar of AI use. Tokens you buy never expire.' },
       { q: 'How do introductions work?', a: 'They are earned through your venture-readiness record. When an investor wants to meet, the introduction proceeds under a three-way NDA once you accept.' },
       { q: 'Can I bring an existing startup?', a: 'Yes. Import your company and start in Validate, Build, Raise, or Grow. You do not have to take the Lab.' },

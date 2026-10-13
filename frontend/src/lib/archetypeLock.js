@@ -22,8 +22,14 @@ export function archetypeLock(...replies) {
   return null;
 }
 
-/** "Growth" from `growth`; null when the reply named no tier. */
+/**
+ * The plan's name as the Worker sends it ("Validate + Build", D683), else the
+ * tier capitalised ("Professional" from `professional`); null when the reply
+ * named neither.
+ */
 export function lockedPlanName(plan) {
+  const name = typeof plan?.name === 'string' ? plan.name.trim() : '';
+  if (name) return name;
   const tier = typeof plan?.tier === 'string' ? plan.tier.trim() : '';
   if (!tier) return null;
   return tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase();

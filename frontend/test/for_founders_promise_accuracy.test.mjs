@@ -58,12 +58,14 @@ test('the free/Starter plan no longer advertises "5 runs / month" scoring', () =
   }
 });
 
-test('Growth is still where scoring is actually advertised — nothing was silently dropped', () => {
+test('the growth tier is still where scoring is actually advertised — nothing was silently dropped', () => {
   // TIER_PLANS.growth.features in PaywallModal.jsx is the single source of
   // truth pricing.js/productPages.js both inherit from; this just confirms
   // the fix didn't accidentally remove the TRUE claim along with the false one.
+  // D683 renamed the tier's plan "Validate + Build" and its line "Venture-
+  // readiness scoring runs"; the gate is still `ensureTier(user, 'growth')`.
   const PAYWALL = read('../src/components/PaywallModal.jsx');
-  assert.match(PAYWALL, /AI scoring/);
+  assert.match(PAYWALL, /growth: \{[\s\S]*?'Venture-readiness scoring runs'[\s\S]*?\n  \},/);
 });
 
 // --- investor intros are no longer claimed as Pro-exclusive --------------

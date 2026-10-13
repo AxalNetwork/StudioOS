@@ -636,7 +636,7 @@ function MatchSummaryCard({ className }) {
   }, []);
 
   const unlock = useCallback(() => {
-    openPaywall('studio', 'Upgrade to Studio to see your full match list — names, scores, and the reasons behind every match.');
+    openPaywall('studio', 'Upgrade to Raise + Grow to see your full match list — names, scores, and the reasons behind every match.');
   }, []);
 
   let body;

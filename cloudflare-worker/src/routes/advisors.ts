@@ -718,7 +718,7 @@ advisors.post('/slots/:id/book', async (c) => {
         return c.json({ detail: 'This session type is not bookable' }, 409);
       }
     }
-    if (!isActiveLabExplorer && context?.link.audience !== 'cohort') ensureTier(user, 'growth');
+    if (!isActiveLabExplorer && context?.link.audience !== 'cohort') ensureTier(user, 'studio'); // D683: advisor booking is Raise + Grow
     if (type?.duration_minutes != null
       && (Date.parse(slot.ends_at) - Date.parse(slot.starts_at)) / 60000 !== type.duration_minutes) {
       return c.json({ detail: 'Slot length does not match this session type' }, 400);

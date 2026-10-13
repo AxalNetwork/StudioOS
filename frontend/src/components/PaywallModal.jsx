@@ -18,32 +18,40 @@ import QuotaCard from './QuotaCard';
 // feature lists from the same source-of-truth instead of duplicating
 // them and drifting over time. See `frontend/src/data/pricing.js`.
 export const TIER_PLANS = {
+  // D683 (owner, 2026-10-13): the founder plans are the four cycles in two
+  // groups, and the second keeps everything in the first. The tier ids stay
+  // `growth` and `studio`; the price is the active Stripe price on the tier's
+  // product, which `requireTier.ts` PLAN_PRICE_LABEL quotes too.
   growth: {
-    label: 'Growth',
-    price: '$79',
+    label: 'Validate + Build',
+    price: '$20',
     period: '/ month',
-    blurb: 'For founders shipping past discovery.',
+    blurb: 'Prove the idea, then build the company.',
     features: [
-      'Unlimited projects',
-      'Unlimited customer interviews + OKRs',
-      'Pitch deck builder + share links',
-      'Cap-table scenarios + simulator',
-      'Advisor booking & office hours',
-      'AI scoring + co-marketing',
+      'Unlimited startups',
+      'Unlimited customer interviews and OKRs',
+      'Venture-readiness scoring runs',
+      'Company data for market research',
+      'Your full archetype card',
+      'Wellbeing sessions with experts',
+      'Accept up to 10 proposed introductions a month',
     ],
   },
   studio: {
-    label: 'Studio',
-    price: '$249',
+    label: 'Raise + Grow',
+    price: '$100',
     period: '/ month',
-    blurb: 'Capital, legal, and partner tooling.',
+    blurb: 'Raise the money, then grow the company.',
     features: [
-      'Everything in Growth',
-      'Capital + funds + reserves + waterfall',
-      'Liquidity, legal cap, KYC, 83(b)',
-      'Co-founder matching',
-      'Watchlist + decision journal',
-      'Partner office hours + demand insights',
+      'Everything in Validate + Build',
+      'Pitch decks: every template, share links, your own branding',
+      'Cap table scenarios and the dilution simulator',
+      'Capital, funds, reserves, and waterfall',
+      'Legal, compliance, KYC, and the 83(b)',
+      'Liquidity and co-founder matching',
+      'Advisor booking, co-marketing, and partner office hours',
+      'Watchlist, decision journal, and demand insights',
+      'Accept up to 25 proposed introductions a month',
     ],
   },
   professional: {
