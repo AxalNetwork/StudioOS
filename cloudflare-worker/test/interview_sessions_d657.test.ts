@@ -51,6 +51,7 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   // 447 adds submitted_via (an assistant's or a channel's session); 452 is D685's setup.
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(readFileSync(new URL('../sql/migrations/452_record_session_setup.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8'));
   // D658 (#1471): the receipt read also lists the structuring lines, which
   // live in `interview_structure_receipts`, beside 439's columns on 214/246's
   // `validate_proposals`, as they will in production.
@@ -670,4 +671,222 @@ test('D685 §5.11: deleting an interview deletes its sessions the way DELETE /se
   assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM interview_sessions WHERE id = ?').get(sid).n, 0);
   assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM validate_proposals WHERE session_id = ?').get(sid).n, 0, 'pending proposals and their quotes are gone');
   assert.equal(interviewRow(f, s.body.interview.id), undefined);
+});
+
+// ===========================================================================
+// D685 S03-B (#1584) — Stop leads to the findings: upload → transcribe →
+// summarise → place findings, as a resumable job. The AI is mocked by model.
+// ===========================================================================
+
+import { runInterviewProcessJob, isStale } from '../src/services/interviewProcessing.ts';
+import { checkSummary } from '../src/services/interviewStructuring.ts';
+
+/** A recorded, stopped session with `n` chunks, the queue captured. */
+async function recordedForProcessing(f: any, n: number, opts: { consent?: boolean } = {}) {
+  // structureSession re-checks the member's account (D684's writableSession).
+  for (const col of ['deletion_requested_at TEXT', 'deleted_at TEXT']) {
+    try { f.db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch { /* present */ }
+  }
+  for (const col of ['company_id INTEGER', 'deleted_at TEXT']) {
+    try { f.db.exec(`ALTER TABLE projects ADD COLUMN ${col}`); } catch { /* present */ }
+  }
+  f.db.exec('CREATE TABLE IF NOT EXISTS pain_groups (id INTEGER PRIMARY KEY, project_id INTEGER, title TEXT)');
+  const sent: any[] = [];
+  f.env.USE_CF_QUEUE = 'true';
+  f.env.JOB_QUEUE = { async send(body: any) { sent.push(body); } };
+  const r = await setup(f, { channel: 'in_person', interviewee: { name: 'Robin' }, consent: { status: 'given', method: 'verbal' } });
+  const sid = r.body.session.id;
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/start`);
+  for (let i = 0; i < n; i++) assert.equal((await putChunk(f, sid, i, new Uint8Array(64 + i))).status, 201);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/stop`);
+  if (opts.consent === false) f.db.prepare("UPDATE interview_sessions SET consent_status = 'declined' WHERE id = ?").run(sid);
+  return { sid, interviewId: r.body.interview.id, sent };
+}
+
+/** Whisper transcribes; Llama answers the summary and the structuring prompts. */
+function llmAi(f: any, opts: { summary?: string; budgetOn?: string } = {}) {
+  f.setAi((model: string, input: any) => {
+    if (model.includes('whisper') || model.includes('nova')) {
+      return { text: 'We reconcile by hand every Friday.', transcription_info: { language: 'en' },
+        segments: [{ start: 0, end: 3, text: 'We reconcile by hand every Friday.' }] };
+    }
+    const sys = String(input?.messages?.[0]?.content || '');
+    if (sys.startsWith('Summarise')) {
+      return { response: opts.summary ?? JSON.stringify({ sentences: [
+        { text: 'They reconcile two systems by hand each week.', cites: [{ from: 0, to: 3000 }] },
+        { text: 'They love the product.', cites: [{ from: 999000, to: 999500 }] },
+      ] }) };
+    }
+    return { response: JSON.stringify({ placements: [] }) };
+  });
+}
+
+const stage = (f: any, sid: number) => f.db.prepare('SELECT processing_stage AS s, processing_done AS d, processing_total AS t, processing_error AS e, status FROM interview_sessions WHERE id = ?').get(sid) as any;
+const job = (f: any, sid: number) => runInterviewProcessJob(f.env, { session_id: sid, user_id: FOUNDER });
+
+test('D685 §5.9: /finish counts the chunks; a late chunk queues the job; the job transcribes, summarises and places findings', async () => {
+  const f = fixture();
+  llmAi(f);
+  const { sid, sent } = await recordedForProcessing(f, 2);
+  // Three chunks expected, two stored: uploading 2 of 3, nothing queued.
+  const fin = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 2 });
+  assert.equal(fin.status, 202);
+  assert.deepEqual([fin.body.processing.stage, fin.body.processing.done, fin.body.processing.total], ['uploading', 2, 3]);
+  assert.equal(sent.length, 0);
+  // The late chunk is accepted after stop and queues the job.
+  assert.equal((await putChunk(f, sid, 2, new Uint8Array(70))).status, 201);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].job_type, 'interview_process');
+  assert.deepEqual(sent[0].payload, { session_id: sid, user_id: FOUNDER });
+  assert.equal(stage(f, sid).d, 3);
+
+  assert.equal(await job(f, sid), 'done');
+  const st = stage(f, sid);
+  assert.equal(st.s, 'done');
+  assert.equal(st.e, null);
+  assert.equal(st.status, 'structured', 'structureSession ran and moved it on');
+  const read = await call(f.env, FOUNDER, 'GET', `/sessions/${sid}`);
+  assert.equal(read.body.processing.stage, 'done');
+  assert.equal(read.body.summary.sentences.length, 1, 'the uncited sentence was dropped');
+  assert.equal(read.body.summary.sentences[0].text, 'They reconcile two systems by hand each week.');
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM interview_transcript_segments WHERE session_id = ? AND source = 'final'").get(sid).n, 3);
+  // Each AI step left its receipt line, the summary's in the same read.
+  const receipt = await call(f.env, FOUNDER, 'GET', `/sessions/${sid}/receipt`);
+  const kinds = receipt.body.items.map((i: any) => i.kind);
+  assert.ok(kinds.includes('final') && kinds.includes('summarised') && kinds.includes('structured'), kinds.join(','));
+  // structureSession was the one that ran, with its own receipt.
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM interview_structure_receipts WHERE session_id = ? AND step = 'structured'").get(sid).n, 1);
+});
+
+test('D685 §5.9: a failed chunk fails the run with a sentence; a retry resumes without billing a chunk twice', async () => {
+  const f = fixture();
+  let failSeq1 = true;
+  let whisperCalls = 0;
+  f.setAi((model: string, input: any) => {
+    if (model.includes('whisper')) {
+      whisperCalls += 1;
+      if (failSeq1 && Array.isArray(input?.audio) && input.audio.length === 65) throw new Error('upstream down');
+      return { text: 'ok', segments: [{ start: 0, end: 1, text: 'ok' }] };
+    }
+    return { response: JSON.stringify({ sentences: [], placements: [] }) };
+  });
+  const { sid, sent } = await recordedForProcessing(f, 3);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 2 });
+  assert.equal(await job(f, sid), 'failed');
+  let st = stage(f, sid);
+  assert.equal(st.s, 'failed');
+  assert.match(st.e, /could not be transcribed/);
+  assert.equal(st.status, 'stopped', 'back where a person can act');
+  const staged = f.db.prepare('SELECT COUNT(*) AS n FROM interview_chunk_transcripts WHERE session_id = ?').get(sid).n;
+  assert.equal(staged, 1, 'chunk 0 is staged');
+  const before = whisperCalls;
+  failSeq1 = false;
+  const retry = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/process`);
+  assert.equal(retry.status, 202);
+  assert.notEqual(sent[sent.length - 1].idempotency_key, sent[0].idempotency_key, 'a retry gets a fresh key');
+  assert.equal(await job(f, sid), 'done');
+  assert.equal(whisperCalls - before, 2, 'only chunks 1 and 2 were transcribed again; chunk 0 was not billed twice');
+  st = stage(f, sid);
+  assert.equal(st.s, 'done');
+});
+
+test('D685 §5.9: a spent budget is recorded and shown in the budget\'s words', async () => {
+  const f = fixture({ dayMicro: 1 });
+  llmAi(f);
+  const { sid } = await recordedForProcessing(f, 1);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 0 });
+  assert.equal(await job(f, sid), 'failed');
+  const st = stage(f, sid);
+  assert.match(st.e, /allowance/i, st.e);
+  const receipt = await call(f.env, FOUNDER, 'GET', `/sessions/${sid}/receipt`);
+  assert.ok(receipt.body.items.some((i: any) => i.outcome === 'refused' && String(i.refusal).startsWith('budget')));
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM interview_transcript_segments WHERE session_id = ? AND source = 'final'").get(sid).n, 0);
+});
+
+test('D685 §5.9: consent and ownership — no consent, no processing; another member gets 404', async () => {
+  const f = fixture();
+  llmAi(f);
+  const { sid } = await recordedForProcessing(f, 1, { consent: false });
+  const fin = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 0 });
+  assert.equal(fin.status, 409);
+  assert.equal(fin.body.error, 'consent_not_recorded');
+  f.db.prepare("UPDATE interview_sessions SET processing_stage = 'transcribing', expected_last_seq = 0 WHERE id = ?").run(sid);
+  assert.equal(await job(f, sid), 'failed', 'the job re-checks consent');
+  assert.match(stage(f, sid).e, /consent/);
+  assert.equal(f.aiCalls.length, 0, 'no AI ran');
+  for (const path of ['finish', 'process', 'summarise']) {
+    assert.equal((await call(f.env, OTHER, 'POST', `/sessions/${sid}/${path}`, { last_seq: 0 })).status, 404, path);
+  }
+  f.db.prepare("UPDATE interview_sessions SET consent_status = 'given', processing_stage = 'transcribing' WHERE id = ?").run(sid);
+  assert.equal(await runInterviewProcessJob(f.env, { session_id: sid, user_id: OTHER }), null, 'the job runs only for the member who recorded it');
+  assert.equal(f.aiCalls.length, 0, 'and runs no AI for anyone else');
+});
+
+test('D685 §5.9: Manual mode stops after Transcribing; /transcribe and /structure wait while the job runs', async () => {
+  const f = fixture();
+  llmAi(f);
+  const { sid } = await recordedForProcessing(f, 1);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 0, auto: false });
+  const busy = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/transcribe`);
+  assert.equal(busy.status, 409);
+  assert.equal(busy.body.error, 'processing');
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/summarise`)).body.error, 'processing');
+  assert.equal(await job(f, sid), 'done');
+  assert.equal(stage(f, sid).status, 'transcribed', 'no summary, no placements in Manual mode');
+  assert.equal(f.db.prepare('SELECT summary FROM interview_sessions WHERE id = ?').get(sid).summary, null);
+  // Done: a re-run is allowed again.
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/summarise`)).status, 201);
+});
+
+test('D685 §5.9: a stale run, and a session the old route left in transcribing, are recovered', async () => {
+  const f = fixture();
+  llmAi(f);
+  const { sid } = await recordedForProcessing(f, 1);
+  f.db.prepare("UPDATE interview_sessions SET status = 'transcribing', processing_stage = NULL, updated_at = datetime('now', '-1 hour') WHERE id = ?").run(sid);
+  // DELETE lets a stale legacy row through; /process recovers it.
+  const rec = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/process`);
+  assert.equal(rec.status, 202, JSON.stringify(rec.body));
+  assert.equal(await job(f, sid), 'done');
+  assert.ok(isStale({ processing_stage: 'transcribing', processing_updated_at: '2020-01-01 00:00:00' } as any));
+  assert.equal(isStale({ processing_stage: 'done', processing_updated_at: '2020-01-01 00:00:00' } as any), false);
+  assert.equal(isStale({ processing_stage: 'transcribing', processing_updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19) } as any), false);
+  // A run that is moving refuses a second /process.
+  f.db.prepare("UPDATE interview_sessions SET processing_stage = 'transcribing', processing_updated_at = datetime('now') WHERE id = ?").run(sid);
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/process`)).status, 409);
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${sid}`)).status, 409, 'a moving run is waited for');
+  f.db.prepare("UPDATE interview_sessions SET processing_stage = 'failed' WHERE id = ?").run(sid);
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${sid}`)).status, 200, 'a failed run can be deleted');
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM interview_chunk_transcripts WHERE session_id = ?').get(sid).n, 0);
+});
+
+test('D685 §5.10: summary sentences keep only citations inside the transcript; a text session is summarised; refusals use #1470\'s codes', async () => {
+  const segs = [{ start: 0, end: 2000, text: 'a', speaker: 'Me' }, { start: 2000, end: 4000, text: 'b', speaker: 'Dana' }] as any;
+  const out = checkSummary(JSON.stringify({ sentences: [
+    { text: 'Cited.', cites: [{ from: 0, to: 1000 }] },
+    { text: 'Outside.', cites: [{ from: 9000, to: 9500 }] },
+    { text: 'No cite.' },
+    { text: '', cites: [{ from: 0, to: 1000 }] },
+  ] }), segs);
+  assert.deepEqual(out.sentences.map((s) => s.text), ['Cited.']);
+  assert.equal(out.dropped, 3);
+
+  const f = fixture();
+  llmAi(f);
+  const t = await setup(f, { channel: 'text', interviewee: { name: 'Chat' }, messages: [{ author: 'Chat', text: 'We reconcile by hand.', at_ms: 0 }] });
+  const tid = t.body.session.id;
+  f.db.prepare("UPDATE interview_transcript_segments SET start_ms = 0, end_ms = 3000 WHERE session_id = ?").run(tid);
+  const s1 = await call(f.env, FOUNDER, 'POST', `/sessions/${tid}/summarise`);
+  assert.equal(s1.status, 201, JSON.stringify(s1.body));
+  assert.equal(s1.body.summary.sentences.length, 1);
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${tid}/summarise`, { model: 'not a model' })).status, 400);
+  const g = fixture({ dayMicro: 1 });
+  llmAi(g);
+  const t2 = await setup(g, { channel: 'text', interviewee: { name: 'Chat' }, messages: [{ author: 'Chat', text: 'x', at_ms: 0 }] });
+  const spent = await call(g.env, FOUNDER, 'POST', `/sessions/${t2.body.session.id}/summarise`);
+  assert.equal(spent.status, 402);
+  assert.match(spent.body.message, /allowance/i);
+  // The second run is a re-summary.
+  await call(f.env, FOUNDER, 'POST', `/sessions/${tid}/summarise`);
+  const steps = f.db.prepare('SELECT step FROM interview_summary_receipts WHERE session_id = ? ORDER BY id').all(tid).map((r: any) => r.step);
+  assert.deepEqual(steps, ['summarised', 're_summarised']);
 });

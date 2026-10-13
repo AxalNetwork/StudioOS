@@ -184,7 +184,8 @@ const FORWARDED: Record<string, string[]> = {
 const EXPECTED: Record<string, string[]> = {
   'routes/founder_validate.ts': ['AI_SURFACE.validate', 'AI_SURFACE.validateInterviews'],
   // D657 — a session's final transcript, on the same page as the interview log.
-  'routes/founder_validate_sessions.ts': ['AI_SURFACE.validateInterviews'],
+  // D685 (#1584) moved the call into the processing service the route and the job share.
+  'services/interviewProcessing.ts': ['AI_SURFACE.validateInterviews'],
   // D684 — a Telegram or WhatsApp voice note's transcript, bound for the same interviews page.
   'routes/channels.ts': ['AI_SURFACE.validateInterviews'],
   'routes/research.ts': ['AI_SURFACE.researchAsk'],
@@ -194,7 +195,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
-  'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask
+  'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise
   'services/advisor/rerank.ts': ['AI_SURFACE.studio'],
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],
   'routes/advisor.ts': ['AI_SURFACE.studio', 'AI_SURFACE.studio', 'AI_SURFACE.studio'],
