@@ -416,7 +416,8 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
       // it went, so it is never called sent (`ok` is neither true nor false);
       // after a minute it is reported as unknown. Nothing is sent now either.
       const age = Date.now() - ms(claim.row.created_at);
-      const code = Number.isFinite(age) && age < 60_000 ? 'send_in_flight' : 'send_unknown';
+      const code = claim.row.error_code === 'send_unknown' ? 'send_unknown'
+        : Number.isFinite(age) && age < 60_000 ? 'send_in_flight' : 'send_unknown';
       return c.json({ ok: null, existing: true, pending: true, code, message: sentence(code), outbound: outboundView(claim.row) });
     }
     return c.json({ ok: claim.row.status !== 'failed', existing: true, outbound: outboundView(claim.row) });
@@ -446,6 +447,12 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
   } catch {
     saved = false;
     console.error(`[channels] ${thread.provider} reply outcome not saved ok=${result.ok}`);
+  }
+  if (!result.ok && result.code === 'send_unknown') {
+    // A deadline/network loss cannot tell whether the provider accepted it.
+    // Return a readable unknown outcome, retaining this key and pending claim.
+    return c.json({ ok: null, existing: false, pending: true, code: 'send_unknown', message: sentence('send_unknown'),
+      outbound: outboundView({ ...claim.row, status: 'pending', error_code: 'send_unknown' }) });
   }
   if (!result.ok) {
     const code = result.code ?? 'rejected';

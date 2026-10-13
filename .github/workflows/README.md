@@ -8,6 +8,7 @@ Task #48.
 
 | Workflow file | What it does | Triggers | Required repo secrets |
 |---|---|---|---|
+| `channel-worker-contracts.yml` | Focused D684 messaging and provider deadline contracts with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching channel Worker contracts | none (`contents: read`) |
 | `ci.yml` | Frontend build, worker typecheck, API↔Worker drift, dev-backend import smoke, npm + pip audits | push/PR to `main` | none (uses `GITHUB_TOKEN` only) |
 | `build-worker-contracts.yml` | Focused D686 connector, Workspace mapping and local Wrangler D1 tests with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching the Build Worker contracts | none (`contents: read`; local scratch D1 only) |
 | `claude-code.yml` | Runs the Claude Code GitHub Action against an `@claude` mention, or a manual dispatch carrying an optional one-shot `prompt`. Short-circuits with a readable error if its secret is missing rather than a generic 401 | `issue_comment` [created], `pull_request_review_comment` [created], `pull_request_review` [submitted], `issues` [opened, assigned], manual dispatch | `ANTHROPIC_API_KEY` (billed via the Anthropic API, not a Claude.ai subscription — the org has subscription access to Claude Code disabled) |

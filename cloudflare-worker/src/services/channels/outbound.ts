@@ -4,7 +4,8 @@
  * `beginOutbound` claims a `client_key` (the caller's idempotency key, e.g. the
  * composer's per-message uuid): a repeat of the same key returns the existing
  * row and the caller must not send again. The send result then moves the row to
- * 'submitted' (the provider accepted it) or 'failed'. Only WhatsApp status
+ * 'submitted' (the provider accepted it) or 'failed' (a known refusal).
+ * An ambiguous send stays 'pending' with 'send_unknown': never retry it. Only WhatsApp status
  * webhooks move it further, to 'delivered' or 'read' — Telegram never does, and
  * nothing in Axal may call a Telegram message delivered.
  */
@@ -39,7 +40,7 @@ export async function finishOutbound(env: Env, id: number, result: SendResult): 
   const ext = result.externalMessageId && row ? await refKey(row.provider, result.externalMessageId) : null;
   await env.DB.prepare(
     `UPDATE channel_outbound SET status = ?, external_message_id = ?, error_code = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(result.ok ? 'submitted' : 'failed', ext, result.ok ? null : (result.code ?? 'send_failed'), id).run();
+  ).bind(result.ok ? 'submitted' : result.code === 'send_unknown' ? 'pending' : 'failed', ext, result.ok ? null : (result.code ?? 'send_failed'), id).run();
 }
 
 /**
