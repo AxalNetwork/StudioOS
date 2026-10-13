@@ -37,6 +37,13 @@ export function makeCycleWrites(request) {
       // MVP scope's row: `mvpFeature` adds one, with the project in the path.
       feature: (projectId, id, body) => request(`/cycles/build/features/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       mvpFeature: (projectId, body) => request(`/progress/mvp-scope/${seg(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      // D686 §5.3 (S18-B): a core system's connector. `{ integration_uid }`
+      // for Bank, Accounting, Payroll and CRM, `{ provider_key }` for
+      // Workspace, either null to unmap; `used_by` is free text.
+      system: (projectId, kind, body) => request(`/cycles/build/systems/${seg(kind)}?${q(projectId)}`, { method: 'PUT', body: JSON.stringify(body) }),
+      // Each kind's choices: the caller's own connections enabled for the
+      // project's company whose category fits it.
+      systemChoices: (projectId) => request(`/cycles/build/systems/choices?${q(projectId)}`),
     },
   };
 }

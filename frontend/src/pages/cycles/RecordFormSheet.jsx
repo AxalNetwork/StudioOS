@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { initialValues, validate } from './forms';
 
@@ -17,10 +18,14 @@ import { initialValues, validate } from './forms';
  *   onSubmit  (values) => Promise — the form's writes, already bound to the venture
  *   onSaved   after a save
  *   onClose
+ *   loadOptions  () => Promise<{ [field]: { options, note } }> — a select's
+ *             choices read before the form draws (D686 §5.4's connector
+ *             mapping); `validate` then checks the loaded ones. A field with
+ *             no choice shows its `note` and link.
  */
 const INPUT = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink outline-none focus:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-function Field({ field, value, error, onChange }) {
+function Field({ field, value, error, onChange, note }) {
   const id = `cycle-form-${field.name}`;
   const common = { id, name: field.name, value: value ?? '', onChange: (e) => onChange(e.target.value), 'aria-invalid': error ? 'true' : undefined, 'aria-describedby': error ? `${id}-error` : field.hint ? `${id}-hint` : undefined };
   let input;
@@ -45,15 +50,33 @@ function Field({ field, value, error, onChange }) {
       {error
         ? <span id={`${id}-error`} role="alert" className="text-[11.5px] text-red-700 dark:text-red-300">{error}</span>
         : field.hint ? <span id={`${id}-hint`} className="text-[11.5px] text-axal-muted dark:text-gray-400">{field.hint}</span> : null}
+      {note && (
+        <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`cycle-form-note-${field.name}`}>
+          {note.text}{note.href ? <> <Link to={note.href} className="font-semibold text-axal-violet-deep underline dark:text-violet-300">Connect a tool</Link></> : null}
+        </span>
+      )}
     </div>
   );
 }
 
-export default function RecordFormSheet({ form, current = null, cycle, onSubmit, onSaved, onClose }) {
-  const [values, setValues] = useState(() => initialValues(form, current));
+export default function RecordFormSheet({ form: base, current = null, cycle, onSubmit, onSaved, onClose, loadOptions = null }) {
+  const [values, setValues] = useState(() => initialValues(base, current));
   const [errors, setErrors] = useState({});
   const [refusal, setRefusal] = useState('');
   const [busy, setBusy] = useState(false);
+  // undefined while the choices are read, null when they could not be, else { field: { options, note } }.
+  const [loaded, setLoaded] = useState(loadOptions ? undefined : {});
+  useEffect(() => {
+    if (!loadOptions) return undefined;
+    let live = true;
+    Promise.resolve().then(loadOptions).then((r) => { if (live) setLoaded(r || {}); }, (e) => { if (live) { setLoaded(null); setRefusal(e?.message || 'The choices could not be read.'); } });
+    return () => { live = false; };
+    // Read once, when the sheet opens: the caller keys the sheet per row, and
+    // its `loadOptions` is a new function on each of its renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // The form with each loaded select's options, so `validate` checks those.
+  const form = useMemo(() => (base && loaded ? { ...base, fields: base.fields.map((f) => (loaded[f.name] ? { ...f, options: loaded[f.name].options || [] } : f)) } : base), [base, loaded]);
   if (!form) return null;
 
   const save = async (e) => {
@@ -91,13 +114,14 @@ export default function RecordFormSheet({ form, current = null, cycle, onSubmit,
       <form onSubmit={save} noValidate className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
           {refusal && <p role="alert" data-testid="cycle-form-refusal" className="m-0 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{refusal}</p>}
-          {form.fields.map((f) => (
-            <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={(v) => setValues((old) => ({ ...old, [f.name]: v }))} />
+          {loaded === undefined && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="cycle-form-loading">Reading the choices…</p>}
+          {loaded && form.fields.map((f) => (
+            <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} note={loaded[f.name]?.note || null} onChange={(v) => setValues((old) => ({ ...old, [f.name]: v }))} />
           ))}
         </div>
         <footer className="flex justify-end gap-2 border-t border-axal-hairline p-4 dark:border-gray-800">
           <button type="button" onClick={onClose} className="rounded-[9px] border border-axal-hairline px-3.5 py-2 text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800">Cancel</button>
-          <button type="submit" disabled={busy} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
+          <button type="submit" disabled={busy || !loaded} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
         </footer>
       </form>
     </aside>

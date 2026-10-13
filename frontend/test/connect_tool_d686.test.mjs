@@ -354,3 +354,100 @@ test('Build\'s list for the project\'s company: Use for it keeps the others, out
     assert.equal(none.text(none.by('tool-action-calendly')), 'Connect', 'still connectable, for the member');
   } finally { Object.assign(connectorsApi, saved); await none.unmount(); }
 });
+
+// ---------------------------------------------------------------- core systems and the Tools history
+
+import { EDITS, SYSTEM_KINDS, UNMAP, systemOptions } from '../src/pages/cycles/forms.js';
+import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
+import RecordFormSheet from '../src/pages/cycles/RecordFormSheet.jsx';
+import ToolsHistory from '../src/pages/cycles/ToolsHistory.jsx';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+const CHOICES = { kinds: [
+  { kind: 'crm', label: 'CRM', choices: [{ uid: 'u-hub', provider_key: 'hubspot', display_name: 'HubSpot', category: 'CRM' }] },
+  { kind: 'workspace', label: 'Workspace', choices: [{ uid: null, provider_key: 'google_calendar', display_name: 'Google Calendar' }] },
+  { kind: 'bank', label: 'Bank', choices: [] },
+] };
+
+test('a core system\'s connector: its choices, unmapping, the body each kind takes, and no Edit without a company', () => {
+  const edit = EDITS.build['operating-systems'];
+  assert.equal(edit.button, 'Choose connector');
+  assert.deepEqual(SYSTEM_KINDS, ['bank', 'accounting', 'payroll', 'crm', 'workspace']);
+  assert.equal(edit.idOf({ id: 'crm' }), 'crm', 'the row\'s id is its kind');
+  assert.equal(edit.idOf({ id: 'product_analytics' }), null, 'not a kind: no Edit');
+  assert.equal(edit.idOf({ id: 4 }), null);
+  assert.deepEqual(systemOptions(CHOICES, 'crm'), { options: [{ value: 'uid:u-hub', label: 'HubSpot' }, { value: UNMAP, label: '— None (unmap) —' }], note: null });
+  assert.deepEqual(systemOptions(CHOICES, 'workspace').options[0], { value: 'provider:google_calendar', label: 'Google Calendar' });
+  assert.deepEqual(systemOptions(CHOICES, 'bank'), { options: [{ value: UNMAP, label: '— None (unmap) —' }], note: { text: 'No connected Bank tool is enabled for this company.', href: '/build/connect' } });
+  assert.deepEqual(edit.toBody({ choice: 'uid:u-hub', used_by: ' Sales ' }, 'crm'), { integration_uid: 'u-hub', used_by: 'Sales' });
+  assert.deepEqual(edit.toBody({ choice: 'provider:microsoft_365', used_by: '' }, 'workspace'), { provider_key: 'microsoft_365', used_by: null });
+  assert.deepEqual(edit.toBody({ choice: UNMAP, used_by: '' }, 'crm'), { integration_uid: null, used_by: null }, 'unmap a connector kind');
+  assert.deepEqual(edit.toBody({ choice: UNMAP, used_by: '' }, 'workspace'), { provider_key: null, used_by: null }, 'unmap Workspace by its key');
+  assert.equal(edit.hiddenFor({ card: { state: 'not_recorded' } }), true, 'no company: no row action');
+  assert.equal(edit.hiddenFor({ card: { state: 'ok' } }), false);
+  assert.equal(edit.valuesOf({ cells: { used_by: 'Finance' } }).used_by, 'Finance');
+  const calls = [];
+  const w = makeCycleWrites((path, opts) => { calls.push([path, opts?.method || 'GET', opts?.body ? JSON.parse(opts.body) : null]); return Promise.resolve(CHOICES); });
+  edit.submit(w, 7, 'crm', { choice: 'uid:u-hub', used_by: 'Sales' });
+  w.build.systemChoices(7);
+  assert.deepEqual(calls, [
+    ['/cycles/build/systems/crm?project=7', 'PUT', { integration_uid: 'u-hub', used_by: 'Sales' }],
+    ['/cycles/build/systems/choices?project=7', 'GET', null],
+  ]);
+});
+
+test('the mapping sheet reads the choices before it draws, validates against them, and says when there is none', async () => {
+  const edit = EDITS.build['operating-systems'];
+  let resolve;
+  const loading = new Promise((r) => { resolve = r; });
+  const sent = [];
+  const m = await mount(h(MemoryRouter, null, h(RecordFormSheet, {
+    form: edit, current: edit.valuesOf({ cells: { used_by: 'Finance' } }), cycle: 'Build',
+    loadOptions: () => loading.then(() => edit.loadOptions({ build: { systemChoices: async () => CHOICES } }, 7, 'bank')),
+    onSubmit: async (v) => { sent.push(v); }, onClose() {},
+  })));
+  try {
+    assert.ok(m.by('cycle-form-loading'), 'nothing to choose from until the choices are read');
+    assert.equal(m.pr(m.by('cycle-form-save')).disabled, true);
+    resolve();
+    await m.settle();
+    assert.equal(m.by('cycle-form-loading'), undefined);
+    assert.equal(m.text(m.by('cycle-form-note-choice')), 'No connected Bank tool is enabled for this company. Connect a tool');
+    await act(async () => { m.pr(m.by('cycle-form-save')).onClick?.(); });
+    const form = (n) => (n.tagName === 'FORM' ? n : null);
+    const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+    const f = walk(document.body).map(form).find(Boolean);
+    await act(async () => { await m.pr(f).onSubmit({ preventDefault() {} }); });
+    assert.deepEqual(sent, [], 'no choice made: nothing is sent');
+    assert.ok(m.text().includes('Connector is required.'));
+    await act(async () => { m.pr(walk(document.body).find((n) => m.pr(n).id === 'cycle-form-choice')).onChange({ target: { value: 'uid:someone-else' } }); });
+    await act(async () => { await m.pr(f).onSubmit({ preventDefault() {} }); });
+    assert.deepEqual(sent, [], 'a value the read did not offer is refused before sending');
+    assert.ok(m.text().includes('Pick one of the choices for connector.'));
+    await act(async () => { m.pr(walk(document.body).find((n) => m.pr(n).id === 'cycle-form-choice')).onChange({ target: { value: UNMAP } }); });
+    await act(async () => { await m.pr(f).onSubmit({ preventDefault() {} }); });
+    assert.deepEqual(sent, [{ choice: UNMAP, used_by: 'Finance' }], 'unmapping is a choice');
+  } finally { await m.unmount(); }
+});
+
+test('the Tools history on Operating systems: one row per connection with its Open link, the Worker\'s reason without a company, and the note', () => {
+  const tools = {
+    cols: [{ key: 'tool', label: 'Tool' }, { key: 'state', label: 'State' }, { key: 'owner', label: 'Owner' }, { key: 'action', label: 'Action' }],
+    rows: [{ id: 'tool-0', cells: { tool: 'HubSpot', state: 'Failing', owner: 'You', action: { text: 'Open', href: '/build/connect?tool=hubspot' } } }, { id: 'tool-1', cells: { tool: 'Stripe', state: 'Connected', owner: null, action: null } }],
+    total: 2, state: 'ok', note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
+  };
+  const out = renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools })));
+  assert.match(out, /<section id="tools"/, 'anchored, for the Tools tab');
+  assert.match(out, /href="\/build\/connect\?tool=hubspot"[^>]*>Open</);
+  assert.equal((out.match(/data-testid="tools-row-/g) || []).length, 2);
+  assert.match(out, />Not recorded</, 'an owner the viewer may not see is not named, and says so');
+  assert.match(out, /data-testid="tools-note"[^>]*>Google Calendar and Microsoft 365 are personal connections/);
+  assert.match(out, />2 tools</);
+  const none = renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: { cols: tools.cols, rows: [], total: null, state: 'not_recorded', reason: 'This project has no company scope for connectors.' } })));
+  assert.match(none, /data-testid="tools-not-recorded"[^>]*>This project has no company scope for connectors\./);
+  assert.doesNotMatch(none, /tools<\/span>/, 'no count without a company');
+  assert.equal(renderToStaticMarkup(h(ToolsHistory, { tools: null })), '', 'no part, nothing drawn');
+  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  assert.match(route, /'operating-systems': \(data\) => <ToolsHistory tools=\{data\?\.parts\?\.tools\} \/>/);
+  assert.match(route, /loadOptions=\{edit\.loadOptions \? \(\) => edit\.loadOptions\(cyclesWrite, projectId, edit\.idOf\(editing\)\) : null\}/);
+});
