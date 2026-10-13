@@ -13,14 +13,16 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import RecordingView, { SHARE_NOTES, clock, initials, languageName, layers, statusWord } from '../src/pages/founder/RecordingView.jsx';
 import RecordingPill from '../src/pages/founder/RecordingPill.jsx';
 import { liveRedirect } from '../src/pages/founder/RecordLivePage.jsx';
+import { reviewPath } from '../src/lib/activeRecording.js';
 import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
 import { setRecorder } from '../src/contexts/ActiveRecordingContext.jsx';
+import InterviewSessionPage from '../src/pages/founder/InterviewSessionPage.jsx';
 
 const h = React.createElement;
 const html = (el, url = '/') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [url] }, el));
@@ -44,11 +46,15 @@ test('the top bar: who and where from, the call\'s pill, the offline pill, and E
   assert.match(out, /pt-\[max\(1rem,env\(safe-area-inset-top\)\)\]/);
 });
 
-test('a hidden status announces Recording, Paused, Offline and Stopped; the timer itself is not live', () => {
+test('a hidden status announces Recording, Paused, Offline, each processing stage, and Ready to review; the timer itself is not live', () => {
   assert.match(view(), /<p class="sr-only" role="status" data-testid="recording-status">Recording</);
   assert.match(view({ phase: 'paused' }), /data-testid="recording-status">Paused</);
   assert.match(view({ online: false }), /data-testid="recording-status">Offline</);
-  assert.match(view({ phase: 'stopping' }), /data-testid="recording-status">Stopped</);
+  assert.match(view({ phase: 'stopping', processing: { stage: 'transcribing', done: 1, total: 4 } }), /data-testid="recording-status">Transcribing</);
+  assert.match(view({ phase: 'stopping', processing: { stage: 'placing' } }), /data-testid="recording-status">Placing findings</);
+  assert.match(view({ phase: 'stopping', processing: { stage: 'failed', error: 'No.' }, stageAt: 1 }), /data-testid="recording-status">Processing stopped</);
+  assert.match(view({ phase: 'stopping', processing: null }), /data-testid="recording-status">Processing</);
+  assert.match(view({ phase: 'ready' }), /data-testid="recording-status">Ready to review</);
   assert.equal(statusWord(layers(ST({ phase: 'paused', online: false })), 'paused'), 'Offline', 'offline is the more urgent word');
   const t = tag(view(), 'recording-clock');
   assert.match(t, /role="timer"/);
@@ -148,6 +154,45 @@ test('dark: the canvas\'s ground and vignette, and dark pairs for the pill and t
   assert.match(tag(out, 'tile-you'), /dark:bg-\[#130b22\]/);
 });
 
+test('processing: a percentage and aria-valuenow only where the Worker counts; the chips; the sentence and Retry on failure', () => {
+  const up = view({ phase: 'stopping', processing: { stage: 'uploading', done: 3, total: 4 } });
+  const ring = tag(up, 'recording-ring');
+  assert.match(ring, /role="progressbar"/);
+  assert.match(ring, /aria-valuenow="75"/);
+  assert.match(ring, /aria-label="Processing: Uploading"/);
+  assert.match(up, /data-testid="processing-percent">75%</);
+  assert.doesNotMatch(up, /data-testid="recording-clock"/, 'the timer gives way to the processing ring');
+  for (const stage of ['summarising', 'placing']) {
+    const out = view({ phase: 'stopping', processing: { stage, done: 3, total: 4 } });
+    assert.match(tag(out, 'recording-ring'), /role="progressbar"/);
+    assert.doesNotMatch(tag(out, 'recording-ring'), /aria-valuenow/, `${stage}: no count, no value`);
+    assert.doesNotMatch(out, /processing-percent|\d+%/, `${stage}: never a guessed percentage`);
+  }
+  assert.doesNotMatch(tag(view({ phase: 'stopping', processing: { stage: 'uploading', done: null, total: null } }), 'recording-ring'), /aria-valuenow/, 'before finish answers');
+  assert.doesNotMatch(tag(view(), 'recording-ring'), /progressbar/, 'recording: the ring is not a progress bar');
+
+  const tr = view({ phase: 'stopping', processing: { stage: 'transcribing', done: 1, total: 4 } });
+  assert.match(tag(tr, 'stage-1'), /data-tone="current"/);
+  assert.match(tag(tr, 'stage-1'), /aria-current="step"/);
+  assert.match(tag(tr, 'stage-1'), /bg-violet-700/, 'the current one filled violet');
+  assert.match(tag(tr, 'stage-2'), /data-tone="next"/);
+  assert.match(tag(tr, 'stage-2'), /bg-violet-100/, 'the next tinted');
+  assert.match(tag(tr, 'stage-3'), /data-tone="rest"/);
+  assert.doesNotMatch(tag(tr, 'stage-3'), /bg-/, 'the rest outlined');
+  assert.match(tag(tr, 'stage-0'), /data-tone="done"/);
+  assert.ok(renderedText(tr).includes('Then the review screen.'));
+  assert.doesNotMatch(tr, /Not recorded/, 'no stage is marked as missing now that the Worker reports each');
+  assert.doesNotMatch(tr, /data-testid="processing-failed"/);
+
+  const failed = view({ phase: 'stopping', stageAt: 1, processing: { stage: 'failed', error: 'The recording could not be read. Nothing was transcribed.' } });
+  assert.match(tag(failed, 'processing-failed'), /role="alert"/);
+  assert.ok(renderedText(failed).includes('The recording could not be read. Nothing was transcribed.'));
+  assert.match(failed, /data-testid="button-retry-processing"/);
+  assert.match(tag(failed, 'stage-1'), /data-tone="rest"/, 'nothing is drawn as running after a failure');
+  assert.doesNotMatch(renderedText(failed), /Then the review screen/);
+  assert.doesNotMatch(failed, /data-testid="button-stop"/, 'no recording controls while processing');
+});
+
 test('the drawer: "[n] of [m] covered", one checkbox each, its empty sentence, ticks saved by the Worker, and a refusal said', () => {
   const pts = [{ id: 1, text: 'H1 · They lose a day', covered: true }, { id: 2, text: 'H2 · They would pay', covered: false }, { id: 3, text: 'H3', covered: false }];
   const out = view({ drawer: true, points: pts }, { actions: { tick() {} } });
@@ -204,7 +249,7 @@ async function mountView(st, actions) {
 
 test('focus: into the view on open; into the confirm on Keep recording, Escape keeps recording, and focus goes back to Stop', async () => {
   const calls = [];
-  const actions = { cancelStop: () => calls.push('keep'), confirmStop: () => calls.push('stop'), discard: () => calls.push('discard'), toggleDrawer: (v) => calls.push(`drawer:${v}`) };
+  const actions = { cancelStop: () => calls.push('keep'), confirmStop: () => calls.push('stop'), discard: () => calls.push('discard'), retry: () => calls.push('retry'), toggleDrawer: (v) => calls.push(`drawer:${v}`) };
   const m = await mountView(ST(), actions);
   try {
     assert.ok(m.focused.at(-1) === m.by('button-exit-full-screen'), 'focus moves into the view');
@@ -217,6 +262,9 @@ test('focus: into the view on open; into the confirm on Keep recording, Escape k
     await m.render(ST({ confirm: true }));
     await act(async () => { m.pr(m.by('button-discard')).onClick(); });
     assert.ok(calls.includes('discard'));
+    await m.render(ST({ phase: 'stopping', processing: { stage: 'failed', error: 'No.' }, stageAt: 1 }));
+    await act(async () => { m.pr(m.by('button-retry-processing')).onClick(); });
+    assert.ok(calls.includes('retry'), 'Retry asks the recorder to resume');
   } finally { await m.unmount(); }
 });
 
@@ -293,6 +341,48 @@ test('pressing the pill opens the live view for its session; the recording is un
   await act(async () => root.unmount()); restore();
 });
 
+test('after a reload the session page hands a run under way to the recorder and opens the live view; a finished one stays', async () => {
+  const followed = [];
+  const rec = stubRecorder({ phase: 'idle', session: null });
+  rec.follow = (arg) => { followed.push(arg); return Promise.resolve('done'); };
+  setRecorder(rec);
+  const read = (processing) => ({
+    session: { id: 7, interview_id: 41, status: 'stopped', channel: 'in_person', consent_status: 'given' },
+    interview: { id: 41, interviewee_name: 'Dana Ruiz' }, call_label: 'In person', processing, segments: [], marks: [], chunks: [],
+  });
+  const api = (r) => ({ get: async () => r, receipt: async () => ({ items: [] }), models: async () => ({ live: [], final: [] }), placements: async () => ({ items: [] }) });
+  const mount = async (r) => {
+    const restore = installDocument();
+    // The page's theme hook reads the root's class list, which the stub DOM lacks.
+    if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+    let path = null;
+    function Probe() { const l = useLocation(); path = `${l.pathname}${l.search}`; return null; }
+    const container = document.createElement('div'); document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(h(MemoryRouter, { initialEntries: ['/validate/session/7'] }, h(Probe),
+        h(Routes, null, h(Route, { path: '/validate/session/:id', element: h(InterviewSessionPage, { api: api(r) }) }), h(Route, { path: '/validate/record/live', element: h('p', null, 'live') }))));
+    });
+    await act(async () => { await new Promise((res) => setTimeout(res, 0)); });
+    await act(async () => root.unmount()); restore();
+    return path;
+  };
+  assert.equal(await mount(read({ stage: 'transcribing', done: 1, total: 3, error: null, stale: false })), '/validate/record/live?session=7');
+  assert.equal(followed.length, 1);
+  assert.equal(followed[0].processing.stage, 'transcribing', 'from the Worker\'s state');
+  assert.equal(followed[0].interview.interviewee_name, 'Dana Ruiz', 'the name from the session read');
+  assert.equal(followed[0].callLabel, 'In person');
+  assert.equal(await mount(read({ stage: 'failed', done: null, total: null, error: 'No.', stale: false })), '/validate/record/live?session=7', 'a failure opens it too, with Retry');
+  assert.equal(await mount(read({ stage: 'done', done: null, total: null, error: null, stale: false })), '/validate/session/7', 'done: nothing to follow');
+  assert.equal(await mount(read(null)), '/validate/session/7', 'never processed: nothing to follow');
+  assert.equal(followed.length, 2);
+  const followedHere = stubRecorder({ phase: 'stopping', session: { id: 7 } });
+  followedHere.follow = () => { followed.push('again'); return Promise.resolve('done'); };
+  setRecorder(followedHere);
+  assert.equal(await mount(read({ stage: 'transcribing', done: 1, total: 3, error: null, stale: false })), '/validate/session/7', 'already followed in this tab: left alone');
+  assert.equal(followed.length, 2);
+});
+
 test('the live route: bound to the recording; another session\'s address goes to its page; a finished one lands on its review', () => {
   const st = ST();
   assert.equal(liveRedirect(st, null), null);
@@ -301,14 +391,20 @@ test('the live route: bound to the recording; another session\'s address goes to
   assert.equal(liveRedirect({ session: null }, '9'), '/validate/session/9');
   assert.equal(liveRedirect({ session: null }, 'abc'), '/validate', 'a malformed id goes nowhere odd');
   assert.equal(liveRedirect({ session: null }, null), '/validate');
-  assert.equal(liveRedirect({ ...st, phase: 'ready' }, '7'), '/validate/session/7');
+  assert.equal(liveRedirect({ ...st, phase: 'ready', session: { ...SESSION, interview_id: 41 } }, '7'), '/validate/interviews/41?session=7', 'done: the interview\'s review, on this session');
+  assert.equal(reviewPath({ id: 7 }), '/validate/session/7', 'no interview id: the session\'s own page');
+  assert.equal(reviewPath(null), '/validate/interviews');
   assert.equal(liveRedirect({ phase: 'discarded', session: null }, '7'), '/validate/interviews');
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /<Route path="\/validate\/record\/live" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <RecordLivePage \/>\)\} \/>/);
   assert.match(app, /<ActiveRecordingProvider userId=\{user\?\.id \?\? null\} \/>/, 'mounted once, above the pages');
   assert.match(app, /<SafeMount name="RecordingPill"><RecordingPill \/><\/SafeMount>/);
   const live = readFileSync('frontend/src/pages/founder/RecordLivePage.jsx', 'utf8');
-  assert.doesNotMatch(live, /recorder\.(signOut|discard|confirmStop)\(/, 'leaving the view never ends the recording');
+  const exitFn = live.slice(live.indexOf('const exit = '), live.indexOf('};', live.indexOf('const exit = ')));
+  assert.doesNotMatch(exitFn, /recorder\./, 'leaving the view never ends the recording');
+  assert.doesNotMatch(live, /recorder\.(signOut|discard)\(/);
+  assert.match(live, /const \[auto\] = useAssistMode\('Validate'\);/, 'the rail\'s mode decides whether the Worker goes past Transcribing');
+  assert.match(live, /confirmStop: \(\) => recorder\.confirmStop\(\{ auto \}\)/);
   assert.match(readFileSync('frontend/src/pages/founder/RecordingView.jsx', 'utf8'), /fixed inset-0 z-\[90\]/, 'full screen at every width, above the rail');
 });
 
