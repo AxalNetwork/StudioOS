@@ -4,7 +4,6 @@ import RingViz from '../../components/discovery/RingViz';
 import { NO_SOUND_MS } from '../../lib/interviewCapture';
 import { STAGES, elapsedMs } from '../../lib/activeRecording';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
-import { NOT_STORED } from './recordSetup.js';
 
 /**
  * The Recording View (D685 §5.7, #1588), full screen at `/validate/record/live`,
@@ -117,7 +116,7 @@ function useTrap(ref, onEscape, active) {
 }
 
 /** The talking-points drawer (§5.2, RV11): a bottom sheet, its count announced politely. */
-export function PointsDrawer({ points = [], stored = false, onClose, returnTo }) {
+export function PointsDrawer({ points = [], onTick, error = null, onClose, returnTo }) {
   const box = useRef(null);
   const close = useRef(null);
   useTrap(box, onClose, true);
@@ -144,13 +143,13 @@ export function PointsDrawer({ points = [], stored = false, onClose, returnTo })
             {points.map((p, i) => (
               <li key={p.id ?? i}>
                 <label className={`flex items-start gap-2 text-[13.5px] ${p.covered ? 'text-violet-700 line-through opacity-50 dark:text-violet-300' : ''}`}>
-                  <input type="checkbox" checked={!!p.covered} disabled={!stored} onChange={() => {}} className="mt-0.5 accent-violet-600" />
+                  <input type="checkbox" checked={!!p.covered} disabled={!onTick} onChange={() => onTick?.(p.id, !p.covered)} className="mt-0.5 accent-violet-600" data-testid={`point-${p.id}`} />
                   <span>{p.text}</span>
                 </label>
               </li>
             ))}
           </ul>
-          {!stored && <p className="mt-2 text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="points-not-stored">{NOT_STORED}</p>}
+          {error && <p role="alert" className="mt-2 text-[12px] text-red-700 dark:text-red-300" data-testid="points-error">{error}</p>}
         </>
       )}
     </section>
@@ -315,7 +314,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         </footer>
       )}
 
-      {l.drawer && <PointsDrawer points={st?.points || []} stored={false} onClose={() => actions.toggleDrawer?.(false)} returnTo={drawerBtn} />}
+      {l.drawer && <PointsDrawer points={st?.points || []} onTick={actions.tick ? (id, on) => actions.tick(id, on) : null} error={st?.pointError || null} onClose={() => actions.toggleDrawer?.(false)} returnTo={drawerBtn} />}
       {l.confirm && <StopConfirm onKeep={() => actions.cancelStop?.()} onStop={() => actions.confirmStop?.()} onDiscard={() => actions.discard?.()} returnTo={stopRef} />}
     </div>
   );

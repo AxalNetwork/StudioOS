@@ -167,7 +167,7 @@ export default function RecordLightbox({
       const r = await sessions.create(target.id, body);
       if (handsOver) {
         const who = { id: target.id, interviewee_name: target.interviewee_name ?? name.trim(), interviewee_company: target.interviewee_company ?? (company.trim() || null) };
-        recorder.begin({ session: r.session, interview: who, callLabel: callLabel(mode, provider), points: picked.map((p) => ({ id: p.id, text: p.text, covered: false })), video: mode === 'video' });
+        recorder.begin({ session: r.session, interview: who, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video' });
         onStarted?.(r.session, who, 'live');
         return;
       }

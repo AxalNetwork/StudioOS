@@ -9,6 +9,7 @@
 //   sessionAction    POST   /sessions/:id/{start,pause,resume,stop}
 //   uploadChunk      PUT    /sessions/:id/chunks/:seq   one audio chunk; a repeat is `duplicate`
 //   markMoment       POST   /sessions/:id/marks
+//   tickPoint        PUT    /sessions/:id/points/:pointId  { covered } → { points, points_covered } (D685 §5.2)
 //   liveSocketUrl    GET    /sessions/:id/live          WebSocket, linear16 at 16 kHz
 //   transcribe       POST   /sessions/:id/transcribe
 //   setSpeaker       PATCH  /sessions/:id/segments/:segId
@@ -50,6 +51,9 @@ export const interviewSessionsApi = {
   }),
   mark: (id, offsetMs, label) => request(`${P}/sessions/${enc(id)}/marks`, {
     method: 'POST', body: JSON.stringify({ offset_ms: offsetMs, label }),
+  }),
+  tickPoint: (id, pointId, covered) => request(`${P}/sessions/${enc(id)}/points/${enc(pointId)}`, {
+    method: 'PUT', body: JSON.stringify({ covered: !!covered }),
   }),
   /** The live socket's address. A browser WebSocket carries the auth cookie. */
   liveUrl: (id, loc = (typeof window !== 'undefined' ? window.location : null)) => {

@@ -248,6 +248,40 @@ test('a session left recording with no capture here is paused, and resumed by ha
   assert.equal(r.capture.offsetMs() >= 90000, true, 'offsets continue from active_ms');
 });
 
+test('a talking point is ticked at once, saved by the Worker under its own id, and put back when refused', async () => {
+  const b = fakeBrowser();
+  let refuse = false;
+  let seen = null;
+  const w = fakeApi({
+    tickPoint: async (id, pointId, covered) => {
+      w.calls.push(['tick', id, pointId, covered]);
+      seen = r.getSnapshot().points.find((p) => p.id === pointId)?.covered;
+      if (refuse) throw new Error('500');
+      // The Worker answers with the whole list, as it now stands.
+      return { points: [{ id: 88, text: 'H2', covered, covered_offset_ms: 4000 }, { id: 89, text: 'H1', covered: false, covered_offset_ms: null }], points_covered: covered ? 1 : 0 };
+    },
+  });
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  await r.adopt({ session: draft({ status: 'paused' }), points: [{ id: 88, text: 'H2', covered: false }, { id: 89, text: 'H1', covered: false }] });
+  assert.deepEqual(r.getSnapshot().points.map((p) => p.id), [88, 89], 'an adopted session keeps the read\'s points');
+  assert.equal(await r.tick(88, true), 'saved');
+  assert.deepEqual(w.calls.at(-1), ['tick', 7, 88, true]);
+  assert.equal(seen, true, 'shown ticked before the Worker answers');
+  assert.equal(r.getSnapshot().points[0].covered_offset_ms, 4000, 'the Worker\'s answer replaces the list');
+  refuse = true;
+  assert.equal(await r.tick(89, true), 'refused');
+  assert.equal(r.getSnapshot().points.find((p) => p.id === 89).covered, false, 'a refused tick is put back');
+  assert.equal(r.getSnapshot().pointError, 'That tick was not saved. Try again.');
+  refuse = false;
+  await r.tick(88, false);
+  assert.equal(r.getSnapshot().pointError, null, 'the next tick clears the refusal');
+  assert.equal(r.getSnapshot().points[0].covered, false);
+  const client = readFileSync('frontend/src/lib/api/interviewSessions.js', 'utf8');
+  assert.match(client, /tickPoint: \(id, pointId, covered\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/points\/\$\{enc\(pointId\)\}`, \{\s*method: 'PUT', body: JSON\.stringify\(\{ covered: !!covered \}\),/);
+  const worker = readFileSync('cloudflare-worker/src/routes/founder_validate_sessions.ts', 'utf8');
+  assert.match(worker, /sessions\.put\('\/sessions\/:id\/points\/:pointId'/, 'the route it calls is mounted');
+});
+
 test('sign-out stops the capture and sends nothing more under another member', async () => {
   const b = fakeBrowser();
   const w = fakeApi();

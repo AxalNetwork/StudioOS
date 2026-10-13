@@ -155,12 +155,13 @@ test('talking points: open claims only, the current sprint\'s first, the first t
 });
 
 test('the body sent to today\'s route carries only what the Worker stores', () => {
-  assert.equal(SETUP_FIELDS.points, false);
+  assert.equal(SETUP_FIELDS.points, true, 'the talking points are stored since #1591');
   assert.equal(SETUP_FIELDS.language, false);
   assert.match(NOT_STORED, /^Not saved yet/);
   const audio = { mode: 'video', consent: 'written', live: 'nova', final: 'whisper', provider: 'zoom', link: 'https://zoom.us/j/1', language: 'fr', points: [2, 7] };
-  assert.deepEqual(sessionBody(audio), { channel: 'video', consent: { status: 'given', method: 'written' }, live_model: 'nova', final_model: 'whisper' },
-    'no provider, link, language or points while the Worker takes none');
+  assert.deepEqual(sessionBody(audio), { channel: 'video', consent: { status: 'given', method: 'written' }, live_model: 'nova', final_model: 'whisper', points: [2, 7] },
+    'the points, and no provider, link or language while the Worker takes none of them');
+  assert.equal('points' in sessionBody({ ...audio, points: [] }), false, 'no points picked sends none');
   assert.deepEqual(sessionBody(audio, { ...SETUP_FIELDS, call_provider: true, meeting_url: true, language: true, points: true }), {
     channel: 'video', consent: { status: 'given', method: 'written' }, live_model: 'nova', final_model: 'whisper', language: 'fr', call_provider: 'zoom', meeting_url: 'https://zoom.us/j/1', points: [2, 7],
   }, 'each is sent once its flag is on');
