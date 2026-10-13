@@ -29,6 +29,28 @@ export interface Env {
   // 503 `{code:'telegram_token_missing'}` — no silent fallback. The
   // schema + admin UI stay fully usable for draft authoring regardless.
   TELEGRAM_BOT_TOKEN?: string;
+  // D684 (#1575) — interview channels. Platform secrets only: a member's own
+  // WhatsApp business token lives encrypted on their `integrations` row, and
+  // Telegram Business needs none. Every one is `wrangler secret put … --env
+  // production`, never committed; a provider whose secrets are missing reports
+  // itself unavailable (services/channels/connections.ts `availability`).
+  // TELEGRAM_CHANNEL_* is a SEPARATE bot from TELEGRAM_BOT_TOKEN (the admin
+  // broadcaster): members connect it to their Telegram Business account.
+  TELEGRAM_CHANNEL_BOT_TOKEN?: string;
+  TELEGRAM_CHANNEL_BOT_USERNAME?: string;
+  /** setWebhook's secret_token; Telegram echoes it in X-Telegram-Bot-Api-Secret-Token. */
+  TELEGRAM_CHANNEL_WEBHOOK_SECRET?: string;
+  /** Meta app (Tech Provider) for WhatsApp Embedded Signup and the Cloud API webhook. */
+  WHATSAPP_APP_ID?: string;
+  /** Signs X-Hub-Signature-256 on every webhook delivery; exchanges signup codes. */
+  WHATSAPP_APP_SECRET?: string;
+  /** The hub.verify_token Meta's subscription GET must echo. */
+  WHATSAPP_VERIFY_TOKEN?: string;
+  WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?: string;
+  /** Zoom General app (user-managed OAuth) and its webhook secret token. */
+  ZOOM_CLIENT_ID?: string;
+  ZOOM_CLIENT_SECRET?: string;
+  ZOOM_WEBHOOK_SECRET_TOKEN?: string;
   // Task #4 — X (Twitter) admin broadcaster. OAuth 2.0 PKCE client
   // credentials. Provisioned via
   //   wrangler secret put X_CLIENT_ID     --env production

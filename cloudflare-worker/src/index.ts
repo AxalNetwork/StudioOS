@@ -1698,6 +1698,27 @@ export default {
             console.error('[cron] learning video sweep failed', e);
           }
         }
+        // D684 — interview channels. Every five minutes, each provider that
+        // must poll (Google Meet transcripts) runs its sweep; at 03:50 the
+        // pending-conversation store is purged past its 30 days. Every tier:
+        // a branch's members and their conversations are its own.
+        if (now.getUTCMinutes() % 5 === 2) {
+          try {
+            const { runChannelSweeps } = await import('./services/channels/jobs');
+            await runChannelSweeps(env, now);
+          } catch (e) {
+            console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
+          }
+        }
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 50) {
+          try {
+            const { purgeExpired } = await import('./services/channels/threads');
+            const r = await purgeExpired(env, now);
+            if (r.threads || r.messages) console.info(`[cron] channel purge threads=${r.threads} messages=${r.messages}`);
+          } catch (e) {
+            console.error('[cron] channel purge failed', e instanceof Error ? e.message : 'error');
+          }
+        }
         // D572 part 3b — the partner leaderboard's daily standings, so the
         // board's "change" has an earlier standing to compare with. Every
         // tier: a branch's partners are its own. Idempotent per day.
