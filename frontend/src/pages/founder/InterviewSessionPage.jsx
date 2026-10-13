@@ -229,8 +229,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   if (data === undefined) return <div className="p-6 text-[13px] text-axal-faint">Reading the session…</div>;
   if (data === null) return <div role="alert" className="p-6 text-[13px] text-red-700">{error}</div>;
   const { session, segments = [], marks = [], chunks = [] } = data;
-  // The session row has no name; the lightbox passes the interview it opened from.
-  const interview = location.state?.interview || null;
+  // The lightbox passes the interview it opened from; after a reload the session read carries it.
+  const interview = location.state?.interview || data.interview || null;
   const intervieweeName = (interview?.interviewee_name || '').trim() || null;
   // D685 §5.6: the recording lives above the routes. This page hands it over and links to it.
   const mine = rec.session?.id != null && String(rec.session.id) === String(session.id);
@@ -240,7 +240,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const start = async () => {
     setBusy(true); setStartError(null);
     try {
-      const r = await recorder.begin({ session, interview, video: session.channel === 'video' });
+      const r = await recorder.begin({ session, interview, callLabel: data.call_label ?? null, points: data.points || [], video: session.channel === 'video' });
       if (r === 'refused') { setStartError(recorder.getSnapshot().error); return; }
       navigate(live);
     } catch (e) {
@@ -257,7 +257,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const adopt = async () => {
     setBusy(true);
     try {
-      await recorder.adopt({ session, interview, storedSeqs: chunks.map((c) => c.seq) });
+      await recorder.adopt({ session, interview, callLabel: data.call_label ?? null, points: data.points || [], storedSeqs: chunks.map((c) => c.seq) });
       navigate(live);
     } finally { setBusy(false); }
   };

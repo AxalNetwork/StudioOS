@@ -10,15 +10,16 @@
  * priced", never $0.
  *
  * WHAT THE WORKER STORES TODAY. `SETUP_FIELDS` says, field by field, whether
- * the Worker accepts it yet. D685 §5.1 is S03's: until its `POST /sessions`
- * lands, the Worker takes none of the language, the talking points, the call
- * provider or the meeting link. A control for a field the Worker does not
+ * the Worker accepts it yet. D685 §5.1 is S03's. The talking points are stored
+ * since #1591 (S03-A, #1583), on the create route this lightbox posts to; the
+ * language, the call provider and the meeting link wait on the lightbox moving
+ * to `POST /sessions` (#1587). A control for a field the Worker does not
  * store is drawn, disabled, with that reason: it never takes a choice and drops
  * it. Flip a flag when the route that stores it merges.
  */
 
 export const SETUP_FIELDS = Object.freeze({
-  points: false, // §5.2: interview_session_points (migration 450)
+  points: true, // §5.2: interview_session_points (migration 452, #1591)
   language: false, // §5.1.3
   call_provider: false, // §5.1.2
   meeting_url: false, // §5.1.2

@@ -20,8 +20,10 @@
  *     its own; and the marks' `client_key`, so a replayed mark is never doubled.
  *     Until then a session opened from its page after a reload is paused and
  *     resumed by hand, with its seqs continued from `GET /sessions/:id`.
- *   · #1583: the talking points' ticks. Until then the drawer lists the points
- *     picked in the lightbox, unticked, and says they are not saved yet.
+ *
+ * The talking points are the Worker's (#1583, merged as #1591): the session
+ * read carries them with their own ids, and a tick is `PUT
+ * /sessions/:id/points/:pointId`, whose answer replaces the list.
  */
 import { createCapture, indexedDbQueue, nextSeq } from './interviewCapture.js';
 
@@ -32,7 +34,7 @@ const TOAST_MS = 2500;
 const blank = () => ({
   phase: 'idle', session: null, interview: null, callLabel: null, channel: null, points: [],
   cap: {}, confirm: false, drawer: false, toast: null, stage: 0, error: null, wake: null,
-  marksQueued: [], online: true, video: false,
+  marksQueued: [], online: true, video: false, pointError: null,
 });
 
 /** The pill's variant, from the phase (D685 §5.6.4). Null when nothing is recording. */
@@ -173,12 +175,12 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       return goLive();
     },
     /** A session that already exists (its page, or after a reload): paused until resumed in a click. */
-    async adopt({ session, interview = null, callLabel = null, storedSeqs = [] }) {
+    async adopt({ session, interview = null, callLabel = null, points = [], storedSeqs = [] }) {
       capture = null;
       let s = session;
       // A recording with no capture in this tab is paused, never left running (§5.6.7).
       if (s?.status === 'recording') { try { s = (await api.action(s.id, 'pause')).session; } catch { /* the Worker keeps its own state */ } }
-      set({ ...blank(), session: s, interview, callLabel, channel: s?.channel || null, storedSeqs, phase: s?.status === 'draft' ? 'idle' : 'paused', video: s?.channel === 'video' });
+      set({ ...blank(), session: s, interview, callLabel, channel: s?.channel || null, points, storedSeqs, phase: s?.status === 'draft' ? 'idle' : 'paused', video: s?.channel === 'video' });
       return state.phase;
     },
     /** Video, second click: share the call's tab, or record the microphone only. */
@@ -207,6 +209,22 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       try { await api.mark(state.session.id, offset); return 'sent'; } catch {
         set((x) => ({ marksQueued: [...x.marksQueued, { offset, key: markKey(x.session.id, offset) }] }));
         return 'queued';
+      }
+    },
+    /**
+     * Tick or untick a talking point (§5.2). Shown at once; the Worker's answer
+     * replaces the list, and a refusal puts the box back and says so.
+     */
+    async tick(pointId, covered) {
+      const flip = (on) => (x) => ({ points: x.points.map((p) => (p.id === pointId ? { ...p, covered: on } : p)) });
+      set((x) => ({ ...flip(covered)(x), pointError: null }));
+      try {
+        const r = await api.tickPoint(state.session.id, pointId, covered);
+        if (Array.isArray(r?.points)) set({ points: r.points });
+        return 'saved';
+      } catch {
+        set((x) => ({ ...flip(!covered)(x), pointError: 'That tick was not saved. Try again.' }));
+        return 'refused';
       }
     },
     toggleLive() { capture?.setLive(!(state.cap.live ?? !!state.session?.live_model)); },

@@ -128,16 +128,16 @@ test('the meeting link is drawn for Zoom, Meet and Teams only, and says why it i
   assert.doesNotMatch(on, /record-link-note/);
 });
 
-test('talking points: the first two on, "No hypothesis yet" when there are none, and disabled with a reason until stored', () => {
+test('talking points: the first two on, "No hypothesis yet" when there are none, and stored since #1591', () => {
   const out = render();
   assert.match(tag(out, 'record-point-2'), /aria-pressed="true"/);
   assert.match(tag(out, 'record-point-1'), /aria-pressed="true"/);
   assert.match(tag(out, 'record-point-5'), /aria-pressed="false"/);
-  assert.match(tag(out, 'record-point-2'), / disabled=""/, 'the Worker stores none yet');
-  assert.match(renderedText(out), /Not saved yet: the Worker does not store this field\./);
-  const stored = render({ fields: { ...SETUP_FIELDS, points: true } });
-  assert.doesNotMatch(tag(stored, 'record-point-2'), / disabled=""/);
-  assert.match(renderedText(stored), /The hypotheses you pick appear in the Talking points drawer while you record\./);
+  assert.doesNotMatch(tag(out, 'record-point-2'), / disabled=""/, 'the Worker stores them');
+  assert.match(renderedText(out), /The hypotheses you pick appear in the Talking points drawer while you record\./);
+  const unstored = render({ fields: { ...SETUP_FIELDS, points: false } });
+  assert.match(tag(unstored, 'record-point-2'), / disabled=""/, 'a field the Worker does not store is disabled');
+  assert.match(renderedText(unstored), /Not saved yet: the Worker does not store this field\./);
   const none = render({ initialBoard: { hypotheses: [] } });
   assert.ok(renderedText(none).includes('No hypothesis yet.'));
   assert.match(none, /data-testid="record-points-none"/);
@@ -239,7 +239,7 @@ test('a new person is logged, then the session opens; the body is the Worker\'s 
     await m.click('record-consents-verbal');
     await m.click('record-start');
     assert.deepEqual(s.calls.createInterview, [[3, { interviewee_name: 'Dana Ruiz', interviewee_company: 'Acme' }]]);
-    assert.deepEqual(s.calls.create, [[41, { channel: 'in_person', consent: { status: 'given', method: 'verbal' }, live_model: 'nova', final_model: 'whisper' }]]);
+    assert.deepEqual(s.calls.create, [[41, { channel: 'in_person', consent: { status: 'given', method: 'verbal' }, live_model: 'nova', final_model: 'whisper', points: [2, 1] }]]);
     assert.equal(s.calls.started.length, 1);
     assert.equal(s.calls.started[0][0].id, 501);
     assert.equal(s.calls.started[0][1].id, 41, 'the caller gets the interview too, for the session page');
@@ -254,7 +254,7 @@ test('an interview it was opened on is not logged again', async () => {
     await m.click('record-consents-in_app');
     await m.click('record-start');
     assert.equal(s.calls.createInterview.length, 0);
-    assert.deepEqual(s.calls.create, [[7, { channel: 'video', consent: { status: 'given', method: 'in_app' }, live_model: 'nova', final_model: 'whisper' }]]);
+    assert.deepEqual(s.calls.create, [[7, { channel: 'video', consent: { status: 'given', method: 'in_app' }, live_model: 'nova', final_model: 'whisper', points: [2, 1] }]]);
   } finally { await m.unmount(); }
 });
 
@@ -311,7 +311,7 @@ test('a text chat is pasted: the conversation becomes messages, with no consent 
     await m.type('record-conversation', 'Dana: It takes a day\nwe log it');
     assert.equal(m.pr(m.by('record-start'))['aria-disabled'], undefined);
     await m.click('record-start');
-    assert.deepEqual(s.calls.create[0][1], { channel: 'text', messages: [{ author: 'Dana', text: 'It takes a day' }, { author: 'Me', text: 'we log it' }] });
+    assert.deepEqual(s.calls.create[0][1], { channel: 'text', messages: [{ author: 'Dana', text: 'It takes a day' }, { author: 'Me', text: 'we log it' }], points: [2, 1] });
   } finally { await m.unmount(); }
 });
 
@@ -325,9 +325,9 @@ test('importing a chat from an app waits for the channel routes: it says so and 
   } finally { await m.unmount(); }
 });
 
-test('a talking point toggles once the Worker stores it, and is sent', async () => {
+test('a talking point toggles, and is sent', async () => {
   const s = spies();
-  const m = await mount({ ...s.props, fields: { ...SETUP_FIELDS, points: true } });
+  const m = await mount(s.props);
   try {
     await m.type('record-name', 'Dana');
     await m.click('record-consents-verbal');
