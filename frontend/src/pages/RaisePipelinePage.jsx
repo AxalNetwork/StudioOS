@@ -108,6 +108,7 @@ export default function RaisePipelinePage({ embedded = false }) {
   const [items, setItems] = useState([]);
   const [stages, setStages] = useState(STAGES);
   const [updates, setUpdates] = useState([]);
+  const [sharedUpdates, setSharedUpdates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -135,13 +136,14 @@ export default function RaisePipelinePage({ embedded = false }) {
     Promise.all([
       api.raiseProspects(pid),
       api.raiseRound(pid).catch((e) => { setErr(e?.message || 'Failed to load round details'); return { round: null, raised: 0, committed_count: 0 }; }),
-      api.raiseUpdates(pid).catch((e) => { setErr(e?.message || 'Failed to load investor updates'); return { items: [] }; }),
+      api.raiseUpdates(pid).catch((e) => { setErr(e?.message || 'Failed to load investor updates'); return { items: [], shared_updates: [] }; }),
     ])
       .then(([pr, rd, up]) => {
         setItems(pr?.items || []);
         setStages(pr?.stages?.length ? pr.stages : STAGES);
         setRoundInfo(rd || { round: null, raised: 0, committed_count: 0 });
         setUpdates(up?.items || []);
+        setSharedUpdates(up?.shared_updates || []);
       })
       .catch((e) => setErr(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
@@ -292,7 +294,7 @@ export default function RaisePipelinePage({ embedded = false }) {
           ))}
 
           {roundTab === 'ladder' && (
-            <UpdatesPanel projectId={projectId} updates={updates}
+            <UpdatesPanel projectId={projectId} updates={updates} shared={sharedUpdates}
               onPosted={(u) => setUpdates((prev) => [u, ...prev])} />
           )}
         </>
@@ -711,7 +713,7 @@ function ProspectDrawer({ prospect, stages, busy, onSave, onClose }) {
   );
 }
 
-function UpdatesPanel({ projectId, updates, onPosted }) {
+export function UpdatesPanel({ projectId, updates, shared = [], onPosted }) {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -739,7 +741,7 @@ function UpdatesPanel({ projectId, updates, onPosted }) {
         )}
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        Updates are recorded here and on each investor's contact timeline — they are not emailed.
+        Updates posted here are recorded on each investor's contact timeline and are not emailed. Updates shared from Grow were sent to investors through Axal.
       </p>
 
       {open && (
@@ -763,11 +765,24 @@ function UpdatesPanel({ projectId, updates, onPosted }) {
         </div>
       )}
 
-      {updates.length === 0 ? (
+      {shared.length > 0 && (
+        <ul className="mb-3 space-y-3" data-testid="shared-updates">
+          {shared.map((u) => (
+            <li key={u.uid} className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Link to={u.link} className="font-medium text-sm text-violet-700 dark:text-violet-300 truncate">{u.title}</Link>
+                <div className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{u.sent_at ? new Date(u.sent_at).toLocaleDateString() : ''}</div>
+              </div>
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{u.period ? `${u.period} · ` : ''}Sent to {u.investors ?? 0} investors · {u.delivered ?? 0} delivered · Shared from Grow</div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {updates.length === 0 && shared.length === 0 ? (
         <div className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
           No updates yet. Keep investors in the loop as your raise progresses.
         </div>
-      ) : (
+      ) : updates.length > 0 && (
         <ul className="space-y-3">
           {updates.map((u) => (
             <li key={u.id} className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
