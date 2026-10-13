@@ -16,8 +16,9 @@ import './doors.css';
  *
  * The sections, in the canvas's order: the hero; the problem and what you get;
  * how it works, with the Eadwyn note; in the product; plans (only when a plan
- * resolves in the catalogue); the aside (when the door has one); questions;
- * the closing band.
+ * resolves in the catalogue), with how AI use is paid in tokens under them
+ * (owner, 2026-10-13); the aside (when the door has one); questions; the
+ * closing band.
  *
  * Plans are read from the price catalogue `/pricing` reads (`data/pricing.js`)
  * — the price AND the feature list. A canvas plan names its tier; one the
@@ -122,6 +123,24 @@ function PlanCard({ p, to }) {
   );
 }
 
+/** How AI use is paid, under the plans: the plan for the workspace, tokens for the AI. */
+function Tokens({ tokens }) {
+  return (
+    <div className="ax-door-tokens" role="group" aria-labelledby="ax-door-tokens-h">
+      <div>
+        <div className="ax-lbl-q">{tokens.k}</div>
+        <h3 id="ax-door-tokens-h" className="ax-door-tokens-t">{tokens.t}</h3>
+        <p className="ax-door-note">{tokens.d}</p>
+      </div>
+      <ul className="ax-door-tokens-list">
+        {tokens.points.map((t) => (
+          <li key={t} className="ax-door-aside-item"><span className="ax-door-dot" aria-hidden="true" />{t}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function DoorPage({ door: key }) {
   const door = DOORS[key];
   if (!door) return <NotFoundPage />;
@@ -218,6 +237,7 @@ export default function DoorPage({ door: key }) {
                 {plans.map((p) => <PlanCard key={p.name} p={p} to={door.primary.to} />)}
               </div>
               {door.planNote && <p className="ax-door-plan-note">{door.planNote}</p>}
+              {door.tokens && <Tokens tokens={door.tokens} />}
             </div>
           </section>
         )}
