@@ -67,6 +67,7 @@ test('the meter: the count held this month, "No target set" until one is stored,
   // #1609's meter: its count wins (none logged is a counted 0), and its target.
   assert.deepEqual(phoneMeter({ ...RAW, meter: { key: 'interviews_this_month', count: 0, target: 12, target_reason: null } }), { label: 'Interviews this month', count: 0, target: 12, pct: 0, unreadable: false });
   assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }], meter: { count: null, target: null } }).unreadable, true, 'a null Worker count falls back to the figure');
+  assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }], meter: { count: 3, target: null } }).unreadable, false, 'the Worker counted: not unreadable');
   const out = html(RAW);
   assert.match(out, /data-testid="phone-meter-value">14(<!-- -->)? <span[^>]*>· No target set<\/span>/);
   assert.doesNotMatch(out, /role="progressbar"/, 'no target, no bar');
