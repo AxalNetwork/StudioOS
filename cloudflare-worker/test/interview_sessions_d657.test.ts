@@ -14,7 +14,8 @@ import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import sessions from '../src/routes/founder_validate_sessions.ts';
+import sessions, { markCeiling } from '../src/routes/founder_validate_sessions.ts';
+import { sweepInterviewSessions, missingLine } from '../src/services/sessionSweeper.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { listSttModels, isChoosable } from '../src/services/sttModels.ts';
@@ -889,4 +890,137 @@ test('D685 §5.10: summary sentences keep only citations inside the transcript; 
   await call(f.env, FOUNDER, 'POST', `/sessions/${tid}/summarise`);
   const steps = f.db.prepare('SELECT step FROM interview_summary_receipts WHERE session_id = ? ORDER BY id').all(tid).map((r: any) => r.step);
   assert.deepEqual(steps, ['summarised', 're_summarised']);
+});
+
+// ── D685 §5.6 and §5.7 (#1584): the active read, the sweeper, the marks gate ──
+
+/** A session on interview 1 put straight into a state: one recording at a time and the free tier's interview cap are the routes' rules, not this test's. */
+async function sessionIn(f: any, status: string, extra = '', user = FOUNDER) {
+  const r = await audioSession(f, { status: 'given', method: 'verbal' }, {}, user);
+  const id = r.body.session.id;
+  f.db.prepare(`UPDATE interview_sessions SET status = ?, recording_since = CASE WHEN ? = 'recording' THEN datetime('now') END ${extra} WHERE id = ?`).run(status, status, id);
+  return id;
+}
+
+test('D685 §5.6: GET /sessions/active is the caller\'s own, newest first, without channel sessions, and is not read as an id', async () => {
+  const f = fixture();
+  const ida = await sessionIn(f, 'recording');
+  await putChunk(f, ida, 0);
+  const idb = await sessionIn(f, 'paused', ", channel = 'phone'");
+  await sessionIn(f, 'draft');
+  await sessionIn(f, 'recording', ", submitted_via = 'telegram'");
+  await sessionIn(f, 'structured');
+  const r = await call(f.env, FOUNDER, 'GET', '/sessions/active');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.items.map((x: any) => [x.id, x.status]), [[idb, 'paused'], [ida, 'recording']]);
+  const first = r.body.items[1];
+  assert.deepEqual([first.interviewee_name, first.project_id, first.channel, first.chunk_seqs, first.processing], [interviewRow(f, 1).interviewee_name, 10, 'in_person', [0], null]);
+  assert.equal(r.body.items[0].call_label, 'Audio call');
+  assert.ok(first.recording_since && 'active_ms' in first);
+  // Another member sees none of them.
+  assert.deepEqual((await call(f.env, OTHER, 'GET', '/sessions/active')).body.items, []);
+  // Processing that is not done counts; done does not.
+  f.db.prepare("UPDATE interview_sessions SET status = 'stopped', processing_stage = 'transcribing' WHERE id = ?").run(idb);
+  f.db.prepare("UPDATE interview_sessions SET status = 'structured', processing_stage = 'done' WHERE id = ?").run(ida);
+  const later = await call(f.env, FOUNDER, 'GET', '/sessions/active');
+  assert.deepEqual(later.body.items.map((x: any) => [x.id, x.processing?.stage]), [[idb, 'transcribing']]);
+});
+
+test('D685 §5.6: migration 453 adds the creator/status index', () => {
+  const sql = readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8');
+  assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_interview_sessions_creator_status\s+ON interview_sessions\s*\(created_by_user_id, status\)/);
+});
+
+test('D685 §5.6: the sweeper deletes stale drafts (and the interview made for one), pauses silent recordings, and goes on with uploads that stalled', async () => {
+  const f = fixture();
+  const sent: any[] = [];
+  f.env.USE_CF_QUEUE = 'true';
+  f.env.JOB_QUEUE = { async send(body: any) { sent.push(body); } };
+  const made = await setup(f, { channel: 'in_person', interviewee: { name: 'Robin' }, consent: { status: 'given', method: 'verbal' } });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  const onLogged = await sessionIn(f, 'draft');
+  const fresh = await sessionIn(f, 'draft');
+  // An interview logged by hand long before, whose only session is a stale draft: the draft goes, the interview stays.
+  const handId = Number(f.db.prepare("INSERT INTO discovery_interviews (project_id, interviewee_name, stage, created_at) VALUES (10, 'Hand logged', 'booked', datetime('now', '-40 days'))").run().lastInsertRowid);
+  const handDraft = (await audioSession(f, { status: 'given', method: 'verbal' }, {}, FOUNDER, handId)).body.session.id;
+  f.db.prepare("UPDATE interview_sessions SET created_at = datetime('now', '-25 hours') WHERE id = ?").run(handDraft);
+  const old = "datetime('now', '-25 hours')";
+  f.db.prepare(`UPDATE interview_sessions SET created_at = ${old} WHERE id IN (?, ?)`).run(made.body.session.id, onLogged);
+  f.db.prepare(`UPDATE discovery_interviews SET created_at = ${old} WHERE id = ?`).run(made.body.interview.id);
+  // A silent recording: one chunk 20 minutes ago, recording for 30.
+  const rid = await sessionIn(f, 'recording', ", active_ms = 5000");
+  await putChunk(f, rid, 0);
+  f.db.prepare("UPDATE interview_sessions SET recording_since = datetime('now', '-30 minutes') WHERE id = ?").run(rid);
+  f.db.prepare("UPDATE interview_session_chunks SET created_at = datetime('now', '-20 minutes') WHERE session_id = ?").run(rid);
+  // A recording that is still talking is left alone.
+  const live = await sessionIn(f, 'recording');
+  f.db.prepare("UPDATE interview_sessions SET recording_since = datetime('now', '-30 minutes') WHERE id = ?").run(live);
+  await putChunk(f, live, 0);
+  // An upload stuck for 40 minutes with parts 2 and 4 of 4 missing.
+  const up = await sessionIn(f, 'recording');
+  await putChunk(f, up, 0); await putChunk(f, up, 2);
+  f.db.prepare("UPDATE interview_sessions SET status = 'stopped', recording_since = NULL WHERE id = ?").run(up);
+  const fin = await call(f.env, FOUNDER, 'POST', `/sessions/${up}/finish`, { last_seq: 3, auto: true });
+  assert.equal(fin.status, 202, JSON.stringify(fin.body));
+  f.db.prepare("UPDATE interview_sessions SET processing_updated_at = datetime('now', '-40 minutes') WHERE id = ?").run(up);
+  const queuedBefore = sent.length;
+
+  const r = await sweepInterviewSessions(f.env, new Date());
+  assert.deepEqual(r, { drafts: 3, paused: 1, resumed: 1 });
+  assert.ok(interviewRow(f, handId), 'an interview logged by hand stays, even with its only draft gone');
+  const row = (id: number) => f.db.prepare('SELECT * FROM interview_sessions WHERE id = ?').get(id) as any;
+  assert.equal(row(made.body.session.id), undefined);
+  assert.equal(interviewRow(f, made.body.interview.id), undefined, 'the interview made for the draft goes too');
+  assert.equal(row(onLogged), undefined);
+  assert.ok(interviewRow(f, 1), 'an interview logged by hand stays');
+  assert.equal(row(fresh).status, 'draft', 'a draft under 24 hours stays');
+  const paused = row(rid);
+  assert.equal(paused.status, 'paused');
+  assert.equal(paused.recording_since, null);
+  assert.ok(paused.active_ms >= 5000 + 9 * 60_000 && paused.active_ms <= 5000 + 11 * 60_000, `counted to the last chunk, not to now: ${paused.active_ms}`);
+  assert.equal(row(live).status, 'recording');
+  const stuck = row(up);
+  assert.equal(stuck.processing_stage, 'transcribing');
+  assert.equal(stuck.processing_error, 'Parts 2 and 4 of the recording never arrived, so the transcript goes on without them.');
+  assert.equal(sent.length, queuedBefore + 1);
+  // A second sweep does nothing more.
+  assert.deepEqual(await sweepInterviewSessions(f.env, new Date()), { drafts: 0, paused: 0, resumed: 0 });
+  assert.equal(missingLine([0]), 'Part 1 of the recording never arrived, so the transcript goes on without it.');
+});
+
+test('D685 §5.6: the missing-parts note survives the run to done', async () => {
+  const f = fixture();
+  llmAi(f);
+  const { sid } = await recordedForProcessing(f, 1);
+  f.db.prepare("UPDATE interview_sessions SET expected_last_seq = 1, processing_stage = 'uploading', processing_updated_at = datetime('now', '-40 minutes') WHERE id = ?").run(sid);
+  await sweepInterviewSessions(f.env, new Date());
+  assert.equal(await job(f, sid), 'done');
+  assert.equal(stage(f, sid).e, 'Part 2 of the recording never arrived, so the transcript goes on without it.');
+});
+
+test('D685 §5.7: a mark is taken while recording, paused or stopped; a client_key replay answers the stored mark; the offset is capped', async () => {
+  const f = fixture();
+  const r = await setup(f, { channel: 'in_person', interviewee: { name: 'Robin' }, consent: { status: 'given', method: 'verbal' } });
+  const sid = r.body.session.id;
+  const mark = (body: any) => call(f.env, FOUNDER, 'POST', `/sessions/${sid}/marks`, body);
+  assert.equal((await mark({ offset_ms: 0 })).status, 409, 'a draft takes no mark');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/start`);
+  f.db.prepare("UPDATE interview_sessions SET active_ms = 60000, recording_since = datetime('now', '-30 seconds') WHERE id = ?").run(sid);
+  const one = await mark({ offset_ms: 70_000, label: 'Pricing', client_key: 'k-1' });
+  assert.equal(one.status, 201);
+  const again = await mark({ offset_ms: 70_000, label: 'Pricing', client_key: 'k-1' });
+  assert.deepEqual([again.status, again.body.duplicate, again.body.mark.id], [200, true, one.body.mark.id]);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_marks WHERE session_id = ?').get(sid).n, 1);
+  const far = await mark({ offset_ms: 9_999_999, client_key: 'k-2' });
+  assert.ok(far.body.mark.offset_ms >= 89_000 && far.body.mark.offset_ms <= 92_000, `capped at the time recorded: ${far.body.mark.offset_ms}`);
+  assert.equal((await mark({ offset_ms: 1, client_key: 'bad key!' })).status, 400);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/pause`);
+  assert.equal((await mark({ offset_ms: 10, client_key: 'k-3' })).status, 201, 'paused takes a mark');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/resume`);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/stop`);
+  assert.equal((await mark({ offset_ms: 10, client_key: 'k-4' })).status, 201, 'stopped takes the last flush');
+  f.db.prepare("UPDATE interview_sessions SET status = 'transcribed' WHERE id = ?").run(sid);
+  assert.equal((await mark({ offset_ms: 10, client_key: 'k-5' })).status, 409);
+  assert.equal(markCeiling({ active_ms: 1000, recording_since: null }), 1000);
+  assert.equal(markCeiling({ active_ms: 1000, recording_since: '2026-01-01 00:00:00' }, Date.parse('2026-01-01T00:00:05Z')), 6000);
 });

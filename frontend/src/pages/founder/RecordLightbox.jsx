@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Lightbox from '../../ui/Lightbox.jsx';
 import { api as defaultApi } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
+import { channelsApi } from '../../lib/api/channels.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
 import { ConnectPanel, SchedulePanel } from './InterviewChannels';
@@ -78,11 +79,23 @@ function Section({ title, children, testId }) {
 }
 
 export default function RecordLightbox({
-  projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels = null, fields = SETUP_FIELDS,
-  initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, returnFocusTo,
+  projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels: initialChannels, fields = SETUP_FIELDS,
+  initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, channelsSource = channelsApi, returnFocusTo,
   // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
   recorder = null,
 }) {
+  // The chips' statuses (#1586): `GET /api/channels` once, unless the caller
+  // passed the read. A failed read is null, and the chips then say "Not
+  // available yet" rather than guessing (`chipStatus`).
+  const [channels, setChannels] = useState(initialChannels === undefined ? null : initialChannels);
+  useEffect(() => {
+    if (initialChannels !== undefined || !fields.channels) return undefined;
+    let alive = true;
+    channelsSource.overview()
+      .then((r) => { if (alive) setChannels(r || null); })
+      .catch(() => { if (alive) setChannels(null); });
+    return () => { alive = false; };
+  }, [channelsSource, initialChannels, fields.channels]);
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
   const [name, setName] = useState(interview?.interviewee_name || '');

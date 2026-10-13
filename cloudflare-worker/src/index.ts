@@ -1728,6 +1728,17 @@ export default {
             console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
           }
         }
+        // D685 §5.6 — recordings a closed tab left behind: drafts never
+        // started (24 h), silent recordings paused (10 min), uploads that never
+        // finished processed with what arrived (30 min). Every minute; each
+        // rule reads a bounded batch through the creator/status index.
+        try {
+          const { sweepInterviewSessions } = await import('./services/sessionSweeper');
+          const r = await sweepInterviewSessions(env, now);
+          if (r.drafts || r.paused || r.resumed) console.info(`[cron] interview sessions drafts=${r.drafts} paused=${r.paused} resumed=${r.resumed}`);
+        } catch (e) {
+          console.error('[cron] interview session sweep failed', e instanceof Error ? e.message : 'error');
+        }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 50) {
           try {
             const { purgeExpired } = await import('./services/channels/threads');

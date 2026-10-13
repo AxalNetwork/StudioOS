@@ -298,8 +298,16 @@ export async function checkWhatsAppConnection(env: Env, conn: ChannelConnection)
   const pnid = phoneNumberIdOf(conn);
   const token = await whatsappToken(env, conn);
   if (!pnid || !token) return { ok: false, code: 'not_connected' };
-  const r = await graph('check', `${GRAPH_BASE}/${encodeURIComponent(pnid)}?fields=verified_name,quality_rating`, { token });
-  return r.ok ? { ok: true } : { ok: false, code: r.code };
+  const r = await graph('check', `${GRAPH_BASE}/${encodeURIComponent(pnid)}?fields=verified_name,quality_rating,messaging_limit_tier,display_phone_number`, { token });
+  if (!r.ok) return { ok: false, code: r.code };
+  // #1586: the check refreshes what WhatsApp Calling would need. The number is
+  // read for its calling code only and not kept.
+  const calling = callingRecord(obj(r.data));
+  await env.DB.prepare(
+    `UPDATE integrations SET config_json = json_set(COALESCE(config_json, '{}'), '$.calling', json(?)), updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND provider_key = 'whatsapp'`,
+  ).bind(JSON.stringify(calling), conn.integrationId).run();
+  return { ok: true };
 }
 
 export type UnsubscribeOutcome = 'unsubscribed' | 'shared' | 'unverified' | 'failed';
@@ -363,6 +371,84 @@ export function maskNumber(display: unknown): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// WhatsApp Calling: eligibility only (#1586, phase 2). No calling is built.
+// ---------------------------------------------------------------------------
+
+/** Meta's `messaging_limit_tier`, as a daily number of business-initiated conversations. Null when unknown. */
+const TIER_LIMIT: Record<string, number> = {
+  TIER_50: 50, TIER_250: 250, TIER_1K: 1_000, TIER_2K: 2_000, TIER_10K: 10_000, TIER_100K: 100_000, TIER_UNLIMITED: Number.POSITIVE_INFINITY,
+};
+export const CALLING_MIN_LIMIT = 2_000;
+
+/**
+ * Where business-initiated calls are not offered (README, Calls; Meta's list,
+ * as of 2026-10-13), by the number's calling code. A +1 number may be in the
+ * US or Canada, or in another NANP country; the restriction covers the first
+ * two, and the sentence says "+1" rather than claiming which.
+ */
+const RESTRICTED_CALLING_CODES: [string, string, string][] = [
+  ['234', 'NG', 'Nigeria'], ['20', 'EG', 'Egypt'], ['84', 'VN', 'Vietnam'], ['1', 'US_CA', 'the US or Canada (+1)'],
+];
+
+/**
+ * The region restriction for a number, from its calling code only. The number
+ * itself is never kept: this returns 'NG', 'EG', 'VN', 'US_CA', 'none' (not a
+ * restricted calling code) or null when the number could not be read.
+ */
+export function callingRegion(display: unknown): string | null {
+  const digits = String(display ?? '').replace(/\D/g, '');
+  if (digits.length < 6) return null;
+  const hit = RESTRICTED_CALLING_CODES.find(([code]) => digits.startsWith(code));
+  return hit ? hit[1] : 'none';
+}
+
+/** What Calling would need, recorded per connected number in the integration's config (no number, no token). */
+export interface CallingRecord { tier: string | null; region: string | null; checked_at: string }
+
+export function callingRecord(number: Record<string, unknown> | null | undefined, now = new Date()): CallingRecord {
+  const tier = typeof number?.messaging_limit_tier === 'string' && /^TIER_[A-Z0-9]{1,12}$/.test(number.messaging_limit_tier)
+    ? number.messaging_limit_tier : null;
+  return { tier, region: callingRegion(number?.display_phone_number), checked_at: now.toISOString() };
+}
+
+export interface CallingEligibility {
+  available: false;
+  reasons: { code: string; sentence: string }[];
+  sentence: string;
+  tier: string | null;
+  checked_at: string | null;
+}
+
+/**
+ * The card's "Calls: not yet, because …". Always unavailable: Axal builds no
+ * calling in this phase. The other reasons are this number's, from its record.
+ */
+export function callingEligibility(config: Record<string, unknown> | null | undefined): CallingEligibility {
+  const rec = config?.calling && typeof config.calling === 'object' ? config.calling as Partial<CallingRecord> : null;
+  // Each reason is a clause, so the card's line reads as one sentence.
+  const clauses: [string, string][] = [['not_built', 'Axal does not answer or place WhatsApp calls yet']];
+  if (!rec) {
+    clauses.push(['not_checked', 'this number has not been checked yet (test the connection to check it)']);
+  } else {
+    const limit = rec.tier ? TIER_LIMIT[rec.tier] : undefined;
+    if (limit === undefined) clauses.push(['tier_unknown', 'this number\'s messaging limit could not be read']);
+    else if (limit < CALLING_MIN_LIMIT) {
+      clauses.push(['tier_low', `this number can start ${limit.toLocaleString('en-US')} conversations a day, and WhatsApp Calling needs at least ${CALLING_MIN_LIMIT.toLocaleString('en-US')}`]);
+    }
+    const region = RESTRICTED_CALLING_CODES.find(([, key]) => key === rec.region);
+    if (region) clauses.push(['region', `Meta does not offer business-initiated calls for numbers in ${region[2]}`]);
+    else if (rec.region == null) clauses.push(['region_unknown', 'this number\'s country could not be read']);
+  }
+  return {
+    available: false,
+    reasons: clauses.map(([code, clause]) => ({ code, sentence: `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.` })),
+    sentence: `Calls: not yet, because ${clauses.map(([, clause]) => clause).join('; ')}.`,
+    tier: rec?.tier ?? null,
+    checked_at: typeof rec?.checked_at === 'string' ? rec.checked_at : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Embedded Signup
 // ---------------------------------------------------------------------------
 
@@ -405,7 +491,7 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   if (!token) return { ok: false, status: !exchanged.ok && !exchanged.retryable ? 400 : 502, code: 'code_exchange_failed' };
 
   const numbers = await graph('phone_numbers',
-    `${GRAPH_BASE}/${encodeURIComponent(input.wabaId)}/phone_numbers?fields=id,display_phone_number,verified_name`, { token });
+    `${GRAPH_BASE}/${encodeURIComponent(input.wabaId)}/phone_numbers?fields=id,display_phone_number,verified_name,messaging_limit_tier`, { token });
   if (!numbers.ok) return { ok: false, status: 502, code: 'waba_unreadable' };
   const listed = arr(numbers.data?.data).map(obj).filter((n) => n && idStr(n.id));
   // No number id from the signup (coexistence may send only the WABA): a WABA
@@ -427,6 +513,8 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   const name = verified ?? masked;
   const config = JSON.stringify({
     waba_id: input.wabaId, phone_number_id: input.phoneNumberId, number_masked: masked, connected_at: new Date().toISOString(),
+    // #1586: what WhatsApp Calling would need, for the card's "Calls: not yet". No number is kept.
+    calling: callingRecord(number),
   });
 
   const existing = await env.DB.prepare(

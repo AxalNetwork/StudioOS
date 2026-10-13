@@ -245,7 +245,7 @@ export function WhatsAppChannelCard({ card, overview, pending = null, api = chan
         </>
       )}
       <Outcome outcome={outcome} />
-      <p className="text-[11.5px] font-semibold text-axal-muted dark:text-gray-400" data-testid="whatsapp-calls">{WHATSAPP_CALLS}. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead.</p>
+      <p className="text-[11.5px] font-semibold text-axal-muted dark:text-gray-400" data-testid="whatsapp-calls">{card.calls || `${WHATSAPP_CALLS}.`} WhatsApp calls do not reach Axal; record a call with the in-app recorder instead.</p>
     </CardFrame>
   );
 }

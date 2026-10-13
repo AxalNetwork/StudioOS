@@ -142,14 +142,14 @@ export function channelCard(provider, overview) {
     const account = accountName(conn);
     if (available === false) return out('problem', { account, why: 'Axal has switched this off for now. Your connection is kept, but nothing new arrives until it is back.' });
     const problem = connectionProblem(provider, conn);
-    if (problem) return out('problem', { account, why: problem });
+    if (problem) return out('problem', { account, why: problem, calls: callsLine(provider, conn) });
     if (provider === 'telegram' && telegramBusinessMissing(conn)) {
       return out('linked', { account, why: 'Your Telegram account is linked. Add the Axal bot in Telegram Business to start receiving chats.' });
     }
     const note = provider === 'telegram' && telegramCannotReply(conn)
       ? 'The bot can read the chats you chose but not reply. To reply from Axal, allow it to reply in Telegram › Settings › Telegram Business › Chatbots.'
       : '';
-    return out('connected', { account, note });
+    return out('connected', { account, note, calls: callsLine(provider, conn) });
   }
   if (available !== true) return out('unavailable', { why: UNAVAILABLE_WHY });
   return out('not_connected');
@@ -262,6 +262,17 @@ export const WHATSAPP_NOTES = [
 
 /** WhatsApp calls are a later phase (D684 §6): the card says so. */
 export const WHATSAPP_CALLS = 'Calls: not yet';
+
+/**
+ * #1586: the connected number's own "Calls: not yet, because …", from the
+ * Worker's eligibility read (`connections.whatsapp.calls.sentence`). '' when
+ * the read has none, and the card then says the fixed line above.
+ */
+export function callsLine(provider, conn) {
+  if (provider !== 'whatsapp') return '';
+  const line = conn?.calls?.sentence;
+  return typeof line === 'string' && /^Calls: not yet/.test(line) ? line : '';
+}
 
 // ---------- Zoom and Google Meet -------------------------------------------
 

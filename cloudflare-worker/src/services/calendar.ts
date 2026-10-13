@@ -89,6 +89,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
   'openid',
 ];
+export const GOOGLE_MEET_TRANSCRIPT_SCOPE = 'https://www.googleapis.com/auth/meetings.space.readonly';
 
 // ===========================================================================
 // Microsoft constants — Graph v1.0 + Azure AD v2 endpoints. Tenant defaults
@@ -225,7 +226,7 @@ export function preflightOAuthSecrets(
 // ===========================================================================
 // Auth URL builders
 // ===========================================================================
-export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string): string {
+export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, includeMeetTranscripts = false): string {
   // Task #1 — `select_account consent` forces Google's account chooser
   // every time, even when the browser is already signed into exactly one
   // Google account. Without `select_account` Google silently re-uses the
@@ -239,7 +240,7 @@ export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string):
     client_id: googleCalClientId(env)!,
     redirect_uri: googleRedirectUri(env),
     response_type: 'code',
-    scope: GOOGLE_SCOPES.join(' '),
+    scope: [...GOOGLE_SCOPES, ...(includeMeetTranscripts ? [GOOGLE_MEET_TRANSCRIPT_SCOPE] : [])].join(' '),
     access_type: 'offline',
     prompt: 'select_account consent',
     state,

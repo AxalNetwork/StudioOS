@@ -16,10 +16,13 @@
  *                                   WhatsApp: read the number with the member's token — a test
  *                                   never messages one of the member's customers.
  *   GET    /threads?status=         the member's conversations
- *   GET    /threads/:uid            one conversation; its pending messages, decrypted for the member only
- *   POST   /threads/:uid/assign     { interview_id } | { create: { interviewee_name, project_id } }
+ *   GET    /threads/:uid            one conversation; its pending messages, decrypted for the member only;
+ *                                   a waiting voice note carries `transcription_failure` (#1586)
+ *   POST   /threads/:uid/assign     { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } },
+ *                                   and quote_consent?: true (D685 §5.1.4)
  *   POST   /threads/:uid/ignore     { ignored?: boolean } (default true)
  *   POST   /threads/:uid/reply      { text, client_key }: once per client_key, inside the 24 h window
+ *   POST   /threads/:uid/voice/:message/retry  a waiting voice note again, once what stopped it allows (#1586)
  *
  * Public — each verified by its provider's own secret, outside requireAuth:
  *   POST   /telegram/webhook        X-Telegram-Bot-Api-Secret-Token
@@ -72,11 +75,16 @@ import {
 import { createLinkCode } from '../services/channels/linkCodes';
 import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
 import {
-  applyDelete, applyEdit, assignThread, forgetConnection, inInterview, listThreads, queueVoiceTranscriptions, readThread,
+  applyDelete, applyEdit, assignThread, forgetConnection, inInterview, listThreads, noteVoiceTry, queueVoiceTranscriptions, readThread,
   releaseVoiceNote, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote, storeVoiceTranscript, threadForReply,
-  voiceNoteForJob, type ThreadRow,
+  voiceNoteForJob, type AssignTarget, type ThreadRow,
 } from '../services/channels/threads';
-import { registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
+import { enqueueChannelJob, registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
+import * as zoom from '../services/channels/zoom';
+import * as meet from '../services/channels/googleMeet';
+import {
+  VOICE_RETRY_DELAYS, VOICE_TRIES, retryVoiceNote, transcriptionFailures,
+} from '../services/channels/voiceFailures';
 import {
   CHANNEL_LIMITS, type InboundEvent, type InboundLink, type InboundLinkConfirm, type InboundMessage, type MessagingProvider,
   type SendResult,
@@ -224,8 +232,14 @@ channels.get('/', member(async (c, user) => {
     connections[r.provider_key] = r.provider_key === 'telegram'
       // Linked is step one; the bot added in Telegram Business is step two.
       ? { ...base, can_reply: !!tg?.r, business_connected: Number(tg?.n ?? 0) > 0 }
-      : { ...base, can_reply: r.status === 'active' };
+      // #1586: what WhatsApp Calling would need for this number, and why it is not yet (no calling is built).
+      : { ...base, can_reply: r.status === 'active', calls: whatsapp.callingEligibility(cfg) };
   }
+  const [zoomConn, meetConn] = await Promise.all([
+    zoom.zoomConnection(env, user.id), meet.googleConnection(env, user.id),
+  ]);
+  if (zoomConn) connections.zoom = { status: 'active' };
+  if (meetConn) connections.google_meet = { status: 'active', transcript_access: meet.transcriptAccess(meetConn) };
 
   const counts = (await env.DB.prepare(
     `SELECT t.provider AS provider, COUNT(*) AS n FROM channel_threads t
@@ -322,17 +336,36 @@ channels.get('/threads', member(async (c, user) => {
   return c.json({ items: threads });
 }));
 
-channels.get('/threads/:uid', member(async (c, user) => c.json(await readThread(c.env, user.id, c.req.param('uid') ?? ''))));
+channels.get('/threads/:uid', member(async (c, user) => {
+  const uid = c.req.param('uid') ?? '';
+  const read = await readThread(c.env, user.id, uid);
+  // #1586: a waiting voice note that could not be transcribed says why, in our
+  // words, with no message or provider text (services/channels/voiceFailures.ts).
+  const failures = await transcriptionFailures(c.env, user.id, uid);
+  return c.json({ ...read, messages: read.messages.map((m) => ({ ...m, transcription_failure: failures.get(m.uid) ?? null })) });
+}));
+
+/** #1586: transcribe a waiting voice note again, once what stopped it allows (the budget is checked first). */
+channels.post('/threads/:uid/voice/:message/retry', member(async (c, user) => {
+  const r = await retryVoiceNote(c.env, user.id, c.req.param('uid') ?? '', c.req.param('message') ?? '');
+  return c.json({ ok: true, queued: r.queued });
+}));
 
 channels.post('/threads/:uid/assign', member(async (c, user) => {
   const body = await c.req.json<Record<string, any>>().catch(() => ({} as Record<string, any>));
   const create = body.create && typeof body.create === 'object' ? body.create : null;
-  let target: { interviewId: number } | { projectId: number; intervieweeName: string };
+  let target: AssignTarget;
   if (body.interview_id != null) target = { interviewId: Number(body.interview_id) };
   else if (create && Number.isInteger(Number(create.project_id))) {
-    target = { projectId: Number(create.project_id), intervieweeName: String(create.interviewee_name ?? '') };
+    target = {
+      projectId: Number(create.project_id), intervieweeName: String(create.interviewee_name ?? ''),
+      // Who's company (D685 §5.3), so the lightbox's interviewee keeps it.
+      intervieweeCompany: typeof create.interviewee_company === 'string' ? create.interviewee_company : null,
+    };
   } else return no(c, 400, 'invalid_request');
-  const r = await assignThread(c.env, user.id, c.req.param('uid') ?? '', target);
+  // Quote consent (D685 §5.1.4): only the literal true sets it.
+  if (body.quote_consent != null && typeof body.quote_consent !== 'boolean') return no(c, 400, 'invalid_request');
+  const r = await assignThread(c.env, user.id, c.req.param('uid') ?? '', target, { quoteConsent: body.quote_consent === true });
   return c.json({ ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved, voice_queued: r.queued });
 }));
 
@@ -680,8 +713,11 @@ const FINAL_REFUSAL = /^(budget_|kill_switch|model_not_offered)/;
  *     model runs — a D1 error throws, so it fails closed.
  * A note deleted at the source is gone before the download or before the
  * store, and nothing is kept. A refusal (the cap, the budget, a download the
- * provider refuses) gives the note back for the next assignment to queue. A
- * transient failure throws, so the queue retries this job.
+ * provider refuses) gives the note back for the next assignment to queue,
+ * with its code kept on the note for the thread read (#1586). A provider or
+ * transcription that does not answer is tried again by the job itself,
+ * VOICE_TRIES times in all (#1586); anything else that throws is left to the
+ * queue's own retries.
  */
 export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
   if (p.kind !== 'voice') throw new Error(`unknown channel_followup kind for ${p.provider}`);
@@ -695,8 +731,23 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   if (!note) return;
   const fields: EventFields = { userId: Number(note.thread.user_id), threadId: note.thread.id };
   const giveBack = async (status: EventStatus, error: string) => {
-    await releaseVoiceNote(env, note.uid, job);
+    // A failure keeps its code on the note, so the thread can say why (#1586);
+    // an 'ignored' give-back (the chat left its interview, the member left) is
+    // not a failure, and the note just waits.
+    await releaseVoiceNote(env, note.uid, job, status === 'failed' ? error : null);
     await end(status, { ...fields, error });
+  };
+  // A provider or transcription that does not answer (#1586): the job keeps
+  // the note and tries again itself, VOICE_TRIES times in all, so the last
+  // try is known and the member is told; until then the note says it is
+  // still being tried.
+  const tryAgain = async (code: 'provider_unreachable' | 'transcription_unavailable') => {
+    const attempt = Math.max(1, Number(p.try) || 1);
+    if (attempt >= VOICE_TRIES) return giveBack('failed', code);
+    await noteVoiceTry(env, note.uid, job, code);
+    await enqueueChannelJob(env, 'channel_followup', provider, `${job}-try-${attempt + 1}`, { ...p, try: attempt + 1 }, {
+      delaySeconds: VOICE_RETRY_DELAYS[Math.min(attempt - 1, VOICE_RETRY_DELAYS.length - 1)],
+    });
   };
 
   const conn = await memberConnection(env, Number(note.thread.user_id), provider);
@@ -709,7 +760,10 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
     ? await telegram.fetchTelegramVoice(env, note.file, note.mime)
     : await whatsapp.fetchWhatsAppMedia(env, conn, note.file, note.mime);
   if (!audio.ok) {
-    if (audio.retryable) throw new Error(`voice download failed provider=${provider} code=${audio.code}`);
+    if (audio.retryable) {
+      console.error(`[channels] voice download failed provider=${provider} code=${audio.code} try=${Number(p.try) || 1}`);
+      return tryAgain('provider_unreachable');
+    }
     return giveBack('failed', audio.code);
   }
   if (!(await reserveTranscription(env, conn.integrationId))) return giveBack('failed', 'transcription_cap');
@@ -720,7 +774,10 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   });
   if (!r.ok) {
     const refusal = String(r.refusal || 'all_models_failed');
-    if (!FINAL_REFUSAL.test(refusal)) throw new Error(`voice transcription failed provider=${provider} refusal=${refusal}`);
+    if (!FINAL_REFUSAL.test(refusal)) {
+      console.error(`[channels] voice transcription failed provider=${provider} refusal=${refusal} try=${Number(p.try) || 1}`);
+      return tryAgain('transcription_unavailable');
+    }
     return giveBack('failed', refusal);
   }
   const text = String(r.transcript?.text ?? r.output ?? '').trim();

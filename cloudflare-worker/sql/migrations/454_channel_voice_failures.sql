@@ -1,0 +1,21 @@
+-- 454 — why a voice note was not transcribed, kept on the note so the member is
+-- told (D685 S19, #1586; the number is the owner's, 2026-10-13).
+--
+-- Since 451 a voice note on a member's business Telegram or WhatsApp waits as
+-- a placeholder in `channel_thread_messages` (kind 'voice', its file ref
+-- encrypted in `voice_ref_enc`) until a `channel_followup` job transcribes it.
+-- When the job cannot — the member's AI budget (D640) is spent, AI is switched
+-- off, the connection's daily cap is reached, the file is too large or cannot
+-- be read, the connection has expired, or Telegram or Meta does not answer —
+-- the note is given back and waits. Nothing said why, so the thread showed a
+-- note "awaiting transcription" for ever.
+--
+-- `transcribe_error` holds that reason as a machine code (the same codes the
+-- job records on `channel_events.error`): never message text, never the
+-- provider's words. It is cleared whenever a job claims the note again, and
+-- goes with the placeholder when the note is transcribed, deleted at the
+-- source, ignored, disconnected or purged.
+--
+-- Additive: one nullable column, no table rebuilt.
+
+ALTER TABLE channel_thread_messages ADD COLUMN transcribe_error TEXT;

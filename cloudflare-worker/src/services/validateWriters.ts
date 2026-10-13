@@ -299,6 +299,31 @@ export async function setDemandSignalStatus(
 // Waitlist bar
 // ---------------------------------------------------------------------------
 
+/** D685 §5.12 — the `metric_targets` key Validate's interviews meter reads. */
+export const INTERVIEWS_TARGET_KEY = 'interviews_month_target';
+
+/** Set the monthly interviews target, or clear it with `null`. A target of 0 is refused. */
+export async function setInterviewsTarget(
+  env: Env,
+  input: { projectId: number; userId: number | null; value: unknown },
+): Promise<void> {
+  if (input.value === null) {
+    await env.DB.prepare('DELETE FROM metric_targets WHERE project_id = ? AND metric_key = ?')
+      .bind(input.projectId, INTERVIEWS_TARGET_KEY).run();
+    await recordActor(env, input.userId, input.projectId, 'interviews_target_cleared', 'monthly interviews target cleared');
+    return;
+  }
+  const n = Number(input.value);
+  if (!Number.isInteger(n) || n <= 0 || n > 10_000) throw new WriterError(400, 'The target is a whole number of interviews a month, above zero');
+  await env.DB.prepare(
+    `INSERT INTO metric_targets (project_id, metric_key, target_value, direction, label, created_by)
+     VALUES (?, ?, ?, 'up', 'Interviews this month', ?)
+     ON CONFLICT(project_id, metric_key)
+     DO UPDATE SET target_value = excluded.target_value, updated_at = datetime('now')`,
+  ).bind(input.projectId, INTERVIEWS_TARGET_KEY, n, input.userId).run();
+  await recordActor(env, input.userId, input.projectId, 'interviews_target_set', `monthly interviews target ${n}`);
+}
+
 /** The `metric_targets` key the waitlist bar lives under. */
 export const WAITLIST_TARGET_KEY = 'waitlist_target';
 
