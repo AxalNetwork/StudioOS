@@ -83,7 +83,9 @@ test('one row each for Google Calendar and Microsoft 365: the registry entries m
   assert.equal(exact.filter((p) => p.key === 'google').length, 1);
   assert.equal(exact.find((p) => p.key === 'google').display_name, 'Google (registry)');
   // A first-party row with no registry entry keeps its own category.
-  assert.equal(buildCatalogue({ providers: [], firstParty: {} }).find((p) => p.key === 'microsoft').category, 'Calendar and workspace');
+  const bare = buildCatalogue({ providers: [], firstParty: {} });
+  assert.equal(bare.find((p) => p.key === 'microsoft').category, 'Calendar and workspace');
+  assert.equal(bare.find((p) => p.key === 'google').category, 'Calendar and workspace');
   assert.ok(CATEGORY_ORDER.includes('Calendar and workspace'), 'a Connectors chip for it');
 });
 
@@ -196,6 +198,7 @@ import { readFileSync } from 'node:fs';
 test('the sync view\'s rules: refusals in the Worker\'s words, a repository\'s line, a percentage only when reported, the banner only from a result', () => {
   assert.equal(syncRefusal({ status: 403, code: 'write_scope_refused', message: 'GitHub grants this connection more than read access. Change the StudioOS app to read-only in GitHub, then choose again.' }),
     'GitHub grants this connection more than read access. Change the StudioOS app to read-only in GitHub, then choose again.', 'the Worker\'s sentence as sent');
+  assert.equal(syncRefusal({ status: 403, code: 'company_not_enabled', message: 'Turn Acme on for this connection first.' }), 'Turn Acme on for this connection first.', 'the Worker\'s sentence wins over the table');
   assert.match(syncRefusal({ status: 403, code: 'company_not_enabled', message: 'company_not_enabled' }), /^This connection is not enabled for this project’s company\./, 'a bare code gets its sentence');
   for (const code of ['repositories_not_supported', 'repositories_unreadable', 'project_not_enabled', 'grant_unreadable', 'repositories_required', 'too_many_repositories', 'repository_not_accessible', 'sync_failed']) {
     assert.doesNotMatch(syncRefusal({ code, message: code }), /_/, `${code} reads as a sentence`);
@@ -326,9 +329,10 @@ test('Build\'s list for the project\'s company: Use for it keeps the others, out
     firstParty: {},
   });
   const companies = [{ id: 5, company_name: 'Acme' }, { id: 9, company_name: 'Beta' }];
-  const saved = { setCompanies: connectorsApi.setCompanies, teammate: connectorsApi.teammate };
+  const saved = { setCompanies: connectorsApi.setCompanies, teammate: connectorsApi.teammate, oauthStart: connectorsApi.oauthStart };
   const calls = [];
   let reloads = 0;
+  connectorsApi.oauthStart = async (key, params, opts) => { calls.push(['oauthStart', key, opts ?? null]); return {}; };
   connectorsApi.setCompanies = async (uid, ids) => { calls.push(['setCompanies', uid, ids]); return { ok: true }; };
   connectorsApi.teammate = async (key, opts) => { calls.push(['teammate', key, opts ?? null]); return { teammate: { name: 'Ana' } }; };
   const view = (project) => h(MemoryRouter, null, h(ConnectToolView, { data: { status: 'ready', catalogue: cat, companies, reload: () => { reloads += 1; } }, project, projectId: 7, onClose() {} }));
@@ -342,6 +346,9 @@ test('Build\'s list for the project\'s company: Use for it keeps the others, out
     await m.click('tool-action-calendly');
     assert.deepEqual(calls.at(-1), ['teammate', 'calendly', { companyId: 5 }], 'asked for the project\'s company, not the sidebar\'s');
     assert.ok(m.text().includes('Ana already connected Calendly for Acme. Use theirs, or connect your own.'));
+    await m.click('button-connect-own');
+    await m.click('button-connect-continue');
+    assert.deepEqual(calls.at(-1), ['oauthStart', 'calendly', { companyId: 5 }], 'the sign-in starts for the project\'s company');
   } finally { await m.unmount(); }
   const out = await mount(view({ id: 7, company_id: 12 }));
   try {
@@ -450,4 +457,13 @@ test('the Tools history on Operating systems: one row per connection with its Op
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.match(route, /'operating-systems': \(data\) => <ToolsHistory tools=\{data\?\.parts\?\.tools\} \/>/);
   assert.match(route, /loadOptions=\{edit\.loadOptions \? \(\) => edit\.loadOptions\(cyclesWrite, projectId, edit\.idOf\(editing\)\) : null\}/);
+});
+
+import { moduleHref } from '../src/pages/account/ConnectorSheet.jsx';
+
+test('a fed module\'s Open link stays inside StudioOS and carries the project', () => {
+  assert.equal(moduleHref('/build/roadmap', 7), '/build/roadmap?project_id=7');
+  assert.equal(moduleHref('/build/roadmap?project_id=3', 7), '/build/roadmap?project_id=3');
+  assert.equal(moduleHref('/build/roadmap', null), '/build/roadmap');
+  for (const bad of ['//evil.example/x', 'https://evil.example/x', 'build/roadmap', null]) assert.equal(moduleHref(bad, 7), null, `${bad} is not a StudioOS path`);
 });
