@@ -1514,7 +1514,7 @@ async function checkReplyDeadline(t: any, provider: 'telegram' | 'whatsapp', pha
     late(phase === 'headers' ? new Response(JSON.stringify(accepted)) : accepted);
     await deadlineTurn();
     assert.deepEqual([db.prepare('SELECT status FROM channel_outbound WHERE client_key = ?').get(key).status,
-      count(db, "SELECT COUNT(*) n FROM channel_thread_messages WHERE side = 'me'"), calls], ['pending', 0, 1]);
+      count(db, "SELECT COUNT(*) n FROM channel_thread_messages"), calls], ['pending', 1, 1]);
   } finally {
     t.mock.timers.reset();
     globalThis.fetch = originalFetch;
@@ -1575,7 +1575,7 @@ test('#1602 mutations: adapter ambiguity, abort, early expiry and repeat copy ar
       ? "method === 'sendMessage' ? 'send_unknown' : 'network'"
       : "what === 'send' ? 'send_unknown' : 'network'";
     await deadlineMutant(`../src/services/channels/${provider}.ts`, before, "'network'");
-    const route = await deadlineMutant('../src/routes/channels.ts', '// #1602 mutation marker', '// #1602 mutation marker',
+    const route = await deadlineMutant('../src/routes/channels.ts', 'const channels = new Hono', 'const channels = new Hono',
       { [`../services/channels/${provider}`]: deadlineMutantUrl });
     await assert.rejects(() => checkReplyDeadline(t, provider, 'headers', new Hono().route('/api/channels', route.default)), { name: 'AssertionError' });
   }
@@ -1586,7 +1586,7 @@ test('#1602 mutations: adapter ambiguity, abort, early expiry and repeat copy ar
     await deadlineMutant('../src/services/channels/providerHttp.ts', before, after);
     await deadlineMutant('../src/services/channels/telegram.ts', "import type { Env }", "import type { Env }",
       { './providerHttp': deadlineMutantUrl });
-    const route = await deadlineMutant('../src/routes/channels.ts', '// #1602 mutation marker', '// #1602 mutation marker',
+    const route = await deadlineMutant('../src/routes/channels.ts', 'const channels = new Hono', 'const channels = new Hono',
       { '../services/channels/telegram': deadlineMutantUrl });
     await assert.rejects(() => checkReplyDeadline(t, 'telegram', 'json', new Hono().route('/api/channels', route.default)), { name: 'AssertionError' });
   }
@@ -1618,7 +1618,7 @@ test('#1602: lost networks and malformed acceptances are unknown; known refusals
         const first = await reply(), repeat = await reply();
         const row = db.prepare('SELECT status, error_code FROM channel_outbound WHERE client_key = ?').get(key);
         if (outcome === 'refused') {
-          assert.deepEqual([first.body.ok, row.status, repeat.body.ok, calls], [false, 'failed', false, 1]);
+          assert.deepEqual([first.status, first.body.code, row.status, repeat.body.ok, calls], [502, 'forbidden', 'failed', false, 1]);
         } else {
           assert.deepEqual([first.status, first.body.ok, first.body.code, row.status, row.error_code,
             repeat.body.ok, repeat.body.code, calls], [200, null, 'send_unknown', 'pending', 'send_unknown', null, 'send_unknown', 1]);
