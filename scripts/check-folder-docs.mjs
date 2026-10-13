@@ -101,6 +101,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/market_intel', 'market-intelligence ingestion'],
   ['cloudflare-worker/src/services/market_intel/extractors', 'what is pulled out of a source'],
   ['cloudflare-worker/src/services/market_intel/sources',    'where signals come from'],
+  ['cloudflare-worker/src/services/channels', 'D684 interview channels — the shared intake contract and one adapter per provider'],
   ['cloudflare-worker/src/templates/legal',   'the legal document templates'],
 ]);
 

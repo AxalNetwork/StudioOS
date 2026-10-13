@@ -1,0 +1,80 @@
+// D684 (#1575, S02 #1578) — interview channels: a member's business Telegram
+// and WhatsApp (routes/channels.ts, S19) and the Zoom and Google Meet calls an
+// interview schedules (routes/founder_validate_meetings.ts, S18).
+//
+//   overview         GET    /channels                      availability, the member's connections, pending counts
+//   linkTelegram     POST   /channels/telegram/link        → { code, url, expires_at }
+//   connectWhatsApp  POST   /channels/whatsapp/connect     { code, waba_id, phone_number_id } from Embedded Signup
+//   disconnect       DELETE /channels/:provider
+//   test             POST   /channels/:provider/test
+//   threads          GET    /channels/threads?status=      → { items: ThreadView[] }
+//   thread           GET    /channels/threads/:uid         → { thread, messages }
+//   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, project_id } }
+//   ignore           POST   /channels/threads/:uid/ignore  { ignored }
+//   reply            POST   /channels/threads/:uid/reply   { text, client_key }
+//   meetings         GET    /founder/validate/interviews/:id/meetings
+//   scheduleMeeting  POST   /founder/validate/interviews/:id/meetings  { provider, starts_at, duration_min, topic? }
+//   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
+//   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
+//
+// Every path is written out in full (no shared prefix constant) so the drift
+// check (scripts/check-api-drift.mjs) reads each one against the Worker.
+import { request } from '../api.js';
+
+const enc = encodeURIComponent;
+const PROVIDERS = new Set(['telegram', 'whatsapp', 'zoom', 'google_meet']);
+const THREAD_STATUSES = new Set(['pending', 'assigned', 'ignored']);
+const MEETING_PROVIDERS = new Set(['zoom', 'google_meet']);
+
+function provider(p) {
+  if (!PROVIDERS.has(p)) throw new Error(`Unknown channel provider: ${p}`);
+  return p;
+}
+
+/** The thread list's query: one of the three statuses, or none for all of them. */
+function threadsQuery(status) {
+  if (status == null || status === '') return '';
+  if (!THREAD_STATUSES.has(status)) throw new Error(`Unknown thread status: ${status}`);
+  return `?status=${status}`;
+}
+
+/** The assignment body: an interview the member already has, or one made from this chat. */
+function assignBody(target) {
+  if (target && target.create) {
+    return { create: { interviewee_name: String(target.create.interviewee_name ?? '').trim(), project_id: Number(target.create.project_id) } };
+  }
+  return { interview_id: Number(target?.interview_id) };
+}
+
+export const channelsApi = {
+  overview: () => request('/channels'),
+  linkTelegram: () => request('/channels/telegram/link', { method: 'POST', body: JSON.stringify({}) }),
+  connectWhatsApp: ({ code, waba_id, phone_number_id }) => request('/channels/whatsapp/connect', {
+    method: 'POST', body: JSON.stringify({ code, waba_id, phone_number_id: phone_number_id ?? null }),
+  }),
+  disconnect: (p) => request(`/channels/${enc(provider(p))}`, { method: 'DELETE' }),
+  test: (p) => request(`/channels/${enc(provider(p))}/test`, { method: 'POST', body: JSON.stringify({}) }),
+  threads: (status) => request(`/channels/threads${threadsQuery(status)}`),
+  thread: (uid) => request(`/channels/threads/${enc(uid)}`),
+  assign: (uid, target) => request(`/channels/threads/${enc(uid)}/assign`, {
+    method: 'POST', body: JSON.stringify(assignBody(target)),
+  }),
+  ignore: (uid, ignored = true) => request(`/channels/threads/${enc(uid)}/ignore`, {
+    method: 'POST', body: JSON.stringify({ ignored: !!ignored }),
+  }),
+  reply: (uid, text, clientKey) => request(`/channels/threads/${enc(uid)}/reply`, {
+    method: 'POST', body: JSON.stringify({ text, client_key: clientKey }),
+  }),
+  meetings: (interviewId) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings`),
+  scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic }) => {
+    if (!MEETING_PROVIDERS.has(p)) throw new Error(`Unknown meeting provider: ${p}`);
+    return request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
+      method: 'POST',
+      body: JSON.stringify({ provider: p, starts_at, duration_min: Number(duration_min), ...(topic ? { topic } : {}) }),
+    });
+  },
+  cancelMeeting: (interviewId, refUid) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}`, { method: 'DELETE' }),
+  importMeeting: (interviewId, refUid) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}/import`, {
+    method: 'POST', body: JSON.stringify({}),
+  }),
+};

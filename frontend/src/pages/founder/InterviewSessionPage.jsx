@@ -5,9 +5,10 @@ import { createCapture, indexedDbQueue } from '../../lib/interviewCapture';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView, { recordingState } from './RecordingView';
 import { AssistantBadge } from './AssistantEntry';
-import { openingStep } from './assistantSession.js';
+import { channelOf, openingStep } from './assistantSession.js';
 import { ModelList, AUDIO } from './RecordSessionSheet';
 import InterviewReview from './InterviewReview';
+import { ChannelSessionPanel } from './InterviewChannels';
 
 /**
  * Validate › an interview session (D660, #1473), at `/validate/session/:id`, to
@@ -83,7 +84,8 @@ export function SessionRail({ session, models, receipt }) {
   const fin = models?.final?.find((m) => m.model === session.final_model);
   return (
     <aside className="space-y-4 text-[12px]" data-testid="session-rail">
-      {AUDIO.has(session.channel) && (
+      {/* D684: a Zoom or Meet session's words are the provider's transcript; no model of ours made them. */}
+      {AUDIO.has(session.channel) && !channelOf(session) && (
         <section>
           <h3 className="mb-1 text-[11px] font-bold uppercase text-axal-faint">Speech to text</h3>
           <p>Live: <strong>{session.live_model ? (live?.label || session.live_model) : 'Off'}</strong></p>
@@ -330,6 +332,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
     ? Math.max(0, now - Date.parse(`${String(session.recording_since).replace(' ', 'T')}Z`)) : 0);
 
   const reviewFirst = openingStep(session) === 'review';
+  // D684: a channel session still waiting for its messages or its call's transcript.
+  const waiting = openingStep(session) === 'channel';
   const review = ['transcribed', 'structured', 'reviewed'].includes(session.status) && (
     <section data-testid="session-review" data-first={reviewFirst ? 'true' : 'false'} className="space-y-2">
       <h2 className="text-[16px] font-bold">Review</h2>
@@ -342,7 +346,9 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
       <main className="min-w-0 space-y-4">
         <nav className="flex items-center gap-2 text-[12px]"><Link to="/validate/interviews" className="text-axal-muted underline">Interviews</Link><AssistantBadge session={session} /></nav>
         {error && <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
-        {session.status === 'draft' && <StartPanel session={session} error={startError} busy={busy} onStart={start} onConsent={consent} />}
+        {session.status === 'draft' && (waiting
+          ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
+          : <StartPanel session={session} error={startError} busy={busy} onStart={start} onConsent={consent} />)}
         {recording && (
           <RecordingView
             state={state} theme={theme} analyser={cap.analyser} elapsedMs={elapsed} interviewee={intervieweeName}

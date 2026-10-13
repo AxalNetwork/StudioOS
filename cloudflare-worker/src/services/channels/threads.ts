@@ -25,9 +25,11 @@ import type { Env } from '../../types';
 import type { StoredSegment } from '../interviewSessions';
 import { decryptColumn, encryptColumn } from '../columnCipher';
 import {
-  IntakeError, appendSegments, createInterview, openSession, writableInterview, type ScopedInterview,
+  IntakeError, activeMember, appendSegments, createInterview, openSession, writableInterview, type ScopedInterview,
 } from '../interviewIntake';
 import type { ChannelConnection } from './connections';
+import { refKey } from './events';
+import { isOurSend } from './outbound';
 import {
   CHANNEL_LIMITS, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide, type MessagingProvider,
 } from './types';
@@ -141,7 +143,7 @@ async function storePending(env: Env, thread: ThreadRow, m: ThreadMessageInput, 
   const res = await env.DB.prepare(
     `INSERT OR IGNORE INTO channel_thread_messages (uid, thread_id, external_message_id, direction, kind, text_enc, sent_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, thread.id, clip(m.externalMessageId, 200), m.side === 'me' ? 'out' : 'in', m.kind, enc,
+  ).bind(uid, thread.id, await refKey(thread.provider, m.externalMessageId), m.side === 'me' ? 'out' : 'in', m.kind, enc,
     isoOr(m.sentAt, new Date().toISOString())).run();
   return Number(res.meta?.changes ?? 0) > 0;
 }
@@ -153,14 +155,14 @@ async function storePending(env: Env, thread: ThreadRow, m: ThreadMessageInput, 
  * and UNIQUE(thread_id, external_message_id) backs it for pending messages.
  */
 export async function storeMessage(env: Env, conn: ChannelConnection, m: ThreadMessageInput): Promise<StoreOutcome> {
+  // An inactive or deleted account keeps nothing, pending or not.
+  await activeMember(env, conn.userId);
   const text = clip(m.text, CHANNEL_LIMITS.maxTextChars);
   let thread = await upsertThread(env, conn, m.externalChatId, m.side === 'contact' ? m.contactName : null);
   if (!text) return { stored: 'empty', thread };
   if (thread.status === 'ignored') return { stored: 'ignored', thread };
-  if (m.side === 'me' && m.origin !== 'axal') {
-    const ours = await env.DB.prepare('SELECT 1 FROM channel_outbound WHERE provider = ? AND external_message_id = ?')
-      .bind(conn.provider, clip(m.externalMessageId, 200)).first();
-    if (ours) return { stored: 'duplicate', thread };
+  if (m.side === 'me' && m.origin !== 'axal' && await isOurSend(env, conn.provider, m.externalMessageId)) {
+    return { stored: 'duplicate', thread };
   }
 
   const now = new Date().toISOString();
@@ -209,7 +211,7 @@ export async function applyEdit(env: Env, conn: ChannelConnection, edit: Inbound
   const thread = await threadForChat(env, conn, edit.externalChatId);
   if (!thread || thread.status !== 'pending') return false;
   const row = await env.DB.prepare(`SELECT uid FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?`)
-    .bind(thread.id, clip(edit.externalMessageId, 200)).first<{ uid: string }>();
+    .bind(thread.id, await refKey(thread.provider, edit.externalMessageId)).first<{ uid: string }>();
   const text = clip(edit.text, CHANNEL_LIMITS.maxTextChars);
   if (!row || !text) return false;
   const enc = await encryptColumn(env, MSG_TABLE, 'text_enc', row.uid, text);
@@ -224,7 +226,7 @@ export async function applyDelete(env: Env, conn: ChannelConnection, del: Inboun
   let removed = 0;
   for (const id of del.externalMessageIds.slice(0, 100)) {
     const res = await env.DB.prepare(`DELETE FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?`)
-      .bind(thread.id, clip(id, 200)).run();
+      .bind(thread.id, await refKey(thread.provider, id)).run();
     removed += Number(res.meta?.changes ?? 0);
   }
   if (removed) {

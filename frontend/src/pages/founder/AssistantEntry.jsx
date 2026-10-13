@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ASSISTANTS_HREF, ASSISTANT_CONSENT, ASSISTANT_STEPS, sessionBadge, starterPrompt } from './assistantSession.js';
+import {
+  ASSISTANTS_HREF, ASSISTANT_CONSENT, ASSISTANT_STEPS, channelBadgeTitle, channelOf, sessionBadge, sessionOrigin, starterPrompt,
+} from './assistantSession.js';
 
 /**
  * D668 (#1498) — Record a session's "From an AI assistant" (D665): three
@@ -30,11 +32,22 @@ export function AssistantEntry({ companyName, copy = (t) => navigator.clipboard?
   );
 }
 
-/** The badge a session from an assistant carries in the session list. */
+/**
+ * The badge a session carries for where it came from: an assistant's (violet,
+ * with its host), or, for D684's channels, the channel's own (`ChannelBadge`).
+ */
 export function AssistantBadge({ session }) {
-  const text = sessionBadge(session);
-  if (!text) return null;
-  return <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10.5px] font-bold text-violet-800 dark:bg-violet-950/40 dark:text-violet-200" data-testid="assistant-badge" title={session.submitted_via_host || 'host not recorded'}>{text}</span>;
+  const origin = sessionOrigin(session);
+  if (!origin) return null;
+  if (origin.kind === 'channel') return <ChannelBadge session={session} />;
+  return <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10.5px] font-bold text-violet-800 dark:bg-violet-950/40 dark:text-violet-200" data-testid="assistant-badge" title={session.submitted_via_host || 'host not recorded'}>{sessionBadge(session)}</span>;
+}
+
+/** D684: "From Telegram", "From Zoom"…: the member's own channel, never an assistant. */
+export function ChannelBadge({ session }) {
+  const provider = channelOf(session);
+  if (!provider) return null;
+  return <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[10.5px] font-bold text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200" data-testid="channel-badge" data-provider={provider} title={channelBadgeTitle(provider)}>{sessionBadge(session)}</span>;
 }
 
 export default AssistantEntry;

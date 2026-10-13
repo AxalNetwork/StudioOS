@@ -39,6 +39,11 @@
 --   channel_events          Every webhook event once: UNIQUE(provider,
 --                           external_event_id) is the idempotency boundary for all
 --                           four providers. Ids and outcome, never text.
+--
+-- Every provider event or message id here (external_event_id, and
+-- external_message_id in channel_outbound and channel_thread_messages) is a
+-- SHA-256 of provider:id, never the id: a WhatsApp wamid carries the customer's
+-- number in base64, and these columns are only ever compared for equality.
 --   channel_outbound        Every message Axal sends on a member's behalf.
 --                           `client_key` UNIQUE makes a retried send a no-op;
 --                           `status` keeps the provider accepting a send
@@ -119,7 +124,7 @@ CREATE TABLE IF NOT EXISTS channel_events (
   uid TEXT NOT NULL UNIQUE,
   provider TEXT NOT NULL CHECK (provider IN ('telegram', 'whatsapp', 'zoom', 'google_meet')),
   external_event_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('message', 'voice', 'echo', 'edit', 'command', 'link', 'connection', 'status', 'meeting', 'transcript', 'ignored')),
+  kind TEXT NOT NULL CHECK (kind IN ('message', 'voice', 'echo', 'edit', 'delete', 'command', 'link', 'connection', 'status', 'meeting', 'transcript', 'ignored')),
   user_id INTEGER,
   thread_id INTEGER,
   session_id INTEGER,
