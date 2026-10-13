@@ -10,12 +10,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React from 'react';
+import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { FIRST_FOCUS, phoneFocus, phoneIndex, phoneMeter } from '../src/pages/cycles/validatePhone.js';
-import ValidatePhoneFocus from '../src/pages/cycles/ValidatePhoneFocus.jsx';
+import ValidatePhoneFocus, { targetValue } from '../src/pages/cycles/ValidatePhoneFocus.jsx';
+import { createRoot } from 'react-dom/client';
+import { installDocument } from './_contracts_dom.mjs';
 
 const h = React.createElement;
 const html = (raw, search = '?project_id=3') => renderToStaticMarkup(h(MemoryRouter, null, h(ValidatePhoneFocus, { raw, search })));
@@ -48,8 +50,10 @@ test('the focus: no interview gives the canvas\'s first-conversation card; other
   assert.equal(next.then, null, 'no "Then" line without a stored rule behind it');
   assert.equal(phoneFocus({ cards: [{ slug: 'x', next: { text: 'Go', href: 'https://evil.example' } }] }), null, 'only in-app paths');
   assert.equal(phoneFocus({ cards: [] }), null);
-  const worker = phoneFocus({ ...RAW, focus: { eyebrow: 'Validate · Next', headline: 'Review the interview with Dana from 12 Oct.', why: 'It is transcribed but not yet placed.', cta: { text: 'Review the interview', href: '/validate/interviews/41' } } });
+  // #1609's shape: { rule, eyebrow, headline, why, cta: { label, href }, then }.
+  const worker = phoneFocus({ ...RAW, focus: { rule: 'review', eyebrow: 'Validate · Next', headline: 'Review the interview with Dana from 12 Oct.', why: 'It is transcribed but not yet placed.', cta: { label: 'Review the interview', href: '/validate/interviews/41' }, then: null } });
   assert.equal(worker.headline, 'Review the interview with Dana from 12 Oct.');
+  assert.equal(worker.cta, 'Review the interview');
   assert.equal(worker.href, '/validate/interviews/41');
   assert.equal(worker.then, null);
 });
@@ -60,6 +64,9 @@ test('the meter: the count held this month, "No target set" until one is stored,
   assert.equal(phoneMeter({ ...RAW, meter: { target: 0 } }).target, null, 'a zero target is no target');
   assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', value: null, state: 'empty' }] }).count, null, 'none recorded: null, never 0');
   assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }] }).unreadable, true);
+  // #1609's meter: its count wins (none logged is a counted 0), and its target.
+  assert.deepEqual(phoneMeter({ ...RAW, meter: { key: 'interviews_this_month', count: 0, target: 12, target_reason: null } }), { label: 'Interviews this month', count: 0, target: 12, pct: 0, unreadable: false });
+  assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }], meter: { count: null, target: null } }).unreadable, true, 'a null Worker count falls back to the figure');
   const out = html(RAW);
   assert.match(out, /data-testid="phone-meter-value">14(<!-- -->)? <span[^>]*>· No target set<\/span>/);
   assert.doesNotMatch(out, /role="progressbar"/, 'no target, no bar');
@@ -87,7 +94,11 @@ test('the index: the canvas\'s seven rows, each linking to its page, each from t
   assert.equal(empty['problem-discovery'].detail, 'Pain themes');
   assert.equal(empty['customer-research'].detail, 'Recruiting');
   assert.equal(phoneIndex({ ...RAW, figures: [{ key: 'pain_themes', value: 4, delta_30d: -1 }] })[1].detail, '4 pain themes', 'a drop is not "new"');
-  assert.equal(phoneIndex({ ...RAW, index: { interviews: 22 } })[0].value, 22, 'the Worker\'s count when it sends one');
+  // #1609's index: { interviews_total, booked }, the Worker's counts over the derived ones.
+  const counted = phoneIndex({ ...RAW, index: { interviews_total: 22, booked: 4 } });
+  assert.equal(counted[0].value, 22, 'every interview, every stage');
+  assert.equal(counted[2].detail, 'Recruiting · 4 booked');
+  assert.equal(phoneIndex({ ...RAW, index: { interviews_total: 0, booked: 0 } })[0].value, 0, 'a counted zero is shown');
   const out = html({ figures: [], cards: [] });
   assert.equal((out.match(/>Not recorded</g) || []).length >= 7, true);
   assert.doesNotMatch(renderedText(out), /\b0 (pain themes|segments|booked)\b/, 'never a zero for a missing value');
@@ -105,6 +116,49 @@ test('phone only, a full-width CTA, dark pairs; mounted above the Validate overv
   assert.match(tag(first, 'phone-focus-cta'), /href="\/validate\/record\?project_id=3"/);
   assert.doesNotMatch(first, /data-testid="phone-meter"/, 'no meter on the first-conversation card, as drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /\{cycle === 'validate' && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus raw=\{rawOverview\} search=\{q\} \/>\}/);
+  assert.match(route, /\{cycle === 'validate' && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus raw=\{rawOverview\} search=\{q\} projectId=\{projectId\} onChanged=\{\(\) => setReload\(\(n\) => n \+ 1\)\} \/>\}/, 'a saved target re-reads the overview');
   assert.match(route, /setRawOverview\(data\); setOverview\(adaptOverview\(cycle, data\)\)/, 'the raw read, before adapting');
+});
+
+test('Set a target: a whole number above zero, empty clears it; saved through #1609\'s writer, and the overview read again', async () => {
+  assert.deepEqual(targetValue(' 20 '), { value: 20 });
+  assert.deepEqual(targetValue(''), { value: null }, 'empty clears the target');
+  for (const bad of ['0', '-3', '2.5', 'ten']) assert.match(targetValue(bad).error, /whole number of interviews a month, above zero/, bad);
+  const client = readFileSync('frontend/src/lib/api/cycleValidate.js', 'utf8');
+  assert.match(client, /setInterviewsTarget: \(projectId, value\) => request\(`\/cycles\/validate\/interviews-target\?\$\{q\(projectId\)\}`, \{ method: 'PUT', body: JSON\.stringify\(\{ value \}\) \}\)/);
+  assert.match(readFileSync('cloudflare-worker/src/routes/cycle_validate.ts', 'utf8'), /cycleValidate\.put\('\/interviews-target'/, 'the route it calls is mounted');
+  assert.doesNotMatch(html(RAW), /phone-target-open/, 'no venture handed in: no form');
+
+  const calls = [];
+  let changed = 0;
+  let refuse = null;
+  const api = { setInterviewsTarget: async (pid, v) => { calls.push([pid, v]); if (refuse) throw new Error(refuse); return { ok: true }; } };
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const render = () => act(async () => { root.render(h(MemoryRouter, null, h(ValidatePhoneFocus, { raw: RAW, search: '?project_id=3', projectId: 3, api, onChanged: () => { changed += 1; } }))); });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  const txt = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(txt).join(' ') : n.textContent || '');
+  const text = () => txt(container).replace(/\s+/g, ' ');
+  try {
+    await render();
+    assert.ok(text().includes('Set a target'));
+    await act(async () => { pr(by('phone-target-open')).onClick(); });
+    await act(async () => { pr(by('phone-target-input')).onChange({ target: { value: '0' } }); });
+    await act(async () => { await pr(by('phone-target-form')).onSubmit({ preventDefault() {} }); });
+    assert.deepEqual(calls, [], 'a zero target is never sent');
+    assert.ok(text().includes('Enter a whole number of interviews a month, above zero.'));
+    refuse = 'The target is a whole number of interviews a month, above zero';
+    await act(async () => { pr(by('phone-target-input')).onChange({ target: { value: '25' } }); });
+    await act(async () => { await pr(by('phone-target-form')).onSubmit({ preventDefault() {} }); });
+    assert.ok(text().includes('The target is a whole number of interviews a month, above zero'), 'the Worker\'s refusal in its words');
+    assert.equal(changed, 0);
+    refuse = null;
+    await act(async () => { await pr(by('phone-target-form')).onSubmit({ preventDefault() {} }); });
+    assert.deepEqual(calls.at(-1), [3, 25]);
+    assert.equal(changed, 1, 'saved: the overview is read again');
+    assert.equal(by('phone-target-form'), undefined, 'and the form closes');
+  } finally { await act(async () => root.unmount()); restore(); }
 });

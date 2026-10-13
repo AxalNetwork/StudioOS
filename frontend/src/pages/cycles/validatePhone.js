@@ -2,16 +2,16 @@
 // the interviews meter, and "Everything else in Validate", to
 // `Cycle Overview.dc.html` (`mobData`).
 //
-// FROM THE READS THAT EXIST. `GET /cycles/validate/overview` returns figures
-// and cards. Its `focus`, `meter` and `index` (§5.12, S03-B) are not on the
-// Worker yet; when they are, `focus` and the meter's `target` are taken as
-// sent. Until then:
+// THE WORKER'S FIRST. `GET /cycles/validate/overview` returns `focus`, `meter`
+// and `index` (§5.12, #1609) beside its figures and cards; each is null when
+// its part could not be read, and then this falls back to what the figures
+// and cards say:
 //   · rule 1 (no interview) is the Customer research card read empty;
-//   · rule 2 ("Review the interview with …") needs the Worker's focus: the
-//     overview carries no session, so it is never guessed here;
+//   · rule 2 ("Review the interview with …") is the Worker's alone: the
+//     overview's cards carry no session, so it is never guessed here;
 //   · rule 3 is the first card's `next`;
-//   · the meter's target reads "No target set": none is stored.
-// Every value comes from the RAW read: adapting a card replaces its series
+//   · the meter's count is the figure's, and its target "No target set".
+// Every fallback reads the RAW overview: adapting a card replaces its series
 // with chart specs. A missing value reads "Not recorded", never 0.
 
 import { usdShort } from './adapters/validate.js';
@@ -48,14 +48,15 @@ export function phoneFocus(raw, search = '') {
 /** The meter: interviews held this month against a stored target; none stored reads "No target set". */
 export function phoneMeter(raw) {
   const fig = figure(raw, 'interviews_this_month');
-  const count = num(fig?.value) ? fig.value : null;
+  // The Worker's count first: it reads none logged as 0, a fact it counted.
+  const count = num(raw?.meter?.count) ? raw.meter.count : num(fig?.value) ? fig.value : null;
   const target = num(raw?.meter?.target) && raw.meter.target > 0 ? raw.meter.target : null;
   return {
     label: 'Interviews this month',
     count,
     target,
     pct: count != null && target != null ? Math.max(0, Math.min(100, Math.round((100 * count) / target))) : null,
-    unreadable: fig?.state === 'unreadable',
+    unreadable: count == null && fig?.state === 'unreadable',
   };
 }
 
@@ -69,11 +70,12 @@ export function phoneIndex(raw, search = '') {
   const market = card(raw, 'market-intelligence');
   const demand = card(raw, 'demand-signals');
   const funnel = research?.series?.funnel;
-  const booked = num(funnel?.booked) && num(funnel?.done) ? Math.max(0, funnel.booked - funnel.done) : null;
+  const booked = num(raw?.index?.booked) ? raw.index.booked
+    : num(funnel?.booked) && num(funnel?.done) ? Math.max(0, funnel.booked - funnel.done) : null;
   const segments = Array.isArray(icp?.series?.segments) ? icp.series.segments.length : null;
   const sam = market?.series?.sam?.value;
   const bar = demand?.series?.bar;
-  const total = num(raw?.index?.interviews) ? raw.index.interviews : null;
+  const total = num(raw?.index?.interviews_total) ? raw.index.interviews_total : null;
   return [
     { key: 'interviews', title: 'Interviews', detail: 'Every interview, newest first', value: total, href: `/validate/interviews${search}` },
     { key: 'problem-discovery', title: 'Problem discovery',

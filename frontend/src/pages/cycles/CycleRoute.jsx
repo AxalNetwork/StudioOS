@@ -421,7 +421,7 @@ export default function CycleRoute({ cycle, record = false }) {
   } else if (!slug) {
     body = (
       <>
-        {cycle === 'validate' && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus raw={rawOverview} search={q} />}
+        {cycle === 'validate' && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus raw={rawOverview} search={q} projectId={projectId} onChanged={() => setReload((n) => n + 1)} />}
         <CycleOverview
           cycle={cycle}
           data={overview}
