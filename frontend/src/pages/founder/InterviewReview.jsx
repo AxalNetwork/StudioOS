@@ -54,7 +54,8 @@ const SEVERITY = { severe: 'Severe', real: 'Real', mild: 'Mild' };
 const FIT = { strong: 'Strong fit', partial: 'Partial fit', none: 'Not a fit' };
 const DEMAND = { need_to_have: 'Need to have', would_pay: 'Would pay', loi: 'Letter of intent', pre_sale: 'Pre-sale' };
 const STRENGTH = { anecdote: 'Anecdote', pattern: 'Pattern', measured: 'Measured' };
-const STEP_LABELS = { structured: 'Structured', re_structured: 'Re-structured', asked: 'Asked' };
+// D685 §5.10: the summary's receipt lines (#1605) are listed with structuring's.
+const STEP_LABELS = { structured: 'Structured', re_structured: 'Re-structured', asked: 'Asked', summarised: 'Summarised', re_summarised: 'Re-summarised' };
 export const STRUCTURING_STEPS = new Set(Object.keys(STEP_LABELS));
 
 /** A placement's payload, as one line a founder reads. Unknown shapes say so. */

@@ -238,9 +238,10 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                     when the conversation happened.
                   */}
                   <div className="min-w-0">
-                    <div className="truncate text-xs font-semibold text-axal-ink">
+                    {/* D685 §5.11: each row opens the interview's review, its sessions and their findings. */}
+                    <Link to={`/validate/interviews/${encodeURIComponent(r.id)}`} className="block truncate text-xs font-semibold text-axal-ink hover:underline dark:text-gray-100" data-testid={`interview-row-link-${r.id}`}>
                       {r.interviewee_name || <NotRecorded>Name not recorded</NotRecorded>}
-                    </div>
+                    </Link>
                     <div className="mt-0.5 truncate text-[11px] text-axal-faint">
                       {r.interviewee_company || r.interviewee_role || <NotRecorded>No company recorded</NotRecorded>}
                     </div>

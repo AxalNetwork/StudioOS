@@ -7,6 +7,7 @@ import { ChannelOriginBadge } from './ChannelOriginBadge.jsx';
 import { channelOf, openingStep } from './assistantSession.js';
 import { ModelList, AUDIO } from './RecordSessionSheet';
 import InterviewReview from './InterviewReview';
+import SessionSummary from './SessionSummary';
 import { ChannelSessionPanel } from './InterviewChannels';
 
 /**
@@ -64,7 +65,7 @@ export function TranscriptReview({ segments, intervieweeName, onAssign }) {
   return (
     <ol className="space-y-3" data-testid="transcript">
       {rows.map((s) => (
-        <li key={s.id} className="text-[13px]">
+        <li key={s.id} id={`seg-${s.id}`} className="scroll-mt-4 text-[13px]">
           <div className="mb-1 flex flex-wrap items-center gap-1">
             {SPEAKER_CHOICES(intervieweeName).map((label) => (
               <button key={label} type="button" data-testid={`speaker-${s.id}-${label}`} aria-pressed={s.speaker_label === label}
@@ -289,6 +290,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const review = ['transcribed', 'structured', 'reviewed'].includes(session.status) && (
     <section data-testid="session-review" data-first={reviewFirst ? 'true' : 'false'} className="space-y-2">
       <h2 className="text-[16px] font-bold">Review</h2>
+      <SessionSummary summary={data.summary || null} segments={segments} />
       <ReviewStep api={api} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
     </section>
   );

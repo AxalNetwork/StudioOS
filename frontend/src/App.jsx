@@ -79,6 +79,7 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 // D660 (#1473) — one interview session: record, live transcript, review.
 const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
+const InterviewReviewPage = lazy(() => import('./pages/founder/InterviewReviewPage'));
 // D684 (#1578) — customer chats from business Telegram and WhatsApp, waiting for an interview.
 const ChannelsInboxPage = lazy(() => import('./pages/founder/ChannelsInbox'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
@@ -2524,6 +2525,8 @@ function AppInner() {
       <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings. */}
+      <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
