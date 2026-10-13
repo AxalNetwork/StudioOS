@@ -27,3 +27,43 @@ conversation reaches Validate › Interviews. Read
   is encrypted with columnCipher; once assigned it lives only in the transcript.
 - A provider capability Axal cannot use (Telegram calls, WhatsApp Calling
   before its gates are met) is stated as unavailable, never simulated.
+
+## Messaging adapters (#1576)
+
+- Telegram verifies a hashed secret with constantTimeEqual and normalizes only
+  private /start and Business updates. Business rights supersede can_reply.
+  Message ids include connection and chat to avoid numeric-id collisions.
+- WhatsApp verifies HMAC over the raw bytes, independently of the GET challenge.
+  App echoes are Me; status updates are scoped to the number's member.
+  Signup verifies the token's app, scopes, WABA and phone-number membership
+  before subscribing; credentials use the existing encrypted integrations blob.
+- The route module exports channels for /api/channels and adminChannels for
+  /api/admin/channels. S01 mounts them and exempts only the messaging webhook
+  paths from signed-in middleware. Management paths still authenticate inside.
+- Unknown/unlinked connections store nothing. Link Telegram before attaching
+  the bot to Telegram Business. If linking consumes a code but storing the
+  connection fails, issue a new code; consumed codes cannot be replayed.
+- Provider calls and their response bodies have a deadline, redirect refusal
+  and byte caps. Voice downloads are capped at 20 MB, kept in memory, and run
+  through aiRouter's transcribe task under the connection owner's D640 budget.
+  Only transcript text is retained. Queue metadata is encrypted; events contain
+  only hashed identifiers and machine outcomes.
+- KV limits use a hashed per-connection/minute bucket. As with existing KV
+  limits, concurrent deliveries can exceed a bucket slightly: KV is not an
+  atomic counter. Missing/unreadable KV fails closed. Raw bodies cap at 256 KB.
+- Replies require rights and an open window. Idempotent client keys never
+  trigger a second send. A provider acceptance is submitted, never delivered
+  for Telegram. WhatsApp delivery comes only from signed status webhooks.
+
+## Calls
+
+Telegram bots have no call API: they cannot place or answer Telegram calls.
+
+WhatsApp Calling is phase 2 only. It requires a business messaging limit of
+at least 2,000, eligible countries and a real WebRTC (or SIP) media endpoint.
+Business-initiated calls additionally require customer call permission and are
+unavailable in the US, Canada, Egypt, Vietnam and Nigeria. Meta provides no
+recording API: the endpoint must handle media itself. A later owner-approved
+phase needs eligibility checks, permission storage, call signalling/webhooks,
+a secured media endpoint and explicit recording consent. This implementation
+does not advertise or simulate call support.
