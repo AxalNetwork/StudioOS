@@ -31,6 +31,8 @@ export { default as SectionLabel } from './SectionLabel';
 export { default as Card } from './Card';
 export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
+// D685 — the one lightbox shell: a centred dialog, a full-screen sheet on a phone. See Lightbox.jsx.
+export { default as Lightbox } from './Lightbox';
 
 // The AI control rail — eight canvases, one component. Not navigation: see
 // documentation/architecture/DECISIONS.md T3. The gateway it reports on is services/aiRouter.ts and has

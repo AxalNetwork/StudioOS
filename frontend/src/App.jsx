@@ -2506,6 +2506,8 @@ function AppInner() {
       <Route path="/validate" element={founderValidateLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)
         : <Navigate to="/validate/interviews" replace />} />
+      {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
+      <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
