@@ -367,6 +367,25 @@ export const REGISTRY: ProviderDescriptor[] = [
     oauth_scopes: ['issues:read', 'pull_requests:read', 'contents:read', 'metadata:read'],
   },
   {
+    key: 'zoom',
+    display_name: 'Zoom',
+    integration_type: 'messaging',
+    description: 'Schedule a Zoom call from a Validate interview on your own Zoom account. When the call’s cloud transcript is ready, it is imported into the interview.',
+    // D684 (#1577). The implementation lives with the other interview channels
+    // (services/channels/zoom.ts), which registers it; the router that mounts
+    // the meetings routes imports it. Scopes are granular General-app names,
+    // UNVERIFIED until the Zoom app exists: create, delete, and list a
+    // meeting's recordings (which carries the transcript's download link).
+    // Zoom sets scopes on the app itself; the callback refuses a wider grant.
+    status: 'beta',
+    tier: 'free',
+    auth_type: 'oauth2',
+    capabilities: ['Schedule interview calls', 'Import cloud transcripts'],
+    docs_url: 'https://developers.zoom.us/docs/integrations/oauth/',
+    icon: 'Video',
+    oauth_scopes: ['meeting:write:meeting', 'meeting:delete:meeting', 'cloud_recording:read:list_recording_files'],
+  },
+  {
     key: 'google_calendar', display_name: 'Google Calendar', integration_type: 'scheduling',
     description: 'Calendar events and interview slots from your existing Google Calendar connection.',
     status: 'live', tier: 'free', auth_type: 'oauth2', capabilities: ['Calendar events'],
@@ -403,6 +422,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   stripe: { category: 'Payments', verified: true, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   affinity: { category: 'CRM', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read relationship data from your Affinity account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Releases', module: 'product_roadmap' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases in the repositories you choose.', 'Read repository names and visibility.'] },
+  zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.'] },
   google_calendar: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read Gmail messages linked to invitations.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   microsoft_365: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
