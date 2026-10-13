@@ -25,23 +25,49 @@
  * read carries them with their own ids, and a tick is `PUT
  * /sessions/:id/points/:pointId`, whose answer replaces the list.
  */
-import { createCapture, indexedDbQueue, nextSeq } from './interviewCapture.js';
+import { createCapture, flushQueue, indexedDbQueue, nextSeq } from './interviewCapture.js';
 
 export const PHASES = ['idle', 'share', 'denied', 'recording', 'paused', 'stopping', 'ready', 'discarded'];
 export const STAGES = ['Uploading', 'Transcribing', 'Summarising', 'Placing findings'];
+/** The Worker's `processing_stage` for each of `STAGES` (D685 §5.9, migration 453). */
+export const STAGE_KEYS = ['uploading', 'transcribing', 'summarising', 'placing'];
+/** How often the processing view reads the session (§5.9.1). */
+export const POLL_MS = 2000;
+
+/**
+ * The ring's fraction, only where the Worker counts something (§5.9.2):
+ * Uploading (chunks stored of chunks recorded) and Transcribing (chunks
+ * transcribed of chunks). Summarising and Placing findings have no count, so
+ * this is null and the ring draws an indeterminate arc, never a guess.
+ */
+export function processingProgress(p) {
+  if (!p || (p.stage !== 'uploading' && p.stage !== 'transcribing')) return null;
+  const done = Number(p.done), total = Number(p.total);
+  if (p.done == null || p.total == null || !Number.isFinite(done) || !Number.isFinite(total) || total <= 0) return null;
+  return Math.max(0, Math.min(1, done / total));
+}
+
+/** Which of `STAGES` is current: its index, `STAGES.length` once done, -1 when unknown. */
+export function stageIndex(p, last = -1) {
+  if (!p) return last;
+  if (p.stage === 'done') return STAGES.length;
+  const i = STAGE_KEYS.indexOf(p.stage);
+  return i >= 0 ? i : last;
+}
 const TOAST_MS = 2500;
 
 const blank = () => ({
   phase: 'idle', session: null, interview: null, callLabel: null, channel: null, points: [],
-  cap: {}, confirm: false, drawer: false, toast: null, stage: 0, error: null, wake: null,
+  cap: {}, confirm: false, drawer: false, toast: null, error: null, wake: null,
   marksQueued: [], online: true, video: false, pointError: null,
+  processing: null, stageAt: -1, stopStep: null, lastSeq: null,
 });
 
 /** The pill's variant, from the phase (D685 §5.6.4). Null when nothing is recording. */
 export function pillVariant(st) {
   if (!st?.session) return null;
   if (st.phase === 'ready') return 'ready';
-  if (st.phase === 'stopping') return 'processing';
+  if (st.phase === 'stopping') return st.processing?.stage === 'failed' ? 'failed' : 'processing';
   if (st.phase === 'paused') return 'paused';
   if (st.online === false || st.cap?.online === false) return 'offline';
   if (st.phase === 'recording' || st.phase === 'share' || st.phase === 'denied') return 'recording';
@@ -55,6 +81,7 @@ export function pillLabel(variant, clockText) {
     paused: `Paused · ${clockText} · tap to expand`,
     offline: `Recording offline · ${clockText} · saved on this device · tap to expand`,
     processing: 'Processing the session · tap to expand',
+    failed: 'Processing stopped · tap to retry',
     ready: 'Ready to review · open the review',
   }[variant] || '';
 }
@@ -70,11 +97,23 @@ export function elapsedMs(session, now) {
   return session.status === 'recording' && Number.isFinite(since) ? base + Math.max(0, now - since) : base;
 }
 
+/** The interview review for a session (§5.11): the session chosen in it. */
+export function reviewPath(session) {
+  if (!session) return '/validate/interviews';
+  const sid = encodeURIComponent(session.id);
+  return session.interview_id != null
+    ? `/validate/interviews/${encodeURIComponent(session.interview_id)}?session=${sid}`
+    : `/validate/session/${sid}`;
+}
+
 /** A key a replayed mark can be recognised by, once the Worker takes one (#1584). */
 export const markKey = (sessionId, offset) => `${sessionId}:${Math.round(offset)}`;
 
-export function createRecorder({ api, browser = {}, queue = null, now = () => Date.now(), setTimeout: st = (f, ms) => globalThis.setTimeout(f, ms) } = {}) {
+export function createRecorder({ api, browser = {}, queue = null, now = () => Date.now(), setTimeout: st = (f, ms) => globalThis.setTimeout(f, ms), wait = null } = {}) {
   let state = blank();
+  // One poll at a time: a new Stop, a sign-out or a clear ends the one before.
+  let pollGen = 0;
+  const pause = wait || ((ms) => new Promise((r) => st(r, ms)));
   let capture = null;
   let pre = null;
   let wakeLock = null;
@@ -138,11 +177,94 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     set({ marksQueued: left });
   };
 
+  /** The processing state, and the stage reached (kept through a failure, so the chips stay put). */
+  const showProcessing = (p) => set((x) => ({ processing: p, stageAt: stageIndex(p, x.stageAt) }));
+  const upload = (id) => (seq, blob, startMs) => api.uploadChunk(id, seq, blob, startMs);
+  const failWith = (sentence) => set((x) => ({ processing: { ...(x.processing || {}), stage: 'failed', error: sentence } }));
+
+  /**
+   * Read the session about every two seconds until processing is done or has
+   * failed (§5.9.1). While it is uploading, what still waits on this device is
+   * sent again, so a Stop made offline finishes when the network returns.
+   */
+  const follow = async (id) => {
+    const gen = ++pollGen;
+    for (;;) {
+      if (gen !== pollGen) return 'cancelled';
+      if (state.processing?.stage === 'uploading') { try { await flushQueue(q(), id, upload(id)); } catch { /* the next pass tries again */ } }
+      let r = null;
+      try { r = await api.get(id); } catch { /* offline: keep the last state on screen and read again */ }
+      if (gen !== pollGen) return 'cancelled';
+      if (r) {
+        const p = r.processing || null;
+        set({ session: r.session });
+        showProcessing(p);
+        if (p?.stage === 'done' || (!p && ['transcribed', 'structured', 'reviewed'].includes(r.session?.status))) {
+          set({ phase: 'ready' });
+          return 'done';
+        }
+        if (p?.stage === 'failed') return 'failed';
+        if (p?.stale) {
+          failWith(p.error || 'Processing has not moved for 15 minutes. Nothing was lost; try again.');
+          return 'failed';
+        }
+      }
+      await pause(POLL_MS);
+    }
+  };
+
+  /**
+   * Stop and process (§5.9.1), resumable: each step is done once, so Retry
+   * picks up at the step that failed. Stop, then the capture's stop and flush
+   * (or the device's queue, with no capture here), then `finish` with the last
+   * seq recorded, then the poll.
+   */
+  const process = async (auto) => {
+    const s = state.session;
+    if (!state.stopStep) {
+      await replayMarks();
+      if (s.status === 'recording' || s.status === 'paused') {
+        const r = await api.action(s.id, 'stop');
+        set({ session: r.session });
+      }
+      set({ stopStep: 'stopped' });
+    }
+    if (state.stopStep === 'stopped') {
+      let last = -1;
+      if (capture) {
+        const out = await capture.stop();
+        if (Number.isFinite(out?.lastSeq)) last = out.lastSeq;
+        capture = null;
+      } else {
+        await flushQueue(q(), s.id, upload(s.id)).catch(() => null);
+      }
+      letSleep();
+      const queued = await q().list(s.id).catch(() => []);
+      last = Math.max(last, nextSeq(state.storedSeqs || [], queued.map((r) => r.seq)) - 1);
+      set({ stopStep: 'flushed', lastSeq: last });
+    }
+    if (state.stopStep === 'flushed') {
+      if (state.lastSeq == null || state.lastSeq < 0) {
+        failWith('No audio was recorded, so there is nothing to process.');
+        return 'failed';
+      }
+      const f = await api.finish(s.id, state.lastSeq, auto);
+      showProcessing(f?.processing || { stage: 'uploading', done: null, total: null, error: null });
+      set({ stopStep: 'finished' });
+    }
+    return follow(s.id);
+  };
+
   const api_ = {
     subscribe(l) { listeners.add(l); return () => listeners.delete(l); },
     getSnapshot: () => state,
-    /** Is audio being taken, or still leaving this device? Nothing may reload or log out under it. */
-    isCapturing: () => ['share', 'recording', 'paused', 'stopping'].includes(state.phase),
+    /**
+     * Is audio being taken, or still leaving this device? Nothing may reload or
+     * log out under it. Once `finish` is accepted and the chunks are stored,
+     * the rest runs on the Worker, and a reload only re-reads it (§5.9.5).
+     */
+    isCapturing: () => ['share', 'recording', 'paused'].includes(state.phase)
+      || (state.phase === 'stopping' && (state.stopStep !== 'finished' || state.processing?.stage === 'uploading')),
 
     /**
      * Inside the Start click (D685 §5.6.5): the microphone and the AudioContext
@@ -232,23 +354,45 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     askStop() { set({ confirm: true }); },
     cancelStop() { set({ confirm: false }); },
 
-    /** Stop and process: marks first, then stop, flush, transcribe. The pill turns "Ready to review"; nobody is navigated away. */
-    async confirmStop() {
-      set({ confirm: false, phase: 'stopping', stage: 0, error: null });
-      const s = state.session;
-      try {
-        await replayMarks();
-        const r = await api.action(s.id, 'stop');
-        set({ session: r.session });
-        await capture?.stop();
-        capture = null;
-        letSleep();
-        set({ stage: 1 });
-        await api.transcribe(s.id, s.final_model);
-        set((x) => ({ phase: 'ready', stage: 2, session: { ...x.session, status: 'transcribed' } }));
-      } catch (e) {
-        set({ phase: 'ready', error: e?.message || 'The transcript could not be made.' });
+    /**
+     * Stop and process. `auto: false` is the rail's Manual mode: the Worker
+     * stops after Transcribing and the review offers Summarise and Structure.
+     * Nobody is navigated from here; the live view goes to the review when it
+     * is open, and the pill says "Ready to review" when it is not.
+     */
+    async confirmStop({ auto = true } = {}) {
+      set({ confirm: false, phase: 'stopping', error: null, auto: auto !== false, stopStep: null, lastSeq: null,
+        processing: { stage: 'uploading', done: null, total: null, error: null }, stageAt: 0 });
+      try { return await process(auto !== false); } catch (e) {
+        failWith(e?.message || 'Processing could not start. Nothing was lost; try again.');
+        return 'failed';
       }
+    },
+    /** Retry after a failure: the step that failed, or the Worker's run from the stage it reached (`POST /process`). */
+    async retry() {
+      const s = state.session;
+      set((x) => ({ processing: { ...(x.processing || {}), stage: x.stageAt >= 0 ? STAGE_KEYS[Math.min(x.stageAt, STAGE_KEYS.length - 1)] : 'uploading', error: null } }));
+      try {
+        if (state.stopStep !== 'finished') return await process(state.auto !== false);
+        const r = await api.process(s.id);
+        showProcessing(r?.processing || null);
+        return await follow(s.id);
+      } catch (e) {
+        failWith(e?.message || 'Processing could not start. Nothing was lost; try again.');
+        return 'failed';
+      }
+    },
+    /**
+     * A session already being processed, opened after a reload or from its
+     * page: the view renders from the Worker's processing state (§5.9.5).
+     */
+    follow({ session, interview = null, processing = null, callLabel = null }) {
+      capture = null;
+      const done = processing?.stage === 'done';
+      set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, phase: done ? 'ready' : 'stopping', stopStep: 'finished' });
+      showProcessing(processing);
+      if (done || processing?.stage === 'failed') return Promise.resolve(done ? 'done' : 'failed');
+      return follow(session.id);
     },
     /**
      * "Discard this recording" (D685 §5.7.9, required by #1470): pause, record
@@ -280,13 +424,14 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     onVisible() { if (state.phase === 'recording') keepAwake(); },
     /** Sign-out or an account switch: stop, and leave queued chunks on the device (§5.6.8). */
     async signOut() {
+      pollGen += 1;
       await capture?.stop({ flush: false });
       capture = null;
       letSleep();
       set(blank());
     },
     /** Done with the review: the pill goes. */
-    clear() { if (!api_.isCapturing()) set(blank()); },
+    clear() { if (!api_.isCapturing()) { pollGen += 1; set(blank()); } },
     /** For tests and the route: the capture this recorder holds. */
     get capture() { return capture; },
   };

@@ -233,6 +233,7 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState, st
       if (!parts.length || s.discarded) return;
       const blob = new Blob(parts, { type: parts[0].type || 'audio/webm' });
       await queue.put({ sessionId, seq, blob, startMs });
+      s.lastSeq = Math.max(s.lastSeq ?? -1, seq);
       s.pending += 1;
       emit();
       // A sign-out's stop holds the last slice on this device (D685 §5.6.8).
@@ -401,7 +402,9 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState, st
       // someone else (D685 §5.6.8).
       await new Promise((r) => deps.setTimeout(r, 0));
       if (flushOnStop) await flush();
-      return { pending: s.pending };
+      // The last seq queued, for `finish` (D685 §5.9.1). A slice that held no
+      // sound was never queued, so it is not counted as one to wait for.
+      return { pending: s.pending, lastSeq: s.lastSeq ?? null };
     },
     /**
      * Discard this recording (D685 §5.7.9): nothing more is queued or sent,

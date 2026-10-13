@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Pause, Play, Square, Flag, ListChecks, X, Captions, CaptionsOff, MicOff, MonitorUp, Mic } from 'lucide-react';
 import RingViz from '../../components/discovery/RingViz';
 import { NO_SOUND_MS } from '../../lib/interviewCapture';
-import { STAGES, elapsedMs } from '../../lib/activeRecording';
+import { STAGES, elapsedMs, processingProgress, stageIndex } from '../../lib/activeRecording';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 
 /**
@@ -38,6 +38,8 @@ export function layers(st, { reduced = false } = {}) {
     paused: st?.phase === 'paused',
     offline: st?.online === false || cap.online === false,
     stopping: st?.phase === 'stopping',
+    // Processing stopped: the Worker's sentence, and Retry (§5.9.7).
+    failed: st?.phase === 'stopping' && st?.processing?.stage === 'failed',
     confirm: !!st?.confirm,
     drawer: !!st?.drawer,
     toast: !!st?.toast,
@@ -58,9 +60,14 @@ export function ringMode(l) {
   return 'speech';
 }
 
-/** What the hidden status announces (the timer is aria-live off). */
-export function statusWord(l, phase) {
-  if (phase === 'ready' || l.stopping) return 'Stopped';
+/**
+ * What the hidden status announces (the timer is aria-live off). While
+ * processing, each stage is announced as it is reached (§5.9.4).
+ */
+export function statusWord(l, phase, stageAt = -1) {
+  if (phase === 'ready') return 'Ready to review';
+  if (l.failed) return 'Processing stopped';
+  if (l.stopping) return STAGES[stageAt] || 'Processing';
   if (l.offline) return 'Offline';
   if (l.paused) return 'Paused';
   return 'Recording';
@@ -156,6 +163,38 @@ export function PointsDrawer({ points = [], onTick, error = null, onClose, retur
   );
 }
 
+/**
+ * The stage chips (§5.9.3): the current one filled violet, the next tinted,
+ * the rest outlined; then "Then the review screen.". A failure prints the
+ * Worker's sentence with Retry (§5.9.7).
+ */
+export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
+  const failed = processing?.stage === 'failed';
+  return (
+    <div className="space-y-2 text-center" data-testid="stopping-stages">
+      <ol className="m-0 flex list-none flex-wrap justify-center gap-1.5 p-0">
+        {STAGES.map((x, i) => {
+          const tone = i === stageAt && !failed ? 'current' : i === stageAt + 1 && !failed ? 'next' : i < stageAt ? 'done' : 'rest';
+          const cls = {
+            current: 'border-violet-700 bg-violet-700 text-white dark:border-violet-400 dark:bg-violet-500 dark:text-white',
+            next: 'border-violet-200 bg-violet-100 text-violet-800 dark:border-violet-800 dark:bg-violet-900/50 dark:text-violet-200',
+            done: 'border-gray-300 text-gray-500 line-through dark:border-[#2a2140] dark:text-gray-400',
+            rest: 'border-gray-300 text-gray-600 dark:border-[#2a2140] dark:text-gray-300',
+          }[tone];
+          return <li key={x} data-testid={`stage-${i}`} data-tone={tone} aria-current={tone === 'current' ? 'step' : undefined} className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${cls}`}>{x}</li>;
+        })}
+      </ol>
+      {!failed && <p className="m-0 text-[12.5px] text-gray-500 dark:text-gray-400">Then the review screen.</p>}
+      {failed && (
+        <div role="alert" data-testid="processing-failed" className="mx-auto max-w-[360px] space-y-2">
+          <p className="m-0 text-[13.5px] font-semibold text-red-700 dark:text-red-300">{processing?.error || 'Processing stopped. Nothing was lost; try again.'}</p>
+          <button type="button" onClick={onRetry} data-testid="button-retry-processing" className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800">Retry</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** "Stop and process this session?" (§5.7.9): modal, Escape keeps recording, focus returns to Stop. */
 export function StopConfirm({ onKeep, onStop, onDiscard, returnTo }) {
   const box = useRef(null);
@@ -206,6 +245,10 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
   const liveOn = st?.cap?.live ?? !!s.live_model;
   const liveAvailable = !!s.live_model && !l.budget;
   const tiles = st?.video && !l.share;
+  // §5.9.2: a fraction only where the Worker counts; null draws an indeterminate arc.
+  const progress = l.stopping ? processingProgress(st?.processing) : null;
+  const pct = progress == null ? null : Math.round(progress * 100);
+  const stageAt = l.stopping ? stageIndex(st?.processing, st?.stageAt ?? -1) : -1;
 
   // Focus moves into the view when it opens; the caller returns it on exit.
   useEffect(() => { exitRef.current?.focus?.(); }, []);
@@ -215,7 +258,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
       data-paused={l.paused ? 'true' : 'false'} data-offline={l.offline ? 'true' : 'false'}
       className={`${dark ? 'dark text-gray-100' : 'text-gray-900'} fixed inset-0 z-[90] flex flex-col overflow-hidden`}
       style={{ background: dark ? 'radial-gradient(120% 90% at 50% 40%, #130b22 0%, #07050d 70%)' : '#faf9ff' }}>
-      <p className="sr-only" role="status" data-testid="recording-status">{statusWord(l, st?.phase)}</p>
+      <p className="sr-only" role="status" data-testid="recording-status">{statusWord(l, st?.phase, stageAt)}</p>
 
       <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         <div className="min-w-0 space-y-1.5">
@@ -243,9 +286,13 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
       )}
 
       <div className="relative mx-auto flex w-full max-w-[420px] flex-1 items-center justify-center px-6">
-        <div className="relative aspect-square w-full">
+        <div className="relative aspect-square w-full" data-testid="recording-ring"
+          {...(l.stopping ? { role: 'progressbar', 'aria-label': `Processing: ${STAGES[stageAt] || 'starting'}`, 'aria-valuemin': 0, 'aria-valuemax': 100, ...(pct == null ? {} : { 'aria-valuenow': pct }) } : {})}>
           <RingViz analyser={st?.cap?.analyser || null} mode={ringMode(l)} theme={theme} motion={reduced ? 'reduced' : undefined}
-            progress={(Number(st?.stage) + 1) / STAGES.length} flash={reduced ? null : st?.toast?.at ?? null} />
+            progress={progress} flash={reduced ? null : st?.toast?.at ?? null} />
+          {l.stopping && pct != null && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[30px] font-semibold tabular-nums" data-testid="processing-percent">{pct}%</div>
+          )}
           {!l.stopping && (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               <div role="timer" aria-live="off" aria-label={`Elapsed ${clock(elapsed)}`} data-testid="recording-clock"
@@ -254,11 +301,6 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
             </div>
           )}
         </div>
-        {l.stopping && (
-          <ol className="absolute inset-x-0 bottom-0 space-y-1 text-center text-[13px]" data-testid="stopping-stages">
-            {STAGES.map((x, i) => <li key={x} className={i === st.stage ? 'font-bold' : i < st.stage ? 'text-gray-400 line-through' : 'text-gray-400 dark:text-gray-500'}>{x}{i >= 2 ? ' · Not recorded' : ''}</li>)}
-          </ol>
-        )}
       </div>
 
       <div className="min-h-[56px] space-y-2 px-6 text-center text-[14px]" data-testid="recording-notes">
@@ -270,6 +312,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         {l.budget && <p className="text-amber-700 dark:text-amber-300" data-testid="recording-budget">Live captions stopped: your AI budget is spent. The recording continues, and the transcript appears when you stop.</p>}
         {l.shareNote && SHARE_NOTES[l.shareNote] && <p className="text-gray-600 dark:text-gray-300" data-testid="recording-share-note">{SHARE_NOTES[l.shareNote]}</p>}
         {st?.wake === 'unsupported' && (l.paused || st?.phase === 'recording') && <p className="text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="recording-wake">This browser cannot keep the screen on. Keep it awake so the recording continues.</p>}
+        {l.stopping && <ProcessingStages processing={st?.processing} stageAt={stageAt} onRetry={() => actions.retry?.()} />}
         {st?.error && <p role="alert" className="font-semibold text-red-700 dark:text-red-300" data-testid="recording-error">{st.error}</p>}
         {!l.share && !l.denied && !l.stopping && !l.offline && !l.opening && (
           liveOn && liveAvailable
