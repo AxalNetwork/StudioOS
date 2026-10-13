@@ -81,8 +81,8 @@ function appFor(m:Mods) {
  a.onError((e,c)=>c.json({error:e.message},500)); return a;
 }
 async function req(a:any,env:any,path:string,method='GET',body?:unknown,id=1,cookie='') {
- return a.request(path,{method,headers:{Authorization:'Bearer '+await auth(id),'X-Company-Id':'10','Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},
- ...(body===undefined?{}:{body:JSON.stringify(body)})},env);
+ try { return await a.request(path,{method,headers:{Authorization:'Bearer '+await auth(id),'X-Company-Id':'10','Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},
+ ...(body===undefined?{}:{body:JSON.stringify(body)})},env); } catch (e) { if (e instanceof Response) return e; throw e; }
 }
 function fake(mode='ok',capture?:(config:any)=>void) {
  registry.registerProvider({key:'slack',async buildAuthorizeUrl(_c,_u,state){return 'https://provider.example.test/authorize?state='+encodeURIComponent(state);},
@@ -195,7 +195,7 @@ async function mutant(check:Check):Promise<Mods>{
  const file=new URL(paths[check.module],import.meta.url);let source=readFileSync(file,'utf8');
  if(!source.includes(check.before))throw new Error('mutation_target_missing: '+check.name);
  source=stripTypeScriptTypes(source.replace(check.before,check.after),{mode:'strip'});
- source=source.replace(/(from\s*['"])([^'"]+)(['"])/g,(_all,begin,path,end)=>begin+(path.startsWith('.')?new URL(/\.(?:ts|mjs|js)$/.test(path)?path:path+'.ts',file).href:import.meta.resolve(path))+end);
+ source=source.replace(/^((?:import\s+[^'\";]+|export\s*\{[^}]*\})\s+from\s*['\"])([^'\"]+)(['\"])/gm,(_all,begin,path,end)=>begin+(path.startsWith('.')?new URL(/\.(?:ts|mjs|js)$/.test(path)?path:path+'.ts',file).href:import.meta.resolve(path))+end);
  const loaded=await import('data:text/javascript;base64,'+Buffer.from(source+'\n// mutant '+serial++).toString('base64'));
  return {...real,[check.module]:loaded};
 }
