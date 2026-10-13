@@ -14,7 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CHANNEL_PROVIDERS, accountName, botHandle, channelCard, meetingCard, pendingLabel, pendingTotal, readOverview,
+  CHANNEL_PROVIDERS, MEETING_NOTES, accountName, botHandle, channelCard, meetingCard, pendingLabel, pendingTotal, readOverview,
   safeTelegramUrl, telegramLinkView, telegramSteps, testOutcome, whatsappSignupConfig,
 } from '../src/pages/account/channelsModel.js';
 import {
@@ -22,9 +22,9 @@ import {
   signupLoginOptions,
 } from '../src/pages/account/whatsappSignup.js';
 import {
-  assignedSentence, callWhen, clientKeyFor, composerState, interviewOptions, keepKeyAfter, meetingBody, meetingError,
-  meetingItems, meetingProviders, meetingStatus, messageView, providerNote, replyOutcome, safeJoinUrl, scheduleRefusal,
-  sentLabel, sessionHref, threadItems, threadRow,
+  assignedSentence, callWhen, cancelOutcome, cancelQuestion, clientKeyFor, composerState, defaultMeetingForm, interviewOptions, keepKeyAfter,
+  meetingBody, meetingError, meetingItems, meetingProviders, meetingStatus, messageView, providerNote, replyFailureText, replyOutcome, safeJoinUrl,
+  scheduleRefusal, sentLabel, sessionHref, threadItems, threadRow, transcriptNote,
 } from '../src/pages/founder/channelThreads.js';
 import {
   CHANNEL_SOURCES, channelBadgeTitle, channelOf, openingStep, sessionBadge, sessionOrigin,
@@ -88,6 +88,7 @@ test('every channels call hits D684 §9’s method and path, with the body the W
     await channelsApi.scheduleMeeting(7, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: '30', topic: 'Interview' });
     await channelsApi.cancelMeeting(7, 'r 1');
     await channelsApi.importMeeting(7, 'r1');
+    await channelsApi.scheduleMeeting(7, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
   } finally { f.restore(); }
   assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), [
     'GET /channels', 'POST /channels/telegram/link', 'POST /channels/whatsapp/connect', 'DELETE /channels/telegram',
@@ -96,7 +97,10 @@ test('every channels call hits D684 §9’s method and path, with the body the W
     'POST /channels/threads/t1/ignore', 'POST /channels/threads/t1/reply',
     'GET /founder/validate/interviews/7/meetings', 'POST /founder/validate/interviews/7/meetings',
     'DELETE /founder/validate/interviews/7/meetings/r%201', 'POST /founder/validate/interviews/7/meetings/r1/import',
+    'POST /founder/validate/interviews/7/meetings',
   ]);
+  // Zoom's cloud recording reaches the Worker only when the member turned it on (`auto_record`, routes/founder_validate_meetings.ts).
+  assert.deepEqual(f.calls[17].body, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
   assert.deepEqual(f.calls[2].body, { code: 'c0de', waba_id: '1', phone_number_id: '2' });
   assert.deepEqual(f.calls[8].body, { interview_id: 7 });
   assert.deepEqual(f.calls[9].body, { create: { interviewee_name: 'Ada', project_id: 3 } });
@@ -209,9 +213,10 @@ test('the Zoom and Google Meet cards read availability from /api/channels and th
   assert.deepEqual([meet.state, meet.account, meet.connectorKey], ['connected', 'ada@example.test', 'google']);
   assert.equal(meetingCard('zoom', readOverview(RAW), catalogue).state, 'unavailable', 'Zoom is off on this deployment');
   assert.equal(meetingCard('zoom', o, []).state, 'unavailable', 'no Zoom in the registry yet');
-  const reconnect = meetingCard('google_meet', readOverview({ ...RAW, connections: { google_meet: { status: 'active', needs_reconnect: true } } }), catalogue);
-  assert.equal(reconnect.state, 'problem');
-  assert.match(reconnect.why, /Reconnect Google once so Axal can read Meet transcripts/);
+  // Reconnecting cannot give Axal Meet's transcript scope (no Google sign-in asks for it), so the card never asks for one.
+  const stale = meetingCard('google_meet', readOverview({ ...RAW, connections: { google_meet: { status: 'active', needs_reconnect: true } } }), catalogue);
+  assert.equal(stale.state, 'connected');
+  assert.doesNotMatch(String(stale.why ?? ''), /Reconnect/);
   assert.equal(meetingCard('google_meet', null, catalogue).state, 'unreadable');
 });
 
@@ -349,6 +354,8 @@ test('a thread row: contact, provider, message count, last message time; GET /th
 test('a message shows its side, and a voice note says it was transcribed', () => {
   assert.deepEqual(messageView({ uid: 'm1', side: 'contact', kind: 'voice', text: 'We lose a day a week.' }, 'Ada'), { uid: 'm1', mine: false, who: 'Ada', label: 'Voice note (transcribed)', text: 'We lose a day a week.' });
   assert.deepEqual(messageView({ uid: 'm2', side: 'me', kind: 'text', text: 'Thanks' }, 'Ada'), { uid: 'm2', mine: true, who: 'You', label: '', text: 'Thanks' });
+  // A pending chat's voice note waits, untranscribed, until the member adds the chat to an interview (threads.ts readThread).
+  assert.deepEqual(messageView({ uid: 'm4', side: 'contact', kind: 'voice', text: null, awaiting_transcription: true, duration_sec: 12 }, 'Ada'), { uid: 'm4', mine: false, who: 'Ada', label: 'Voice note, transcribed when you add this chat to an interview', text: null });
   assert.equal(messageView({ uid: 'm3', side: 'contact', kind: 'text', text: null }, '').text, null, 'an undecryptable message is said, not blank');
 });
 
@@ -375,7 +382,26 @@ test('a sent reply: Telegram is "Sent" whatever the answer says; only WhatsApp�
   assert.equal(replyOutcome('whatsapp', { ok: false, existing: true, outbound: { status: 'failed' } }).ok, false, 'a repeat of a failed key sent nothing');
 });
 
-test('the idempotency key: one per message, kept only when no answer came back', () => {
+test('a repeat whose first attempt is still pending is never "Sent": in flight keeps the key, unknown says to check the chat', () => {
+  // The Worker's answer for a key whose row is still 'pending' (routes/channels.ts).
+  const inFlight = replyOutcome('telegram', { ok: null, existing: true, pending: true, code: 'send_in_flight', outbound: { status: 'pending' } });
+  assert.equal(inFlight.ok, null);
+  assert.equal(inFlight.keepKey, true, 'the first attempt may still go: the next press only asks again');
+  assert.match(inFlight.text, /^Sending… Telegram has not confirmed it yet\. Press Send again in a moment to check: it will not send twice\.$/);
+  const unknown = replyOutcome('whatsapp', { ok: null, existing: true, pending: true, code: 'send_unknown', outbound: { status: 'pending' } });
+  assert.deepEqual([unknown.ok, unknown.keepKey], [null, false]);
+  assert.match(unknown.text, /^Not confirmed yet: check the chat in WhatsApp before sending again\./);
+  // A Worker without the explicit pending answer said ok: true for a pending row; that is not a provider's word either.
+  const older = replyOutcome('telegram', { ok: true, existing: true, outbound: { status: 'pending' } });
+  assert.notEqual(older.ok, true, 'a pending row is not Sent');
+  assert.equal(older.keepKey, false);
+  for (const ambiguous of [{}, { ok: true }, { ok: true, outbound: {} }, null]) {
+    assert.notEqual(replyOutcome('whatsapp', ambiguous).ok, true, `${JSON.stringify(ambiguous)} is not Sent`);
+  }
+  assert.equal(replyOutcome('whatsapp', { ok: true, outbound: { status: 'failed' } }).ok, false, 'a status report of failure is not Sent');
+});
+
+test('the idempotency key: one per message, dropped only after the Worker’s refusal (a 4xx with its code)', () => {
   let n = 0;
   const make = () => `k${++n}`;
   const first = clientKeyFor(null, make);
@@ -384,7 +410,18 @@ test('the idempotency key: one per message, kept only when no answer came back',
   assert.equal(keepKeyAfter(Object.assign(new Error('Network error'), {})), true, 'offline: the first try may have gone');
   assert.equal(keepKeyAfter(Object.assign(new Error('timeout'), { code: 'timeout' })), true);
   assert.equal(keepKeyAfter(Object.assign(new Error('closed'), { status: 409, code: 'window_closed' })), false, 'refused: that key is spent');
-  assert.equal(keepKeyAfter(Object.assign(new Error('busy'), { status: 503 })), false);
+  assert.equal(keepKeyAfter(Object.assign(new Error('Too many'), { status: 429, code: 'rate_limited' })), false);
+  assert.equal(keepKeyAfter(Object.assign(new Error('Gone'), { status: 404, code: 'thread_not_found' })), false);
+  // A 5xx can follow a send the provider took (a D1 error while recording it answers 500): the repeat must read that, not send again.
+  assert.equal(keepKeyAfter(Object.assign(new Error('Internal server error'), { status: 500 })), true);
+  assert.equal(keepKeyAfter(Object.assign(new Error('busy'), { status: 503 })), true);
+  assert.equal(keepKeyAfter(Object.assign(new Error('unreachable'), { status: 503, code: 'network' })), true);
+  assert.equal(keepKeyAfter(Object.assign(new Error('odd'), { status: 502, code: 'unexpected_response' })), true);
+  assert.equal(keepKeyAfter(Object.assign(new Error('Bad Request'), { status: 400 })), true, 'a 4xx without the Worker’s code is not its refusal');
+  assert.match(replyFailureText(Object.assign(new Error('Internal server error'), { status: 500 })), /^Axal could not confirm whether it went\. Press Send again to check: it will not send twice\.$/);
+  assert.equal(replyFailureText(Object.assign(new Error('The provider could not be reached. Try again in a minute.'), { status: 503, code: 'network' })), 'The provider could not be reached. Try again in a minute.');
+  assert.equal(replyFailureText(new Error('Network error')), 'Network error');
+  assert.match(replyFailureText({}), /^No answer came back/);
   assert.match(clientKeyFor(null), /^[0-9a-f-]{32,36}$/, 'crypto.randomUUID by default');
 });
 
@@ -469,6 +506,44 @@ test('every meeting status reads as a sentence, with what the member can do', ()
   }
 });
 
+test('a cancel says "Cancelled" only when the provider confirmed it; otherwise it says to delete the call there', () => {
+  assert.equal(cancelOutcome('zoom', { meeting: {}, provider_cancelled: true }).text, 'Cancelled in Zoom too: its link no longer works.');
+  assert.match(cancelOutcome('google_meet', { provider_cancelled: true }).text, /^Cancelled, and deleted from your Google Calendar\.$/);
+  // `false`: not connected, refused or unreachable; `null`: no provider call was made; nothing: an answer without it.
+  for (const r of [{ provider_cancelled: false }, { provider_cancelled: null }, {}, undefined]) {
+    const z = cancelOutcome('zoom', r);
+    assert.equal(z.tone, 'warn', JSON.stringify(r));
+    assert.match(z.text, /^Removed from Axal, but Zoom did not confirm the call was cancelled\. It may still exist in your Zoom account with a working link: delete it there\.$/);
+    assert.doesNotMatch(z.text, /^Cancelled/);
+    const g = cancelOutcome('google_meet', r);
+    assert.match(g.text, /may still be in your Google Calendar with a working Meet link: delete it there/);
+  }
+  // The question promises only what the Worker does: it asks the provider.
+  assert.equal(cancelQuestion('zoom'), 'Cancel this call? Axal also asks Zoom to cancel it.');
+  assert.match(cancelQuestion('google_meet'), /asks Google to delete it from your calendar/);
+  for (const p of ['zoom', 'google_meet']) assert.doesNotMatch(cancelQuestion(p), /stops working/);
+});
+
+test('the schedule form promises a transcript only when the provider will make one; Zoom records to the cloud only when asked', () => {
+  const zoomOff = transcriptNote('zoom', false);
+  assert.match(zoomOff, /Zoom makes a transcript only from a cloud recording\. Without it, no transcript comes into the session/);
+  assert.doesNotMatch(zoomOff, /transcript comes into that session/);
+  assert.equal(transcriptNote('zoom', undefined), zoomOff);
+  assert.match(transcriptNote('zoom', true), /Zoom records the call to the cloud, and when it ends Zoom’s transcript comes into that session[^]*paid plan with Audio transcript turned on/);
+  assert.match(transcriptNote('google_meet', true), /only when someone turns on transcription in the call/);
+  assert.equal(defaultMeetingForm().record, false, 'recording a customer is the member’s choice, never a default');
+  const now = Date.parse('2026-10-13T08:00:00Z');
+  const form = { provider: 'zoom', date: '2026-10-20', time: '09:30', duration: 30, consent: 'verbal' };
+  assert.equal(meetingBody({ ...form, record: true }, now).body.auto_record, true);
+  assert.equal('auto_record' in meetingBody({ ...form, record: false }, now).body, false);
+  assert.equal('auto_record' in meetingBody(form, now).body, false);
+  assert.equal('auto_record' in meetingBody({ ...form, provider: 'google_meet', record: true }, now).body, false, 'Meet has no cloud-recording setting');
+  assert.match(meetingBody({ ...form, consent: '', record: true }, now).error, /agreed to be recorded/, 'no consent, no recording');
+  assert.match(MEETING_NOTES.zoom, /Record in the cloud turned on/);
+  assert.doesNotMatch(MEETING_NOTES.zoom, /; its transcript comes in when the call ends/);
+  assert.match(MEETING_NOTES.google_meet, /only if someone turned on transcription in it/);
+});
+
 test('a bare error code is mapped or left out, never printed alone', () => {
   assert.match(meetingError({ error_code: 'meet_scope_missing' }), /Reconnect your account/);
   assert.match(meetingError({ last_error: 'zoom_not_connected' }), /not connected/);
@@ -501,10 +576,11 @@ test('the schedule form: local time to UTC, a future time, a duration; the refus
     { provider: 'google_meet', available: true, connected: true, transcript_access: 'missing' },
   ] });
   assert.equal(providerNote('zoom', ps.zoom), 'Connect Zoom in Account › Connectors first.');
-  assert.match(providerNote('google_meet', ps.google_meet), /reconnect Google in Account › Connectors before the call/);
+  assert.equal(providerNote('google_meet', ps.google_meet), 'Axal cannot import Google Meet transcripts yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.');
+  assert.doesNotMatch(providerNote('google_meet', ps.google_meet), /reconnect/i, 'a reconnect cannot help');
   assert.equal(providerNote('zoom', meetingProviders(null).zoom), '', 'an unread provider is not a "no"');
   assert.match(providerNote('zoom', { available: false }), /not set up on Axal yet/);
-  const notice = 'Google needs to be reconnected to allow transcripts: reconnect Google in Account › Connectors and allow Axal to read your Meet transcripts, then retry.';
+  const notice = 'Google Meet transcripts are not available on Axal yet, so this call’s transcript will not be imported. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.';
   const scheduledWithNotice = meetingStatus({ ...REF('scheduled'), provider: 'google_meet', error: notice }, now, () => 'Mon 20 Oct, 09:30');
   assert.equal(scheduledWithNotice.tone, 'warn');
   assert.equal(scheduledWithNotice.text, `Scheduled for Mon 20 Oct, 09:30. ${notice}`);

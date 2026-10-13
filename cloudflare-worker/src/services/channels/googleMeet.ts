@@ -8,18 +8,26 @@
  * `loadRefreshTokenExport` and refreshed with `refreshGoogleAccessToken`), and
  * its `calendar.events` scope is what creates the event with a Meet link.
  *
- * READING A TRANSCRIPT needs one more scope, `meetings.space.readonly`, which
- * that connection does not ask for today. The grant's scopes are recorded in
+ * READING A TRANSCRIPT needs one more scope, `meetings.space.readonly`, and no
+ * Axal consent screen asks for it yet: the incremental consent that will is
+ * #1585 (S18). Until it ships, reconnecting Google cannot grant it, so nothing
+ * here tells the member to. The grant's scopes are recorded in
  * `google_oauth_tokens.scope`; when they are recorded and lack it, nothing is
- * asked of Meet and the ref says, in plain words, that Google needs
- * reconnecting (`meet_scope_missing`). An older row with no recorded scopes is
- * tried, and Meet's 403 says the same thing. Adding the scope to the consent
- * screen is calendar.ts's to do (S01), not this file's.
+ * asked of Meet, the call can still be scheduled, and the ref says plainly
+ * that Meet transcripts are not available on Axal yet and that the recorder or
+ * a pasted conversation will do instead (`meet_transcripts_unavailable`,
+ * settled as `no_transcript`). An older row with no recorded scopes is tried,
+ * and Meet's 403 settles it the same way.
  *
  * NO PUSH. Meet tells nobody a transcript is ready without Workspace Events and
- * Pub/Sub, so the cron sweeps calls whose end has passed: a conference record
- * with a generated transcript queues `meeting_import`; none yet waits; none a
- * day after the call settles the ref as `no_transcript` with the reason.
+ * Pub/Sub, so the cron sweeps calls whose end has passed. Every conference on
+ * the link that started within six hours of the scheduled start is the call
+ * (rejoining after everyone left starts a new one), and every transcript of
+ * those is part of it (stopping and restarting transcription makes another).
+ * The import waits until each conference has ended and each transcript is
+ * generated, then imports all of them in time order; none yet waits; a day
+ * after the call it imports what was generated, or settles the ref as
+ * `no_transcript` with the reason.
  *
  * Meet REST v2 as read 2026-10-13 (developers.google.com/workspace/meet):
  *   conferenceRecords?filter=space.meeting_code="abc-mnop-xyz"
@@ -35,7 +43,7 @@ import {
 } from '../calendar';
 import { enqueueChannelJob, registerChannelJob, registerChannelSweep } from './jobs';
 import {
-  MeetingProviderError, dueRefs, meetingImportHandler, setRefStatus, touchRef,
+  MeetingProviderError, dueRefs, importMeetingRef, meetingImportHandler, setRefStatus, touchRef, withinCallSlot,
   type MeetingErrorCode, type MeetingRef, type TranscriptFetch,
 } from './meetings';
 import type { ImportedSegment } from './types';
@@ -46,7 +54,6 @@ const MEET_API = 'https://meet.googleapis.com/v2';
 /** Meet keeps records 30 days; a transcript is normally there within the hour. A day is the wait. */
 const GRACE_AFTER_END_MS = 24 * 60 * 60 * 1000;
 const MAX_RECORD_PAGES = 20;
-const RECORD_WINDOW_MS = 6 * 60 * 60 * 1000;
 const MAX_ENTRY_PAGES = 100;
 const MAX_PARTICIPANT_PAGES = 20;
 
@@ -192,9 +199,9 @@ interface Participant {
 }
 
 /**
- * GET on Meet. A 403 is read for its reason only: an insufficient scope is the
- * member's to fix by reconnecting; a disabled API is the owner's. Nothing of
- * the body goes further.
+ * GET on Meet. A 403 is read for its reason only: an insufficient scope means
+ * Meet transcripts are not available to Axal yet (no reconnect grants it); a
+ * disabled API is the owner's. Nothing of the body goes further.
  */
 async function meetGet<T>(token: string, path: string): Promise<T | null> {
   let res: Response;
@@ -209,7 +216,7 @@ async function meetGet<T>(token: string, path: string): Promise<T | null> {
   if (res.status === 403) {
     const body = await res.json().catch(() => null) as { error?: { details?: { reason?: string }[] } } | null;
     const disabled = (body?.error?.details ?? []).some((d) => d?.reason === 'SERVICE_DISABLED');
-    throw new MeetingProviderError(disabled ? 'meet_api_disabled' : 'meet_scope_missing', false);
+    throw new MeetingProviderError(disabled ? 'meet_api_disabled' : 'meet_transcripts_unavailable', false);
   }
   if (res.status === 429 || res.status >= 500) throw new MeetingProviderError('meet_unreachable', true);
   throw new MeetingProviderError('meet_fetch_failed', false);
@@ -217,14 +224,19 @@ async function meetGet<T>(token: string, path: string): Promise<T | null> {
 
 const ms = (iso: string | undefined) => (iso ? Date.parse(iso) : NaN);
 
-interface Found { records: ConferenceRecord[]; ready: { record: ConferenceRecord; transcript: Transcript }[] }
+interface Found {
+  records: ConferenceRecord[];
+  ready: { record: ConferenceRecord; transcript: Transcript }[];
+  /** Transcripts of the call not generated yet (started, or ended and still being written). */
+  pending: number;
+}
 
 /** The call's conference records and, of their transcripts, those whose file is generated. */
 async function findTranscripts(token: string, meetingCode: string, ref: MeetingRef): Promise<Found> {
-  // A Meet link may be used again. Only the conference nearest this scheduled
-  // interview can supply its transcript; older uses of the link are unrelated.
-  const scheduled = ms(ref.starts_at ?? undefined);
-  if (!Number.isFinite(scheduled)) return { records: [], ready: [] };
+  // A Meet link may be used again. Only conferences that started within this
+  // interview's slot are its call (a rejoin after everyone left is a second
+  // one); other uses of the link are unrelated (`withinCallSlot`).
+  if (!Number.isFinite(ms(ref.starts_at ?? undefined))) return { records: [], ready: [], pending: 0 };
   const candidates: ConferenceRecord[] = [];
   let pageToken = '';
   for (let page = 0; page < MAX_RECORD_PAGES; page++) {
@@ -234,27 +246,35 @@ async function findTranscripts(token: string, meetingCode: string, ref: MeetingR
     pageToken = String(list?.nextPageToken ?? '');
     if (!pageToken) break;
   }
-  const records = candidates.filter((r) => Number.isFinite(ms(r.startTime))
-      && Math.abs(ms(r.startTime) - scheduled) <= RECORD_WINDOW_MS)
-    .sort((a, b) => Math.abs(ms(a.startTime) - scheduled) - Math.abs(ms(b.startTime) - scheduled))
-    .slice(0, 1);
+  const records = candidates.filter((r) => withinCallSlot(ms(r.startTime), ref))
+    .sort((a, b) => ms(a.startTime) - ms(b.startTime));
   const ready: Found['ready'] = [];
+  let pending = 0;
   for (const record of records) {
     const t = await meetGet<{ transcripts?: Transcript[] }>(token, `/${record.name}/transcripts`);
-    for (const transcript of t?.transcripts ?? []) {
-      if (transcript?.state === 'FILE_GENERATED' && TRANSCRIPT_NAME.test(String(transcript.name ?? ''))) {
-        ready.push({ record, transcript });
-      }
+    const transcripts = (t?.transcripts ?? []).filter((x) => TRANSCRIPT_NAME.test(String(x?.name ?? '')))
+      .sort((a, b) => (ms(a.startTime) || 0) - (ms(b.startTime) || 0));
+    for (const transcript of transcripts) {
+      if (transcript.state === 'FILE_GENERATED') ready.push({ record, transcript });
+      else pending += 1;
     }
   }
-  return { records, ready };
+  return { records, ready, pending };
 }
 
-/** Ready to import, still worth waiting for, or settled with the reason there is none. */
+/**
+ * Ready to import, still worth waiting for, or settled with the reason there
+ * is none. Within the day after the call, a part still under way (a conference
+ * not ended, a transcript not generated) is waited for, so an import never
+ * settles the call on its first part and leaves the rest behind; after that,
+ * what was generated is imported.
+ */
 function settle(found: Found, ref: MeetingRef, now: number): 'ready' | 'wait' | MeetingErrorCode {
-  if (found.ready.length) return 'ready';
   const end = ms(ref.ends_at ?? undefined);
-  if (!Number.isFinite(end) || now - end < GRACE_AFTER_END_MS) return 'wait';
+  const inGrace = !Number.isFinite(end) || now - end < GRACE_AFTER_END_MS;
+  const underWay = found.pending > 0 || found.records.some((r) => !r.endTime);
+  if (found.ready.length && !(inGrace && underWay)) return 'ready';
+  if (inGrace) return 'wait';
   return found.records.length ? 'meet_no_transcript' : 'meet_no_record';
 }
 
@@ -316,7 +336,7 @@ async function meetAccess(env: Env, ref: MeetingRef): Promise<{ token: string; c
   if (!code) return { fail: 'meet_no_record', retryable: false };
   const conn = await googleConnection(env, Number(ref.user_id));
   if (!conn) return { fail: 'meet_not_connected', retryable: false };
-  if (transcriptAccess(conn) === 'missing') return { fail: 'meet_scope_missing', retryable: false };
+  if (transcriptAccess(conn) === 'missing') return { fail: 'meet_transcripts_unavailable', retryable: false };
   try {
     return { token: await accessToken(env, conn.userId), code };
   } catch (e) {
@@ -325,11 +345,25 @@ async function meetAccess(env: Env, ref: MeetingRef): Promise<{ token: string; c
   }
 }
 
+/**
+ * Reasons that settle a call rather than fail it: there is nothing the member
+ * can retry or reconnect their way out of, only the recorder or a paste.
+ */
+const SETTLES = new Set<MeetingErrorCode>(['meet_no_record', 'meet_transcripts_unavailable']);
+
 /** A Meet call's transcript, through the member's own Google connection. */
 export async function fetchTranscript(env: Env, ref: MeetingRef, _hint: Record<string, unknown>, now = Date.now()): Promise<TranscriptFetch> {
   const access = await meetAccess(env, ref);
-  if ('fail' in access) return { kind: 'error', code: access.fail, retryable: access.retryable };
-  const found = await findTranscripts(access.token, access.code, ref);
+  if ('fail' in access) {
+    return SETTLES.has(access.fail) ? { kind: 'none', code: access.fail } : { kind: 'error', code: access.fail, retryable: access.retryable };
+  }
+  let found: Found;
+  try {
+    found = await findTranscripts(access.token, access.code, ref);
+  } catch (e) {
+    if (e instanceof MeetingProviderError && SETTLES.has(e.code)) return { kind: 'none', code: e.code };
+    throw e;
+  }
   const state = settle(found, ref, now);
   if (state === 'wait') return { kind: 'waiting' };
   if (state !== 'ready') return { kind: 'none', code: state };
@@ -337,7 +371,8 @@ export async function fetchTranscript(env: Env, ref: MeetingRef, _hint: Record<s
   return segments.length ? { kind: 'segments', segments } : { kind: 'none', code: 'transcript_empty' };
 }
 
-registerChannelJob('meeting_import', 'google_meet', meetingImportHandler('google_meet', fetchTranscript));
+registerChannelJob('meeting_import', 'google_meet',
+  meetingImportHandler('google_meet', (env, ref, hint) => importMeetingRef(env, ref, fetchTranscript, hint)));
 
 // ───────────────────────────────────────────────────────────── the sweep
 
@@ -347,20 +382,20 @@ export type SweepResult = 'queued' | 'waiting' | 'no_transcript' | 'failed' | 's
 async function sweepOne(env: Env, ref: MeetingRef, now: Date): Promise<SweepResult> {
   // Touched first: a ref that throws below is not looked at again for ten minutes.
   await touchRef(env, ref.id);
+  const settleOn = async (code: MeetingErrorCode, retryable: boolean): Promise<SweepResult> => {
+    if (retryable) return 'skipped';
+    const status = SETTLES.has(code) ? 'no_transcript' : 'failed';
+    await setRefStatus(env, ref.id, status, code);
+    return status;
+  };
   const access = await meetAccess(env, ref);
-  if ('fail' in access) {
-    if (access.retryable) return 'skipped';
-    await setRefStatus(env, ref.id, access.fail === 'meet_no_record' ? 'no_transcript' : 'failed', access.fail);
-    return access.fail === 'meet_no_record' ? 'no_transcript' : 'failed';
-  }
+  if ('fail' in access) return settleOn(access.fail, access.retryable);
   let found: Found;
   try {
     found = await findTranscripts(access.token, access.code, ref);
   } catch (e) {
     if (!(e instanceof MeetingProviderError)) throw e;
-    if (e.retryable) return 'skipped';
-    await setRefStatus(env, ref.id, 'failed', e.code);
-    return 'failed';
+    return settleOn(e.code, e.retryable);
   }
   const state = settle(found, ref, now.getTime());
   if (state === 'wait') {

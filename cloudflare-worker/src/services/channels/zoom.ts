@@ -19,11 +19,17 @@
  *             is claimed once (`claimEvent`) and queues `meeting_import` with
  *             the ref's uid; the job asks Zoom for the recording list WITH THE
  *             MEMBER'S TOKEN and downloads the VTT, so the queue carries ids,
- *             never a transcript or a download link.
+ *             never a transcript or a download link. A call ended and started
+ *             again on its link has more than one instance; each is imported,
+ *             none over another (see "a restarted call" below).
  *
  * A call with no cloud transcript sends no event at all, so a sweep asks once
  * a day after the call should have ended, and the ref then says why there is
  * none in plain words.
+ *
+ * The access token is refreshed under a lease held in the connection's own
+ * credentials (`accessToken`), so a rotating refresh token is spent once; a
+ * disconnect revokes the refresh token, not only the short-lived access token.
  *
  * UNVERIFIED (no Zoom app exists yet; re-check when the owner creates it):
  *   - Scope names. The registry asks for granular scopes as a General app
@@ -45,12 +51,13 @@ import {
 } from '../../integrations/registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../../integrations/secrets';
 import { constantTimeEqual } from '../../rpc/secret';
+import { IntakeError, openSession, writableInterview } from '../interviewIntake';
 import { claimEvent, finishEvent, releaseEvent } from './events';
 import { enqueueChannelJob, registerChannelJob, registerChannelSweep } from './jobs';
 import { providerAvailable } from './connections';
 import {
-  MeetingProviderError, dueRefs, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef,
-  type MeetingRef, type TranscriptFetch,
+  MeetingProviderError, cancelRef, dueRefs, importMeetingRef, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef, withinCallSlot,
+  type ImportOutcome, type MeetingErrorCode, type MeetingRef, type TranscriptFetch, type TranscriptFetcher,
 } from './meetings';
 import type { ImportedSegment } from './types';
 
@@ -148,16 +155,42 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   };
 }
 
-/** Best-effort: Zoom forgets the grant. A failure leaves only an unused token behind. */
-async function revokeToken(env: Env, token: string): Promise<void> {
-  if (!token) return;
+/** POST /oauth/revoke for one token. True when Zoom accepted it; a refusal is logged by kind and status only. */
+async function revokeToken(env: Env, token: string, kind: 'refresh' | 'access'): Promise<boolean> {
+  if (!token) return false;
   try {
-    await fetch(`${ZOOM_AUTH}/oauth/revoke`, {
+    const res = await fetch(`${ZOOM_AUTH}/oauth/revoke`, {
       method: 'POST',
       headers: { Authorization: basicAuth(env), 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ token }),
     });
-  } catch { /* best-effort */ }
+    if (res.ok) return true;
+    console.warn(`[zoom] revoke_refused kind=${kind} status=${res.status}`);
+  } catch {
+    console.warn(`[zoom] revoke_unreachable kind=${kind}`);
+  }
+  return false;
+}
+
+/**
+ * Best-effort: Zoom forgets the grant, so the app no longer acts on the
+ * member's account. The stored access token has usually expired by the time a
+ * member disconnects (it lives an hour and is refreshed only when used), and
+ * Zoom will not revoke an expired one, so the refresh token — which lives for
+ * months — is revoked first. If Zoom refuses that, a live access token is
+ * revoked instead: the stored one while it lasts, else one refreshed for the
+ * purpose. UNVERIFIED (no Zoom app yet): whether /oauth/revoke takes a refresh
+ * token; the access-token fallback covers it either way.
+ */
+async function revokeGrant(env: Env, creds: CredentialBlob | null): Promise<void> {
+  const refresh = typeof creds?.refresh_token === 'string' ? creds.refresh_token : '';
+  if (await revokeToken(env, refresh, 'refresh')) return;
+  let access = liveToken(creds);
+  if (!access && refresh) {
+    try { access = (await tokenRequest(env, { grant_type: 'refresh_token', refresh_token: refresh })).access_token; }
+    catch { /* the grant is already gone, or Zoom is away: the stored token is the last try */ }
+  }
+  await revokeToken(env, access || (typeof creds?.access_token === 'string' ? creds.access_token : ''), 'access');
 }
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
@@ -182,11 +215,10 @@ registerProvider({
   connect,
   buildAuthorizeUrl,
   async revokeGranted(env, result) {
-    await revokeToken(env, typeof result.credentials.access_token === 'string' ? result.credentials.access_token : '');
+    await revokeGrant(env, result.credentials);
   },
   async disconnect(c, _user, row) {
-    const creds = await decryptCredentials(c.env, row.uid, row.credentials_enc);
-    await revokeToken(c.env, typeof creds?.access_token === 'string' ? creds.access_token : '');
+    await revokeGrant(c.env, await decryptCredentials(c.env, row.uid, row.credentials_enc));
   },
 });
 
@@ -208,62 +240,121 @@ function liveToken(creds: CredentialBlob | null): string {
   return at && exp - Date.now() > 60_000 ? at : '';
 }
 
-async function readCreds(env: Env, conn: ZoomConnection): Promise<CredentialBlob | null> {
+/** The stored credentials as read: the exact ciphertext (what a swap compares) and what it holds. */
+interface StoredCreds { enc: string; creds: CredentialBlob }
+
+async function readCreds(env: Env, conn: ZoomConnection): Promise<StoredCreds | null> {
   const row = await env.DB.prepare('SELECT credentials_enc FROM integrations WHERE id = ?')
     .bind(conn.id).first<{ credentials_enc: string | null }>();
-  return decryptCredentials(env, conn.uid, row?.credentials_enc ?? null);
+  const enc = row?.credentials_enc ?? '';
+  const creds = enc ? await decryptCredentials(env, conn.uid, enc) : null;
+  return creds ? { enc, creds } : null;
+}
+
+/**
+ * Replace the stored credentials only if they are still exactly `from`: true
+ * when this write landed. Each encryption has a fresh nonce, so two writers
+ * never produce the same ciphertext and only one swap from a given read lands.
+ */
+async function swapCreds(env: Env, conn: ZoomConnection, from: string, to: string, settled = false): Promise<boolean> {
+  const res = await env.DB.prepare(
+    `UPDATE integrations SET credentials_enc = ?, last_error = CASE WHEN ? = 1 THEN NULL ELSE last_error END,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND credentials_enc = ?`,
+  ).bind(to, settled ? 1 : 0, conn.id, from).run();
+  return Number(res.meta?.changes ?? 0) > 0;
+}
+
+/** How long one refresh may hold the connection; a holder that died frees it after this. */
+const REFRESH_LEASE_MS = 30_000;
+const LEASE_POLL_MS = 500;
+const LEASE_POLLS = 12;
+
+/** The request holding a live refresh lease on these credentials, or null. */
+function leaseHolder(creds: CredentialBlob): string | null {
+  const lease = creds.refresh_lease as { holder?: unknown; until?: unknown } | undefined;
+  return lease && typeof lease.holder === 'string' && Number(lease.until) > Date.now() ? lease.holder : null;
+}
+
+function withoutLease(creds: CredentialBlob): CredentialBlob {
+  const { refresh_lease: _lease, ...rest } = creds;
+  return rest as CredentialBlob;
 }
 
 /**
  * A live access token for the connection, refreshed when within a minute of
- * expiry. Zoom rotates the refresh token on every use, so two isolates
- * refreshing at once would strand one of them: a short KV lease serialises
- * them, and a loser re-reads what the winner stored (the HubSpot pattern).
+ * expiry. Zoom rotates the refresh token on every use, so a refresh token must
+ * be spent by one request only.
+ *
+ * THE LEASE lives in the connection's own encrypted credentials: a request
+ * takes it by swapping the credentials it read for a copy that names it and
+ * when the lease ends (`swapCreds`, a compare-and-swap D1 runs as one write),
+ * so exactly one request holds it. Every other request re-reads the stored
+ * credentials until a live token appears or the lease is given back, and
+ * never refreshes without holding it; one that waits too long gets a retryable
+ * failure, not a refresh. The holder stores the new pair with a swap from its
+ * leased copy, so credentials a reconnect wrote meanwhile are never
+ * overwritten. A refused refresh is called `zoom_reconnect` only when the
+ * refresh token it spent is still the stored one: if another writer stored a
+ * newer pair, that pair is used instead.
  */
 async function accessToken(env: Env, conn: ZoomConnection): Promise<string> {
-  const creds = await decryptCredentials(env, conn.uid, conn.credentials_enc);
-  if (!creds) throw new MeetingProviderError('zoom_reconnect', false);
-  const live = liveToken(creds);
+  const first = await decryptCredentials(env, conn.uid, conn.credentials_enc);
+  if (!first) throw new MeetingProviderError('zoom_reconnect', false);
+  const live = liveToken(first);
   if (live) return live;
 
-  const lockKey = `zoom:refresh:${conn.uid}`;
   const holder = crypto.randomUUID();
-  let acquired = false;
-  let leaseless = false;
-  try {
-    if (!(await env.RATE_LIMITS.get(lockKey))) {
-      await env.RATE_LIMITS.put(lockKey, holder, { expirationTtl: 30 });
-      acquired = (await env.RATE_LIMITS.get(lockKey)) === holder;
+  let held: { enc: string; creds: CredentialBlob } | null = null;
+  for (let poll = 0; poll <= LEASE_POLLS && !held; poll++) {
+    const now = await readCreds(env, conn);
+    if (!now) throw new MeetingProviderError('zoom_reconnect', false);
+    const token = liveToken(now.creds);
+    if (token) return token;
+    if (leaseHolder(now.creds)) {
+      if (poll < LEASE_POLLS) await new Promise((r) => setTimeout(r, LEASE_POLL_MS));
+      continue;
     }
-  } catch { leaseless = true; /* no lease to wait on: refresh ourselves */ }
-  if (!acquired && !leaseless) {
-    for (let i = 0; i < 6; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      const after = liveToken(await readCreds(env, conn));
-      if (after) return after;
-    }
+    const creds = withoutLease(now.creds);
+    const leased = await encryptCredentials(env, conn.uid, { ...creds, refresh_lease: { holder, until: Date.now() + REFRESH_LEASE_MS } });
+    // A lost swap means another request wrote first: the next read shows what.
+    if (await swapCreds(env, conn, now.enc, leased)) held = { enc: leased, creds };
   }
+  // Another request is still refreshing: its token will be there on a retry.
+  if (!held) throw new MeetingProviderError('zoom_unreachable', true);
+
+  const sent = typeof held.creds.refresh_token === 'string' ? held.creds.refresh_token : '';
+  let tok: ZoomTokenResponse;
   try {
-    const fresh = (await readCreds(env, conn)) ?? creds;
-    const already = liveToken(fresh);
-    if (already) return already;
-    const refreshToken = typeof fresh.refresh_token === 'string' ? fresh.refresh_token : '';
-    if (!refreshToken) throw new MeetingProviderError('zoom_reconnect', false);
-    const tok = await tokenRequest(env, { grant_type: 'refresh_token', refresh_token: refreshToken });
-    const next: CredentialBlob = {
-      ...fresh,
-      access_token: tok.access_token,
-      refresh_token: tok.refresh_token || refreshToken,
-      token_type: 'bearer',
-      expires_at: Date.now() + Math.max(60, Number(tok.expires_in) || 3600) * 1000,
-    };
-    await env.DB.prepare(
-      'UPDATE integrations SET credentials_enc = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    ).bind(await encryptCredentials(env, conn.uid, next), conn.id).run();
-    return tok.access_token;
-  } finally {
-    if (acquired) { try { await env.RATE_LIMITS.delete(lockKey); } catch { /* expires in 30 s */ } }
+    if (!sent) throw new MeetingProviderError('zoom_reconnect', false);
+    tok = await tokenRequest(env, { grant_type: 'refresh_token', refresh_token: sent });
+  } catch (e) {
+    // Give the lease back. If that swap does not land, someone stored other
+    // credentials meanwhile; a refusal of a refresh token that is no longer the
+    // stored one says nothing about the connection.
+    const released = await swapCreds(env, conn, held.enc, await encryptCredentials(env, conn.uid, held.creds));
+    if (!released && e instanceof MeetingProviderError && e.code === 'zoom_reconnect') {
+      const now = await readCreds(env, conn);
+      if (now && now.creds.refresh_token !== sent) {
+        const theirs = liveToken(now.creds);
+        if (theirs) return theirs;
+        throw new MeetingProviderError('zoom_unreachable', true);
+      }
+    }
+    throw e;
   }
+  const next: CredentialBlob = {
+    ...held.creds,
+    access_token: tok.access_token,
+    refresh_token: tok.refresh_token || sent,
+    token_type: 'bearer',
+    expires_at: Date.now() + Math.max(60, Number(tok.expires_in) || 3600) * 1000,
+  };
+  if (await swapCreds(env, conn, held.enc, await encryptCredentials(env, conn.uid, next), true)) return tok.access_token;
+  // The credentials changed under the lease (the member reconnected, or the
+  // lease ran out and another request took it): what is stored stands.
+  const now = await readCreds(env, conn);
+  return (now && liveToken(now.creds)) || tok.access_token;
 }
 
 async function zoomApi(env: Env, conn: ZoomConnection, path: string, init: RequestInit = {}): Promise<Response> {
@@ -415,11 +506,14 @@ export async function handleZoomWebhook(env: Env, rawBody: string, headers: Head
       await finishEvent(env, claim, 'done', who);
       return { status: 200, body: { ok: true } };
     }
-    if (ref.status === 'imported' || ref.status === 'cancelled') {
+    if (ref.status === 'cancelled') {
       await finishEvent(env, claim, 'ignored', who);
       return { status: 200, body: { ok: true, ignored: ref.status } };
     }
-    await setRefStatus(env, ref.id, 'transcript_ready', null);
+    // An imported call still takes this event: a new uuid is another instance
+    // of the call (it was ended and started again on the same link), and its
+    // import adds that part beside the first rather than replacing it.
+    if (ref.status !== 'imported') await setRefStatus(env, ref.id, 'transcript_ready', null);
     await enqueueChannelJob(env, 'meeting_import', 'zoom', `${ref.uid}:${uuid || meetingId}`, {
       refUid: ref.uid, meetingUuid: uuid || null,
     });
@@ -554,17 +648,17 @@ async function downloadTranscript(env: Env, conn: ZoomConnection, url: URL): Pro
   return readCapped(res);
 }
 
+/** One meeting instance's recordings, as Zoom lists them: its uuid, when it started, its files. */
+type Recordings =
+  | { kind: 'instance'; uuid: string; startTime: string; files: RecordingFile[] }
+  | Extract<TranscriptFetch, { kind: 'none' | 'error' }>;
+
 /**
- * A Zoom call's transcript, through the member's own connection: the
- * meeting's recording list (the instance the webhook named, else the latest),
- * its TRANSCRIPT file (the audio transcript; a CC file, Zoom's live captions,
- * when there is no transcript), parsed.
+ * GET /meetings/{id}/recordings with the member's token. `id` is an instance's
+ * uuid, or the meeting id — which Zoom answers with its LATEST instance only.
  */
-export async function fetchTranscript(env: Env, ref: MeetingRef, hint: Record<string, unknown>): Promise<TranscriptFetch> {
-  const conn = await zoomConnection(env, Number(ref.user_id));
-  if (!conn) return { kind: 'error', code: 'zoom_not_connected', retryable: false };
-  const uuid = typeof hint.meetingUuid === 'string' && hint.meetingUuid ? hint.meetingUuid : '';
-  const res = await zoomApi(env, conn, `/meetings/${meetingPathId(uuid || ref.external_ref)}/recordings`);
+async function listRecordings(env: Env, conn: ZoomConnection, id: string): Promise<Recordings> {
+  const res = await zoomApi(env, conn, `/meetings/${meetingPathId(id)}/recordings`);
   // 404 / Zoom code 3301: no recording for this meeting at all.
   if (res.status === 404) return { kind: 'none', code: 'zoom_no_transcript' };
   if (res.status === 400 || res.status === 403) {
@@ -576,8 +670,20 @@ export async function fetchTranscript(env: Env, ref: MeetingRef, hint: Record<st
     return { kind: 'error', code: reconnect ? 'zoom_reconnect' : 'zoom_fetch_failed', retryable: false };
   }
   if (!res.ok) throw zoomFailure(res.status, 'zoom_fetch_failed');
-  const body = await res.json().catch(() => null) as { recording_files?: RecordingFile[] } | null;
-  const files = Array.isArray(body?.recording_files) ? body!.recording_files : [];
+  const body = await res.json().catch(() => null) as { uuid?: unknown; start_time?: unknown; recording_files?: RecordingFile[] } | null;
+  return {
+    kind: 'instance',
+    uuid: String(body?.uuid ?? '').trim().slice(0, 100),
+    startTime: String(body?.start_time ?? ''),
+    files: Array.isArray(body?.recording_files) ? body!.recording_files : [],
+  };
+}
+
+/**
+ * An instance's TRANSCRIPT file (the audio transcript; a CC file, Zoom's live
+ * captions, when there is no transcript), downloaded and parsed.
+ */
+async function transcriptOf(env: Env, conn: ZoomConnection, files: RecordingFile[]): Promise<TranscriptFetch> {
   const vttFiles = (type: string) => files.filter((f) => String(f.file_type ?? '').toUpperCase() === type);
   const candidates = vttFiles('TRANSCRIPT').length ? vttFiles('TRANSCRIPT') : vttFiles('CC');
   const ready = candidates.find((f) => (f.status ?? 'completed') === 'completed' && zoomDownloadUrl(f.download_url));
@@ -588,7 +694,201 @@ export async function fetchTranscript(env: Env, ref: MeetingRef, hint: Record<st
   return segments.length ? { kind: 'segments', segments } : { kind: 'none', code: 'transcript_empty' };
 }
 
-registerChannelJob('meeting_import', 'zoom', meetingImportHandler('zoom', fetchTranscript));
+/** Whether an instance's files hold a transcript at all (made, or still being made). */
+const hasTranscriptFile = (files: RecordingFile[]) =>
+  files.some((f) => ['TRANSCRIPT', 'CC'].includes(String(f.file_type ?? '').toUpperCase()));
+
+/**
+ * A Zoom call's transcript, through the member's own connection: one
+ * instance's recording list — an instance ref's own uuid, else the instance
+ * the webhook named, else the meeting's latest — and its transcript.
+ */
+export async function fetchTranscript(env: Env, ref: MeetingRef, hint: Record<string, unknown>): Promise<TranscriptFetch> {
+  const conn = await zoomConnection(env, Number(ref.user_id));
+  if (!conn) return { kind: 'error', code: 'zoom_not_connected', retryable: false };
+  const uuid = typeof hint.meetingUuid === 'string' && hint.meetingUuid ? hint.meetingUuid : '';
+  const listed = await listRecordings(env, conn, instanceOf(ref)?.uuid || uuid || ref.external_ref);
+  return listed.kind === 'instance' ? transcriptOf(env, conn, listed.files) : listed;
+}
+
+// ───────────────────────────────────────────────────────────── a restarted call
+
+/**
+ * A Zoom link outlives its first use: ending the call and starting it again on
+ * the same link makes another INSTANCE of the meeting (same meeting id, new
+ * uuid), with its own recording and its own transcript_completed event. Every
+ * instance of the interview's call is imported, and none replaces another:
+ *
+ *   · Each instance is a ref of its own, external_ref `{meeting id}:{uuid}`,
+ *     made the first time its transcript is looked for. The refs'
+ *     UNIQUE(provider, external_ref) makes that once, however many jobs race.
+ *   · The first instance takes the call's own session, and the scheduled ref
+ *     shows its state. A later one opens a session of its own on the same
+ *     interview, with the call's consent, and is listed beside the call. Each
+ *     import replaces only its own session's segments.
+ *   · From then on an instance is fetched by its own uuid — by its job, its
+ *     retry and the sweep — never as "the meeting's latest", which after a
+ *     restart is another instance.
+ *
+ * Only an instance that started within the scheduled slot (`withinCallSlot`)
+ * is this interview's call; a later use of the link is another conversation.
+ * An instance with no transcript file gets no ref and no session, and a call
+ * the member cancelled imports none of its instances.
+ */
+const INSTANCE_REF = /^(\d{6,20}):(.+)$/;
+
+/** The meeting id and uuid an instance ref names; null for the scheduled call's own ref. */
+export function instanceOf(ref: Pick<MeetingRef, 'provider' | 'external_ref'>): { meetingId: string; uuid: string } | null {
+  const m = ref.provider === 'zoom' ? INSTANCE_REF.exec(String(ref.external_ref ?? '')) : null;
+  return m ? { meetingId: m[1], uuid: m[2] } : null;
+}
+
+/** The instance holding the call's own session, once one does. */
+async function ownInstance(env: Env, call: MeetingRef): Promise<MeetingRef | null> {
+  return (await env.DB.prepare(
+    `SELECT * FROM interview_channel_refs
+      WHERE provider = 'zoom' AND session_id = ? AND id <> ? AND external_ref LIKE ?
+      ORDER BY id LIMIT 1`,
+  ).bind(call.session_id, call.id, `${call.external_ref}:%`).first<MeetingRef>()) ?? null;
+}
+
+/**
+ * The instance ref for `uuid`, made if it is not there yet: on the call's own
+ * session when no instance holds it (one INSERT … WHERE NOT EXISTS, so two
+ * instances racing cannot both take it), else on a new session. A session
+ * made for a ref another request stored first is deleted again, still empty.
+ */
+async function bindInstance(env: Env, call: MeetingRef, uuid: string): Promise<MeetingRef> {
+  const key = `${call.external_ref}:${uuid}`;
+  const found = await refByExternal(env, 'zoom', key);
+  if (found) return found;
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO interview_channel_refs
+       (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status)
+     SELECT ?, 'zoom', ?, c.session_id, c.interview_id, c.user_id, c.join_url, c.starts_at, c.ends_at, 'transcript_ready'
+       FROM interview_channel_refs c
+      WHERE c.id = ? AND c.status NOT IN ('imported', 'cancelled')
+        AND NOT EXISTS (SELECT 1 FROM interview_channel_refs o WHERE o.session_id = c.session_id AND o.id <> c.id)`,
+  ).bind(crypto.randomUUID(), key, call.id).run();
+  const own = await refByExternal(env, 'zoom', key);
+  if (own) return own;
+
+  // Re-checks that the interview is still the member's to write (IntakeError if not).
+  const scoped = await writableInterview(env, Number(call.user_id), Number(call.interview_id));
+  const consent = await env.DB.prepare('SELECT consent_status, consent_method FROM interview_sessions WHERE id = ?')
+    .bind(call.session_id).first<{ consent_status: string | null; consent_method: string | null }>();
+  const session = await openSession(env, scoped, 'zoom', 'video',
+    consent?.consent_status === 'given' && consent.consent_method ? { method: consent.consent_method } : null);
+  const res = await env.DB.prepare(
+    `INSERT OR IGNORE INTO interview_channel_refs
+       (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status)
+     SELECT ?, 'zoom', ?, ?, c.interview_id, c.user_id, c.join_url, c.starts_at, c.ends_at, 'transcript_ready'
+       FROM interview_channel_refs c WHERE c.id = ?`,
+  ).bind(crypto.randomUUID(), key, session.id, call.id).run();
+  if (!Number(res.meta?.changes ?? 0)) {
+    await env.DB.prepare(
+      'DELETE FROM interview_sessions WHERE id = ? AND NOT EXISTS (SELECT 1 FROM interview_transcript_segments WHERE session_id = ?)',
+    ).bind(session.id, session.id).run();
+  }
+  const bound = await refByExternal(env, 'zoom', key);
+  if (!bound) throw new Error('zoom_instance_not_stored');
+  return bound;
+}
+
+/** The call shows its first instance's state: copied onto the scheduled ref that shares its session. */
+async function mirrorOnCall(env: Env, instance: MeetingRef): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE interview_channel_refs
+        SET status = (SELECT status FROM interview_channel_refs WHERE id = ?),
+            last_error = (SELECT last_error FROM interview_channel_refs WHERE id = ?),
+            updated_at = datetime('now')
+      WHERE session_id = ? AND id <> ? AND status NOT IN ('imported', 'cancelled')
+        AND (SELECT status FROM interview_channel_refs WHERE id = ?) <> 'cancelled'`,
+  ).bind(instance.id, instance.id, instance.session_id, instance.id, instance.id).run();
+}
+
+async function importInstance(env: Env, instance: MeetingRef, fetcher: TranscriptFetcher): Promise<ImportOutcome> {
+  const out = await importMeetingRef(env, instance, fetcher);
+  await mirrorOnCall(env, instance);
+  return out;
+}
+
+const SKIPPED: ImportOutcome = { status: 'skipped', code: null, retryable: false, segments: 0 };
+
+/**
+ * Import a Zoom ref: the `meeting_import` job, the sweep and the retry route
+ * all run this. An instance ref imports its own uuid. The scheduled call
+ * imports the instance the job names (`meetingUuid`); without one (a retry, a
+ * sweep) its own instance again, by uuid, or — before any is known — the
+ * meeting's latest. The outcome of an instance is written to that instance;
+ * a failure before any instance is known is written to the call, unless the
+ * call already holds its own instance and this is a later one's event.
+ */
+export async function importZoomRef(env: Env, ref: MeetingRef, hint: Record<string, unknown> = {}): Promise<ImportOutcome> {
+  if (ref.status === 'cancelled') return SKIPPED;
+  const part = instanceOf(ref);
+  if (part) {
+    // A call the member cancelled (or whose session is gone) imports nothing,
+    // even from an instance found before it was cancelled.
+    const scheduled = await refByExternal(env, 'zoom', part.meetingId);
+    if (!scheduled || scheduled.status === 'cancelled') {
+      await cancelRef(env, ref.id);
+      return SKIPPED;
+    }
+    return importInstance(env, ref, fetchTranscript);
+  }
+  const named = typeof hint.meetingUuid === 'string' ? hint.meetingUuid.trim().slice(0, 100) : '';
+  const own = await ownInstance(env, ref);
+  if (!named) {
+    if (ref.status === 'imported') return SKIPPED;
+    if (own) return importInstance(env, own, fetchTranscript);
+  }
+  // What happened, onto the call — or, for a later instance's event once the
+  // call holds its own, onto nothing (a retryable failure still retries the job).
+  const settle = async (got: TranscriptFetch): Promise<ImportOutcome> => {
+    if (!own) return importMeetingRef(env, ref, async () => got);
+    if (got.kind === 'error') return { status: 'failed', code: got.code, retryable: got.retryable, segments: 0 };
+    return SKIPPED;
+  };
+
+  const conn = await zoomConnection(env, Number(ref.user_id));
+  if (!conn) return settle({ kind: 'error', code: 'zoom_not_connected', retryable: false });
+  let listed: Recordings;
+  try {
+    listed = await listRecordings(env, conn, named || ref.external_ref);
+  } catch (e) {
+    if (!(e instanceof MeetingProviderError)) throw e;
+    return settle({ kind: 'error', code: e.code, retryable: e.retryable });
+  }
+  if (listed.kind !== 'instance') return settle(listed);
+  const uuid = listed.uuid || named;
+  // Zoom named no instance: nothing to keep apart, so the call imports it as before.
+  if (!uuid) return importMeetingRef(env, ref, async () => transcriptOf(env, conn, listed.files));
+
+  const started = Date.parse(listed.startTime);
+  if (Number.isFinite(started) && Number.isFinite(Date.parse(String(ref.starts_at ?? ''))) && !withinCallSlot(started, ref)) {
+    // Another conversation on the same link. A call this event had marked
+    // transcript_ready goes back to waiting for its own instance.
+    if (named) {
+      if (!own && ref.status === 'transcript_ready') await setRefStatus(env, ref.id, 'ended', null);
+      return SKIPPED;
+    }
+    return settle({ kind: 'none', code: 'zoom_no_transcript' });
+  }
+  if (!hasTranscriptFile(listed.files)) return settle({ kind: 'none', code: 'zoom_no_transcript' });
+
+  let instance: MeetingRef;
+  try {
+    instance = await bindInstance(env, ref, uuid);
+  } catch (e) {
+    if (!(e instanceof IntakeError)) throw e;
+    const code: MeetingErrorCode = e.status === 403 ? 'member_inactive' : 'interview_gone';
+    return settle({ kind: 'error', code, retryable: false });
+  }
+  return importInstance(env, instance, async () => transcriptOf(env, conn, listed.files));
+}
+
+registerChannelJob('meeting_import', 'zoom', meetingImportHandler('zoom', importZoomRef));
 
 /**
  * A call that produced no cloud transcript sends no event, and a lost job

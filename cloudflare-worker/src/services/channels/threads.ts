@@ -12,7 +12,17 @@
  *            to that session.
  *   ignore   the pending copies are deleted and later messages are dropped
  *            (a personal chat on a business account is none of Axal's business).
+ *            The thread stays as a tombstone — ids, no text — for as long as
+ *            the contact keeps writing, so the ignore holds.
  * Pending messages are purged after CHANNEL_LIMITS.pendingDays.
+ *
+ * VOICE NOTES SPEND NOTHING UNTIL THE MEMBER CHOOSES THE CHAT. A voice note
+ * arrives as a placeholder: kind 'voice', no text, its duration, and the
+ * provider's file ref encrypted (`voice_ref_enc`, migration 451). Only a note
+ * on a chat in an interview is transcribed — on arrival, or, for a chat still
+ * pending, when the member assigns it (`queueVoiceTranscriptions`) — under the
+ * connection's daily cap and the member's AI budget. A stranger who writes in
+ * can therefore never run the model on the member's account.
  *
  * Edits and deletions at the source change a PENDING message. Once a message
  * is in an interview the transcript is the member's record: they edit it there.
@@ -29,6 +39,7 @@ import {
 } from '../interviewIntake';
 import type { ChannelConnection } from './connections';
 import { refKey } from './events';
+import { enqueueChannelJob } from './jobs';
 import { isOurSend } from './outbound';
 import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
@@ -45,7 +56,13 @@ export interface ThreadRow {
 interface PendingRow {
   id: number; uid: string; external_message_id: string; direction: 'in' | 'out'; kind: 'text' | 'voice';
   text_enc: string; sent_at: string;
+  /** Non-null: a voice note waiting for its transcript (its `text_enc` is ''). */
+  voice_ref_enc: string | null; duration_sec: number | null;
 }
+
+/** Rows an assignment moves per batch, and batches before it stops (what is left is swept by the next assignment, and purged at 30 days regardless). */
+const MOVE_BATCH = 2000;
+const MOVE_PASSES = 50;
 
 /** One message as the thread store takes it: from a webhook, a transcribed voice note, or a reply Axal sent. */
 export interface ThreadMessageInput {
@@ -138,15 +155,60 @@ async function detach(env: Env, thread: ThreadRow): Promise<ThreadRow> {
   return { ...thread, status: 'pending', interview_id: null, session_id: null };
 }
 
-async function storePending(env: Env, thread: ThreadRow, m: ThreadMessageInput, text: string): Promise<boolean> {
-  const uid = crypto.randomUUID();
-  const enc = await encryptColumn(env, MSG_TABLE, 'text_enc', uid, text);
-  const res = await env.DB.prepare(
-    `INSERT OR IGNORE INTO channel_thread_messages (uid, thread_id, external_message_id, direction, kind, text_enc, sent_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, thread.id, await refKey(thread.provider, m.externalMessageId), m.side === 'me' ? 'out' : 'in', m.kind, enc,
-    isoOr(m.sentAt, new Date().toISOString())).run();
-  return Number(res.meta?.changes ?? 0) > 0;
+/** Whether a thread's messages go straight into an interview session. */
+export const inInterview = (t: Pick<ThreadRow, 'status' | 'session_id' | 'interview_id'>): boolean =>
+  t.status === 'assigned' && !!t.session_id && !!t.interview_id;
+
+/**
+ * The thread's counters for one more message. With `onlyIfRow`, they move
+ * only if the pending row of that uid exists — i.e. only if the INSERT before
+ * it in the same batch went in.
+ */
+function bumpStatement(env: Env, threadId: number, side: MessageSide, onlyIfRow: string | null = null): D1PreparedStatement {
+  const now = new Date().toISOString();
+  return env.DB.prepare(
+    `UPDATE channel_threads
+        SET message_count = message_count + 1, last_message_at = ?,
+            last_inbound_at = CASE WHEN ? = 'contact' THEN ? ELSE last_inbound_at END, updated_at = datetime('now')
+      WHERE id = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM channel_thread_messages WHERE uid = ?))`,
+  ).bind(now, side, now, threadId, onlyIfRow, onlyIfRow);
+}
+
+/**
+ * A message arrived on an ignored chat. Nothing of it is kept, but the
+ * tombstone records that the chat is still active (`updated_at`): the purge
+ * takes an ignored thread only once it has been quiet for
+ * CHANNEL_LIMITS.pendingDays, so the ignore cannot lapse while the contact
+ * keeps writing (which would let their next message reopen the chat as
+ * pending, its text kept).
+ */
+async function heardOnIgnored(env: Env, thread: ThreadRow): Promise<void> {
+  await env.DB.prepare(`UPDATE channel_threads SET updated_at = datetime('now') WHERE id = ? AND status = 'ignored'`)
+    .bind(thread.id).run();
+}
+
+interface NewPending {
+  uid: string; externalMessageId: string; side: MessageSide; kind: 'text' | 'voice'; textEnc: string; sentAt: string;
+  voiceRefEnc?: string | null; durationSec?: number | null;
+}
+
+/**
+ * One pending row and the thread's counters, in one batch. A redelivery
+ * (UNIQUE(thread_id, external_message_id)) counts nothing, and a failure
+ * takes both with it, so the provider's retry applies both.
+ */
+async function insertPending(env: Env, thread: ThreadRow, p: NewPending): Promise<boolean> {
+  const ref = await refKey(thread.provider, p.externalMessageId);
+  const [ins] = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO channel_thread_messages
+         (uid, thread_id, external_message_id, direction, kind, text_enc, sent_at, voice_ref_enc, duration_sec)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(p.uid, thread.id, ref, p.side === 'me' ? 'out' : 'in', p.kind, p.textEnc, isoOr(p.sentAt, new Date().toISOString()),
+      p.voiceRefEnc ?? null, p.durationSec ?? null),
+    bumpStatement(env, thread.id, p.side, p.uid),
+  ]);
+  return Number(ins?.meta?.changes ?? 0) > 0;
 }
 
 /**
@@ -161,27 +223,22 @@ export async function storeMessage(env: Env, conn: ChannelConnection, m: ThreadM
   const text = clip(m.text, CHANNEL_LIMITS.maxTextChars);
   let thread = await upsertThread(env, conn, m.externalChatId, m.side === 'contact' ? m.contactName : null);
   if (!text) return { stored: 'empty', thread };
-  if (thread.status === 'ignored') return { stored: 'ignored', thread };
-  if (m.side === 'me' && m.origin !== 'axal' && await isOurSend(env, conn.provider, m.externalMessageId)) {
+  if (thread.status === 'ignored') {
+    await heardOnIgnored(env, thread);
+    return { stored: 'ignored', thread };
+  }
+  if (m.side === 'me' && m.origin !== 'axal' && await isOurSend(env, conn.provider, conn.userId, m.externalMessageId)) {
     return { stored: 'duplicate', thread };
   }
 
-  const now = new Date().toISOString();
-  const bump = env.DB.prepare(
-    `UPDATE channel_threads
-        SET message_count = message_count + 1, last_message_at = ?,
-            last_inbound_at = CASE WHEN ? = 'contact' THEN ? ELSE last_inbound_at END, updated_at = datetime('now')
-      WHERE id = ?`,
-  ).bind(now, m.side, now, thread.id);
-
-  if (thread.status === 'assigned' && thread.session_id && thread.interview_id) {
+  if (inInterview(thread)) {
     try {
       const { interview } = await writableInterview(env, conn.userId, Number(thread.interview_id));
       const seg: StoredSegment = {
         start_ms: null, end_ms: null, speaker_raw: null, text,
         speaker_label: speaker(m.side, interview.interviewee_name, m.contactName ?? (await contactName(env, thread))),
       };
-      await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [bump]);
+      await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [bumpStatement(env, thread.id, m.side)]);
       return { stored: 'session', thread, sessionId: Number(thread.session_id) };
     } catch (err) {
       // The interview or session went away, or the venture is no longer the
@@ -191,10 +248,164 @@ export async function storeMessage(env: Env, conn: ChannelConnection, m: ThreadM
     }
   }
 
-  const inserted = await storePending(env, thread, m, text);
+  const uid = crypto.randomUUID();
+  const inserted = await insertPending(env, thread, {
+    uid, externalMessageId: m.externalMessageId, side: m.side, kind: m.kind, sentAt: m.sentAt,
+    textEnc: await encryptColumn(env, MSG_TABLE, 'text_enc', uid, text),
+  });
   if (!inserted) return { stored: 'duplicate', thread };
-  await bump.run();
   return { stored: 'pending', thread };
+}
+
+export type VoiceArrival =
+  | { stored: 'voice'; thread: ThreadRow; messageUid: string }
+  | { stored: 'ignored' | 'duplicate'; thread: ThreadRow };
+
+/**
+ * A voice note as it arrives: a placeholder on its thread (header), never a
+ * transcription. The caller queues the transcription when the thread is in an
+ * interview (`queueVoiceTranscriptions`); a pending chat's note waits for the
+ * member to assign it.
+ */
+export async function storeVoiceNote(env: Env, conn: ChannelConnection, msg: InboundMessage): Promise<VoiceArrival> {
+  if (!msg.voice) throw new IntakeError(400, 'voice_required', 'The message had no voice note.');
+  await activeMember(env, conn.userId);
+  const thread = await upsertThread(env, conn, msg.externalChatId, msg.side === 'contact' ? msg.contactName : null);
+  if (thread.status === 'ignored') {
+    await heardOnIgnored(env, thread);
+    return { stored: 'ignored', thread };
+  }
+  const uid = crypto.randomUUID();
+  const d = msg.voice.durationSec;
+  const inserted = await insertPending(env, thread, {
+    uid, externalMessageId: msg.externalMessageId, side: msg.side, kind: 'voice', textEnc: '', sentAt: msg.sentAt,
+    voiceRefEnc: await encryptColumn(env, MSG_TABLE, 'voice_ref_enc', uid, JSON.stringify({ file: msg.voice.fileRef, mime: msg.voice.mime })),
+    durationSec: d != null && Number.isFinite(Number(d)) ? Math.max(0, Math.round(Number(d))) : null,
+  });
+  return inserted ? { stored: 'voice', thread, messageUid: uid } : { stored: 'duplicate', thread };
+}
+
+/**
+ * Queue the transcription of a thread's waiting voice notes — only while the
+ * thread is in an interview. Each note is first claimed for one job
+ * (`transcribe_job`), so an assignment repeated, or a webhook and an
+ * assignment at once, never queue one note twice; a claim an hour old is
+ * taken to be a job that was lost. At most a day's cap of notes per call (the
+ * rest wait for the next assignment). The job carries ids only: the file ref
+ * stays encrypted on its row. Returns how many were queued.
+ */
+export async function queueVoiceTranscriptions(
+  env: Env, thread: ThreadRow, opts: { only?: string; event?: number | null } = {},
+): Promise<number> {
+  if (!inInterview(thread)) return 0;
+  const only = opts.only ?? null;
+  const rows = (await env.DB.prepare(
+    `SELECT uid FROM channel_thread_messages
+      WHERE thread_id = ? AND voice_ref_enc IS NOT NULL AND (? IS NULL OR uid = ?)
+      ORDER BY sent_at, id LIMIT ?`,
+  ).bind(thread.id, only, only, CHANNEL_LIMITS.transcriptionsPerDay).all<{ uid: string }>()).results ?? [];
+  let queued = 0;
+  for (const r of rows) {
+    const job = crypto.randomUUID();
+    const claimed = await env.DB.prepare(
+      `UPDATE channel_thread_messages SET transcribe_job = ?, updated_at = datetime('now')
+        WHERE uid = ? AND voice_ref_enc IS NOT NULL
+          AND (transcribe_job IS NULL OR datetime(updated_at) < datetime('now', '-60 minutes'))
+        RETURNING id`,
+    ).bind(job, r.uid).first<{ id: number }>();
+    if (!claimed) continue;
+    try {
+      await enqueueChannelJob(env, 'channel_followup', thread.provider, job, {
+        kind: 'voice', message: r.uid, job, event: opts.event ?? null,
+      });
+      queued++;
+    } catch (err) {
+      await releaseVoiceNote(env, r.uid, job).catch(() => {});
+      throw err;
+    }
+  }
+  return queued;
+}
+
+/** A waiting voice note, as the job that holds it reads it. */
+export interface VoiceJobNote {
+  id: number; uid: string; side: MessageSide; file: string; mime: string | null; durationSec: number | null; thread: ThreadRow;
+}
+
+/**
+ * The note a voice job was queued for, while that job still holds it — or
+ * null: transcribed already, deleted at the source, ignored, purged, or held
+ * by another job.
+ */
+export async function voiceNoteForJob(env: Env, messageUid: string, job: string): Promise<VoiceJobNote | null> {
+  if (!messageUid || !job) return null;
+  const row = await env.DB.prepare(
+    `SELECT id, uid, direction, voice_ref_enc, duration_sec, thread_id FROM channel_thread_messages
+      WHERE uid = ? AND transcribe_job = ? AND voice_ref_enc IS NOT NULL`,
+  ).bind(messageUid, job).first<{ id: number; uid: string; direction: 'in' | 'out'; voice_ref_enc: string; duration_sec: number | null; thread_id: number }>();
+  if (!row) return null;
+  const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(row.thread_id).first<ThreadRow>();
+  let ref: { file?: unknown; mime?: unknown } | null = null;
+  try { ref = JSON.parse((await decryptColumn(env, MSG_TABLE, 'voice_ref_enc', row.uid, row.voice_ref_enc)) ?? 'null'); } catch { ref = null; }
+  if (!thread || typeof ref?.file !== 'string' || !ref.file) return null;
+  return {
+    id: Number(row.id), uid: row.uid, side: row.direction === 'out' ? 'me' : 'contact', file: ref.file,
+    mime: typeof ref.mime === 'string' ? ref.mime : null, durationSec: row.duration_sec, thread,
+  };
+}
+
+/** The job could not transcribe the note now (the day's cap, the member's budget, a refused download): the next assignment may queue it again. */
+export async function releaseVoiceNote(env: Env, messageUid: string, job: string): Promise<void> {
+  await env.DB.prepare(`UPDATE channel_thread_messages SET transcribe_job = NULL WHERE uid = ? AND transcribe_job = ?`)
+    .bind(messageUid, job).run();
+}
+
+/**
+ * A waiting voice note's transcript, stored once. In an interview, the
+ * segment is appended and the placeholder deleted in ONE batch, with
+ * `alongside` (the job's event record): a retry after that finds no note and
+ * does nothing, so nothing is appended or billed twice. If the chat fell back
+ * to pending meanwhile (its interview went away), the placeholder becomes an
+ * ordinary pending message carrying the text. An empty transcript deletes the
+ * placeholder. 'gone': the note was deleted at the source, or the chat ignored,
+ * while the model ran — nothing is kept and `alongside` is not run.
+ */
+export async function storeVoiceTranscript(
+  env: Env, conn: ChannelConnection, note: VoiceJobNote, transcript: string, alongside: D1PreparedStatement[] = [],
+): Promise<'session' | 'pending' | 'empty' | 'gone'> {
+  const still = await env.DB.prepare(`SELECT thread_id FROM channel_thread_messages WHERE id = ? AND uid = ? AND voice_ref_enc IS NOT NULL`)
+    .bind(note.id, note.uid).first<{ thread_id: number }>();
+  const thread = still ? await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(still.thread_id).first<ThreadRow>() : null;
+  if (!thread || thread.status === 'ignored') return 'gone';
+  const drop = env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(note.id);
+  const text = clip(transcript, CHANNEL_LIMITS.maxTextChars);
+  if (!text) {
+    await env.DB.batch([drop, ...alongside]);
+    return 'empty';
+  }
+  if (inInterview(thread)) {
+    try {
+      const { interview } = await writableInterview(env, conn.userId, Number(thread.interview_id));
+      const seg: StoredSegment = {
+        start_ms: null, end_ms: null, speaker_raw: null, text,
+        speaker_label: speaker(note.side, interview.interviewee_name, await contactName(env, thread)),
+      };
+      await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [drop, ...alongside]);
+      return 'session';
+    } catch (err) {
+      if (!(err instanceof IntakeError) || err.status !== 404) throw err;
+      // The interview is gone: the chat goes back to pending, and the note with it.
+      await detach(env, thread);
+    }
+  }
+  const enc = await encryptColumn(env, MSG_TABLE, 'text_enc', note.uid, text);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE channel_thread_messages SET text_enc = ?, voice_ref_enc = NULL, transcribe_job = NULL, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(enc, note.id),
+    ...alongside,
+  ]);
+  return 'pending';
 }
 
 /** Convenience for adapters: a normalised inbound message (text, or a voice note's transcript). */
@@ -211,8 +422,10 @@ async function threadForChat(env: Env, conn: ChannelConnection, externalChatId: 
 export async function applyEdit(env: Env, conn: ChannelConnection, edit: InboundEdit): Promise<boolean> {
   const thread = await threadForChat(env, conn, edit.externalChatId);
   if (!thread || thread.status !== 'pending') return false;
-  const row = await env.DB.prepare(`SELECT uid FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?`)
-    .bind(thread.id, await refKey(thread.provider, edit.externalMessageId)).first<{ uid: string }>();
+  // A voice note's placeholder has no text to replace.
+  const row = await env.DB.prepare(
+    `SELECT uid FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ? AND voice_ref_enc IS NULL`,
+  ).bind(thread.id, await refKey(thread.provider, edit.externalMessageId)).first<{ uid: string }>();
   const text = clip(edit.text, CHANNEL_LIMITS.maxTextChars);
   if (!row || !text) return false;
   const enc = await encryptColumn(env, MSG_TABLE, 'text_enc', row.uid, text);
@@ -220,10 +433,15 @@ export async function applyEdit(env: Env, conn: ChannelConnection, edit: Inbound
   return true;
 }
 
-/** Deletion at the source removes pending copies. Returns how many were removed. */
+/**
+ * Deletion at the source removes pending copies, whatever the thread's state:
+ * every row in `channel_thread_messages` is one — on an assigned chat, a voice
+ * note still waiting for its transcript, whose job then finds nothing to
+ * transcribe. Returns how many were removed.
+ */
 export async function applyDelete(env: Env, conn: ChannelConnection, del: InboundDelete): Promise<number> {
   const thread = await threadForChat(env, conn, del.externalChatId);
-  if (!thread || thread.status !== 'pending') return 0;
+  if (!thread) return 0;
   let removed = 0;
   for (const id of del.externalMessageIds.slice(0, 100)) {
     const res = await env.DB.prepare(`DELETE FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?`)
@@ -247,74 +465,145 @@ async function memberThread(env: Env, userId: number, threadUid: string): Promis
 
 export type AssignTarget = { interviewId: number } | { projectId: number; intervieweeName: string };
 
-/**
- * Put a conversation into an interview. The pending messages become the first
- * segments of a new Text session there, marked with the channel, and are
- * deleted from the pending store in the same batch. Assigning an assigned
- * thread to the SAME interview is a no-op; to a different one, a new session
- * starts there and later messages follow it (earlier ones stay where they are).
- */
-export async function assignThread(
-  env: Env, userId: number, threadUid: string, target: AssignTarget,
-): Promise<{ interviewId: number; sessionId: number; moved: number }> {
-  const thread = await memberThread(env, userId, threadUid);
-  const interviewId = 'interviewId' in target
-    ? Number(target.interviewId)
-    : await createInterview(env, userId, Number(target.projectId), target.intervieweeName);
-  const scoped: ScopedInterview = await writableInterview(env, userId, interviewId);
+export interface AssignResult {
+  interviewId: number; sessionId: number; moved: number;
+  /** Voice notes queued for transcription now that the chat is in an interview. */
+  queued: number;
+}
 
-  if (thread.status === 'assigned' && Number(thread.interview_id) === interviewId && thread.session_id) {
-    return { interviewId, sessionId: Number(thread.session_id), moved: 0 };
+/**
+ * Move a thread's pending text into a session, in batches that each delete
+ * what they append, until none is left (or MOVE_PASSES batches). `first`
+ * joins the first batch even when there is nothing to move: the assignment's
+ * `session_id`, so the thread points at its session exactly when the first
+ * move lands. Voice notes still waiting for a transcript stay; they are queued.
+ */
+async function movePending(
+  env: Env, userId: number, thread: ThreadRow, sessionId: number, scoped: ScopedInterview, first: D1PreparedStatement[] = [],
+): Promise<number> {
+  const name = await contactName(env, thread);
+  let moved = 0;
+  let extra = first;
+  for (let pass = 0; pass < MOVE_PASSES; pass++) {
+    const rows = (await env.DB.prepare(
+      `SELECT id, uid, external_message_id, direction, kind, text_enc, sent_at, voice_ref_enc, duration_sec FROM channel_thread_messages
+        WHERE thread_id = ? AND voice_ref_enc IS NULL ORDER BY sent_at, id LIMIT ?`,
+    ).bind(thread.id, MOVE_BATCH).all<PendingRow>()).results ?? [];
+    if (!rows.length && !extra.length) break;
+    const segments: StoredSegment[] = [];
+    for (const r of rows) {
+      const text = await decryptColumn(env, MSG_TABLE, 'text_enc', r.uid, r.text_enc);
+      if (!text) continue;
+      segments.push({
+        start_ms: null, end_ms: null, speaker_raw: null, text,
+        speaker_label: speaker(r.direction, scoped.interview.interviewee_name, name),
+      });
+    }
+    const drop = rows.map((r) => env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(r.id));
+    moved += await appendSegments(env, userId, sessionId, segments, thread.provider, [...drop, ...extra]);
+    extra = [];
   }
-  // An assignment in flight (claimed, no session yet). One that died mid-way
-  // frees itself after a minute.
+  return moved;
+}
+
+/** Queue the voice notes of a thread now in an interview. Never fails an assignment: the notes wait, and the next assignment queues them. */
+async function queueAfterAssign(env: Env, thread: ThreadRow): Promise<number> {
+  try {
+    return await queueVoiceTranscriptions(env, thread);
+  } catch (err) {
+    console.error('[channels] voice notes not queued after assignment', err instanceof Error ? err.name : 'error');
+    return 0;
+  }
+}
+
+/** An interview this assignment created, removed again while nothing hangs off it. */
+async function dropCreatedInterview(env: Env, interviewId: number): Promise<void> {
+  await env.DB.prepare(
+    `DELETE FROM discovery_interviews WHERE id = ? AND NOT EXISTS (SELECT 1 FROM interview_sessions WHERE interview_id = ?)`,
+  ).bind(interviewId, interviewId).run();
+}
+
+/** An assignment in flight (claimed, no session yet). One that died mid-way frees itself after a minute. */
+function refuseIfBusy(thread: ThreadRow): void {
   if (thread.status === 'assigned' && !thread.session_id
       && Date.now() - Date.parse(`${thread.updated_at.replace(' ', 'T')}Z`) < 60_000) {
     throw new IntakeError(409, 'thread_busy', 'That conversation is being assigned. Try again in a minute.');
   }
+}
 
+/**
+ * Put a conversation into an interview. The pending messages become the first
+ * segments of a new Text session there, marked with the channel, and are
+ * deleted from the pending store in the same batch; its waiting voice notes
+ * are queued for transcription. Assigning an assigned thread to the SAME
+ * interview moves anything left pending since (a message that landed while an
+ * assignment was in flight, or a move cut short) and queues its voice notes;
+ * to a different one, a new session starts there and later messages follow it
+ * (earlier ones stay where they are).
+ *
+ * "Create interview from this chat" creates the interview only past the busy
+ * check, and removes it again if the claim or the move fails, so a refused or
+ * repeated press leaves no empty interview behind.
+ */
+export async function assignThread(
+  env: Env, userId: number, threadUid: string, target: AssignTarget,
+): Promise<AssignResult> {
+  const thread = await memberThread(env, userId, threadUid);
+  if ('interviewId' in target) {
+    const scoped = await writableInterview(env, userId, Number(target.interviewId));
+    if (inInterview(thread) && Number(thread.interview_id) === scoped.interview.id) {
+      // What this moves is new text on a session already structured once: the quiet-chat sweep takes it from here.
+      const sessionId = Number(thread.session_id);
+      const moved = await movePending(env, userId, thread, sessionId, scoped);
+      return { interviewId: scoped.interview.id, sessionId, moved, queued: await queueAfterAssign(env, thread) };
+    }
+    refuseIfBusy(thread);
+    return moveInto(env, userId, thread, scoped, null);
+  }
+  refuseIfBusy(thread);
+  const created = await createInterview(env, userId, Number(target.projectId), target.intervieweeName);
+  let scoped: ScopedInterview;
+  try {
+    scoped = await writableInterview(env, userId, created);
+  } catch (err) {
+    await dropCreatedInterview(env, created).catch(() => {});
+    throw err;
+  }
+  return moveInto(env, userId, thread, scoped, created);
+}
+
+async function moveInto(
+  env: Env, userId: number, thread: ThreadRow, scoped: ScopedInterview, created: number | null,
+): Promise<AssignResult> {
+  const interviewId = scoped.interview.id;
   // Claim the thread as it was read: of two concurrent assigns, one claim matches.
   const claim = await env.DB.prepare(
     `UPDATE channel_threads SET status = 'assigned', interview_id = ?, session_id = NULL, updated_at = datetime('now')
       WHERE id = ? AND user_id = ? AND status = ? AND interview_id IS ? AND session_id IS ? RETURNING id`,
   ).bind(interviewId, thread.id, userId, thread.status, thread.interview_id, thread.session_id).first<{ id: number }>();
-  if (!claim) throw new IntakeError(409, 'thread_busy', 'That conversation changed while you were assigning it. Try again.');
+  if (!claim) {
+    if (created) await dropCreatedInterview(env, created).catch(() => {});
+    throw new IntakeError(409, 'thread_busy', 'That conversation changed while you were assigning it. Try again.');
+  }
 
   let opened: number | null = null;
   try {
     const session = await openSession(env, scoped, thread.provider, 'text');
     opened = session.id;
-    const name = await contactName(env, thread);
-    let moved = 0;
+    const setSession = env.DB.prepare(
+      `UPDATE channel_threads SET session_id = ?, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(session.id, thread.id);
     // Messages may land pending while the session opens; sweep until none are left.
-    for (let pass = 0; pass < 3; pass++) {
-      const rows = (await env.DB.prepare(
-        `SELECT id, uid, external_message_id, direction, kind, text_enc, sent_at FROM channel_thread_messages
-          WHERE thread_id = ? ORDER BY sent_at, id LIMIT 2000`,
-      ).bind(thread.id).all<PendingRow>()).results ?? [];
-      if (pass > 0 && !rows.length) break;
-      const setSession = env.DB.prepare(
-        `UPDATE channel_threads SET session_id = ?, updated_at = datetime('now') WHERE id = ?`,
-      ).bind(session.id, thread.id);
-      const segments: StoredSegment[] = [];
-      for (const r of rows) {
-        const text = await decryptColumn(env, MSG_TABLE, 'text_enc', r.uid, r.text_enc);
-        if (!text) continue;
-        segments.push({
-          start_ms: null, end_ms: null, speaker_raw: null, text,
-          speaker_label: speaker(r.direction, scoped.interview.interviewee_name, name),
-        });
-      }
-      const drop = rows.map((r) => env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(r.id));
-      moved += await appendSegments(env, userId, session.id, segments, thread.provider, [...drop, setSession]);
-    }
+    const moved = await movePending(env, userId, thread, session.id, scoped, [setSession]);
     // The chat's text is in the interview: the Worker AI proposes its findings
     // now; later messages are picked up by the quiet-chat sweep.
     if (moved > 0) await enqueueSessionStructure(env, session.id, userId, 'chat_assigned');
-    return { interviewId, sessionId: session.id, moved };
+    const assigned: ThreadRow = { ...thread, status: 'assigned', interview_id: interviewId, session_id: session.id };
+    return { interviewId, sessionId: session.id, moved, queued: await queueAfterAssign(env, assigned) };
   } catch (err) {
     // If the first move never landed, nothing moved (each move is one batch
-    // with its deletion): release the claim and drop the empty session.
+    // with its deletion): release the claim and drop the empty session, and
+    // the interview this assignment created for it.
     const released = await env.DB.prepare(
       `UPDATE channel_threads SET status = ?, interview_id = ?, session_id = ?, updated_at = datetime('now')
         WHERE id = ? AND session_id IS NULL RETURNING id`,
@@ -324,6 +613,7 @@ export async function assignThread(
         `DELETE FROM interview_sessions WHERE id = ? AND NOT EXISTS (SELECT 1 FROM interview_transcript_segments WHERE session_id = ?)`,
       ).bind(opened, opened).run();
     }
+    if (released && created) await dropCreatedInterview(env, created).catch(() => {});
     throw err;
   }
 }
@@ -390,27 +680,41 @@ export async function listThreads(
   return Promise.all(rows.map((t) => view(env, t, rights[t.provider])));
 }
 
+export interface MessageView {
+  uid: string; side: MessageSide; kind: 'text' | 'voice'; text: string | null; sent_at: string;
+  /**
+   * A voice note with no transcript yet (`text` null). On a pending chat it is
+   * transcribed when the member assigns the chat; on an assigned one it is
+   * queued, or waiting for the next assignment after the day's cap.
+   */
+  awaiting_transcription: boolean;
+  duration_sec: number | null;
+}
+
 /** One conversation and, while it is pending, its messages (decrypted for the member only). */
-export async function readThread(env: Env, userId: number, threadUid: string): Promise<{
-  thread: ThreadView;
-  messages: { uid: string; side: MessageSide; kind: 'text' | 'voice'; text: string | null; sent_at: string }[];
-}> {
+export async function readThread(env: Env, userId: number, threadUid: string): Promise<{ thread: ThreadView; messages: MessageView[] }> {
   const t = await memberThread(env, userId, threadUid);
   const interview = t.interview_id
     ? await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?').bind(t.interview_id).first<{ interviewee_name: string }>()
     : null;
   const rights = await replyRights(env, userId);
   const rows = (await env.DB.prepare(
-    `SELECT id, uid, external_message_id, direction, kind, text_enc, sent_at FROM channel_thread_messages
+    `SELECT id, uid, external_message_id, direction, kind, text_enc, sent_at, voice_ref_enc, duration_sec FROM channel_thread_messages
       WHERE thread_id = ? ORDER BY sent_at, id LIMIT 500`,
   ).bind(t.id).all<PendingRow>()).results ?? [];
-  const messages = await Promise.all(rows.map(async (r) => ({
-    uid: r.uid,
-    side: (r.direction === 'out' ? 'me' : 'contact') as MessageSide,
-    kind: r.kind,
-    text: await decryptColumn(env, MSG_TABLE, 'text_enc', r.uid, r.text_enc),
-    sent_at: r.sent_at,
-  })));
+  const messages = await Promise.all(rows.map(async (r): Promise<MessageView> => {
+    const waiting = r.voice_ref_enc != null;
+    return {
+      uid: r.uid,
+      side: r.direction === 'out' ? 'me' : 'contact',
+      kind: r.kind,
+      // The file ref never leaves the Worker.
+      text: waiting ? null : await decryptColumn(env, MSG_TABLE, 'text_enc', r.uid, r.text_enc),
+      sent_at: r.sent_at,
+      awaiting_transcription: waiting,
+      duration_sec: r.duration_sec == null ? null : Number(r.duration_sec),
+    };
+  }));
   return { thread: await view(env, { ...t, interviewee_name: interview?.interviewee_name ?? null }, rights[t.provider]), messages };
 }
 
@@ -429,32 +733,43 @@ export async function forgetConnection(env: Env, integrationId: number): Promise
 }
 
 /**
- * The retention sweep (daily cron). Pending and ignored conversations whose
- * last message is older than CHANNEL_LIMITS.pendingDays go with their
- * messages; spent link codes after a day; event ids after 90 days.
+ * The retention sweep (daily cron).
+ *   messages  every pending copy older than CHANNEL_LIMITS.pendingDays,
+ *             whatever its thread's state: a row here is always a pending
+ *             copy — on a pending chat, a voice note waiting on an assigned
+ *             one, or text an interrupted assignment left behind.
+ *   threads   pending chats whose last message is that old; ignored ones
+ *             only once they have also been QUIET that long (`updated_at` is
+ *             when an ignored chat was last heard from), so an ignore holds
+ *             while the contact keeps writing.
+ *   codes     spent link codes after a day; event ids after 90 days; the
+ *             per-connection counters after two days.
  */
-export async function purgeExpired(env: Env, now = new Date()): Promise<{ threads: number; messages: number; codes: number; events: number }> {
+export async function purgeExpired(env: Env, now = new Date()): Promise<{
+  threads: number; messages: number; codes: number; events: number; counters: number;
+}> {
   const cutoff = new Date(now.getTime() - CHANNEL_LIMITS.pendingDays * 86_400_000).toISOString();
   const day = new Date(now.getTime() - 86_400_000).toISOString();
+  const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs] = await env.DB.batch([
-    env.DB.prepare(
-      `DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)
-          AND thread_id IN (SELECT id FROM channel_threads WHERE status = 'pending')`,
-    ).bind(cutoff),
+  const [msgs, threads, codes, evs, counters] = await env.DB.batch([
+    env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
           AND datetime(COALESCE(last_message_at, created_at)) < datetime(?)
+          AND (status = 'pending' OR datetime(updated_at) < datetime(?))
           AND NOT EXISTS (SELECT 1 FROM channel_thread_messages m WHERE m.thread_id = channel_threads.id)`,
-    ).bind(cutoff),
+    ).bind(cutoff, cutoff),
     env.DB.prepare(
       `DELETE FROM channel_link_codes WHERE (used_at IS NOT NULL OR datetime(expires_at) < datetime(?))
           AND datetime(created_at) < datetime(?)`,
     ).bind(now.toISOString(), day),
     env.DB.prepare(`DELETE FROM channel_events WHERE datetime(created_at) < datetime(?)`).bind(events),
+    env.DB.prepare(`DELETE FROM channel_counters WHERE datetime(created_at) < datetime(?)`).bind(twoDays),
   ]);
   return {
     messages: Number(msgs.meta?.changes ?? 0), threads: Number(threads.meta?.changes ?? 0),
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
+    counters: Number(counters.meta?.changes ?? 0),
   };
 }

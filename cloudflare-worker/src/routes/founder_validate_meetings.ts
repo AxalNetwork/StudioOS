@@ -30,11 +30,12 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { IntakeError, openSession, writableInterview, type ScopedInterview } from '../services/interviewIntake';
 import { providerAvailable } from '../services/channels/connections';
-import { MEETING_PROVIDERS, PROVIDER_LABEL, CHANNEL_LIMITS, type MeetingProvider } from '../services/channels/types';
+import { MEETING_PROVIDERS, PROVIDER_LABEL, type MeetingProvider } from '../services/channels/types';
 import {
   MEETING_ERRORS, MeetingProviderError, cancelRef, importMeetingRef, loadRef, meetingView, memberRef,
-  type MeetingErrorCode, type MeetingRef, type TranscriptFetcher,
+  type MeetingErrorCode, type MeetingImporter, type MeetingRef,
 } from '../services/channels/meetings';
+import { readCappedBody } from '../services/channels/events';
 import * as zoom from '../services/channels/zoom';
 import * as meet from '../services/channels/googleMeet';
 import { googleOAuthAvailable } from '../services/calendar';
@@ -43,7 +44,11 @@ import { CONSENT_METHODS } from '../services/interviewSessions';
 const meetings = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
 
-const FETCHERS: Record<MeetingProvider, TranscriptFetcher> = { zoom: zoom.fetchTranscript, google_meet: meet.fetchTranscript };
+/** The same import each provider's `meeting_import` job runs. */
+const IMPORTERS: Record<MeetingProvider, MeetingImporter> = {
+  zoom: zoom.importZoomRef,
+  google_meet: (env, ref, hint) => importMeetingRef(env, ref, meet.fetchTranscript, hint),
+};
 
 /**
  * Whether a provider can be used on this deployment. Zoom needs its three
@@ -75,7 +80,7 @@ function intakeRefusal(c: C, refusal: IntakeError): Response {
 /** Provider trouble as the member reads it: a code and our sentence, the provider's words nowhere. */
 function providerRefusal(c: C, failure: MeetingProviderError): Response {
   const status = failure.retryable ? 503
-    : /_(not_connected|reconnect|scope_missing)$/.test(failure.code) ? 409 : 502;
+    : /_(not_connected|reconnect)$/.test(failure.code) ? 409 : 502;
   return refuse(c, status, { code: failure.code, message: MEETING_ERRORS[failure.code] });
 }
 
@@ -103,9 +108,12 @@ const view = (ref: MeetingRef) => meetingView(ref, PROVIDER_LABEL[ref.provider])
 meetings.get('/interviews/:id/meetings', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
+  // A restarted Zoom call's first instance shares the call's session and shows
+  // as the call itself; a later instance has a session of its own and is listed.
   const rows = (await c.env.DB.prepare(
-    `SELECT * FROM interview_channel_refs WHERE interview_id = ? AND user_id = ?
-      ORDER BY datetime(COALESCE(starts_at, created_at)) DESC, id DESC LIMIT 100`,
+    `SELECT * FROM interview_channel_refs r WHERE r.interview_id = ? AND r.user_id = ?
+        AND NOT EXISTS (SELECT 1 FROM interview_channel_refs p WHERE p.session_id = r.session_id AND p.id < r.id)
+      ORDER BY datetime(COALESCE(r.starts_at, r.created_at)) DESC, r.id DESC LIMIT 100`,
   ).bind(s.scoped.interview.id, s.user.id).all<MeetingRef>()).results ?? [];
   const google = await meet.googleConnection(c.env, s.user.id);
   const providers = [
@@ -176,8 +184,10 @@ meetings.post('/interviews/:id/meetings', async (c) => {
   }
 
   // Scheduling works with Calendar's own scope; reading the transcript later
-  // needs Meet's. Say so now, while the member can still reconnect in time.
-  const notice: MeetingErrorCode | null = googleConn && meet.transcriptAccess(googleConn) === 'missing' ? 'meet_scope_missing' : null;
+  // needs Meet's, which no Axal consent asks for yet (#1585), so reconnecting
+  // cannot help. Say so now, while the member can still plan to record the
+  // call in Axal or paste it afterwards.
+  const notice: MeetingErrorCode | null = googleConn && meet.transcriptAccess(googleConn) === 'missing' ? 'meet_transcripts_unavailable' : null;
   const undo = async () => {
     try {
       if (zoomConn) await zoom.cancelMeeting(c.env, zoomConn, created.externalRef);
@@ -268,7 +278,7 @@ meetings.post('/interviews/:id/meetings/:refUid/import', async (c) => {
   }
   if (!available(c.env, ref.provider)) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE[ref.provider] });
   // Run here rather than queued: the member pressed the button and waits for the answer.
-  const outcome = await importMeetingRef(c.env, ref, FETCHERS[ref.provider]);
+  const outcome = await IMPORTERS[ref.provider](c.env, ref, {});
   const fresh = await loadRef(c.env, ref.uid);
   if (!fresh) return refuse(c, 404, { code: 'meeting_not_found', message: 'That call no longer exists.' });
   return c.json({ meeting: view(fresh), outcome: outcome.status, segments: outcome.segments });
@@ -288,10 +298,9 @@ export default meetings;
 export const zoomWebhook = new Hono<{ Bindings: Env }>();
 
 zoomWebhook.post('/zoom/webhook', async (c) => {
-  const tooLarge = () => c.json({ error: 'too_large', message: 'The request body is too large.' }, 413);
-  if (Number(c.req.header('content-length') || 0) > CHANNEL_LIMITS.maxBodyBytes) return tooLarge();
-  const buf = await c.req.arrayBuffer();
-  if (buf.byteLength > CHANNEL_LIMITS.maxBodyBytes) return tooLarge();
+  // Counted as it arrives: a body without Content-Length is never buffered whole.
+  const buf = await readCappedBody(c.req.raw);
+  if (!buf) return c.json({ error: 'too_large', message: 'The request body is too large.' }, 413);
   const reply = await zoom.handleZoomWebhook(c.env, new TextDecoder().decode(buf), c.req.raw.headers);
   return c.json(reply.body, reply.status);
 });

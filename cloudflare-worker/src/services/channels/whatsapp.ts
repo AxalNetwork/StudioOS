@@ -302,13 +302,58 @@ export async function checkWhatsAppConnection(env: Env, conn: ChannelConnection)
   return r.ok ? { ok: true } : { ok: false, code: r.code };
 }
 
-/** Disconnect: stop Meta sending this WABA's webhooks to Axal. Best effort; the caller ignores a failure. */
-export async function unsubscribeApp(env: Env, conn: Pick<ChannelConnection, 'integrationUid' | 'credentialsEnc' | 'config'>): Promise<boolean> {
+export type UnsubscribeOutcome = 'unsubscribed' | 'shared' | 'unverified' | 'failed';
+
+/**
+ * Disconnect: stop Meta sending this WABA's webhooks to Axal — unless another
+ * Axal member still uses a number in it. Meta subscribes an app per WABA, not
+ * per number, so `DELETE /{waba}/subscribed_apps` would silently cut off every
+ * other member's number there (two co-founders on one company WABA): their
+ * rows would still read 'active' while no webhook arrived.
+ *
+ * Leaving the subscription on is always safe — a number no member holds is
+ * ignored on arrival — so this unsubscribes only when it is SURE nobody else
+ * is on the WABA, and does nothing when it cannot tell:
+ *   - no other active WhatsApp connection records this waba_id; and
+ *   - the WABA's own number list, read with this member's token, holds this
+ *     member's number (so `config.waba_id`, which the connectors' config
+ *     route can rewrite, is not trusted on its own) and no number another
+ *     active member holds. A list that pages beyond one page is not read as
+ *     complete.
+ * Best effort; the caller ignores the outcome.
+ */
+export async function unsubscribeApp(
+  env: Env,
+  conn: Pick<ChannelConnection, 'integrationId' | 'integrationUid' | 'credentialsEnc' | 'config'> & { phoneNumberId: string | null },
+): Promise<UnsubscribeOutcome> {
   const waba = idStr(conn.config?.waba_id);
+  const own = idStr(conn.phoneNumberId);
   const token = await whatsappToken(env, conn);
-  if (!waba || !token) return false;
+  if (!waba || !own || !token) return 'unverified';
+  const recorded = await env.DB.prepare(
+    `SELECT 1 AS t FROM integrations
+      WHERE provider_key = 'whatsapp' AND status = 'active' AND id != ?
+        AND (CASE WHEN json_valid(config_json) THEN json_extract(config_json, '$.waba_id') END) = ?
+      LIMIT 1`,
+  ).bind(conn.integrationId, waba).first<{ t: number }>();
+  if (recorded) return 'shared';
+
+  const numbers = await graph('phone_numbers', `${GRAPH_BASE}/${encodeURIComponent(waba)}/phone_numbers?fields=id&limit=100`, { token });
+  if (!numbers.ok || numbers.data?.paging?.next) return 'unverified';
+  const ids = arr(numbers.data?.data).map((n) => idStr(obj(n)?.id)).filter((x): x is string => !!x);
+  if (!ids.includes(own)) return 'unverified';
+  const others = ids.filter((id) => id !== own);
+  if (others.length) {
+    const held = await env.DB.prepare(
+      `SELECT 1 AS t FROM integrations
+        WHERE provider_key = 'whatsapp' AND status = 'active' AND id != ?
+          AND external_account_id IN (SELECT value FROM json_each(?))
+        LIMIT 1`,
+    ).bind(conn.integrationId, JSON.stringify(others)).first<{ t: number }>();
+    if (held) return 'shared';
+  }
   const r = await graph('unsubscribe', `${GRAPH_BASE}/${encodeURIComponent(waba)}/subscribed_apps`, { method: 'DELETE', token });
-  return r.ok;
+  return r.ok ? 'unsubscribed' : 'failed';
 }
 
 /** '•••• 1234' — the only form a WhatsApp number is shown or stored in outside the provider. */

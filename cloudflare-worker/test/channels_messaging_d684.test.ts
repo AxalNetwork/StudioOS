@@ -5,20 +5,33 @@
  * fails the test — nothing reaches a real provider).
  *
  * What these prove:
- *   · Telegram: a forged or missing secret is 401 and stores nothing; an unset
- *     one is 503. `/start <code>` links the account once; an account another
- *     member holds is refused and nothing is stored. A business connection
- *     before linking stores only its row and prompts the owner; after linking
- *     its messages arrive pending, encrypted; edits, deletions and duplicates
- *     behave; a disabled connection is nobody. A voice note queues a job that
- *     carries no text, and the job transcribes it on the member's budget —
- *     a spent budget stores nothing.
+ *   · Telegram: a forged or missing secret is 401 and stores nothing, before
+ *     the body is read; an unset one is 503. `/start <code>` links nothing on
+ *     its own: the bot names the Axal account, and only that Telegram
+ *     account's own /confirm, within ten minutes, links it — so a member's
+ *     code sent to someone else's account hands over none of its chats. An
+ *     account another member holds is refused and nothing is stored. A
+ *     business connection before linking stores only its row and prompts the
+ *     owner; after linking its messages arrive pending, encrypted; edits,
+ *     deletions and duplicates behave; a disabled connection is nobody.
+ *   · Voice notes: on a pending chat, a placeholder with no text and no job —
+ *     no download, no model; the member's assignment queues them, ids only,
+ *     and each lands once, even when its record fails mid-way. A note deleted
+ *     at the source is never transcribed. A spent budget, the connection's
+ *     daily cap (D1, fails closed) or an oversize note runs nothing.
+ *   · The per-connection limit trips by a D1 count (KV could never count that
+ *     fast) and fails open; webhook bodies are capped without Content-Length.
  *   · WhatsApp: the challenge echoes only for the right token; a forged or
  *     missing signature is 401; text, voice, app echoes and statuses land
  *     where they should; a duplicate is processed once; an unknown number is
  *     ignored; Embedded Signup stores the token encrypted and refuses a number
- *     outside the WABA or held by another member.
- *   · Replies: once per client_key, never outside the 24-hour window.
+ *     outside the WABA or held by another member. No wamid rides in a job.
+ *     Disconnecting leaves the app subscribed while another member's number
+ *     shares the WABA.
+ *   · Replies: once per client_key, never outside the 24-hour window; a send
+ *     the provider took answers sent even when its outcome could not be
+ *     saved, and a key whose first attempt never finished is never called
+ *     sent or sent again.
  *   · Another member's thread is not there (404) for every thread route.
  *   · No response carries a platform secret, a token or a phone number;
  *     availability names missing secrets to admins only.
@@ -42,6 +55,7 @@ import { runChannelJob } from '../src/services/channels/jobs.ts';
 import { createLinkCode } from '../src/services/channels/linkCodes.ts';
 import { normaliseTelegramUpdate } from '../src/services/channels/telegram.ts';
 import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/whatsapp.ts';
+import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 
 /** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
 const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
@@ -105,7 +119,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '450_channel_events_delete_kind.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql']) db.exec(mig(m));
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
       db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
@@ -230,6 +244,15 @@ const startUpdate = (code: string, tg = TG_ME) => ({
   update_id: ++updateId,
   message: { message_id: 1, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: `/start ${code}` },
 });
+const confirmUpdate = (tg = TG_ME) => ({
+  update_id: ++updateId,
+  message: { message_id: 2, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: '/confirm' },
+});
+/** Both steps of linking: the code, then the Telegram account's own /confirm. */
+async function linkTelegram(env: any, code: string, tg = TG_ME) {
+  await tgHook(env, startUpdate(code, tg));
+  return tgHook(env, confirmUpdate(tg));
+}
 const connectionUpdate = (bc: string, tg: string, extra: Record<string, unknown> = { rights: { can_reply: true, can_read_messages: true } }, enabled = true) => ({
   update_id: ++updateId,
   business_connection: { id: bc, user: tgUser(tg), user_chat_id: Number(tg), date: now(), is_enabled: enabled, ...extra },
@@ -349,7 +372,7 @@ test('Telegram: a forged or missing secret is 401 and stores nothing; an unset o
   } finally { f.restore(); }
 });
 
-test('Telegram: /start <code> links the account once; a duplicate update does nothing', async () => {
+test('Telegram: /start <code> then the account’s own /confirm links it once; a duplicate update does nothing', async () => {
   const { env, db } = await world();
   const f = mockFetch(telegramApi);
   try {
@@ -363,19 +386,32 @@ test('Telegram: /start <code> links the account once; a duplicate update does no
              VALUES ('bc-early', 'BC-EARLY', '${TG_NEW}', NULL, 1, 1)`);
     const update = startUpdate(link.body.code, TG_NEW);
     assert.equal((await tgHook(env, update)).status, 200);
-    const row = db.prepare(`SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'telegram'`).get(ME);
-    assert.deepEqual([row.status, row.auth_type, row.external_account_id, row.external_account_name, row.credentials_enc],
-      ['active', 'webhook', TG_NEW, '@dana_biz', null]);
-    assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-EARLY'`).get().user_id, ME);
-    const reply = f.calls.find((c) => c.url.endsWith('/sendMessage'))!;
-    assert.equal(String(reply.body.chat_id), TG_NEW, 'the confirmation goes to the private chat');
-    assert.match(reply.body.text, /linked/i);
-    assert.equal(reply.body.text.includes(link.body.code), false);
+    // Step one names the Axal account and links nothing.
+    assert.equal(count(db, `SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'`), 0);
+    assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-EARLY'`).get().user_id, null);
+    const prompt = f.calls.find((c) => c.url.endsWith('/sendMessage'))!;
+    assert.equal(String(prompt.body.chat_id), TG_NEW, 'the question goes to the private chat');
+    assert.match(prompt.body.text, /m•••@example\.test/, 'it names the Axal account, masked');
+    assert.match(prompt.body.text, /\/confirm/);
+    assert.equal(prompt.body.text.includes(link.body.code), false);
+    assert.equal(prompt.body.text.includes('member@example.test'), false);
 
     const before = f.calls.length;
     assert.equal((await tgHook(env, update)).status, 200, 'a redelivery answers 200');
     assert.equal(f.calls.length, before, 'and does nothing');
-    assert.equal(count(db, `SELECT COUNT(*) n FROM channel_events WHERE kind = 'link'`), 1);
+
+    assert.equal((await tgHook(env, confirmUpdate(TG_NEW))).status, 200);
+    const row = db.prepare(`SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'telegram'`).get(ME);
+    assert.deepEqual([row.status, row.auth_type, row.external_account_id, row.external_account_name, row.credentials_enc],
+      ['active', 'webhook', TG_NEW, '@dana_biz', null]);
+    assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-EARLY'`).get().user_id, ME);
+    const reply = f.calls[f.calls.length - 1];
+    assert.match(reply.body.text, /now linked/i);
+    assert.equal(count(db, `SELECT COUNT(*) n FROM channel_events WHERE kind = 'link'`), 2);
+
+    // A second /confirm finds nothing waiting.
+    await tgHook(env, confirmUpdate(TG_NEW));
+    assert.match(f.calls[f.calls.length - 1].body.text, /no link waiting/);
 
     const status = await call(env, ME, 'GET', '');
     assert.deepEqual(status.body.connections.telegram.external_account_name, '@dana_biz');
@@ -402,6 +438,36 @@ test('Telegram: an account another member holds is refused, and nothing is store
   } finally { f.restore(); }
 });
 
+test('Telegram: a member’s link code sent to someone else’s account links nothing without that account’s /confirm', async () => {
+  // Review finding 3: OTHER (any signed-in member) sends their t.me link to the
+  // owner of a Telegram Business account that already has the bot connected.
+  // One tap on Start used to link that account to OTHER and hand OTHER its
+  // business connection — the customer chats, and replies as that business.
+  const { env, db } = await world();
+  const f = mockFetch(telegramApi);
+  try {
+    db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
+             VALUES ('bc-v', 'BC-VICTIM', '${TG_NEW}', NULL, 1, 1)`);
+    const { code } = await createLinkCode(env, OTHER, 'telegram');
+    assert.equal((await tgHook(env, startUpdate(code, TG_NEW))).status, 200);
+    assert.equal(count(db, `SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'`), 0, 'nothing linked on /start');
+    assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-VICTIM'`).get().user_id, null,
+      'the business connection is not handed over');
+    assert.match(f.calls[0].body.text, /i•••@example\.test/, 'the owner is told which Axal account is asking');
+
+    // Nobody else can confirm for that Telegram account.
+    await tgHook(env, confirmUpdate(TG_OTHER));
+    assert.equal(count(db, `SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'`), 0);
+    assert.match(f.calls[1].body.text, /no link waiting/);
+
+    // And the owner's own /confirm counts only within ten minutes.
+    db.exec(`UPDATE channel_link_codes SET used_at = datetime('now', '-11 minutes')`);
+    await tgHook(env, confirmUpdate(TG_NEW));
+    assert.equal(count(db, `SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'`), 0);
+    assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-VICTIM'`).get().user_id, null);
+  } finally { f.restore(); }
+});
+
 test('Telegram: a connection before linking stores only its row and prompts; after linking, messages arrive pending', async () => {
   const { env, db } = await world();
   const f = mockFetch(telegramApi);
@@ -419,7 +485,7 @@ test('Telegram: a connection before linking stores only its row and prompts; aft
     assert.equal(db.prepare(`SELECT error FROM channel_events WHERE kind = 'message'`).get().error, 'unknown_connection');
 
     const { code } = await createLinkCode(env, ME, 'telegram');
-    await tgHook(env, startUpdate(code, TG_NEW));
+    await linkTelegram(env, code, TG_NEW);
     assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-NEW'`).get().user_id, ME);
 
     assert.equal((await tgHook(env, businessMessage('BC-NEW', { text: 'Invoices take my whole Friday.' }))).status, 200);
@@ -478,41 +544,110 @@ test('Telegram: a disabled connection is updated and its messages are nobody’s
   } finally { f.restore(); }
 });
 
-test('Telegram: a voice note queues ids only; the job transcribes it on the member budget and keeps only text', async () => {
+/** A Telegram chat with one text message, assigned to INTERVIEW through the route. */
+async function assignedTelegramChat(env: any, chat = 8001) {
+  await tgHook(env, businessMessage('BC-ME', { chat, text: 'We reconcile invoices by hand every Friday.' }));
+  const [t] = (await call(env, ME, 'GET', '/threads?status=pending')).body.items;
+  const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
+  assert.equal(a.status, 200);
+  return { uid: t.uid as string, sessionId: Number(a.body.session_id) };
+}
+const voiceJobs = (queued: any[]) => queued.filter((j) => j.job_type === 'channel_followup');
+const segments = (db: any, sessionId: number) => db.prepare('SELECT speaker_label, text FROM interview_transcript_segments WHERE session_id = ? ORDER BY id').all(sessionId)
+  .map((s: any) => [s.speaker_label, s.text]);
+
+test('Telegram: a voice note on a pending chat runs no model and waits, with no text, until the member assigns the chat', async () => {
+  // Review findings 0 and 9: a stranger's voice notes used to be downloaded and
+  // transcribed on arrival, on the member's AI budget and then their top-up.
   const { env, db, queued, aiCalls } = await world({ seed: true });
   const f = mockFetch(telegramApi);
   try {
     const voice = { file_id: 'VOICE-1', file_unique_id: 'U1', duration: 9, mime_type: 'audio/ogg', file_size: 4000 };
-    assert.equal((await tgHook(env, businessMessage('BC-ME', { voice }))).status, 200);
-    assert.equal(queued.length, 1);
-    const job = queued[0];
-    assert.equal(job.job_type, 'channel_followup');
-    assert.match(job.idempotency_key, /^telegram:channel_followup:\d+$/);
-    assert.equal(job.payload.provider, 'telegram');
-    assert.equal(job.payload.kind, 'voice');
-    assert.equal(job.payload.file, 'VOICE-1');
-    assert.equal(JSON.stringify(job.payload).includes('Sam'), false, 'no name in the job');
-    assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0, 'nothing stored before transcription');
-    assert.equal(db.prepare(`SELECT status FROM channel_events WHERE kind = 'voice'`).get().status, 'accepted');
+    for (let i = 0; i < 3; i++) assert.equal((await tgHook(env, businessMessage('BC-ME', { voice }))).status, 200);
+    assert.equal(queued.length, 0, 'nothing queued for a chat the member has not assigned');
+    assert.equal(aiCalls.length, 0, 'no model ran');
+    assert.equal(f.calls.length, 0, 'nothing downloaded');
+    assert.equal(JSON.stringify(db.prepare('SELECT * FROM channel_thread_messages').all()).includes('VOICE-1'), false, 'the file ref is stored encrypted');
+    assert.equal(db.prepare(`SELECT status FROM channel_events WHERE kind = 'voice' LIMIT 1`).get().status, 'stored');
+    const [t] = (await call(env, ME, 'GET', '/threads?status=pending')).body.items;
+    assert.equal(t.message_count, 3);
+    const read = await call(env, ME, 'GET', `/threads/${t.uid}`);
+    assert.deepEqual(read.body.messages.map((m: any) => [m.kind, m.text, m.awaiting_transcription, m.duration_sec]),
+      [['voice', null, true, 9], ['voice', null, true, 9], ['voice', null, true, 9]]);
+    assert.equal(JSON.stringify(read.body).includes('VOICE-1'), false, 'the file ref never leaves the Worker');
 
-    await runChannelJob(env, 'channel_followup', job.payload);
+    // The member assigns the chat: now, and only now, the notes are queued — ids only.
+    const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
+    assert.deepEqual([a.status, a.body.moved, a.body.voice_queued], [200, 0, 3]);
+    const jobs = voiceJobs(queued);
+    assert.equal(jobs.length, 3);
+    for (const job of jobs) {
+      assert.match(job.idempotency_key, /^telegram:channel_followup:[0-9a-f-]{36}$/);
+      assert.deepEqual(Object.keys(job.payload).sort(), ['event', 'job', 'kind', 'message', 'provider']);
+      assert.equal(JSON.stringify(job).includes('VOICE-1') || JSON.stringify(job).includes('8001'), false, 'no file ref and no chat id in the job');
+    }
+    assert.equal((await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW })).body.voice_queued, 0, 'never queued twice');
+
+    await runChannelJob(env, 'channel_followup', jobs[0].payload);
     assert.equal(aiCalls.length, 1);
     assert.equal(aiCalls[0].model, '@cf/openai/whisper-large-v3-turbo', 'the sessions default final model');
-    const [t] = (await call(env, ME, 'GET', '/threads')).body.items;
-    const read = await call(env, ME, 'GET', `/threads/${t.uid}`);
-    assert.deepEqual(read.body.messages.map((m: any) => [m.kind, m.text]), [['voice', 'We lose a whole day every month to this.']]);
-    assert.equal(db.prepare(`SELECT status FROM channel_events WHERE kind = 'voice'`).get().status, 'stored');
+    assert.deepEqual(segments(db, a.body.session_id), [['Dana Ruiz', 'We lose a whole day every month to this.']]);
+    assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 2, 'the transcribed placeholder is gone');
     assert.ok(count(db, `SELECT COUNT(*) n FROM ai_usage_logs WHERE user_id = ${ME} AND task = 'transcribe'`) >= 1, 'charged to the member');
     assert.ok(f.calls.some((c) => c.url.includes('/file/bot')), 'downloaded through getFile');
 
     // Run twice: nothing more happens.
-    await runChannelJob(env, 'channel_followup', job.payload);
+    await runChannelJob(env, 'channel_followup', jobs[0].payload);
     assert.equal(aiCalls.length, 1);
-    assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 1);
+    assert.equal(segments(db, a.body.session_id).length, 1);
   } finally { f.restore(); }
 });
 
-test('Telegram: a spent budget transcribes nothing and stores nothing; an oversize voice note is refused', async () => {
+test('Telegram: on a chat in an interview a voice note is queued on arrival and lands once, even when its record fails mid-way', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramApi);
+  try {
+    const { sessionId } = await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'VOICE-2', duration: 4 } }));
+    const [job] = voiceJobs(queued);
+    assert.ok(job.payload.event, 'the webhook’s event travels with the job, as its id');
+    assert.equal(db.prepare(`SELECT status FROM channel_events WHERE kind = 'voice'`).get().status, 'stored');
+
+    // Review finding 17: the event's record fails after the append. The record
+    // is in the append's batch now, so nothing lands and the retry lands once.
+    db.exec(`CREATE TRIGGER fail_event BEFORE UPDATE ON channel_events BEGIN SELECT RAISE(ABORT, 'd1 hiccup'); END;`);
+    await assert.rejects(runChannelJob(env, 'channel_followup', job.payload));
+    db.exec('DROP TRIGGER fail_event');
+    assert.equal(segments(db, sessionId).length, 1, 'nothing appended without its record');
+    await runChannelJob(env, 'channel_followup', job.payload);
+    await runChannelJob(env, 'channel_followup', job.payload);
+    assert.deepEqual(segments(db, sessionId).map((x: any) => x[1]),
+      ['We reconcile invoices by hand every Friday.', 'We lose a whole day every month to this.'], 'appended once');
+    assert.equal(aiCalls.length, 2, 'the failed attempt and its retry; the redelivery ran nothing');
+    assert.equal(db.prepare(`SELECT status FROM channel_events WHERE kind = 'voice'`).get().status, 'done');
+    assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0);
+  } finally { f.restore(); }
+});
+
+test('Telegram: a voice note deleted at the source while its job waits is never downloaded, transcribed or stored', async () => {
+  // Review finding 7.
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramApi);
+  try {
+    const { sessionId } = await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { id: 777, voice: { file_id: 'VOICE-3', duration: 4 } }));
+    const [job] = voiceJobs(queued);
+    await tgHook(env, { update_id: ++updateId, deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [777] } });
+    assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0, 'the placeholder went with the deletion');
+    const calls = f.calls.length;
+    await runChannelJob(env, 'channel_followup', job.payload);
+    assert.equal(f.calls.length, calls, 'not downloaded');
+    assert.equal(aiCalls.length, 0, 'not transcribed');
+    assert.equal(segments(db, sessionId).length, 1, 'not stored');
+  } finally { f.restore(); }
+});
+
+test('Telegram: a spent budget, the connection’s daily cap or an oversize note transcribes nothing, and the note waits', async () => {
   const { env, db, queued, aiCalls } = await world({ seed: true, budget: 0 });
   const f = mockFetch((url, init) => {
     if (url.pathname.endsWith('/getFile') && String((JSON.parse(String(init.body))).file_id) === 'HUGE') {
@@ -521,20 +656,39 @@ test('Telegram: a spent budget transcribes nothing and stores nothing; an oversi
     return telegramApi(url, init);
   });
   try {
+    const { uid } = await assignedTelegramChat(env);
     await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'VOICE-1', duration: 4 } }));
-    await runChannelJob(env, 'channel_followup', queued[0].payload);
+    await runChannelJob(env, 'channel_followup', voiceJobs(queued)[0].payload);
     assert.equal(aiCalls.length, 0, 'no model ran on a spent budget');
-    assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0);
     assert.match(db.prepare(`SELECT error FROM channel_events WHERE kind = 'voice'`).get().error, /^budget_/);
+    const waiting = (await call(env, ME, 'GET', `/threads/${uid}`)).body.messages;
+    assert.deepEqual(waiting.map((m: any) => [m.kind, m.text, m.awaiting_transcription]), [['voice', null, true]], 'the note waits, given back');
+
+    // The day's cap, held in D1 (the refused run above took one): spent, the model never runs.
+    const integration = db.prepare(`SELECT id FROM integrations WHERE uid = 'tg-me'`).get().id;
+    assert.equal(db.prepare(`SELECT n FROM channel_counters WHERE counter = 'transcriptions_day'`).get().n, 1);
+    db.prepare(`UPDATE channel_counters SET n = ? WHERE integration_id = ? AND counter = 'transcriptions_day'`)
+      .run(CHANNEL_LIMITS.transcriptionsPerDay, integration);
+    const again = await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW });
+    assert.equal(again.body.voice_queued, 1, 'assigning again queues the note that was given back');
+    await runChannelJob(env, 'channel_followup', voiceJobs(queued)[1].payload);
+    assert.equal(aiCalls.length, 0);
+    assert.equal(db.prepare(`SELECT n FROM channel_counters WHERE counter = 'transcriptions_day'`).get().n, CHANNEL_LIMITS.transcriptionsPerDay);
+
+    // And when the counter cannot be read, it fails closed: the job throws for the queue to retry, and nothing runs.
+    await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW });
+    db.exec('DROP TABLE channel_counters');
+    await assert.rejects(runChannelJob(env, 'channel_followup', voiceJobs(queued)[2].payload));
+    assert.equal(aiCalls.length, 0);
 
     await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'HUGE', duration: 4000 } }));
-    await runChannelJob(env, 'channel_followup', queued[1].payload);
+    await runChannelJob(env, 'channel_followup', voiceJobs(queued)[3].payload);
     assert.equal(f.calls.some((c) => c.url.includes('huge.oga')), false, 'never downloaded');
     assert.equal(db.prepare(`SELECT error FROM channel_events WHERE kind = 'voice' ORDER BY id DESC LIMIT 1`).get().error, 'too_large');
   } finally { f.restore(); }
 });
 
-test('Telegram: an inactive member, or a connection over its per-minute limit, is ignored', async () => {
+test('Telegram: an inactive member is ignored, and a connection over its per-minute limit is refused by a D1 count', async (t) => {
   const { env, db } = await world({ seed: true });
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-g', 'BC-GONE', '999', ${GONE}, 1, 1)`);
@@ -543,11 +697,67 @@ test('Telegram: an inactive member, or a connection over its per-minute limit, i
   assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_threads'), 0);
   assert.equal(db.prepare(`SELECT error FROM channel_events`).get().error, 'member_inactive');
 
-  const minute = Math.floor(Date.now() / 1000 / 60);
-  await env.RATE_LIMITS.put(`rl:ch:telegram:${db.prepare(`SELECT id FROM integrations WHERE uid = 'tg-me'`).get().id}:${minute}`, '120');
-  await tgHook(env, businessMessage('BC-ME'));
-  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0);
-  assert.equal(db.prepare(`SELECT error FROM channel_events ORDER BY id DESC LIMIT 1`).get().error, 'rate_limited');
+  // Review finding 1: KV as production has it takes one write per key per
+  // second and throws on a second, so the KV counter this used to be never
+  // passed about 60 in a minute and the limit of 120 never tripped.
+  const writes = new Map<string, number>();
+  env.RATE_LIMITS = {
+    async get() { return null; },
+    async put(key: string) {
+      const last = writes.get(key);
+      if (last !== undefined && Date.now() - last < 1000) throw new Error('KV PUT failed: 429 Too Many Requests');
+      writes.set(key, Date.now());
+    },
+  };
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-13T10:05:05.000Z') });
+  const over = 5;
+  for (let i = 0; i < CHANNEL_LIMITS.eventsPerMinute + over; i++) await tgHook(env, businessMessage('BC-ME'));
+  assert.equal(count(db, `SELECT COUNT(*) n FROM channel_events WHERE error = 'rate_limited'`), over);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), CHANNEL_LIMITS.eventsPerMinute);
+
+  // It fails open: a counter that cannot be written never drops a customer's text.
+  db.exec('DROP TABLE channel_counters');
+  const error = console.error;
+  console.error = () => {};
+  try { await tgHook(env, businessMessage('BC-ME')); } finally { console.error = error; }
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), CHANNEL_LIMITS.eventsPerMinute + 1);
+});
+
+test('Webhook bodies: the size cap holds without Content-Length, and a wrong Telegram secret is refused before the body is read', async () => {
+  // Review split finding 0.
+  const { env, db } = await world({ seed: true });
+  const streamed = (bytes: number) => {
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(ctrl) {
+        if (sent >= bytes) { ctrl.close(); return; }
+        const n = Math.min(64 * 1024, bytes - sent);
+        sent += n;
+        ctrl.enqueue(new Uint8Array(n).fill(32));
+      },
+    }, { highWaterMark: 0 });
+    return { body, read: () => sent };
+  };
+  const post = (path: string, headers: Record<string, string>, body: ReadableStream<Uint8Array>) =>
+    send(env, path, { method: 'POST', headers, body, duplex: 'half' } as RequestInit);
+  const allowance = CHANNEL_LIMITS.maxBodyBytes + 128 * 1024;
+
+  const big = streamed(8 * 1024 * 1024);
+  const r = await post('/api/channels/telegram/webhook', { 'X-Telegram-Bot-Api-Secret-Token': SECRETS.TELEGRAM_CHANNEL_WEBHOOK_SECRET }, big.body);
+  assert.equal(r.status, 413);
+  assert.ok(big.read() <= allowance, `read ${big.read()} bytes of a body that sent no Content-Length`);
+
+  const anon = streamed(8 * 1024 * 1024);
+  const r2 = await post('/api/channels/telegram/webhook', { 'X-Telegram-Bot-Api-Secret-Token': 'not-the-secret' }, anon.body);
+  assert.equal(r2.status, 401);
+  assert.ok(anon.read() <= 64 * 1024, `read ${anon.read()} bytes for a caller without the secret`);
+
+  // WhatsApp's signature covers the body, so it is read first — under the same cap.
+  const wa = streamed(8 * 1024 * 1024);
+  const r3 = await post('/api/channels/whatsapp/webhook', { 'X-Hub-Signature-256': `sha256=${'0'.repeat(64)}` }, wa.body);
+  assert.equal(r3.status, 413);
+  assert.ok(wa.read() <= allowance);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_events'), 0);
 });
 
 test('Telegram: a store that fails releases the claim and answers 500, so the retry is processed', async () => {
@@ -619,7 +829,7 @@ test('WhatsApp: app echoes are the member’s side; statuses advance Axal’s se
   assert.equal(db.prepare(`SELECT error FROM channel_events WHERE external_event_id = ?`).get(ref('whatsapp', 'wamid.GONE')).error, 'member_inactive');
 });
 
-test('WhatsApp: one POST with several messages claims each; a voice note is queued and fetched with the member token', async () => {
+test('WhatsApp: one POST with several messages claims each; a voice note waits for the assignment, then is fetched with the member token', async () => {
   const { env, db, queued, aiCalls } = await world({ seed: true });
   const payload = waPayload(PNID, {
     contacts: [{ profile: { name: 'Priya Shah' }, wa_id: WA_CUSTOMER }],
@@ -630,8 +840,15 @@ test('WhatsApp: one POST with several messages claims each; a voice note is queu
   });
   await waHook(env, payload);
   assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_events'), 2);
-  assert.equal(queued.length, 1);
-  assert.equal(JSON.stringify(queued[0].payload).includes(WA_CUSTOMER), false, 'no phone number in the job');
+  assert.equal(queued.length, 0, 'a pending chat’s voice note is not queued');
+  const [t] = (await call(env, ME, 'GET', '/threads')).body.items;
+  const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
+  assert.deepEqual([a.body.moved, a.body.voice_queued], [1, 1]);
+  const [job] = voiceJobs(queued);
+  // Review finding 5: a wamid is the customer's number in base64. Neither it,
+  // the number nor the media id rides in the job or in its idempotency key.
+  const wire = JSON.stringify(job);
+  for (const s of ['wamid', WA_CUSTOMER, 'MEDIA-9']) assert.equal(wire.includes(s), false, `${s} is in the job`);
 
   const f = mockFetch((url) => {
     if (url.hostname === 'graph.facebook.com' && url.pathname === '/v23.0/MEDIA-9') {
@@ -641,18 +858,19 @@ test('WhatsApp: one POST with several messages claims each; a voice note is queu
     return undefined;
   });
   try {
-    await runChannelJob(env, 'channel_followup', queued[0].payload);
+    await runChannelJob(env, 'channel_followup', job.payload);
     assert.equal(f.calls.length, 2);
     assert.ok(f.calls.every((c) => c.auth === `Bearer ${WA_TOKEN}`), 'both calls carry the member token');
     assert.equal(aiCalls.length, 1);
-    assert.equal(count(db, `SELECT COUNT(*) n FROM channel_thread_messages WHERE kind = 'voice'`), 1);
+    assert.deepEqual(segments(db, a.body.session_id).map((x: any) => x[1]), ['One.', 'We lose a whole day every month to this.']);
+    assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0);
   } finally { f.restore(); }
 
-  // A media URL off Meta's hosts is never sent the token.
+  // On the assigned chat a voice note is queued on arrival. A media URL off Meta's hosts is never sent the token.
   await waHook(env, waPayload(PNID, { messages: [{ from: WA_CUSTOMER, id: 'wamid.V2', timestamp: String(now()), type: 'audio', audio: { id: 'MEDIA-EVIL' } }] }));
   const g = mockFetch((url) => (url.pathname === '/v23.0/MEDIA-EVIL' ? { json: { url: 'https://attacker.example/steal', file_size: 10 } } : undefined));
   try {
-    await runChannelJob(env, 'channel_followup', queued[1].payload);
+    await runChannelJob(env, 'channel_followup', voiceJobs(queued)[1].payload);
     assert.equal(g.calls.length, 1);
     assert.equal(db.prepare(`SELECT error FROM channel_events WHERE external_event_id = ?`).get(ref('whatsapp', 'wamid.V2')).error, 'media_host');
   } finally { g.restore(); }
@@ -747,6 +965,37 @@ test('Replies: once per client_key, as Me, and never outside the 24-hour window'
   } finally { f.restore(); }
 });
 
+test('Replies: a send whose outcome could not be saved still answers sent; a key whose first attempt never finished is never called sent or sent again', async () => {
+  const { env, db } = await world({ seed: true });
+  await waHook(env, waText(PNID, 'wamid.IN9'));
+  const [t] = (await call(env, ME, 'GET', '/threads')).body.items;
+  const f = mockFetch((url, init) => (url.hostname === 'graph.facebook.com' && url.pathname === `/v23.0/${PNID}/messages` && init.method === 'POST'
+    ? { json: { messaging_product: 'whatsapp', messages: [{ id: 'wamid.REPLY9' }] } }
+    : undefined));
+  const error = console.error;
+  try {
+    // Review finding 18: Meta took the message, then D1 failed to record the
+    // outcome. A 500 here made the composer drop its key, and the next press
+    // sent a second copy.
+    db.exec(`CREATE TRIGGER fail_outcome BEFORE UPDATE ON channel_outbound BEGIN SELECT RAISE(ABORT, 'd1 hiccup'); END;`);
+    console.error = () => {};
+    const first = await call(env, ME, 'POST', `/threads/${t.uid}/reply`, { text: 'Can we talk Thursday?', client_key: 'ck-9' });
+    console.error = error;
+    db.exec('DROP TRIGGER fail_outcome');
+    assert.deepEqual([first.status, first.body.ok, first.body.outbound.status], [200, true, 'submitted']);
+
+    // Review finding 19: the row is still 'pending'. The same key again sends
+    // nothing, and says neither sent nor failed.
+    const again = await call(env, ME, 'POST', `/threads/${t.uid}/reply`, { text: 'Can we talk Thursday?', client_key: 'ck-9' });
+    assert.equal(again.status, 200);
+    assert.deepEqual([again.body.ok, again.body.pending, again.body.code, again.body.outbound.status], [null, true, 'send_in_flight', 'pending']);
+    db.exec(`UPDATE channel_outbound SET created_at = datetime('now', '-5 minutes') WHERE client_key = 'ck-9'`);
+    const later = await call(env, ME, 'POST', `/threads/${t.uid}/reply`, { text: 'Can we talk Thursday?', client_key: 'ck-9' });
+    assert.deepEqual([later.body.ok, later.body.code], [null, 'send_unknown']);
+    assert.equal(f.calls.length, 1, 'sent once');
+  } finally { console.error = error; f.restore(); }
+});
+
 test('Telegram replies go out on the business connection, only with the reply right; acceptance is never delivery', async () => {
   const { env, db } = await world({ seed: true });
   await tgHook(env, businessMessage('BC-ME', { chat: 8001 }));
@@ -813,15 +1062,24 @@ test('Availability names missing secrets to admins only, hands the browser the s
   assert.equal(noWa.body.providers.find((p: any) => p.provider === 'whatsapp').signup, undefined);
 });
 
+/** Graph for a disconnect: the WABA's numbers, and the unsubscribe. */
+const wabaRoute = (numbers: string[]): Route => (url, init) => {
+  if (url.hostname !== 'graph.facebook.com') return undefined;
+  if (url.pathname === '/v23.0/2000001/phone_numbers') return { json: { data: numbers.map((id) => ({ id })) } };
+  if (url.pathname === '/v23.0/2000001/subscribed_apps' && init.method === 'DELETE') return { json: { success: true } };
+  return undefined;
+};
+
 test('Disconnecting clears credentials, forgets conversations and unsubscribes the app', async () => {
   const { env, db } = await world({ seed: true });
   await waHook(env, waText(PNID, 'wamid.D1'));
   await tgHook(env, businessMessage('BC-ME'));
-  const f = mockFetch((url, init) => (url.pathname === '/v23.0/2000001/subscribed_apps' && init.method === 'DELETE' ? { json: { success: true } } : undefined));
+  const f = mockFetch(wabaRoute([PNID]));
   try {
     const r = await call(env, ME, 'DELETE', '/whatsapp');
     assert.deepEqual(r.body, { ok: true, disconnected: true });
-    assert.equal(f.calls.length, 1);
+    assert.deepEqual(f.calls.map((c) => c.method), ['GET', 'DELETE'], 'the WABA’s numbers are read, then the app unsubscribed');
+    assert.ok(f.calls.every((c) => c.auth === `Bearer ${WA_TOKEN}`));
   } finally { f.restore(); }
   const row = db.prepare(`SELECT status, credentials_enc FROM integrations WHERE uid = 'wa-me'`).get();
   assert.deepEqual([row.status, row.credentials_enc], ['disconnected', null]);
@@ -834,6 +1092,40 @@ test('Disconnecting clears credentials, forgets conversations and unsubscribes t
   assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_threads'), 0);
   assert.equal((await call(env, ME, 'DELETE', '/zoom')).status, 404);
   assert.deepEqual((await call(env, ME, 'DELETE', '/telegram')).body, { ok: true, disconnected: false });
+});
+
+test('WhatsApp: disconnecting one number leaves the app subscribed while another member’s number shares the WABA', async () => {
+  // Review findings 2 and 24: Meta subscribes an app per WABA, so unsubscribing
+  // for one member's number cut off every other member's number in it.
+  const { env, db } = await world({ seed: true });
+  const otherCreds = await encryptCredentials(env, 'wa-other', { access_token: 'EAAG-other-token', token_type: 'bearer' });
+  db.prepare(`INSERT INTO integrations (uid, user_id, provider_key, auth_type, external_account_id, config_json, credentials_enc)
+              VALUES ('wa-other', ?, 'whatsapp', 'oauth2', '1000002', ?, ?)`)
+    .run(OTHER, JSON.stringify({ phone_number_id: '1000002', waba_id: '2000001' }), otherCreds);
+  const reconnect = async () => db.prepare(`UPDATE integrations SET status = 'active', credentials_enc = ? WHERE uid = 'wa-me'`)
+    .run(await encryptCredentials(env, 'wa-me', { access_token: WA_TOKEN, token_type: 'bearer' }));
+  const f = mockFetch(wabaRoute([PNID, '1000002']));
+  try {
+    assert.deepEqual((await call(env, ME, 'DELETE', '/whatsapp')).body, { ok: true, disconnected: true });
+    assert.equal(f.calls.some((c) => c.method === 'DELETE'), false, 'the shared WABA stays subscribed');
+    assert.equal(db.prepare(`SELECT status FROM integrations WHERE uid = 'wa-other'`).get().status, 'active');
+
+    // The other member's recorded waba_id does not decide it alone: the WABA's own number list shows the share.
+    await reconnect();
+    db.exec(`UPDATE integrations SET config_json = '{"phone_number_id":"1000002","waba_id":"9999999"}' WHERE uid = 'wa-other'`);
+    await call(env, ME, 'DELETE', '/whatsapp');
+    assert.equal(f.calls.some((c) => c.method === 'DELETE'), false);
+
+    // And this member's own waba_id is not trusted when the WABA does not hold their number.
+    await reconnect();
+    db.exec(`UPDATE integrations SET status = 'disconnected' WHERE uid = 'wa-other'`);
+    f.restore();
+    const g = mockFetch(wabaRoute(['1000777']));
+    try {
+      await call(env, ME, 'DELETE', '/whatsapp');
+      assert.equal(g.calls.some((c) => c.method === 'DELETE'), false);
+    } finally { g.restore(); }
+  } finally { f.restore(); }
 });
 
 test('Admin: setWebhook registers the secret and the business update types; the response carries neither token nor secret', async () => {

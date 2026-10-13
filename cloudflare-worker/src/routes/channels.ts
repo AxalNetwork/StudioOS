@@ -29,16 +29,27 @@
  * Admin (`channelsAdmin`, super admin):
  *   POST   /telegram/webhook        setWebhook with secret_token and the business update types
  *
- * A WEBHOOK PERSISTS, THEN ACKNOWLEDGES (D684 §11). Size cap before parsing →
- * verify (503 when the secret is unset: fail closed) → parse → claim the event
- * (a redelivery answers 200 and does nothing) → resolve the connection (none:
- * 'ignored', 200) → the member must still be active → the per-connection
- * limit → store → finish → 200. A failure before anything was stored releases
- * the claim and answers 500, so the provider retries. A voice note is the one
- * slow step: the webhook queues it (`channel_followup`, ids only, never text)
- * and the job below transcribes it with the interview sessions' own
- * speech-to-text, billed to the member's AI budget (D640). Only the text is
- * kept; the audio is never stored.
+ * A WEBHOOK PERSISTS, THEN ACKNOWLEDGES (D684 §11). Verify what a header can
+ * prove before reading the body (Telegram's secret) → read the body under its
+ * size cap, counting bytes as they arrive → verify what needs the body
+ * (WhatsApp's signature; 503 when a secret is unset: fail closed) → parse →
+ * claim the event (a redelivery answers 200 and does nothing) → resolve the
+ * connection (none: 'ignored', 200) → the member must still be active → the
+ * per-connection limit (a D1 counter) → store → finish → 200. A failure before
+ * anything was stored releases the claim and answers 500, so the provider
+ * retries.
+ *
+ * A VOICE NOTE SPENDS NOTHING UNTIL THE MEMBER CHOSE THE CHAT. It is stored as
+ * a placeholder with no text (threads.ts). Only on a chat already in an
+ * interview is it queued at once (`channel_followup`, ids only); a pending
+ * chat's notes are queued when the member assigns it. The job below
+ * transcribes with the interview sessions' own speech-to-text, under the
+ * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
+ * Only the text is kept; the audio is never stored.
+ *
+ * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
+ * account, and that account's own `/confirm`, after the bot has named the Axal
+ * account it would join, links it (telegram.ts says why).
  *
  * Nothing here returns or logs message text, a phone number, a token or a
  * platform secret. Refusals carry a code and a sentence we wrote.
@@ -51,19 +62,23 @@ import { withDeadline } from '../util/deadline';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { IntakeError, activeMember } from '../services/interviewIntake';
-import { claimEvent, finishEvent, releaseEvent, type EventKind, type EventStatus } from '../services/channels/events';
+import {
+  claimEvent, connectionOverLimit, finishEvent, finishEventStatement, readCappedBody, releaseEvent, reserveTranscription,
+  type EventFields, type EventKind, type EventStatus,
+} from '../services/channels/events';
 import {
   availability, connectionForTelegram, connectionForWhatsApp, memberConnection, providerAvailable, type ChannelConnection,
 } from '../services/channels/connections';
 import { createLinkCode } from '../services/channels/linkCodes';
 import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
 import {
-  applyDelete, applyEdit, assignThread, forgetConnection, listThreads, readThread, setThreadIgnored, storeInbound,
-  storeMessage, threadForReply, upsertThread, type ThreadRow,
+  applyDelete, applyEdit, assignThread, forgetConnection, inInterview, listThreads, queueVoiceTranscriptions, readThread,
+  releaseVoiceNote, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote, storeVoiceTranscript, threadForReply,
+  voiceNoteForJob, type ThreadRow,
 } from '../services/channels/threads';
-import { enqueueChannelJob, registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
+import { registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
 import {
-  CHANNEL_LIMITS, type InboundEvent, type InboundLink, type InboundMessage, type MessageSide, type MessagingProvider,
+  CHANNEL_LIMITS, type InboundEvent, type InboundLink, type InboundLinkConfirm, type InboundMessage, type MessagingProvider,
   type SendResult,
 } from '../services/channels/types';
 import * as telegram from '../services/channels/telegram';
@@ -91,6 +106,8 @@ const SENTENCE: Record<string, string> = {
   text_too_long: 'That message is too long for this channel.',
   client_key_required: 'The reply is missing its client key.',
   client_key_conflict: 'That client key was already used for another reply.',
+  send_in_flight: 'This message is still being sent. Check the conversation again in a moment; pressing Send again will not send it twice.',
+  send_unknown: 'Axal could not confirm whether this message went out. Check the chat in Telegram or WhatsApp before writing it again.',
   forbidden: 'The provider refused the message for this account.',
   token_invalid: 'The connection to this account has expired. Connect it again in Account › Connectors.',
   undeliverable: 'The provider could not deliver this message.',
@@ -148,9 +165,11 @@ const parseJson = (s: string | null): Record<string, unknown> => {
 const ms = (s: string | null | undefined) => (s ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`) : NaN);
 
 /**
- * A KV counter (middleware/rateLimit.ts's pattern). Fails OPEN: on a webhook,
- * a KV outage must not drop a customer's message, and the provider's own
- * limits still apply.
+ * A KV counter (middleware/rateLimit.ts's pattern), for the link-attempt limits
+ * only: a few attempts an hour per IP or Telegram account. KV takes one write
+ * per key per second, so a KV counter cannot count faster than that — the
+ * per-connection webhook limit is a D1 counter (`connectionOverLimit`). Fails
+ * OPEN: a KV outage must not lock a member out of linking.
  */
 async function overLimit(env: Env, key: string, limit: number, windowSec: number): Promise<boolean> {
   const kv = env.RATE_LIMITS;
@@ -248,14 +267,19 @@ channels.delete('/:provider', member(async (c, user) => {
   if (!MESSAGING.has(provider)) return no(c, 404, 'unknown_provider');
   const env = c.env;
   const row = await env.DB.prepare(
-    `SELECT id, uid, status, credentials_enc, config_json FROM integrations WHERE user_id = ? AND provider_key = ?`,
-  ).bind(user.id, provider).first<{ id: number; uid: string; status: string; credentials_enc: string | null; config_json: string | null }>();
+    `SELECT id, uid, status, credentials_enc, config_json, external_account_id FROM integrations WHERE user_id = ? AND provider_key = ?`,
+  ).bind(user.id, provider).first<{
+    id: number; uid: string; status: string; credentials_enc: string | null; config_json: string | null; external_account_id: string | null;
+  }>();
   if (!row || row.status === 'disconnected') return c.json({ ok: true, disconnected: false });
   if (provider === 'whatsapp') {
-    // Stop Meta sending this account's webhooks to Axal. Best effort: the
-    // row below goes either way, and an unknown number is ignored on arrival.
-    await whatsapp.unsubscribeApp(env, { integrationUid: row.uid, credentialsEnc: row.credentials_enc, config: parseJson(row.config_json) })
-      .catch(() => false);
+    // Stop Meta sending this account's webhooks to Axal — unless another
+    // member's number shares the WABA (whatsapp.ts). Best effort: the row
+    // below goes either way, and an unknown number is ignored on arrival.
+    await whatsapp.unsubscribeApp(env, {
+      integrationId: Number(row.id), integrationUid: row.uid, credentialsEnc: row.credentials_enc,
+      config: parseJson(row.config_json), phoneNumberId: row.external_account_id,
+    }).catch(() => 'failed');
   }
   await env.DB.prepare(
     `UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
@@ -309,7 +333,7 @@ channels.post('/threads/:uid/assign', member(async (c, user) => {
     target = { projectId: Number(create.project_id), intervieweeName: String(create.interviewee_name ?? '') };
   } else return no(c, 400, 'invalid_request');
   const r = await assignThread(c.env, user.id, c.req.param('uid') ?? '', target);
-  return c.json({ ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved });
+  return c.json({ ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved, voice_queued: r.queued });
 }));
 
 channels.post('/threads/:uid/ignore', member(async (c, user) => {
@@ -352,7 +376,18 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
     throw err;
   }
   // The same client_key again: what happened the first time, and nothing sent now.
-  if (claim.existing) return c.json({ ok: claim.row.status !== 'failed', existing: true, outbound: outboundView(claim.row) });
+  if (claim.existing) {
+    if (claim.row.status === 'pending') {
+      // The first attempt has no outcome: it is still waiting on the provider,
+      // or its request was cut off before the provider answered. Nobody knows
+      // it went, so it is never called sent (`ok` is neither true nor false);
+      // after a minute it is reported as unknown. Nothing is sent now either.
+      const age = Date.now() - ms(claim.row.created_at);
+      const code = Number.isFinite(age) && age < 60_000 ? 'send_in_flight' : 'send_unknown';
+      return c.json({ ok: null, existing: true, pending: true, code, message: sentence(code), outbound: outboundView(claim.row) });
+    }
+    return c.json({ ok: claim.row.status !== 'failed', existing: true, outbound: outboundView(claim.row) });
+  }
 
   // Refused after the claim, so a retry of this client_key reads the refusal instead of sending.
   const refusal = thread.status === 'ignored' ? 'thread_ignored' : windowRefusal(thread);
@@ -367,7 +402,18 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
   } else {
     result = await whatsapp.sendWhatsAppText(env, conn, thread.external_chat_id, text);
   }
-  await finishOutbound(env, claim.row.id, result);
+  // Once the provider has answered, nothing below may answer 5xx: the composer
+  // reads a 5xx as "not sent", so a member could press Send again on a message
+  // the provider already took. A failure to record the outcome is logged, and
+  // a later repeat of this key reads the row as pending: never sent twice,
+  // never called sent without a provider's word.
+  let saved = true;
+  try {
+    await finishOutbound(env, claim.row.id, result);
+  } catch {
+    saved = false;
+    console.error(`[channels] ${thread.provider} reply outcome not saved ok=${result.ok}`);
+  }
   if (!result.ok) {
     const code = result.code ?? 'rejected';
     const status = ['window_closed', 'no_reply_right', 'not_connected', 'thread_ignored'].includes(code) ? 409
@@ -386,20 +432,22 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
     recorded = false;
     console.error('[channels] reply sent but not recorded', err instanceof IntakeError ? err.code : 'error');
   }
-  const row = await env.DB.prepare('SELECT * FROM channel_outbound WHERE id = ?').bind(claim.row.id).first<OutboundRow & { created_at: string }>();
-  return c.json({ ok: true, existing: false, recorded, outbound: outboundView(row ?? claim.row) });
+  const row = saved
+    ? await env.DB.prepare('SELECT * FROM channel_outbound WHERE id = ?').bind(claim.row.id).first<OutboundRow & { created_at: string }>()
+      .catch(() => null)
+    : null;
+  // The provider accepted it: that is 'submitted', whether or not the row could say so.
+  return c.json({ ok: true, existing: false, recorded, outbound: outboundView(row ?? { ...claim.row, status: 'submitted' }) });
 }));
 
 // ---------------------------------------------------------------------------
 // Webhooks
 // ---------------------------------------------------------------------------
 
-/** The raw body, or the 413 that refuses it — before anything parses it. */
+/** The raw body, or the 413 that refuses it — before anything parses it (`readCappedBody`). */
 async function cappedBody(c: C): Promise<ArrayBuffer | Response> {
-  const tooLarge = () => c.json({ error: 'payload_too_large', code: 'payload_too_large' }, 413);
-  if (Number(c.req.header('content-length') || 0) > CHANNEL_LIMITS.maxBodyBytes) return tooLarge();
-  const raw = await c.req.arrayBuffer();
-  return raw.byteLength > CHANNEL_LIMITS.maxBodyBytes ? tooLarge() : raw;
+  const raw = await readCappedBody(c.req.raw);
+  return raw ?? c.json({ error: 'payload_too_large', code: 'payload_too_large' }, 413);
 }
 
 function parseBody(raw: ArrayBuffer): unknown {
@@ -412,7 +460,7 @@ function eventKind(ev: InboundEvent): EventKind {
     case 'edit': return 'edit';
     case 'delete': return 'delete';
     case 'status': return 'status';
-    case 'link': return 'link';
+    case 'link': case 'link_confirm': return 'link';
     case 'connection': return 'connection';
     default: return 'ignored';
   }
@@ -424,23 +472,38 @@ async function tell(env: Env, chatId: string, text: string): Promise<void> {
   if (!r.ok) console.error(`[channels] telegram notice not sent code=${r.code ?? 'unknown'}`);
 }
 
-async function handleLink(env: Env, claim: number, ev: InboundLink): Promise<void> {
-  // Link attempts per Telegram account: the webhook's caller is Telegram, so
-  // the account, not an IP, is who is guessing.
+/**
+ * `/start <code>` (step one) or `/confirm` (step two) — telegram.ts explains
+ * the two steps. Attempts are limited per Telegram account: the webhook's
+ * caller is Telegram, so the account, not an IP, is who is guessing.
+ */
+async function handleLink(env: Env, claim: number, ev: InboundLink | InboundLinkConfirm): Promise<void> {
   if (await overLimit(env, `rl:ch:link:tg:${ev.telegramUserId}`, 10, 3600)) {
     await finishEvent(env, claim, 'ignored', { error: 'rate_limited' });
     return;
   }
-  const out = await telegram.linkTelegramAccount(env, ev);
+  const copy = telegram.TELEGRAM_COPY;
+  if (ev.kind === 'link') {
+    const out = await telegram.claimTelegramLink(env, ev);
+    if (out.claimed) {
+      await finishEvent(env, claim, 'done', { userId: out.userId });
+      await tell(env, ev.chatId, copy.confirm(out.account));
+      return;
+    }
+    await finishEvent(env, claim, 'ignored', { error: out.reason });
+    await tell(env, ev.chatId, out.reason === 'identity_taken' ? copy.identityTaken
+      : out.reason === 'member_inactive' ? copy.memberInactive : copy.codeInvalid);
+    return;
+  }
+  const out = await telegram.confirmTelegramLink(env, ev);
   if (out.linked) {
     await finishEvent(env, claim, 'done', { userId: out.userId });
-    await tell(env, ev.chatId, out.businessConnected ? telegram.TELEGRAM_COPY.linkedConnected : telegram.TELEGRAM_COPY.linked);
+    await tell(env, ev.chatId, out.businessConnected ? copy.linkedConnected : copy.linked);
     return;
   }
   await finishEvent(env, claim, 'ignored', { error: out.reason });
-  const copy = out.reason === 'identity_taken' ? telegram.TELEGRAM_COPY.identityTaken
-    : out.reason === 'member_inactive' ? telegram.TELEGRAM_COPY.memberInactive : telegram.TELEGRAM_COPY.codeInvalid;
-  await tell(env, ev.chatId, copy);
+  await tell(env, ev.chatId, out.reason === 'identity_taken' ? copy.identityTaken
+    : out.reason === 'member_inactive' ? copy.memberInactive : copy.nothingToConfirm);
 }
 
 function resolveConnection(env: Env, provider: MessagingProvider, ref: string): Promise<ChannelConnection | null> {
@@ -472,9 +535,10 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
     await finishEvent(env, claim, status, fields);
   };
   try {
-    if (ev.kind === 'link') {
-      // A link code is spent by its first attempt, so a failure here is not
-      // retried (a retry could only say "expired"): the member asks for a new code.
+    if (ev.kind === 'link' || ev.kind === 'link_confirm') {
+      // A link code (and its confirmation) is spent by its first attempt, so a
+      // failure here is not retried (a retry could only say "expired"): the
+      // member asks for a new code.
       stored = true;
       await handleLink(env, claim, ev);
       return 'ok';
@@ -490,7 +554,7 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
     const conn = await resolveConnection(env, ev.provider as MessagingProvider, ev.connectionRef);
     if (!conn) { await finish('ignored', { error: 'unknown_connection' }); return 'ok'; }
     if (!(await memberStands(env, conn.userId))) { await finish('ignored', { userId: conn.userId, error: 'member_inactive' }); return 'ok'; }
-    if (await overLimit(env, `rl:ch:${conn.provider}:${conn.integrationId}`, CHANNEL_LIMITS.eventsPerMinute, 60)) {
+    if (await connectionOverLimit(env, conn.integrationId)) {
       await finish('ignored', { userId: conn.userId, error: 'rate_limited' });
       return 'ok';
     }
@@ -513,15 +577,18 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
 
     const msg = ev as InboundMessage;
     if (msg.voice && !msg.text) {
-      // The thread now (so its contact name is stored encrypted, and the job
-      // carries no name and no chat id); the audio later, off this request.
-      const thread = await upsertThread(env, conn, msg.externalChatId, msg.side === 'contact' ? msg.contactName : null);
-      if (thread.status === 'ignored') { await finish('ignored', { userId: conn.userId, threadId: thread.id, error: 'thread_ignored' }); return 'ok'; }
-      await enqueueChannelJob(env, 'channel_followup', msg.provider, msg.eventId, {
-        kind: 'voice', event: claim, connection: msg.connectionRef, thread: thread.uid, message: msg.externalMessageId,
-        file: msg.voice.fileRef, mime: msg.voice.mime, duration: msg.voice.durationSec, side: msg.side, sent_at: msg.sentAt,
-      });
-      await finish('accepted', { userId: conn.userId, threadId: thread.id });
+      // A placeholder now: no text, the file ref encrypted on its row. The
+      // audio is fetched and transcribed later, off this request, and only for
+      // a chat in an interview — a pending chat's note waits for the member to
+      // assign it, so a stranger's voice note spends nothing (threads.ts).
+      const out = await storeVoiceNote(env, conn, msg);
+      stored = true;
+      if (out.stored !== 'voice') {
+        await finish('ignored', { userId: conn.userId, threadId: out.thread.id, error: out.stored === 'ignored' ? 'thread_ignored' : 'duplicate' });
+        return 'ok';
+      }
+      await finish('stored', { userId: conn.userId, threadId: out.thread.id });
+      if (inInterview(out.thread)) await queueVoiceTranscriptions(env, out.thread, { only: out.messageUid, event: claim });
       return 'ok';
     }
 
@@ -551,11 +618,12 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
 }
 
 channels.post('/telegram/webhook', async (c) => {
-  const raw = await cappedBody(c);
-  if (raw instanceof Response) return raw;
+  // The secret is a header: a caller without it is refused before one byte of the body is read.
   const check = await telegram.verifyTelegramSecret(c.env, c.req.header('X-Telegram-Bot-Api-Secret-Token'));
   if (check === 'unconfigured') return c.json({ error: 'not_configured', code: 'not_configured' }, 503);
   if (check !== 'ok') return c.json({ error: 'unauthorized', code: 'unauthorized' }, 401);
+  const raw = await cappedBody(c);
+  if (raw instanceof Response) return raw;
   const update = parseBody(raw);
   if (update === undefined) return c.json({ error: 'malformed', code: 'malformed' }, 400);
   const bcId = telegram.telegramBusinessConnectionId(update);
@@ -597,39 +665,54 @@ channels.post('/whatsapp/webhook', async (c) => {
 const FINAL_REFUSAL = /^(budget_|kill_switch|model_not_offered)/;
 
 /**
- * `channel_followup` { kind: 'voice' }: fetch the audio, transcribe it with
- * the interview sessions' speech-to-text (aiRouter task `transcribe`, the
- * default final model, billed to the member — a spent budget is refused there
- * and nothing runs), and store only the text, through the same intake as a
- * typed message. Safe to run twice: it acts only while its event is still
- * 'accepted'. A transient failure throws, so the queue retries it.
+ * `channel_followup` { kind: 'voice', message, job, event? }: one waiting
+ * voice note (threads.ts). Fetch the audio, transcribe it with the interview
+ * sessions' speech-to-text (aiRouter task `transcribe`, the default final
+ * model, billed to the member — a spent budget is refused there and nothing
+ * runs), and store only the text.
+ *
+ * What it spends, and when:
+ *   - only a note on a chat in an interview — the member chose the chat;
+ *   - only while this job holds the note (`transcribe_job`), and only once:
+ *     the transcript and the deletion of the placeholder are one batch, with
+ *     the event's record, so a retry after it finds nothing to do;
+ *   - under the connection's daily cap, held in D1 and checked before the
+ *     model runs — a D1 error throws, so it fails closed.
+ * A note deleted at the source is gone before the download or before the
+ * store, and nothing is kept. A refusal (the cap, the budget, a download the
+ * provider refuses) gives the note back for the next assignment to queue. A
+ * transient failure throws, so the queue retries this job.
  */
 export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
   if (p.kind !== 'voice') throw new Error(`unknown channel_followup kind for ${p.provider}`);
   const provider = p.provider as MessagingProvider;
-  const claim = Number(p.event);
-  const ev = await env.DB.prepare('SELECT status FROM channel_events WHERE id = ? AND provider = ?')
-    .bind(claim, provider).first<{ status: string }>();
-  if (!ev || ev.status !== 'accepted') return;
-  const end = (status: EventStatus, fields: Parameters<typeof finishEvent>[3] = {}) => finishEvent(env, claim, status, fields);
+  const job = String(p.job ?? '');
+  const event = Number.isSafeInteger(Number(p.event)) && Number(p.event) > 0 ? Number(p.event) : null;
+  const end = async (status: EventStatus, fields: EventFields) => { if (event) await finishEvent(env, event, status, fields); };
 
-  const conn = await resolveConnection(env, provider, String(p.connection ?? ''));
-  if (!conn) return end('ignored', { error: 'unknown_connection' });
-  if (!(await memberStands(env, conn.userId))) return end('ignored', { userId: conn.userId, error: 'member_inactive' });
-  const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE uid = ? AND integration_id = ?')
-    .bind(String(p.thread ?? ''), conn.integrationId).first<ThreadRow>();
-  if (!thread) return end('ignored', { userId: conn.userId, error: 'thread_gone' });
-  if (thread.status === 'ignored') return end('ignored', { userId: conn.userId, threadId: thread.id, error: 'thread_ignored' });
+  // Transcribed already, deleted at the source, ignored, purged, or held by another job.
+  const note = await voiceNoteForJob(env, String(p.message ?? ''), job);
+  if (!note) return;
+  const fields: EventFields = { userId: Number(note.thread.user_id), threadId: note.thread.id };
+  const giveBack = async (status: EventStatus, error: string) => {
+    await releaseVoiceNote(env, note.uid, job);
+    await end(status, { ...fields, error });
+  };
 
-  const file = String(p.file ?? '');
-  const mimeHint = typeof p.mime === 'string' ? p.mime : null;
+  const conn = await memberConnection(env, Number(note.thread.user_id), provider);
+  if (!conn || conn.integrationId !== Number(note.thread.integration_id)) return giveBack('ignored', 'unknown_connection');
+  if (!(await memberStands(env, conn.userId))) return giveBack('ignored', 'member_inactive');
+  // The member's chat may have left its interview since the job was queued.
+  if (!inInterview(note.thread)) return giveBack('ignored', 'not_assigned');
+
   const audio = provider === 'telegram'
-    ? await telegram.fetchTelegramVoice(env, file, mimeHint)
-    : await whatsapp.fetchWhatsAppMedia(env, conn, file, mimeHint);
+    ? await telegram.fetchTelegramVoice(env, note.file, note.mime)
+    : await whatsapp.fetchWhatsAppMedia(env, conn, note.file, note.mime);
   if (!audio.ok) {
     if (audio.retryable) throw new Error(`voice download failed provider=${provider} code=${audio.code}`);
-    return end('failed', { userId: conn.userId, threadId: thread.id, error: audio.code });
+    return giveBack('failed', audio.code);
   }
+  if (!(await reserveTranscription(env, conn.integrationId))) return giveBack('failed', 'transcription_cap');
 
   const r = await aiRun(env, {
     task: 'transcribe', userId: conn.userId, surface: AI_SURFACE.validateInterviews,
@@ -638,23 +721,14 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   if (!r.ok) {
     const refusal = String(r.refusal || 'all_models_failed');
     if (!FINAL_REFUSAL.test(refusal)) throw new Error(`voice transcription failed provider=${provider} refusal=${refusal}`);
-    return end('failed', { userId: conn.userId, threadId: thread.id, error: refusal });
+    return giveBack('failed', refusal);
   }
   const text = String(r.transcript?.text ?? r.output ?? '').trim();
-  if (!text) return end('ignored', { userId: conn.userId, threadId: thread.id, error: 'empty_transcript' });
-
-  const msg: InboundMessage = {
-    kind: 'message', provider, eventId: String(claim), connectionRef: String(p.connection), externalChatId: thread.external_chat_id,
-    externalMessageId: String(p.message ?? ''), side: (p.side === 'me' ? 'me' : 'contact') as MessageSide, contactName: null,
-    text: null, voice: { fileRef: file, mime: mimeHint, durationSec: Number.isFinite(Number(p.duration)) ? Number(p.duration) : null },
-    sentAt: typeof p.sent_at === 'string' ? p.sent_at : new Date().toISOString(),
-  };
-  const out = await storeInbound(env, conn, msg, text);
-  const kept = out.stored === 'pending' || out.stored === 'session';
-  await end(kept ? 'stored' : 'ignored', {
-    userId: conn.userId, threadId: thread.id, sessionId: out.stored === 'session' ? out.sessionId : null,
-    error: kept ? null : out.stored === 'ignored' ? 'thread_ignored' : out.stored,
-  });
+  const record = event
+    ? [finishEventStatement(env, event, text ? 'done' : 'ignored', { ...fields, error: text ? null : 'empty_transcript' })]
+    : [];
+  const out = await storeVoiceTranscript(env, conn, note, text, record);
+  if (out === 'gone') await end('ignored', { ...fields, error: 'voice_gone' });
 }
 
 // Registered at module load: index.ts imports this file, so the handlers exist
