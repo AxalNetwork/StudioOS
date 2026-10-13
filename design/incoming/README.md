@@ -752,7 +752,7 @@ Move each file to `canvases/integrated/` once its bodies are built.
 
 The owner shared seven artifacts on 2026-10-09:
 - `NyLYXDDmQBEvWcAJymQa37`: the Cycle Overview canvas;
-- `Fxui55FyoHTWvTDi1iXysL`: the overview board;
+- `Fxui55FyoHTWvTDi1iXysL`: the overview board (republished on 2026-10-13 as "Record a Session · Boards", below);
 - `1X7wXqoDBNe3uWn8UusEGn`: the module board;
 - `LXcVAvZXP2NGQnNxKVQya7`: the cycle actions board;
 - `RazxF7VUNpr5S1k78A7xDT`: the Recording View;
@@ -763,14 +763,14 @@ Each was unpacked from its bundle. Every nested `Cycle Overview`, `Cycle Action`
 
 | Canvas | Screens | Routes | Grade | Issues |
 | --- | --- | --- | --- | --- |
-| `Cycle Overview.dc.html` + `pro-cycles.js` | One component for all four cycles: the overview (`full`, `new`, `states`) and each module's page (`module` 0–6). **Moved to `canvases/integrated/` on 2026-10-10:** all four cycles are wired (D661). | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` | UPGRADE | #1472, #1474, #1475, #1476, #1477 |
-| `Cycle Overview · Boards.dc.html` | O1–O5. **Moved to `canvases/integrated/` on 2026-10-10.** | — | — | #1469 |
+| `Cycle Overview.dc.html` + `pro-cycles.js` | One component for all four cycles: the overview (`full`, `new`, `states`) and each module's page (`module` 0–6). **Moved to `canvases/integrated/` on 2026-10-10:** all four cycles are wired (D661). Replaced there on 2026-10-13 by an export that no longer loads `pro-cycles.js` (below). | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` | UPGRADE | #1472, #1474, #1475, #1476, #1477 |
+| `Cycle Overview · Boards.dc.html`, now `Record a Session · Boards.dc.html` | O1–O5. **Moved to `canvases/integrated/` on 2026-10-10;** renamed and replaced there on 2026-10-13 (below). | — | — | #1469 |
 | `Cycle Modules · Boards.dc.html` | MV1–MV6, MB1–MB6, MR1–MR7, MG1–MG7. **Moved to `canvases/integrated/` on 2026-10-10.** | — | — | #1469 |
 | `Cycle Actions · Boards.dc.html` | Each cycle's primary action as its own page, with every step and state | — | — | #1469 |
-| `Cycle Action.dc.html` (updated) | Adds `action=record`: Validate's "Record a session" | Validate's header | NEW | #1473 |
+| `Cycle Action.dc.html` (updated) | Adds `action=record`: Validate's "Record a session". **Superseded for Record a session on 2026-10-13** by the centred setup modal in `Cycle Overview` (below). | Validate's header | NEW | #1473 |
 | `Interview Session.dc.html` | `start`, `record`, `liveoff`, `text`, `review`, with the speech-to-text and structuring model rail | `/validate/session/:id` | NEW | #1470, #1471, #1473 |
-| `Recording View.dc.html` + `ring-viz.js` | The phone recording view with its 11 states, light and dark. **Moved to `canvases/integrated/` by D660.** | the same route, full-screen on a phone | NEW | #1473 |
-| `Recording View · Boards.dc.html` | RV1–RV12. **Moved to `canvases/integrated/` by D660.** | — | — | #1473 |
+| `Recording View.dc.html` + `ring-viz.js` | The phone recording view with its 11 states, light and dark. **Moved to `canvases/integrated/` by D660;** replaced there on 2026-10-13 (below). | the same route, full-screen on a phone | NEW | #1473 |
+| `Recording View · Boards.dc.html`, now `Recording View Canvas.dc.html` | RV1–RV12. **Moved to `canvases/integrated/` by D660;** renamed and replaced there on 2026-10-13 (below). | — | — | #1473 |
 | `AIRail.dc.html` (updated) | "Recommended" now reads "Default" | — | — | — |
 
 Every figure in them is a bracketed placeholder.
@@ -778,3 +778,30 @@ Every figure in them is a bracketed placeholder.
 The speech-to-text and structuring models named in the rail are Cloudflare Workers AI models. Their prices come from the Workers AI catalogue, never from the canvas.
 
 Move each file to `canvases/integrated/` once its bodies are built.
+
+## Landed 2026-10-13 — Record a session, redesigned (D685)
+
+The owner republished `Fxui55FyoHTWvTDi1iXysL` on 2026-10-13. It is the artifact the D656 landing above calls "the overview board", now named "Record a Session · Boards", and it redesigns Record a session in Validate › Interviews. Its bundle carries six canvases. Each was decoded and compared with the committed copy. None is a new canvas, so each was replaced where it already sat, and two were renamed to the names Claude Design now gives them:
+
+| Canvas | What happened | What changed |
+| --- | --- | --- |
+| `Record a Session · Boards.dc.html` | Renamed from `Cycle Overview · Boards.dc.html` in `canvases/integrated/` and replaced there. Normalised with `scripts/read-canvas.mjs`. | O2n, O3n and O4n; `page`, `module` and `mobile` passed to Cycle Overview; a `#recording` section that imports Recording View Canvas and names the routes `/validate/record` → `/validate/record/live` |
+| `Recording View Canvas.dc.html` | Renamed from `Recording View · Boards.dc.html` in `canvases/integrated/` and replaced there | RV1–RV13 unchanged; the ring import reads `from="./ring-viz.js"` instead of an asset uuid |
+| `Cycle Overview.dc.html` | Replaced in `canvases/integrated/` | The setup modal and the full-screen Recording View mount; real hrefs; an "Interviews" tab; linked Interviews rows; a phone layout. **It no longer loads `pro-cycles.js`**: its data is inline. `pro-cycles.js` stays in `integrated/`, because D656 and D661 cite it. |
+| `Recording View.dc.html` | Replaced in `canvases/integrated/` | A `callLabel` pill ("Video call · Zoom"), `onClose` on "Exit full screen", and the two video tiles |
+| `Cycle Action.dc.html` | Replaced here, in place | The × is a real close button (`onClick="{{ onClose }}"`, `role="button"`, `aria-label="Close"`) |
+| `AIRail.dc.html` | Nothing | Byte-identical to the copy here |
+
+**What the redesign draws.**
+1. The header CTA "Record a session" links to `/validate/record` and opens a centred setup modal over the page you are on. Its sections are Who, How (In person | Video call | Audio call | Text chat), Talking points, Transcript and Consent.
+   - It replaces the side sheet built to `Cycle Action`'s `action=record` (D660).
+   - It also replaces `Interview Session.dc.html`'s `start` step.
+2. Start opens `/validate/record/live`, the full-screen Recording View.
+3. "Exit full screen" minimises it to a 64px live ring and the timer in the corner (RV13). Tapping the ring returns to full screen.
+4. Stop asks "Stop and process this session?", then runs Uploading → Transcribing → Summarising → Placing findings, then opens the review at `/validate/interviews/:id`.
+
+The same export also gives the other three cycle CTAs a centred lightbox that imports `Cycle Action`, and gives each cycle a history tab. A separate gap analysis covers those three.
+
+**Grade: UPGRADE.** `/validate` and `/validate/session/:id` are live. `/validate/record`, `/validate/record/live` and `/validate/interviews/:id` do not exist yet. `ROUTE_MAP.md`'s Record a session row changes when they ship. D685 lists what is already built and what each slot builds.
+
+`Cycle Action.dc.html` stays here for the three other actions. `Interview Session.dc.html` stays here as before: only its `start` step is superseded. **Counts unchanged: 90 / 28 / 26.** Every figure in these canvases is a bracketed placeholder.
