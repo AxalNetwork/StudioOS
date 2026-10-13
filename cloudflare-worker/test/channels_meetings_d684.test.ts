@@ -18,11 +18,21 @@
  *     offsets, and lands in the ref's session — tenancy from the ref row;
  *   · an unknown meeting is ignored with nothing stored; no transcript is
  *     said in plain words;
+ *   · a Zoom call ended and started again on its link has every instance
+ *     imported, each by its own uuid, none over another (the later one into a
+ *     session of its own), whatever order the jobs run in; a cancelled call
+ *     imports nothing; a use of the link days later is not this interview's;
+ *   · a rotating Zoom refresh token is spent once under a D1 lease even when
+ *     KV shows no lease; a refusal of a token someone else already rotated is
+ *     not "reconnect Zoom"; a refresh never overwrites a reconnect's pair;
+ *   · disconnecting Zoom revokes the refresh token, or a live access token;
  *   · the VTT parser survives what WebVTT allows and Zoom varies;
  *   · a Meet call is a Calendar event with a hangoutsMeet createRequest;
  *   · the Meet sweep imports a generated transcript, waits for one that is not
- *     there yet, settles a call with none after a day, and stops at a missing
- *     scope without asking Meet;
+ *     there yet (or for a part still being transcribed), imports a rejoined
+ *     call's second conference with the first, settles a call with none after
+ *     a day, and settles a call whose transcripts Axal cannot read yet —
+ *     without asking Meet, and without advising a reconnect that cannot help;
  *   · the routes create, list, cancel and retry, answer 404 for an interview
  *     that is not the member's, 503 when a provider is not set up, and 409
  *     when the member has not connected.
@@ -43,7 +53,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import meetingsRouter, { zoomWebhook } from '../src/routes/founder_validate_meetings.ts';
 import { parseVtt, sweepZoom, verifyZoomSignature } from '../src/services/channels/zoom.ts';
 import { meetingCodeOf, sweepMeet, MEET_TRANSCRIPT_SCOPE } from '../src/services/channels/googleMeet.ts';
-import { MEETING_ERRORS } from '../src/services/channels/meetings.ts';
+import { MEETING_ERRORS, withinCallSlot } from '../src/services/channels/meetings.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
 import { openSession, writableInterview } from '../src/services/interviewIntake.ts';
 import { CONNECTOR_METADATA, getDescriptor, getProviderImpl } from '../src/integrations/registry.ts';
@@ -269,6 +279,20 @@ test('every Zoom event needs a fresh signature over the raw body', async () => {
 
   const big = 'x'.repeat(256 * 1024 + 1);
   assert.equal((await zoomPost(f.env, big, signed(big))).status, 413);
+  // No Content-Length (chunked, HTTP/2): the bytes are counted as they arrive and the read stops at the cap.
+  let sent = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(ctrl) {
+      if (sent >= 8 * 1024 * 1024) { ctrl.close(); return; }
+      sent += 64 * 1024;
+      ctrl.enqueue(new Uint8Array(64 * 1024).fill(32));
+    },
+  }, { highWaterMark: 0 });
+  const streamed = await app.fetch(new Request('http://x/api/channels/zoom/webhook', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: stream, duplex: 'half',
+  } as RequestInit), f.env);
+  assert.equal(streamed.status, 413);
+  assert.ok(sent <= 256 * 1024 + 128 * 1024, `read ${sent} bytes of a body that sent no Content-Length`);
   assert.equal(count(f.db, 'SELECT COUNT(*) n FROM channel_events'), 0, 'nothing for an unknown meeting');
 });
 
@@ -328,10 +352,145 @@ test('transcript_completed queues one import; the job imports the VTT with speak
   const events = JSON.stringify(f.db.prepare('SELECT * FROM channel_events').all());
   assert.equal(events.includes('invoices'), false);
 
-  // Imported is settled: a late duplicate under another uuid is acknowledged and dropped.
-  const late = await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'another-instance'));
-  assert.deepEqual(late.body, { ok: true, ignored: 'imported' });
-  assert.equal(f.jobs.length, 2, 'nothing more is queued for a settled call');
+  // The same instance redelivered after the import is still the duplicate it was.
+  assert.deepEqual((await zoomPost(f.env, transcriptEvent())).body, { ok: true, duplicate: true });
+  assert.equal(f.jobs.length, 2, 'nothing more is queued for the same instance');
+});
+
+// ── Zoom: a call ended and started again on its link ─────────────────────────
+
+const VTT_B = 'WEBVTT\n\n1\n00:00:02.000 --> 00:00:05.000\nDana Ruiz: After the restart: month-end close is the worst part.\n';
+/** One instance's recording list, as Zoom answers GET /meetings/{uuid}/recordings. */
+const instanceRecordings = (uuid: string, startTime: string) => () => json({
+  uuid, id: Number(MEETING_ID), start_time: startTime,
+  recording_files: [{ ...TRANSCRIPT_FILE, download_url: `https://zoom.us/rec/download/${uuid}` }],
+});
+const sessionTexts = (f: World, sessionId: number) =>
+  f.db.prepare('SELECT text FROM interview_transcript_segments WHERE session_id = ? ORDER BY id').all(sessionId).map((s: any) => s.text);
+const interviewSessions = (f: World) => f.db.prepare(
+  'SELECT id, channel, status, submitted_via, consent_status, consent_method FROM interview_sessions WHERE interview_id = ? ORDER BY id',
+).all(INTERVIEW);
+
+test('a restarted Zoom call: the later instance is imported into a session of its own, beside the first', async (t) => {
+  const f = world();
+  await connectZoom(f);
+  const { uid, sessionId } = await seedRef(f, { status: 'ended' });
+  f.db.prepare("UPDATE interview_sessions SET consent_status = 'given', consent_method = 'verbal' WHERE id = ?").run(sessionId);
+  const start = Date.parse(refRow(f, uid).starts_at);
+  mockFetch(t, {
+    'GET https://api.zoom.us/v2/meetings/instanceA/recordings': instanceRecordings('instanceA', new Date(start).toISOString()),
+    'GET https://api.zoom.us/v2/meetings/instanceB/recordings': instanceRecordings('instanceB', new Date(start + 40 * 60_000).toISOString()),
+    'GET https://api.zoom.us/v2/meetings/nextWeek/recordings': instanceRecordings('nextWeek', new Date(start + 7 * 24 * HOUR).toISOString()),
+    'GET https://zoom.us/rec/download/instanceA': () => new Response(VTT),
+    'GET https://zoom.us/rec/download/instanceB': () => new Response(VTT_B),
+    'GET https://zoom.us/rec/download/nextWeek': () => new Response(VTT_B),
+  });
+  await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'instanceA'));
+  await runChannelJob(f.env, 'meeting_import', f.jobs.at(-1).payload);
+  assert.equal(refRow(f, uid).status, 'imported');
+
+  // Ended and started again on the same link: a second instance, after the first was imported.
+  const second = await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'instanceB'));
+  assert.deepEqual(second.body, { ok: true }, 'a new instance of an imported call is not a duplicate');
+  const job = f.jobs.at(-1);
+  assert.deepEqual(job.payload, { refUid: uid, meetingUuid: 'instanceB', provider: 'zoom' });
+  await runChannelJob(f.env, 'meeting_import', job.payload);
+  await runChannelJob(f.env, 'meeting_import', job.payload);
+
+  assert.equal(sessionTexts(f, sessionId).length, 3, 'the first instance stays in the call’s session');
+  assert.match(sessionTexts(f, sessionId)[0], /reconciling invoices/);
+  const sessions = interviewSessions(f);
+  assert.equal(sessions.length, 2, 'one session more, made once however often the job runs');
+  assert.deepEqual({ ...sessions[1] }, {
+    id: sessions[1].id, channel: 'video', status: 'transcribed', submitted_via: 'zoom', consent_status: 'given', consent_method: 'verbal',
+  }, 'the later instance carries the call’s consent');
+  assert.deepEqual(sessionTexts(f, sessions[1].id), ['After the restart: month-end close is the worst part.']);
+  assert.ok(f.jobs.some((j: any) => j.job_type === 'session_structure' && j.payload.session_id === sessions[1].id));
+  const listed = await call(f.env, ME, 'GET', `/interviews/${INTERVIEW}/meetings`);
+  assert.deepEqual(listed.body.meetings.map((m: any) => [m.session_id, m.status]).sort(), [[sessionId, 'imported'], [sessions[1].id, 'imported']].sort(),
+    'the call, and its later part beside it');
+
+  // A use of the link a week later is another conversation, not this interview's.
+  await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'nextWeek'));
+  await runChannelJob(f.env, 'meeting_import', f.jobs.at(-1).payload);
+  assert.equal(interviewSessions(f).length, 2);
+  assert.equal(refRow(f, uid).status, 'imported');
+});
+
+test('a restarted Zoom call whose two events arrive before either import: neither instance replaces the other', async (t) => {
+  const f = world();
+  await connectZoom(f);
+  const { uid, sessionId } = await seedRef(f, { status: 'ended' });
+  const start = Date.parse(refRow(f, uid).starts_at);
+  mockFetch(t, {
+    'GET https://api.zoom.us/v2/meetings/instanceA/recordings': instanceRecordings('instanceA', new Date(start).toISOString()),
+    'GET https://api.zoom.us/v2/meetings/instanceB/recordings': instanceRecordings('instanceB', new Date(start + 40 * 60_000).toISOString()),
+    'GET https://zoom.us/rec/download/instanceA': () => new Response(VTT),
+    'GET https://zoom.us/rec/download/instanceB': () => new Response(VTT_B),
+  });
+  await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'instanceA'));
+  await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'instanceB'));
+  const jobs = f.jobs.filter((j: any) => j.job_type === 'meeting_import');
+  assert.equal(jobs.length, 2);
+  await Promise.all(jobs.map((j: any) => runChannelJob(f.env, 'meeting_import', j.payload)));
+
+  const sessions = interviewSessions(f);
+  assert.equal(sessions.length, 2);
+  assert.equal(sessions[0].id, sessionId);
+  const held = sessions.map((s: any) => sessionTexts(f, s.id).join(' '));
+  assert.equal(held.filter((x: string) => /reconciling invoices/.test(x)).length, 1, 'the first instance is in one session');
+  assert.equal(held.filter((x: string) => /month-end close/.test(x)).length, 1, 'the second instance is in the other');
+  assert.ok(held.every((x: string) => !(/reconciling invoices/.test(x) && /month-end close/.test(x))));
+  assert.equal(refRow(f, uid).status, 'imported');
+});
+
+test('a cancelled Zoom call imports nothing, even from an instance found before it was cancelled', async (t) => {
+  const f = world();
+  await connectZoom(f);
+  const { uid, sessionId } = await seedRef(f, { status: 'ended' });
+  let files: unknown[] = [{ ...TRANSCRIPT_FILE, status: 'processing' }];
+  mockFetch(t, {
+    'GET https://api.zoom.us/v2/meetings/85746065432/recordings': () => zoomRecordings(files),
+    'GET https://api.zoom.us/v2/meetings/Mtg%2Buuid%3D%3D/recordings': () => zoomRecordings(files),
+    'GET https://zoom.us/rec/download/transcript-file': () => new Response(VTT),
+  });
+  await runChannelJob(f.env, 'meeting_import', { provider: 'zoom', refUid: uid });
+  assert.equal(refRow(f, uid).status, 'ended', 'its instance was found, its transcript still being made');
+  assert.equal((await call(f.env, ME, 'DELETE', `/interviews/${INTERVIEW}/meetings/${uid}`)).body.meeting.status, 'cancelled');
+  files = [TRANSCRIPT_FILE];
+  f.db.exec(`UPDATE interview_channel_refs SET updated_at = '2026-01-01 00:00:00', ends_at = '${iso(-25 * HOUR)}'`);
+  assert.equal(await sweepZoom(f.env, new Date()), 1, 'the found instance is still swept');
+  await runChannelJob(f.env, 'meeting_import', f.jobs.at(-1).payload);
+  assert.equal(count(f.db, 'SELECT COUNT(*) n FROM interview_transcript_segments WHERE session_id = ?', sessionId), 0);
+  assert.equal(count(f.db, "SELECT COUNT(*) n FROM interview_channel_refs WHERE status <> 'cancelled'"), 0);
+});
+
+test('after a restart, retrying the call fetches its own instance by uuid, never the meeting’s latest', async (t) => {
+  const f = world();
+  await connectZoom(f);
+  const { uid, sessionId } = await seedRef(f, { status: 'ended' });
+  const start = Date.parse(refRow(f, uid).starts_at);
+  let downloadA = 0;
+  mockFetch(t, {
+    'GET https://api.zoom.us/v2/meetings/instanceA/recordings': instanceRecordings('instanceA', new Date(start).toISOString()),
+    'GET https://api.zoom.us/v2/meetings/instanceB/recordings': instanceRecordings('instanceB', new Date(start + 40 * 60_000).toISOString()),
+    // Asked by meeting id, Zoom answers with the latest instance only: B.
+    'GET https://api.zoom.us/v2/meetings/85746065432/recordings': instanceRecordings('instanceB', new Date(start + 40 * 60_000).toISOString()),
+    'GET https://zoom.us/rec/download/instanceA': () => (downloadA++ ? new Response(VTT) : json({ message: 'busy' }, 503)),
+    'GET https://zoom.us/rec/download/instanceB': () => new Response(VTT_B),
+  });
+  await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'instanceA'));
+  await assert.rejects(runChannelJob(f.env, 'meeting_import', f.jobs.at(-1).payload), /meeting_import_retry:zoom_unreachable/);
+  assert.equal(refRow(f, uid).status, 'failed');
+  await zoomPost(f.env, transcriptEvent(Number(MEETING_ID), 'instanceB'));
+  await runChannelJob(f.env, 'meeting_import', f.jobs.at(-1).payload);
+
+  const retried = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings/${uid}/import`);
+  assert.equal(retried.status, 200, JSON.stringify(retried.body));
+  assert.equal(retried.body.meeting.status, 'imported');
+  assert.match(sessionTexts(f, sessionId).join(' '), /reconciling invoices/, 'the call’s session holds its own instance');
+  assert.doesNotMatch(sessionTexts(f, sessionId).join(' '), /month-end close/);
+  assert.equal(interviewSessions(f).length, 2);
 });
 
 test('an unknown meeting is ignored; meeting.ended moves only a scheduled call; no transcript says why', async (t) => {
@@ -348,7 +507,11 @@ test('an unknown meeting is ignored; meeting.ended moves only a scheduled call; 
   assert.equal((await zoomPost(f.env, { event: 'meeting.started', payload: { object: { id: MEETING_ID } } })).body.ignored, 'event');
 
   let files: unknown[] = [{ file_type: 'TRANSCRIPT', status: 'processing', download_url: TRANSCRIPT_FILE.download_url }];
-  mockFetch(t, { 'GET https://api.zoom.us/v2/meetings/85746065432/recordings': () => zoomRecordings(files) });
+  // First asked by meeting id (no instance known yet), then by the instance's own uuid.
+  mockFetch(t, {
+    'GET https://api.zoom.us/v2/meetings/85746065432/recordings': () => zoomRecordings(files),
+    'GET https://api.zoom.us/v2/meetings/Mtg%2Buuid%3D%3D/recordings': () => zoomRecordings(files),
+  });
   await runChannelJob(f.env, 'meeting_import', { provider: 'zoom', refUid: uid });
   assert.deepEqual({ ...f.db.prepare('SELECT status, last_error FROM interview_channel_refs WHERE uid = ?').get(uid) },
     { status: 'ended', last_error: null }, 'still being made: wait');
@@ -421,6 +584,107 @@ test('the Zoom sweep asks once about a quiet call a day after it ended, and sett
   assert.equal(refRow(f, quiet.uid).status, 'no_transcript');
   assert.equal(refRow(f, recent.uid).status, 'ended');
   assert.equal(await sweepZoom(world({ ZOOM_CLIENT_ID: undefined }).env, new Date()), 0, 'dark provider: no sweep');
+});
+
+// ── Zoom: the token refresh and the revoke ───────────────────────────────────
+
+const storedZoomCreds = async (f: World, userId = ME) => {
+  const row = f.db.prepare("SELECT uid, credentials_enc FROM integrations WHERE provider_key = 'zoom' AND user_id = ?").get(userId);
+  return decryptCredentials(f.env, row.uid, row.credentials_enc);
+};
+/** What another writer stores while a refresh is out: a reconnect, or a refresh that got there first. */
+const storeElsewhere = async (f: World, creds: Record<string, unknown>) => {
+  const enc = await encryptCredentials(f.env, `zoom-${ME}`, { token_type: 'bearer', expires_at: Date.now() + HOUR, ...creds });
+  f.db.prepare("UPDATE integrations SET credentials_enc = ? WHERE uid = ?").run(enc, `zoom-${ME}`);
+};
+const zoomImportRoutes = (): Record<string, Handler> => ({
+  'GET https://api.zoom.us/v2/meetings/85746065432/recordings': () => zoomRecordings([TRANSCRIPT_FILE]),
+  'GET https://api.zoom.us/v2/meetings/11111111111/recordings': () => zoomRecordings([TRANSCRIPT_FILE]),
+  'GET https://zoom.us/rec/download/transcript-file': () => new Response(VTT),
+});
+
+test('two imports with an expired token spend the refresh token once, even when KV never shows a lease', async (t) => {
+  // KV read from two locations: neither sees the other's write, so a KV lease is no lease.
+  const blindKV = { async get() { return null; }, async put() {}, async delete() {} };
+  const f = world({ RATE_LIMITS: blindKV });
+  await connectZoom(f, { access_token: 'stale-at', expires_at: Date.now() - 1000 });
+  const a = await seedRef(f, { status: 'ended' });
+  const b = await seedRef(f, { status: 'ended', external_ref: '11111111111' });
+  const calls = mockFetch(t, {
+    ...zoomImportRoutes(),
+    // Zoom rotates the refresh token: it works once.
+    'POST https://zoom.us/oauth/token': async (_url, init) => {
+      const spent = calls.filter((c) => c.key === 'POST https://zoom.us/oauth/token').length > 1;
+      if (spent || new URLSearchParams(String(init.body)).get('refresh_token') !== 'zoom-rt') return json({ error: 'invalid_grant' }, 400);
+      await new Promise((r) => setTimeout(r, 50));
+      return json({ access_token: 'fresh-at', refresh_token: 'rotated-rt', expires_in: 3599 });
+    },
+  });
+  await Promise.all([a, b].map((r) => runChannelJob(f.env, 'meeting_import', { provider: 'zoom', refUid: r.uid })));
+  assert.equal(calls.filter((c) => c.key === 'POST https://zoom.us/oauth/token').length, 1, 'one refresh; the other request waited for it');
+  assert.deepEqual([refRow(f, a.uid).status, refRow(f, b.uid).status], ['imported', 'imported']);
+  const stored = await storedZoomCreds(f);
+  assert.equal(stored?.refresh_token, 'rotated-rt');
+  assert.equal(stored?.refresh_lease, undefined, 'the lease is given back with the new pair');
+});
+
+test('a refused refresh is not "reconnect Zoom" when another writer has stored a newer pair', async (t) => {
+  const f = world();
+  await connectZoom(f, { access_token: 'stale-at', expires_at: Date.now() - 1000 });
+  const { uid } = await seedRef(f, { status: 'ended' });
+  const calls = mockFetch(t, {
+    ...zoomImportRoutes(),
+    'POST https://zoom.us/oauth/token': async () => {
+      await storeElsewhere(f, { access_token: 'theirs-at', refresh_token: 'theirs-rt' });
+      return json({ reason: 'Invalid Token!', error: 'invalid_grant' }, 400);
+    },
+  });
+  await runChannelJob(f.env, 'meeting_import', { provider: 'zoom', refUid: uid });
+  assert.equal(refRow(f, uid).status, 'imported', 'the stored pair is used; the connection was never broken');
+  assert.equal(calls.find((c) => c.key.startsWith('GET https://api.zoom.us'))!.headers.get('authorization'), 'Bearer theirs-at');
+  assert.equal((await storedZoomCreds(f))?.refresh_token, 'theirs-rt');
+});
+
+test('a refresh never overwrites credentials a reconnect stored while it was out', async (t) => {
+  const f = world();
+  await connectZoom(f, { access_token: 'stale-at', expires_at: Date.now() - 1000 });
+  const { uid } = await seedRef(f, { status: 'ended' });
+  mockFetch(t, {
+    ...zoomImportRoutes(),
+    'POST https://zoom.us/oauth/token': async () => {
+      await storeElsewhere(f, { access_token: 'reconnected-at', refresh_token: 'reconnected-rt' });
+      return json({ access_token: 'fresh-at', refresh_token: 'rotated-rt', expires_in: 3599 });
+    },
+  });
+  await runChannelJob(f.env, 'meeting_import', { provider: 'zoom', refUid: uid });
+  assert.equal(refRow(f, uid).status, 'imported');
+  const stored = await storedZoomCreds(f);
+  assert.deepEqual([stored?.access_token, stored?.refresh_token], ['reconnected-at', 'reconnected-rt']);
+});
+
+test('disconnecting Zoom revokes the refresh token; when Zoom refuses that, a live access token', async (t) => {
+  const f = world();
+  // An hour-long access token, last refreshed days ago: long expired at disconnect.
+  await connectZoom(f, { access_token: 'stale-at', expires_at: Date.now() - 3 * 24 * HOUR });
+  const row = f.db.prepare("SELECT * FROM integrations WHERE provider_key = 'zoom'").get();
+  let refuseRefresh = false;
+  const calls = mockFetch(t, {
+    'POST https://zoom.us/oauth/revoke': (_url, init) => (refuseRefresh && new URLSearchParams(String(init.body)).get('token') === 'zoom-rt'
+      ? json({ reason: 'Invalid Token!' }, 400) : json({ status: 'success' })),
+    'POST https://zoom.us/oauth/token': () => json({ access_token: 'fresh-at', refresh_token: 'rotated-rt', expires_in: 3599 }),
+  });
+  const revoked = () => calls.filter((c) => c.key === 'POST https://zoom.us/oauth/revoke').map((c) => new URLSearchParams(c.body!).get('token'));
+  const impl = getProviderImpl('zoom')!;
+  const { warn } = console;
+  console.warn = () => {};
+  try {
+    await impl.disconnect!({ env: f.env } as any, { id: ME } as any, row);
+    assert.deepEqual(revoked(), ['zoom-rt'], 'the refresh token, not the expired access token');
+    assert.equal(calls[0].headers.get('authorization'), `Basic ${btoa('zoom-client-id:zoom-client-secret')}`);
+    refuseRefresh = true;
+    await impl.disconnect!({ env: f.env } as any, { id: ME } as any, row);
+    assert.deepEqual(revoked(), ['zoom-rt', 'zoom-rt', 'fresh-at'], 'refused: a freshly refreshed access token is revoked instead');
+  } finally { console.warn = warn; }
 });
 
 // ── The VTT parser ───────────────────────────────────────────────────────────
@@ -498,7 +762,7 @@ test('a Meet call is a Calendar event with a hangoutsMeet conference request', a
   assert.deepEqual({ ...session }, { channel: 'video', status: 'draft', submitted_via: 'google_meet', submitted_via_name: 'Google Meet' });
 });
 
-test('Meet: a grant without the transcript scope still schedules, and says Google must be reconnected', async (t) => {
+test('Meet: a grant without the transcript scope still schedules, and says plainly that Meet transcripts are not available yet', async (t) => {
   const f = world();
   await connectGoogle(f, NO_MEET);
   let pending = true;
@@ -511,9 +775,13 @@ test('Meet: a grant without the transcript scope still schedules, and says Googl
   });
   const r = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings`, { consent: CONSENT, provider: 'google_meet', starts_at: iso(HOUR) });
   assert.equal(r.status, 201);
-  assert.deepEqual(r.body.notice, { code: 'meet_scope_missing', message: MEETING_ERRORS.meet_scope_missing });
-  assert.equal(r.body.meeting.error_code, 'meet_scope_missing');
-  assert.match(r.body.meeting.error, /reconnected to allow transcripts/);
+  assert.deepEqual(r.body.notice, { code: 'meet_transcripts_unavailable', message: MEETING_ERRORS.meet_transcripts_unavailable });
+  assert.equal(r.body.meeting.error_code, 'meet_transcripts_unavailable');
+  assert.match(r.body.meeting.error, /Meet transcripts are not available on Axal yet/);
+  assert.match(r.body.meeting.error, /recorder/);
+  assert.match(r.body.meeting.error, /paste the conversation/);
+  // No consent screen asks for Meet's transcript scope yet (#1585): reconnecting cannot help, so it is not advised.
+  assert.doesNotMatch(r.body.meeting.error, /reconnect/i);
   assert.equal(calls.filter((c) => c.key.startsWith('GET https://www.googleapis.com/calendar')).length, 1, 'a pending conference is asked for once more');
 
   pending = false;
@@ -580,23 +848,116 @@ test('a reused Meet link imports only the conference scheduled for this intervie
   const f = world();
   await connectGoogle(f, GRANTED);
   const { uid, sessionId } = await seedRef(f, { provider: 'google_meet' });
-  const old = { name: 'conferenceRecords/old', startTime: iso(-3 * 24 * HOUR) };
-  const current = { name: 'conferenceRecords/rec1', startTime: refRow(f, uid).starts_at };
+  const old = { name: 'conferenceRecords/old', startTime: iso(-3 * 24 * HOUR), endTime: iso(-3 * 24 * HOUR + HOUR) };
+  const current = { name: 'conferenceRecords/rec1', startTime: refRow(f, uid).starts_at, endTime: refRow(f, uid).ends_at };
+  // The same link used again three hours after the slot's start, the same day: someone else's conversation.
+  const start = Date.parse(refRow(f, uid).starts_at);
+  const later = { name: 'conferenceRecords/later', startTime: new Date(start + 3 * HOUR).toISOString(), endTime: new Date(start + 4 * HOUR).toISOString() };
   const routes = {
     ...meetApi({ records: [current] }),
     'GET https://meet.googleapis.com/v2/conferenceRecords': (url: URL) => url.searchParams.get('pageToken') === 'next'
-      ? json({ conferenceRecords: [current] })
+      ? json({ conferenceRecords: [current, later] })
       : json({ conferenceRecords: [old], nextPageToken: 'next' }),
     'GET https://meet.googleapis.com/v2/conferenceRecords/old/transcripts': () => json({ transcripts: [
       { name: 'conferenceRecords/old/transcripts/old', state: 'FILE_GENERATED' },
+    ] }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords/later/transcripts': () => json({ transcripts: [
+      { name: 'conferenceRecords/later/transcripts/later', state: 'FILE_GENERATED' },
     ] }),
   };
   const calls = mockFetch(t, routes);
   assert.deepEqual(await sweepMeet(f.env, new Date()), ['queued']);
   assert.equal(calls.some((c) => c.key.includes('/old/transcripts')), false, 'another call on this link is never read');
+  assert.equal(calls.some((c) => c.key.includes('/later/transcripts')), false, 'nor a later use of it the same day');
   await runChannelJob(f.env, 'meeting_import', f.jobs[0].payload);
   assert.equal(refRow(f, uid).status, 'imported');
   assert.equal(count(f.db, 'SELECT COUNT(*) n FROM interview_transcript_segments WHERE session_id = ?', sessionId), 3);
+});
+
+test('a call is the conference that started within its slot: up to 30 minutes early or an hour after its end', () => {
+  const ref = { starts_at: '2099-01-05T09:00:00Z', ends_at: '2099-01-05T09:30:00Z' };
+  const at = (t: string) => Date.parse(`2099-01-05T${t}:00Z`);
+  assert.equal(withinCallSlot(at('08:30'), ref), true, 'joined early');
+  assert.equal(withinCallSlot(at('08:29'), ref), false);
+  assert.equal(withinCallSlot(at('09:10'), ref), true, 'a restart during the call');
+  assert.equal(withinCallSlot(at('10:30'), ref), true, 'a late start, an hour after the slot');
+  assert.equal(withinCallSlot(at('10:31'), ref), false, 'another use of the link later that day');
+  assert.equal(withinCallSlot(at('12:00'), ref), false);
+  // No end: the slot is taken as two hours.
+  assert.equal(withinCallSlot(at('12:00'), { starts_at: ref.starts_at, ends_at: null }), true);
+  assert.equal(withinCallSlot(at('12:01'), { starts_at: ref.starts_at, ends_at: null }), false);
+  assert.equal(withinCallSlot(NaN, ref), false);
+  assert.equal(withinCallSlot(at('09:00'), { starts_at: null, ends_at: null }), false, 'an unknown slot claims nothing');
+});
+
+/** A conference record of the seeded call, `fromMin` to `toMin` minutes after its scheduled start. */
+const meetRecord = (f: World, uid: string, name: string, fromMin: number, toMin: number | null) => {
+  const start = Date.parse(refRow(f, uid).starts_at);
+  return { name, startTime: new Date(start + fromMin * 60_000).toISOString(), ...(toMin == null ? {} : { endTime: new Date(start + toMin * 60_000).toISOString() }) };
+};
+const meetSegments = (f: World, sessionId: number) => f.db.prepare(
+  'SELECT speaker_label, text FROM interview_transcript_segments WHERE session_id = ? ORDER BY COALESCE(start_ms, 0), id',
+).all(sessionId).map((s: any) => `${s.speaker_label}: ${s.text}`);
+
+test('a Meet call whose transcription was stopped and restarted waits for both parts, then imports both', async (t) => {
+  const f = world();
+  await connectGoogle(f, GRANTED);
+  const { uid, sessionId } = await seedRef(f, { provider: 'google_meet' });
+  const rec1 = meetRecord(f, uid, 'conferenceRecords/rec1', 0, 50);
+  let second = 'ENDED';
+  const routes = {
+    ...meetApi({ records: [rec1] }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords/rec1/transcripts': () => json({ transcripts: [
+      { name: 'conferenceRecords/rec1/transcripts/t1', state: 'FILE_GENERATED', startTime: rec1.startTime },
+      { name: 'conferenceRecords/rec1/transcripts/t2', state: second, startTime: meetRecord(f, uid, 'x', 30, null).startTime },
+    ] }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords/rec1/transcripts/t2/entries': () => json({ transcriptEntries: [
+      { participant: 'conferenceRecords/rec1/participants/p2', text: 'And the auditors want it in two days.',
+        startTime: meetRecord(f, uid, 'x', 31, null).startTime, endTime: meetRecord(f, uid, 'x', 32, null).startTime },
+    ] }),
+  };
+  mockFetch(t, routes);
+  // The second transcript is still being written: importing now would settle the call on its first part.
+  assert.deepEqual(await sweepMeet(f.env, new Date()), ['waiting']);
+  assert.equal(f.jobs.length, 0);
+  assert.equal(refRow(f, uid).status, 'ended');
+
+  second = 'FILE_GENERATED';
+  f.db.exec(`UPDATE interview_channel_refs SET updated_at = '2026-01-01 00:00:00'`);
+  assert.deepEqual(await sweepMeet(f.env, new Date()), ['queued']);
+  await runChannelJob(f.env, 'meeting_import', f.jobs[0].payload);
+  assert.equal(refRow(f, uid).status, 'imported');
+  assert.equal(meetSegments(f, sessionId).at(-1), 'Dana Ruiz: And the auditors want it in two days.');
+  assert.equal(meetSegments(f, sessionId).length, 4);
+});
+
+test('a Meet call rejoined after everyone left (a second conference record) is imported whole, in time order', async (t) => {
+  const f = world();
+  await connectGoogle(f, GRANTED);
+  const { uid, sessionId } = await seedRef(f, { provider: 'google_meet' });
+  const rec1 = meetRecord(f, uid, 'conferenceRecords/rec1', 0, 20);
+  const rec2 = meetRecord(f, uid, 'conferenceRecords/rec2', 25, 50);
+  const lastWeek = meetRecord(f, uid, 'conferenceRecords/old', -7 * 24 * 60, -7 * 24 * 60 + 30);
+  const calls = mockFetch(t, {
+    ...meetApi({ records: [rec2, lastWeek, rec1] }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords/rec2/transcripts': () => json({ transcripts: [
+      { name: 'conferenceRecords/rec2/transcripts/t3', state: 'FILE_GENERATED', startTime: rec2.startTime },
+    ] }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords/rec2/participants': () => json({ participants: [
+      { name: 'conferenceRecords/rec2/participants/p7', anonymousUser: { displayName: 'Dana Ruiz' } },
+    ] }),
+    'GET https://meet.googleapis.com/v2/conferenceRecords/rec2/transcripts/t3/entries': () => json({ transcriptEntries: [
+      { participant: 'conferenceRecords/rec2/participants/p7', text: 'Sorry, my connection dropped.',
+        startTime: meetRecord(f, uid, 'x', 26, null).startTime, endTime: meetRecord(f, uid, 'x', 27, null).startTime },
+    ] }),
+  });
+  assert.deepEqual(await sweepMeet(f.env, new Date()), ['queued']);
+  await runChannelJob(f.env, 'meeting_import', f.jobs[0].payload);
+  assert.equal(refRow(f, uid).status, 'imported');
+  const segs = meetSegments(f, sessionId);
+  assert.equal(segs.length, 4, 'both conferences of the call');
+  assert.equal(segs.at(-1), 'Dana Ruiz: Sorry, my connection dropped.');
+  assert.equal(calls.some((c) => c.key.includes('/old/')), false, 'a use of the link a week earlier is never read');
 });
 
 test('the Meet sweep waits for a transcript not there yet, and settles a call with none after a day', async (t) => {
@@ -625,19 +986,26 @@ test('the Meet sweep waits for a transcript not there yet, and settles a call wi
   assert.match(row.last_error, /Workspace edition that includes Meet transcription/);
 });
 
-test('the Meet sweep stops at a missing transcript scope, recorded or reported by Meet', async (t) => {
+test('the Meet sweep settles a call it cannot read a transcript of, without asking Meet or advising a reconnect', async (t) => {
   const f = world();
   await connectGoogle(f, NO_MEET);
   const { uid } = await seedRef(f, { provider: 'google_meet' });
   const calls = mockFetch(t, meetApi());
-  assert.deepEqual(await sweepMeet(f.env, new Date()), ['failed']);
+  assert.deepEqual(await sweepMeet(f.env, new Date()), ['no_transcript']);
   assert.equal(calls.length, 0, 'a grant recorded without the scope asks Google nothing');
   const row = refRow(f, uid);
-  assert.equal(row.status, 'failed');
-  assert.equal(row.last_error, MEETING_ERRORS.meet_scope_missing);
+  assert.equal(row.status, 'no_transcript', 'settled: there is nothing to retry or reconnect');
+  assert.equal(row.last_error, MEETING_ERRORS.meet_transcripts_unavailable);
+  assert.doesNotMatch(row.last_error, /reconnect/i);
   const listed = await call(f.env, ME, 'GET', `/interviews/${INTERVIEW}/meetings`);
-  assert.equal(listed.body.meetings[0].error_code, 'meet_scope_missing');
+  assert.equal(listed.body.meetings[0].error_code, 'meet_transcripts_unavailable');
   assert.equal(listed.body.providers.find((p: any) => p.provider === 'google_meet').transcript_access, 'missing');
+  // Import now says the same, and asks Google nothing either.
+  const retried = await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings/${uid}/import`);
+  assert.equal(retried.status, 200);
+  assert.equal(retried.body.outcome, 'no_transcript');
+  assert.equal(retried.body.meeting.error_code, 'meet_transcripts_unavailable');
+  assert.equal(calls.length, 0);
 });
 
 test('an older Google grant with no recorded scopes learns of the missing one from Meet’s 403', async (t) => {
@@ -646,9 +1014,9 @@ test('an older Google grant with no recorded scopes learns of the missing one fr
   const { uid } = await seedRef(f, { provider: 'google_meet' });
   mockFetch(t, meetApi({ status: 403, body: { error: { code: 403, message: 'Request had insufficient authentication scopes.',
     status: 'PERMISSION_DENIED', details: [{ reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }] } } }));
-  assert.deepEqual(await sweepMeet(f.env, new Date()), ['failed']);
+  assert.deepEqual(await sweepMeet(f.env, new Date()), ['no_transcript']);
   const row = refRow(f, uid);
-  assert.equal(row.last_error, MEETING_ERRORS.meet_scope_missing);
+  assert.equal(row.last_error, MEETING_ERRORS.meet_transcripts_unavailable);
   assert.equal(row.last_error.includes('insufficient'), false, 'our sentence, not Google’s');
 
   const g = world();

@@ -446,6 +446,7 @@ const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/Adv
 // hitting the landing page never downloads them. Each render site below is
 // wrapped in its own <Suspense fallback> so fetching a chunk can't blank the app.
 const InactivityWarningModal = lazy(() => import('./components/InactivityWarningModal'));
+const RecordLivePage = lazy(() => import('./pages/founder/RecordLivePage'));
 const NotificationBell = lazy(() => import('./components/NotificationBell'));
 const FounderWellbeingMenu = lazy(() => import('./components/FounderWellbeingMenu'));
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
@@ -453,6 +454,9 @@ const StepUpModal = lazy(() => import('./components/StepUpModal'));
 const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
 const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
+// D685 §5.6 (#1588): the one recording, above the routes, and its pill.
+import { ActiveRecordingProvider, useActiveRecording } from './contexts/ActiveRecordingContext';
+import RecordingPill from './pages/founder/RecordingPill';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
@@ -1096,10 +1100,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
   // present (covers the brief render between logout and redirect).
+  // A recording gives no input: the logout is suspended while one is
+  // recording, paused or uploading (D685 §5.6.8).
+  const { recorder: activeRecorder } = useActiveRecording();
   const { warningOpen, secondsLeft, stayLoggedIn, logoutNow } = useInactivityTimeout({
     timeoutMs: 20 * 60 * 1000,
     warningMs: 60 * 1000,
-    enabled: !!user,
+    enabled: !!user && !activeRecorder.isCapturing(),
     onTimeout: onLogout,
   });
 
@@ -1342,6 +1349,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
           <MobileTabBar role={shellRole} />
+          {/* D685 §5.6: the recording outlives every route; its pill sits in the corner. */}
+          <ActiveRecordingProvider userId={user?.id ?? null} />
+          <SafeMount name="RecordingPill"><RecordingPill /></SafeMount>
 
           {/* A COLUMN, so the footer stays at the bottom on short pages while
               still following long page content inside the scroll container.
@@ -2510,6 +2520,8 @@ function AppInner() {
         : <Navigate to="/validate/interviews" replace />} />
       {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
+      {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
+      <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />

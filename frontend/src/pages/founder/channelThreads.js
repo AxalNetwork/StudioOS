@@ -12,9 +12,11 @@
  * and a meeting ref (`interview_channel_refs`):
  *   { uid, provider, join_url, starts_at, ends_at, status, last_error, session_id }
  *
- * TWO THINGS THIS FILE MUST NEVER SAY: that a Telegram message was delivered
- * (Telegram reports acceptance only), and that a call works over Telegram or
- * WhatsApp (neither reaches Axal).
+ * THINGS THIS FILE MUST NEVER SAY: that a Telegram message was delivered
+ * (Telegram reports acceptance only); that a reply was sent before a provider
+ * took it; that a call works over Telegram or WhatsApp (neither reaches Axal);
+ * and that a call will have a transcript, or was cancelled at Zoom or Google,
+ * when the provider will not make one or did not confirm it.
  */
 import { PROVIDER_LABEL } from '../account/channelsModel.js';
 import { agoLabel } from '../account/connectorsModel.js';
@@ -60,7 +62,7 @@ export function messageView(m, contact) {
     uid: m?.uid,
     mine: m?.side === 'me',
     who: m?.side === 'me' ? 'You' : (str(contact) || 'Contact'),
-    label: m?.kind === 'voice' ? 'Voice note (transcribed)' : '',
+    label: m?.kind !== 'voice' ? '' : m?.awaiting_transcription === true ? 'Voice note, transcribed when you add this chat to an interview' : 'Voice note (transcribed)',
     text: typeof m?.text === 'string' && m.text ? m.text : null,
   };
 }
@@ -104,6 +106,9 @@ export function sentLabel(provider, status) {
   return 'Sent';
 }
 
+/** The outbound statuses that mean a provider took the message (`channel_outbound`). */
+const TAKEN = new Set(['submitted', 'delivered', 'read']);
+
 /**
  * The composer's idempotency key: one per composed message, kept across a
  * retry so the Worker never sends it twice, and dropped once it is sent.
@@ -115,23 +120,52 @@ export function clientKeyFor(current, make = newClientKey) {
 /**
  * Whether a failed send keeps its key for the next press. The Worker spends a
  * key on its first attempt (`channel_outbound.client_key`): a repeat returns
- * that attempt's outcome and never sends again. So the key is kept only when
- * no answer came back (offline, a timeout), where the first attempt may have
- * gone; once the Worker has answered with a refusal, the next press is a new
- * attempt and takes a new key.
+ * that attempt's outcome and never sends again. So the key is dropped only
+ * after an explicit refusal, a 4xx with the Worker's code, where nothing went;
+ * the next press is then a new attempt and takes a new key. Every other
+ * failure keeps it: no answer (offline, a timeout), and any 5xx, which can
+ * come after the provider already took the message (a database error while
+ * recording the outcome answers 500). The repeat then reads what the first
+ * attempt did instead of sending a second copy.
  */
 export function keepKeyAfter(error) {
-  return !(Number(error?.status) > 0);
+  const status = Number(error?.status);
+  const refused = status >= 400 && status < 500 && typeof error?.code === 'string' && error.code !== '';
+  return !refused;
 }
 
 /**
- * A reply's answer read: `{ ok: true, label }` once the provider took it, or
- * `{ ok: false, text }` when the Worker reports that the attempt this key
- * already made failed (it sends nothing on a repeat).
+ * What a failed send says. A 5xx without the Worker's code (its catch-all, when
+ * something broke after the provider may already have taken the message) says
+ * that nobody knows, and that the next press is safe (`keepKeyAfter` kept the
+ * key); otherwise the Worker's sentence.
+ */
+export function replyFailureText(error) {
+  if (Number(error?.status) >= 500 && !error?.code) return 'Axal could not confirm whether it went. Press Send again to check: it will not send twice.';
+  return error?.message || 'No answer came back, so it may not have gone. Press Send again: it will not send twice.';
+}
+
+/**
+ * A reply's answer read:
+ *   { ok: true, label }           a provider took it ('submitted', 'delivered', 'read')
+ *   { ok: false, text }           the attempt this key made failed; nothing went
+ *   { ok: null, keepKey, text }   nobody knows yet whether it went
+ * The last is a repeat of a key whose first attempt is still 'pending': still
+ * waiting on the provider (`send_in_flight`, the key is kept so the next press
+ * only asks again), or cut off before the provider answered (`send_unknown`,
+ * and an answer with no status Axal can read). The member is told to look in
+ * the chat before sending it again, and the key is dropped so they can. It is
+ * never called sent: Axal claims "Sent" only on a provider's word.
  */
 export function replyOutcome(provider, r) {
-  if (r && r.ok === false) return { ok: false, text: 'That message was not sent. Press Send to try again.' };
-  return { ok: true, label: sentLabel(provider, r?.outbound?.status ?? r?.status) };
+  const status = r?.outbound?.status ?? r?.status;
+  if (r && (r.ok === false || status === 'failed')) return { ok: false, text: 'That message was not sent. Press Send to try again.' };
+  if (r?.ok === true && TAKEN.has(status)) return { ok: true, label: sentLabel(provider, status) };
+  const name = PROVIDER_LABEL[provider] || 'the provider';
+  if (r?.code === 'send_in_flight') {
+    return { ok: null, keepKey: true, text: `Sending… ${name} has not confirmed it yet. Press Send again in a moment to check: it will not send twice.` };
+  }
+  return { ok: null, keepKey: false, text: `Not confirmed yet: check the chat in ${name} before sending again. If it is not there, press Send to send it again.` };
 }
 
 export function newClientKey() {
@@ -207,7 +241,8 @@ export function providerNote(key, p) {
   const name = PROVIDER_LABEL[key];
   if (p?.available === false) return `${name} calls are not set up on Axal yet.`;
   if (p?.connected === false) return key === 'zoom' ? 'Connect Zoom in Account › Connectors first.' : 'Connect Google in Account › Connectors first.';
-  if (key === 'google_meet' && p?.transcriptAccess === 'missing') return 'You can schedule now, but reconnect Google in Account › Connectors before the call so Axal may read its transcript.';
+  // Reconnecting cannot help: no Google sign-in asks for Meet's transcript scope (D684 §6).
+  if (key === 'google_meet' && p?.transcriptAccess === 'missing') return 'Axal cannot import Google Meet transcripts yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.';
   return '';
 }
 
@@ -306,6 +341,34 @@ export function meetingStatus(ref, now = Date.now(), fmt = defaultWhen) {
   }
 }
 
+/**
+ * The question before a cancel. It promises only what the Worker does: it asks
+ * the provider to cancel the call, which may not succeed (`cancelOutcome`).
+ */
+export function cancelQuestion(provider) {
+  return provider === 'google_meet'
+    ? 'Cancel this call? Axal also asks Google to delete it from your calendar.'
+    : `Cancel this call? Axal also asks ${PROVIDER_LABEL[provider] || 'the provider'} to cancel it.`;
+}
+
+/**
+ * What a cancel did, from the Worker's `provider_cancelled`
+ * (routes/founder_validate_meetings.ts): `true` only when the provider
+ * confirmed. Anything else (`false`: not connected, refused, unreachable;
+ * `null`: no provider call was made) means the call may still be live there,
+ * so the member is told to delete it themselves.
+ */
+export function cancelOutcome(provider, r) {
+  if (r?.provider_cancelled === true) {
+    return provider === 'google_meet'
+      ? { tone: 'neutral', text: 'Cancelled, and deleted from your Google Calendar.' }
+      : { tone: 'neutral', text: 'Cancelled in Zoom too: its link no longer works.' };
+  }
+  return provider === 'google_meet'
+    ? { tone: 'warn', text: 'Removed from Axal, but Google did not confirm the event was deleted. It may still be in your Google Calendar with a working Meet link: delete it there.' }
+    : { tone: 'warn', text: 'Removed from Axal, but Zoom did not confirm the call was cancelled. It may still exist in your Zoom account with a working link: delete it there.' };
+}
+
 /** A join link Axal can safely draw: https on the provider's own domain. */
 export function safeJoinUrl(url, provider) {
   try {
@@ -320,7 +383,11 @@ export function safeJoinUrl(url, provider) {
   }
 }
 
-/** The schedule form's starting values: the next full hour, half an hour, on Zoom. */
+/**
+ * The schedule form's starting values: the next full hour, half an hour, on
+ * Zoom, not recorded. Recording a customer is the member's choice, made in the
+ * form (`record`), never a default.
+ */
 export function defaultMeetingForm(now = Date.now()) {
   const d = new Date(now + 60 * 60 * 1000);
   d.setMinutes(0, 0, 0);
@@ -332,7 +399,27 @@ export function defaultMeetingForm(now = Date.now()) {
     duration: 30,
     topic: '',
     consent: '',
+    record: false,
   };
+}
+
+/**
+ * What the schedule form may say about the transcript, for the provider and
+ * the recording choice in it. Zoom makes a transcript only from a cloud
+ * recording, and Axal asks for one only when the member turns it on
+ * (`auto_record`); Meet only when someone turns on transcription in the call.
+ * Neither is promised when it will not be made.
+ */
+export function transcriptNote(provider, record) {
+  if (provider === 'zoom') {
+    return record
+      ? 'Zoom records the call to the cloud, and when it ends Zoom’s transcript comes into that session for you to review. Zoom makes transcripts only on a paid plan with Audio transcript turned on.'
+      : 'Zoom makes a transcript only from a cloud recording. Without it, no transcript comes into the session unless someone starts Record to the Cloud during the call.';
+  }
+  if (provider === 'google_meet') {
+    return 'Google Meet makes a transcript only on a Workspace edition that includes it, and only when someone turns on transcription in the call.';
+  }
+  return '';
 }
 
 /** How the interviewee agreed to be recorded and transcribed: the Worker's CONSENT_METHODS. */
@@ -358,9 +445,12 @@ export function meetingBody(form, now = Date.now()) {
   // No consent, no AI over the transcript (#1470): the Worker refuses the call without it.
   if (!MEETING_CONSENT.some(([m]) => m === form?.consent)) return { error: 'Record how the interviewee agreed to be recorded and transcribed.' };
   const topic = str(form.topic).slice(0, 200);
+  // Zoom's cloud recording, only when the member turned it on: the Worker
+  // creates the call with `auto_recording: 'none'` otherwise. Meet has no such setting.
+  const record = form.provider === 'zoom' && form.record === true;
   return { body: {
     provider: form.provider, starts_at: start.toISOString(), duration_min: duration, ...(topic ? { topic } : {}),
-    consent: { status: 'given', method: form.consent },
+    consent: { status: 'given', method: form.consent }, ...(record ? { auto_record: true } : {}),
   } };
 }
 

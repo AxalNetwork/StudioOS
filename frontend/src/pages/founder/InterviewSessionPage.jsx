@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
-import { createCapture, indexedDbQueue } from '../../lib/interviewCapture';
-import { prefersReducedMotion } from '../../components/discovery/RingViz';
-import RecordingView, { recordingState } from './RecordingView';
+import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import { AssistantBadge } from './AssistantEntry';
 import { ChannelOriginBadge } from './ChannelOriginBadge.jsx';
 import { channelOf, openingStep } from './assistantSession.js';
@@ -207,28 +205,20 @@ function useDarkTheme() {
 export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const { id } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const theme = useDarkTheme();
+  const { state: rec, recorder } = useActiveRecording();
   const [data, setData] = useState(undefined);
   const [models, setModels] = useState(undefined);
   const [receipt, setReceipt] = useState(undefined);
   const [error, setError] = useState(null);
   const [startError, setStartError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [cap, setCap] = useState({});
-  const [ui, setUi] = useState({ confirm: false, drawer: false, stopping: false, stage: 0, markedAt: null, lastMark: null });
-  const [now, setNow] = useState(() => Date.now());
-  const capture = useRef(null);
 
   const load = useCallback(() => api.get(id).then((r) => { setData(r); return r; }).catch((e) => { setError(e?.message || 'Unreadable'); setData(null); }), [api, id]);
   const loadReceipt = useCallback(() => api.receipt(id).then(setReceipt).catch(() => setReceipt(null)), [api, id]);
 
   useEffect(() => { load(); loadReceipt(); api.models().then(setModels).catch(() => setModels(null)); }, [api, load, loadReceipt]);
-  useEffect(() => () => { capture.current?.stop(); }, []);
-  useEffect(() => {
-    if (data?.session?.status !== 'recording') return undefined;
-    const t = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(t);
-  }, [data?.session?.status]);
   // Poll while the Worker transcribes.
   useEffect(() => {
     if (data?.session?.status !== 'transcribing') return undefined;
@@ -236,51 +226,39 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
     return () => clearTimeout(t);
   }, [data, load]);
 
-  // Reconnect: anything left on the device goes up when the browser is back.
-  useEffect(() => {
-    const on = () => capture.current?.flush();
-    window.addEventListener('online', on);
-    return () => window.removeEventListener('online', on);
-  }, []);
-
   if (data === undefined) return <div className="p-6 text-[13px] text-axal-faint">Reading the session…</div>;
   if (data === null) return <div role="alert" className="p-6 text-[13px] text-red-700">{error}</div>;
-  const { session, segments = [], marks = [] } = data;
-  // The session row has no name; the sheet passes the interview it opened from.
-  const intervieweeName = (location.state?.interview?.interviewee_name || '').trim() || null;
+  const { session, segments = [], marks = [], chunks = [] } = data;
+  // The session row has no name; the lightbox passes the interview it opened from.
+  const interview = location.state?.interview || null;
+  const intervieweeName = (interview?.interviewee_name || '').trim() || null;
+  // D685 §5.6: the recording lives above the routes. This page hands it over and links to it.
+  const mine = rec.session?.id != null && String(rec.session.id) === String(session.id);
+  const live = `/validate/record/live?session=${encodeURIComponent(session.id)}`;
 
-  const ensureCapture = () => {
-    if (capture.current) return capture.current;
-    capture.current = createCapture({
-      deps: {
-        getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c),
-        AudioContext: window.AudioContext || window.webkitAudioContext,
-        MediaRecorder: window.MediaRecorder,
-        WebSocket: window.WebSocket,
-        now: () => Date.now(), setTimeout: (f, ms) => window.setTimeout(f, ms), clearTimeout: (t) => window.clearTimeout(t),
-        liveUrl: api.liveUrl(session.id),
-      },
-      api: { uploadChunk: (seq, blob, startMs) => api.uploadChunk(session.id, seq, blob, startMs) },
-      queue: indexedDbQueue(),
-      sessionId: session.id,
-      liveOn: !!session.live_model,
-      onState: (st) => setCap((c) => ({ ...c, ...st, online: st.online !== false && (typeof navigator === 'undefined' || navigator.onLine !== false) })),
-    });
-    return capture.current;
-  };
-
+  /** Start, in this click: the recorder opens the microphone, then posts start (§5.6.5). */
   const start = async () => {
     setBusy(true); setStartError(null);
     try {
-      const c = ensureCapture();
-      const mic = await c.open();
-      if (mic === 'denied') { setCap((x) => ({ ...x, mic: 'denied' })); return; }
-      const r = await api.action(session.id, session.status === 'paused' ? 'resume' : 'start');
-      setData((d) => ({ ...d, session: r.session }));
-      c.start();
+      const r = await recorder.begin({ session, interview, video: session.channel === 'video' });
+      if (r === 'refused') { setStartError(recorder.getSnapshot().error); return; }
+      navigate(live);
     } catch (e) {
       // The Worker's 409 `consent_not_recorded` — in its own words.
       setStartError(e?.message || 'The session could not start.');
+    } finally { setBusy(false); }
+  };
+
+  /**
+   * A session left recording or paused with no capture in this tab (a reload,
+   * another tab): it is paused, and resumed by hand with its seqs continued
+   * (§5.6.6, §5.6.7). #1584's active read makes this automatic on app load.
+   */
+  const adopt = async () => {
+    setBusy(true);
+    try {
+      await recorder.adopt({ session, interview, storedSeqs: chunks.map((c) => c.seq) });
+      navigate(live);
     } finally { setBusy(false); }
   };
 
@@ -288,49 +266,12 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
     try { const r = await api.setConsent(session.id, 'given', method); setData((d) => ({ ...d, session: r.session })); setStartError(null); } catch (e) { setStartError(e?.message); }
   };
 
-  const act = async (action) => {
-    const r = await api.action(session.id, action);
-    setData((d) => ({ ...d, session: r.session }));
-    if (action === 'pause') capture.current?.pause();
-    if (action === 'resume') capture.current?.resume();
-  };
-
-  const mark = async () => {
-    const offset = capture.current?.offsetMs() ?? 0;
-    setUi((u) => ({ ...u, markedAt: Date.now(), lastMark: offset }));
-    try { await api.mark(session.id, offset); } catch { /* the moment stays on screen; the Worker did not keep it */ }
-  };
-
-  const stop = async () => {
-    setUi((u) => ({ ...u, confirm: false, stopping: true, stage: 0 }));
-    try {
-      const r = await api.action(session.id, 'stop');
-      setData((d) => ({ ...d, session: r.session }));
-      await capture.current?.stop();
-      capture.current = null;
-      setUi((u) => ({ ...u, stage: 1 }));
-      setData((d) => ({ ...d, session: { ...d.session, status: 'transcribing' } }));
-      await api.transcribe(session.id, session.final_model);
-    } catch (e) {
-      setError(e?.message || 'The transcript could not be made.');
-    } finally {
-      setUi((u) => ({ ...u, stopping: false }));
-      await load(); loadReceipt();
-    }
-  };
-
   const assign = async (segId, label) => {
     await api.setSpeaker(session.id, segId, label);
     setData((d) => ({ ...d, segments: d.segments.map((s) => (s.id === segId ? { ...s, speaker_label: label } : s)) }));
   };
 
-  const recording = ['recording', 'paused'].includes(session.status) || ui.stopping;
-  const state = recordingState({
-    confirm: ui.confirm, stopping: ui.stopping, mic: cap.mic, paused: session.status === 'paused',
-    online: cap.online, silentMs: cap.silentMs, markedAt: ui.markedAt, now, drawer: ui.drawer, reduced: prefersReducedMotion(),
-  });
-  const elapsed = (session.active_ms || 0) + (session.status === 'recording' && session.recording_since
-    ? Math.max(0, now - Date.parse(`${String(session.recording_since).replace(' ', 'T')}Z`)) : 0);
+  const recording = ['recording', 'paused'].includes(session.status);
 
   const reviewFirst = openingStep(session) === 'review';
   // D684: a channel session still waiting for its messages or its call's transcript.
@@ -351,19 +292,24 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} busy={busy} onStart={start} onConsent={consent} />)}
         {recording && (
-          <RecordingView
-            state={state} theme={theme} analyser={cap.analyser} elapsedMs={elapsed} interviewee={intervieweeName}
-            liveOn={cap.live ?? !!session.live_model} liveAvailable={!!session.live_model} caption={cap.caption}
-            lastMark={ui.lastMark} stage={ui.stage} pending={cap.pending || 0}
-            segments={segments.filter((s) => s.source === 'live')}
-            onPause={() => act('pause')} onResume={() => (capture.current ? act('resume') : start())} onMark={mark}
-            onStop={() => setUi((u) => ({ ...u, confirm: true }))} onCancelStop={() => setUi((u) => ({ ...u, confirm: false }))}
-            onConfirmStop={stop} onToggleDrawer={() => setUi((u) => ({ ...u, drawer: !u.drawer }))}
-            onToggleLive={() => capture.current?.setLive(!(cap.live ?? !!session.live_model))} onRetryMic={start}
-          />
+          <section className="rounded-2xl border border-axal-hairline p-5 dark:border-gray-800" data-testid="session-recording">
+            {mine ? (
+              <>
+                <h2 className="m-0 text-[16px] font-bold">{session.status === 'paused' ? 'Paused' : 'Recording'}</h2>
+                <p className="mt-1 text-[13px] text-axal-muted">The recording continues while you move around StudioOS.</p>
+                <Link to={live} className="mt-3 inline-block rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800" data-testid="link-open-recording">Open the recording</Link>
+              </>
+            ) : (
+              <>
+                <h2 className="m-0 text-[16px] font-bold">This recording was interrupted</h2>
+                <p className="mt-1 text-[13px] text-axal-muted">It was {session.status === 'paused' ? 'paused' : 'recording'} in another tab or before the page reloaded. Resume it here: it carries on after the audio already saved.</p>
+                <button type="button" onClick={adopt} disabled={busy} className="mt-3 rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800 disabled:opacity-50" data-testid="button-adopt-recording">Resume here</button>
+              </>
+            )}
+          </section>
         )}
         {session.status === 'transcribing' && <p className="text-[13px] text-axal-faint" data-testid="session-transcribing">Transcribing…</p>}
-        {['stopped', 'transcribed', 'structured', 'reviewed'].includes(session.status) && !ui.stopping && (
+        {['stopped', 'transcribed', 'structured', 'reviewed'].includes(session.status) && (
           <section className="space-y-3">
             <h2 className="text-[16px] font-bold">Transcript</h2>
             {session.status === 'stopped' && AUDIO.has(session.channel) && (

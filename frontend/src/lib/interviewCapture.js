@@ -18,8 +18,12 @@
 
 export const LIVE_SAMPLE_RATE = 16000;
 export const CHUNK_MS = 15000;
-/** How long the microphone may read silence before the page says so. */
-export const NO_SOUND_MS = 8000;
+/** How long the microphone may read silence before the page says so (D685 §5.7: 30 seconds). */
+export const NO_SOUND_MS = 30000;
+/** How often the level is checked, so silence shows within a quarter second, not at a chunk boundary. */
+export const LEVEL_MS = 250;
+/** The relay's close code when the member's AI budget runs out (liveTranscription.ts). It is never reopened. */
+export const BUDGET_CLOSE = 4402;
 
 /** Float samples at `inRate` → 16 kHz signed 16-bit PCM. */
 export function downsampleTo16k(input, inRate) {
@@ -61,6 +65,7 @@ export function memoryQueue() {
     put: async (r) => { rows.set(k(r), r); },
     list: async (sessionId) => [...rows.values()].filter((r) => r.sessionId === sessionId).sort((a, b) => a.seq - b.seq),
     remove: async (sessionId, seq) => { rows.delete(`${sessionId}:${seq}`); },
+    sessions: async () => [...new Set([...rows.values()].map((r) => r.sessionId))],
   };
 }
 
@@ -91,7 +96,19 @@ export function indexedDbQueue(idb = (typeof indexedDB !== 'undefined' ? indexed
       return (all || []).filter((r) => r.sessionId === sessionId).sort((a, b) => a.seq - b.seq);
     },
     remove: (sessionId, seq) => tx('readwrite', (s) => s.delete([sessionId, seq])),
+    /** Every session with a chunk still on this device, so app load can flush them all (D685 §5.6.7). */
+    sessions: async () => [...new Set(((await tx('readonly', (s) => s.getAll())) || []).map((r) => r.sessionId))],
   };
+}
+
+/**
+ * Where a capture resumed in this tab continues: one past the highest seq the
+ * Worker holds or this device still queues (D685 §5.6.6). Starting at 0 again
+ * would PUT seq 0, be answered `duplicate`, and lose that audio without a word.
+ */
+export function nextSeq(storedSeqs = [], queuedSeqs = []) {
+  const all = [...storedSeqs, ...queuedSeqs].map(Number).filter(Number.isFinite);
+  return all.length ? Math.max(...all) + 1 : 0;
 }
 
 /**
@@ -162,20 +179,33 @@ export function readLiveEvent(ev) {
 // ---------------------------------------------------------------------------
 
 /**
- * One capture. `deps` carries the browser: { getUserMedia, AudioContext,
- * MediaRecorder, WebSocket, now, setTimeout, clearTimeout, liveUrl }.
+ * One capture. `deps` carries the browser: { getUserMedia, getDisplayMedia,
+ * AudioContext, MediaStream, MediaRecorder, WebSocket, now, setTimeout,
+ * clearTimeout, setInterval, clearInterval, liveUrl }. `startSeq` and
+ * `baseOffsetMs` continue a session the Worker already holds audio for.
  * `api` carries the Worker: { uploadChunk(seq, blob, startMs) }.
  */
-export function createCapture({ deps, api, queue, sessionId, liveOn, onState }) {
+export function createCapture({ deps, api, queue, sessionId, liveOn, onState, startSeq = 0, baseOffsetMs = 0 }) {
   const s = {
     stream: null, ctx: null, analyser: null, processor: null, recorder: null, socket: null,
-    seq: 0, startedAt: 0, pausedMs: 0, pausedAt: null, chunkTimer: null, lastSoundAt: 0,
+    seq: Number.isFinite(startSeq) && startSeq > 0 ? startSeq : 0, startedAt: 0, pausedMs: 0, pausedAt: null, chunkTimer: null, lastSoundAt: 0,
     live: !!liveOn, caption: '', online: true, flushing: false, pending: 0, error: null,
+    levelTimer: null, mic: null, display: null, displayVideo: null, shareNote: null, recordStream: null, budget: false, discarded: false, holding: false,
   };
   const emit = (extra = {}) => onState?.({
-    analyser: s.analyser, live: s.live, liveOpen: !!s.socket?.open, caption: s.caption,
-    pending: s.pending, online: s.online, error: s.error, silentMs: s.startedAt ? deps.now() - s.lastSoundAt : 0, ...extra,
+    analyser: s.analyser, live: s.live, liveOpen: !!s.socket?.open, caption: s.caption, mic: s.mic,
+    pending: s.pending, online: s.online, error: s.error, silentMs: s.startedAt && s.pausedAt == null ? deps.now() - s.lastSoundAt : 0,
+    shareNote: s.shareNote, displayVideo: s.displayVideo, budget: s.budget, ...extra,
   });
+  // D685 §5.7.6: the level is read every LEVEL_MS, not only when a caption or a chunk arrives.
+  const startLevel = () => {
+    if (s.levelTimer != null || typeof deps.setInterval !== 'function') return;
+    s.levelTimer = deps.setInterval(() => emit(), LEVEL_MS);
+  };
+  const stopLevel = () => {
+    if (s.levelTimer != null && typeof deps.clearInterval === 'function') deps.clearInterval(s.levelTimer);
+    s.levelTimer = null;
+  };
 
   const flush = async () => {
     if (s.flushing) return;
@@ -187,22 +217,26 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState }) 
     } finally { s.flushing = false; emit(); }
   };
 
-  const offsetMs = () => deps.now() - s.startedAt - s.pausedMs;
+  // Offsets continue from what the Worker already holds (`active_ms`), so a resumed capture's chunks and marks line up.
+  const offsetMs = () => baseOffsetMs + (s.startedAt ? deps.now() - s.startedAt - s.pausedMs - (s.pausedAt != null ? deps.now() - s.pausedAt : 0) : 0);
 
   const startRecorderSlice = () => {
-    if (!deps.MediaRecorder || !s.stream) return;
-    const rec = new deps.MediaRecorder(s.stream);
+    const stream = s.recordStream || s.stream;
+    if (!deps.MediaRecorder || !stream) return;
+    // Audio only, always (D685 §5.8.2): the Worker refuses anything but audio/* with 415.
+    const rec = new deps.MediaRecorder(stream);
     const seq = s.seq; const startMs = offsetMs();
     s.seq += 1;
     const parts = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
     rec.onstop = async () => {
-      if (!parts.length) return;
+      if (!parts.length || s.discarded) return;
       const blob = new Blob(parts, { type: parts[0].type || 'audio/webm' });
       await queue.put({ sessionId, seq, blob, startMs });
       s.pending += 1;
       emit();
-      flush();
+      // A sign-out's stop holds the last slice on this device (D685 §5.6.8).
+      if (!s.holding) flush();
     };
     rec.start();
     s.recorder = rec;
@@ -226,25 +260,85 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState }) 
         if (r.error) { s.error = r.error; } else { s.caption = r.text; }
         emit();
       },
-      onClose: () => { s.socket = null; emit(); },
+      onClose: (e) => {
+        s.socket = null;
+        // The budget ran out: say so, and never reopen this socket (D685 §5.7.8).
+        if (e?.code === BUDGET_CLOSE) { s.budget = true; s.live = false; s.caption = ''; }
+        emit();
+      },
     });
   };
+  const openSocketIfLive = () => { if (!s.budget && s.startedAt && s.pausedAt == null) openSocket(); };
+
+  /** Watch the microphone track: losing it shows at once, not 30 seconds later as "no sound". */
+  const watchMic = (track) => {
+    if (!track || typeof track.addEventListener !== 'function') return;
+    track.addEventListener('ended', () => { s.mic = 'ended'; emit(); });
+    track.addEventListener('mute', () => { s.mic = 'muted'; emit(); });
+    track.addEventListener('unmute', () => { s.mic = 'granted'; emit(); });
+  };
+
+  /** The call's tab stopped sharing: keep recording the microphone, and say so. */
+  const shareLost = () => { s.shareNote = 'not_shared'; s.displayVideo = null; emit(); };
 
   return {
-    /** Ask for the microphone. Resolves 'granted' or 'denied'. */
-    async open() {
+    /**
+     * Ask for the microphone, and with `{ display: true }` the call's tab too
+     * (D685 §5.8). Resolves 'granted' or 'denied'; a refused or audio-less
+     * share is never 'denied': it records the microphone and sets `shareNote`.
+     * Call it inside the click that asked for it (Safari, Firefox).
+     */
+    async open({ display = false } = {}) {
+      // The share is asked for first, while the click's activation is fresh.
+      let shared = null;
+      s.shareNote = null;
+      if (display) {
+        if (typeof deps.getDisplayMedia !== 'function') {
+          s.shareNote = 'unsupported';
+        } else {
+          try {
+            shared = await deps.getDisplayMedia({ video: true, audio: true });
+          } catch { s.shareNote = 'not_shared'; }
+        }
+      }
       try {
         s.stream = await deps.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       } catch {
-        emit({ mic: 'denied' });
+        shared?.getTracks?.().forEach((t) => t.stop());
+        s.mic = 'denied';
+        emit();
         return 'denied';
+      }
+      s.mic = 'granted';
+      watchMic(s.stream.getAudioTracks?.()[0]);
+      if (shared) {
+        s.display = shared;
+        const audio = shared.getAudioTracks?.() || [];
+        const video = shared.getVideoTracks?.() || [];
+        if (!audio.length) s.shareNote = 'no_audio';
+        // The tile shows the tab's picture; nothing of it is recorded or stored.
+        s.displayVideo = video.length ? shared : null;
+        [...audio, ...video].forEach((t) => t.addEventListener?.('ended', shareLost));
       }
       if (deps.AudioContext) {
         s.ctx = new deps.AudioContext();
-        const src = s.ctx.createMediaStreamSource(s.stream);
+        const mic = s.ctx.createMediaStreamSource(s.stream);
+        // One mix of the microphone and the tab's audio feeds the recorder,
+        // the ring and the live feed, so every chunk is audio (§5.8.2).
+        const mix = typeof s.ctx.createGain === 'function' ? s.ctx.createGain() : null;
+        const into = mix || mic;
+        if (mix) mic.connect(mix);
+        if (mix && shared && (shared.getAudioTracks?.() || []).length) {
+          s.ctx.createMediaStreamSource(new (deps.MediaStream || MediaStream)(shared.getAudioTracks())).connect(mix);
+        }
+        if (mix && typeof s.ctx.createMediaStreamDestination === 'function') {
+          const dest = s.ctx.createMediaStreamDestination();
+          mix.connect(dest);
+          s.recordStream = dest.stream;
+        }
         s.analyser = s.ctx.createAnalyser();
         s.analyser.fftSize = 2048;
-        src.connect(s.analyser);
+        into.connect(s.analyser);
         if (typeof s.ctx.createScriptProcessor === 'function') {
           s.processor = s.ctx.createScriptProcessor(4096, 1, 1);
           s.processor.onaudioprocess = (e) => {
@@ -253,11 +347,11 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState }) 
             if (rms(block) > 0.01) s.lastSoundAt = deps.now();
             if (s.socket) s.socket.send(downsampleTo16k(block, s.ctx.sampleRate));
           };
-          src.connect(s.processor);
+          into.connect(s.processor);
           s.processor.connect(s.ctx.destination);
         }
       }
-      emit({ mic: 'granted' });
+      emit();
       return 'granted';
     },
     /** Called after the Worker accepted `start`. */
@@ -265,32 +359,60 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState }) 
       s.startedAt = deps.now(); s.lastSoundAt = s.startedAt;
       startRecorderSlice();
       openSocket();
+      startLevel();
       emit();
     },
-    pause() { s.pausedAt = deps.now(); stopRecorderSlice(); s.socket?.close(); s.socket = null; emit(); },
+    pause() { s.pausedAt = deps.now(); stopRecorderSlice(); stopLevel(); s.socket?.close(); s.socket = null; emit(); },
     resume() {
       if (s.pausedAt != null) s.pausedMs += deps.now() - s.pausedAt;
       s.pausedAt = null; s.lastSoundAt = deps.now();
-      startRecorderSlice(); openSocket(); emit();
+      startRecorderSlice(); openSocketIfLive(); startLevel(); emit();
     },
-    /** Hide or show the live transcript. Hiding closes the socket. */
+    /** Hide or show the live transcript. Hiding closes the socket; a spent budget keeps it shut. */
     setLive(on) {
-      s.live = !!on;
-      if (!s.live) { s.socket?.close(); s.socket = null; s.caption = ''; } else if (s.startedAt && s.pausedAt == null) openSocket();
+      s.live = !!on && !s.budget;
+      if (!s.live) { s.socket?.close(); s.socket = null; s.caption = ''; } else openSocketIfLive();
       emit();
     },
+    /** Back online (D685 §5.7.7): flush what waited, and reopen the live socket if it is on. */
+    reconnect() {
+      s.online = true;
+      flush();
+      if (s.live) openSocketIfLive();
+      emit();
+    },
+    /** Offline: chunks keep queueing on the device; the screen says so at once. */
+    offline() { s.online = false; emit(); },
     offsetMs,
     flush,
-    async stop() {
+    async stop({ flush: flushOnStop = true } = {}) {
+      if (!flushOnStop) s.holding = true;
       stopRecorderSlice();
+      stopLevel();
       s.socket?.close(); s.socket = null;
       try { s.processor?.disconnect(); } catch { /* gone */ }
       s.stream?.getTracks?.().forEach((t) => t.stop());
+      // The call's tab stops sharing with the recording (§5.8.4).
+      s.display?.getTracks?.().forEach((t) => t.stop());
+      s.display = null; s.displayVideo = null;
       try { await s.ctx?.close?.(); } catch { /* gone */ }
-      // Let the last slice's onstop queue it before the final flush.
+      // Let the last slice's onstop queue it before the final flush. A sign-out
+      // passes `flush: false`: the chunks stay on this device, never sent as
+      // someone else (D685 §5.6.8).
       await new Promise((r) => deps.setTimeout(r, 0));
-      await flush();
+      if (flushOnStop) await flush();
       return { pending: s.pending };
+    },
+    /**
+     * Discard this recording (D685 §5.7.9): nothing more is queued or sent,
+     * and what waited on this device for it is removed.
+     */
+    async discard() {
+      s.discarded = true;
+      await this.stop({ flush: false });
+      for (const r of await queue.list(sessionId)) await queue.remove(sessionId, r.seq);
+      s.pending = 0;
+      emit();
     },
     get state() { return s; },
   };

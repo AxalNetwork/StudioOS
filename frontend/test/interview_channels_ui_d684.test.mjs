@@ -317,6 +317,52 @@ test('the composer: disabled with the reason outside the window; a retry with no
   } finally { await m.unmount(); }
 });
 
+test('the composer: a 500 keeps the key; a pending first attempt keeps the words and is never "Sent"', async () => {
+  const keys = [];
+  const answers = [
+    () => { throw Object.assign(new Error('Internal server error'), { status: 500 }); },
+    () => ({ ok: null, existing: true, pending: true, code: 'send_in_flight', outbound: { status: 'pending' } }),
+    () => ({ ok: null, existing: true, pending: true, code: 'send_unknown', outbound: { status: 'pending' } }),
+    () => ({ ok: true, existing: false, outbound: { status: 'submitted' } }),
+  ];
+  const api = { reply: async (uid, t, key) => { keys.push(key); return answers[keys.length - 1](); } };
+  let n = 0;
+  let sent = 0;
+  const m = await mount(h(ReplyComposer, { thread: { ...THREAD, provider: 'telegram' }, api, makeKey: () => `key-${++n}`, onSent() { sent += 1; } }));
+  try {
+    await m.type('input-reply', 'Could we talk Thursday?');
+    await m.click('button-reply-send');
+    assert.match(m.text(), /Axal could not confirm whether it went\. Press Send again to check: it will not send twice\./);
+    assert.doesNotMatch(m.text(), /Internal server error/, 'not the server’s words');
+    await m.click('button-reply-send');
+    assert.deepEqual(keys, ['key-1', 'key-1'], 'a 500 may follow a send the provider took: the same key, so it cannot go twice');
+    assert.equal(m.byTestId('reply-sent'), undefined, 'still waiting on the provider is not Sent');
+    assert.match(m.props(m.byTestId('reply-pending')).children, /^Sending… Telegram has not confirmed it yet/);
+    assert.equal(m.props(m.byTestId('input-reply')).value, 'Could we talk Thursday?', 'the words stay');
+    await m.click('button-reply-send');
+    assert.deepEqual(keys, ['key-1', 'key-1', 'key-1'], 'in flight: the next press only asks again');
+    assert.equal(m.byTestId('reply-sent'), undefined);
+    assert.match(m.props(m.byTestId('reply-pending')).children, /^Not confirmed yet: check the chat in Telegram before sending again\./);
+    assert.equal(m.props(m.byTestId('input-reply')).value, 'Could we talk Thursday?');
+    assert.equal(sent, 0);
+    await m.click('button-reply-send');
+    assert.deepEqual(keys, ['key-1', 'key-1', 'key-1', 'key-2'], 'after checking the chat, the member may send it again, as a new attempt');
+    assert.equal(m.props(m.byTestId('reply-sent')).children, 'Sent');
+    assert.equal(m.byTestId('reply-pending'), undefined);
+    assert.equal(sent, 1);
+  } finally { await m.unmount(); }
+
+  // A Worker that still answers ok: true for a pending row does not make it Sent either.
+  const older = await mount(h(ReplyComposer, { thread: THREAD, api: { reply: async () => ({ ok: true, existing: true, outbound: { status: 'pending' } }) } }));
+  try {
+    await older.type('input-reply', 'Hello');
+    await older.click('button-reply-send');
+    assert.equal(older.byTestId('reply-sent'), undefined);
+    assert.ok(older.byTestId('reply-pending'));
+    assert.equal(older.props(older.byTestId('input-reply')).value, 'Hello');
+  } finally { await older.unmount(); }
+});
+
 test('ignore and stop ignoring', async () => {
   const { api, calls } = inboxApi({ thread: async () => ({ thread: { ...THREAD, status: 'ignored', message_count: 0 }, messages: [] }) });
   const m = await mount(h(ChannelsInboxPage, { api, source: SOURCE, now: NOW }));
@@ -386,12 +432,44 @@ test('Schedule a call: Zoom or Meet, the body the Worker reads, and a refusal th
   } finally { await m.unmount(); }
 });
 
+test('Schedule a call: Zoom’s transcript is promised only with Record in the cloud on, and that choice is sent as auto_record', async () => {
+  const sent = [];
+  const api = {
+    meetings: async () => ({ meetings: [], providers: [{ provider: 'zoom', available: true, connected: true }, { provider: 'google_meet', available: true, connected: true }] }),
+    scheduleMeeting: async (id, body) => { sent.push(body); return { meeting: { uid: 'r9' }, session_id: 50, notice: null }; },
+  };
+  const form = { provider: 'zoom', date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: 'verbal', record: false };
+  const m = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form }));
+  try {
+    await m.flush();
+    // Read from the props: the test DOM does not apply React's in-place text updates.
+    const intro = () => [m.props(m.byTestId('schedule-intro')).children].flat().join('');
+    assert.doesNotMatch(intro(), /transcript comes into that session/, 'no cloud recording, no promise');
+    assert.match(intro(), /Zoom makes a transcript only from a cloud recording/);
+    assert.match(m.text(), /Record in the cloud \(needed for the transcript\)/);
+    assert.match(m.text(), /Zoom’s own recording notice tells everyone on the call/);
+    assert.equal(m.props(m.byTestId('input-meeting-record')).checked, false, 'off until the member turns it on');
+    await m.click('button-schedule-meeting');
+    assert.equal('auto_record' in sent[0], false, 'off: the Worker keeps Zoom’s recording off');
+    await act(async () => { m.props(m.byTestId('input-meeting-record')).onChange({ target: { checked: true } }); });
+    assert.equal(m.props(m.byTestId('input-meeting-record')).checked, true);
+    assert.match(intro(), /Zoom records the call to the cloud, and when it ends Zoom’s transcript comes into that session/);
+    await m.click('button-schedule-meeting');
+    assert.equal(sent[1].auto_record, true);
+    await m.click('meeting-provider-google_meet');
+    assert.equal(m.byTestId('input-meeting-record'), undefined, 'Meet has no cloud-recording setting');
+    assert.match(intro(), /Google Meet makes a transcript only on a Workspace edition that includes it, and only when someone turns on transcription in the call/);
+    await m.click('button-schedule-meeting');
+    assert.equal('auto_record' in sent[2], false);
+  } finally { await m.unmount(); }
+});
+
 test('Schedule a call says what to fix before pressing, and repeats the Worker’s notice once scheduled', async () => {
-  const notice = 'Google needs to be reconnected to allow transcripts: reconnect Google in Account › Connectors and allow Axal to read your Meet transcripts, then retry.';
+  const notice = 'Google Meet transcripts are not available on Axal yet, so this call’s transcript will not be imported. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.';
   let listed = 0;
   const api = {
     meetings: async () => { listed += 1; return { meetings: [], providers: [{ provider: 'zoom', available: true, connected: false }, { provider: 'google_meet', available: true, connected: true, transcript_access: 'missing' }] }; },
-    scheduleMeeting: async () => ({ meeting: { uid: 'r9' }, session_id: 50, notice: { code: 'meet_scope_missing', message: notice } }),
+    scheduleMeeting: async () => ({ meeting: { uid: 'r9' }, session_id: 50, notice: { code: 'meet_transcripts_unavailable', message: notice } }),
   };
   const form = (provider) => ({ provider, date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: 'pre_agreed' });
   const z = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form('zoom') }));
@@ -403,7 +481,8 @@ test('Schedule a call says what to fix before pressing, and repeats the Worker�
   const m = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form('google_meet') }));
   try {
     await m.flush();
-    assert.match(m.text(), /You can schedule now, but reconnect Google in Account › Connectors before the call/);
+    assert.match(m.text(), /Axal cannot import Google Meet transcripts yet\. You can still hold the call/);
+    assert.doesNotMatch(m.text(), /reconnect Google/i);
     await m.click('button-schedule-meeting');
     assert.ok(m.byTestId('schedule-notice'));
     assert.ok(m.text().includes(`Scheduled. ${notice}`));
@@ -432,6 +511,43 @@ test('a scheduled call shows its join link with Copy and Cancel (asked first); a
   } finally { await failed.unmount(); }
   const evil = html(h('ul', null, h(MeetingRow, { meeting: { ...ref, join_url: 'javascript:alert(1)' }, interview: { id: 7 }, now: NOW })));
   assert.doesNotMatch(evil, /javascript:/);
+});
+
+test('Cancel says "Cancelled" only when Zoom or Google confirmed it; otherwise the row says to delete the call there', async () => {
+  const ref = { uid: 'r1', provider: 'zoom', join_url: 'https://us02web.zoom.us/j/81234567890?pwd=abc', starts_at: '2099-01-05T09:00:00Z', ends_at: '2099-01-05T09:30:00Z', status: 'scheduled', session_id: 12 };
+  // The row as the list reads it again after the cancel (routes/founder_validate_meetings.ts sets the ref 'cancelled' either way).
+  function Harness({ answer }) {
+    const [meeting, setMeeting] = React.useState(ref);
+    const api = { cancelMeeting: async () => answer };
+    return h('ul', null, h(MeetingRow, { meeting, interview: { id: 7 }, api, now: NOW, onChanged: () => setMeeting({ ...ref, status: 'cancelled' }) }));
+  }
+  const asked = await mount(h(Harness, { answer: { meeting: null, provider_cancelled: false } }));
+  try {
+    await asked.click('button-meeting-cancel-r1');
+    assert.match(asked.text(), /Cancel this call\? Axal also asks Zoom to cancel it\./);
+    assert.doesNotMatch(asked.text(), /Its link stops working/, 'nothing promised that the Worker cannot guarantee');
+  } finally { await asked.unmount(); }
+  for (const answer of [{ meeting: null, provider_cancelled: false }, { meeting: null, provider_cancelled: null }]) {
+    const m = await mount(h(Harness, { answer }));
+    try {
+      await m.click('button-meeting-cancel-r1');
+      const row = m.byTestId('meeting-cancel-confirm-r1');
+      await act(async () => { await m.props(row.childNodes.find((n) => m.props(n).children === 'Cancel it')).onClick(); });
+      await m.flush();
+      const status = m.props(m.byTestId('meeting-status'));
+      assert.equal(status.children, 'Removed from Axal, but Zoom did not confirm the call was cancelled. It may still exist in your Zoom account with a working link: delete it there.', JSON.stringify(answer));
+      assert.match(status.className, /amber/, 'a warning, not a neutral "Cancelled."');
+      assert.equal(m.byTestId('meeting-join'), undefined);
+    } finally { await m.unmount(); }
+  }
+  const ok = await mount(h(Harness, { answer: { meeting: null, provider_cancelled: true } }));
+  try {
+    await ok.click('button-meeting-cancel-r1');
+    const row = ok.byTestId('meeting-cancel-confirm-r1');
+    await act(async () => { await ok.props(row.childNodes.find((n) => ok.props(n).children === 'Cancel it')).onClick(); });
+    await ok.flush();
+    assert.equal(ok.props(ok.byTestId('meeting-status')).children, 'Cancelled in Zoom too: its link no longer works.');
+  } finally { await ok.unmount(); }
 });
 
 test('Record a session keeps D684\'s two ways in: a picked interview offers the chat import and the call for later; a new person goes to the inbox', async () => {

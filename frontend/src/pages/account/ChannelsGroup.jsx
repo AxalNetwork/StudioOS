@@ -262,7 +262,7 @@ export function MeetingChannelCard({ card, onOpenConnector }) {
           : <Link to={CHANNELS_HREF} className={`${BTN.primary} self-start`}>Connect {via} in Connectors</Link>
       )}
       {(card.state === 'connected' || card.state === 'problem') && card.connectorKey && onOpenConnector && (
-        <button type="button" className={`${BTN.ghost} self-start`} onClick={() => onOpenConnector(card.connectorKey)} data-testid={`button-manage-${card.provider}`}>{card.state === 'problem' && card.provider === 'google_meet' ? 'Reconnect Google' : `Manage or disconnect ${via}`}</button>
+        <button type="button" className={`${BTN.ghost} self-start`} onClick={() => onOpenConnector(card.connectorKey)} data-testid={`button-manage-${card.provider}`}>{`Manage or disconnect ${via}`}</button>
       )}
       <p className={NOTE}>{MEETING_NOTES[card.provider]}</p>
       {card.state === 'connected' && <p className={NOTE}>Test it by scheduling a {name} call from an interview.</p>}

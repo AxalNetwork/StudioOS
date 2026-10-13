@@ -11,7 +11,7 @@ export function prefersReducedMotion(motion) {
  * The Recording View's ring (D660). Reads an `AnalyserNode`; with none (the
  * microphone is not yet open, or was denied) it draws the resting rings.
  */
-export default function RingViz({ analyser = null, mode = 'speech', theme = 'light', motion, progress = 0, label }) {
+export default function RingViz({ analyser = null, mode = 'speech', theme = 'light', motion, progress = 0, label, flash = null }) {
   const ref = useRef(null);
   useEffect(() => {
     const canvas = ref.current;
@@ -25,7 +25,9 @@ export default function RingViz({ analyser = null, mode = 'speech', theme = 'lig
       ctx, size: { w, h }, analyser, sampleRate: analyser?.context?.sampleRate || 48000,
       mode, dark: theme === 'dark', reduced: prefersReducedMotion(motion), progress,
       raf: (f) => requestAnimationFrame(f), caf: (id) => cancelAnimationFrame(id), now: () => performance.now(),
+      // A new `flash` (a mark's time) lights the ring once, from now.
+      flashAt: flash == null ? null : performance.now(),
     });
-  }, [analyser, mode, theme, motion, progress]);
+  }, [analyser, mode, theme, motion, progress, flash]);
   return <canvas ref={ref} data-testid="ring-viz" data-mode={mode} role="img" aria-label={label || 'Microphone level'} className="block h-full w-full" />;
 }

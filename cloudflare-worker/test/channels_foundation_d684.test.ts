@@ -18,7 +18,15 @@
  *   · a venture the member cannot write is not there (404), and nothing moves;
  *   · an inactive member's connection writes nothing;
  *   · a provider copy of Axal's own reply is a duplicate;
- *   · ignore deletes and drops; purge keeps 30 days;
+ *   · ignore deletes and drops, and holds while the contact keeps writing;
+ *     purge keeps 30 days, and takes pending copies on any thread;
+ *   · leftovers on an assigned chat are moved by the next assignment;
+ *     "Create interview from this chat" leaves no empty interview behind;
+ *   · a failed thread count takes its message with it; another member's reply
+ *     is never this member's echo; two delivery reports at once never move a
+ *     status backwards; the transcript mirror stops at its bound;
+ *   · the per-connection counters live in D1: the minute limit trips and fails
+ *     open, the daily transcription cap holds and fails closed;
  *   · a channel job reaches its provider's handler, and a provider that
  *     registered none fails loudly.
  *
@@ -30,7 +38,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
-import { claimEvent, finishEvent, releaseEvent } from '../src/services/channels/events.ts';
+import { claimEvent, connectionOverLimit, finishEvent, releaseEvent, reserveTranscription } from '../src/services/channels/events.ts';
 import { createLinkCode, consumeLinkCode } from '../src/services/channels/linkCodes.ts';
 import { beginOutbound, finishOutbound, applyDeliveryStatus } from '../src/services/channels/outbound.ts';
 import {
@@ -40,7 +48,10 @@ import {
   applyDelete, applyEdit, assignThread, forgetConnection, listThreads, purgeExpired, readThread, setThreadIgnored,
   storeMessage, type ThreadMessageInput,
 } from '../src/services/channels/threads.ts';
-import { IntakeError, importTranscript, openSession, writableInterview } from '../src/services/interviewIntake.ts';
+import {
+  IntakeError, TRANSCRIPT_MIRROR_MAX_BYTES, appendSegments, importTranscript, openSession, writableInterview,
+} from '../src/services/interviewIntake.ts';
+import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 import { registerChannelJob, runChannelJob, registerChannelSweep, runChannelSweeps } from '../src/services/channels/jobs.ts';
 import { runSessionStructureJob, structureSession, sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
 
@@ -90,7 +101,7 @@ function world() {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '450_channel_events_delete_kind.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql']) db.exec(mig(m));
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1), ('bc-2', 'BC-UNLINKED', '777', NULL, 1, 1),
                   ('bc-3', 'BC-OFF', '555001', ${ME}, 0, 1)`);
@@ -387,6 +398,170 @@ test('purge keeps 30 days of pending messages and never touches an assigned thre
   assert.deepEqual(chats, ['kept', 'new']);
   assert.equal(await forgetConnection(env, TG_INT), 2);
   assert.ok(count(db, 'SELECT COUNT(*) n FROM interview_transcript_segments') > 0, 'what was assigned stays in the interview');
+});
+
+/** Reads that resolve only once `n` have been made (or 50 ms pass): two handlers reading before either writes. */
+function readBarrier(DB: any, match: RegExp, n = 2) {
+  let arrived = 0;
+  let open!: () => void;
+  const gate = new Promise<void>((r) => { open = r; setTimeout(r, 50); });
+  return {
+    ...DB, batch: DB.batch.bind(DB),
+    prepare(sql: string) {
+      const st = DB.prepare(sql);
+      if (!match.test(sql)) return st;
+      return { bind: (...a: unknown[]) => {
+        const b = st.bind(...a);
+        return { all: () => b.all(), run: () => b.run(), first: async (c?: string) => { const v = await b.first(c); if (++arrived >= n) open(); await gate; return v; } };
+      } };
+    },
+  };
+}
+
+test('two delivery reports handled at once never move a status backwards', async () => {
+  // Review finding 16: 'read' and 'delivered' both read 'submitted', and the slower write won.
+  const { env, db } = world();
+  const a = await beginOutbound(env, 'whatsapp', ME, null, 'race-1');
+  await finishOutbound(env, a.row.id, { ok: true, externalMessageId: 'wamid.R' });
+  const racing: any = { ...env, DB: readBarrier(env.DB, /^\s*SELECT[\s\S]*FROM channel_outbound/) };
+  const both = await Promise.all([applyDeliveryStatus(racing, 'wamid.R', 'read', null), applyDeliveryStatus(racing, 'wamid.R', 'delivered', null)]);
+  assert.deepEqual(both, [true, true]);
+  assert.equal(db.prepare('SELECT status FROM channel_outbound WHERE id = ?').get(a.row.id).status, 'read');
+});
+
+test("another member's reply is never taken for this member's own message", async () => {
+  // Review finding 4: Telegram refs are `<chat>:<message_id>`, and two business
+  // accounts writing to the same customer count message_ids separately.
+  const { env } = world();
+  const conn = (await connectionForTelegram(env, 'BC-ME'))!;
+  const theirs = await beginOutbound(env, 'telegram', OTHER, null, 'other-reply');
+  await finishOutbound(env, theirs.row.id, { ok: true, externalMessageId: 'chat-1:4711' });
+  const mine = await storeMessage(env, conn, msg({ externalMessageId: 'chat-1:4711', side: 'me', text: 'From my phone.', contactName: null }));
+  assert.equal(mine.stored, 'pending');
+});
+
+test('a failed thread count takes its message with it, so the provider’s retry stores and counts both', async () => {
+  // Review finding 15: the insert used to commit alone; the retry then hit the
+  // unique key as a duplicate and the count (and WhatsApp's reply window) never moved.
+  const { env, db } = world();
+  const conn = (await connectionForWhatsApp(env, 'PNID-1'))!;
+  await storeMessage(env, conn, msg({ externalChatId: '4479', externalMessageId: 'wamid.first' }));
+  db.exec(`UPDATE channel_threads SET last_inbound_at = NULL`);
+  db.exec(`CREATE TRIGGER fail_count BEFORE UPDATE OF message_count ON channel_threads BEGIN SELECT RAISE(ABORT, 'd1 hiccup'); END;`);
+  await assert.rejects(storeMessage(env, conn, msg({ externalChatId: '4479', externalMessageId: 'wamid.second' })));
+  db.exec('DROP TRIGGER fail_count');
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 1, 'nothing kept without its count');
+  assert.equal((await storeMessage(env, conn, msg({ externalChatId: '4479', externalMessageId: 'wamid.second' }))).stored, 'pending');
+  const t = db.prepare('SELECT message_count, last_inbound_at FROM channel_threads').get();
+  assert.equal(t.message_count, 2);
+  assert.ok(t.last_inbound_at, 'the reply window opens');
+});
+
+test('an ignored chat stays ignored while the contact keeps writing; a quiet one is purged after 30 days', async () => {
+  // Review findings 6 and 11: the purge used to take an ignored chat 30 days
+  // after its last stored message, however active it was, and the next message
+  // reopened it as pending, text kept.
+  const { env, db } = world();
+  const conn = (await connectionForTelegram(env, 'BC-ME'))!;
+  await storeMessage(env, conn, msg({ externalChatId: 'spouse', externalMessageId: 's1' }));
+  await storeMessage(env, conn, msg({ externalChatId: 'gone-quiet', externalMessageId: 'q1' }));
+  for (const t of await listThreads(env, ME)) await setThreadIgnored(env, ME, t.uid, true);
+  db.exec(`UPDATE channel_threads SET last_message_at = '2026-01-01T00:00:00.000Z', updated_at = '2026-01-01 00:00:00'`);
+
+  // The spouse writes today: dropped, but the tombstone hears it.
+  assert.equal((await storeMessage(env, conn, msg({ externalChatId: 'spouse', externalMessageId: 's2', text: 'Dinner at 8?' }))).stored, 'ignored');
+  const r = await purgeExpired(env, new Date());
+  assert.equal(r.threads, 1, 'only the quiet ignored chat goes');
+  assert.deepEqual(db.prepare('SELECT external_chat_id, status FROM channel_threads').all().map((x: any) => [x.external_chat_id, x.status]), [['spouse', 'ignored']]);
+  assert.equal((await storeMessage(env, conn, msg({ externalChatId: 'spouse', externalMessageId: 's3', text: 'Call me.' }))).stored, 'ignored');
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0, 'no text kept');
+});
+
+test('pending copies left on an assigned chat are moved by the next assignment, and purged at 30 days', async () => {
+  // Review findings 8 and 14: rows that landed pending on an assigned thread
+  // (an assignment in flight, or a move cut short) were never moved, and the
+  // purge skipped every thread that was not pending.
+  const { env, db } = world();
+  const conn = (await connectionForTelegram(env, 'BC-ME'))!;
+  await storeMessage(env, conn, msg({ externalMessageId: 'm1', text: 'First.' }));
+  const [t] = await listThreads(env, ME);
+  const r = await assignThread(env, ME, t.uid, { interviewId: INTERVIEW });
+  // What an assignment in flight leaves: a pending row on an assigned thread.
+  const thread = db.prepare('SELECT * FROM channel_threads WHERE uid = ?').get(t.uid);
+  db.prepare(`INSERT INTO channel_thread_messages (uid, thread_id, external_message_id, direction, kind, text_enc, sent_at)
+              VALUES ('late', ?, 'h-late', 'in', 'text', ?, ?)`)
+    .run(thread.id, await (await import('../src/services/columnCipher.ts')).encryptColumn(env, 'channel_thread_messages', 'text_enc', 'late', 'Landed late.'),
+      new Date().toISOString());
+  const again = await assignThread(env, ME, t.uid, { interviewId: INTERVIEW });
+  assert.deepEqual([again.sessionId, again.moved], [r.sessionId, 1]);
+  assert.deepEqual(db.prepare('SELECT text FROM interview_transcript_segments WHERE session_id = ? ORDER BY id').all(r.sessionId).map((x: any) => x.text),
+    ['First.', 'Landed late.']);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0);
+
+  db.prepare(`INSERT INTO channel_thread_messages (uid, thread_id, external_message_id, direction, kind, text_enc, sent_at)
+              VALUES ('stale', ?, 'h-stale', 'in', 'text', 'x', '2026-01-01T00:00:00.000Z')`).run(thread.id);
+  assert.equal((await purgeExpired(env, new Date())).messages, 1, 'a 30-day-old copy goes, whatever its thread');
+});
+
+test('"Create interview from this chat" leaves no interview behind when the chat is busy or the claim is lost', async () => {
+  // Review finding 13.
+  const { env, db } = world();
+  const conn = (await connectionForWhatsApp(env, 'PNID-1'))!;
+  await storeMessage(env, conn, msg({ externalChatId: '4479', externalMessageId: 'wamid.a' }));
+  const [t] = await listThreads(env, ME);
+  const before = count(db, 'SELECT COUNT(*) n FROM discovery_interviews');
+  // An assignment in flight (claimed, no session yet): a second press is refused.
+  db.exec(`UPDATE channel_threads SET status = 'assigned', interview_id = ${INTERVIEW}, session_id = NULL, updated_at = datetime('now')`);
+  await refused(assignThread(env, ME, t.uid, { projectId: PROJECT, intervieweeName: 'Sam from Acme' }), 409, 'thread_busy');
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM discovery_interviews'), before, 'no empty interview');
+
+  // The claim lost to a concurrent change: the interview it made goes again.
+  db.exec(`UPDATE channel_threads SET status = 'pending', interview_id = NULL, updated_at = datetime('now', '-5 minutes')`);
+  db.exec(`CREATE TRIGGER steal_claim BEFORE UPDATE OF session_id ON channel_threads WHEN NEW.status = 'assigned' AND NEW.session_id IS NULL
+           BEGIN SELECT RAISE(IGNORE); END;`);
+  await refused(assignThread(env, ME, t.uid, { projectId: PROJECT, intervieweeName: 'Sam from Acme' }), 409, 'thread_busy');
+  db.exec('DROP TRIGGER steal_claim');
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM discovery_interviews'), before, 'no empty interview');
+});
+
+test('the interview transcript mirror stops growing at its bound; the session keeps every message', async () => {
+  // Review finding 10: past D1's 2,000,000-byte value limit every later append
+  // to the interview (every customer message, the member's replies) failed.
+  const { env, db } = world();
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const s = await openSession(env, scoped, 'telegram', 'text');
+  db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run('x'.repeat(TRANSCRIPT_MIRROR_MAX_BYTES - 10), INTERVIEW);
+  const seg = (text: string) => ({ start_ms: null, end_ms: null, speaker_raw: null, speaker_label: 'Dana Ruiz', text });
+  assert.equal(await appendSegments(env, ME, s.id, [seg('This one does not fit in the mirror.')], 'telegram'), 1);
+  const bytes = db.prepare('SELECT length(CAST(transcript AS BLOB)) AS n FROM discovery_interviews WHERE id = ?').get(INTERVIEW).n;
+  assert.ok(bytes <= TRANSCRIPT_MIRROR_MAX_BYTES, `mirror is ${bytes} bytes`);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM interview_transcript_segments WHERE session_id = ?', s.id), 1);
+  db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run('short', INTERVIEW);
+  await appendSegments(env, ME, s.id, [seg('Fits.')], 'telegram');
+  assert.equal(db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, 'short\nFits.');
+});
+
+test('per-connection counters live in D1: the minute limit trips, the day cap holds and fails closed', async () => {
+  const { env, db } = world();
+  const at = new Date('2026-10-13T10:05:00.000Z');
+  for (let i = 0; i < CHANNEL_LIMITS.eventsPerMinute; i++) assert.equal(await connectionOverLimit(env, TG_INT, at), false);
+  assert.equal(await connectionOverLimit(env, TG_INT, at), true, 'the next one is over');
+  assert.equal(await connectionOverLimit(env, WA_INT, at), false, 'per connection');
+  assert.equal(await connectionOverLimit(env, TG_INT, new Date('2026-10-13T10:06:00.000Z')), false, 'per minute');
+
+  for (let i = 0; i < CHANNEL_LIMITS.transcriptionsPerDay; i++) assert.equal(await reserveTranscription(env, TG_INT, at), true);
+  assert.equal(await reserveTranscription(env, TG_INT, at), false, 'the day is spent');
+  assert.equal(await reserveTranscription(env, TG_INT, new Date('2026-10-14T00:00:01.000Z')), true, 'a new day');
+  assert.equal(db.prepare(`SELECT n FROM channel_counters WHERE integration_id = ? AND counter = 'transcriptions_day' AND window_start = '2026-10-13'`).get(TG_INT).n,
+    CHANNEL_LIMITS.transcriptionsPerDay);
+
+  db.exec(`UPDATE channel_counters SET created_at = datetime('now', '-3 days')`);
+  assert.equal((await purgeExpired(env, new Date())).counters, 5, 'three minute windows and two days');
+  db.exec('DROP TABLE channel_counters');
+  const error = console.error;
+  console.error = () => {};
+  try { assert.equal(await connectionOverLimit(env, TG_INT, at), false, 'the event limit fails open'); } finally { console.error = error; }
+  await assert.rejects(reserveTranscription(env, TG_INT, at), 'the transcription cap fails closed');
 });
 
 test('a meeting transcript is imported once into its session, replacing what was there', async () => {
