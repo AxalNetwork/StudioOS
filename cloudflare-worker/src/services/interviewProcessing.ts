@@ -51,13 +51,19 @@ export const PROCESS_JOB = 'interview_process' as JobType;
 
 const micro = (usd: number) => Math.max(0, Math.round((usd || 0) * 1_000_000));
 
+/**
+ * Move the stage. The error is kept unless one is passed (null clears it), so
+ * a note set on the way (the sweeper's missing parts) survives to `done`.
+ */
 async function setStage(env: Env, sessionId: number, stage: Stage, fields: { done?: number | null; total?: number | null; error?: string | null } = {}) {
+  const setsError = 'error' in fields ? 1 : 0;
   await env.DB.prepare(
     `UPDATE interview_sessions
-        SET processing_stage = ?, processing_done = ?, processing_total = ?, processing_error = ?,
+        SET processing_stage = ?, processing_done = ?, processing_total = ?,
+            processing_error = CASE WHEN ? = 1 THEN ? ELSE processing_error END,
             processing_updated_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ?`,
-  ).bind(stage, fields.done ?? null, fields.total ?? null, fields.error ?? null, sessionId).run();
+  ).bind(stage, fields.done ?? null, fields.total ?? null, setsError, fields.error ?? null, sessionId).run();
 }
 
 export function enqueueProcess(env: Env, sessionId: number, userId: number, key?: string) {
@@ -342,7 +348,7 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
           : placed.reason === 'refused'
             ? 'The findings could not be placed. The transcript is ready; try Structure again.'
             : null;
-      await setStage(env, session.id, 'done', { error });
+      await setStage(env, session.id, 'done', error ? { error } : {});
       return 'done';
     }
     return session.processing_stage as Stage;
@@ -387,7 +393,7 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
     `UPDATE interview_sessions SET expected_last_seq = ?, processing_auto = COALESCE(processing_auto, 1),
             status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END, updated_at = datetime('now') WHERE id = ?`,
   ).bind(lastSeq, session.id).run();
-  await setStage(env, session.id, resumeAt);
+  await setStage(env, session.id, resumeAt, { error: null });
   await enqueueProcess(env, session.id, userId);
   return { ok: true, stage: resumeAt };
 }

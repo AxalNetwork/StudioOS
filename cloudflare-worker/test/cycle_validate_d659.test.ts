@@ -598,3 +598,102 @@ test('D685: "Record your first session" opens the setup route', async () => {
     assert.equal(card(r.body, slug).next.href, `/validate/record?project=${P}`, slug);
   }
 });
+
+// ---------------------------------------------------------------------------
+// D685 §5.12 (#1584): the phone's focus, the interviews meter, the index counts
+// ---------------------------------------------------------------------------
+
+/** The two session stores the focus reads, only the columns it reads. */
+function withSessions(db: any) {
+  db.exec(`CREATE TABLE IF NOT EXISTS interview_sessions (id INTEGER PRIMARY KEY, project_id INTEGER, interview_id INTEGER, status TEXT,
+             stopped_at TEXT, updated_at TEXT, created_at TEXT DEFAULT (datetime('now')))`);
+  db.exec(`CREATE TABLE IF NOT EXISTS validate_proposals (id INTEGER PRIMARY KEY, project_id INTEGER, session_id INTEGER, kind TEXT,
+             payload_json TEXT, edited_payload_json TEXT, status TEXT, run_id TEXT)`);
+  return db;
+}
+const proposal = (db: any, sid: number, kind: string, payload: unknown, o: { status?: string; run?: string | null } = {}) =>
+  db.prepare('INSERT INTO validate_proposals (project_id, session_id, kind, payload_json, status, run_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(P, sid, kind, JSON.stringify(payload), o.status ?? 'pending', o.run === undefined ? 'run-1' : o.run);
+
+test('D685 §5.12: no interview → "Record your first conversation." word for word', async () => {
+  const r = await overview(withSessions(fixture()));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.focus, {
+    rule: 'first_interview', eyebrow: 'Validate · Next', headline: 'Record your first conversation.',
+    why: 'Validate starts with one interview. Everything else in the venture builds on what it finds.',
+    cta: { label: 'Record a session', href: `/validate/record?project=${P}` },
+    then: 'Write the claim you most need to be true.',
+  });
+});
+
+test('D685 §5.12: the newest session needing review leads, counting themes and hypotheses, never placements', async () => {
+  const db = withSessions(fixture());
+  const iv = interview(db, P, { name: 'Robin Reyes', stage: 'done' });
+  db.prepare("INSERT INTO pain_groups (id, project_id, title) VALUES (7, ?, 'Slow dispatch'), (9, ?, 'Churn')").run(P, P);
+  db.prepare("INSERT INTO interview_sessions (id, project_id, interview_id, status, stopped_at) VALUES (1, ?, ?, 'structured', '2026-10-14 10:00:00')").run(P, iv);
+  // Two wordings of one theme count once, and so does that theme named again through evidence.
+  proposal(db, 1, 'pain_severity', { phrase: 'Slow dispatch', severity: 'severe' });
+  proposal(db, 1, 'pain_severity', { phrase: 'slow   dispatch', severity: 'real' });
+  proposal(db, 1, 'pain_severity', { phrase: 'Billing errors', severity: 'mild' });
+  proposal(db, 1, 'evidence', { hypothesis_id: 3, pain_group_id: 7, direction: 'supports' });
+  proposal(db, 1, 'evidence', { hypothesis_id: 4, pain_group_id: 7, direction: 'supports' });
+  // Evidence alone names a third theme; a hypothesis named twice counts once.
+  proposal(db, 1, 'evidence', { hypothesis_id: 3, pain_group_id: 9, direction: 'refutes' });
+  proposal(db, 1, 'pain_severity', { phrase: 'Ignored' }, { status: 'accepted' });
+  proposal(db, 1, 'pain_severity', { phrase: 'Assistant' }, { run: null });
+  const f = (await overview(db)).body.focus;
+  assert.deepEqual([f.rule, f.headline, f.why, f.cta, f.then], ['review', 'Review the interview with Robin Reyes from 14 Oct.',
+    'Its findings would move 3 pain themes and 2 hypotheses.', { label: 'Review the interview', href: `/validate/interviews/${iv}` }, null]);
+  // A transcribed session that is not placed says so.
+  db.prepare("INSERT INTO interview_sessions (id, project_id, interview_id, status, stopped_at) VALUES (2, ?, ?, 'transcribed', '2026-10-15 10:00:00')").run(P, iv);
+  assert.equal((await overview(db)).body.focus.why, 'It is transcribed but not yet placed.');
+  // A partner reads the board but cannot write: the rule falls through to the first card.
+  const partner = (await overview(db, PARTNER)).body.focus;
+  assert.equal(partner.rule, 'card');
+  // A structured session with nothing pending falls through too.
+  db.prepare('DELETE FROM interview_sessions WHERE id = 2').run();
+  db.prepare("UPDATE validate_proposals SET status = 'accepted'").run();
+  const done = (await overview(db)).body.focus;
+  assert.equal(done.rule, 'card');
+  const first = (await overview(db)).body.cards.find((c: any) => c.next?.text);
+  assert.deepEqual(done.cta, { label: first.next.text, href: first.next.href });
+});
+
+test('D685 §5.12: the meter reads the stored target; none reads "No target set"; the writer refuses 0 and clears with null', async () => {
+  const db = withSessions(fixture());
+  interview(db, P, { stage: 'done', date: TODAY });
+  interview(db, P, { stage: 'done', date: TODAY });
+  interview(db, P, { stage: 'booked' });
+  let m = (await overview(db)).body.meter;
+  assert.deepEqual([m.count, m.target, m.target_reason], [2, null, 'No target set']);
+  assert.equal((await call(db, FOUNDER, 'PUT', `/interviews-target?project=${P}`, { value: 0 })).status, 400);
+  assert.equal((await call(db, FOUNDER, 'PUT', `/interviews-target?project=${P}`, { value: 2.5 })).status, 400);
+  assert.equal((await call(db, PARTNER, 'PUT', `/interviews-target?project=${P}`, { value: 8 })).status, 403);
+  assert.equal((await call(db, FOUNDER, 'PUT', `/interviews-target?project=${P}`, { value: 8 })).status, 200);
+  m = (await overview(db)).body.meter;
+  assert.deepEqual([m.count, m.target, m.target_reason], [2, 8, null]);
+  assert.equal((await call(db, FOUNDER, 'PUT', `/interviews-target?project=${P}`, { value: null })).status, 200);
+  assert.equal((await overview(db)).body.meter.target, null);
+  // The index: every interview, and booked now (not the cumulative funnel).
+  assert.deepEqual((await overview(db)).body.index, { interviews_total: 3, booked: 1 });
+});
+
+test('D685 §5.12: the interviews target shares metric_targets but never reaches the snapshot targets list', async () => {
+  const { default: progress } = await import('../src/routes/progress.ts');
+  const db = fixture();
+  db.exec(`INSERT INTO metric_targets (project_id, metric_key, target_value, direction) VALUES (${P}, 'mrr', 10000, 'up')`);
+  assert.equal((await call(db, FOUNDER, 'PUT', `/interviews-target?project=${P}`, { value: 8 })).status, 200);
+  assert.equal((await call(db, FOUNDER, 'PUT', `/waitlist-target?project=${P}`, { value: 40 })).status, 200);
+  const p = new Hono<any>();
+  p.route('/api/progress', progress);
+  const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await p.request(`/api/progress/metrics/${P}/targets`, { headers: { Authorization: `Bearer ${token}` } },
+      { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+    const body = await res.json() as any;
+    assert.equal(res.status, 200, JSON.stringify(body));
+    assert.deepEqual(body.items.map((t: any) => t.metric_key), ['mrr']);
+  } finally { [console.warn, console.error] = saved; }
+});
