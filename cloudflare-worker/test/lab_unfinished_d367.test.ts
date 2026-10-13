@@ -41,7 +41,7 @@ function freshDb() {
     CREATE TABLE mi_pro_subscriptions (user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT,
       plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     INSERT INTO users (id, role, email, founder_id, subscription_tier, subscription_status)
-      VALUES (10, 'founder', 'f@example.com', 1001, 'growth', 'active');
+      VALUES (10, 'founder', 'f@example.com', 1001, 'studio', 'active'); -- D683: deck share is on Raise + Grow
     INSERT INTO projects (id, name, founder_id) VALUES (1, 'Acme', 1001);
   `);
   for (const stmt of MIGRATION.split(';')) {

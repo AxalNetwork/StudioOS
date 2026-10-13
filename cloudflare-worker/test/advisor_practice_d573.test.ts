@@ -64,8 +64,10 @@ function freshDb() {
   db.exec(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY, role TEXT NOT NULL, advisor_id INTEGER,
-      is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT, subscription_tier TEXT DEFAULT 'growth'
+      is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT, subscription_tier TEXT DEFAULT 'studio'
     );
+    -- D683: advisor booking is on the Raise + Grow plan (studio), so the
+    -- founders here hold it; this file pins attribution, not the paywall.
     CREATE TABLE cohort_cycles (
       id INTEGER PRIMARY KEY AUTOINCREMENT, year INTEGER NOT NULL, month INTEGER NOT NULL,
       start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled'
