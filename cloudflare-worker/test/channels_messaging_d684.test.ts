@@ -1434,6 +1434,20 @@ async function deadlineTurn() {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
+/**
+ * Turn the event loop until `done()` holds or `ms` of real time have passed.
+ * A count of turns is no bound on the request: the route verifies a JWT,
+ * decrypts tokens and hashes refs with WebCrypto, which finishes on libuv's
+ * thread pool, so on a loaded runner (the full suite runs test files in
+ * parallel) eighty setImmediate turns all passed before the request reached
+ * the provider, and `calls` read 0. Only setTimeout is faked; setImmediate and
+ * performance.now() are real.
+ */
+async function deadlineUntil(done: () => boolean, ms = 10_000) {
+  const start = performance.now();
+  while (!done() && performance.now() - start < ms) await deadlineTurn();
+}
+
 let deadlineMutation = 0;
 let deadlineMutantUrl = '';
 /** Re-execute the production module with one regression, leaving dependencies real. */
@@ -1489,14 +1503,15 @@ async function checkReplyDeadline(t: any, provider: 'telegram' | 'whatsapp', pha
       return { status: res.status, body };
     });
     // The request must have reached the provider before advancing its deadline.
-    for (let i = 0; i < 80 && !calls; i++) await deadlineTurn();
+    // A request that ends without calling the provider stops the wait too.
+    await deadlineUntil(() => calls > 0 || settled);
     assert.equal(calls, 1, 'exactly one provider attempt');
     await deadlineTurn(); // body read has begun for the JSON variant
     t.mock.timers.tick(9_999);
     await deadlineTurn();
     assert.equal(settled, false, 'deadline must not expire early');
     t.mock.timers.tick(1);
-    for (let i = 0; i < 80 && !settled; i++) await deadlineTurn();
+    await deadlineUntil(() => settled);
     assert.equal(settled, true, 'headers and body must both have a bounded wait');
     const out = await first;
     assert.deepEqual([out.status, out.body.ok, out.body.pending, out.body.code, out.body.outbound?.status],
