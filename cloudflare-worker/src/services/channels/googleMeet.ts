@@ -45,7 +45,8 @@ const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const MEET_API = 'https://meet.googleapis.com/v2';
 /** Meet keeps records 30 days; a transcript is normally there within the hour. A day is the wait. */
 const GRACE_AFTER_END_MS = 24 * 60 * 60 * 1000;
-const MAX_RECORDS = 5;
+const MAX_RECORD_PAGES = 20;
+const RECORD_WINDOW_MS = 6 * 60 * 60 * 1000;
 const MAX_ENTRY_PAGES = 100;
 const MAX_PARTICIPANT_PAGES = 20;
 
@@ -219,13 +220,24 @@ const ms = (iso: string | undefined) => (iso ? Date.parse(iso) : NaN);
 interface Found { records: ConferenceRecord[]; ready: { record: ConferenceRecord; transcript: Transcript }[] }
 
 /** The call's conference records and, of their transcripts, those whose file is generated. */
-async function findTranscripts(token: string, meetingCode: string): Promise<Found> {
-  const q = new URLSearchParams({ filter: `space.meeting_code = "${meetingCode}"`, pageSize: String(MAX_RECORDS) });
-  const list = await meetGet<{ conferenceRecords?: ConferenceRecord[] }>(token, `/conferenceRecords?${q.toString()}`);
-  const records = (list?.conferenceRecords ?? [])
-    .filter((r) => RECORD_NAME.test(String(r?.name ?? '')))
-    .sort((a, b) => (ms(a.startTime) || 0) - (ms(b.startTime) || 0))
-    .slice(0, MAX_RECORDS);
+async function findTranscripts(token: string, meetingCode: string, ref: MeetingRef): Promise<Found> {
+  // A Meet link may be used again. Only the conference nearest this scheduled
+  // interview can supply its transcript; older uses of the link are unrelated.
+  const scheduled = ms(ref.starts_at ?? undefined);
+  if (!Number.isFinite(scheduled)) return { records: [], ready: [] };
+  const candidates: ConferenceRecord[] = [];
+  let pageToken = '';
+  for (let page = 0; page < MAX_RECORD_PAGES; page++) {
+    const q = new URLSearchParams({ filter: `space.meeting_code = "${meetingCode}"`, pageSize: '100', ...(pageToken ? { pageToken } : {}) });
+    const list = await meetGet<{ conferenceRecords?: ConferenceRecord[]; nextPageToken?: string }>(token, `/conferenceRecords?${q.toString()}`);
+    candidates.push(...(list?.conferenceRecords ?? []).filter((r) => RECORD_NAME.test(String(r?.name ?? ''))));
+    pageToken = String(list?.nextPageToken ?? '');
+    if (!pageToken) break;
+  }
+  const records = candidates.filter((r) => Number.isFinite(ms(r.startTime))
+      && Math.abs(ms(r.startTime) - scheduled) <= RECORD_WINDOW_MS)
+    .sort((a, b) => Math.abs(ms(a.startTime) - scheduled) - Math.abs(ms(b.startTime) - scheduled))
+    .slice(0, 1);
   const ready: Found['ready'] = [];
   for (const record of records) {
     const t = await meetGet<{ transcripts?: Transcript[] }>(token, `/${record.name}/transcripts`);
@@ -317,7 +329,7 @@ async function meetAccess(env: Env, ref: MeetingRef): Promise<{ token: string; c
 export async function fetchTranscript(env: Env, ref: MeetingRef, _hint: Record<string, unknown>, now = Date.now()): Promise<TranscriptFetch> {
   const access = await meetAccess(env, ref);
   if ('fail' in access) return { kind: 'error', code: access.fail, retryable: access.retryable };
-  const found = await findTranscripts(access.token, access.code);
+  const found = await findTranscripts(access.token, access.code, ref);
   const state = settle(found, ref, now);
   if (state === 'wait') return { kind: 'waiting' };
   if (state !== 'ready') return { kind: 'none', code: state };
@@ -343,7 +355,7 @@ async function sweepOne(env: Env, ref: MeetingRef, now: Date): Promise<SweepResu
   }
   let found: Found;
   try {
-    found = await findTranscripts(access.token, access.code);
+    found = await findTranscripts(access.token, access.code, ref);
   } catch (e) {
     if (!(e instanceof MeetingProviderError)) throw e;
     if (e.retryable) return 'skipped';
