@@ -213,6 +213,12 @@ async function withFetch(routes:Record<string,Handler>,run:()=>Promise<void>){
 const part=(uuid:string,started:string)=>json({uuid,start_time:started,recording_files:[{file_type:'TRANSCRIPT',status:'completed',download_url:'https://zoom.us/rec/download/'+uuid}]});
 async function ready(f:World){await connectZoom(f);const ref=await seedRef(f,{status:'ended'});f.db.prepare("UPDATE interview_sessions SET consent_status='given',consent_method='verbal' WHERE id=?").run(ref.sessionId);return ref;}
 const checks=[
+ {name:'Successful rediscovery clears the root warning without reimporting its first part',module:'zoom',before:"// Successful discovery retires its previous warning without touching later instance failures.\n      if (ref.status === 'imported')",after:"// Successful discovery retires its previous warning without touching later instance failures.\n      if (false)",run:async m=>{
+ const f=world(),ref=await ready(f);f.db.prepare("UPDATE interview_channel_refs SET status='imported',last_error=? WHERE uid=?").run(m.meeting.MEETING_ERRORS.zoom_reconnect,ref.uid);
+ await withFetch({['GET https://api.zoom.us/v2/past_meetings/'+MEETING_ID+'/instances']:()=>json({meetings:[]})},async()=>{
+ const out=await m.zoom.importZoomRef(f.env,refRow(f,ref.uid));snap([out.status,refRow(f,ref.uid).status,refRow(f,ref.uid).last_error],['skipped','imported',null]);
+ });f.db.close();}},
+
  {name:'Confirmed cancellation is still confirmed after reload without a warning',module:'meeting',before:"provider_cancelled: confirmed ? true",after:"provider_cancelled: confirmed ? false",run:async m=>{
  const f=world();await connectZoom(f);const ref=await seedRef(f,{ends_at:iso(HOUR)});
  await withFetch({['DELETE https://api.zoom.us/v2/meetings/'+MEETING_ID]:()=>new Response(null,{status:204})},async()=>{

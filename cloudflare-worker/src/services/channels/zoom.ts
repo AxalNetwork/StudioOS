@@ -935,6 +935,11 @@ export async function importZoomRef(env: Env, ref: MeetingRef, hint: Record<stri
           .bind(MEETING_ERRORS[e.code], ref.id).run();
         return { status: 'failed', code: e.code, retryable: e.retryable, segments: 0 };
       }
+      // Successful discovery retires its previous warning without touching later instance failures.
+      if (ref.status === 'imported') {
+        await env.DB.prepare("UPDATE interview_channel_refs SET last_error = NULL WHERE id = ? AND status = 'imported' AND last_error IN (?, ?, ?)")
+          .bind(ref.id, MEETING_ERRORS.zoom_reconnect, MEETING_ERRORS.zoom_unreachable, MEETING_ERRORS.zoom_fetch_failed).run();
+      }
       const within = instances.filter(instance => withinCallSlot(instance.started, ref));
       if (within.length) {
         let result: ImportOutcome = SKIPPED;
