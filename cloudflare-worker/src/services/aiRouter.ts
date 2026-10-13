@@ -55,7 +55,9 @@ export type TaskClass =
   | 'market_sizing_inputs'
   | 'competitor_scan'
   | 'research_ask'
-  | 'structure_interview';
+  | 'structure_interview'
+  // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
+  | 'summarise_interview';
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -490,6 +492,14 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     fallbackChain: [SMALL_LLAMA],
     // DeepSeek last: Compare's "Structure again" takes the first model that is
     // not the last run's (InterviewReview.jsx), and the 8B needs no paid plan.
+    alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
+  },
+  // D685 §5.10 — the same models and prices as structuring: the summary reads
+  // the same transcript the same way, and the rail offers one list for both.
+  summarise_interview: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
   },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },

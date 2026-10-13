@@ -295,7 +295,8 @@ async function scopeSession(c: any): Promise<{ user: User; session: SessionRow }
   return { user, session };
 }
 
-async function finalSegments(env: Env, sessionId: number) {
+// D685: shared with the summary route and the processing job.
+export async function finalSegments(env: Env, sessionId: number) {
   const rows = await env.DB.prepare(
     `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
       WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id`,
@@ -321,7 +322,8 @@ export async function recordStructureReceipt(
     line.prompt_tokens, line.completion_tokens, micro(line.est_cost_usd), outcome, refusal).run();
 }
 
-function refusedBody(refusal: string | null) {
+// D685: shared with the summary route and the processing job.
+export function refusedBody(refusal: string | null) {
   return {
     ok: false,
     refusal,
@@ -338,7 +340,8 @@ function refusedBody(refusal: string | null) {
  * task does not offer, 503 only when no model could be reached. The page tells
  * them apart by `refusal`, not by the status (`InterviewReview.jsx`).
  */
-function refusedStatus(refusal: string | null): 400 | 402 | 503 {
+// D685: shared with the summary route and the processing job.
+export function refusedStatus(refusal: string | null): 400 | 402 | 503 {
   if (refusal === 'budget_user_day' || refusal === 'budget_user_month' || refusal === 'budget_review') return 402;
   if (refusal === 'model_not_offered') return 400;
   return 503;
@@ -350,14 +353,16 @@ const MODEL_RE = /^@cf\/[a-z0-9._/-]{3,100}$/i;
  * a Workers AI model id is refused here, before anything runs: it used to fall
  * through as `undefined` and silently run the default.
  */
-function modelFrom(v: unknown): { model: string | undefined } | { refused: true } {
+// D685: shared with the summary route and the processing job.
+export function modelFrom(v: unknown): { model: string | undefined } | { refused: true } {
   if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return { model: undefined };
   if (typeof v === 'string' && MODEL_RE.test(v.trim())) return { model: v.trim() };
   return { refused: true };
 }
 
 /** #1470's rule, the same 409 its start, resume and live routes give: no consent, no AI over the recording. */
-function consentRefusal(session: SessionRow) {
+// D685: shared with the summary route and the processing job.
+export function consentRefusal(session: SessionRow) {
   const blocked = consentBlocks(session.channel, session.consent_status);
   return blocked ? json(blocked, 409) : null;
 }
@@ -367,6 +372,9 @@ structure.post('/sessions/:id/structure', async (c) => {
   if (s instanceof Response) return s;
   const blocked = consentRefusal(s.session);
   if (blocked) return blocked;
+  // D685 §5.9 — never two writers: the pipeline places findings itself.
+  const busy = processingBusy(s.session);
+  if (busy) return busy;
   const body = await c.req.json<{ model?: string }>().catch(() => ({} as { model?: string }));
   const picked = modelFrom(body?.model);
   if ('refused' in picked) return json(refusedBody('model_not_offered'), 400);
@@ -482,5 +490,12 @@ structure.post('/sessions/:id/ask', async (c) => {
   }
   return json({ ok: true, answer: out.answer, cites: out.cites, receipt: out.receipt });
 });
+
+/** D685 §5.9 — the 409 a manual run gets while the processing job owns the session. */
+export function processingBusy(session: { processing_stage?: string | null; processing_updated_at?: string | null }) {
+  const stage = session.processing_stage ?? null;
+  if (stage === null || stage === 'done' || stage === 'failed') return null;
+  return json({ error: 'processing', stage, message: 'This session is still being processed. Its findings appear when it finishes.' }, 409);
+}
 
 export default structure;

@@ -57,6 +57,11 @@ export interface SessionRow {
   active_ms: number; recording_since: string | null; started_at: string | null; stopped_at: string | null;
   audio_bytes: number; created_at: string; updated_at: string;
   call_provider?: string | null; meeting_url?: string | null; client_key?: string | null; submitted_via?: string | null;
+  // D685 §5.9–§5.10 (migration 453).
+  processing_stage?: string | null; processing_done?: number | null; processing_total?: number | null;
+  processing_error?: string | null; processing_updated_at?: string | null; processing_auto?: number | null;
+  expected_last_seq?: number | null;
+  summary?: string | null; summary_model?: string | null; summarised_at?: string | null; summary_citations_json?: string | null;
 }
 
 export async function loadSession(env: Env, id: number): Promise<SessionRow | null> {
@@ -248,6 +253,9 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
     env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ?').bind(session.id),
     // D685 §5.2 — deleted explicitly, not left to the CASCADE.
     env.DB.prepare('DELETE FROM interview_session_points WHERE session_id = ?').bind(session.id),
+    // D685 §5.9–§5.10 — the staged chunk transcripts and the summary's receipts.
+    env.DB.prepare('DELETE FROM interview_chunk_transcripts WHERE session_id = ?').bind(session.id),
+    env.DB.prepare('DELETE FROM interview_summary_receipts WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_sessions WHERE id = ?').bind(session.id),
     env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,

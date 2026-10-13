@@ -86,7 +86,7 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     // D685: the session's talking points, which deleteSession now deletes.
-    '452_record_session_setup.sql']) {
+    '452_record_session_setup.sql', '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
   const env: any = {

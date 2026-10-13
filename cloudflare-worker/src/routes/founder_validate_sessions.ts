@@ -7,6 +7,9 @@
  *   POST   /sessions                        D685: set up in one call (Who, How, Transcript, Consent)
  *   POST   /interviews/:id/sessions         open a session on an interview
  *   PUT    /sessions/:id/points/:pointId    D685: tick or untick a talking point
+ *   POST   /sessions/:id/finish             D685: the chunks to expect; queues processing
+ *   POST   /sessions/:id/process            D685: retry a failed or stale run
+ *   POST   /sessions/:id/summarise          D685: the summary, run again
  *   GET    /interviews/:id/sessions         the interview's sessions
  *   GET    /sessions/:id                    one session: segments, marks, chunks
  *   PATCH  /sessions/:id/consent            record consent to record
@@ -29,12 +32,11 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canWrite, type ProjectRef } from './_founder_validate_helpers';
-import { run as aiRun, audioMinutesFromBytes, budgetRefusalMessage, estimateCostUsd } from '../services/aiRouter';
-import { AI_SURFACE } from '../services/aiSurfaces';
+import { audioMinutesFromBytes, budgetRefusalMessage, estimateCostUsd } from '../services/aiRouter';
 import * as aiBudget from '../services/aiBudget';
 import {
   AUDIO_CHANNELS, AUDIO_PREFIX, CHANNELS, CHUNK_MIME, CONSENT, CONSENT_METHODS, MAX_CHUNK_BYTES, MAX_CHUNKS,
-  TRANSITIONS, consentBlocks, deleteSession, labelSegments, listChunks, loadSession, putChunk, recordReceipt,
+  TRANSITIONS, consentBlocks, deleteSession, listChunks, loadSession, putChunk, recordReceipt,
   replaceWithFinal, transition, type SessionRow, type StoredSegment,
 } from '../services/interviewSessions';
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
@@ -45,6 +47,10 @@ import {
   pointStatements, sessionExtras,
 } from '../services/sessionSetup';
 import { setInterviewStage } from '../services/validateWriters';
+import {
+  afterChunkStored, finishSession, isStale, processingOf, recoverSession, summariseSession, summaryOf, transcribeChunk,
+} from '../services/interviewProcessing';
+import { consentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 
 const sessions = new Hono<{ Bindings: Env }>();
@@ -329,6 +335,8 @@ sessions.get('/sessions/:id', async (c) => {
   return json({
     session: s.session,
     ...(await sessionExtras(c.env, s.session)),
+    processing: processingOf(s.session),
+    summary: summaryOf(s.session),
     segments: segments.results || [],
     marks: marks.results || [],
     chunks: chunks.map((ch) => ({ seq: ch.seq, size_bytes: ch.size_bytes, start_ms: ch.start_ms })),
@@ -434,6 +442,9 @@ sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   const startMs = Number.isSafeInteger(rawStart) && rawStart >= 0 ? Math.min(rawStart, 24 * 3600 * 1000) : null;
   try {
     const r = await putChunk(c.env, s.session, s.user.id, seq, mime, bytes, startMs);
+    // D685 §5.9 — a chunk arriving after /finish moves the upload count, and
+    // the last one queues the processing job.
+    if (!r.duplicate) await afterChunkStored(c.env, s.session.id, s.user.id);
     return json({ ok: true, seq, duplicate: r.duplicate }, r.duplicate ? 200 : 201);
   } catch (e) {
     console.error('[sessions] chunk store failed:', (e as Error).message);
@@ -482,14 +493,75 @@ sessions.get('/sessions/:id/live', async (c) => {
 // The final transcript
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// D685 §5.9–§5.10 — processed without a button
+// ---------------------------------------------------------------------------
+
+/**
+ * After Stop: the chunks to expect. The job is queued once every one is
+ * stored; `auto: false` (the rail's Manual mode) stops it after Transcribing.
+ */
+sessions.post('/sessions/:id/finish', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
+  const blocked = consentRefusal(s.session);
+  if (blocked) return blocked;
+  if (s.session.status !== 'stopped') return json({ detail: 'stop_first', status: s.session.status }, 409);
+  const busy = processingBusy(s.session);
+  if (busy && s.session.processing_stage !== 'uploading') return busy;
+  const body = await c.req.json<any>().catch(() => ({}));
+  const lastSeq = Number(body?.last_seq);
+  if (!Number.isSafeInteger(lastSeq) || lastSeq < 0 || lastSeq >= MAX_CHUNKS) return json({ detail: 'invalid_last_seq', max: MAX_CHUNKS - 1 }, 400);
+  const out = await finishSession(c.env, s.session, s.user.id, lastSeq, body?.auto !== false);
+  return json({ ok: true, processing: { stage: out.stage, done: out.done, total: out.total, error: null }, queued: out.queued }, 202);
+});
+
+/** Retry a failed or stale run, from the stage it reached. */
+sessions.post('/sessions/:id/process', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const blocked = consentRefusal(s.session);
+  if (blocked) return blocked;
+  const out = await recoverSession(c.env, s.session, s.user.id);
+  if (!out.ok) return json({ detail: out.detail, message: out.message }, 409);
+  return json({ ok: true, processing: processingOf((await loadSession(c.env, s.session.id))!) }, 202);
+});
+
+/**
+ * The summary, run again (the job runs it once). Not gated on audio: a text
+ * or imported session has a final transcript and no recording.
+ */
+sessions.post('/sessions/:id/summarise', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const blocked = consentRefusal(s.session);
+  if (blocked) return blocked;
+  const busy = processingBusy(s.session);
+  if (busy) return busy;
+  const body = await c.req.json<{ model?: string }>().catch(() => ({} as { model?: string }));
+  const picked = modelFrom(body?.model);
+  if ('refused' in picked) return json(refusedBody('model_not_offered'), 400);
+  const out = await summariseSession(c.env, s.session, s.user.id, picked.model);
+  if (!out.ok) {
+    if (out.reason === 'no_final_transcript') return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to summarise yet.' }, 409);
+    if (out.reason === 'no_citation') return json({ error: 'no_citation', detail: 'The summary could not be tied to the transcript, so none is stored.' }, 422);
+    return json(refusedBody(out.refusal), refusedStatus(out.refusal));
+  }
+  return json({ ok: true, summary: summaryOf((await loadSession(c.env, s.session.id))!) }, 201);
+});
+
 sessions.post('/sessions/:id/transcribe', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
   if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
-  if (!['stopped', 'transcribed'].includes(s.session.status)) {
+  if (!['stopped', 'transcribed', 'structured', 'reviewed'].includes(s.session.status)) {
     return json({ detail: 'stop_first', status: s.session.status }, 409);
   }
+  // D685 §5.9 — never two writers: the processing job transcribes on its own.
+  const busy = processingBusy(s.session);
+  if (busy) return busy;
   const body = await c.req.json<any>().catch(() => ({}));
   const model = String(body?.model || s.session.final_model || DEFAULT_FINAL_MODEL);
   if (!isChoosable(model, 'final')) return json({ detail: 'model_not_offered', model }, 400);
@@ -533,7 +605,6 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
   let cursorMs = 0;
   for (let i = 0; i < chunks.length; i++) {
     const ch = chunks[i];
-    const obj = await c.env.FILES.get(ch.r2_key);
     const fail = async (refusal: string, message: string, status: number) => {
       await c.env.DB.prepare(`UPDATE interview_sessions SET status = ?, updated_at = datetime('now') WHERE id = ?`)
         .bind(s.session.status, s.session.id).run();
@@ -543,28 +614,16 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
       });
       return json({ ok: false, refusal, message }, status);
     };
-    if (!obj) return fail('chunk_missing', `Chunk ${ch.seq} could not be read. Nothing was stored.`, 502);
-    const r = await aiRun(c.env, {
-      task: 'transcribe',
-      userId: s.user.id,
-      surface: AI_SURFACE.validateInterviews,
-      model,
-      audio: new Uint8Array(await obj.arrayBuffer()),
-      audioMime: ch.mime,
-      audioMinutes: minutesPer[i],
-      language: s.session.language,
-    });
-    if (!r.ok) {
-      const budget = String(r.refusal || '').startsWith('budget');
-      return fail(r.refusal || 'all_models_failed',
-        budget ? budgetRefusalMessage(String(r.refusal)) : 'The recording could not be transcribed. Nothing was stored.',
-        budget ? 402 : 503);
-    }
-    costMicro += aiBudget.usdToMicro(r.usage.est_cost_usd);
-    if (r.usage.fallback_used) { fallback = true; modelUsed = r.usage.model; }
-    language = language || r.transcript?.language || null;
     const offset = ch.start_ms ?? cursorMs;
-    const placed = labelSegments(r.transcript?.segments ?? [], s.interview.interviewee_name, offset);
+    // The same per-chunk call the processing job makes (D685 §5.9).
+    const r = await transcribeChunk(c.env, {
+      session: s.session, userId: s.user.id, chunk: ch, model, intervieweeName: s.interview.interviewee_name, offsetMs: offset,
+    });
+    if (!r.ok) return fail(r.refusal, r.message, r.refusal === 'chunk_missing' ? 502 : r.budget ? 402 : 503);
+    costMicro += r.costMicro;
+    if (r.fallback) { fallback = true; modelUsed = r.model; }
+    language = language || r.language;
+    const placed = r.segments;
     segments.push(...placed);
     const lastEnd = placed.reduce((m, p) => Math.max(m, p.end_ms ?? 0), offset);
     cursorMs = Math.max(cursorMs, lastEnd);
@@ -601,8 +660,10 @@ sessions.get('/sessions/:id/receipt', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
   // D658 — the language-model lines (Structured, Re-structured, Asked) live in
-  // `interview_structure_receipts` (439), because this table's CHECK admits
-  // only speech-to-text kinds. One list, in time order: `kind` is the step.
+  // `interview_structure_receipts` (446), because this table's CHECK admits
+  // only speech-to-text kinds; D685's summary lines (Summarised,
+  // Re-summarised) in `interview_summary_receipts` (453). One list, in time
+  // order: `kind` is the step.
   const rows = await c.env.DB.prepare(
     `SELECT kind, model, requested_model, fallback_used, audio_minutes, cost_microusd, outcome, refusal, created_at
        FROM (
@@ -611,8 +672,11 @@ sessions.get('/sessions/:id/receipt', async (c) => {
          UNION ALL
          SELECT step, model, requested_model, fallback_used, 0, cost_microusd, outcome, refusal, created_at, id, 1
            FROM interview_structure_receipts WHERE session_id = ?
+         UNION ALL
+         SELECT step, model, requested_model, fallback_used, 0, cost_microusd, outcome, refusal, created_at, id, 2
+           FROM interview_summary_receipts WHERE session_id = ?
        ) ORDER BY created_at, src, id`,
-  ).bind(s.session.id, s.session.id).all();
+  ).bind(s.session.id, s.session.id, s.session.id).all();
   let budget: Record<string, unknown> | null = null;
   let budgetError: string | null = null;
   try {
@@ -637,7 +701,13 @@ sessions.get('/sessions/:id/receipt', async (c) => {
 sessions.delete('/sessions/:id', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  if (s.session.status === 'transcribing') return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
+  // D685 §5.9 — a run that is moving is waited for; a failed or stale one
+  // (including a row the old synchronous route left in `transcribing`) is not.
+  const moving = s.session.processing_stage && !['done', 'failed'].includes(s.session.processing_stage) && !isStale(s.session);
+  const legacyStuck = !s.session.processing_stage && s.session.status === 'transcribing';
+  if (moving || (legacyStuck && !isStale({ ...s.session, processing_stage: 'transcribing', processing_updated_at: s.session.updated_at }))) {
+    return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
+  }
   try {
     const r = await deleteSession(c.env, s.session, s.user.id);
     return json({ ok: true, audio_chunks_deleted: r.keys.length });
