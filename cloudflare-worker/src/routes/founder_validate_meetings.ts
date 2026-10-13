@@ -318,7 +318,7 @@ meetings.delete('/interviews/:id/meetings/:refUid', async (c) => {
   if (s instanceof Response) return s;
   const ref = await memberRef(c.env, s.user.id, s.scoped.interview.id, c.req.param('refUid'));
   if (!ref) return refuse(c, 404, { code: 'meeting_not_found', message: 'That call no longer exists.' });
-  if (ref.status === 'cancelled') return c.json({ meeting: view(ref), provider_cancelled: null });
+  if (ref.status === 'cancelled') return c.json({ meeting: view(ref), provider_cancelled: view(ref).provider_cancelled });
   if (ref.status === 'imported') {
     return refuse(c, 409, { code: 'already_imported', message: 'This call’s transcript is already in the interview. Delete the session instead.' });
   }
@@ -340,7 +340,7 @@ meetings.delete('/interviews/:id/meetings/:refUid', async (c) => {
       }
     } catch { /* stays false: the page tells the member to cancel it there too */ }
   }
-  await cancelRef(c.env, ref.id);
+  await cancelRef(c.env, ref.id, providerCancelled === false ? (ref.provider === 'zoom' ? 'zoom_cancel_unconfirmed' : 'meet_cancel_unconfirmed') : providerCancelled === true ? (ref.provider === 'zoom' ? 'zoom_cancel_confirmed' : 'meet_cancel_confirmed') : null);
   const fresh = await loadRef(c.env, ref.uid);
   return c.json({ meeting: fresh ? view(fresh) : null, provider_cancelled: providerCancelled });
 });
@@ -355,7 +355,7 @@ meetings.post('/interviews/:id/meetings/:refUid/import', async (c) => {
   const ref = await memberRef(c.env, s.user.id, s.scoped.interview.id, c.req.param('refUid'));
   if (!ref) return refuse(c, 404, { code: 'meeting_not_found', message: 'That call no longer exists.' });
   if (ref.status === 'cancelled') return refuse(c, 409, { code: 'meeting_cancelled', message: 'This call was cancelled.' });
-  if (ref.status === 'imported') {
+  if (ref.status === 'imported' && (ref.provider !== 'zoom' || zoom.instanceOf(ref))) {
     return refuse(c, 409, { code: 'already_imported', message: 'This call’s transcript is already in the interview.' });
   }
   if (!ref.ends_at || Date.parse(ref.ends_at) > Date.now()) {
