@@ -2,9 +2,10 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
-import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
+import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 
 const app = new Hono<{ Bindings: Env }>();
 const MODULES = [
@@ -22,7 +23,7 @@ type Query = { q?: string; filter?: string; sort?: string; page?: string };
 
 function number(v: unknown): number { return Number(v ?? 0); }
 function rows<T>(r: { results?: T[] | null }): T[] { return r.results ?? []; }
-function record(id: number | string, cells: Record<string, string | number | null>): RecordRow { return { id, cells }; }
+function record(id: number | string, cells: Record<string, Cell>): RecordRow { return { id, cells }; }
 function card(slug: Slug, state: Card['state'], series: ChartSpec[], range = 'Now', reason: string | null = null, next: Card['next'] = null): Card {
   const spec = MODULES.find(m => m[0] === slug)!;
   return { slug, name: spec[1], caption: spec[3], state, series, range, reason, next };
@@ -189,37 +190,59 @@ async function company(env: Env, p: Project): Promise<ModuleRead> {
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null } };
 }
 
-const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'product_analytics'] as const;
-async function operating(env: Env, p: Project): Promise<ModuleRead> {
+const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
+type SystemKind = typeof SYSTEM_KINDS[number];
+const SYSTEM_LABEL: Record<SystemKind, string> = { bank: 'Bank', accounting: 'Accounting', payroll: 'Payroll', crm: 'CRM', workspace: 'Workspace' };
+type Viewer = Awaited<ReturnType<typeof requireAuth>>;
+function fitsKind(kind: SystemKind, providerKey: string): boolean {
+  return kind === 'workspace' ? ['google_calendar', 'microsoft_365'].includes(providerKey)
+    : kind === 'crm' && CONNECTOR_METADATA[providerKey]?.category === 'CRM';
+}
+async function workspaceConnected(env: Env, userId: number, providerKey: string): Promise<boolean> {
+  if (providerKey === 'google_calendar') return !!await env.DB.prepare('SELECT 1 FROM google_oauth_tokens WHERE user_id = ?').bind(userId).first();
+  if (providerKey === 'microsoft_365') return !!await env.DB.prepare('SELECT 1 FROM microsoft_oauth_tokens WHERE user_id = ?').bind(userId).first();
+  return false;
+}
+async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   // The company's enabled mapping is the only source. A member's personal
   // connector list would include tools withheld from this company.
   const connectors = p.company_id == null ? [] : rows(await env.DB.prepare(
-    `SELECT s.kind, s.used_by, i.provider_key, i.display_name, i.status, i.last_synced_at
+    `SELECT s.kind, s.used_by, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at
        FROM project_core_systems s
        JOIN integrations i ON i.id = s.integration_id
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
        JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
       WHERE s.project_id = ?`,
   ).bind(p.company_id, p.id).all<any>());
+  const workspace = p.company_id == null ? null : await env.DB.prepare(
+    `SELECT s.provider_key, s.updated_by, s.used_by FROM project_core_systems s
+       JOIN user_company_links ucl ON ucl.user_id = s.updated_by AND ucl.company_id = ?
+      WHERE s.project_id = ? AND s.kind = 'workspace'`,
+  ).bind(p.company_id, p.id).first<{ provider_key: string; updated_by: number; used_by: string | null }>();
+  if (workspace && await workspaceConnected(env, workspace.updated_by, workspace.provider_key)) connectors.push({
+    kind: 'workspace', used_by: workspace.used_by, user_id: workspace.updated_by,
+    provider_key: workspace.provider_key, display_name: getDescriptor(workspace.provider_key)?.display_name,
+    status: 'active', last_synced_at: null,
+  });
   const byKind = new Map(connectors.map(c => [c.kind, c]));
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
       AND run_date >= date('now', '-84 days') ORDER BY run_date, id`,
   ).bind(p.id).all<any>());
   const connected = SYSTEM_KINDS.filter(k => byKind.get(k)?.status === 'active').length;
-  const tiles = SYSTEM_KINDS.map(k => ({ label: k.replace('_', ' '), state: !byKind.has(k) ? 'not_connected' : byKind.get(k)?.status === 'error' ? 'failing' : byKind.get(k)?.status === 'active' ? 'connected' : 'not_connected' }));
+  const tiles = SYSTEM_KINDS.map(k => ({ label: SYSTEM_LABEL[k], state: !byKind.has(k) ? 'not_connected' : byKind.get(k)?.status === 'error' ? 'failing' : byKind.get(k)?.status === 'active' ? 'connected' : 'not_connected' }));
   const reviews = rituals.map(r => r.state === 'done');
   const series: ChartSpec[] = [{ kind: 'tiles', items: tiles }];
   if (reviews.length) series.push({ kind: 'dots', values: reviews, label: 'Weekly reviews held' });
   const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
   const failingLast = failing ? byKind.get(failing)?.last_synced_at : null;
-  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, next('operating-systems', failing ? `Reconnect ${failing}${failingLast ? ` · last good sync ${String(failingLast).slice(0, 10)}` : ''}` : null)),
+  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failing ? { text: `Reconnect ${getDescriptor(byKind.get(failing)?.provider_key)?.display_name ?? SYSTEM_LABEL[failing]}${failingLast ? ` · last good sync ${String(failingLast).slice(0, 10)}` : ''}`, href: `/build/connect?tool=${encodeURIComponent(byKind.get(failing)?.provider_key)}` } : null),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
-    rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k); return record(k, { system: k.replace('_', ' '), provider: c?.display_name ?? c?.provider_key ?? null, state: !c ? 'Not connected' : c.status === 'error' ? 'Failing' : c.status === 'active' ? 'Connected' : 'Not connected', last_sync: c?.last_synced_at ?? null, used_by: c?.used_by ?? null }); }),
+    rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k); return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: !c ? 'Not connected' : c.status === 'error' ? 'Failing' : c.status === 'active' ? 'Connected' : 'Not connected', last_sync: c?.last_synced_at ?? null, used_by: c?.used_by ?? null }); }),
     facts: { connected, total: SYSTEM_KINDS.length } };
 }
 
-const READS: Record<Slug, (env: Env, p: Project) => Promise<ModuleRead>> = {
+const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<ModuleRead>> = {
   'solution-design': solution, 'prototype-mvp': prototype, 'product-roadmap': roadmap,
   'founding-team': founding, 'company-creation': company, 'operating-systems': operating,
 };
@@ -228,8 +251,8 @@ const FILTER_FIELD: Record<Slug, string> = {
   'founding-team': 'role', 'company-creation': 'state', 'operating-systems': 'state',
 };
 
-async function safeRead(slug: Slug, env: Env, project: Project): Promise<ModuleRead> {
-  try { return await READS[slug](env, project); }
+async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer): Promise<ModuleRead> {
+  try { return await READS[slug](env, project, viewer); }
   catch (error) {
     console.error(`[cycle_build] ${MODULES.find(m => m[0] === slug)![2]} read failed`, error);
     const spec = MODULES.find(m => m[0] === slug)!;
@@ -252,7 +275,8 @@ async function context(c: any): Promise<Project | Response> {
 app.get('/overview', async c => {
   const project = await context(c);
   if (project instanceof Response) return project;
-  const results = await Promise.all(MODULES.map(m => safeRead(m[0], c.env, project)));
+  const viewer = await requireAuth(c);
+  const results = await Promise.all(MODULES.map(m => safeRead(m[0], c.env, project, viewer)));
   const prototype = results[1], roadmap = results[2], systems = results[5];
   const pFacts = prototype.facts, rFacts = roadmap.facts, sFacts = systems.facts;
   const pBad = prototype.card.state === 'unreadable';
@@ -279,7 +303,7 @@ app.get('/modules/:slug', async c => {
   if (!Object.hasOwn(READS, slug)) return c.json({ detail: 'Module not found' }, 404);
   const project = await context(c);
   if (project instanceof Response) return project;
-  const result = await safeRead(slug, c.env, project);
+  const result = await safeRead(slug, c.env, project, await requireAuth(c));
   const query: Query = { q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') };
   const filterKey = FILTER_FIELD[slug];
   const filterLabel = result.cols.find(col => col.key === filterKey)?.label ?? filterKey;
@@ -526,32 +550,74 @@ app.patch('/obligations/:id/proof', async c => {
   return c.json({ ok: true, id });
 });
 
+
+app.get('/systems/choices', async c => {
+  const project = await context(c); if (project instanceof Response) return project;
+  const user = await requireAuth(c);
+  if (!project.company_id) return c.json({ detail: 'Project has no company' }, 409);
+  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?').bind(user.id, project.company_id).first();
+  if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
+  const own = rows(await c.env.DB.prepare(
+    `SELECT i.uid, i.provider_key FROM integrations i
+       JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
+       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+      WHERE i.user_id = ? ORDER BY i.id`,
+  ).bind(project.company_id, user.id).all<{ uid: string; provider_key: string }>());
+  const workspace = [];
+  for (const provider of ['google_calendar', 'microsoft_365']) if (await workspaceConnected(c.env, user.id, provider)) workspace.push(provider);
+  return c.json({ kinds: SYSTEM_KINDS.map(kind => ({
+    kind, label: SYSTEM_LABEL[kind],
+    choices: kind === 'workspace' ? workspace.map(provider_key => ({ uid: null, provider_key, display_name: getDescriptor(provider_key)?.display_name ?? provider_key, category: 'Calendar and workspace' }))
+      : own.filter(i => fitsKind(kind, i.provider_key)).map(i => ({ ...i, display_name: getDescriptor(i.provider_key)?.display_name ?? i.provider_key, category: CONNECTOR_METADATA[i.provider_key]?.category })),
+  })) });
+});
+
 app.put('/systems/:kind', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  const kind = c.req.param('kind');
-  if (!(SYSTEM_KINDS as readonly string[]).includes(kind)) return c.json({ detail: 'Unknown system kind' }, 404);
+  const rawKind = c.req.param('kind');
+  if (!(SYSTEM_KINDS as readonly string[]).includes(rawKind)) return c.json({ error: 'invalid_kind', detail: 'Unknown system kind' }, 400);
+  const kind = rawKind as SystemKind;
   if (!ctx.project.company_id) return c.json({ detail: 'Project has no company' }, 409);
-  const body = await jsonBody(c);
-  const integrationId = body?.integration_id == null ? null : positiveId(body.integration_id);
-  const usedBy = text(body?.used_by, 200);
-  if (!body || usedBy === false || (body.integration_id != null && !integrationId)) return c.json({ detail: 'Invalid mapping' }, 400);
-  if (integrationId) {
-    const enabled = await c.env.DB.prepare(
-      `SELECT 1 FROM integrations i JOIN integration_companies ic ON ic.integration_id = i.id
-        JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
-        WHERE i.id = ? AND i.user_id = ? AND ic.company_id = ? AND ic.enabled = 1`,
-    ).bind(integrationId, ctx.user.id, ctx.project.company_id).first();
-    if (!enabled) return c.json({ detail: 'Connector not enabled for this company or not owned by you' }, 403);
+  const body = await jsonBody(c), usedBy = text(body?.used_by, 200);
+  if (!body || usedBy === false) return c.json({ detail: 'Invalid mapping' }, 400);
+  let integrationId: number | null = null, providerKey: string | null = null;
+  if (kind === 'workspace') {
+    const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?')
+      .bind(ctx.user.id, ctx.project.company_id).first();
+    if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
+    if (body.integration_uid != null || body.integration_id != null) return c.json({ error: 'kind_mismatch', detail: 'That connector is not a workspace tool.' }, 400);
+    if (body.provider_key != null) {
+      if (typeof body.provider_key !== 'string' || !fitsKind(kind, body.provider_key)) return c.json({ error: 'kind_mismatch', detail: 'That connector is not a workspace tool.' }, 400);
+      providerKey = body.provider_key;
+      if (!await workspaceConnected(c.env, ctx.user.id, providerKey)) return c.json({ error: 'workspace_not_connected', detail: 'Connect Google Calendar or Microsoft 365 first.' }, 403);
+    }
+  } else {
+    if (body.provider_key != null) return c.json({ error: 'kind_mismatch', detail: `That connector is not a ${kind} tool.` }, 400);
+    if (body.integration_uid != null && body.integration_id != null) return c.json({ detail: 'Choose one connector key' }, 400);
+    if (body.integration_uid != null || body.integration_id != null) {
+      const uid = body.integration_uid == null ? null : text(body.integration_uid, 200);
+      const id = body.integration_id == null ? null : positiveId(body.integration_id);
+      if ((body.integration_uid != null && !uid) || (body.integration_id != null && !id)) return c.json({ detail: 'Invalid mapping' }, 400);
+      const enabled = await c.env.DB.prepare(
+        `SELECT i.id, i.provider_key FROM integrations i JOIN integration_companies ic ON ic.integration_id = i.id
+          JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+         WHERE ((? IS NOT NULL AND i.uid = ?) OR (? IS NOT NULL AND i.id = ?))
+           AND i.user_id = ? AND ic.company_id = ? AND ic.enabled = 1`,
+      ).bind(uid, uid, id, id, ctx.user.id, ctx.project.company_id).first<{ id: number; provider_key: string }>();
+      if (!enabled) return c.json({ detail: 'Connector not enabled for this company or not owned by you' }, 403);
+      if (!fitsKind(kind, enabled.provider_key)) return c.json({ error: 'kind_mismatch', detail: `That connector is not a ${kind} tool.` }, 400);
+      integrationId = enabled.id;
+    }
   }
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO project_core_systems (project_id, kind, integration_id, used_by, updated_by)
-       VALUES (?, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
-         integration_id = excluded.integration_id, used_by = excluded.used_by,
+  const change = kind === 'workspace' && providerKey == null
+    ? c.env.DB.prepare('DELETE FROM project_core_systems WHERE project_id = ? AND kind = ?').bind(ctx.project.id, kind)
+    : c.env.DB.prepare(
+      `INSERT INTO project_core_systems (project_id, kind, integration_id, provider_key, used_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
+         integration_id = excluded.integration_id, provider_key = excluded.provider_key, used_by = excluded.used_by,
          updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
-    ).bind(ctx.project.id, kind, integrationId, usedBy, ctx.user.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_system_mapping_changed', kind),
-  ]);
+    ).bind(ctx.project.id, kind, integrationId, providerKey, usedBy, ctx.user.id);
+  await c.env.DB.batch([change, audit(c.env, ctx.project.id, ctx.user.id, 'build_system_mapping_changed', kind)]);
   return c.json({ ok: true, kind });
 });
 
