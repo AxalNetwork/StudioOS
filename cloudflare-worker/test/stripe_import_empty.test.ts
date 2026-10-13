@@ -79,7 +79,7 @@ function freshDb() {
       credentials_enc TEXT,
       config_json TEXT,
       last_synced_at TEXT,
-      last_error TEXT,
+      last_error TEXT, last_error_at TEXT,
       updated_at TEXT
     );
     CREATE TABLE projects (id INTEGER PRIMARY KEY, company_id INTEGER, deleted_at TEXT);

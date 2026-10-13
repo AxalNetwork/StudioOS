@@ -135,6 +135,7 @@ function rowToPublic(row: IntegrationRow, credPreview: string | null, companyIds
     has_webhook_secret: !!row.webhook_secret_enc,
     last_synced_at: row.last_synced_at,
     last_error: row.last_error,
+    last_error_at: row.last_error_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     company_ids: companyIds,
@@ -492,7 +493,7 @@ integrations.post('/connect', async (c) => {
       (webhookEnc ? 'webhook_secret_enc = ?, ' : '') +
       'config_json = ?, capabilities_json = ?, scopes_json = ?, ' +
       'external_account_id = ?, external_account_name = ?, ' +
-      'last_error = NULL, updated_at = CURRENT_TIMESTAMP ' +
+      'last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP ' +
       'WHERE uid = ?',
     ).bind(
       ...(webhookEnc
@@ -612,8 +613,7 @@ integrations.post('/:uid/sync', async (c) => {
     }
   }
 
-  const desc = getDescriptor(row.provider_key);
-  if (desc && desc.tier !== 'free') ensureTier(user, desc.tier as 'growth' | 'studio');
+  // D686: an existing connection keeps syncing after a downgrade.
 
   const impl = getProviderImpl(row.provider_key);
   if (!impl?.sync) {
@@ -621,7 +621,7 @@ integrations.post('/:uid/sync', async (c) => {
   }
   try {
     const out = await impl.sync(c, user, row);
-    await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, status = \'active\' WHERE id = ?').bind(row.id).run();
+    await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL, status = \'active\' WHERE id = ?').bind(row.id).run();
     await logEvent(c.env, {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
       direction: 'outbound', event_type: 'sync', status: 'ok',
@@ -631,7 +631,7 @@ integrations.post('/:uid/sync', async (c) => {
     return c.json({ ok: true, summary: out.summary, counts: out.counts ?? {} });
   } catch (e) {
     const msg = (e as Error).message || 'sync failed';
-    await c.env.DB.prepare('UPDATE integrations SET last_error = ?, status = \'error\' WHERE id = ?').bind(msg.slice(0, 500), row.id).run();
+    await c.env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, status = \'error\' WHERE id = ?').bind(msg.slice(0, 500), row.id).run();
     await logEvent(c.env, {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
       direction: 'outbound', event_type: 'sync', status: 'error', response_summary: msg,
@@ -1237,6 +1237,7 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // callback recovers it from state.extra and passes through to connect()
   // so we never trust the query string at callback time.
   const extra: Record<string, unknown> = { challenge: pkce.challenge, company_id: selectedCompany };
+  if (c.req.query('return_to') === 'build') extra.return_to = 'build';
   if (provider === 'salesforce') {
     const sb = c.req.query('sandbox');
     extra.is_sandbox = sb === '1' || sb === 'true';
@@ -1276,6 +1277,10 @@ integrations.get('/oauth/:provider/start', async (c) => {
  * and either redirect back to the Integrations page (?integration=ok) or
  * surface an error fragment the page renders inline.
  */
+export function returnBase(extra: Record<string, unknown> | null | undefined): string {
+  return extra?.return_to === 'build' ? '/build/connect' : '/integrations';
+}
+
 integrations.get('/oauth/:provider/callback', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -1285,8 +1290,10 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   const code = c.req.query('code') || '';
   const state = c.req.query('state') || '';
   const errorParam = c.req.query('error') || '';
+  const consumed = state ? await consumeOauthState(c.env, user.id, provider, state) : null;
+  const destination = returnBase(consumed?.extra);
   if (errorParam) {
-    return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(errorParam)}`);
+    return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(/^[a-z0-9_]{1,64}$/i.test(errorParam) ? errorParam : 'callback_failed')}`);
   }
   if (!desc || desc.auth_type !== 'oauth2') {
     return c.json({ error: 'oauth_not_supported' }, 404);
@@ -1294,7 +1301,6 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   if (!code || !state) {
     return c.json({ error: 'missing_code_or_state' }, 400);
   }
-  const consumed = await consumeOauthState(c.env, user.id, provider, state);
   if (!consumed) {
     return c.json({ error: 'invalid_or_expired_state' }, 400);
   }
@@ -1302,16 +1308,17 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   const linked = Number.isSafeInteger(selectedCompany) && selectedCompany > 0 &&
     await c.env.DB.prepare('SELECT 1 AS allowed FROM user_company_links WHERE user_id = ? AND company_id = ?')
       .bind(user.id, selectedCompany).first();
-  if (!linked && writesProjectData(provider)) return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=company_not_linked`);
+  if (!linked && writesProjectData(provider)) return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=company_not_linked`);
   const impl = getProviderImpl(provider);
   if (!impl) {
-    return c.redirect(`/integrations?oauth=rolling_out&provider=${encodeURIComponent(provider)}`);
+    return c.redirect(`${destination}?oauth=rolling_out&provider=${encodeURIComponent(provider)}`);
   }
+  const { return_to: _returnTo, ...providerExtra } = consumed.extra;
   try {
     const result = await impl.connect(c, user, {
       oauth_code: code,
       oauth_state: state,
-      config: { pkce_verifier: consumed.pkce_verifier ?? undefined, ...consumed.extra },
+      config: { pkce_verifier: consumed.pkce_verifier ?? undefined, ...providerExtra },
     });
     if (hasScopeOverreach(desc, result.scopes || [])) {
       try { await impl.revokeGranted?.(c.env, result); } catch { /* refusal still wins */ }
@@ -1320,7 +1327,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
         direction: 'internal', event_type: 'overreach', status: 'error',
         response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
       });
-      return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`);
+      return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`);
     }
     const sql = getSQL(c.env);
     try {
@@ -1333,7 +1340,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
         await c.env.DB.prepare(
           "UPDATE integrations SET status = 'active', credentials_enc = ?, " +
           'config_json = ?, capabilities_json = ?, scopes_json = ?, ' +
-          'external_account_id = ?, external_account_name = ?, last_error = NULL, ' +
+          'external_account_id = ?, external_account_name = ?, last_error = NULL, last_error_at = NULL, ' +
           'updated_at = CURRENT_TIMESTAMP WHERE uid = ?',
         ).bind(
           credsEnc,
@@ -1390,7 +1397,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
     } finally {
       await sql.end();
     }
-    return c.redirect(`/integrations?oauth=ok&provider=${encodeURIComponent(provider)}`);
+    return c.redirect(`${destination}?oauth=ok&provider=${encodeURIComponent(provider)}`);
   } catch (e) {
     // Best-effort failure log — we may not have an integrations row to
     // attach to (the connect threw before insert), so skip integration_logs
@@ -1410,7 +1417,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
     const code = /^[a-z0-9_]+$/i.test(rawMsg.split(/[:\s]/)[0])
       ? rawMsg.split(/[:\s]/)[0].slice(0, 64)
       : 'callback_failed';
-    return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(code)}`);
+    return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(code)}`);
   }
 });
 

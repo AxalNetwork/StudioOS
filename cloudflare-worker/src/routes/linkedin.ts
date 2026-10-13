@@ -176,10 +176,10 @@ linkedin.post('/oauth/start', async (c) => {
       scope: 'openid profile email',
       state,
     });
-    if (returnTo === 'integrations') {
+    if (returnTo === 'integrations' || returnTo === 'build') {
       c.header(
         'Set-Cookie',
-        'studioos_li_return=integrations; HttpOnly; Secure; SameSite=Lax; Path=/api/linkedin; Max-Age=600',
+        `studioos_li_return=${returnTo}; HttpOnly; Secure; SameSite=Lax; Path=/api/linkedin; Max-Age=600`,
         { append: true },
       );
     }
@@ -209,7 +209,7 @@ function redirectBack(env: Env, status: 'connected' | 'error', returnTo: string,
   const base = callbackBase(env);
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
-  const path = returnTo === 'integrations' ? '/integrations' : '/refer';
+  const path = returnTo === 'build' ? '/build/connect' : returnTo === 'integrations' ? '/integrations' : '/refer';
   return new Response(null, {
     status: 302,
     headers: { Location: `${base}${path}?${params.toString()}`, 'Set-Cookie': clearLinkedinReturnCookie() },

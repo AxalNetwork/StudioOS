@@ -200,7 +200,7 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
     } as CredentialBlob;
     const enc = await encryptCredentials(env, row.uid, newCreds);
     await env.DB.prepare(
-      'UPDATE integrations SET credentials_enc = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE integrations SET credentials_enc = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     ).bind(enc, row.id).run();
     return refreshed.access_token;
   } finally {
@@ -725,7 +725,7 @@ export async function syncAllCalendlyIntegrations(env: Env): Promise<{ scanned: 
       const stubUser = { id: row.user_id } as User;
       const out = await sync(stubCtx, stubUser, row);
       await env.DB.prepare(
-        'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?',
+        'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?',
       ).bind(row.id).run();
       ok++;
       console.info(`[calendly] cron sync ok integration=${row.id}: ${out.summary}`);
@@ -734,7 +734,7 @@ export async function syncAllCalendlyIntegrations(env: Env): Promise<{ scanned: 
       const msg = (e as Error).message?.slice(0, 500) || 'sync failed';
       try {
         await env.DB.prepare(
-          "UPDATE integrations SET last_error = ?, status = CASE WHEN ? LIKE '%refresh%' THEN 'error' ELSE status END WHERE id = ?",
+          "UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, status = CASE WHEN ? LIKE '%refresh%' THEN 'error' ELSE status END WHERE id = ?",
         ).bind(msg, msg, row.id).run();
       } catch { /* non-fatal */ }
       console.error(`[calendly] cron sync failed integration=${row.id}: ${msg}`);

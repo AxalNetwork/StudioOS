@@ -255,7 +255,7 @@ export async function deleteOauthCredsAndDisconnect(
     const upd = await env.DB.prepare(
       `UPDATE integrations
           SET status = 'disconnected',
-              last_error = 'oauth_keys_revoked_by_admin',
+              last_error = 'oauth_keys_revoked_by_admin', last_error_at = CURRENT_TIMESTAMP,
               updated_at = CURRENT_TIMESTAMP
         WHERE provider_key = ? AND status = 'active'`,
     ).bind(providerKey).run();

@@ -553,7 +553,7 @@ function clearReturnToHeader(): string {
 }
 function destFor(env: Env, returnTo: string): string {
   const base = env.APP_URL || '';
-  return returnTo === 'integrations' ? `${base}/integrations` : `${base}/calendar`;
+  return returnTo === 'build' ? `${base}/build/connect` : returnTo === 'integrations' ? `${base}/integrations` : `${base}/calendar`;
 }
 function failureRedirect(env: Env, provider: string, reason: string | undefined, returnTo: string): Response {
   const url = `${destFor(env, returnTo)}?${provider}=error${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`;
@@ -785,10 +785,10 @@ async function startGoogleOAuth(c: any) {
   // Task #70 — let the Integrations page hand-off remember its origin
   // across the Google round-trip via a short-lived, scoped cookie.
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
-  if (status === 200 && returnTo === 'integrations') {
+  if (status === 200 && (returnTo === 'integrations' || returnTo === 'build')) {
     c.header(
       'Set-Cookie',
-      'studioos_cal_return=integrations; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600',
+      `studioos_cal_return=${returnTo}; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600`,
       { append: true },
     );
   }
@@ -981,7 +981,7 @@ calendar.get('/google/callback', async (c) => {
     const userEmail = String(me?.email || '').toLowerCase().trim();
     const emailsMatch = !!(verified && googleEmail && userEmail && googleEmail === userEmail);
 
-    if (returnTo === 'integrations' && !emailsMatch) {
+    if ((returnTo === 'integrations' || returnTo === 'build') && !emailsMatch) {
       // Strict: no token persistence, no link write, no calendar_sync
       // touch. Surface the mismatch as an explicit error (not a warn)
       // so the tile renders it inline as a failure, not a partial
@@ -1092,10 +1092,10 @@ async function startMicrosoftOAuth(c: any) {
   // short-lived, scoped cookie. The /microsoft/callback handler already
   // calls readReturnTo() so this is the only wiring needed.
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
-  if (status === 200 && returnTo === 'integrations') {
+  if (status === 200 && (returnTo === 'integrations' || returnTo === 'build')) {
     c.header(
       'Set-Cookie',
-      'studioos_cal_return=integrations; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600',
+      `studioos_cal_return=${returnTo}; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600`,
       { append: true },
     );
   }

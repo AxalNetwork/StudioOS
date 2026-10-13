@@ -12,22 +12,13 @@ import { CONNECTOR_METADATA } from './registry';
  */
 export const FED_LEDGER_PROVIDERS = new Set(['github']);
 
-export const MODULE_LABELS: Record<string, string> = {
-  product_roadmap: 'Product roadmap',
-  prototype_mvp: 'Prototype / MVP',
-  capital_relationships: 'Capital relationships',
-  network: 'Network',
-  customer_research: 'Customer research',
-  founding_team: 'Founding team',
-  company_creation: 'Company creation',
-  market_intelligence: 'Market intelligence',
-  revenue_and_traction: 'Revenue and traction',
-  customers: 'Customers',
-};
+import { MODULE_LABELS, moduleHref } from './moduleLabels';
+export { MODULE_LABELS } from './moduleLabels';
 
 export interface FedModule {
   module: string;
   label: string;
+  href: string | null;
   count: number | null;
   linked: number | null;
   unlanded: number | null;
@@ -39,7 +30,7 @@ export async function fedCounts(env: Env, integrationId: number, providerKey: st
   const label = (m: string) => MODULE_LABELS[m] || m;
   if (!FED_LEDGER_PROVIDERS.has(providerKey)) {
     return feeds.map((m) => ({
-      module: m, label: label(m), count: null, linked: null, unlanded: null,
+      module: m, label: label(m), href: moduleHref(m), count: null, linked: null, unlanded: null,
       reason: 'Not recorded: this connector does not yet record what it delivers to each module.',
     }));
   }
@@ -53,7 +44,7 @@ export async function fedCounts(env: Env, integrationId: number, providerKey: st
     const count = Number(r?.n || 0), linked = Number(r?.linked || 0);
     const unlanded = count - linked;
     return {
-      module: m, label: label(m), count, linked, unlanded,
+      module: m, label: label(m), href: moduleHref(m), count, linked, unlanded,
       reason: unlanded > 0 ? `${unlanded} arrived with no store to land in (releases have none in ${label(m)} yet).` : null,
     };
   });

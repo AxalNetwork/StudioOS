@@ -211,7 +211,7 @@ async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<string>
     } as CredentialBlob;
     const enc = await encryptCredentials(env, row.uid, newCreds);
     await env.DB.prepare(
-      'UPDATE integrations SET credentials_enc = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE integrations SET credentials_enc = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     ).bind(enc, row.id).run();
     return refreshed.access_token;
   } finally {
@@ -771,12 +771,12 @@ export async function syncAllDocusignIntegrations(env: Env): Promise<{ scanned: 
       await syncIntegration(env, row);
       ok++;
       await env.DB.prepare(
-        `UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?`,
+        `UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?`,
       ).bind(row.id).run();
     } catch (e) {
       failed++;
       await env.DB.prepare(
-        `UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        `UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       ).bind(((e as Error).message || 'sync failed').slice(0, 300), row.id).run();
     }
   }
@@ -1009,7 +1009,7 @@ async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: Inte
       const msg = ((e as Error).message || 'connect_provision_failed').slice(0, 300);
       try {
         await c.env.DB.prepare(
-          'UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          'UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ).bind(msg, recheck.id).run();
       } catch {}
       console.warn('[docusign] postConnect provisionConnect failed:', msg);
@@ -1024,7 +1024,7 @@ async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: Inte
       const newCfg = { ...cfg1, connect_id: connectId };
       if (secretAlreadyPersisted) {
         await c.env.DB.prepare(
-          'UPDATE integrations SET config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          'UPDATE integrations SET config_json = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ).bind(JSON.stringify(newCfg), recheck.id).run();
       } else {
         // CAS-style guard: only write the secret if no concurrent writer
@@ -1036,7 +1036,7 @@ async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: Inte
         // accepts any of X-DocuSign-Signature-1..5.
         const enc = await encryptWebhookSecret(c.env, recheck.uid, plaintextSecret);
         const upd = await c.env.DB.prepare(
-          `UPDATE integrations SET webhook_secret_enc = ?, config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+          `UPDATE integrations SET webhook_secret_enc = ?, config_json = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND webhook_secret_enc IS NULL`,
         ).bind(enc, JSON.stringify(newCfg), recheck.id).run();
         const changes = (upd.meta as { changes?: number } | undefined)?.changes ?? 0;
@@ -1064,7 +1064,7 @@ async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: Inte
             console.warn('[docusign] postConnect: secondary HMAC install threw:', (e as Error).message);
           }
           await c.env.DB.prepare(
-            'UPDATE integrations SET config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE integrations SET config_json = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           ).bind(JSON.stringify(newCfg), recheck.id).run();
         }
       }
@@ -1072,7 +1072,7 @@ async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: Inte
       const msg = ((e as Error).message || 'connect_persist_failed').slice(0, 300);
       try {
         await c.env.DB.prepare(
-          'UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          'UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ).bind(msg, recheck.id).run();
       } catch {}
       console.warn('[docusign] postConnect persist failed:', msg);
