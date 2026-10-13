@@ -36,22 +36,28 @@ export const FOUNDER_TIERS = [
     name: 'Free',
     priceMonthly: 0,
     priceAnnual: 0,
-    tagline: 'Validate one idea end-to-end.',
+    // D683: what Free includes is a decision, not a leftover. It lets a
+    // founder start Validate on one idea, apply to the Lab, and be found:
+    // the limits are `FREE_TIER_LIMITS` and the founder intro allowance
+    // (`services/introductions.ts`) in the Worker.
+    tagline: 'Start validating one idea.',
     features: [
       '1 active startup',
-      'Spin-Out Lab — 4-week sprint',
+      'Start Validate: 5 customer interviews and 3 OKRs',
+      'Apply to the Spin-Out Lab, the 28-day sprint',
       'Public profile + referral link',
+      'Accept up to 3 proposed introductions a month',
       'Community support',
     ],
     cta: { label: 'Start free', to: '/register?plan=free' },
   },
   tierFromPlan('growth', {
-    priceAnnual: 65,
+    priceAnnual: 16,
     highlight: true,
     cta: { label: 'Start 14-day trial', to: '/register?plan=growth' },
   }),
   tierFromPlan('studio', {
-    priceAnnual: 199,
+    priceAnnual: 80,
     cta: { label: 'Start 14-day trial', to: '/register?plan=studio' },
   }),
 ];

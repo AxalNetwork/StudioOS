@@ -1,13 +1,20 @@
 /**
  * Task #6 — Founder subscription tier middleware.
  *
- * Three-tier ladder for founder accounts:
- *   free    — 1 project, 5 interviews, 3 OKRs, read-only across most surfaces
- *   growth  — pitch deck save+export, captable mutations, advisor booking,
- *             scoring runs, co-marketing, compliance event create
- *   studio  — capital, funds, reserves, waterfall, liquidity, legalcap,
- *             cofounder, 83(b), KYC, network-effects, partner insights,
- *             watchlist + decision journal, partner office hours
+ * Three-tier ladder for founder accounts. D683 (owner, 2026-10-13): the paid
+ * plans are the founder cycles in two groups, and each keeps everything below
+ * it. The tier ids stay `growth` and `studio` (Stripe product metadata,
+ * `users.subscription_tier`); what members read is the plan name.
+ *   free    — "Free": 1 project, 5 interviews, 3 OKRs, read-only across most
+ *             surfaces
+ *   growth  — "Validate + Build": unlimited projects, interviews and OKRs,
+ *             scoring runs, company lookups, wellbeing sessions
+ *   studio  — "Raise + Grow": everything in Validate + Build, plus pitch deck
+ *             save, share and premium templates, captable writes, advisor
+ *             booking, co-marketing, compliance events, and capital, funds,
+ *             reserves, waterfall, liquidity, legalcap, cofounder, 83(b), KYC,
+ *             network-effects, partner insights, watchlist + decision journal,
+ *             partner office hours
  *
  * Bypass roles: admin, partner, investor, advisor — these never hit the gate.
  * Mirrors the `requireMiPro` pattern in middleware/miAccess.ts: throws a
@@ -24,14 +31,21 @@ const TIER_RANK: Record<Tier, number> = { free: 0, growth: 1, studio: 2 };
 
 const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'investor', 'advisor']);
 
-const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
-  growth: 'This is a Growth feature. Upgrade to keep iterating with the full toolkit.',
-  studio: 'This is a Studio feature. Upgrade for capital, legal, and partner tooling.',
+/** What a member reads for each paid tier (D683). */
+export const PLAN_NAME: Record<Exclude<Tier, 'free'>, string> = {
+  growth: 'Validate + Build',
+  studio: 'Raise + Grow',
 };
 
-const PLAN_PRICE_LABEL: Record<Exclude<Tier, 'free'>, string> = {
-  growth: '$79 / month',
-  studio: '$249 / month',
+const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
+  growth: 'This is on the Validate + Build plan. Upgrade to validate and build without limits.',
+  studio: 'This is on the Raise + Grow plan. Upgrade for the pitch deck, cap table, capital, legal, and partner tooling.',
+};
+
+/** The monthly price a member is quoted. It must match the active Stripe price on the tier's product. */
+export const PLAN_PRICE_LABEL: Record<Exclude<Tier, 'free'>, string> = {
+  growth: '$20 / month',
+  studio: '$100 / month',
 };
 
 export interface TierUserCols {
@@ -75,7 +89,7 @@ export function tierUpsell(required: Exclude<Tier, 'free'>) {
     error: 'tier_required',
     required,
     message: TIER_COPY[required],
-    plan: { tier: required, price_label: PLAN_PRICE_LABEL[required] },
+    plan: { tier: required, name: PLAN_NAME[required], price_label: PLAN_PRICE_LABEL[required] },
     checkout_path: '/api/billing/tier/checkout',
   };
 }

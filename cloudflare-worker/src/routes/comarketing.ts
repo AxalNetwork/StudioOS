@@ -92,8 +92,9 @@ async function mintCode(env: Env): Promise<string> {
 
 // Partner side ----------------------------------------------------------
 r.post('/me/pitches', async (c) => {
-  // Task #6 — co-marketing pitch creation is Growth-tier.
-  ensureTier(await requireAuth(c), 'growth');
+  // Task #6 — co-marketing pitch creation. D683: Grow work, on the Raise +
+  // Grow plan (`studio`).
+  ensureTier(await requireAuth(c), 'studio');
   try {
     const user = await requireAuth(c);
     if (!(isPartner(user) || isAdmin(user))) return c.json({ detail: 'Partner role required' }, 403);

@@ -531,8 +531,9 @@ async function insertVersion(env: Env, projectId: number, slides: any[], title: 
 }
 
 decks.post('/generate', async (c) => {
-  // Task #6 — deck generation/save is Growth-tier.
-  ensureTier(await requireAuth(c), 'growth');
+  // Task #6 — deck generation/save. D683: the pitch deck is Raise work, so it
+  // is on the Raise + Grow plan (`studio`).
+  ensureTier(await requireAuth(c), 'studio');
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const pid = parseInt(body?.project_id);
@@ -569,7 +570,7 @@ decks.post('/generate', async (c) => {
 // scoped. Fails LOUDLY when the AI provider isn't configured — no silent
 // fallback and no fabricated lines (security-first / explicit-error prefs).
 decks.post('/positioning', async (c) => {
-  ensureTier(await requireAuth(c), 'growth');
+  ensureTier(await requireAuth(c), 'studio'); // D683: Raise + Grow
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const pid = parseInt(body?.project_id);
@@ -1054,7 +1055,7 @@ decks.put('/:id', async (c) => {
   const persistedMethod = extractDeckMethodId(row);
   if (persistedMethod && PREMIUM_METHOD_IDS.includes(persistedMethod as any)) {
     try { ensureMethodAllowed(user, persistedMethod, PREMIUM_METHOD_IDS); }
-    catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'growth' }, 402); }
+    catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'studio' }, 402); }
   }
   const body = await c.req.json().catch(() => ({} as any));
   const slides = sanitizeSlides(body?.slides || []);
@@ -1169,7 +1170,7 @@ decks.post('/:id/restore', async (c) => {
 });
 
 decks.post('/:id/share', async (c) => {
-  ensureTier(await requireAuth(c), 'growth');
+  ensureTier(await requireAuth(c), 'studio'); // D683: Raise + Grow
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);
@@ -1352,7 +1353,7 @@ decks.get('/methods', async (c) => {
     id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
     best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
     category: m.category, ai_fill_hint: m.ai_fill_hint,
-    locked: !!m.premium && !isBypass && !tierCovers(tier, 'growth'),
+    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
     fields_from_project: m.fields_from_project,
     fields_from_financials: m.fields_from_financials,
     fields_from_captable: m.fields_from_captable,
@@ -1408,8 +1409,8 @@ decks.post('/apply-method', async (c) => {
   } catch (e: any) {
     return c.json({
       error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
-      method_id: methodId, required_tier: 'growth',
-      message: 'This template is part of the Growth plan. Upgrade to unlock.',
+      method_id: methodId, required_tier: 'studio',
+      message: 'This template is part of the Raise + Grow plan. Upgrade to unlock.',
     }, 402);
   }
   let proj: any;
@@ -1536,7 +1537,7 @@ decks.post('/:id/autofill', async (c) => {
   } catch {
     return c.json({
       error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
-      method_id: methodId, required_tier: 'growth',
+      method_id: methodId, required_tier: 'studio',
     }, 402);
   }
 

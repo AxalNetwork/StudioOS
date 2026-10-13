@@ -1012,8 +1012,8 @@ async function resolveSpinoutDeckAccess(
   } catch (_e) {
     return { error: c.json({
       error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
-      method_id: 'axal_spinout_demoday', required_tier: 'growth',
-      message: 'The Spin-Out deck is part of the Growth plan. Upgrade to unlock.',
+      method_id: 'axal_spinout_demoday', required_tier: 'studio',
+      message: 'The Spin-Out deck is part of the Raise + Grow plan. Upgrade to unlock.',
     }, 402) };
   }
 

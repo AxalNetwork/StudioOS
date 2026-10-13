@@ -2,9 +2,9 @@
  * Task #16 (DE) — Deck branding + paywall helpers.
  *
  * - Free tier always renders the Axal footer (cannot be removed).
- * - Growth tier removes the footer.
- * - Studio tier may upload a custom brand watermark (per-user setting).
- * - Premium templates require Growth tier; free tier sees a paywall card.
+ * - D683: decks are Raise work, so the Raise + Grow plan (`studio`) removes the
+ *   footer, may upload a custom brand watermark (per-user setting), and opens
+ *   the premium templates; every other plan sees a paywall card.
  */
 import type { Env, User } from '../../types';
 import { tierCovers } from '../../middleware/requireTier';
@@ -39,7 +39,7 @@ async function ensureWatermarkSchema(env: Env): Promise<void> {
 
 export async function getDeckBrand(env: Env, user: User & { id: number }): Promise<DeckBrand> {
   const tier = String((user as any).subscription_tier || 'free').toLowerCase();
-  const canRemove = tierCovers(tier, 'growth');
+  const canRemove = tierCovers(tier, 'studio'); // D683: decks are Raise + Grow
   const isStudio = tierCovers(tier, 'studio');
 
   let watermark: string | null = null;
@@ -197,11 +197,11 @@ export function applyBrandKitToSlides(
 export function ensureMethodAllowed(user: User | null, methodId: string, premiumIds: string[]): void {
   if (!premiumIds.includes(methodId)) return;
   const tier = String((user as any)?.subscription_tier || 'free').toLowerCase();
-  if (tierCovers(tier, 'growth')) return;
+  if (tierCovers(tier, 'studio')) return; // D683: premium decks are Raise + Grow
   // Bypass roles (admin, partner, investor, advisor) — these never hit a paywall.
   if (user && ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role))) return;
   const err: any = new Error('PAYWALL_PREMIUM_METHOD');
   err.method_id = methodId;
-  err.required_tier = 'growth';
+  err.required_tier = 'studio';
   throw err;
 }

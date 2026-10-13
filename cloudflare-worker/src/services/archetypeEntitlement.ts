@@ -3,7 +3,7 @@
  * the tiers ("B, you define what are the best pricing tiers", #976), and no new
  * price was added: the archetype unlocks with each licence's existing paid plans.
  *
- *   Founder                  `subscription_tier` Growth or Studio ($79 / $249 a month)
+ *   Founder                  `subscription_tier` growth or studio (Validate + Build, or Raise + Grow, D683)
  *   Investor                 effective `investor_tier` Professional or Institutional ($149 / $599),
  *                            an active trial counting and a seat reading its primary's plan
  *   Partner, advisor, admin  always: their licence is the paid tier
@@ -19,13 +19,13 @@ import type { Env, User } from '../types';
 import { userMeetsTier, tierUpsell } from '../middleware/requireTier';
 import { effectiveInvestorTier, investorTierCovers, investorUpsell, type InvestorUser } from '../middleware/requireInvestorTier';
 
-export type RequiredPlan = { licence: 'founder' | 'investor'; tier: 'growth' | 'professional'; price_label: string };
+export type RequiredPlan = { licence: 'founder' | 'investor'; tier: 'growth' | 'professional'; name?: string; price_label: string };
 export type ArchetypeAccess = { locked: false } | { locked: true; required_plan: RequiredPlan };
 
 /** Roles whose licence is the paid tier. */
 const ALWAYS_UNLOCKED = new Set(['admin', 'partner', 'advisor']);
 
-const FOUNDER_PLAN: RequiredPlan = { licence: 'founder', tier: 'growth', price_label: tierUpsell('growth').plan.price_label };
+const FOUNDER_PLAN: RequiredPlan = { licence: 'founder', tier: 'growth', name: tierUpsell('growth').plan.name, price_label: tierUpsell('growth').plan.price_label };
 const INVESTOR_PLAN: RequiredPlan = { licence: 'investor', tier: 'professional', price_label: investorUpsell('professional').plan.price_label };
 
 /**

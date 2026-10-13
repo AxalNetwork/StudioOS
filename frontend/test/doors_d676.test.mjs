@@ -34,10 +34,11 @@ const PAGE_SRC = read('frontend/src/pages/site/DoorPage.jsx');
 const DOORS_SRC = read('frontend/src/lib/siteDoors.js');
 
 const { default: DoorPage, resolvePlans, chapterList, formatPrice } = await import('../src/pages/site/DoorPage.jsx');
-const { DOORS, DOOR_ORDER } = await import('../src/lib/siteDoors.js');
+const { DOORS, DOOR_ORDER, AI_TOKENS } = await import('../src/lib/siteDoors.js');
 const { FOUNDER_TIERS, INVESTOR_TIERS } = await import('../src/data/pricing.js');
 const { PRODUCT_PAGES } = await import('../src/data/productPages.js');
 const { DOOR_LINKS } = await import('../src/lib/siteLinks.js');
+const { bucketsFor } = await import('../src/workspaces/shellConfig.js');
 
 const render = (key) => renderToStaticMarkup(
   React.createElement(MemoryRouter, { initialEntries: [DOORS[key].path] }, React.createElement(DoorPage, { door: key })),
@@ -108,7 +109,7 @@ test('each door renders the canvas sections in order', () => {
     assert.ok(existsSync(resolve(ROOT, 'frontend/public', door.img.slice(1))), `${door.img} ships`);
   }
   // Which doors have which optional sections, as shipped.
-  assert.deepEqual(DOOR_ORDER.filter((k) => PAGES[k].includes('id="door-pricing"')), ['investors']);
+  assert.deepEqual(DOOR_ORDER.filter((k) => PAGES[k].includes('id="door-pricing"')), ['founders', 'investors']);
   assert.deepEqual(DOOR_ORDER.filter((k) => PAGES[k].includes('id="ax-door-aside-h"')), ['partners', 'advisors']);
 });
 
@@ -141,34 +142,38 @@ test('plan prices and features come from the catalogue, never typed', () => {
   }
   assert.match(PAGE_SRC, /from '\.\.\/\.\.\/data\/pricing'/, 'the page reads the catalogue /pricing reads');
 
-  // The investor page shows the catalogue's Starter and Pro, at its prices, with its features.
-  const html = PAGES.investors;
-  for (const id of ['free', 'professional']) {
-    const t = tier(INVESTOR_TIERS, id);
-    assert.ok(html.includes(`>${formatPrice(t)}</div>`), `the ${id} price is the catalogue's (${formatPrice(t)})`);
-    for (const f of t.features) assert.ok(html.includes(attr(f)), `the ${id} plan lists "${f}" from the catalogue`);
+  // Each door that sells plans shows the catalogue's tiers, at its prices,
+  // with its features, under the catalogue's own names.
+  const SOLD = { founders: [FOUNDER_TIERS, ['free', 'growth', 'studio']], investors: [INVESTOR_TIERS, ['free', 'professional', 'institutional']] };
+  for (const [k, [list, ids]] of Object.entries(SOLD)) {
+    const html = PAGES[k];
+    assert.deepEqual(resolvePlans(DOORS[k]).map((p) => p.tier), ids, `${k}: the catalogue's tiers, in order`);
+    for (const id of ids) {
+      const t = tier(list, id);
+      assert.ok(html.includes(`>${formatPrice(t)}</div>`), `${k}: the ${id} price is the catalogue's (${formatPrice(t)})`);
+      assert.ok(html.includes(`<h3 class="ax-door-plan-name">${attr(t.name)}</h3>`), `${k}: the ${id} plan is called ${t.name}, as /pricing calls it`);
+      for (const f of t.features) assert.ok(html.includes(attr(f)), `${k}: the ${id} plan lists "${f}" from the catalogue`);
+    }
+    assert.equal((html.match(/class="ax-door-plan[ "]/g) || []).length, ids.length, `${k}: ${ids.length} plans render`);
+    for (const p of DOORS[k].plans) assert.ok(p.desc, `${k}: ${p.name} says in plain words what it is for`);
   }
-  assert.equal((html.match(/class="ax-door-plan[ "]/g) || []).length, 2, 'two plans render');
 
   // A catalogue that moves its prices moves the page.
   const fake = { investor: [{ id: 'free', priceMonthly: 7, features: ['a'] }, { id: 'professional', priceMonthly: 1234, features: ['b', 'c'] }] };
   assert.deepEqual(resolvePlans(DOORS.investors, fake).map((p) => [p.name, p.price, p.features]),
-    [['Starter', '$7', ['a']], ['Pro', '$1,234', ['b', 'c']]]);
+    [['Free', '$7', ['a']], ['Professional', '$1,234', ['b', 'c']]]);
   // A plan the catalogue does not have does not render.
-  assert.deepEqual(resolvePlans(DOORS.investors, { investor: [fake.investor[1]] }).map((p) => p.name), ['Pro']);
+  assert.deepEqual(resolvePlans(DOORS.investors, { investor: [fake.investor[1]] }).map((p) => p.name), ['Professional']);
   assert.deepEqual(resolvePlans(DOORS.investors, {}), [], 'no catalogue, no plans');
-  assert.ok(!html.includes('Enterprise'), 'the canvas Enterprise plan has no catalogue tier and does not render');
-  for (const k of ['founders', 'partners', 'advisors']) {
+  for (const k of ['partners', 'advisors']) {
     assert.deepEqual(resolvePlans(DOORS[k]), [], `${k}: no canvas plan is in the catalogue`);
   }
 
-  // The founders' "Starter · $0, forever" line reads the free tier's price.
-  const ch = DOORS.founders.chapters.find((c) => c.k === 'Plans');
-  const line = `Starter · ${formatPrice(tier(FOUNDER_TIERS, 'free'))}, forever`;
-  assert.deepEqual(chapterList(DOORS.founders, ch.list), [line, 'Pro · monthly, for an active raise']);
-  assert.ok(PAGES.founders.includes(line), 'the line is drawn with the catalogue price');
-  assert.deepEqual(chapterList(DOORS.founders, ch.list, { founder: [{ id: 'free', priceMonthly: 3 }] })[0], 'Starter · $3, forever');
-  assert.deepEqual(chapterList(DOORS.founders, ch.list, {}), ['Pro · monthly, for an active raise'], 'no tier, no priced line');
+  // A chapter line that quotes a price reads it from the catalogue, or is left out.
+  const priced = [{ t: 'Free · {price}, forever', tier: 'free' }, 'Unpriced line'];
+  assert.deepEqual(chapterList(DOORS.founders, priced), [`Free · ${formatPrice(tier(FOUNDER_TIERS, 'free'))}, forever`, 'Unpriced line']);
+  assert.deepEqual(chapterList(DOORS.founders, priced, { founder: [{ id: 'free', priceMonthly: 3 }] })[0], 'Free · $3, forever');
+  assert.deepEqual(chapterList(DOORS.founders, priced, {}), ['Unpriced line'], 'no tier, no priced line');
 });
 
 test('the primary CTA is the lane link; every other CTA is a routed page', () => {
@@ -211,6 +216,7 @@ test('claims the code does not back stay off the pages', () => {
     /labelled (?:that way|as such) in the product/, // no such label exists
     /drafts replies|handles scheduling|keeps your (?:notes|profile) current/, // no such AI task
     /priced per fund|shaped around them/, // the Enterprise plan does not render
+    /\bStarter\b|\bPro\b|Enterprise/, // the catalogue's plans are Free, Growth, Studio, Professional, Institutional
   ];
   for (const k of DOOR_ORDER) {
     for (const re of unbacked) assert.doesNotMatch(PAGES[k], re, `${k} claims ${re}`);
@@ -226,3 +232,43 @@ test('the tab title and description are the door\'s productPages meta', () => {
     assert.equal(page.meta.title, DOORS[k].label, `${k}: the tab title is the hero label`);
   }
 });
+
+test('the founders door walks the whole founder workspace (owner, 2026-10-13)', () => {
+  // Every bucket the founder shell registers is a chapter, so a founder reads
+  // about all of it, and a bucket added to the shell cannot be left off.
+  const keys = DOORS.founders.chapters.map((c) => c.k);
+  for (const b of bucketsFor('founder')) assert.ok(keys.includes(b.label), `the founders door has a ${b.label} chapter`);
+  assert.ok(keys.includes('Idea to company') && keys.includes('Already a company'), 'both ways in: the Lab, and an existing company');
+  // A chapter that lists a bucket's screens lists every one, by the name the
+  // founder's menu gives it (Network draws its introduction flow instead).
+  for (const b of bucketsFor('founder')) {
+    const c = DOORS.founders.chapters.find((ch) => ch.k === b.label);
+    if (!c.list) continue;
+    assert.deepEqual(c.list, b.zones.map((z) => z.label), `${b.label} lists its screens as the menu names them`);
+    for (const z of b.zones) assert.ok(PAGES.founders.includes(`<span class="ax-door-dot" aria-hidden="true"></span>${attr(z.label)}</li>`), `${b.label} › ${z.label} is drawn`);
+  }
+  const listed = DOORS.founders.chapters.filter((c) => bucketsFor('founder').some((b) => b.label === c.k) && c.list).map((c) => c.k);
+  assert.deepEqual(listed, ['Validate', 'Build', 'Raise', 'Grow', 'Research'], 'the four cycles and Research list their screens');
+});
+
+test('a door that sells plans says how AI use is paid: tokens, under the plans', () => {
+  for (const k of DOOR_ORDER) {
+    const html = PAGES[k];
+    const sells = resolvePlans(DOORS[k]).length > 0;
+    assert.equal(DOORS[k].tokens === AI_TOKENS, sells, `${k}: the tokens note exactly when the door sells plans`);
+    assert.equal(html.includes('id="ax-door-tokens-h"'), sells, `${k}: drawn exactly when the door sells plans`);
+    if (!sells) continue;
+    const plans = html.slice(html.indexOf('id="door-pricing"'), html.indexOf('id="ax-door-faq-h"'));
+    assert.ok(plans.includes(attr(AI_TOKENS.t)), `${k}: the tokens note sits inside the plans section`);
+    for (const p of AI_TOKENS.points) assert.ok(plans.includes(attr(p)), `${k}: "${p}"`);
+  }
+  // D629, and only D629: an allowance first, a one-for-one paid balance after
+  // it that never expires; no allowance amount is typed (the Super Admin sets
+  // each licence's).
+  const all = [AI_TOKENS.t, AI_TOKENS.d, ...AI_TOKENS.points].join(' ');
+  assert.match(all, /allowance/);
+  assert.match(all, /each dollar you add is a dollar of AI use/);
+  assert.match(all, /never expire/);
+  assert.doesNotMatch(all, /\$\d|\d+ tokens/, 'no amount is typed');
+});
+

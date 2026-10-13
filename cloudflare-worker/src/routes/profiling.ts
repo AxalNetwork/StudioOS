@@ -605,7 +605,7 @@ profiling.post('/admin/:email/verify', async (c) => {
         if (viaProvider === 'docusign') {
           const { userMeetsTier } = await import('../middleware/requireTier');
           if (!userMeetsTier(adminUser, 'studio')) {
-            return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Studio plan.' }, 402);
+            return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Raise + Grow plan.' }, 402);
           }
         }
         esignResult = await createAndSendEnvelope(c.env, {

@@ -483,7 +483,7 @@ export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; paramete
   },
   {
     name: 'findInvestor',
-    description: 'Find an investor matching a thesis, sector, or stage. Studio tier required.',
+    description: 'Find an investor matching a thesis, sector, or stage. Raise + Grow plan required.',
     parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
   },
   {
@@ -503,7 +503,7 @@ export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; paramete
   },
   {
     name: 'startContract',
-    description: 'Pre-fill a contract draft (template defaults to "safe"). Studio tier required.',
+    description: 'Pre-fill a contract draft (template defaults to "safe"). Raise + Grow plan required.',
     parameters: { type: 'object', properties: { template: { type: 'string' }, counterparty: { type: 'string' }, deal_id: { type: 'number' } } },
   },
   {
@@ -518,7 +518,7 @@ export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; paramete
   },
   {
     name: 'draftCofounderAgreement',
-    description: 'Pre-fill a cofounder agreement draft. Studio tier required.',
+    description: 'Pre-fill a cofounder agreement draft. Raise + Grow plan required.',
     parameters: { type: 'object', properties: { cofounder_email: { type: 'string' }, equity_pct: { type: 'number' } } },
   },
   {

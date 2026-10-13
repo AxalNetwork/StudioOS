@@ -52,7 +52,7 @@ import {
   RESOURCE_FILE_MAX_BYTES, RESOURCE_FILE_TYPES, mediaType, newResourceFileKey, resourceFilePath,
 } from '../services/wellbeing/resourceFiles';
 import { parseRange } from '../services/learningVideo';
-import { userMeetsTier, type TierUser } from '../middleware/requireTier';
+import { userMeetsTier, tierUpsell, type TierUser } from '../middleware/requireTier';
 import {
   createBookingPaymentIntent, mirrorBookingToCalendar, fanoutBookingNotifications,
 } from '../services/wellbeing/bookings';
@@ -1268,14 +1268,14 @@ wellbeing.get('/experts/:uid', async (c) => {
       const used = await countMonthlyProfileViews(c.env, user.id);
       if (used >= FREE_TIER_PROFILE_VIEWS_PER_MONTH) {
         // À la carte escape hatch: an active feature unlock bypasses the tier
-        // cap without requiring a Growth subscription (additive — tier OR unlock).
+        // cap without requiring a Validate + Build subscription (additive — tier OR unlock).
         const unlocked = await hasFeatureUnlock(c.env, user.id, 'wellbeing_expert_views');
         if (!unlocked) {
           return c.json({
             error: 'tier_required',
             required: 'growth',
-            message: `Free tier is capped at ${FREE_TIER_PROFILE_VIEWS_PER_MONTH} matched expert profile views per month. Upgrade to Growth for unlimited matches.`,
-            plan: { tier: 'growth', price_label: '$79 / month' },
+            message: `Free tier is capped at ${FREE_TIER_PROFILE_VIEWS_PER_MONTH} matched expert profile views per month. Upgrade to Validate + Build for unlimited matches.`,
+            plan: tierUpsell('growth').plan,
             checkout_path: '/api/billing/tier/checkout',
           }, 402);
         }

@@ -75,7 +75,7 @@ export type DeckMethodSpec = {
   best_for: string;
   /** Total slide count (excluding optional appendix slides). */
   slide_count: number;
-  /** Premium templates require Growth tier; free tier sees a paywall. */
+  /** Premium templates require the Raise + Grow plan (D683); below it, a paywall. */
   premium?: boolean;
   /**
    * Who the deck is for — which is what every consumer of this field routes on.
@@ -981,6 +981,6 @@ export function getMethod(id: string | null | undefined): DeckMethodSpec | null 
   return DECK_METHODS_BY_ID[id as DeckMethodId] || null;
 }
 
-/** Premium template ids — gated behind Growth tier. */
+/** Premium template ids — gated behind the Raise + Grow plan (D683). */
 export const PREMIUM_METHOD_IDS: DeckMethodId[] =
   DECK_METHODS.filter((m) => m.premium).map((m) => m.id);

@@ -155,6 +155,14 @@
 .ax-door-plan.is-hi .ax-door-plan-cta { background: var(--door-accent); border-color: var(--door-accent); color: #fff !important; }
 .ax-door-plan-note { margin: 20px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--ax-muted); text-wrap: pretty; }
 
+/* Tokens: how AI use is paid, under the plans */
+.ax-door-tokens {
+  display: grid; grid-template-columns: minmax(0,5fr) minmax(0,7fr); gap: 24px 56px; margin-top: 32px; padding: 36px 40px;
+  border-radius: 22px; background: var(--door-soft); border: 1px solid var(--ax-line);
+}
+.ax-door .ax-door-tokens-t { margin: 10px 0 0; font-size: 26px; line-height: 1.15; font-weight: 900; letter-spacing: -.028em; text-wrap: balance; }
+.ax-door .ax-door-tokens-list { display: flex; flex-direction: column; gap: 10px; }
+
 /* The aside */
 .ax-door-aside { padding-top: 16px; padding-bottom: 72px; }
 .ax-door-aside-box {
@@ -198,7 +206,7 @@
 .ax-door-close .ax-row-btns { justify-content: center; margin-top: 6px; }
 
 @media (max-width: 1060px) {
-  .ax-door-2, .ax-door-split, .ax-door-chap, .ax-door-aside-box { grid-template-columns: minmax(0,1fr); }
+  .ax-door-2, .ax-door-split, .ax-door-chap, .ax-door-aside-box, .ax-door-tokens { grid-template-columns: minmax(0,1fr); }
   .ax-door-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
@@ -218,6 +226,8 @@
   .ax-door-plan-grid { grid-template-columns: minmax(0, 1fr); }
   .ax-door-plan { padding: 26px 20px; }
   .ax-door-aside-box { padding: 24px 20px; }
+  .ax-door-tokens { padding: 24px 20px; }
+  .ax-door .ax-door-tokens-t { font-size: 22px; }
   .ax-door-faq-row { grid-template-columns: 34px minmax(0,1fr); }
   .ax-door-faq-q { font-size: 18px; }
   .ax-door-close-body { padding-top: 72px; padding-bottom: 72px; }

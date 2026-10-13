@@ -189,17 +189,17 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
   billing_subscribed_growth: t({
     key: 'billing_subscribed_growth', category: 'billing', severity: 'info',
     replyTo: 'billing@axal.vc', alwaysSend: true,
-    subject: 'Welcome to Axal Growth',
-    text: `Hi {{name}},\n\nThanks for upgrading to the Growth plan. Manage your subscription any time at {{manage_url}}.`,
-    html: `<p>Hi {{name}},</p><p>Thanks for upgrading to the <strong>Growth</strong> plan. Your tier-gated features (advanced scoring, deck publish, captable sim) are unlocked immediately.</p><p><a href="{{{manage_url}}}" style="color:#111;">Manage subscription</a></p>`,
+    subject: 'Welcome to Axal Validate + Build',
+    text: `Hi {{name}},\n\nThanks for upgrading to the Validate + Build plan. Manage your subscription any time at {{manage_url}}.`,
+    html: `<p>Hi {{name}},</p><p>Thanks for upgrading to the <strong>Validate + Build</strong> plan. Unlimited startups, customer interviews and OKRs, and scoring runs are unlocked immediately.</p><p><a href="{{{manage_url}}}" style="color:#111;">Manage subscription</a></p>`,
   }),
   // vars: name, manage_url
   billing_subscribed_studio: t({
     key: 'billing_subscribed_studio', category: 'billing', severity: 'info',
     replyTo: 'billing@axal.vc', alwaysSend: true,
-    subject: 'Welcome to Axal Studio',
-    text: `Hi {{name}},\n\nWelcome to the Studio plan. Capital, funds, liquidity, KYC, fund-sim, and partner office hours are unlocked. Manage at {{manage_url}}.`,
-    html: `<p>Hi {{name}},</p><p>Welcome to the <strong>Studio</strong> plan. Capital, funds, liquidity, KYC, fund-sim, and partner office hours are now unlocked on your account.</p><p><a href="{{{manage_url}}}" style="color:#111;">Manage subscription</a></p>`,
+    subject: 'Welcome to Axal Raise + Grow',
+    text: `Hi {{name}},\n\nWelcome to the Raise + Grow plan. The pitch deck, cap table, capital, funds, liquidity, legal, KYC, and partner office hours are unlocked. Manage at {{manage_url}}.`,
+    html: `<p>Hi {{name}},</p><p>Welcome to the <strong>Raise + Grow</strong> plan. The pitch deck, cap table, capital, funds, liquidity, legal, KYC, and partner office hours are now unlocked on your account.</p><p><a href="{{{manage_url}}}" style="color:#111;">Manage subscription</a></p>`,
   }),
   // vars: name, manage_url
   billing_subscribed_investor_pro: t({

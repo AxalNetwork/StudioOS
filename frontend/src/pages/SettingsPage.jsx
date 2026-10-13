@@ -33,6 +33,7 @@ import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 import ColleagueSeatsPanel from './ColleagueSeatsPanel';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
+import { TIER_PLANS } from '../components/PaywallModal';
 import BillingDashboard from '../components/BillingDashboard';
 import AuthorCard from '../components/AuthorCard';
 // Task #11 — shared first-time optional TOTP enrolment wizard (also used on
@@ -4835,7 +4836,7 @@ function FounderBillingPanel({ flash, billing }) {
 
   const refreshStatus = billing.reload;
 
-  const TIER_LABEL = { free: 'Free', growth: 'Growth — $79/mo', studio: 'Studio — $249/mo' };
+  const TIER_LABEL = { free: 'Free', growth: `${TIER_PLANS.growth.label} — ${TIER_PLANS.growth.price}/mo`, studio: `${TIER_PLANS.studio.label} — ${TIER_PLANS.studio.price}/mo` };
   const ladder = ['free', 'growth', 'studio'];
   const RANK = { free: 0, growth: 1, studio: 2 };
 
@@ -4926,11 +4927,11 @@ function FounderBillingPanel({ flash, billing }) {
                 return (
                   <div key={t}
                     className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
-                    <div className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{t}</div>
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">{t === 'free' ? 'Free' : TIER_PLANS[t].label}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {t === 'free' && '1 project · 5 interviews · 3 OKRs'}
-                      {t === 'growth' && '$79/mo · Unlimited builds, deck, scoring, advisors'}
-                      {t === 'studio' && '$249/mo · + Capital, legal, partner tools'}
+                      {t === 'growth' && `${TIER_PLANS.growth.price}/mo · Unlimited startups, interviews and OKRs, scoring`}
+                      {t === 'studio' && `${TIER_PLANS.studio.price}/mo · + Pitch deck, cap table, capital, legal, partner tools`}
                     </div>
                     <div className="mt-3">
                       {current && (

@@ -24,7 +24,8 @@ import { codeOnly } from './_codeOnly.mjs';
 const html = (el) => renderToStaticMarkup(createElement(MemoryRouter, null, el));
 const pageCode = codeOnly(readFileSync(fileURLToPath(new URL('../src/pages/ArchetypeCardPage.jsx', import.meta.url)), 'utf8'));
 
-const FOUNDER_PLAN = { licence: 'founder', tier: 'growth', price_label: '$79 / month' };
+// The Worker's reply since D683: the tier, the plan's name and its price.
+const FOUNDER_PLAN = { licence: 'founder', tier: 'growth', name: 'Validate + Build', price_label: '$20 / month' };
 const INVESTOR_PLAN = { licence: 'investor', tier: 'professional', price_label: '$149 / month' };
 const lockedFit = (plan) => ({ data: { fit: [], axal_values: [], archetype_sex: 'f', archetype_access: { locked: true, required_plan: plan } }, error: '' });
 const lockedResults = { data: { results: [{ updated_at: '2026-10-01', values: {} }], archetype_access: { locked: true, required_plan: FOUNDER_PLAN } }, error: '' };
@@ -36,7 +37,7 @@ test('a locked reply draws the title, a lock and the line naming its plan', () =
   const markup = html(createElement(ArchetypeCard, { state: lockedResults, fitState: lockedFit(FOUNDER_PLAN), audience: 'founder', compact: true }));
   const text = renderedText(markup);
   assert.match(text, /Founder archetype/);
-  assert.match(text, /Your archetype is part of the Growth plan\. Your answers are kept\./);
+  assert.match(text, /Your archetype is part of the Validate \+ Build plan\. Your answers are kept\./);
   assert.match(markup, /data-testid="archetype-locked"/);
   assert.match(markup, /lucide-lock/, 'the lock icon is drawn');
   const inv = renderedText(html(createElement(ArchetypeCard, { state: { data: null, error: '' }, fitState: lockedFit(INVESTOR_PLAN), audience: 'investor', compact: true })));
@@ -59,10 +60,10 @@ test('a locked reply wins even when it still carried an archetype, or the other 
   const leaky = lockedFit(FOUNDER_PLAN);
   leaky.data.archetype = { slug: 'fo_missionary', label: 'The Missionary', confidence: 0.8 };
   const markup = html(createElement(ArchetypeCard, { state: { data: null, error: 'x' }, fitState: leaky, compact: true }));
-  assert.match(renderedText(markup), /part of the Growth plan/);
+  assert.match(renderedText(markup), /part of the Validate \+ Build plan/);
   assert.ok(!markup.includes('The Missionary'), 'a slug that slipped through must still not be drawn');
   const viaResults = html(createElement(ArchetypeCard, { state: lockedResults, fitState: { data: null, error: 'x' }, compact: true }));
-  assert.match(renderedText(viaResults), /part of the Growth plan/, 'the results read alone is enough to lock');
+  assert.match(renderedText(viaResults), /part of the Validate \+ Build plan/, 'the results read alone is enough to lock');
 });
 
 test('a paid reply renders the archetype as today', () => {
@@ -79,7 +80,8 @@ test('archetypeLock, lockedPlanName and lockedLine', () => {
   assert.equal(archetypeLock({ archetype_access: { locked: 'true' } }), null, 'only a real true locks');
   assert.deepEqual(archetypeLock({ archetype_access: { locked: false } }, { archetype_access: { locked: true, required_plan: INVESTOR_PLAN } }), INVESTOR_PLAN);
   assert.deepEqual(archetypeLock({ archetype_access: { locked: true } }), {});
-  assert.equal(lockedPlanName({ tier: 'growth' }), 'Growth');
+  assert.equal(lockedPlanName({ tier: 'growth' }), 'Growth', 'a reply without a name falls back to the tier');
+  assert.equal(lockedPlanName({ tier: 'growth', name: 'Validate + Build' }), 'Validate + Build', 'the plan name the Worker sends wins (D683)');
   assert.equal(lockedPlanName({}), null);
   assert.equal(lockedLine({}), 'Your archetype is part of a paid plan. Your answers are kept.');
 });

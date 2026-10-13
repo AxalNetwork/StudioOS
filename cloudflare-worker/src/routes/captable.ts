@@ -396,8 +396,9 @@ captable.get('/scenarios', async (c) => {
 });
 
 captable.post('/scenarios', async (c) => {
-  // Task #6 — captable scenario writes are Growth-tier (read paths stay free).
-  ensureTier(await requireAuth(c), 'growth');
+  // Task #6 — captable scenario writes (read paths stay free). D683: the cap
+  // table is Raise work, on the Raise + Grow plan (`studio`).
+  ensureTier(await requireAuth(c), 'studio');
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
   const name = String(body?.name || '').trim();
@@ -485,9 +486,9 @@ captable.get('/scenarios/by-project/:projectId', async (c) => {
 // Task #29 — create a named DRAFT variant for a project. Always INSERTs a fresh
 // row with is_variant=1 (never upserts), so it stays distinct from the project's
 // canonical cap table and is excluded from the one-per-project upsert/by-project
-// lookups AND the Demo Day deck. Gated by project WRITE access (Growth tier).
+// lookups AND the Demo Day deck. Gated by project WRITE access (Raise + Grow plan, D683).
 captable.post('/scenarios/by-project/:projectId/variants', async (c) => {
-  ensureTier(await requireAuth(c), 'growth');
+  ensureTier(await requireAuth(c), 'studio');
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
@@ -545,7 +546,7 @@ captable.get('/scenarios/:uid', async (c) => {
 });
 
 captable.put('/scenarios/:uid', async (c) => {
-  ensureTier(await requireAuth(c), 'growth');
+  ensureTier(await requireAuth(c), 'studio');
   const user = await requireAuth(c);
   let row: ScenarioRow;
   try { row = await ensureScenarioWriteOr404(c, c.req.param('uid'), user); }
@@ -600,7 +601,7 @@ captable.put('/scenarios/:uid', async (c) => {
 });
 
 captable.delete('/scenarios/:uid', async (c) => {
-  ensureTier(await requireAuth(c), 'growth');
+  ensureTier(await requireAuth(c), 'studio');
   const user = await requireAuth(c);
   let gone: ScenarioRow;
   try { gone = await ensureScenarioWriteOr404(c, c.req.param('uid'), user); }
