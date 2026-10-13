@@ -120,6 +120,11 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - the talking points, checked against the project, capped at 10 and snapshotted;
   - `markInterviewHeld`, which moves the interview to `done` and fills its channel when a session stops or a text session's chat is in;
   - `activeSessionOf`, the one-live-session-per-member check (assistant and channel sessions excluded).
+- `interviewProcessing.ts` (D685, #1584) runs a stopped recording to the review:
+  - `finishSession` (`POST /sessions/:id/finish`) records the last sequence number and queues the `interview_process` job; a chunk that arrives late is taken and the job picks it up;
+  - the job transcribes chunk by chunk into `interview_chunk_transcripts`, so a retry (`POST /sessions/:id/process`) resumes where it stopped, then summarises and places through `structureSession` (`trigger: 'recording_processed'`);
+  - the stage is `uploading`, `transcribing`, `summarising`, `placing`, `done` or `failed`, with `processing_error` in words; a run idle 15 minutes counts as stale and may be retried;
+  - `summariseSession` keeps only sentences that cite a transcript segment, and writes a row to `interview_summary_receipts`.
 
 ### Founder round calls (D653)
 

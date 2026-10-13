@@ -34,7 +34,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/tickets       → tickets.ts
 /api/deals         → deals.ts
 /api/portfolio-support → portfolio_support.ts  (the IP3 value-add ledger, D70)
-/api/founder/validate → founder_validate.ts, founder_validate_sessions.ts  (D657's interview sessions: /interviews/:id/sessions, /sessions/*; D685's one-call setup POST /sessions and PUT /sessions/:id/points/:pointId)
+/api/founder/validate → founder_validate.ts, founder_validate_sessions.ts  (D657's interview sessions: /interviews/:id/sessions, /sessions/*; D685's one-call setup POST /sessions and PUT /sessions/:id/points/:pointId; its processing POST /sessions/:id/{finish,process,summarise})
 /api/portfolio-updates → portfolio_updates.ts  (founder updates; D654's Share an update: /share/*, /:uid/share|send|page, /asks/:uid/*)
 /api/cycles/grow   → cycle_grow.ts  (D664: the Grow overview, module reads and store writes; its shared card types live in the services folder as cycleCards)
 /api/cycles/raise  → cycle_raise.ts  (D663: the Raise overview, module reads and the readiness, narrative, checklist and next-step writes)
