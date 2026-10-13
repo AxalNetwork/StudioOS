@@ -48,7 +48,7 @@ function fixture() {
     INSERT INTO user_company_links VALUES (1, 10), (1, 20), (2, 10), (3, 10);
     INSERT INTO projects VALUES (100, 10, NULL), (200, 20, NULL);`);
   db.exec(migration);
-  db.exec(readFileSync('cloudflare-worker/sql/migrations/454_integrations_last_error_at.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/457_integrations_last_error_at.sql', 'utf8'));
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', KEK_PII: 'fixture-cipher-key-'.repeat(4) } as any;
   return { db, env };
 }
