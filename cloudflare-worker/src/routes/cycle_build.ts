@@ -237,11 +237,11 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
        LEFT JOIN users u ON u.id = i.user_id
       WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') ORDER BY i.id`,
   ).bind(p.company_id).all<any>());
-  const toolRows = tools.map(tool => {
+  const toolRows = tools.map((tool, index) => {
     const descriptor = getDescriptor(tool.provider_key);
     const metadata = CONNECTOR_METADATA[tool.provider_key];
     const href = descriptor && /^[a-z0-9_]{1,80}$/.test(descriptor.key) ? `/build/connect?tool=${encodeURIComponent(descriptor.key)}` : null;
-    return record(`tool-${tool.id}`, {
+    return record(`tool-${index}`, {
       tool: descriptor?.display_name ?? 'Unknown tool', category: metadata?.category ?? 'Not recorded',
       state: tool.status === 'active' ? 'Connected' : tool.status === 'error' ? 'Failing' : 'Not connected',
       last_sync: tool.last_synced_at ?? null,
