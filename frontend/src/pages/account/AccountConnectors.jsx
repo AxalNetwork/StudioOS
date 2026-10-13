@@ -7,6 +7,7 @@ import { Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, ConnectorPanel, Group, Sheet, openingView, useConnectors } from './ConnectorSheet';
 import { AssistantsSection } from './AssistantsGroup';
+import { ChannelsSection } from './ChannelsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, discoverChips,
   discoverSections, doesLabel, feedsLabel, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursRows,
@@ -397,6 +398,10 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
       </div>
 
       {content}
+
+      {/* D684 (#1578): business Telegram and WhatsApp, Zoom and Google Meet, on
+          both tabs. Zoom and Google connect through this page's own sheet. */}
+      <ChannelsSection catalogue={data.catalogue} onOpenConnector={(key) => { const p = data.catalogue.find((x) => x.key === key); if (p) open(p); }} />
 
       {/* D668 (#1498): AI assistants that use StudioOS (D665), on both tabs. */}
       <AssistantsSection />

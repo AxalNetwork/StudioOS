@@ -5,6 +5,8 @@ import { api as defaultApi } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
+import { ConnectPanel, SchedulePanel } from './InterviewChannels';
+import { INBOX_HREF } from '../account/channelsModel';
 import {
   CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, chipStatus, consentNote, defaultProvider, estimate,
   hasMeetingLink, meetingLinkProblem, modeOf, sessionBody, startState, talkingPoints,
@@ -95,6 +97,11 @@ export default function RecordLightbox({
   const [board, setBoard] = useState(initialBoard);
   const [selected, setSelected] = useState(null); // null: the defaults (the first two), until the founder toggles one
   const [assistant, setAssistant] = useState(false);
+  // D684's two other ways in, kept from the sheet this replaces: assign a
+  // Telegram or WhatsApp chat to this interview, or schedule a Zoom or Meet
+  // call for later. Both need the interview, so a new person goes to the inbox.
+  const [chatImport, setChatImport] = useState(false);
+  const [scheduleLater, setScheduleLater] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const { company: active } = useActiveCompany() || {};
@@ -223,8 +230,22 @@ export default function RecordLightbox({
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
             <button type="button" aria-expanded={assistant} aria-controls="record-assistant" onClick={() => setAssistant((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-assistant-link">Send it from your AI assistant</button>
+            {interview ? (
+              <>
+                <button type="button" aria-expanded={chatImport} aria-controls="record-chat-import" onClick={() => setChatImport((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-chat-link">Import a Telegram or WhatsApp chat</button>
+                <button type="button" aria-expanded={scheduleLater} aria-controls="record-schedule" onClick={() => setScheduleLater((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-schedule-link">Schedule the call for later</button>
+              </>
+            ) : (
+              <Link to={INBOX_HREF} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-inbox-link">Import a chat from your inbox</Link>
+            )}
           </div>
           {assistant && <div id="record-assistant" className="-mx-1"><AssistantEntry companyName={active?.company_name || ''} /></div>}
+          {interview && chatImport && (
+            <div id="record-chat-import" className="-mx-1">
+              <ConnectPanel interview={interview} onAssigned={(r) => r?.session_id && onStarted?.({ id: r.session_id }, interview)} />
+            </div>
+          )}
+          {interview && scheduleLater && <div id="record-schedule" className="-mx-1"><SchedulePanel interview={interview} /></div>}
         </Section>
 
         <Section title="Talking points" testId="record-points">

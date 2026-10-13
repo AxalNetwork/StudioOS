@@ -25,3 +25,10 @@
 # quoted that line.
 e68e99682469eac1afc768ef22f41e99614845be:cloudflare-worker/src/services/interviewSessions.ts:generic-api-key:128
 5160c63c48d3aa374f4ce1a3b173b987efc52753:.gitleaksignore:generic-api-key:21
+# D684 (#1577): Zoom's published example `plainToken` for an endpoint
+# url_validation challenge, used as a fixture in the meetings test's first
+# commit. It is documentation sample text, never a credential; the next commit
+# uses a synthetic `test-challenge-0001` instead, so no later commit carries it.
+# Scoped to the two findings, as D334's entry is.
+49cac9ac61158b88ff6d8e143a4d374b9c26e1d8:cloudflare-worker/test/channels_meetings_d684.test.ts:generic-api-key:233
+49cac9ac61158b88ff6d8e143a4d374b9c26e1d8:cloudflare-worker/test/channels_meetings_d684.test.ts:generic-api-key:236

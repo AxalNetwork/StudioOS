@@ -9,7 +9,7 @@
 <x-dc>
 <helmet>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
-  <script src="pro-cycles.js"></script>
+  <style>@container (max-width:760px){.cr-tr{grid-template-columns:1fr 1fr!important;gap:3px 10px!important}.cr-tr>:first-child{grid-column:1/-1}.cr-th{display:none!important}.cr-g3{grid-template-columns:minmax(0,1fr)!important}}@media (max-width:760px){.cr-tr{grid-template-columns:1fr 1fr!important}.cr-th{display:none!important}.cr-g3{grid-template-columns:minmax(0,1fr)!important}}</style>
   <style>
     body{margin:0}a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
     .co{container-type:inline-size}
@@ -17,17 +17,29 @@
     @container (max-width:760px){.co-side,.co-rail{display:none!important}.co-shell{grid-template-columns:minmax(0,1fr)!important}.co-main{padding:14px 14px 40px!important}.co-g2,.co-g4{grid-template-columns:minmax(0,1fr)!important}.co-tabs{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:4px}.co-h1{font-size:20px!important}}
   </style>
 </helmet>
+<sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+<div style="height:824px;display:flex;flex-direction:column;background:#fbfbfc;font-family:Inter,system-ui,sans-serif;color:#18181b;-webkit-font-smoothing:antialiased;overflow:hidden">
+  <sc-if value="{{ mob.isRoot }}" hint-placeholder-val="{{ true }}"><div style="flex:none;position:relative;height:88px;background-image:url('uploads/spin-out-lab-04622b47.png');background-size:cover;background-position:center 18%;overflow:hidden"><div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,12,38,.22) 0%,rgba(20,12,38,.55) 100%)"></div><div style="position:absolute;left:22px;right:22px;bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#fff"><div style="display:flex;align-items:center;gap:6px"><img src="axal-logo.png" alt="Axal VC" width="15" height="15" style="display:block;width:15px;height:15px;object-fit:contain;filter:brightness(0) invert(1)"><span style="font-size:12px;font-weight:800;letter-spacing:-.012em;text-shadow:0 1px 2px rgba(0,0,0,.35)">Axal VC</span></div><div style="display:flex;align-items:center;gap:9px"><span style="font-size:10.5px;font-weight:700;color:#fff;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:99px;padding:3px 9px">Founder</span><span style="width:18px;height:18px;display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))" dangerouslySetInnerHTML="{{ mob.bell }}"></span></div></div></div></sc-if>
+  <sc-if value="{{ mob.isPushed }}" hint-placeholder-val="{{ false }}"><div style="flex:none;position:relative;height:88px;background-image:url('uploads/spin-out-lab-04622b47.png');background-size:cover;background-position:center 18%;overflow:hidden"><div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,12,38,.22) 0%,rgba(20,12,38,.55) 100%)"></div><div style="position:absolute;left:22px;right:22px;bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#fff"><div style="display:flex;align-items:center;gap:6px"><img src="axal-logo.png" alt="Axal VC" width="15" height="15" style="display:block;width:15px;height:15px;object-fit:contain;filter:brightness(0) invert(1)"><span style="font-size:12px;font-weight:800;letter-spacing:-.012em;text-shadow:0 1px 2px rgba(0,0,0,.35)">Axal VC</span></div><div style="display:flex;align-items:center;gap:9px"><span style="font-size:10.5px;font-weight:700;color:#fff;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:99px;padding:3px 9px">Founder</span><span style="width:18px;height:18px;display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))" dangerouslySetInnerHTML="{{ mob.bell }}"></span></div></div></div><div style="flex:none;padding:5px 22px 13px;background:#fff;border-bottom:1px solid #ececf1"><div style="display:flex;align-items:center;gap:5px;height:44px;margin:-5px -22px 0;padding:0 22px;font-size:13px;font-weight:700;color:#6d28d9"><span style="font-size:17px;line-height:1;margin-top:-2px">‹</span>{{ mob.back }}</div><div style="font-size:19px;font-weight:800;letter-spacing:-.024em">{{ mob.title }}</div><sc-if value="{{ mob.sub }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.45">{{ mob.sub }}</div></sc-if></div></sc-if>
+  <div style="flex:1;min-height:0;overflow:auto;padding:0 22px 18px">
+    <sc-if value="{{ mob.hasFocus }}" hint-placeholder-val="{{ true }}"><div style="padding-top:20px"><div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#6d28d9">{{ mob.focus.eyebrow }}</div><div style="font-size:29px;line-height:1.15;font-weight:900;letter-spacing:-.032em;margin-top:13px;text-wrap:balance">{{ mob.focus.h }}</div><div style="font-size:14.5px;color:#4a4553;line-height:1.6;margin-top:12px">{{ mob.focus.why }}</div><sc-if value="{{ mob.focus.hasMeter }}" hint-placeholder-val="{{ false }}"><div style="margin-top:20px"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:11.5px;font-weight:700;color:#615c6e">{{ mob.focus.meter.k }}</span><span style="font-size:11.5px;font-weight:800;color:#6d28d9;font-variant-numeric:tabular-nums">{{ mob.focus.meter.v }}</span></div><div style="height:7px;background:#ececf1;border-radius:999px;overflow:hidden;margin-top:8px"><div style="{{ mob.focus.meter.bar }}"></div></div></div></sc-if><a href="{{ mob.focus.href }}" data-route="{{ mob.focus.href }}" onClick="{{ nav }}" style="display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:14px;font-size:15px;font-weight:700;color:#fff;background:#6d28d9;margin-top:24px;text-decoration:none">{{ mob.focus.cta }}</a><sc-if value="{{ mob.focus.then }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:baseline;gap:8px;margin-top:26px;padding-top:18px;border-top:1px solid #ececf1"><span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#615c6e;flex:none">Then</span><span style="font-size:13px;color:#615c6e;line-height:1.5">{{ mob.focus.then }}</span></div></sc-if></div></sc-if>
+    <sc-for list="{{ mob.groups }}" as="g" hint-placeholder-count="1"><div style="padding-top:18px"><sc-if value="{{ g.label }}" hint-placeholder-val="{{ false }}"><div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#615c6e;padding-bottom:4px">{{ g.label }}</div></sc-if><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="5"><a href="{{ r.href }}" data-route="{{ r.href }}" onClick="{{ nav }}" style="display:flex;align-items:center;gap:12px;min-height:56px;box-sizing:border-box;padding:11px 0;border-bottom:1px solid #f0eff3;color:inherit;text-decoration:none"><div style="min-width:0;flex:1"><div style="font-size:14px;font-weight:700;letter-spacing:-.012em">{{ r.t }}</div><sc-if value="{{ r.d }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:#615c6e;margin-top:3px;line-height:1.4">{{ r.d }}</div></sc-if></div><sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:700;flex:none;color:#18181b;font-variant-numeric:tabular-nums;max-width:40%;text-align:right">{{ r.v }}</span></sc-if><sc-if value="{{ r.nr }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 6px;white-space:nowrap">Not recorded</span></sc-if><span style="font-size:16px;color:#c9c6d2;flex:none;line-height:1">›</span></a></sc-for></div></sc-for>
+  </div>
+  <div style="flex:none;background:rgba(255,255,255,.96);border-top:1px solid #ececf1;display:flex;padding-bottom:6px"><sc-for list="{{ mob.tabs }}" as="t" hint-placeholder-count="5"><a href="{{ t.href }}" data-route="{{ t.href }}" onClick="{{ nav }}" style="{{ t.style }};text-decoration:none"><span style="width:20px;height:20px;display:flex" dangerouslySetInnerHTML="{{ t.icon }}"></span>{{ t.t }}</a></sc-for></div>
+</div>
+</sc-if>
+<sc-if value="{{ notMobile }}" hint-placeholder-val="{{ true }}">
 <div class="co" style="background:#f8f8fa;font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#18181b;-webkit-font-smoothing:antialiased;min-height:100%">
 <div class="co-shell" style="display:grid;grid-template-columns:196px minmax(0,1fr) 286px;min-height:100%">
   <aside class="co-side" style="background:#fff;border-right:1px solid #ececf1;padding:14px 0;display:flex;flex-direction:column">
-    <sc-for list="{{ side }}" as="s" hint-placeholder-count="8"><div style="{{ s.row }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ s.icon }}"></span><span>{{ s.t }}</span></div></sc-for>
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="8"><a href="{{ s.href }}" data-route="{{ s.href }}" onClick="{{ nav }}" style="{{ s.row }};text-decoration:none"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ s.icon }}"></span><span>{{ s.t }}</span></a></sc-for>
   </aside>
   <main class="co-main" style="padding:22px 24px 30px;display:flex;flex-direction:column;gap:16px;min-width:0">
     <div style="display:flex;flex-direction:column;gap:6px">
       <span style="font-size:10px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.09em">{{ eyebrow }}</span>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><h1 class="co-h1" style="margin:0;font-size:24px;line-height:1.15;font-weight:800;letter-spacing:-.025em">{{ name }}</h1><sc-if value="{{ cta }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 13px">{{ cta }}</span></sc-if></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><h1 class="co-h1" style="margin:0;font-size:24px;line-height:1.15;font-weight:800;letter-spacing:-.025em">{{ name }}</h1><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><sc-if value="{{ hist }}" hint-placeholder-val="{{ false }}"><a href="{{ histHref }}" data-route="{{ histHref }}" onClick="{{ nav }}" style="font-size:12.5px;font-weight:600;color:#4a4553;background:#fff;border:1px solid #ececf1;border-radius:9px;padding:8px 13px;text-decoration:none">{{ hist }}</a></sc-if><sc-if value="{{ cta }}" hint-placeholder-val="{{ false }}"><a href="{{ ctaHref }}" data-route="{{ ctaHref }}" onClick="{{ openCta }}" style="font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 13px;text-decoration:none">{{ cta }}</a></sc-if></div></div>
       <div style="font-size:13px;line-height:1.5;color:#4a4553">{{ sub }}</div>
-      <div class="co-tabs co-modtabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7"><span style="{{ t.style }}">{{ t.t }}</span></sc-for></div>
+      <div class="co-tabs co-modtabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7"><a href="{{ t.href }}" data-route="{{ t.href }}" onClick="{{ nav }}" style="{{ t.style }};text-decoration:none">{{ t.t }}</a></sc-for></div>
       <div class="co-moddrop" role="button" aria-haspopup="listbox" style="display:none;align-items:center;justify-content:space-between;gap:10px;min-height:44px;margin-top:4px;padding:0 14px;background:#fff;border:1px solid #ececf1;border-radius:12px;font-size:14px;font-weight:700;color:#18181b"><span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-size:10px;font-weight:800;color:#7d7889;text-transform:uppercase;letter-spacing:.09em">Module</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ currentTab }}</span></span><span style="color:#6b6577">▾</span></div>
     </div>
     <sc-if value="{{ hasFigures }}" hint-placeholder-val="{{ true }}">
@@ -48,7 +60,7 @@
           <div class="co-tabs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ mod.filters }}" as="f" hint-placeholder-count="3"><span style="font-size:12px;font-weight:600;padding:5px 11px;border-radius:99px;border:1px solid #ececf1;white-space:nowrap">{{ f }} ▾</span></sc-for><span style="margin-left:auto;font-size:12px;color:#6b6577;white-space:nowrap">Sort: {{ mod.sort }} ▾</span></div>
         </div>
         <div class="co-th" style="{{ mod.gridHead }}"><sc-for list="{{ mod.cols }}" as="c" hint-placeholder-count="5"><span>{{ c }}</span></sc-for></div>
-        <sc-for list="{{ mod.rows }}" as="r" hint-placeholder-count="5"><div class="co-tr" style="{{ mod.gridRow }}"><sc-for list="{{ r.c }}" as="x" hint-placeholder-count="5"><span style="{{ x.s }}">{{ x.t }}</span></sc-for></div></sc-for>
+        <sc-for list="{{ mod.rows }}" as="r" hint-placeholder-count="5"><a class="co-tr" href="{{ mod.rowHref }}" data-route="{{ mod.rowHref }}" onClick="{{ nav }}" style="{{ mod.gridRow }};color:inherit;text-decoration:none"><sc-for list="{{ r.c }}" as="x" hint-placeholder-count="5"><span style="{{ x.s }}">{{ x.t }}</span></sc-for></a></sc-for>
         <div style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;color:#6b6577">1–25 of [N]</span><div style="display:flex;gap:4px"><sc-for list="{{ pages }}" as="g" hint-placeholder-count="5"><span style="{{ g.style }}">{{ g.t }}</span></sc-for></div></div>
       </div>
       <sc-if value="{{ mod.hasPro }}" hint-placeholder-val="{{ false }}">
@@ -58,10 +70,11 @@
         </div>
       </sc-if>
     </sc-if>
+
     <div class="co-g2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start">
       <sc-for list="{{ cards }}" as="c" hint-placeholder-count="6">
         <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><a href="#" style="font-weight:800;font-size:14.5px;letter-spacing:-.01em;color:#18181b">{{ c.name }} ›</a><span style="font-size:11px;color:#a1a1aa;white-space:nowrap">{{ c.range }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><a href="{{ c.href }}" data-route="{{ c.href }}" onClick="{{ nav }}" style="font-weight:800;font-size:14.5px;letter-spacing:-.01em;color:#18181b">{{ c.name }} ›</a><span style="font-size:11px;color:#a1a1aa;white-space:nowrap">{{ c.range }}</span></div>
           <div style="min-width:0" dangerouslySetInnerHTML="{{ c.html }}"></div>
           <span style="font-size:12px;line-height:1.5;color:#4a4553">{{ c.cap }}</span>
           <sc-if value="{{ c.next }}" hint-placeholder-val="{{ true }}"><span style="font-size:11.5px;color:#6b6577">Next: {{ c.next }}</span></sc-if>
@@ -73,14 +86,164 @@
   <aside class="co-rail" style="background:#fff;border-left:1px solid #ececf1;padding:18px 18px 26px;min-width:0"><dc-import name="AIRail" page="{{ railPage }}" hint-size="100%,760px"></dc-import></aside>
 </div>
 </div>
+</sc-if>
+
+<sc-if value="{{ lbOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeLb }}" style="position:fixed;inset:0;z-index:80;background:rgba(24,24,27,.42);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px;font-family:Inter,system-ui,sans-serif">
+    <div role="dialog" aria-modal="true" aria-label="Record a session" onClick="{{ stopLb }}" style="width:100%;max-width:560px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 24px 64px rgba(24,24,27,.24);overflow:hidden">
+      <div style="padding:18px 20px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div><div style="font-size:10px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.09em">Validate · Customer research</div><div style="font-size:18px;font-weight:800;letter-spacing:-.02em;margin-top:4px">Record a session</div><div style="font-size:12.5px;color:#6b6577;margin-top:3px">It lands in Interviews when you stop.</div></div>
+        <button onClick="{{ closeLb }}" aria-label="Close" style="flex:none;width:32px;height:32px;border-radius:9px;border:1px solid #ececf1;background:#fff;font-size:16px;line-height:1;color:#6b6577;cursor:pointer">×</button>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:16px;overflow:auto">
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:10px;font-weight:800;color:#7d7889;text-transform:uppercase;letter-spacing:.09em">Who</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="border:1px solid #ececf1;border-radius:9px;padding:9px 12px;font-size:13px;color:#a1a1aa">[Name]</div><div style="border:1px solid #ececf1;border-radius:9px;padding:9px 12px;font-size:13px;color:#a1a1aa">[Company]</div></div><span style="font-size:12px;font-weight:600;color:#6d28d9">or pick from Recruiting pipeline ▾</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:10px;font-weight:800;color:#7d7889;text-transform:uppercase;letter-spacing:.09em">How</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px"><sc-for list="{{ lbModes }}" as="m" hint-placeholder-count="4"><span onClick="{{ m.go }}" style="{{ m.style }}">{{ m.t }}</span></sc-for></div><span style="font-size:12px;line-height:1.5;color:#6b6577">{{ lbModeNote }}</span><sc-if value="{{ lbHasCh }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ lbCh }}" as="c" hint-placeholder-count="5"><span onClick="{{ c.go }}" style="{{ c.style }}">{{ c.t }} <span style="font-weight:500;color:{{ c.stColor }}">· {{ c.st }}</span></span></sc-for></div></sc-if><sc-if value="{{ lbIsVideo }}" hint-placeholder-val="{{ false }}"><div style="border:1px solid #ececf1;border-radius:9px;padding:9px 12px;font-size:13px;color:#a1a1aa">[Meeting link]</div></sc-if></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:10px;font-weight:800;color:#7d7889;text-transform:uppercase;letter-spacing:.09em">Talking points</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ lbPoints }}" as="p" hint-placeholder-count="3"><span onClick="{{ p.go }}" style="{{ p.style }}">{{ p.t }}</span></sc-for></div><span style="font-size:12px;color:#6b6577">The hypotheses you pick appear in the Talking points drawer while you record.</span></div>
+        <sc-if value="{{ lbAudio }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:10px;font-weight:800;color:#7d7889;text-transform:uppercase;letter-spacing:.09em">Transcript</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px"><span style="color:#4a4553">Live captions</span><div style="display:flex;gap:4px"><sc-for list="{{ lbLive }}" as="o" hint-placeholder-count="3"><span onClick="{{ o.go }}" style="{{ o.style }}">{{ o.t }}</span></sc-for></div></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px"><span style="color:#4a4553">Final transcript</span><span style="font-weight:600">Whisper Large v3 Turbo <span style="font-weight:400;color:#6b6577">· $0.0005 / min ▾</span></span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px"><span style="color:#4a4553">Language</span><span style="font-weight:600">Detect ▾</span></div>
+            <div style="background:#f4f0fe;border-radius:9px;padding:8px 12px;font-size:12.5px;color:#6d28d9">{{ lbEstimate }}</div>
+          </div>
+        </sc-if>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:10px;font-weight:800;color:#7d7889;text-transform:uppercase;letter-spacing:.09em">Consent</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><sc-for list="{{ lbConsents }}" as="c" hint-placeholder-count="4"><span onClick="{{ c.go }}" style="{{ c.style }}">{{ c.t }}</span></sc-for></div><span style="font-size:12px;line-height:1.5;color:{{ lbConsentColor }}">{{ lbConsentNote }}</span></div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:11.5px;color:#6b6577">Runs on Cloudflare Workers AI</span><div style="display:flex;gap:8px"><button onClick="{{ closeLb }}" style="font-size:13px;font-weight:700;padding:9px 14px;border-radius:9px;border:1px solid #ececf1;background:#fff;cursor:pointer">Cancel</button><button onClick="{{ startRec }}" style="{{ startStyle }}">{{ startLabel }}</button></div></div>
+    </div>
+  </div>
+</sc-if>
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeSheet }}" style="position:fixed;inset:0;z-index:80;background:rgba(24,24,27,.42);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px;font-family:Inter,system-ui,sans-serif">
+    <div role="dialog" aria-modal="true" onClick="{{ stopLb }}" style="width:100%;max-width:560px;height:min(820px,calc(100vh - 40px));background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 24px 64px rgba(24,24,27,.24);overflow:hidden;position:relative">
+      <dc-import name="Cycle Action" action="{{ sheetKind }}" view="{{ sheetView }}" page="{{ false }}" on-close="{{ closeSheet }}" style="position:absolute;inset:0" hint-size="100%,100%"></dc-import>
+    </div>
+  </div>
+</sc-if>
+<sc-if value="{{ recOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;inset:0;z-index:90;background:#fff">
+    <dc-import name="Recording View" state="speech" captions="{{ recCaptions }}" on-close="{{ closeRec }}" call-label="{{ recCall }}" video="{{ recVideo }}" style="position:absolute;inset:0" hint-size="100%,100%"></dc-import>
+  </div>
+</sc-if>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;cycle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Validate&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;Validate&quot;,&quot;Build&quot;,&quot;Raise&quot;,&quot;Grow&quot;]},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;new&quot;,&quot;states&quot;]},&quot;module&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:-1,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:-1,&quot;max&quot;:6}}">
 class Component extends DCLogic {
   componentDidMount() {
-    if (typeof PRO_CYCLES === 'undefined') { this._t = setInterval(() => { if (typeof PRO_CYCLES !== 'undefined') { clearInterval(this._t); this.forceUpdate(); } }, 50); }
+    
   }
   componentWillUnmount() { if (this._t) clearInterval(this._t); }
-  renderVals() {
+  renderVals() { return this.extendVals(this.actionVals()); }
+  extendVals(o) {
+    const cyc = this.props.cycle ?? 'Validate';
+    o.hist = '';
+    o.histHref = '/validate/customer-research';
+    return this.mobVals(o, { mobile: this.mobData() }, cyc, '', null);
+  }
+  mobData() { return {"focus":{"Validate":{"eyebrow":"Validate · Next","h":"Review the interview with [Name] from [12 Oct].","why":"It is transcribed but not yet placed. Its quotes would move [2] pain themes and one hypothesis.","meter":{"k":"Interviews this month","v":"[14] of [20]","pct":70},"cta":"Review the interview","then":"Group two more interviews into a theme."},"Build":{"eyebrow":"Build · Next","h":"Ship the last [2] must-haves before [30 Nov].","why":"The MVP date is [n] days away and [2] of [9] must-haves are still open.","meter":{"k":"Must-haves done","v":"[7] of [9]","pct":78},"cta":"Open Prototype / MVP","then":"Reconnect Stripe, failing since [9 Oct]."},"Raise":{"eyebrow":"Raise · Next","h":"Follow up with [3] investors due this week.","why":"[1] is overdue by [2] days. Each of them has opened the deck.","meter":{"k":"Committed","v":"[$900k] of [$1.5M]","pct":60},"cta":"Open Capital relationships","then":"Add the use of funds to the data room."},"Grow":{"eyebrow":"Grow · Next","h":"Tell the [n] customers who asked that [feature] shipped.","why":"Closing the loop on shipped feedback is the open item in Product improvement.","meter":null,"cta":"Share an update","then":"Run the [channel] experiment."},"new":{"eyebrow":"Validate · Next","h":"Record your first conversation.","why":"Validate starts with one interview. Everything else in the venture builds on what it finds.","meter":null,"cta":"Record a session","then":"Write the claim you most need to be true."},"studio":{"eyebrow":"Studio · Now","h":"Close the sprint ending [21 Oct].","why":"[3] experiments are running. Closing it records each result and proposes a decision.","meter":{"k":"Sprint","v":"[12] of [21] days","pct":57},"cta":"Open the sprint","then":"The next cycle starts with [a new opportunity from Grow]."},"studio-new":{"eyebrow":"Studio · Now","h":"Write the claim you most need to be true.","why":"Only Validate is active. The first hypothesis starts the loop.","meter":null,"cta":"Write a hypothesis","then":"Record your first conversation."},"newBuild":{"eyebrow":"Build · Next","h":"Add the first feature.","why":"Nothing in Build is recorded yet. Each chart fills as you add to its module.","meter":null,"cta":"Add feature","then":"Write the claim you most need to be true."},"newRaise":{"eyebrow":"Raise · Next","h":"Plan the round.","why":"Nothing in Raise is recorded yet.","meter":null,"cta":"Plan the round","then":"Write the claim you most need to be true."},"newGrow":{"eyebrow":"Grow · Next","h":"Enter the first KPI.","why":"Nothing in Grow is recorded yet.","meter":null,"cta":"Enter a KPI","then":"Write the claim you most need to be true."}},"index":{"Validate":[["Interviews","Every interview, newest first","[14]"],["Problem discovery","[9] pain themes · [2] new",""],["Customer research","Recruiting · [n] booked",""],["Ideal customer profile","[3] segments",""],["Market intelligence","Total, serviceable, obtainable","[$610M]"],["Demand and urgency signals","Waitlist against the bar of [40]",""],["Experiments and evidence","Hypotheses supported","[3] of [7]"]],"Build":[["Tools","[4] connected · [1] failing","[5]"],["Solution design","[n] features linked to a pain",""],["Prototype / MVP","Must-haves done","[7] of [9]"],["Product roadmap","Shipped this month","[n]"],["Founding team","Split and vesting",""],["Company creation","Next filing [1 Mar]",""],["Operating systems","Systems connected","[4] of [5]"]],"Raise":[["Calls","Calls for Capital","[1] open"],["Fundraising readiness","Readiness items","[5] of [7]"],["Investor narrative","[n] saved versions",""],["Pitch deck","Views this week","[n]"],["Data room","Checklist coverage",""],["Cap table","Before and after the round",""],["Use of funds","Runway","[24] mo"],["Capital relationships","In active conversation","[n]"]],"Grow":[["Updates","Updates shared","[n]"],["Product improvement","Feedback themes by status",""],["Distribution","Cost per customer by channel",""],["Revenue and traction","MRR","[$38,400]"],["Team expansion","Headcount against plan",""],["Partner network","Partners by stage",""],["Market expansion","Readiness by market",""],["Durable company-building","Compliance, next [90] days",""]]}}; }
+  mobVals(o, P, cyc, pg, r) {
+    this.linkVals(o, cyc, pg);
+    r = o.rec && o.isRec ? o.rec : r;
+    const isMobile = !!this.props.mobile;
+    o.isMobile = isMobile; o.notMobile = !isMobile;
+    const blank = { isRoot: false, isPushed: false, hasFocus: false, focus: { hasMeter: false, meter: { k: '', v: '', bar: '' } }, groups: [], tabs: [], bell: null, back: '', title: '', sub: '' };
+    if (!isMobile || !P || !P.mobile) { o.mob = blank; return o; }
+    const M = P.mobile;
+    const svg = (p) => ({ __html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">' + p + '</svg>' });
+    const icons = {}; (o.side || []).forEach(s => { icons[s.t] = s.icon; });
+    icons.More = svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>');
+    const isStudio = pg === 'studio' || pg === 'studio-new';
+    const act = isStudio ? 'Studio' : (cyc === 'Validate' ? 'More' : cyc);
+    const tabs = ['Studio', 'Build', 'Raise', 'Grow', 'More'].map(t => ({ t, href: '/' + t.toLowerCase(), icon: icons[t] || icons.More, style: 'flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 0;font-size:9.5px;font-weight:700;color:' + (t === act ? '#6d28d9' : '#9a95a6') }));
+    const R = this._R || {}, slug = this._slug || ((s) => s), base0 = '/' + slug(cyc);
+    const row = (t, d, v, href) => ({ t: t || '', d: d || '', v: v === 'Not recorded' ? '' : (v || ''), nr: v === 'Not recorded', href: href || base0 });
+    const foc = (f) => f ? Object.assign({}, f, { hasMeter: !!f.meter, meter: f.meter ? Object.assign({}, f.meter, { bar: 'height:100%;width:' + f.meter.pct + '%;background:#6d28d9;border-radius:999px' }) : { k: '', v: '', bar: '' } }) : blank.focus;
+    const variant = this.props.variant ?? 'full';
+    const mob = Object.assign({}, blank, { tabs, bell: svg('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>') });
+    if (!r || isStudio) {
+      mob.isRoot = true; mob.hasFocus = true;
+      mob.focus = foc(isStudio ? M.focus[pg] : (this.props.variant === 'new' ? (M.focus['new' + cyc] || M.focus.new) : M.focus[cyc])); mob.focus.href = R[mob.focus.cta] || base0;
+    }
+    if (!r) { mob.groups = [{ label: 'Everything else in ' + cyc, rows: (M.index[cyc] || []).map((x, i) => row(x[0], x[1], this.props.variant === 'new' ? 'Not recorded' : x[2], base0 + '/' + slug(x[0]))) }]; o.mob = mob; return o; }
+    if (!isStudio) {
+      const parts = (r.eyebrow || '').split('›').map(s => s.trim());
+      mob.isPushed = true; mob.title = r.name; mob.sub = r.sub;
+      mob.back = parts.length > 1 ? parts[parts.length - 2].split('·').pop().trim() : cyc;
+    }
+    const groups = [];
+    (r.loops || []).forEach(l => groups.push({ label: l.title, rows: l.nodes.map(n => row(n.label, n.sub)).concat((l.items || []).map(i => row(i.t, i.sub, i.pill))) }));
+    if (r.hasChart) groups.push({ label: r.chart.title, rows: [row(r.chart.range, r.chart.note)] });
+    (r.board || []).forEach(c => groups.push({ label: c.t + ' · ' + c.n, rows: c.cards.map(k => row(k.t, k.meta, k.chips[0] ? k.chips[0].t : '')) }));
+    if (r.hasTable) groups.push({ label: r.table.title, rows: r.table.rows.map(rw => { const c = rw.cells, p = c.find(x => x.isPill); return row(c[0].t, c[0].sub || (c[1] ? c[1].t : ''), p ? p.t : '', r.table.rowHref); }) });
+    (r.secs || []).forEach(s => { const rows = [].concat(s.items.map(i => row(i.t, i.sub, i.pill, i.href)), s.kv.map(k => row(k.k, '', k.v)), s.fields.map(f => row(f.k, f.v)), s.turns.map(t => row(t.who + ' · ' + t.ts, t.pre + t.hl + t.post, t.label)), s.quotes.map(q => row(q.q, q.label, q.status || 'Review')));
+      if (!rows.length && s.d) rows.push(row(s.d)); groups.push({ label: s.title, rows }); });
+    mob.groups = groups; o.mob = mob; return o;
+  }
+  linkVals(o, cyc, pg) {
+    const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const base = '/' + slug(cyc);
+    const HISTR = { Validate: '/validate/interviews', Build: '/build/tools', Raise: '/raise/calls', Grow: '/grow/updates' };
+    const HISTL = { Validate: 'Interviews', Build: 'Tools', Raise: 'Calls', Grow: 'Updates' };
+    const R = { 'Record a session': '/validate/record', 'Connect a tool': '/build/connect', 'Call for Capital': '/raise/call', 'Share an update': '/grow/update', 'Record a decision': '/validate/decisions/new', 'New sprint': '/validate/sprints/new', 'Close the sprint': '/validate/sprints/[id]/close', 'Add evidence': '/validate/evidence/new', 'Export the decision memo': '/validate/decisions/[id]/memo', 'Add an experiment': '/validate/sprints/[id]/experiments/new',
+      'Start the next cycle': '/validate/hypotheses/new', 'Open decision': '/validate/decisions/[id]', 'Read': '/validate/decisions/[id]', 'Reconnect': '/build/tools/[tool]/reconnect', 'Connect': '/build/connect', 'Open Build': '/build', 'Open Raise': '/raise', 'Write a hypothesis': '/validate/hypotheses/new', 'Add a contact': '/network/relationships/new', 'Add an investor': '/raise/capital-relationships/new', 'Write the value proposition': '/build/solution-design', 'Plan the round': '/raise/fundraising-readiness', 'Enter the first KPI': '/grow/revenue-and-traction',
+      'Review the interview': '/validate/interviews/[id]', 'Open Prototype / MVP': '/build/prototype-mvp', 'Open Capital relationships': '/raise/capital-relationships', 'Open the sprint': '/validate/sprints/[id]',
+      'Hypotheses': '/validate/hypotheses', 'Sprints': '/validate/sprints', 'Evidence log': '/validate/evidence', 'Decisions': '/validate/decisions', 'Turn into a hypothesis': '/validate/hypotheses/new', 'Add from a template': '/validate/sprints/[id]/experiments/new', 'Pain themes': '/validate/problem-discovery', 'Recruiting pipeline': '/validate/customer-research/recruiting', 'Interview script': '/validate/customer-research/script', 'Edit details': '/validate/interviews/[id]/edit', 'Delete': '/validate/interviews/[id]/delete', 'Create sprint': '/validate/sprints/new', 'Record': '/validate/decisions/new', 'Create hypothesis': '/validate/hypotheses/new', 'Write the claim you most need to be true': '/validate/hypotheses/new', 'Add evidence': '/validate/evidence/new' };
+    const SUBFIX = { 'validate/evidence-log': 'validate/evidence' };
+    const fromSub = (sub) => { const p = String(sub || '').replace(/^→\s*/, '').split('›').map(x => slug(x.trim())).filter(Boolean); const j = p.join('/'); return p.length ? '/' + (SUBFIX[j] || j) : base; };
+    const linkItems = (list) => (list || []).map(i => Object.assign({}, i, { href: R[i.act] || (i.act === 'Open' ? fromSub(i.sub) : base) }));
+    o.nav = (e) => { if (e && e.preventDefault) e.preventDefault(); };
+    const S = this.state || {};
+    const pick = (on) => 'text-align:center;font-size:12px;font-weight:700;padding:8px 6px;border-radius:9px;cursor:pointer;border:1px solid ' + (on ? '#7c3aed' : '#ececf1') + ';background:' + (on ? '#f4f0fe' : '#fff') + ';color:' + (on ? '#6d28d9' : '#4a4553');
+    const chip = (on) => 'font-size:12px;font-weight:600;padding:5px 10px;border-radius:99px;cursor:pointer;border:1px solid ' + (on ? '#c4b5fd' : '#ececf1') + ';background:' + (on ? '#f4f0fe' : '#fff') + ';color:' + (on ? '#6d28d9' : '#4a4553');
+    const mode = S.lbMode || 0, audio = mode !== 3, live = S.lbLive == null ? 1 : S.lbLive, consent = S.lbConsent == null ? -1 : S.lbConsent, pts = S.lbPts || [true, true, false];
+    o.lbOpen = !!S.lbOpen; o.recOpen = !!S.recOpen; o.recCaptions = live !== 0;
+    const AK = { 'Connect a tool': 'connect', 'Call for Capital': 'call', 'Share an update': 'update' };
+    o.openCta = (e) => { if (e && e.preventDefault) e.preventDefault(); if (o.cta === 'Record a session') this.setState({ lbOpen: true }); else if (AK[o.cta]) this.setState({ sheetOpen: AK[o.cta] }); };
+    o.sheetOpen = !!S.sheetOpen; o.sheetKind = S.sheetOpen || 'connect'; o.sheetView = { connect: 'list', call: 'round', update: 'period' }[o.sheetKind] || 'list'; o.closeSheet = () => this.setState({ sheetOpen: null });
+    o.closeLb = () => this.setState({ lbOpen: false });
+    o.closeRec = () => this.setState({ recOpen: false });
+    o.stopLb = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+    o.lbModes = ['In person', 'Video call', 'Audio call', 'Text chat'].map((t, i) => ({ t, go: () => this.setState({ lbMode: i, lbCh: 0 }), style: pick(i === mode) }));
+    o.lbModeNote = ['Put the phone on the table between you. It records this device\u2019s microphone.', 'Paste the meeting link. It records the call\u2019s audio.', 'Put the call on speaker. It records this device\u2019s microphone.', 'No audio. Import the conversation from the app it happened in, or paste it.'][mode];
+    const CH = [[], [['Zoom', 1], ['Google Meet', 1], ['Microsoft Teams', 0], ['WhatsApp video', 1], ['Telegram video', 0]], [['This phone, on speaker', 1], ['WhatsApp call', 1], ['Telegram call', 0], ['Signal call', 0]], [['WhatsApp', 1], ['Telegram', 0], ['Signal', 0], ['SMS', 1], ['LinkedIn', 1], ['Slack', 0], ['Paste a transcript', 1]]][mode];
+    const ch = Math.min(S.lbCh || 0, Math.max(0, CH.length - 1));
+    o.lbHasCh = CH.length > 0;
+    o.lbCh = CH.map((x, i) => ({ t: x[0], st: x[0] === 'This phone, on speaker' || x[0] === 'Paste a transcript' ? 'Ready' : x[1] ? 'Connected' : 'Connect', stColor: x[1] ? '#047857' : '#92400e', go: () => this.setState({ lbCh: i }), style: chip(i === ch) }));
+    o.recCall = mode === 1 ? 'Video call · ' + (CH[ch] || [''])[0] : mode === 2 ? 'Audio call · ' + (CH[ch] || [''])[0] : '';
+    o.recVideo = mode === 1;
+    o.lbIsVideo = mode === 1; o.lbAudio = audio;
+    o.lbPoints = ['[Hypothesis]', '[Hypothesis]', '[Hypothesis]'].map((t, i) => ({ t, go: () => this.setState({ lbPts: pts.map((v, j) => j === i ? !v : v) }), style: chip(pts[i]) }));
+    o.lbLive = [['Off', ''], ['Nova-3 live', ' $0.0092'], ['Flux', ' $0.0077']].map((x, i) => ({ t: x[0] + x[1], go: () => this.setState({ lbLive: i }), style: chip(i === live).replace('padding:5px 10px', 'padding:4px 9px') }));
+    o.lbEstimate = live === 0 ? '[30 min] \u2248 [$0.02] · the transcript appears when you stop' : '[30 min] \u2248 [$0.29] · live captions while you talk';
+    o.lbConsents = ['Said yes out loud', 'In writing', 'In the app', 'Agreed beforehand'].map((t, i) => ({ t, go: () => this.setState({ lbConsent: i }), style: pick(i === consent) }));
+    const ok = consent >= 0 || !audio;
+    o.lbConsentNote = audio ? (consent >= 0 ? 'Consent recorded. Audio starts when you press Start.' : 'Audio starts only once consent is recorded.') : 'Optional for a text chat: needed only to quote it.';
+    o.lbConsentColor = audio && consent < 0 ? '#92400e' : '#6b6577';
+    o.startLabel = !audio ? 'Import the chat' : mode === 1 ? 'Start the call' : 'Start recording';
+    o.startRec = () => { if (!ok) return; this.setState({ lbOpen: false, recOpen: audio }); };
+    o.startStyle = 'font-size:13px;font-weight:700;padding:9px 14px;border-radius:9px;border:none;color:#fff;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';background:' + (ok ? '#7c3aed' : '#c4b5fd');
+    o.ctaHref = R[o.cta] || base;
+    o.ctaHere = base;
+    o.tabs = (o.tabs || []).map(t => Object.assign({}, t, { href: t.t === 'Overview' ? base : t.t === HISTL[cyc] ? HISTR[cyc] : base + '/' + slug(t.t) }));
+    const HIST2 = { Validate: ['Interviews', '/validate/customer-research'], Build: ['Tools', '/build/operating-systems'], Raise: ['Calls', '/raise/capital-relationships'], Grow: ['Updates', '/grow/durable-company-building'] }[cyc];
+    if (HIST2 && o.tabs.length > 1 && !o.tabs.some(t => t.t === HIST2[0])) {
+      const off = (o.tabs.find((t, i) => i > 0 && !/7c3aed|6d28d9/.test(t.style || '')) || o.tabs[1]).style;
+      o.tabs.splice(1, 0, { t: HIST2[0], style: off, href: HIST2[1] });
+    }
+    o.side = (o.side || []).map(s => Object.assign({}, s, { href: '/' + slug(s.t) }));
+    o.cards = (o.cards || []).map(c => Object.assign({}, c, { href: base + '/' + slug(c.name || '') }));
+    if (o.conn && o.conn.bridge) o.conn = Object.assign({}, o.conn, { bridge: Object.assign({}, o.conn.bridge, { href: { Build: '/raise/fundraising-readiness', Raise: '/build', Grow: '/validate/hypotheses/new' }[cyc] || base, items: linkItems(o.conn.bridge.items) }), sent: linkItems(o.conn.sent) });
+    const here = (pg && { interviews: '/validate/interviews', interview: '/validate/interviews/[id]', tools: '/build/tools', calls: '/raise/calls', updates: '/grow/updates', hypothesis: '/validate/hypotheses/[id]', sprints: '/validate/sprints', sprint: '/validate/sprints/[id]', evidence: '/validate/evidence', decisions: '/validate/decisions', thisweek: '/build/operating-systems/this-week', fb2hyp: '/validate/hypotheses/new', studio: '/studio', 'studio-new': '/studio' }[pg]) || base;
+    const ACTR = { Accept: here + '/placements/[id]/accept', 'Edit first': here + '/edit', Edit: here + '/placements/[id]/edit', Discard: here + '/placements/[id]/discard', Cancel: here };
+    const linkActs = (list) => (list || []).map(a => Object.assign({}, a, { href: R[a.t] || ACTR[a.t] || here }));
+    if (o.conn) o.conn = Object.assign({}, o.conn, { emptyHref: R[o.conn.emptyAct] || base });
+    if (o.isRec && o.rec) {
+      const rr = o.rec, ROW = { interviews: '/validate/interviews/[id]', evidence: '/validate/evidence/[id]', tools: '/build/tools/[tool]', calls: '/raise/calls/[id]', updates: '/grow/updates/[id]', sprint: '/validate/sprints/[id]/experiments/[id]' };
+      o.rec = Object.assign({}, rr, { more: (rr.more || []).map(m => Object.assign({}, m, { href: R[m.t] || base + '/' + slug(m.t) })), table: Object.assign({}, rr.table, { actionHref: R[rr.table.action] || base, rowHref: ROW[pg] || base }),
+        secs: (rr.secs || []).map(s => Object.assign({}, s, { items: linkItems(s.items), acts: linkActs(s.acts), quotes: (s.quotes || []).map(q => Object.assign({}, q, { acts: linkActs(q.acts) })) })), states: (rr.states || []).map(x => Object.assign({}, x, { href: x.cta === 'Try again' ? here : (R[x.cta] || here) })), loops: (rr.loops || []).map(l => Object.assign({}, l, { items: linkItems(l.items) })) });
+    }
+    this._R = R; this._slug = slug; this._HISTR = HISTR;
+  }
+  actionVals() {
     const o = this.baseVals();
     const av = this.props.actionView;
     const kinds = { Validate: ['record', 'Record a session'], Build: ['connect', 'Connect a tool'], Raise: ['call', 'Call for Capital'], Grow: ['update', 'Share an update'] };
@@ -173,9 +336,9 @@ class Component extends DCLogic {
       unread: `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span style="font-size:12.5px;color:${BAD}">Stripe could not be read. Last good sync [9 Oct].</span><span style="font-size:12px;font-weight:700;color:${BAD}">Try again</span></div>`,
     };
     let cards = d.cards, figures = d.figs, hasFigures = true;
-    if (variant === 'new' && cyc === 'Validate') {
-      const E = [['No interviews yet. Pain themes appear as interviews are logged.', 'Record your first session'], null, ['No segment yet. Write who your customer is.', 'Start the profile'], ['No market size yet.', 'Add the total market, with its source'], ['No waitlist connected.', 'Connect a landing page'], ['No hypothesis yet.', 'Write the claim you most need to be true']];
-      cards = d.cards.map((c, i) => Object.assign({}, c, i === 1 ? { html: H(S.thin('[2] interviews so far. The chart appears at [5].')), next: 'Log [3] more interviews.' } : { html: H(S.empty(E[i][0], E[i][1])), next: '' }));
+    if (variant === 'new') {
+      const E = ({ Build: [['No features yet. Linked and unlinked features appear here.', 'Add feature'], ['No must-haves yet. The burn-up toward the ship date appears here.', 'Add must-have'], ['No roadmap items yet. Now, Next and Later appear here.', 'Add item'], ['No founders yet. The equity split and vesting appear here.', 'Add founder'], ['No filings yet. Formation steps and their dates appear here.', 'Add filing'], ['No systems connected yet. Each system and its state appear here.', 'Connect a system']], Raise: [['No round planned yet. Readiness by evidence appears here.', 'Plan the round'], ['No narrative saved yet. Each version appears here.', 'New version'], ['No deck yet. Views per week appear here.', 'Build your deck'], ['No files yet. Coverage of the diligence checklist appears here.', 'Upload'], ['No holders yet. Ownership before and after the round appears here.', 'Add holder'], ['No split yet. The planned split and runway appear here.', 'Edit split'], ['No investors yet. The pipeline by stage appears here.', 'Add investor']], Grow: [['No feedback yet. Themes by volume appear here.', 'Log feedback'], ['No channels yet. Cost per customer by channel appears here.', 'Add channel'], ['No KPIs yet. MRR and retention appear here.', 'Enter a KPI'], ['No open roles yet. Headcount against the plan appears here.', 'Open a role'], ['No partners yet. Partners by stage appear here.', 'Add partner'], ['No markets yet. Readiness by market appears here.', 'Add market'], ['No obligations yet. The compliance calendar appears here.', 'Add obligation']] })[cyc] || [['No interviews yet. Pain themes appear as interviews are logged.', 'Record your first session'], null, ['No segment yet. Write who your customer is.', 'Start the profile'], ['No market size yet.', 'Add the total market, with its source'], ['No waitlist connected.', 'Connect a landing page'], ['No hypothesis yet.', 'Write the claim you most need to be true']];
+      cards = d.cards.map((c, i) => Object.assign({}, c, cyc === 'Validate' && i === 1 ? { html: H(S.thin('[2] interviews so far. The chart appears at [5].')), next: 'Log [3] more interviews.' } : { html: H(S.empty(E[i][0], E[i][1])), next: '' }));
       figures = d.figs.map(f => Object.assign({}, f, { v: f.k === 'Interviews this month' ? '[2]' : 'Not recorded', d: f.k === 'Interviews this month' ? 'first month' : 'nothing recorded yet', dc: MUT, spark: { __html: '' } }));
     }
     if (variant === 'states') {
@@ -190,11 +353,10 @@ class Component extends DCLogic {
     const isModule = mi >= 0 && mi < d.cards.length;
     const tabs = [{ t: 'Overview', style: tab(!isModule) }].concat(d.cards.map((c, i) => ({ t: c.name, style: tab(isModule && i === mi) })));
     const pages = ['‹', '1', '2', '3', '›'].map((t, i) => ({ t, style: 'min-width:26px;text-align:center;font-size:12px;font-weight:600;padding:4px 8px;border-radius:7px;border:1px solid ' + (i === 1 ? '#e6dcff' : '#ececf1') + ';background:' + (i === 1 ? '#f6f2ff' : '#fff') + ';color:' + (i === 1 ? '#6d28d9' : '#6b6577') }));
-    let mod = { chartTitle: '', range: '', html: { __html: '' }, cap: '', listTitle: '', add: '', search: '', filters: [], sort: '', cols: [], rows: [], gridHead: '', gridRow: '', hasPro: false, pro: [] };
+    let mod = { rowHref: (cyc === 'Validate' && mi === 1) ? '/validate/interviews/[id]' : '/' + cyc.toLowerCase() + '/' + String(isModule ? d.cards[mi].name : '').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '/[id]', chartTitle: '', range: '', html: { __html: '' }, cap: '', listTitle: '', add: '', search: '', filters: [], sort: '', cols: [], rows: [], gridHead: '', gridRow: '', hasPro: false, pro: [] };
     if (isModule) {
       const card = d.cards[mi];
-      const PC = typeof PRO_CYCLES !== 'undefined' ? PRO_CYCLES[cyc] : null;
-      const pm = PC ? PC.modules[mi] : null;
+      const pm = null;
       const pill = (t) => { const m = { ok: ['#047857', '#ecfdf5', '#a7f3d0'], vio: ['#6d28d9', '#f6f2ff', '#e6dcff'], amb: ['#92400e', '#fffbeb', '#fcd34d'], bad: ['#b91c1c', '#fef2f2', '#fecaca'], grey: ['#6b6577', '#f4f3f7', '#ececf1'] }[t]; return 'font-size:10.5px;font-weight:700;border-radius:99px;padding:2px 8px;white-space:nowrap;color:' + m[0] + ';background:' + m[1] + ';border:1px solid ' + m[2]; };
       const nr = 'font-size:10.5px;font-weight:600;color:#6b6577;background:#f4f3f7;border:1px dashed #d4d1dc;border-radius:99px;padding:2px 8px;white-space:nowrap';
       const c = (t, s) => ({ t, s: s === 'b' ? 'font-weight:600' : s === 'm' ? 'color:#6b6577' : s === 'nr' ? nr : s ? pill(s) : 'color:#4a4553' });

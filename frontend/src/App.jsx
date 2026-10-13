@@ -79,6 +79,8 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 // D660 (#1473) — one interview session: record, live transcript, review.
 const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
+// D684 (#1578) — customer chats from business Telegram and WhatsApp, waiting for an interview.
+const ChannelsInboxPage = lazy(() => import('./pages/founder/ChannelsInbox'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const FundDossier = lazy(() => import('./pages/research/FundDossier'));
 const FundCatalogProfile = lazy(() => import('./pages/research/FundCatalogProfile'));
@@ -2514,6 +2516,7 @@ function AppInner() {
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/session/:id" element={guard(labRoles(['admin', 'founder']), <InterviewSessionPage />)} />
+      <Route path="/validate/inbox" element={guard(labRoles(['admin', 'founder']), <ChannelsInboxPage />)} />
 
       {/* ── Research · one path, four zone lists ─────────────────────────────
           Shared like /network already is: the route role-branches its element

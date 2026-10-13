@@ -66,6 +66,12 @@ routes; `cycles.js` binds it to the app's client as `cyclesWrite`.
 
 D653: `roundCalls.js` calls the mounted `/api/round-calls` domain for availability, real planner context, draft/audience, counsel review, send, responses and management. It uses the shared authenticated request client and has no public-token transport.
 
+D684 (#1578): `channels.js` calls `/api/channels` (a member's business
+Telegram and WhatsApp: availability, link, connect, disconnect, test, and the
+conversation threads with assign, ignore and reply) and the interview meeting
+routes under `/api/founder/validate/interviews/:id/meetings` (Zoom and Google
+Meet). Every path is written out in full so the drift check reads each one.
+
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,
 `{ feature, model, name, provider }`, with no session.

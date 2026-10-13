@@ -42,6 +42,7 @@ import {
 } from '../src/services/channels/threads.ts';
 import { IntakeError, importTranscript, openSession, writableInterview } from '../src/services/interviewIntake.ts';
 import { registerChannelJob, runChannelJob, registerChannelSweep, runChannelSweeps } from '../src/services/channels/jobs.ts';
+import { runSessionStructureJob, structureSession, sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -85,17 +86,33 @@ function world() {
     ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
   `);
   for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
-    'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
+    'competitor_sources', 'competitor_signals', 'queue_jobs']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql']) db.exec(mig(m));
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1), ('bc-2', 'BC-UNLINKED', '777', NULL, 1, 1),
                   ('bc-3', 'BC-OFF', '555001', ${ME}, 0, 1)`);
-  const env: any = { DB, ENVIRONMENT: 'development', JWT_SECRET: 'unit-test-jwt-secret-0123456789-abcdef', KEK_PII: 'k'.repeat(48) };
-  return { env, db };
+  const aiCalls: string[] = [];
+  const env: any = {
+    DB, ENVIRONMENT: 'development', JWT_SECRET: 'unit-test-jwt-secret-0123456789-abcdef', KEK_PII: 'k'.repeat(48),
+    AI: {
+      run: async (model: string) => {
+        if (/guard/.test(model)) return { response: 'safe' };
+        aiCalls.push(model);
+        return { response: STRUCTURE_REPLY };
+      },
+    },
+  };
+  return { env, db, aiCalls };
 }
+
+/** What the Worker AI answers for a chat whose first message is the default one below. */
+const STRUCTURE_REPLY = JSON.stringify({ placements: [
+  { kind: 'pain_severity', payload: { phrase: 'Manual invoice reconciliation', severity: 'severe' }, cite: { from: 0, to: 1000 },
+    quote: 'We reconcile invoices by hand every Friday.' },
+] });
 
 const count = (db: any, sql: string, ...args: unknown[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);
 
@@ -119,6 +136,27 @@ test('migration 449 is idempotent and frees an identity on disconnect', () => {
   assert.throws(() => db.exec(`INSERT INTO integrations (uid, user_id, provider_key, external_account_id) VALUES ('dup', 5, 'whatsapp', 'PNID-1')`));
   db.exec(`UPDATE integrations SET status = 'disconnected' WHERE id = ${WA_INT}`);
   db.exec(`INSERT INTO integrations (uid, user_id, provider_key, external_account_id) VALUES ('dup', 5, 'whatsapp', 'PNID-1')`);
+});
+
+test('migration 450 widens channel_events to the delete kind the adapter writes, keeping every row', async () => {
+  // On 449 alone (what main applied first) the claim the Telegram adapter makes
+  // for a deleted business message is refused by the CHECK.
+  const { DatabaseSync } = await import('node:sqlite');
+  const raw = new DatabaseSync(':memory:');
+  raw.exec(`CREATE TABLE integrations (id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, auth_type TEXT, external_account_id TEXT, status TEXT DEFAULT 'connected')`);
+  raw.exec(`CREATE TABLE interview_sessions (id INTEGER PRIMARY KEY)`);
+  raw.exec(mig('449_interview_channels.sql'));
+  raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind, status) VALUES ('e1', 'telegram', 'h1', 'message', 'done')`);
+  assert.throws(() => raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e2', 'telegram', 'h2', 'delete')`), /CHECK/);
+  raw.exec(mig('450_channel_events_delete_kind.sql'));
+  assert.deepEqual({ ...raw.prepare(`SELECT uid, kind, status FROM channel_events WHERE uid = 'e1'`).get() }, { uid: 'e1', kind: 'message', status: 'done' });
+  raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e2', 'telegram', 'h2', 'delete')`);
+  assert.throws(() => raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e3', 'telegram', 'h3', 'nonsense')`), /CHECK/);
+  assert.throws(() => raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e4', 'telegram', 'h1', 'message')`), /UNIQUE/);
+  assert.ok(raw.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_channel_events_user'`).get(), '449\'s index is gone');
+  // And through the service, on the world every other test uses.
+  const { env } = world();
+  assert.ok(await claimEvent(env, 'telegram', 'del-1', 'delete'));
 });
 
 test('an event is claimed once; a released claim lets the retry through', async () => {
@@ -384,4 +422,71 @@ test('a channel job reaches its provider handler; a provider without one fails l
 
   const worker = readFileSync(new URL('../src/services/queueWorker.ts', import.meta.url), 'utf8');
   assert.match(worker, /case 'channel_followup':\s*case 'meeting_import':[\s\S]*?runChannelJob/);
+});
+
+// ── From the transcript to Validate, without a button ────────────────────────
+
+const queued = (db: any, type: string) =>
+  db.prepare('SELECT payload FROM queue_jobs WHERE job_type = ? ORDER BY id').all(type).map((r: any) => JSON.parse(r.payload));
+
+test('assigning a chat queues the Worker AI\'s Structure pass, and the pass proposes the pain point for review', async () => {
+  const { env, db, aiCalls } = world();
+  const conn = (await connectionForTelegram(env, 'BC-ME'))!;
+  await storeMessage(env, conn, msg({ externalMessageId: 'm1' }));
+  const [t] = await listThreads(env, ME);
+  const r = await assignThread(env, ME, t.uid, { interviewId: INTERVIEW });
+  assert.deepEqual(queued(db, 'session_structure'), [{ session_id: r.sessionId, user_id: ME, trigger: 'chat_assigned' }]);
+  assert.equal(aiCalls.length, 0, 'the request itself runs no model');
+
+  const out = await runSessionStructureJob(env, queued(db, 'session_structure')[0]);
+  assert.equal(out?.ok, true);
+  const p = db.prepare('SELECT kind, payload_json, status, session_id, target_ref, created_by FROM validate_proposals').all();
+  assert.equal(p.length, 1);
+  assert.deepEqual([p[0].kind, JSON.parse(p[0].payload_json).severity, p[0].status, p[0].session_id, p[0].target_ref, p[0].created_by],
+    ['pain_severity', 'severe', 'pending', r.sessionId, `interview:${INTERVIEW}`, ME], 'a proposal awaiting review, never accepted');
+  assert.equal(db.prepare('SELECT status FROM interview_sessions WHERE id = ?').get(r.sessionId).status, 'structured');
+  assert.ok(count(db, 'SELECT COUNT(*) n FROM interview_structure_receipts WHERE session_id = ?', r.sessionId) >= 1, 'a receipt line per model call');
+});
+
+test('no consent, no AI: a call session without consent recorded is not structured', async () => {
+  const { env, db, aiCalls } = world();
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const call = await openSession(env, scoped, 'zoom', 'video');
+  await importTranscript(env, ME, call.id, [{ speaker: 'Dana Ruiz', text: 'We reconcile invoices by hand every Friday.', startMs: 0, endMs: 1000 }], 'zoom');
+  assert.deepEqual(await structureSession(env, { sessionId: call.id, userId: ME, trigger: 'call_imported' }), { ok: false, reason: 'consent_not_recorded' });
+  assert.equal(aiCalls.length, 0);
+
+  const consented = await openSession(env, scoped, 'zoom', 'video', { method: 'verbal' });
+  await importTranscript(env, ME, consented.id, [{ speaker: 'Dana Ruiz', text: 'We reconcile invoices by hand every Friday.', startMs: 0, endMs: 1000 }], 'zoom');
+  const ok = await structureSession(env, { sessionId: consented.id, userId: ME, trigger: 'call_imported' });
+  assert.equal(ok.ok, true);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM validate_proposals WHERE session_id = ?', consented.id), 1);
+});
+
+test('a member who lost the venture, or a malformed job, runs nothing', async () => {
+  const { env, db, aiCalls } = world();
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const s = await openSession(env, scoped, 'telegram', 'text');
+  db.exec(`UPDATE projects SET founder_id = 99 WHERE id = ${PROJECT}`);
+  assert.deepEqual(await structureSession(env, { sessionId: s.id, userId: ME, trigger: 'chat_assigned' }), { ok: false, reason: 'not_writable' });
+  assert.equal(await runSessionStructureJob(env, { session_id: 'x', user_id: ME, trigger: 'chat_assigned' }), null);
+  assert.equal(await runSessionStructureJob(env, { session_id: s.id, user_id: ME, trigger: 'whatever' }), null);
+  assert.equal(aiCalls.length, 0);
+});
+
+test('the quiet-chat sweep re-structures a chat with new text once it is quiet, at most every six hours', async () => {
+  const { env, db } = world();
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const quiet = await openSession(env, scoped, 'whatsapp', 'text');
+  const busy = await openSession(env, scoped, 'telegram', 'text');
+  const recent = await openSession(env, scoped, 'telegram', 'text');
+  const call = await openSession(env, scoped, 'zoom', 'video', { method: 'verbal' });
+  db.exec(`UPDATE interview_sessions SET status = 'transcribed', updated_at = datetime('now', '-2 hours')`);
+  db.exec(`UPDATE interview_sessions SET updated_at = datetime('now', '-5 minutes') WHERE id = ${busy.id}`);
+  db.exec(`INSERT INTO interview_structure_receipts (session_id, run_id, step, model, prompt_tokens, completion_tokens, cost_microusd, outcome, created_at)
+           VALUES (${recent.id}, 'r1', 'structured', 'm', 0, 0, 0, 'refused', datetime('now', '-1 hour'))`);
+  assert.equal(await sweepQuietChats(env, new Date()), 1);
+  assert.deepEqual(queued(db, 'session_structure'), [{ session_id: quiet.id, user_id: ME, trigger: 'chat_quiet' }],
+    'not the busy chat, not one run (or refused) within six hours, not a call');
+  void call;
 });

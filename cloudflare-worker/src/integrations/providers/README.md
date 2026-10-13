@@ -25,6 +25,11 @@ call runs at boot.
 - Task #8 — `crunchbase.ts`
 - Task #9 — `affinity.ts`
 - D655 (#1467) — `github.ts`: a GitHub App's read-only user authorization; issues to Product roadmap, pull requests to Prototype / MVP, releases recorded with no store. Its first ledger writer (`connector_fed_items`, migration 445).
+- D684 (#1577) — Zoom is a registry provider (`zoom`) whose implementation is
+  NOT in this folder: it lives with the other interview channels in
+  `cloudflare-worker/src/services/channels/zoom.ts`, which calls
+  `registerProvider` at module load and is imported by
+  `cloudflare-worker/src/routes/founder_validate_meetings.ts`.
 
 ## Credential handling
 
