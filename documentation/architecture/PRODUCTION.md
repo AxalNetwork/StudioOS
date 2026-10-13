@@ -130,6 +130,11 @@ It's not part of the production deploy path.
 - [ ] `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` – KYC.
 - [ ] `OPENAI_API_KEY` – AI scoring fallback (Workers AI is the primary).
 - [ ] `TURNSTILE_SECRET_KEY` – bot protection on register / login.
+- [ ] Interview channels (D684). Each provider reports itself unavailable until all of its secrets are set; none is ever committed.
+  - `TELEGRAM_CHANNEL_BOT_TOKEN`, `TELEGRAM_CHANNEL_BOT_USERNAME`, `TELEGRAM_CHANNEL_WEBHOOK_SECRET` – the Telegram Business bot. It is a separate bot from `TELEGRAM_BOT_TOKEN`, and needs Business Mode switched on in @BotFather.
+  - `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` – the Meta app (Tech Provider) for Embedded Signup and the Cloud API webhook.
+  - `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN` – the Zoom General app.
+  - Google Meet uses the existing `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.

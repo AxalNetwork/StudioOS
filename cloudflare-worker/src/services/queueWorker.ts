@@ -596,6 +596,13 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await startIncorporationPacket(env, id);
       return;
     }
+    case 'channel_followup':
+    case 'meeting_import': {
+      // D684 — each provider's adapter registered its handler at module load.
+      const { runChannelJob } = await import('./channels/jobs');
+      await runChannelJob(env, job.job_type, payload);
+      return;
+    }
     default:
       throw new Error(`unknown job type ${job.job_type}`);
   }

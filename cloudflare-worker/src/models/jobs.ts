@@ -34,7 +34,11 @@ export type JobType =
   // rendered MIME-ready envelope produced by services/email/send.ts.
   | 'email_send'
   // Task #11 — incorporation packet start (Stripe Checkout paid flow).
-  | 'incorporation_packet_start';
+  | 'incorporation_packet_start'
+  // D684 — interview channels' slow work, dispatched by the payload's
+  // `provider` through services/channels/jobs.ts.
+  | 'channel_followup'
+  | 'meeting_import';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

@@ -37,6 +37,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
 | `calendar/` | Calendar sync. |
+| `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `decks/` | Deck assembly and export. |
 | `email/` | Transactional mail. |
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. |
@@ -124,3 +125,9 @@ and throws a `ToolError` with the issue's status. Consent `given` comes first,
 and a placement's quote must be verbatim in the stored transcript. Nothing is
 accepted on the founder's behalf. `interviewSessions.ts`'s `deleteSession`
 now takes the session's pending proposals with it.
+
+D684 (#1575): `interviewIntake.ts` is the one way an outside channel writes
+into an interview. It reloads the member and re-checks the venture on every
+write, takes the interview only from an id already scoped to the member, and
+stores text where the paste-in Text chat stores it, so Structure and Ask work
+on a channel session unchanged. `channels/` holds the rest.
