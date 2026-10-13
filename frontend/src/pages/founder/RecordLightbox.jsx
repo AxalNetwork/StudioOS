@@ -34,7 +34,7 @@ import {
 const CHIP = 'rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet disabled:cursor-not-allowed disabled:opacity-50';
 const chip = (on) => `${CHIP} ${on ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:border-violet-400 dark:bg-violet-900/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-ink hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`;
 const TILE = 'rounded-[9px] border px-2 py-2 text-center text-[12px] font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet';
-const tile = (on) => `${TILE} ${on ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:border-violet-400 dark:bg-violet-900/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`;
+const tile = (on) => `${TILE} ${on ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:border-violet-400 dark:bg-violet-900/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`;
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink placeholder:text-axal-faint focus:outline-none focus:ring-2 focus:ring-axal-violet/40 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
@@ -172,7 +172,7 @@ export default function RecordLightbox({
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
             <button type="button" onClick={submit} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : 'record-start-reason')}
-              data-testid="record-start" className={`rounded-[9px] px-3.5 py-2 text-[13px] font-bold text-white ${ready ? 'bg-axal-violet hover:bg-axal-violet-deep' : 'cursor-not-allowed bg-violet-300 dark:bg-violet-900/60 dark:text-violet-300'}`}>{busy ? 'Starting…' : label}</button>
+              data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
           </div>
         </div>
       )}>
