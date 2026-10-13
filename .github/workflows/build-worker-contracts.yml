@@ -1,0 +1,46 @@
+name: Build Worker contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cloudflare-worker/src/routes/cycle_build.ts'
+      - 'cloudflare-worker/src/routes/integrations.ts'
+      - 'cloudflare-worker/src/routes/calendar.ts'
+      - 'cloudflare-worker/src/routes/linkedin.ts'
+      - 'cloudflare-worker/src/integrations/**'
+      - 'cloudflare-worker/sql/migrations/*core_systems*'
+      - 'cloudflare-worker/sql/migrations/*integrations_last_error_at*'
+      - 'cloudflare-worker/test/build_*_d686.test.ts'
+      - '.github/workflows/build-worker-contracts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-worker-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Build connector and mapping contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare-worker/package-lock.json
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+      # Separate output keeps these contracts readable through the GitHub
+      # connector; the full drift job's log exceeds its returned log size.
+      # This supplements, and does not replace, the root build and full suite.
+      - name: Connector contract
+        if: hashFiles('cloudflare-worker/test/build_connectors_d686.test.ts') != ''
+        run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/build_connectors_d686.test.ts
+      - name: Mapping and local D1 contract
+        if: hashFiles('cloudflare-worker/test/build_systems_d686.test.ts') != ''
+        run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/build_systems_d686.test.ts
