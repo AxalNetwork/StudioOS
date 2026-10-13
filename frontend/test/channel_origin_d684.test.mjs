@@ -43,7 +43,10 @@ test('a session that is not from a channel carries no channel badge', () => {
 test('a channel session is not an assistant session: no assistant badge, and it does not open on review', () => {
   for (const key of Object.keys(CHANNEL_ORIGINS)) {
     assert.equal(sessionBadge(channel(key)), null, `${key} must not show the assistant badge`);
-    assert.equal(openingStep(channel(key)), null, `${key} must not open on review`);
+    // It opens on its own channel step (D684, #1581): what it waits for while
+    // it is a draft, its transcript once the words are in. Never on review.
+    assert.notEqual(openingStep(channel(key)), 'review', `${key} must not open on review`);
+    assert.equal(openingStep({ ...channel(key), status: 'draft' }), 'channel');
     assert.equal(html(React.createElement(AssistantBadge, { session: channel(key) })), '');
   }
 });

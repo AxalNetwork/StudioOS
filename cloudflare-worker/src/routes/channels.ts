@@ -1,403 +1,680 @@
 /**
- * D684 / #1576. Mount channels at /api/channels and adminChannels at
- * /api/admin/channels. Webhook paths stay outside index.ts's auth middleware.
- * S01 owns the mounts. No provider payload or exception is logged.
+ * D684 (#1576) — interview channels: a member's business Telegram and
+ * business WhatsApp. Customer conversations arrive as threads, pending until
+ * the member assigns one to an interview (services/channels/threads.ts).
+ *
+ * Mounted by index.ts (S01):
+ *   /api/channels        → this file's default export
+ *   /api/admin/channels  → `channelsAdmin`
+ *
+ * Signed in (requireAuth in every handler):
+ *   GET    /                        availability per provider, the member's connections, pending counts
+ *   POST   /telegram/link           a one-time code and its t.me link
+ *   POST   /whatsapp/connect        finish Embedded Signup: { code, waba_id, phone_number_id }
+ *   DELETE /:provider               disconnect (telegram | whatsapp)
+ *   POST   /:provider/test          Telegram: a message in the member's own chat with the bot.
+ *                                   WhatsApp: read the number with the member's token — a test
+ *                                   never messages one of the member's customers.
+ *   GET    /threads?status=         the member's conversations
+ *   GET    /threads/:uid            one conversation; its pending messages, decrypted for the member only
+ *   POST   /threads/:uid/assign     { interview_id } | { create: { interviewee_name, project_id } }
+ *   POST   /threads/:uid/ignore     { ignored?: boolean } (default true)
+ *   POST   /threads/:uid/reply      { text, client_key }: once per client_key, inside the 24 h window
+ *
+ * Public — each verified by its provider's own secret, outside requireAuth:
+ *   POST   /telegram/webhook        X-Telegram-Bot-Api-Secret-Token
+ *   GET    /whatsapp/webhook        hub.verify_token challenge
+ *   POST   /whatsapp/webhook        X-Hub-Signature-256 over the raw body
+ *
+ * Admin (`channelsAdmin`, super admin):
+ *   POST   /telegram/webhook        setWebhook with secret_token and the business update types
+ *
+ * A WEBHOOK PERSISTS, THEN ACKNOWLEDGES (D684 §11). Size cap before parsing →
+ * verify (503 when the secret is unset: fail closed) → parse → claim the event
+ * (a redelivery answers 200 and does nothing) → resolve the connection (none:
+ * 'ignored', 200) → the member must still be active → the per-connection
+ * limit → store → finish → 200. A failure before anything was stored releases
+ * the claim and answers 500, so the provider retries. A voice note is the one
+ * slow step: the webhook queues it (`channel_followup`, ids only, never text)
+ * and the job below transcribes it with the interview sessions' own
+ * speech-to-text, billed to the member's AI budget (D640). Only the text is
+ * kept; the audio is never stored.
+ *
+ * Nothing here returns or logs message text, a phone number, a token or a
+ * platform secret. Refusals carry a code and a sentence we wrote.
  */
-import { Hono } from 'hono';
-import type { Env } from '../types';
+import { Hono, type Context } from 'hono';
+import type { Env, User } from '../types';
 import { requireAuth, requireSuperAdmin } from '../auth';
-import { sha256Hex } from '../rpc/secret';
-import { activeMember, IntakeError } from '../services/interviewIntake';
-import { encryptColumn, decryptColumn } from '../services/columnCipher';
-import { encryptCredentials } from '../integrations/secrets';
+import { refuse } from '../util/refusal';
+import { withDeadline } from '../util/deadline';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
-import { availability, memberConnection, connectionForTelegram, connectionForWhatsApp, providerAvailable, type ChannelConnection } from '../services/channels/connections';
-import { claimEvent, finishEvent, releaseEvent } from '../services/channels/events';
-import { createLinkCode, consumeLinkCode } from '../services/channels/linkCodes';
-import { beginOutbound, finishOutbound, applyDeliveryStatus } from '../services/channels/outbound';
-import { storeInbound, storeMessage, applyEdit, applyDelete, assignThread, setThreadIgnored, listThreads, readThread, threadForReply, forgetConnection } from '../services/channels/threads';
-import { registerChannelJob, enqueueChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
-import { CHANNEL_LIMITS, type InboundEvent, type InboundMessage, type MessagingProvider, type SendResult } from '../services/channels/types';
-import { boundedBytes, identifier, object, secret, normaliseTelegram, verifyTelegram, sendTelegram, fetchTelegramMedia, setTelegramWebhook } from '../services/channels/telegram';
-import { normaliseWhatsApp, verifyWhatsApp, whatsAppChallenge, replyWindowOpen, sendWhatsApp, fetchWhatsAppMedia, exchangeWhatsAppSignup } from '../services/channels/whatsapp';
+import { IntakeError, activeMember } from '../services/interviewIntake';
+import { claimEvent, finishEvent, releaseEvent, type EventKind, type EventStatus } from '../services/channels/events';
+import {
+  availability, connectionForTelegram, connectionForWhatsApp, memberConnection, providerAvailable, type ChannelConnection,
+} from '../services/channels/connections';
+import { createLinkCode } from '../services/channels/linkCodes';
+import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
+import {
+  applyDelete, applyEdit, assignThread, forgetConnection, listThreads, readThread, setThreadIgnored, storeInbound,
+  storeMessage, threadForReply, upsertThread, type ThreadRow,
+} from '../services/channels/threads';
+import { enqueueChannelJob, registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
+import {
+  CHANNEL_LIMITS, type InboundEvent, type InboundLink, type InboundMessage, type MessageSide, type MessagingProvider,
+  type SendResult,
+} from '../services/channels/types';
+import * as telegram from '../services/channels/telegram';
+import * as whatsapp from '../services/channels/whatsapp';
 
-export const channels = new Hono<{ Bindings: Env }>();
-export const adminChannels = new Hono<{ Bindings: Env }>();
-const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-const ack = () => json({ ok: true });
-const error = (code: string, status: number) => json({ error: code }, status);
-const messaging = (v: string): v is MessagingProvider => v === 'telegram' || v === 'whatsapp';
-const positive = (v: unknown) => Number.isSafeInteger(Number(v)) && Number(v) > 0;
+const channels = new Hono<{ Bindings: Env }>();
+export const channelsAdmin = new Hono<{ Bindings: Env }>();
 
-function safeError(e: unknown): Response {
-  if (e instanceof IntakeError) return error(e.code, e.status);
-  const message = e instanceof Error ? e.message : '';
-  if (message === 'Unauthorized') return error('unauthorized', 401);
-  if (['Forbidden', 'Admin required', 'Super admin required'].includes(message)) return error('forbidden', 403);
-  if (message === 'body_too_large') return error('body_too_large', 413);
-  if (message === 'invalid_json') return error('invalid_json', 400);
-  if (message === 'client_key_conflict') return error('client_key_conflict', 409);
-  return error('channel_unavailable', 503);
-}
-channels.onError(e => safeError(e));
-adminChannels.onError(e => safeError(e));
+type C = Context<{ Bindings: Env }>;
 
-async function bodyBytes(request: Request): Promise<Uint8Array> {
-  return boundedBytes(new Response(request.body, { headers: request.headers }), CHANNEL_LIMITS.maxBodyBytes);
-}
-async function bodyObject(request: Request): Promise<Record<string, any>> {
-  const bytes = await bodyBytes(request);
-  try { return object(JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes))); }
-  catch { throw new Error('invalid_json'); }
-}
-async function user(c: any) {
-  const member = await requireAuth(c);
-  await activeMember(c.env, member.id);
-  return member;
-}
+const MESSAGING = new Set<string>(['telegram', 'whatsapp']);
+const THREAD_STATUSES = new Set(['pending', 'assigned', 'ignored']);
 
-/** Fail closed without KV. Keys contain only a hashed connection/member identifier. */
-export async function channelRateLimit(env: Env, scope: string, limit: number = CHANNEL_LIMITS.eventsPerMinute): Promise<boolean> {
-  if (!env.RATE_LIMITS) throw new Error('rate_limit_unavailable');
-  const bucket = Math.floor(Date.now() / 60_000);
-  const key = 'channel:' + await sha256Hex(scope) + ':' + bucket;
-  const count = Number(await env.RATE_LIMITS.get(key) ?? 0);
-  if (!Number.isFinite(count) || count < 0) throw new Error('rate_limit_unavailable');
-  if (count >= limit) return false;
-  await env.RATE_LIMITS.put(key, String(count + 1), { expirationTtl: 120 });
-  return true;
-}
-async function connection(env: Env, event: InboundEvent): Promise<ChannelConnection | null> {
-  if (!('connectionRef' in event)) return null;
-  return event.provider === 'telegram' ? connectionForTelegram(env, event.connectionRef) : connectionForWhatsApp(env, event.connectionRef);
-}
-
-/** Unknown tenants leave no rows. Claim precedes mutation, provider calls and queueing. */
-export async function processChannelEvent(env: Env, event: InboundEvent): Promise<number> {
-  if (event.kind === 'ignored') return 200;
-  let conn: ChannelConnection | null = null;
-  if ('connectionRef' in event) {
-    conn = await connection(env, event);
-    if (!conn) return 200;
-    try { await activeMember(env, conn.userId); } catch (e) { if (e instanceof IntakeError) return 200; throw e; }
-  }
-  if (event.kind === 'connection') {
-    const linked = await env.DB.prepare("SELECT user_id FROM integrations WHERE provider_key = 'telegram' AND external_account_id = ? AND status = 'active'")
-      .bind(event.telegramUserId).first<{ user_id: number }>();
-    if (!linked) return 200;
-    try { await activeMember(env, linked.user_id); } catch (e) { if (e instanceof IntakeError) return 200; throw e; }
-  }
-  const id = await claimEvent(env, event.provider, await sha256Hex(event.eventId),
-    event.kind === 'message' ? (event.voice ? 'voice' : event.side === 'me' ? 'echo' : 'message') : event.kind === 'delete' ? 'edit' : event.kind);
-  if (!id) return 200;
-  let stored = false;
-  try {
-    const scope = conn ? 'connection:' + conn.integrationId : event.kind === 'link' ? 'link:' + event.telegramUserId
-      : event.kind === 'connection' ? 'connection:' + event.businessConnectionId : '';
-    if (!(await channelRateLimit(env, scope))) { await releaseEvent(env, id); return 429; }
-    if (event.kind === 'link') {
-      const userId = await consumeLinkCode(env, event.code, 'telegram');
-      if (!userId) { await finishEvent(env, id, 'ignored'); return 200; }
-      stored = true; // Consuming a one-time code is a durable write; do not pretend a retry can unconsume it.
-      await activeMember(env, userId);
-      const existing = await env.DB.prepare("SELECT uid, external_account_id FROM integrations WHERE user_id = ? AND provider_key = 'telegram'")
-        .bind(userId).first<{ uid: string; external_account_id: string | null }>();
-      if (existing?.external_account_id && existing.external_account_id !== event.telegramUserId) {
-        await finishEvent(env, id, 'ignored', { error: 'disconnect_first' }); return 200;
-      }
-      await env.DB.prepare(
-        "INSERT INTO integrations (uid, user_id, provider_key, status, auth_type, external_account_id, external_account_name, config_json) VALUES (?, ?, 'telegram', 'active', 'webhook', ?, ?, '{}') "
-        + "ON CONFLICT(user_id, provider_key) DO UPDATE SET status = 'active', external_account_id = excluded.external_account_id, external_account_name = excluded.external_account_name, updated_at = datetime('now')",
-      ).bind(existing?.uid ?? crypto.randomUUID(), userId, event.telegramUserId, event.displayName).run();
-      stored = true;
-      await finishEvent(env, id, 'done', { userId });
-      await sendTelegram(env, null, event.chatId, 'Telegram linked. Connect this bot in Telegram Business to import the chats you choose.');
-      return 200;
-    }
-    if (event.kind === 'connection') {
-      const linked = await env.DB.prepare("SELECT id, user_id FROM integrations WHERE provider_key = 'telegram' AND external_account_id = ? AND status = 'active'")
-        .bind(event.telegramUserId).first<{ id: number; user_id: number }>();
-      if (!linked) { await finishEvent(env, id, 'ignored'); return 200; }
-      await env.DB.batch([
-        env.DB.prepare(
-          "INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply, rights_json) VALUES (?, ?, ?, ?, ?, ?, ?) "
-          + "ON CONFLICT(business_connection_id) DO UPDATE SET user_id = excluded.user_id, is_enabled = excluded.is_enabled, can_reply = excluded.can_reply, rights_json = excluded.rights_json, updated_at = datetime('now') WHERE telegram_business_connections.telegram_user_id = excluded.telegram_user_id",
-        ).bind(crypto.randomUUID(), event.businessConnectionId, event.telegramUserId, linked.user_id,
-          event.isEnabled ? 1 : 0, event.canReply ? 1 : 0, JSON.stringify(event.rights)),
-        env.DB.prepare("UPDATE integrations SET config_json = ?, updated_at = datetime('now') WHERE id = ?")
-          .bind(JSON.stringify({ business_connection_id: event.businessConnectionId, can_reply: event.canReply }), linked.id),
-      ]);
-      stored = true;
-      await finishEvent(env, id, 'done', { userId: linked.user_id });
-      return 200;
-    }
-    if (!conn) { await finishEvent(env, id, 'ignored'); return 200; }
-    if (event.kind === 'status') {
-      const ours = await env.DB.prepare("SELECT id FROM channel_outbound WHERE provider = 'whatsapp' AND user_id = ? AND external_message_id = ?")
-        .bind(conn.userId, event.externalMessageId).first();
-      if (ours) { await applyDeliveryStatus(env, event.externalMessageId, event.status, event.errorCode); stored = true; }
-    } else if (event.kind === 'edit') { await applyEdit(env, conn, event); stored = true; }
-    else if (event.kind === 'delete') { await applyDelete(env, conn, event); stored = true; }
-    else if (event.kind === 'message') {
-      if (event.side === 'me') {
-        const ours = await env.DB.prepare('SELECT 1 FROM channel_outbound WHERE provider = ? AND user_id = ? AND external_message_id = ?')
-          .bind(event.provider, conn.userId, event.externalMessageId).first();
-        if (ours) { await finishEvent(env, id, 'ignored', { userId: conn.userId }); return 200; }
-      }
-      if (event.voice) {
-        const encoded = await encryptColumn(env, 'channel_events', 'voice_job', id, JSON.stringify(event));
-        await enqueueChannelJob(env, 'channel_followup', event.provider, String(id), {
-          event_id: id, integration_id: conn.integrationId, user_id: conn.userId, connection_ref: event.connectionRef, message_enc: encoded,
-        });
-        stored = true;
-      } else {
-        const result = await storeInbound(env, conn, event);
-        stored = true;
-        await finishEvent(env, id, 'done', { userId: conn.userId, threadId: result.thread?.id, sessionId: 'sessionId' in result ? result.sessionId : null });
-        return 200;
-      }
-    }
-    await finishEvent(env, id, event.kind === 'message' && event.voice ? 'stored' : 'done', { userId: conn.userId });
-    return 200;
-  } catch {
-    if (stored) return 200;
-    await releaseEvent(env, id);
-    return 503;
-  }
-}
-
-channels.post('/telegram/webhook', async c => {
-  const verified = await verifyTelegram(c.env, c.req.header('X-Telegram-Bot-Api-Secret-Token') ?? null);
-  if (verified !== 'ok') return error(verified === 'unavailable' ? 'provider_unavailable' : 'invalid_signature', verified === 'unavailable' ? 503 : 401);
-  const payload = await bodyObject(c.req.raw);
-  const msg = object(payload.business_message ?? payload.edited_business_message);
-  const ref = identifier(msg.business_connection_id);
-  const bc = ref ? await c.env.DB.prepare('SELECT telegram_user_id FROM telegram_business_connections WHERE business_connection_id = ?')
-    .bind(ref).first<{ telegram_user_id: string }>() : null;
-  const event = normaliseTelegram(payload, bc?.telegram_user_id ?? null);
-  if (event.kind === 'link' && !(await channelRateLimit(c.env, 'link-ip:' + (c.req.header('CF-Connecting-IP') ?? 'unknown'), 20))) return error('rate_limited', 429);
-  const status = await processChannelEvent(c.env, event);
-  return status === 200 ? ack() : error(status === 429 ? 'rate_limited' : 'channel_unavailable', status);
-});
-channels.get('/whatsapp/webhook', async c => {
-  const result = await whatsAppChallenge(c.env, new URL(c.req.url).searchParams);
-  return result.challenge ? new Response(result.challenge, { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } })
-    : error(result.status === 503 ? 'provider_unavailable' : 'invalid_signature', result.status);
-});
-channels.post('/whatsapp/webhook', async c => {
-  if (!secret(c.env, 'WHATSAPP_APP_SECRET')) return error('provider_unavailable', 503);
-  const bytes = await bodyBytes(c.req.raw);
-  const verified = await verifyWhatsApp(c.env, bytes, c.req.header('X-Hub-Signature-256') ?? null);
-  if (verified !== 'ok') return error(verified === 'unavailable' ? 'provider_unavailable' : 'invalid_signature', verified === 'unavailable' ? 503 : 401);
-  let payload: unknown;
-  try { payload = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes)); } catch { return error('invalid_json', 400); }
-  for (const event of normaliseWhatsApp(payload)) {
-    const status = await processChannelEvent(c.env, event);
-    if (status !== 200) return error(status === 429 ? 'rate_limited' : 'channel_unavailable', status);
-  }
-  return ack();
-});
-
-const listChannels = async (c: any) => {
-  const member = await user(c);
-  const connections = await Promise.all((['telegram', 'whatsapp'] as const).map(async provider => {
-    const conn = await memberConnection(c.env, member.id, provider);
-    return conn ? { provider, connected: true, uid: conn.integrationUid, can_reply: conn.canReply } : { provider, connected: false };
-  }));
-  const providers = availability(c.env).map(({ provider, available }) => ({ provider, available }));
-  const pending = await c.env.DB.prepare("SELECT COUNT(*) AS count FROM channel_threads t JOIN integrations i ON i.id = t.integration_id AND i.status = 'active' WHERE t.user_id = ? AND t.status = 'pending'")
-    .bind(member.id).first() as { count: number } | null;
-  return json({ providers, connections, pending_count: Number(pending?.count ?? 0) });
+/** Our sentence for each code a route or a provider call can end in. */
+const SENTENCE: Record<string, string> = {
+  not_available: 'This channel is not available on Axal yet.',
+  not_configured: 'This channel is not set up on Axal yet.',
+  not_connected: 'Connect this account in Account › Connectors first.',
+  unknown_provider: 'That is not a messaging channel Axal connects.',
+  rate_limited: 'Too many attempts right now. Try again in a little while.',
+  window_closed: 'More than 24 hours have passed since this conversation was last active, so a free-form reply is closed. Templates are a later step; nothing was sent.',
+  no_reply_right: 'The Axal bot is not allowed to reply on this Telegram Business account. Allow replies for the bot in Telegram › Settings › Telegram Business › Chatbots.',
+  thread_ignored: 'This conversation is ignored. Stop ignoring it before replying.',
+  text_required: 'Write a message first.',
+  text_too_long: 'That message is too long for this channel.',
+  client_key_required: 'The reply is missing its client key.',
+  client_key_conflict: 'That client key was already used for another reply.',
+  forbidden: 'The provider refused the message for this account.',
+  token_invalid: 'The connection to this account has expired. Connect it again in Account › Connectors.',
+  undeliverable: 'The provider could not deliver this message.',
+  provider_unavailable: 'The provider did not answer. Try again in a minute.',
+  network: 'The provider could not be reached. Try again in a minute.',
+  rejected: 'The provider rejected the message.',
+  unexpected_response: 'The provider answered in a way Axal did not expect. Nothing was recorded.',
+  invalid_request: 'The request is missing a field it needs.',
+  invalid_status: 'Choose pending, assigned or ignored.',
+  number_taken: 'This WhatsApp number is already connected to another Axal account.',
+  number_not_in_waba: 'That number is not part of the WhatsApp Business account you connected.',
+  choose_number: 'Your WhatsApp Business account has more than one number. Connect again and choose the number your customers write to.',
+  code_exchange_failed: 'Meta did not accept the sign-up. Start the WhatsApp connection again.',
+  waba_unreadable: 'Axal could not read your WhatsApp Business account. Start the connection again.',
+  subscribe_failed: 'Axal could not subscribe to your WhatsApp Business account. Try again.',
+  not_stored: 'The connection could not be saved. Try again.',
+  base_url_missing: 'The public base URL is not set, so there is no webhook address to register.',
+  secret_format: 'TELEGRAM_CHANNEL_WEBHOOK_SECRET may use only letters, digits, _ and -, up to 256 characters.',
 };
-channels.get('', listChannels);
-channels.get('/', listChannels);
-channels.post('/telegram/link', async c => {
-  const member = await user(c);
-  if (!providerAvailable(c.env, 'telegram')) return error('provider_unavailable', 503);
-  if (!(await channelRateLimit(c.env, 'member-link:' + member.id, 10))) return error('rate_limited', 429);
-  const username = secret(c.env, 'TELEGRAM_CHANNEL_BOT_USERNAME');
-  if (!/^[A-Za-z0-9_]{5,32}$/.test(username)) return error('provider_unavailable', 503);
-  const issued = await createLinkCode(c.env, member.id, 'telegram');
-  return json({ code: issued.code, url: 'https://t.me/' + username + '?start=' + issued.code, expires_at: issued.expiresAt });
-});
-channels.post('/whatsapp/connect', async c => {
-  const member = await user(c);
-  if (!providerAvailable(c.env, 'whatsapp')) return error('provider_unavailable', 503);
-  if (!(await channelRateLimit(c.env, 'member-signup:' + member.id, 10))) return error('rate_limited', 429);
-  const body = await bodyObject(c.req.raw);
-  const wabaId = identifier(body.waba_id, /^\d{1,30}$/), phoneNumberId = identifier(body.phone_number_id, /^\d{1,30}$/);
-  if (!wabaId || !phoneNumberId || typeof body.code !== 'string' || !body.code || body.code.length > 4096) return error('invalid_signup', 400);
-  const existing = await c.env.DB.prepare("SELECT uid, external_account_id FROM integrations WHERE user_id = ? AND provider_key = 'whatsapp'")
-    .bind(member.id).first<{ uid: string; external_account_id: string | null }>();
-  if (existing?.external_account_id && existing.external_account_id !== phoneNumberId) return error('disconnect_first', 409);
-  const assigned = await c.env.DB.prepare("SELECT user_id FROM integrations WHERE provider_key = 'whatsapp' AND external_account_id = ? AND status = 'active'")
-    .bind(phoneNumberId).first<{ user_id: number }>();
-  if (assigned && Number(assigned.user_id) !== member.id) return error('connection_conflict', 409);
-  let result: Awaited<ReturnType<typeof exchangeWhatsAppSignup>>;
-  try { result = await exchangeWhatsAppSignup(c.env, { code: body.code, wabaId, phoneNumberId }); }
-  catch { return error('signup_failed', 502); }
-  const uid = existing?.uid ?? crypto.randomUUID();
-  const enc = await encryptCredentials(c.env, uid, { access_token: result.accessToken });
-  await c.env.DB.prepare(
-    "INSERT INTO integrations (uid, user_id, provider_key, status, auth_type, external_account_id, external_account_name, config_json, credentials_enc) VALUES (?, ?, 'whatsapp', 'active', 'oauth2', ?, ?, ?, ?) "
-    + "ON CONFLICT(user_id, provider_key) DO UPDATE SET status = 'active', external_account_id = excluded.external_account_id, external_account_name = excluded.external_account_name, config_json = excluded.config_json, credentials_enc = excluded.credentials_enc, updated_at = datetime('now')",
-  ).bind(uid, member.id, phoneNumberId, result.maskedNumber, JSON.stringify({ waba_id: wabaId, phone_number_id: phoneNumberId }), enc).run();
-  return json({ ok: true, uid });
-});
-channels.delete('/:provider', async c => {
-  const member = await user(c), provider = c.req.param('provider');
-  if (!messaging(provider)) return error('unknown_provider', 404);
-  const owned = await c.env.DB.prepare('SELECT id FROM integrations WHERE user_id = ? AND provider_key = ?')
-    .bind(member.id, provider).first<{ id: number }>();
-  if (owned) {
-    await forgetConnection(c.env, owned.id);
-    await c.env.DB.prepare("UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, external_account_name = NULL, config_json = '{}' WHERE id = ? AND user_id = ?")
-      .bind(owned.id, member.id).run();
+const sentence = (code: string) => SENTENCE[code] ?? 'That did not work. Try again.';
+
+/** A refusal with our sentence; `code` travels on `error` and `code` both. */
+function no(c: C, status: number, code: string, extra: Record<string, unknown> = {}): Response {
+  return refuse(c, status, { code, message: sentence(code), extra: { code, ...extra } });
+}
+
+/**
+ * An IntakeError carries a sentence services/ wrote (interviewIntake.ts,
+ * threads.ts) — never provider or SQLite text — so it travels as is.
+ */
+function intakeRefusal(c: C, err: IntakeError): Response {
+  const { code, message: said } = err;
+  return refuse(c, err.status, { code, message: said, extra: { code } });
+}
+
+/** A signed-in route: an IntakeError becomes its own status and sentence. */
+function member(handler: (c: C, user: User) => Promise<Response>) {
+  return async (c: C): Promise<Response> => {
+    const user = await requireAuth(c);
+    try {
+      return await handler(c, user);
+    } catch (err) {
+      if (err instanceof IntakeError) return intakeRefusal(c, err);
+      throw err;
+    }
+  };
+}
+
+const parseJson = (s: string | null): Record<string, unknown> => {
+  if (!s) return {};
+  try { const v = JSON.parse(s); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
+};
+
+/** A D1 or ISO timestamp, in ms; NaN when unreadable. */
+const ms = (s: string | null | undefined) => (s ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`) : NaN);
+
+/**
+ * A KV counter (middleware/rateLimit.ts's pattern). Fails OPEN: on a webhook,
+ * a KV outage must not drop a customer's message, and the provider's own
+ * limits still apply.
+ */
+async function overLimit(env: Env, key: string, limit: number, windowSec: number): Promise<boolean> {
+  const kv = env.RATE_LIMITS;
+  if (!kv) return false;
+  const bucket = `${key}:${Math.floor(Date.now() / 1000 / windowSec)}`;
+  try {
+    const n = await withDeadline((async () => {
+      const next = (parseInt((await kv.get(bucket)) || '0', 10) || 0) + 1;
+      await kv.put(bucket, String(next), { expirationTtl: Math.max(60, windowSec) });
+      return next;
+    })(), 2_000, 'channels-ratelimit');
+    return n > limit;
+  } catch {
+    return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Availability and connections
+// ---------------------------------------------------------------------------
+
+channels.get('/', member(async (c, user) => {
+  const env = c.env;
+  // Secret NAMES help an admin set a deployment up; a member learns only "not available".
+  const admin = String(user.role ?? '').toLowerCase() === 'admin';
+  const providers = availability(env).map((a) => ({
+    provider: a.provider,
+    available: a.available,
+    missing: admin ? a.missing : [],
+    // Public identifiers Meta's JS SDK needs in the browser to open Embedded Signup.
+    ...(a.provider === 'whatsapp' && a.available
+      ? { signup: { app_id: env.WHATSAPP_APP_ID, config_id: env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID } }
+      : {}),
+  }));
+
+  const rows = (await env.DB.prepare(
+    `SELECT provider_key, status, external_account_name, config_json, created_at FROM integrations
+      WHERE user_id = ? AND provider_key IN ('telegram', 'whatsapp') AND status != 'disconnected'`,
+  ).bind(user.id).all<{ provider_key: string; status: string; external_account_name: string | null; config_json: string | null; created_at: string }>()).results ?? [];
+  const tg = await env.DB.prepare(
+    `SELECT COUNT(*) AS n, MAX(can_reply) AS r FROM telegram_business_connections WHERE user_id = ? AND is_enabled = 1`,
+  ).bind(user.id).first<{ n: number; r: number | null }>();
+  const connections: Record<string, unknown> = {};
+  for (const r of rows) {
+    const cfg = parseJson(r.config_json);
+    const base = {
+      status: r.status,
+      // Telegram: '@username' or a name. WhatsApp: the verified business name or '•••• 1234' — never an id.
+      external_account_name: r.external_account_name,
+      connected_at: typeof cfg.connected_at === 'string' ? cfg.connected_at : r.created_at,
+    };
+    connections[r.provider_key] = r.provider_key === 'telegram'
+      // Linked is step one; the bot added in Telegram Business is step two.
+      ? { ...base, can_reply: !!tg?.r, business_connected: Number(tg?.n ?? 0) > 0 }
+      : { ...base, can_reply: r.status === 'active' };
+  }
+
+  const counts = (await env.DB.prepare(
+    `SELECT t.provider AS provider, COUNT(*) AS n FROM channel_threads t
+       JOIN integrations i ON i.id = t.integration_id AND i.status = 'active'
+      WHERE t.user_id = ? AND t.status = 'pending' GROUP BY t.provider`,
+  ).bind(user.id).all<{ provider: string; n: number }>()).results ?? [];
+  const pending = { telegram: 0, whatsapp: 0 } as Record<MessagingProvider, number>;
+  for (const r of counts) if (r.provider === 'telegram' || r.provider === 'whatsapp') pending[r.provider] = Number(r.n) || 0;
+
+  return c.json({ providers, connections, pending });
+}));
+
+channels.post('/telegram/link', member(async (c, user) => {
+  if (!providerAvailable(c.env, 'telegram')) return no(c, 503, 'not_available');
+  const ip = c.req.header('cf-connecting-ip') || (c.req.header('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
+  if (await overLimit(c.env, `rl:ch:link:ip:${ip}`, 20, 3600)) return no(c, 429, 'rate_limited');
+  const { code, expiresAt } = await createLinkCode(c.env, user.id, 'telegram');
+  const bot = String(c.env.TELEGRAM_CHANNEL_BOT_USERNAME ?? '').trim().replace(/^@/, '');
+  return c.json({ code, url: `https://t.me/${encodeURIComponent(bot)}?start=${code}`, expires_at: expiresAt });
+}));
+
+channels.post('/whatsapp/connect', member(async (c, user) => {
+  if (!providerAvailable(c.env, 'whatsapp')) return no(c, 503, 'not_available');
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  const wabaId = String(body.waba_id ?? '').trim();
+  // Coexistence's finish event may carry only the WABA; the number is then read from it.
+  const phoneNumberId = body.phone_number_id == null ? '' : String(body.phone_number_id).trim();
+  if (!code || code.length > 2048 || !/^\d{1,32}$/.test(wabaId) || (phoneNumberId && !/^\d{1,32}$/.test(phoneNumberId))) {
+    return no(c, 400, 'invalid_request');
+  }
+  const out = await whatsapp.completeEmbeddedSignup(c.env, user.id, { code, wabaId, phoneNumberId });
+  if (!out.ok) return no(c, out.status, out.code);
+  return c.json({ ok: true, connection: { status: 'active', external_account_name: out.name, can_reply: true } });
+}));
+
+channels.delete('/:provider', member(async (c, user) => {
+  const provider = c.req.param('provider') ?? '';
+  if (!MESSAGING.has(provider)) return no(c, 404, 'unknown_provider');
+  const env = c.env;
+  const row = await env.DB.prepare(
+    `SELECT id, uid, status, credentials_enc, config_json FROM integrations WHERE user_id = ? AND provider_key = ?`,
+  ).bind(user.id, provider).first<{ id: number; uid: string; status: string; credentials_enc: string | null; config_json: string | null }>();
+  if (!row || row.status === 'disconnected') return c.json({ ok: true, disconnected: false });
+  if (provider === 'whatsapp') {
+    // Stop Meta sending this account's webhooks to Axal. Best effort: the
+    // row below goes either way, and an unknown number is ignored on arrival.
+    await whatsapp.unsubscribeApp(env, { integrationUid: row.uid, credentialsEnc: row.credentials_enc, config: parseJson(row.config_json) })
+      .catch(() => false);
+  }
+  await env.DB.prepare(
+    `UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  ).bind(row.id).run();
+  await forgetConnection(env, Number(row.id));
   if (provider === 'telegram') {
-    await c.env.DB.batch([
-      c.env.DB.prepare('UPDATE telegram_business_connections SET user_id = NULL, is_enabled = 0, can_reply = 0 WHERE user_id = ?').bind(member.id),
-      c.env.DB.prepare("UPDATE channel_link_codes SET used_at = datetime('now') WHERE user_id = ? AND provider = 'telegram' AND used_at IS NULL").bind(member.id),
-    ]);
+    await env.DB.prepare(
+      `UPDATE telegram_business_connections SET user_id = NULL, updated_at = datetime('now') WHERE user_id = ?`,
+    ).bind(user.id).run();
   }
-  return ack();
-});
-channels.get('/threads', async c => {
-  const member = await user(c), status = c.req.query('status');
-  if (status && !['pending', 'assigned', 'ignored'].includes(status)) return error('invalid_status', 400);
-  return json({ items: await listThreads(c.env, member.id, { status: status as 'pending' | 'assigned' | 'ignored' | undefined }) });
-});
-channels.get('/threads/:uid', async c => json(await readThread(c.env, (await user(c)).id, c.req.param('uid'))));
-channels.post('/threads/:uid/assign', async c => {
-  const member = await user(c), body = await bodyObject(c.req.raw);
-  const create = object(body.create);
-  if (positive(body.interview_id) && !body.create) return json(await assignThread(c.env, member.id, c.req.param('uid'), { interviewId: Number(body.interview_id) }));
-  if (!body.interview_id && positive(create.project_id) && typeof create.interviewee_name === 'string' && create.interviewee_name.trim()) {
-    return json(await assignThread(c.env, member.id, c.req.param('uid'), { projectId: Number(create.project_id), intervieweeName: create.interviewee_name }));
+  return c.json({ ok: true, disconnected: true });
+}));
+
+channels.post('/:provider/test', member(async (c, user) => {
+  const provider = c.req.param('provider') ?? '';
+  if (!MESSAGING.has(provider)) return no(c, 404, 'unknown_provider');
+  const conn = await memberConnection(c.env, user.id, provider as MessagingProvider);
+  if (!conn) return no(c, 409, 'not_connected');
+  if (provider === 'whatsapp') {
+    const r = await whatsapp.checkWhatsAppConnection(c.env, conn);
+    return r.ok ? c.json({ ok: true, provider, sent: false }) : no(c, 502, r.code);
   }
-  return error('invalid_assignment', 400);
-});
-channels.post('/threads/:uid/ignore', async c => {
-  const member = await user(c), body = await bodyObject(c.req.raw);
-  await setThreadIgnored(c.env, member.id, c.req.param('uid'), body.ignored !== false);
-  return ack();
+  const row = await c.env.DB.prepare(
+    `SELECT external_account_id FROM integrations WHERE id = ?`,
+  ).bind(conn.integrationId).first<{ external_account_id: string | null }>();
+  if (!row?.external_account_id) return no(c, 409, 'not_connected');
+  // A private chat's id is its user's id, and the member opened it with /start.
+  const r = await telegram.sendPrivateMessage(c.env, String(row.external_account_id), telegram.TELEGRAM_COPY.test);
+  return r.ok ? c.json({ ok: true, provider, sent: true }) : no(c, r.retryable ? 503 : 502, r.code ?? 'rejected');
+}));
+
+// ---------------------------------------------------------------------------
+// Threads
+// ---------------------------------------------------------------------------
+
+channels.get('/threads', member(async (c, user) => {
+  const status = c.req.query('status');
+  if (status && !THREAD_STATUSES.has(status)) return no(c, 400, 'invalid_status');
+  const threads = await listThreads(c.env, user.id, { status: status as ThreadRow['status'] | undefined, limit: Number(c.req.query('limit')) || 50 });
+  return c.json({ items: threads });
+}));
+
+channels.get('/threads/:uid', member(async (c, user) => c.json(await readThread(c.env, user.id, c.req.param('uid') ?? ''))));
+
+channels.post('/threads/:uid/assign', member(async (c, user) => {
+  const body = await c.req.json<Record<string, any>>().catch(() => ({} as Record<string, any>));
+  const create = body.create && typeof body.create === 'object' ? body.create : null;
+  let target: { interviewId: number } | { projectId: number; intervieweeName: string };
+  if (body.interview_id != null) target = { interviewId: Number(body.interview_id) };
+  else if (create && Number.isInteger(Number(create.project_id))) {
+    target = { projectId: Number(create.project_id), intervieweeName: String(create.interviewee_name ?? '') };
+  } else return no(c, 400, 'invalid_request');
+  const r = await assignThread(c.env, user.id, c.req.param('uid') ?? '', target);
+  return c.json({ ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved });
+}));
+
+channels.post('/threads/:uid/ignore', member(async (c, user) => {
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const row = await setThreadIgnored(c.env, user.id, c.req.param('uid') ?? '', body.ignored !== false);
+  // The row itself carries the chat id (a phone number on WhatsApp): only its status goes back.
+  return c.json({ ok: true, status: row.status });
+}));
+
+const outboundView = (r: OutboundRow & { created_at?: string }) => ({
+  uid: r.uid, provider: r.provider, status: r.status, error_code: r.error_code, created_at: r.created_at ?? null,
 });
 
-/** A send accepted before a storage outage can repair its transcript on retry. */
-async function recordReply(
-  env: Env, conn: ChannelConnection, thread: { id: number; external_chat_id: string },
-  outbound: { uid: string; external_message_id: string | null }, text: string,
-): Promise<void> {
-  if (!outbound.external_message_id) return;
-  const claim = await claimEvent(env, conn.provider, await sha256Hex('reply-record:' + outbound.uid), 'echo');
-  if (!claim) return;
-  let stored = false;
+/** Why a free-form reply may not go now, or null. Checked before any provider call. */
+function windowRefusal(thread: ThreadRow): string | null {
+  // WhatsApp counts from the customer's last message; Telegram from the chat's last activity.
+  const since = ms(thread.provider === 'whatsapp' ? thread.last_inbound_at : thread.last_message_at);
+  return Number.isFinite(since) && Date.now() - since < CHANNEL_LIMITS.replyWindowMs ? null : 'window_closed';
+}
+
+channels.post('/threads/:uid/reply', member(async (c, user) => {
+  const env = c.env;
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const text = typeof body.text === 'string' ? body.text.trim() : '';
+  const clientKey = typeof body.client_key === 'string' ? body.client_key.trim() : '';
+  if (!text) return no(c, 400, 'text_required');
+  if (!clientKey || clientKey.length > 100) return no(c, 400, 'client_key_required');
+  // Another member's thread is not there (404, from threads.ts).
+  const thread = await threadForReply(env, user.id, c.req.param('uid') ?? '');
+  const max = thread.provider === 'telegram' ? telegram.TELEGRAM_MAX_TEXT : whatsapp.WHATSAPP_MAX_TEXT;
+  if (text.length > max) return no(c, 400, 'text_too_long', { max_chars: max });
+  const conn = await memberConnection(env, user.id, thread.provider);
+  if (!conn || conn.integrationId !== Number(thread.integration_id)) return no(c, 409, 'not_connected');
+
+  let claim: { row: OutboundRow; existing: boolean };
+  try {
+    claim = await beginOutbound(env, thread.provider, user.id, thread.id, clientKey);
+  } catch (err) {
+    if (err instanceof Error && err.message === 'client_key_conflict') return no(c, 409, 'client_key_conflict');
+    throw err;
+  }
+  // The same client_key again: what happened the first time, and nothing sent now.
+  if (claim.existing) return c.json({ ok: claim.row.status !== 'failed', existing: true, outbound: outboundView(claim.row) });
+
+  // Refused after the claim, so a retry of this client_key reads the refusal instead of sending.
+  const refusal = thread.status === 'ignored' ? 'thread_ignored' : windowRefusal(thread);
+  let result: SendResult;
+  if (refusal) {
+    result = { ok: false, code: refusal };
+  } else if (thread.provider === 'telegram') {
+    const bc = await telegram.activeBusinessConnection(env, user.id);
+    result = !bc ? { ok: false, code: 'not_connected' }
+      : !bc.canReply ? { ok: false, code: 'no_reply_right' }
+      : await telegram.sendBusinessMessage(env, bc.businessConnectionId, thread.external_chat_id, text);
+  } else {
+    result = await whatsapp.sendWhatsAppText(env, conn, thread.external_chat_id, text);
+  }
+  await finishOutbound(env, claim.row.id, result);
+  if (!result.ok) {
+    const code = result.code ?? 'rejected';
+    const status = ['window_closed', 'no_reply_right', 'not_connected', 'thread_ignored'].includes(code) ? 409
+      : code === 'rate_limited' ? 429 : result.retryable ? 503 : 502;
+    return no(c, status, code, { retryable: !!result.retryable });
+  }
+
+  // Sent: the member's reply joins the thread (or the interview it is assigned to) as 'Me'.
+  let recorded = true;
   try {
     await storeMessage(env, conn, {
-      externalChatId: thread.external_chat_id, externalMessageId: outbound.external_message_id, side: 'me', contactName: null,
-      text, kind: 'text', sentAt: new Date().toISOString(), origin: 'axal',
+      externalChatId: thread.external_chat_id, externalMessageId: String(result.externalMessageId), side: 'me',
+      contactName: null, text, kind: 'text', sentAt: new Date().toISOString(), origin: 'axal',
     });
+  } catch (err) {
+    recorded = false;
+    console.error('[channels] reply sent but not recorded', err instanceof IntakeError ? err.code : 'error');
+  }
+  const row = await env.DB.prepare('SELECT * FROM channel_outbound WHERE id = ?').bind(claim.row.id).first<OutboundRow & { created_at: string }>();
+  return c.json({ ok: true, existing: false, recorded, outbound: outboundView(row ?? claim.row) });
+}));
+
+// ---------------------------------------------------------------------------
+// Webhooks
+// ---------------------------------------------------------------------------
+
+/** The raw body, or the 413 that refuses it — before anything parses it. */
+async function cappedBody(c: C): Promise<ArrayBuffer | Response> {
+  const tooLarge = () => c.json({ error: 'payload_too_large', code: 'payload_too_large' }, 413);
+  if (Number(c.req.header('content-length') || 0) > CHANNEL_LIMITS.maxBodyBytes) return tooLarge();
+  const raw = await c.req.arrayBuffer();
+  return raw.byteLength > CHANNEL_LIMITS.maxBodyBytes ? tooLarge() : raw;
+}
+
+function parseBody(raw: ArrayBuffer): unknown {
+  try { return JSON.parse(new TextDecoder().decode(raw)); } catch { return undefined; }
+}
+
+function eventKind(ev: InboundEvent): EventKind {
+  switch (ev.kind) {
+    case 'message': return ev.voice && !ev.text ? 'voice' : ev.side === 'me' ? 'echo' : 'message';
+    case 'edit': return 'edit';
+    case 'delete': return 'delete';
+    case 'status': return 'status';
+    case 'link': return 'link';
+    case 'connection': return 'connection';
+    default: return 'ignored';
+  }
+}
+
+/** A message for the member's private chat with the bot. A failure is logged and never fails the webhook. */
+async function tell(env: Env, chatId: string, text: string): Promise<void> {
+  const r = await telegram.sendPrivateMessage(env, chatId, text).catch(() => ({ ok: false, code: 'network' } as SendResult));
+  if (!r.ok) console.error(`[channels] telegram notice not sent code=${r.code ?? 'unknown'}`);
+}
+
+async function handleLink(env: Env, claim: number, ev: InboundLink): Promise<void> {
+  // Link attempts per Telegram account: the webhook's caller is Telegram, so
+  // the account, not an IP, is who is guessing.
+  if (await overLimit(env, `rl:ch:link:tg:${ev.telegramUserId}`, 10, 3600)) {
+    await finishEvent(env, claim, 'ignored', { error: 'rate_limited' });
+    return;
+  }
+  const out = await telegram.linkTelegramAccount(env, ev);
+  if (out.linked) {
+    await finishEvent(env, claim, 'done', { userId: out.userId });
+    await tell(env, ev.chatId, out.businessConnected ? telegram.TELEGRAM_COPY.linkedConnected : telegram.TELEGRAM_COPY.linked);
+    return;
+  }
+  await finishEvent(env, claim, 'ignored', { error: out.reason });
+  const copy = out.reason === 'identity_taken' ? telegram.TELEGRAM_COPY.identityTaken
+    : out.reason === 'member_inactive' ? telegram.TELEGRAM_COPY.memberInactive : telegram.TELEGRAM_COPY.codeInvalid;
+  await tell(env, ev.chatId, copy);
+}
+
+function resolveConnection(env: Env, provider: MessagingProvider, ref: string): Promise<ChannelConnection | null> {
+  return provider === 'telegram' ? connectionForTelegram(env, ref) : connectionForWhatsApp(env, ref);
+}
+
+/** The member behind a connection must still stand; an inactive one is ignored, not retried. */
+async function memberStands(env: Env, userId: number): Promise<boolean> {
+  try {
+    await activeMember(env, userId);
+    return true;
+  } catch (err) {
+    if (err instanceof IntakeError) return false;
+    throw err;
+  }
+}
+
+/**
+ * One verified event, start to finish. 'retry' means nothing was stored and
+ * the claim was released: the caller answers 500 so the provider sends it again.
+ */
+async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'> {
+  if (ev.kind === 'ignored') return 'ok';
+  const claim = await claimEvent(env, ev.provider, ev.eventId, eventKind(ev));
+  if (!claim) return 'ok';
+  let stored = false;
+  const finish = async (status: EventStatus, fields: Parameters<typeof finishEvent>[3] = {}) => {
     stored = true;
-    await finishEvent(env, claim, 'done', { userId: conn.userId, threadId: thread.id });
-  } catch {
-    if (stored) return;
-    await releaseEvent(env, claim);
-    throw new Error('reply_record_unavailable');
+    await finishEvent(env, claim, status, fields);
+  };
+  try {
+    if (ev.kind === 'link') {
+      // A link code is spent by its first attempt, so a failure here is not
+      // retried (a retry could only say "expired"): the member asks for a new code.
+      stored = true;
+      await handleLink(env, claim, ev);
+      return 'ok';
+    }
+    if (ev.kind === 'connection') {
+      const { userId } = await telegram.recordBusinessConnection(env, ev);
+      await finish('stored', { userId });
+      // Not linked yet: tell them how. Nothing else from the connection is kept.
+      if (ev.isEnabled && !userId) await tell(env, ev.userChatId, telegram.TELEGRAM_COPY.linkPrompt);
+      return 'ok';
+    }
+
+    const conn = await resolveConnection(env, ev.provider as MessagingProvider, ev.connectionRef);
+    if (!conn) { await finish('ignored', { error: 'unknown_connection' }); return 'ok'; }
+    if (!(await memberStands(env, conn.userId))) { await finish('ignored', { userId: conn.userId, error: 'member_inactive' }); return 'ok'; }
+    if (await overLimit(env, `rl:ch:${conn.provider}:${conn.integrationId}`, CHANNEL_LIMITS.eventsPerMinute, 60)) {
+      await finish('ignored', { userId: conn.userId, error: 'rate_limited' });
+      return 'ok';
+    }
+
+    if (ev.kind === 'status') {
+      const known = await applyDeliveryStatus(env, ev.externalMessageId, ev.status, ev.errorCode);
+      await finish(known ? 'done' : 'ignored', { userId: conn.userId, error: known ? null : 'not_ours' });
+      return 'ok';
+    }
+    if (ev.kind === 'edit') {
+      const changed = await applyEdit(env, conn, ev);
+      await finish(changed ? 'done' : 'ignored', { userId: conn.userId, error: changed ? null : 'no_pending_copy' });
+      return 'ok';
+    }
+    if (ev.kind === 'delete') {
+      const removed = await applyDelete(env, conn, ev);
+      await finish(removed ? 'done' : 'ignored', { userId: conn.userId, error: removed ? null : 'no_pending_copy' });
+      return 'ok';
+    }
+
+    const msg = ev as InboundMessage;
+    if (msg.voice && !msg.text) {
+      // The thread now (so its contact name is stored encrypted, and the job
+      // carries no name and no chat id); the audio later, off this request.
+      const thread = await upsertThread(env, conn, msg.externalChatId, msg.side === 'contact' ? msg.contactName : null);
+      if (thread.status === 'ignored') { await finish('ignored', { userId: conn.userId, threadId: thread.id, error: 'thread_ignored' }); return 'ok'; }
+      await enqueueChannelJob(env, 'channel_followup', msg.provider, msg.eventId, {
+        kind: 'voice', event: claim, connection: msg.connectionRef, thread: thread.uid, message: msg.externalMessageId,
+        file: msg.voice.fileRef, mime: msg.voice.mime, duration: msg.voice.durationSec, side: msg.side, sent_at: msg.sentAt,
+      });
+      await finish('accepted', { userId: conn.userId, threadId: thread.id });
+      return 'ok';
+    }
+
+    const out = await storeInbound(env, conn, msg);
+    stored = true;
+    const kept = out.stored === 'pending' || out.stored === 'session';
+    await finish(kept ? 'stored' : 'ignored', {
+      userId: conn.userId, threadId: out.thread?.id ?? null,
+      sessionId: out.stored === 'session' ? out.sessionId : null,
+      error: kept ? null : out.stored === 'ignored' ? 'thread_ignored' : out.stored,
+    });
+    return 'ok';
+  } catch (err) {
+    if (err instanceof IntakeError && err.status < 500) {
+      // A refusal from the intake (an inactive member, a malformed chat id): retrying changes nothing.
+      await finishEvent(env, claim, err.status === 403 ? 'ignored' : 'failed', { error: err.code }).catch(() => {});
+      return 'ok';
+    }
+    console.error(`[channels] ${ev.provider} ${ev.kind} event failed stored=${stored}`, err instanceof Error ? err.name : 'error');
+    if (!stored) {
+      await releaseEvent(env, claim).catch(() => {});
+      return 'retry';
+    }
+    await finishEvent(env, claim, 'failed', { error: 'internal' }).catch(() => {});
+    return 'ok';
   }
 }
 
-export async function replyToThread(env: Env, userId: number, uid: string, text: string, clientKey: string): Promise<Response> {
-  const thread = await threadForReply(env, userId, uid);
-  const conn = await memberConnection(env, userId, thread.provider);
-  if (!conn || conn.integrationId !== thread.integration_id) return error('not_connected', 409);
-  if (!conn.canReply) return error('no_reply_right', 409);
-  const last = thread.provider === 'whatsapp' ? thread.last_inbound_at : thread.last_message_at;
-  if (!replyWindowOpen(last)) return error('window_closed', 409);
-  if (!(await channelRateLimit(env, 'reply:' + conn.integrationId, 30))) return error('rate_limited', 429);
-  const outbound = await beginOutbound(env, thread.provider, userId, thread.id, clientKey);
-  if (outbound.existing) {
-    if (Number(outbound.row.thread_id) !== thread.id || outbound.row.provider !== thread.provider) return error('client_key_conflict', 409);
-    if (['submitted', 'delivered', 'read'].includes(outbound.row.status)) await recordReply(env, conn, thread, outbound.row, text);
-    return json({ ok: outbound.row.status !== 'failed', uid: outbound.row.uid, status: outbound.row.status });
-  }
-  let result: SendResult;
-  if (thread.provider === 'telegram') {
-    const bc = await env.DB.prepare('SELECT business_connection_id FROM telegram_business_connections WHERE user_id = ? AND is_enabled = 1 AND can_reply = 1 ORDER BY updated_at DESC LIMIT 1')
-      .bind(userId).first<{ business_connection_id: string }>();
-    result = bc ? await sendTelegram(env, bc.business_connection_id, thread.external_chat_id, text) : { ok: false, code: 'no_reply_right' };
-  } else {
-    const row = await env.DB.prepare("SELECT external_account_id FROM integrations WHERE id = ? AND user_id = ? AND status = 'active'")
-      .bind(conn.integrationId, userId).first<{ external_account_id: string }>();
-    result = row ? await sendWhatsApp(env, conn, row.external_account_id, thread.external_chat_id, text, thread.last_inbound_at) : { ok: false, code: 'not_connected' };
-  }
-  await finishOutbound(env, outbound.row.id, result);
-  if (result.ok && result.externalMessageId) await recordReply(env, conn, thread, { uid: outbound.row.uid, external_message_id: result.externalMessageId }, text);
-  return json({ ok: result.ok, uid: outbound.row.uid, status: result.ok ? 'submitted' : 'failed', ...(result.ok ? {} : { error: result.code ?? 'send_failed' }) }, result.ok ? 200 : 502);
-}
-channels.post('/threads/:uid/reply', async c => {
-  const member = await user(c), body = await bodyObject(c.req.raw);
-  if (typeof body.text !== 'string' || !body.text.trim() || body.text.length > 4096
-      || !identifier(body.client_key, /^[A-Za-z0-9_-]{1,100}$/)) return error('invalid_reply', 400);
-  return replyToThread(c.env, member.id, c.req.param('uid'), body.text.trim(), body.client_key);
-});
-channels.post('/:provider/test', async c => {
-  const member = await user(c), provider = c.req.param('provider'), body = await bodyObject(c.req.raw);
-  if (!messaging(provider)) return error('unknown_provider', 404);
-  const conn = await memberConnection(c.env, member.id, provider);
-  if (!conn) return error('not_connected', 409);
-  if (provider === 'telegram') {
-    if (!(await channelRateLimit(c.env, 'test:' + conn.integrationId, 10))) return error('rate_limited', 429);
-    const row = await c.env.DB.prepare("SELECT external_account_id FROM integrations WHERE id = ? AND user_id = ?")
-      .bind(conn.integrationId, member.id).first<{ external_account_id: string }>();
-    const result = row ? await sendTelegram(c.env, null, row.external_account_id, 'Your Axal Telegram connection is working.') : { ok: false };
-    return json({ ok: result.ok, status: result.ok ? 'submitted' : 'failed' }, result.ok ? 200 : 502);
-  }
-  if (typeof body.thread_uid !== 'string' || !identifier(body.client_key, /^[A-Za-z0-9_-]{1,100}$/)) return error('test_thread_required', 400);
-  const thread = await threadForReply(c.env, member.id, body.thread_uid);
-  if (thread.provider !== provider) return error('thread_not_found', 404);
-  return replyToThread(c.env, member.id, thread.uid, 'Your Axal WhatsApp connection is working.', body.client_key);
-});
-adminChannels.post('/telegram/webhook', async c => {
-  const admin = await requireSuperAdmin(c);
-  const ok = await setTelegramWebhook(c.env, new URL(c.req.url).origin);
-  if (!ok) return error('webhook_registration_failed', 502);
-  await c.env.DB.prepare('INSERT INTO activity_logs (user_id, action, details) VALUES (?, ?, ?)')
-    .bind(admin.id, 'channel_webhook_registered', JSON.stringify({ provider: 'telegram' })).run();
-  return ack();
+channels.post('/telegram/webhook', async (c) => {
+  const raw = await cappedBody(c);
+  if (raw instanceof Response) return raw;
+  const check = await telegram.verifyTelegramSecret(c.env, c.req.header('X-Telegram-Bot-Api-Secret-Token'));
+  if (check === 'unconfigured') return c.json({ error: 'not_configured', code: 'not_configured' }, 503);
+  if (check !== 'ok') return c.json({ error: 'unauthorized', code: 'unauthorized' }, 401);
+  const update = parseBody(raw);
+  if (update === undefined) return c.json({ error: 'malformed', code: 'malformed' }, 400);
+  const bcId = telegram.telegramBusinessConnectionId(update);
+  const owner = bcId ? await telegram.businessConnectionOwner(c.env, bcId) : null;
+  const verdict = await processEvent(c.env, telegram.normaliseTelegramUpdate(update, owner));
+  return verdict === 'retry' ? c.json({ error: 'retry', code: 'retry' }, 500) : c.json({ ok: true });
 });
 
-/** Deferred voice work: no retained audio; encrypted queue metadata; member budget only. */
-export async function channelFollowup(env: Env, payload: ChannelJobPayload): Promise<void> {
-  const id = Number(payload.event_id);
-  if (!positive(id) || !messaging(String(payload.provider))) throw new Error('invalid_channel_job');
-  const row = await env.DB.prepare('SELECT status FROM channel_events WHERE id = ? AND provider = ?')
-    .bind(id, payload.provider).first<{ status: string }>();
-  if (!row || row.status === 'done' || row.status === 'ignored') return;
-  const plain = await decryptColumn(env, 'channel_events', 'voice_job', id, typeof payload.message_enc === 'string' ? payload.message_enc : null);
-  if (!plain) throw new Error('voice_metadata_unreadable');
-  let event: InboundMessage;
-  try { event = JSON.parse(plain); } catch { throw new Error('invalid_channel_job'); }
-  if (event.kind !== 'message' || event.provider !== payload.provider || !event.voice || event.connectionRef !== payload.connection_ref) throw new Error('invalid_channel_job');
-  const conn = await connection(env, event);
-  if (!conn || conn.integrationId !== Number(payload.integration_id) || conn.userId !== Number(payload.user_id)) {
-    await finishEvent(env, id, 'ignored'); return;
+channels.get('/whatsapp/webhook', async (c) => {
+  const r = await whatsapp.verifyWhatsAppChallenge(c.env, c.req.query('hub.mode'), c.req.query('hub.verify_token'), c.req.query('hub.challenge'));
+  if (r.status === 200) return c.text(r.challenge, 200);
+  return r.status === 503
+    ? c.json({ error: 'not_configured', code: 'not_configured' }, 503)
+    : c.json({ error: 'forbidden', code: 'forbidden' }, 403);
+});
+
+channels.post('/whatsapp/webhook', async (c) => {
+  const raw = await cappedBody(c);
+  if (raw instanceof Response) return raw;
+  const check = await whatsapp.verifyWhatsAppSignature(c.env, raw, c.req.header('X-Hub-Signature-256'));
+  if (check === 'unconfigured') return c.json({ error: 'not_configured', code: 'not_configured' }, 503);
+  if (check !== 'ok') return c.json({ error: 'unauthorized', code: 'unauthorized' }, 401);
+  const body = parseBody(raw);
+  if (body === undefined) return c.json({ error: 'malformed', code: 'malformed' }, 400);
+  // One POST may carry many events; each is claimed on its own, and one that
+  // must be retried does not stop the rest (their claims make the retry a no-op).
+  let retry = false;
+  for (const ev of whatsapp.normaliseWhatsAppPayload(body)) {
+    if ((await processEvent(c.env, ev)) === 'retry') retry = true;
   }
-  try { await activeMember(env, conn.userId); } catch (e) { if (!(e instanceof IntakeError)) throw new Error('channel_unavailable'); await finishEvent(env, id, 'ignored'); return; }
-  const ignored = await env.DB.prepare("SELECT 1 FROM channel_threads WHERE integration_id = ? AND external_chat_id = ? AND status = 'ignored'")
-    .bind(conn.integrationId, event.externalChatId).first();
-  if (ignored) { await finishEvent(env, id, 'ignored'); return; }
-  const media = event.provider === 'telegram' ? await fetchTelegramMedia(env, event.voice.fileRef)
-    : await fetchWhatsAppMedia(env, conn, event.voice.fileRef);
-  const result = await aiRun(env, {
+  return retry ? c.json({ error: 'retry', code: 'retry' }, 500) : c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Voice notes: the queued follow-up
+// ---------------------------------------------------------------------------
+
+/** Refusals from the router that retrying would not change: the member's budget, a review hold, the org cap. */
+const FINAL_REFUSAL = /^(budget_|kill_switch|model_not_offered)/;
+
+/**
+ * `channel_followup` { kind: 'voice' }: fetch the audio, transcribe it with
+ * the interview sessions' speech-to-text (aiRouter task `transcribe`, the
+ * default final model, billed to the member — a spent budget is refused there
+ * and nothing runs), and store only the text, through the same intake as a
+ * typed message. Safe to run twice: it acts only while its event is still
+ * 'accepted'. A transient failure throws, so the queue retries it.
+ */
+export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
+  if (p.kind !== 'voice') throw new Error(`unknown channel_followup kind for ${p.provider}`);
+  const provider = p.provider as MessagingProvider;
+  const claim = Number(p.event);
+  const ev = await env.DB.prepare('SELECT status FROM channel_events WHERE id = ? AND provider = ?')
+    .bind(claim, provider).first<{ status: string }>();
+  if (!ev || ev.status !== 'accepted') return;
+  const end = (status: EventStatus, fields: Parameters<typeof finishEvent>[3] = {}) => finishEvent(env, claim, status, fields);
+
+  const conn = await resolveConnection(env, provider, String(p.connection ?? ''));
+  if (!conn) return end('ignored', { error: 'unknown_connection' });
+  if (!(await memberStands(env, conn.userId))) return end('ignored', { userId: conn.userId, error: 'member_inactive' });
+  const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE uid = ? AND integration_id = ?')
+    .bind(String(p.thread ?? ''), conn.integrationId).first<ThreadRow>();
+  if (!thread) return end('ignored', { userId: conn.userId, error: 'thread_gone' });
+  if (thread.status === 'ignored') return end('ignored', { userId: conn.userId, threadId: thread.id, error: 'thread_ignored' });
+
+  const file = String(p.file ?? '');
+  const mimeHint = typeof p.mime === 'string' ? p.mime : null;
+  const audio = provider === 'telegram'
+    ? await telegram.fetchTelegramVoice(env, file, mimeHint)
+    : await whatsapp.fetchWhatsAppMedia(env, conn, file, mimeHint);
+  if (!audio.ok) {
+    if (audio.retryable) throw new Error(`voice download failed provider=${provider} code=${audio.code}`);
+    return end('failed', { userId: conn.userId, threadId: thread.id, error: audio.code });
+  }
+
+  const r = await aiRun(env, {
     task: 'transcribe', userId: conn.userId, surface: AI_SURFACE.validateInterviews,
-    audio: media.bytes, audioMime: media.mime ?? event.voice.mime ?? 'audio/ogg',
-    audioMinutes: audioMinutesFromBytes(media.bytes.byteLength),
+    audio: audio.bytes, audioMime: audio.mime, audioMinutes: audioMinutesFromBytes(audio.bytes.byteLength),
   });
-  if (!result.ok) throw new Error('voice_transcription_unavailable');
-  const outcome = await storeInbound(env, conn, event, result.output ?? '');
-  await finishEvent(env, id, 'done', { userId: conn.userId, threadId: outcome.thread?.id }).catch(() => {});
+  if (!r.ok) {
+    const refusal = String(r.refusal || 'all_models_failed');
+    if (!FINAL_REFUSAL.test(refusal)) throw new Error(`voice transcription failed provider=${provider} refusal=${refusal}`);
+    return end('failed', { userId: conn.userId, threadId: thread.id, error: refusal });
+  }
+  const text = String(r.transcript?.text ?? r.output ?? '').trim();
+  if (!text) return end('ignored', { userId: conn.userId, threadId: thread.id, error: 'empty_transcript' });
+
+  const msg: InboundMessage = {
+    kind: 'message', provider, eventId: String(claim), connectionRef: String(p.connection), externalChatId: thread.external_chat_id,
+    externalMessageId: String(p.message ?? ''), side: (p.side === 'me' ? 'me' : 'contact') as MessageSide, contactName: null,
+    text: null, voice: { fileRef: file, mime: mimeHint, durationSec: Number.isFinite(Number(p.duration)) ? Number(p.duration) : null },
+    sentAt: typeof p.sent_at === 'string' ? p.sent_at : new Date().toISOString(),
+  };
+  const out = await storeInbound(env, conn, msg, text);
+  const kept = out.stored === 'pending' || out.stored === 'session';
+  await end(kept ? 'stored' : 'ignored', {
+    userId: conn.userId, threadId: thread.id, sessionId: out.stored === 'session' ? out.sessionId : null,
+    error: kept ? null : out.stored === 'ignored' ? 'thread_ignored' : out.stored,
+  });
 }
-registerChannelJob('channel_followup', 'telegram', channelFollowup);
-registerChannelJob('channel_followup', 'whatsapp', channelFollowup);
+
+// Registered at module load: index.ts imports this file, so the handlers exist
+// before the queue delivers anything (services/channels/jobs.ts).
+registerChannelJob('channel_followup', 'telegram', runVoiceFollowup);
+registerChannelJob('channel_followup', 'whatsapp', runVoiceFollowup);
+
+// ---------------------------------------------------------------------------
+// Admin
+// ---------------------------------------------------------------------------
+
+channelsAdmin.post('/telegram/webhook', async (c) => {
+  await requireSuperAdmin(c);
+  const base = String(c.env.PUBLIC_BASE_URL || c.env.APP_URL || '').trim().replace(/\/+$/, '');
+  // Telegram delivers webhooks to HTTPS only.
+  if (!/^https:\/\/[^/]+$/.test(base)) return no(c, 503, 'base_url_missing');
+  const url = `${base}/api/channels/telegram/webhook`;
+  const r = await telegram.setTelegramWebhook(c.env, url);
+  if (!r.ok) return no(c, r.code === 'not_configured' || r.code === 'secret_format' ? 503 : 502, r.code);
+  return c.json({ ok: true, url, allowed_updates: [...telegram.TELEGRAM_ALLOWED_UPDATES] });
+});
+
 export default channels;

@@ -14,6 +14,7 @@
  * deployment — names only, never values.
  */
 import type { Env } from '../../types';
+import { googleOAuthAvailable } from '../calendar';
 import type { ChannelProvider, ProviderAvailability } from './types';
 
 export interface ChannelConnection {
@@ -84,6 +85,8 @@ const REQUIRED_SECRETS: Record<ChannelProvider, string[]> = {
   telegram: ['TELEGRAM_CHANNEL_BOT_TOKEN', 'TELEGRAM_CHANNEL_BOT_USERNAME', 'TELEGRAM_CHANNEL_WEBHOOK_SECRET'],
   whatsapp: ['WHATSAPP_APP_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID'],
   zoom: ['ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_WEBHOOK_SECRET_TOKEN'],
+  // Meet rides on the Google Calendar connection, which also accepts the
+  // calendar-specific GOOGLE_CAL_* client: availability asks calendar.ts.
   google_meet: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
 };
 
@@ -91,6 +94,10 @@ const REQUIRED_SECRETS: Record<ChannelProvider, string[]> = {
 export function availability(env: Env): ProviderAvailability[] {
   const vars = env as unknown as Record<string, unknown>;
   return (Object.keys(REQUIRED_SECRETS) as ChannelProvider[]).map((provider) => {
+    if (provider === 'google_meet') {
+      const available = googleOAuthAvailable(env);
+      return { provider, available, missing: available ? [] : ['GOOGLE_CAL_CLIENT_ID or GOOGLE_CLIENT_ID', 'GOOGLE_CAL_CLIENT_SECRET or GOOGLE_CLIENT_SECRET'] };
+    }
     const missing = REQUIRED_SECRETS[provider].filter((k) => typeof vars[k] !== 'string' || !(vars[k] as string).trim());
     return { provider, available: missing.length === 0, missing };
   });

@@ -6,7 +6,7 @@
  * AN ASSISTANT'S OUTPUT IS A PROPOSAL FROM THAT ASSISTANT, NEVER A FACT. Its
  * name is self-declared, so a label always carries the redirect host too.
  */
-import { channelOrigin } from './channelOrigin.js';
+import { CHANNEL_ORIGINS, channelOrigin } from './channelOrigin.js';
 
 /** The three steps the sheet shows. */
 export const ASSISTANT_STEPS = [
@@ -66,20 +66,56 @@ export function runLabel(run) {
 }
 
 /**
- * The assistant badge's text for a session, or null for a session recorded
- * here. A session from a connected channel (D684) stores its provider's label
- * in the same column, but it is the member's own conversation, not an
- * assistant's: it has its own badge (channelOrigin.js).
+ * D684 (#1578) — a session can also arrive through one of the member's own
+ * channels. The intake (`services/interviewIntake.ts`) sets `submitted_via` to
+ * the provider key and `submitted_via_name` to its label; an assistant's
+ * `submitted_via` is its OAuth client id, a random hex string, so the key alone
+ * tells the two apart (`channelOrigin.js`). A channel session is the member's
+ * own conversation, not an assistant's proposal: it gets its own badge
+ * (`ChannelOriginBadge.jsx`), never the assistant's.
  */
-export function sessionBadge(session) {
-  if (channelOrigin(session)) return null;
+export const CHANNEL_SOURCES = CHANNEL_ORIGINS;
+const MEETING_SOURCES = new Set(['zoom', 'google_meet']);
+
+/** The channel a session came through, or null for one recorded here or sent by an assistant. */
+export const channelOf = channelOrigin;
+
+/** Where a session came from: `{ kind: 'channel', provider, text }`, `{ kind: 'assistant', text }`, or null. */
+export function sessionOrigin(session) {
+  const channel = channelOf(session);
+  if (channel) return { kind: 'channel', provider: channel, text: `From ${CHANNEL_SOURCES[channel]}` };
   const name = String(session?.submitted_via_name || '').trim();
-  return name ? `From ${name}` : null;
+  return name ? { kind: 'assistant', text: `From ${name}` } : null;
 }
 
-/** The step a session opens on: one an assistant submitted opens on review. */
+/**
+ * The assistant badge's text, or null for a session recorded here or from a
+ * channel: a channel session carries the channel badge instead.
+ */
+export function sessionBadge(session) {
+  const origin = sessionOrigin(session);
+  return origin?.kind === 'assistant' ? origin.text : null;
+}
+
+/** The channel badge's tooltip: how the words reached the session. */
+export function channelBadgeTitle(provider) {
+  const name = CHANNEL_SOURCES[provider] || 'a channel';
+  return MEETING_SOURCES.has(provider)
+    ? `Imported from the ${name} call’s transcript`
+    : `Arrived from your connected ${name} account`;
+}
+
+/**
+ * The step a session opens on.
+ *   'review'      — an assistant's session: its placements are the point.
+ *   'channel'     — a channel session with nothing in it yet (still `draft`):
+ *                   the page shows what it waits for, never the recorder.
+ *   'transcript'  — a channel session with its conversation or call
+ *                   transcript in: the words first, then Structure below them.
+ *   null          — a session recorded here.
+ */
 export function openingStep(session) {
-  if (channelOrigin(session)) return null;
+  if (channelOf(session)) return session?.status === 'draft' ? 'channel' : 'transcript';
   if (session?.submitted_via_name) return 'review';
   return null;
 }

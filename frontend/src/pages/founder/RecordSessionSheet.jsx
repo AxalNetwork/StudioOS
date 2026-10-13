@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
+import { ConnectPanel, SchedulePanel } from './InterviewChannels';
 
 /**
  * Validate › Record a session (D660, #1473), to `design/incoming/Cycle
@@ -30,6 +31,13 @@ export const CHANNELS = [
 export const AUDIO = new Set(['in_person', 'video', 'phone']);
 /** D668: not a channel StudioOS records on. The founder's assistant submits the interview (D665). */
 export const ASSISTANT = 'assistant';
+/**
+ * D684: two more ways in that StudioOS does not record either. A chat waiting
+ * from the member's business Telegram or WhatsApp is assigned to this
+ * interview; a Zoom or Meet call is scheduled and its transcript comes later.
+ */
+export const FROM_CHAT = 'from_chat';
+export const SCHEDULE_CALL = 'schedule_call';
 export const CONSENT_METHODS = [
   ['verbal', 'Said yes, out loud'],
   ['written', 'In writing'],
@@ -125,6 +133,10 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
 
   const { company } = useActiveCompany() || {};
   const viaAssistant = channel === ASSISTANT;
+  const viaChat = channel === FROM_CHAT;
+  const viaCall = channel === SCHEDULE_CALL;
+  // Nothing is started from this sheet on these: the session comes from elsewhere.
+  const elsewhere = viaAssistant || viaChat || viaCall;
   const audio = AUDIO.has(channel);
   const ready = canStart(channel, consent) && (audio || parseConversation(conversation).length > 0);
   const finalLabel = models?.final?.find((m) => m.model === final)?.label;
@@ -158,6 +170,8 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
               <button key={k} type="button" role="radio" aria-checked={channel === k} data-testid={`channel-${k}`} className={chip(channel === k)} onClick={() => setChannel(k)}>{label}</button>
             ))}
             <button type="button" role="radio" aria-checked={viaAssistant} data-testid="channel-assistant" className={chip(viaAssistant)} onClick={() => setChannel(ASSISTANT)}>From an AI assistant</button>
+            <button type="button" role="radio" aria-checked={viaChat} data-testid="channel-from-chat" className={chip(viaChat)} onClick={() => setChannel(FROM_CHAT)}>From Telegram or WhatsApp</button>
+            <button type="button" role="radio" aria-checked={viaCall} data-testid="channel-schedule-call" className={chip(viaCall)} onClick={() => setChannel(SCHEDULE_CALL)}>Schedule a Zoom or Meet call</button>
           </div>
         </Group>
         <Group title="With">
@@ -171,6 +185,14 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
         </Group>
         {viaAssistant ? (
           <AssistantEntry companyName={company?.company_name || ''} />
+        ) : viaChat ? (
+          <Group title="From Telegram or WhatsApp">
+            <ConnectPanel interview={interview} onAssigned={(r) => r?.session_id && onCreated?.({ id: r.session_id })} />
+          </Group>
+        ) : viaCall ? (
+          <Group title="Schedule a call">
+            <SchedulePanel interview={interview} />
+          </Group>
         ) : audio ? (
           <Group title="Consent">
             <div className="flex items-center justify-between gap-3">
@@ -215,12 +237,14 @@ export default function RecordSessionSheet({ interview, onClose, onCreated, init
         <div className="flex items-center justify-between gap-3">
           <p className="text-[12px] text-axal-faint" data-testid="sheet-foot-note">
             {viaAssistant ? 'Your assistant sends the interview; it appears here for your review.'
+              : viaChat ? 'The chat’s messages become this interview’s transcript; nothing is recorded here.'
+              : viaCall ? 'The call’s transcript comes into its session after the call ends.'
               : audio && !canStart(channel, consent) ? 'Start unlocks once consent is recorded.'
               : audio ? `Transcribe with ${finalLabel || 'Not recorded'}` : 'No audio is recorded on this channel.'}
           </p>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-[12px] font-bold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
-            {!viaAssistant && <button type="button" data-testid="button-start-recording" disabled={!ready || busy} onClick={submit} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
+            {!elsewhere && <button type="button" data-testid="button-start-recording" disabled={!ready || busy} onClick={submit} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
               {audio ? 'Start recording' : 'Save session'}
             </button>}
           </div>

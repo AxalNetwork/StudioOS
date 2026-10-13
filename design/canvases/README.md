@@ -108,7 +108,8 @@ the component opens with its sections empty.
 
 **2026-10-09 (D660), two canvases graduated from `incoming/`.** The Recording
 View and its board (RV1–RV12) are built at `/validate/session/:id` (#1473), so
-`Recording View.dc.html`, `Recording View · Boards.dc.html` and the
+`Recording View.dc.html`, its board (then `Recording View · Boards.dc.html`,
+renamed `Recording View Canvas.dc.html` on 2026-10-13, below) and the
 `ring-viz.js` drawing script they load moved to `integrated/`: `integrated/`
 went **83 → 85**. `Interview Session.dc.html` stays in `incoming/` until
 #1471 builds its structuring rail.
@@ -116,9 +117,10 @@ went **83 → 85**. `Interview Session.dc.html` stays in `incoming/` until
 **2026-10-10 (D661), three canvases graduated from `incoming/`.** All four
 cycles are wired to their reads (#1474): `/validate`, `/build`, `/raise` and
 `/grow` are the overview, and `/:cycle/:module` the module pages. So
-`Cycle Overview.dc.html`, `Cycle Overview · Boards.dc.html`,
+`Cycle Overview.dc.html`, its board (then `Cycle Overview · Boards.dc.html`,
+renamed `Record a Session · Boards.dc.html` on 2026-10-13, below),
 `Cycle Modules · Boards.dc.html` and the `pro-cycles.js` script the overview
-loads by name moved to `integrated/`: `integrated/` went **85 → 88**. They
+then loaded by name moved to `integrated/`: `integrated/` went **85 → 88**. They
 came from the intake queue, so `backlog/` did not move. `Cycle Action.dc.html`
 and `Cycle Actions · Boards.dc.html` stay in `incoming/`: they belong to the
 four primary actions (#1463, #1465, #1466, #1473), not to #1474.
@@ -343,4 +345,39 @@ change; its two `eadwyn-ai.png` references named a file next to the canvas
 that never existed, and now point at `../../../frontend/public/eadwyn-ai.png`.
 It is graded `UPGRADE`: the page ships only the claims the code makes true,
 and D678 lists the rest.
+
+**2026-10-13 (D685), Record a session: four files in place, two of them
+renamed.** The owner republished artifact `Fxui55FyoHTWvTDi1iXysL`, which the
+D656 landing called "the overview board". It is now named "Record a Session ·
+Boards", and its bundle carries the board plus the five canvases it imports.
+Every file was replaced or renamed where it sat, so none moves a number:
+**`integrated/` stays 90.**
+
+| file | was | is |
+| --- | --- | --- |
+| `Cycle Overview.dc.html` | 55 KB · loads `pro-cycles.js` | **91 KB · its data inline.** Adds the Record a session setup modal (`lbOpen`), the full-screen Recording View mount (`recOpen`), and a centred lightbox for the other three cycle actions (`sheetOpen`, importing `Cycle Action`). Also adds real hrefs, a history tab second in each cycle's tabs, linked Interviews rows, a phone layout (`mobile`) and new-venture states for Build, Raise and Grow. |
+| `Recording View.dc.html` | 14 KB | **15 KB.** Adds a `callLabel` pill, `onClose` on "Exit full screen", and the two video tiles. |
+| `Recording View Canvas.dc.html`, renamed from `Recording View · Boards.dc.html` | 11 KB · RV1–RV13 | **7 KB · RV1–RV13 unchanged.** The ring import now reads `from="./ring-viz.js"`, the sibling file, where the old board named an asset uuid; the rest of the difference is the branding strip and serialisation. |
+| `Record a Session · Boards.dc.html`, renamed from `Cycle Overview · Boards.dc.html` | 8 KB · O1–O5 | **5 KB.** Adds O2n, O3n and O4n, passes `page`, `module` and `mobile` to Cycle Overview, and adds a `#recording` section. That section imports Recording View Canvas and names the routes `/validate/record` → `/validate/record/live`. |
+
+- **The renames use Claude Design's new names,** so a later export matches
+  them by name. They were made with `git mv`, so each file's history follows it.
+- **The board was normalised with `scripts/read-canvas.mjs`.** The bundle's
+  copy of it still named the runtime by its asset uuid and inlined 21
+  `@font-face` rules. A bundle rebuilt from its decoded assets went through the
+  decoder: `src="./support.js"`, one Inter 400/600/800 link, no branding strip, and no
+  asset left unplaced. The other three arrived as the bundle's source files and
+  were already in this folder's form.
+- **Neither board carries the "Made with Claude Design" strip now.** Both old
+  board files did, because the D656 landing unpacked them without the decoder.
+  `Cycle Modules · Boards.dc.html` was not re-exported, and still carries it.
+- **`pro-cycles.js` stays,** although the new Cycle Overview no longer loads it
+  (no `<script src="pro-cycles.js">`, no `PRO_CYCLES`). D656 and D661 cite it,
+  and it is the record of the Pro parts the earlier export drew. `ring-viz.js`
+  is still loaded by Recording View and Recording View Canvas.
+- **The other two files in the bundle are in `design/incoming/`.** `AIRail` is
+  byte-identical to the copy there. `Cycle Action` was replaced there in place:
+  its × now closes the lightbox.
+- What the design asks for, what is built, and who builds the rest:
+  `documentation/architecture/decisions/D685.md`.
 
