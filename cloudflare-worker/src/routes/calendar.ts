@@ -19,7 +19,7 @@ import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
-  buildGoogleAuthUrl, buildMicrosoftAuthUrl,
+  buildGoogleAuthUrl, buildMicrosoftAuthUrl, GOOGLE_MEET_TRANSCRIPT_SCOPE,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs,
@@ -553,7 +553,8 @@ function clearReturnToHeader(): string {
 }
 function destFor(env: Env, returnTo: string): string {
   const base = env.APP_URL || '';
-  return returnTo === 'integrations' ? `${base}/integrations` : `${base}/calendar`;
+  return returnTo === 'integrations' ? `${base}/integrations`
+    : returnTo === 'record' ? `${base}/validate/record` : `${base}/calendar`;
 }
 function failureRedirect(env: Env, provider: string, reason: string | undefined, returnTo: string): Response {
   const url = `${destFor(env, returnTo)}?${provider}=error${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`;
@@ -697,6 +698,7 @@ export async function buildGoogleOAuthStartResponse(
   env: Env,
   userId: number,
   loginHint?: string,
+  meetTranscripts = false,
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
@@ -711,7 +713,7 @@ export async function buildGoogleOAuthStartResponse(
       },
     };
   }
-  const nonce = crypto.randomUUID().replace(/-/g, '');
+  const nonce = `${meetTranscripts ? 'gm_' : ''}${crypto.randomUUID().replace(/-/g, '')}`;
   try {
     await persistState(env, nonce, userId, 'google');
     const state = await makeState(env, nonce);
@@ -720,7 +722,7 @@ export async function buildGoogleOAuthStartResponse(
     // pre-selects/highlights the matching row. The chooser still always
     // appears (`prompt=select_account consent`) so the user can pick a
     // different account if they really want to.
-    const url = buildGoogleAuthUrl(env, state, loginHint);
+    const url = buildGoogleAuthUrl(env, state, loginHint, meetTranscripts);
     return { status: 200, body: { redirect_url: url, auth_url: url } };
   } catch (e: any) {
     console.error('[CAL:g_start] persistState/makeState failed:', e?.message, e?.stack || '');
@@ -775,20 +777,20 @@ export async function buildMicrosoftOAuthStartResponse(
   }
 }
 
-async function startGoogleOAuth(c: any) {
+async function startGoogleOAuth(c: any, meetTranscripts = false) {
   const user = await requireAuth(c);
   // Task #1 — pass the Axal user's email as `login_hint` so Google's
   // account chooser pre-selects the matching row. Falls through as
   // undefined if the JWT somehow lacks an email (older sessions).
   const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
-  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint);
+  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, meetTranscripts);
   // Task #70 — let the Integrations page hand-off remember its origin
   // across the Google round-trip via a short-lived, scoped cookie.
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
-  if (status === 200 && returnTo === 'integrations') {
+  if (status === 200 && (returnTo === 'integrations' || returnTo === 'record')) {
     c.header(
       'Set-Cookie',
-      'studioos_cal_return=integrations; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600',
+      `studioos_cal_return=${returnTo}; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600`,
       { append: true },
     );
   }
@@ -797,6 +799,9 @@ async function startGoogleOAuth(c: any) {
 calendar.post('/google/connect', safe('g_connect', 'Could not start Google OAuth', startGoogleOAuth));
 calendar.get('/google/start',    safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
 calendar.post('/google/start',   safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
+// Explicit opt-in. A normal Calendar connection never asks to read Meet transcripts.
+calendar.post('/google/meet-transcripts/connect', safe('g_meet_consent', 'Could not start Meet transcript consent',
+  (c) => startGoogleOAuth(c, true)));
 
 /**
  * Task #1 — pure persistence step of /google/callback, extracted for
@@ -955,10 +960,14 @@ calendar.get('/google/callback', async (c) => {
     if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
     const nonce = await verifyState(c.env, stateRaw);
     if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
+    const meetTranscripts = nonce.startsWith('gm_');
     const userId = await consumeState(c.env, nonce, 'google');
     if (!userId) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
 
     const tokens = await exchangeGoogleCode(c.env, code);
+    if (meetTranscripts && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
+      return failureRedirect(c.env, 'google', 'meet_scope_missing', returnTo);
+    }
     const refreshToken = tokens?.refresh_token;
     if (!refreshToken) return failureRedirect(c.env, 'google', 'no_refresh_token', returnTo);
     const info = await fetchGoogleUserinfo(tokens.access_token || '');

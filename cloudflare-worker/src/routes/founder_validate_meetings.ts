@@ -28,7 +28,7 @@ import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
-import { IntakeError, openSession, writableInterview, type ScopedInterview } from '../services/interviewIntake';
+import { IntakeError, openSession, writableInterview, writableSession, type ScopedInterview } from '../services/interviewIntake';
 import { providerAvailable } from '../services/channels/connections';
 import { MEETING_PROVIDERS, PROVIDER_LABEL, type MeetingProvider } from '../services/channels/types';
 import {
@@ -137,10 +137,86 @@ const MAX_TOPIC = 200;
 /** A call may be scheduled to start now; a few minutes of clock skew are allowed. */
 const PAST_SLACK_MS = 10 * 60 * 1000;
 
+function attachedLink(raw: unknown): { provider: MeetingProvider; joinUrl: string; externalRef: string } | null {
+  if (typeof raw !== 'string' || raw.length > 2048) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) return null;
+    const host = url.hostname.toLowerCase();
+    if (host === 'zoom.us' || host.endsWith('.zoom.us')) {
+      const id = /^\/j\/(\d{6,20})\/?$/.exec(url.pathname)?.[1];
+      return id ? { provider: 'zoom', joinUrl: url.toString(), externalRef: id } : null;
+    }
+    if (host === 'meet.google.com') {
+      const code = /^\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\/?$/i.exec(url.pathname)?.[1]?.toLowerCase();
+      return code ? { provider: 'google_meet', joinUrl: url.toString(), externalRef: code } : null;
+    }
+  } catch { /* invalid link */ }
+  return null;
+}
+
+async function attachCall(c: C, s: { user: User; scoped: ScopedInterview }, body: Record<string, unknown>) {
+  const attach = body.attach && typeof body.attach === 'object' ? body.attach as Record<string, unknown> : null;
+  const link = attachedLink(attach?.join_url);
+  if (!link || (body.provider != null && body.provider !== link.provider)) {
+    return refuse(c, 400, { code: 'meeting_link_invalid', message: 'Paste a Zoom or Google Meet join link for the call you host.' });
+  }
+  const sessionId = Number(body.session_id);
+  if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
+    return refuse(c, 400, { code: 'session_required', message: 'Start a video recording session before attaching its call.' });
+  }
+  let session: Awaited<ReturnType<typeof writableSession>>['session'];
+  try {
+    session = (await writableSession(c.env, s.user.id, sessionId)).session;
+  } catch (e) { return e instanceof IntakeError ? intakeRefusal(c, e) : Promise.reject(e); }
+  const meta = await c.env.DB.prepare('SELECT submitted_via FROM interview_sessions WHERE id = ?')
+    .bind(sessionId).first<{ submitted_via: string | null }>();
+  if (Number(session.interview_id) !== Number(s.scoped.interview.id) || Number(session.created_by_user_id) !== Number(s.user.id)) {
+    return refuse(c, 404, { code: 'session_not_found', message: 'That session no longer exists.' });
+  }
+  if (session.channel !== 'video' || meta?.submitted_via || !['draft', 'recording', 'paused'].includes(session.status)) {
+    return refuse(c, 409, { code: 'session_not_recording', message: 'Attach a call to the video recording you are starting.' });
+  }
+  if (session.consent_status !== 'given' || !session.consent_method) {
+    return refuse(c, 409, { code: 'consent_required', message: 'Record consent before attaching a call transcript.' });
+  }
+  if (!available(c.env, link.provider)) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE[link.provider] });
+  const zoomConn = link.provider === 'zoom' ? await zoom.zoomConnection(c.env, s.user.id) : null;
+  const googleConn = link.provider === 'google_meet' ? await meet.googleConnection(c.env, s.user.id) : null;
+  if (!zoomConn && !googleConn) return refuse(c, 409, { code: 'connect_first', message: CONNECT_FIRST[link.provider] });
+  try {
+    const hosted = zoomConn
+      ? await zoom.verifyHostedMeeting(c.env, zoomConn, link.externalRef)
+      : await meet.verifyHostedMeet(c.env, googleConn!, link.joinUrl, session.started_at || session.created_at);
+    if (!hosted) return refuse(c, 409, { code: 'meeting_not_hosted',
+      message: 'Axal can import only a call hosted by the account you connected. Record this call in-app instead.' });
+  } catch (e) { return e instanceof MeetingProviderError ? providerRefusal(c, e) : Promise.reject(e); }
+  try {
+    const uid = crypto.randomUUID();
+    await c.env.DB.prepare(
+      `INSERT INTO interview_channel_refs
+         (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'scheduled')`,
+    ).bind(uid, link.provider, link.externalRef, sessionId, s.scoped.interview.id, s.user.id,
+      link.joinUrl, session.started_at || session.created_at).run();
+    const ref = await loadRef(c.env, uid);
+    return c.json({ meeting: ref ? view(ref) : null, session_id: sessionId,
+      notice: { code: 'hosted_transcript_only',
+        message: 'Axal will import a transcript only if this connected account hosts the call and the provider makes a transcript. The recording remains a separate session.' } }, 201);
+  } catch (e) {
+    if (/UNIQUE constraint/i.test(e instanceof Error ? e.message : '')) {
+      return refuse(c, 409, { code: 'meeting_link_reused',
+        message: 'This meeting link is already attached to an interview. Use a new meeting link for this session.' });
+    }
+    throw e;
+  }
+}
+
 meetings.post('/interviews/:id/meetings', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
   const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  if (body?.attach != null) return attachCall(c, s, body);
   const provider = String(body?.provider ?? '') as MeetingProvider;
   if (!(MEETING_PROVIDERS as readonly string[]).includes(provider)) {
     return refuse(c, 400, { code: 'provider_invalid', message: 'Choose Zoom or Google Meet.' });
@@ -246,7 +322,10 @@ meetings.delete('/interviews/:id/meetings/:refUid', async (c) => {
   if (upcoming) {
     providerCancelled = false;
     try {
-      if (ref.provider === 'zoom') {
+      const attached = await c.env.DB.prepare('SELECT submitted_via FROM interview_sessions WHERE id = ?')
+        .bind(ref.session_id).first<{ submitted_via: string | null }>();
+      if (!attached?.submitted_via) providerCancelled = null;
+      else if (ref.provider === 'zoom') {
         const conn = await zoom.zoomConnection(c.env, s.user.id);
         if (conn) providerCancelled = await zoom.cancelMeeting(c.env, conn, ref.external_ref);
       } else {
@@ -273,7 +352,7 @@ meetings.post('/interviews/:id/meetings/:refUid/import', async (c) => {
   if (ref.status === 'imported') {
     return refuse(c, 409, { code: 'already_imported', message: 'This call’s transcript is already in the interview.' });
   }
-  if (Date.parse(String(ref.ends_at ?? '')) > Date.now()) {
+  if (!ref.ends_at || Date.parse(ref.ends_at) > Date.now()) {
     return refuse(c, 409, { code: 'call_not_over', message: 'The call has not ended yet. Its transcript can be fetched after it ends.' });
   }
   if (!available(c.env, ref.provider)) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE[ref.provider] });

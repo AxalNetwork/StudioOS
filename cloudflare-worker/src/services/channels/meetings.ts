@@ -20,8 +20,9 @@
  * can act on, never a provider's text — and `errorCodeOf` gives back its code.
  */
 import type { Env } from '../../types';
-import { IntakeError, importTranscript } from '../interviewIntake';
+import { IntakeError, importTranscript, writableSession } from '../interviewIntake';
 import { enqueueSessionStructure } from '../sessionAutoStructure';
+import { PROVIDER_LABEL } from './types';
 import type { ChannelJobPayload } from './jobs';
 import type { ImportedSegment, MeetingProvider } from './types';
 
@@ -163,6 +164,22 @@ export async function cancelRef(env: Env, refId: number): Promise<boolean> {
   return Number(res.meta?.changes ?? 0) > 0;
 }
 
+/** A pasted call link points at the live recording until Stop supplies its end. */
+export async function closeAttachedRefs(env: Env, sessionId: number): Promise<number> {
+  if (!Number.isSafeInteger(sessionId) || sessionId <= 0) return 0;
+  const session = await env.DB.prepare(
+    'SELECT started_at, stopped_at FROM interview_sessions WHERE id = ?',
+  ).bind(sessionId).first<{ started_at: string | null; stopped_at: string | null }>();
+  if (!session?.stopped_at) return 0;
+  const result = await env.DB.prepare(
+    `UPDATE interview_channel_refs SET starts_at = COALESCE(?, starts_at), ends_at = ?,
+       status = CASE WHEN status = 'scheduled' THEN 'ended' ELSE status END,
+       updated_at = datetime('now')
+     WHERE session_id = ? AND ends_at IS NULL AND status NOT IN ('cancelled', 'imported')`,
+  ).bind(session.started_at, session.stopped_at, sessionId).run();
+  return Number(result.meta?.changes ?? 0);
+}
+
 /**
  * Refs a sweep should look at, oldest-looked-at first, at most `limit`:
  * a call that should have ended by `endedBefore` and is still waiting, or one
@@ -210,6 +227,56 @@ export interface ImportOutcome {
 
 const unreachable = (p: MeetingProvider): MeetingErrorCode => (p === 'zoom' ? 'zoom_unreachable' : 'meet_unreachable');
 
+const attachedUid = (ref: MeetingRef) => `meeting:${ref.uid}`;
+
+/** The recording is never a provider transcript's destination. */
+async function destinationSession(env: Env, ref: MeetingRef): Promise<{ id: number; attached: boolean }> {
+  const { session: anchor } = await writableSession(env, Number(ref.user_id), Number(ref.session_id));
+  if (Number(anchor.interview_id) !== Number(ref.interview_id) || Number(anchor.created_by_user_id) !== Number(ref.user_id)) {
+    throw new IntakeError(404, 'session_not_found', 'That session no longer exists.');
+  }
+  const meta = await env.DB.prepare('SELECT submitted_via FROM interview_sessions WHERE id = ?')
+    .bind(anchor.id).first<{ submitted_via: string | null }>();
+  if (meta?.submitted_via) return { id: anchor.id, attached: false };
+  if (anchor.consent_status !== 'given' || !anchor.consent_method) {
+    throw new IntakeError(403, 'consent_not_recorded', 'Record consent before importing this call.');
+  }
+  const uid = attachedUid(ref);
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO interview_sessions
+       (uid, interview_id, project_id, created_by_user_id, channel, status,
+        consent_status, consent_method, consent_at, submitted_via, submitted_via_name)
+     VALUES (?, ?, ?, ?, 'video', 'draft', 'given', ?, ?, ?, ?)`,
+  ).bind(uid, ref.interview_id, anchor.project_id, ref.user_id,
+    anchor.consent_method, anchor.consent_at, ref.provider, PROVIDER_LABEL[ref.provider]).run();
+  const row = await env.DB.prepare('SELECT id FROM interview_sessions WHERE uid = ? AND interview_id = ? AND created_by_user_id = ?')
+    .bind(uid, ref.interview_id, ref.user_id).first<{ id: number }>();
+  if (!row) throw new IntakeError(500, 'not_stored', 'The provider transcript session could not be created.');
+  return { id: Number(row.id), attached: true };
+}
+
+/** Store a provider transcript in its own session while preserving a live recording's interview transcript. */
+async function storeWithoutReplacingRecording(env: Env, ref: MeetingRef, sessionId: number, segments: ImportedSegment[]): Promise<number> {
+  await writableSession(env, Number(ref.user_id), sessionId);
+  const clean = segments.map((s) => ({
+    text: String(s.text ?? '').trim(), speaker: String(s.speaker ?? '').trim().slice(0, 80) || 'Speaker ?',
+    start: s.startMs == null ? null : Math.max(0, Math.round(s.startMs)),
+    end: s.endMs == null ? null : Math.max(0, Math.round(s.endMs)),
+  })).filter((s) => s.text);
+  if (!clean.length) throw new IntakeError(422, 'transcript_empty', 'The meeting transcript had no text to import.');
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM interview_transcript_segments WHERE session_id = ?').bind(sessionId),
+    ...clean.map((s) => env.DB.prepare(
+      `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model)
+       VALUES (?, 'final', ?, ?, ?, NULL, ?, ?)`,
+    ).bind(sessionId, s.start, s.end, s.speaker, s.text, `${ref.provider}_transcript`)),
+    env.DB.prepare(
+      `UPDATE interview_sessions SET status = 'transcribed', final_model = ?, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(`${ref.provider}_transcript`, sessionId),
+  ]);
+  return clean.length;
+}
+
 /**
  * Fetch a call's transcript and import it into the call's session. Safe to run
  * twice: an import replaces the session's segments whole, and a settled ref is
@@ -247,11 +314,18 @@ export async function importMeetingRef(
   }
 
   try {
-    const n = await importTranscript(env, Number(ref.user_id), Number(ref.session_id), got.segments, ref.provider);
+    const destination = await destinationSession(env, ref);
+    const recordedElsewhere = destination.attached || !!(await env.DB.prepare(
+      `SELECT 1 FROM interview_sessions s WHERE s.interview_id = ? AND s.id <> ? AND s.submitted_via IS NULL
+        AND EXISTS (SELECT 1 FROM interview_transcript_segments t WHERE t.session_id = s.id AND t.source = 'final') LIMIT 1`,
+    ).bind(ref.interview_id, destination.id).first());
+    const n = recordedElsewhere
+      ? await storeWithoutReplacingRecording(env, ref, destination.id, got.segments)
+      : await importTranscript(env, Number(ref.user_id), destination.id, got.segments, ref.provider);
     await setRefStatus(env, ref.id, 'imported', null);
     // The transcript is in: the Worker AI proposes its findings (pain points
     // and the rest) for the founder to review, without waiting for a button.
-    await enqueueSessionStructure(env, Number(ref.session_id), Number(ref.user_id), 'call_imported');
+    await enqueueSessionStructure(env, destination.id, Number(ref.user_id), 'call_imported');
     return { status: 'imported', code: null, retryable: false, segments: n };
   } catch (e) {
     let code: MeetingErrorCode = 'import_failed';
