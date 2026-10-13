@@ -3,7 +3,9 @@
  * contract) and the manual writes for the records migration 440 added.
  *
  *   GET /overview?project=:pid
- *     → { cycle, question, figures: [Figure ×4], cards: [Card ×6] }
+ *     → { cycle, question, figures: [Figure ×4], cards: [Card ×6], focus, meter, index }
+ *       (D685 §5.12: the phone's focus, the interviews meter, the index counts;
+ *       PUT /interviews-target sets the meter's monthly target)
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module, card: Card, records: { cols, rows, total, page, page_size } }
  *
@@ -22,13 +24,14 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_helpers';
+import { focusOf, indexCountsOf, meterOf } from '../services/validateFocus';
 import {
   CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
   type Ctx, type ModuleSlug,
 } from '../services/cycleValidate';
 import {
   WriterError, writeSegment, assignInterviewSegment, setInterviewStage, writeDemandSignal,
-  setDemandSignalStatus, setWaitlistTarget, writeCompetitorMention, setMarketMark, addMarketSource,
+  setDemandSignalStatus, setWaitlistTarget, setInterviewsTarget, writeCompetitorMention, setMarketMark, addMarketSource,
   removeMarketSource, setHypothesisPlan, setEvidenceStrength,
 } from '../services/validateWriters';
 
@@ -37,7 +40,7 @@ const cycleValidate = new Hono<{ Bindings: Env }>();
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** The project in `?project=`, and the caller, or the Response that refuses them. */
-async function scope(c: any, gate: (p: ProjectRef, u: User) => boolean): Promise<{ user: User; projectId: number } | Response> {
+async function scope(c: any, gate: (p: ProjectRef, u: User) => boolean): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
   let user: User;
   try {
     user = (await requireAuth(c)) as User;
@@ -51,7 +54,7 @@ async function scope(c: any, gate: (p: ProjectRef, u: User) => boolean): Promise
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   if (!gate(project, user)) return c.json({ detail: 'Forbidden' }, 403);
-  return { user, projectId };
+  return { user, projectId, project };
 }
 
 const ctxOf = (c: any, projectId: number): Ctx => ({ env: c.env, projectId, today: today() });
@@ -74,7 +77,17 @@ cycleValidate.get('/overview', async (c) => {
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
   const [figs, cs] = await Promise.all([figures(ctx), cards(ctx)]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs });
+  // D685 §5.12 — the phone's focus, meter and index counts. Each fails on its
+  // own: an unreadable part is null, never a figure it did not read.
+  const part = async <T>(name: string, f: () => Promise<T>): Promise<T | null> => {
+    try { return await f(); } catch (e) { console.warn('[cycle_validate] overview part unreadable:', name, (e as Error)?.message); return null; }
+  };
+  const [focus, meter, index] = await Promise.all([
+    part('focus', () => focusOf(c.env, s.projectId, canWrite(s.project, s.user), cs)),
+    part('meter', () => meterOf(c.env, s.projectId, figs)),
+    part('index', () => indexCountsOf(c.env, s.projectId)),
+  ]);
+  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index });
 });
 
 cycleValidate.get('/modules/:slug', async (c) => {
@@ -184,6 +197,17 @@ cycleValidate.put('/waitlist-target', async (c) => {
   const b = await body(c);
   try {
     await setWaitlistTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value === undefined ? undefined : b.value });
+    return c.json({ ok: true });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+// D685 §5.12 — the monthly interviews target the meter reads; null clears it.
+cycleValidate.put('/interviews-target', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    await setInterviewsTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value === undefined ? undefined : b.value });
     return c.json({ ok: true });
   } catch (e) { return writeFailed(c, e); }
 });

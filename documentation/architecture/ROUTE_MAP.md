@@ -93,7 +93,7 @@ returns one card and its records table. The slugs are `problem-discovery`,
 The Spin-Out Lab market page already reads `GET /market-readiness` and
 writes `PUT /market-marks/:item` and `POST|DELETE /market-sources`. The other
 writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
-`/waitlist-target`, `/competitor-mentions`, `/hypotheses/:id/plan`,
+`/waitlist-target`, `/interviews-target` (D685 §5.12), `/competitor-mentions`, `/hypotheses/:id/plan`,
 `/evidence-links/:id/strength`) call the same writers as #1471's interview
 accept path. See `decisions/D659.md`.
 The `experiments` records carry Eadwyn's mark (D424) on each hypothesis as
