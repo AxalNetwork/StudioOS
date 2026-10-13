@@ -216,6 +216,12 @@ export function feedsLabel(p) {
   return p.feeds.map((f) => (typeof f === 'string' ? humanKey(f) : f?.label || humanKey(f?.key))).filter(Boolean).join(', ') || null;
 }
 
+/** One module a connector fills, named as the Worker names it (`feed_modules`), else its key made readable. */
+export function moduleLabel(p, key) {
+  const hit = Array.isArray(p?.feed_modules) ? p.feed_modules.find((m) => m && typeof m === 'object' && m.key === key) : null;
+  return hit?.label || humanKey(key) || null;
+}
+
 /** "All", "2 of 3" or "None", from the connection's per-company scope; null when it is not known. */
 export function companiesLabel(conn) {
   const list = conn?.companies;
@@ -565,6 +571,52 @@ export function toolGroups(catalogue, { q = '', filter = 'All', pin = null } = {
   return { groups, total: list.length };
 }
 
+/** The plan a locked tool needs, in the Worker's tier words; never the canvas's placeholder "Pro". */
+export const UPGRADE_TIER = Object.freeze({ growth: 'Growth', studio: 'Studio' });
+
+/**
+ * One row of Build's list (D686 §3.1 items 2 and 5): its line under the name,
+ * its pill, and the one action it offers.
+ *   failing   "Sign-in expired" → reconnect; "Last sync failed" → retry
+ *             (a sync); "Daily limit reached" → none: waiting is the fix.
+ *   connected → disconnect (with an inline confirm); the name opens its detail.
+ *   locked    → the real tier's pill and "Upgrade to Growth" / "to Studio".
+ *   soon      → "Will feed …", no action.
+ */
+export function toolRow(p) {
+  const s = toolState(p);
+  const feeds = feedsLabel(p);
+  const tier = UPGRADE_TIER[p.tier] || null;
+  if (p.locked && !p.connection && p.available) {
+    return { state: 'locked', pill: [tier || 'Paid plan', 'info'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '),
+      action: 'upgrade', actionLabel: tier ? `Upgrade to ${tier}` : 'See plans' };
+  }
+  if (s === 'failing') {
+    const why = attentionReason(p.connection);
+    const action = why === 'Sign-in expired' ? 'reconnect' : why === 'Last sync failed' ? 'retry' : null;
+    return { state: s, pill: ['Failing', 'danger'], detail: `${why} · last good sync ${lastSyncLabel(p.connection)}`,
+      action, actionLabel: action === 'reconnect' ? 'Reconnect' : action === 'retry' ? 'Try again' : null };
+  }
+  if (s === 'connected') {
+    const synced = p.connection.last_synced_at ? ` · synced ${lastSyncLabel(p.connection)}` : ' · last sync not recorded';
+    return { state: s, pill: ['Connected', 'ok'], detail: `${feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', ')}${synced}`, action: 'disconnect', actionLabel: 'Disconnect' };
+  }
+  if (s === 'soon') return { state: s, pill: ['Coming soon', 'neutral'], detail: feeds ? `Will feed ${feeds}` : 'What it will feed is not recorded', action: null, actionLabel: null };
+  if (s === 'unavailable') return { state: s, pill: [p.unreadable ? 'Status unreadable' : 'Not set up here', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: null, actionLabel: null };
+  return { state: s, pill: ['Not connected', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: 'connect', actionLabel: 'Connect' };
+}
+
+/**
+ * "Try again"'s answer, in words: the Worker's sentence for a refusal it can
+ * explain, Reconnect when the tool has no sync of its own (422).
+ */
+export function retryOutcome(e) {
+  if (!e) return { tone: 'ok', text: 'Synced.', reconnect: false };
+  const code = e?.code || e?.data?.error || e?.data?.detail || '';
+  if (e?.status === 422 || code === 'sync_not_supported') return { tone: 'warn', text: 'This tool has no sync of its own. Reconnect it instead.', reconnect: true };
+  return { tone: 'danger', text: e?.message || 'The sync failed.', reconnect: false };
+}
+
 /** The banner above Build's list: a failing tool first, then a locked one; null when neither. */
 export function toolBanner(catalogue) {
   const failing = (catalogue || []).find((p) => toolState(p) === 'failing');
@@ -573,6 +625,7 @@ export function toolBanner(catalogue) {
     return {
       tone: 'danger',
       view: 'failed',
+      key: failing.key,
       text: `${failing.display_name}: ${attentionReason(failing.connection).toLowerCase()}. ${when ? `The last good sync was ${when}; ` : ''}what it feeds keeps the last good data.`,
     };
   }

@@ -11,7 +11,7 @@ import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
-  disconnectNote, feedsLabel, flowBanner, lastSyncLabel,
+  disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
 } from './connectorsModel';
 
 /**
@@ -163,7 +163,7 @@ function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' 
       <>
         <Group label={read}>
           {(p.pulls || []).length
-            ? p.pulls.map((x) => <Row key={x.what} a={x.what} b={x.module ? `→ ${feedsLabel({ feeds: [x.module] })}` : null} />)
+            ? p.pulls.map((x) => <Row key={x.what} a={x.what} b={x.module ? `→ ${moduleLabel(p, x.module)}` : null} />)
             : <Row a="Nothing" b={`${p.display_name} only sends out.`} />}
         </Group>
         <Group label={write}>
@@ -325,7 +325,8 @@ async function startFirstParty(key) {
   return r?.authorize_url;
 }
 
-async function disconnect(p) {
+/** Disconnect a connector through its own route: the first-party three, or the registry's. */
+export async function disconnect(p) {
   if (p.key === 'google') return api.googleCalDisconnect();
   if (p.key === 'microsoft') return api.microsoftCalDisconnect();
   if (p.key === 'linkedin') return api.linkedinDisconnect();
