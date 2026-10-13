@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
+import { MODULE_LABELS } from '../integrations/fed';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
@@ -18,7 +19,7 @@ const MODULES = [
 ] as const;
 type Slug = typeof MODULES[number][0];
 type Project = { id: number; founder_id: number | null; company_id: number | null; entity_id: number | null; mvp_target_date: string | null; incorporation_meta: string | null; cofounder_decision_meta: string | null; spinout_ip_meta: string | null };
-type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; facts?: Record<string, unknown>; add?: BuildRecords['add'] };
+type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown> };
 type Query = { q?: string; filter?: string; sort?: string; page?: string };
 
 function number(v: unknown): number { return Number(v ?? 0); }
@@ -225,6 +226,32 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
     status: 'active', last_synced_at: null,
   });
   const byKind = new Map(connectors.map(c => [c.kind, c]));
+  const viewerMember = p.company_id != null && !!await env.DB.prepare(
+    'SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?',
+  ).bind(viewer.id, p.company_id).first();
+  const tools = p.company_id == null ? [] : rows(await env.DB.prepare(
+    `SELECT i.id, i.user_id, i.provider_key, i.status, i.last_synced_at, u.name AS owner_name
+       FROM integrations i
+       JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
+       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+       LEFT JOIN users u ON u.id = i.user_id
+      WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') ORDER BY i.id`,
+  ).bind(p.company_id).all<any>());
+  const toolRows = tools.map(tool => {
+    const descriptor = getDescriptor(tool.provider_key);
+    const metadata = CONNECTOR_METADATA[tool.provider_key];
+    const href = descriptor && /^[a-z0-9_]{1,80}$/.test(descriptor.key) ? `/build/connect?tool=${encodeURIComponent(descriptor.key)}` : null;
+    return record(`tool-${tool.id}`, {
+      tool: descriptor?.display_name ?? 'Unknown tool', category: metadata?.category ?? 'Not recorded',
+      state: tool.status === 'active' ? 'Connected' : tool.status === 'error' ? 'Failing' : 'Not connected',
+      last_sync: tool.last_synced_at ?? null,
+      feeds: metadata?.feeds.map(key => MODULE_LABELS[key] ?? key).join(' · ') || 'Not recorded',
+      owner: tool.user_id === viewer.id ? 'You' : viewerMember ? tool.owner_name ?? null : null,
+      action: href ? { text: 'Open', href } : null,
+    });
+  });
+  const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
+
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
       AND run_date >= date('now', '-84 days') ORDER BY run_date, id`,
@@ -236,10 +263,20 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   if (reviews.length) series.push({ kind: 'dots', values: reviews, label: 'Weekly reviews held' });
   const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
   const failingLast = failing ? byKind.get(failing)?.last_synced_at : null;
-  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failing ? { text: `Reconnect ${getDescriptor(byKind.get(failing)?.provider_key)?.display_name ?? SYSTEM_LABEL[failing]}${failingLast ? ` · last good sync ${String(failingLast).slice(0, 10)}` : ''}`, href: `/build/connect?tool=${encodeURIComponent(byKind.get(failing)?.provider_key)}` } : null),
+  const toolNext = failingTool ? { text: `Reconnect ${getDescriptor(failingTool.provider_key)!.display_name}`, href: `/build/connect?tool=${encodeURIComponent(failingTool.provider_key)}` } : null;
+  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failing ? { text: `Reconnect ${getDescriptor(byKind.get(failing)?.provider_key)?.display_name ?? SYSTEM_LABEL[failing]}${failingLast ? ` · last good sync ${String(failingLast).slice(0, 10)}` : ''}`, href: `/build/connect?tool=${encodeURIComponent(byKind.get(failing)?.provider_key)}` } : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k); return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: !c ? 'Not connected' : c.status === 'error' ? 'Failing' : c.status === 'active' ? 'Connected' : 'Not connected', last_sync: c?.last_synced_at ?? null, used_by: c?.used_by ?? null }); }),
-    facts: { connected, total: SYSTEM_KINDS.length } };
+    facts: { connected, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
+      tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
+    parts: { tools: {
+      cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
+      rows: toolRows, total: p.company_id == null ? null : toolRows.length,
+      state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
+      note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
+      failure_time_reason: 'Failure time is not recorded.',
+    } } };
+
 }
 
 const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<ModuleRead>> = {
@@ -312,7 +349,7 @@ app.get('/modules/:slug', async c => {
   const filters = result.cols.length ? [{ key: filterKey, label: filterLabel, options }] : [];
   const sorts = result.cols.flatMap(col => [{ key: col.key, label: col.label }, { key: `-${col.key}`, label: `${col.label} descending` }]);
   return c.json({ module: slug, card: result.card, records: { cols: result.cols, ...pageBuildRows(result.rows, query), filters, sorts,
-    ...(result.add ? { add: result.add } : {}) }, ...(result.facts ? { facts: result.facts } : {}) });
+    ...(result.add ? { add: result.add } : {}) }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
 });
 
 // The existing MVP, OKR, cap table and obligation writers remain canonical for

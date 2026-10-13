@@ -65,6 +65,21 @@ function connectors(db:any){
 }
 const snap=(got:unknown,want:unknown)=>assert.deepEqual(got,want);
 const checks=[
+ {name:'Tools history includes only enabled current members, with canonical fields and private owner names',before:"viewerMember ? tool.owner_name ?? null : null",after:"tool.owner_name ?? null",run:async(route:any)=>{
+ const {db,env}=fixture();connectors(db);
+ const member=await request(route,env,'/modules/operating-systems?project=101'),admin=await request(route,env,'/modules/operating-systems?project=101',3);
+ const by=(r:any,id:string)=>r.body.parts.tools.rows.find((row:any)=>row.id===id);
+ const owned=by(member,'tool-11'),team=by(member,'tool-12'),outside=by(admin,'tool-12');
+ const before=member.body.parts.tools.total;db.exec('DELETE FROM user_company_links WHERE user_id=2 AND company_id=10');
+ const departed=await request(route,env,'/modules/operating-systems?project=101');
+ snap([member.status,before,owned.cells.tool,owned.cells.owner,team.cells.tool,team.cells.owner,outside.cells.owner,JSON.stringify(admin.body).includes('Private teammate account'),member.body.parts.tools.rows.some((r:any)=>r.id==='tool-13'),departed.body.parts.tools.rows.some((r:any)=>r.id==='tool-12')],
+ [200,3,'HubSpot','You','Salesforce','Two',null,false,false,false]);db.close();}},
+ {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
+ const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
+ const action=r.body.parts.tools.rows.find((row:any)=>row.id==='tool-12').cells.action;
+ snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next.text,r.body.card.next.href,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-11').cells.feeds],
+ [2,1,3,'Reconnect Salesforce','/build/connect?tool=salesforce',{text:'Open',href:'/build/connect?tool=salesforce'},'Capital relationships · Network']);db.close();}},
+
  {name:'The five tiles and rows name Workspace',before:"workspace: 'Workspace'",after:"workspace: 'Analytics'",run:async(route:any)=>{
  const {db,env}=fixture();const r=await request(route,env,'/modules/operating-systems?project=101');
  snap([r.status,r.body.records.rows.map((r:any)=>r.cells.system),r.body.card.series[0].items.map((r:any)=>r.label)],
