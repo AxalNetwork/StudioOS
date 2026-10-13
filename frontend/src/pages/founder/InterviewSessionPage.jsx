@@ -5,6 +5,7 @@ import { createCapture, indexedDbQueue } from '../../lib/interviewCapture';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView, { recordingState } from './RecordingView';
 import { AssistantBadge } from './AssistantEntry';
+import { ChannelOriginBadge } from './ChannelOriginBadge.jsx';
 import { openingStep } from './assistantSession.js';
 import { ModelList, AUDIO } from './RecordSessionSheet';
 import InterviewReview from './InterviewReview';
@@ -340,7 +341,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   return (
     <div className="mx-auto grid max-w-6xl gap-6 p-4 md:grid-cols-[1fr_280px] md:p-6" data-testid="interview-session-page">
       <main className="min-w-0 space-y-4">
-        <nav className="flex items-center gap-2 text-[12px]"><Link to="/validate/interviews" className="text-axal-muted underline">Interviews</Link><AssistantBadge session={session} /></nav>
+        <nav className="flex items-center gap-2 text-[12px]"><Link to="/validate/interviews" className="text-axal-muted underline">Interviews</Link><AssistantBadge session={session} /><ChannelOriginBadge session={session} /></nav>
         {error && <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
         {session.status === 'draft' && <StartPanel session={session} error={startError} busy={busy} onStart={start} onConsent={consent} />}
         {recording && (

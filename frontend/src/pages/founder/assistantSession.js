@@ -6,6 +6,7 @@
  * AN ASSISTANT'S OUTPUT IS A PROPOSAL FROM THAT ASSISTANT, NEVER A FACT. Its
  * name is self-declared, so a label always carries the redirect host too.
  */
+import { channelOrigin } from './channelOrigin.js';
 
 /** The three steps the sheet shows. */
 export const ASSISTANT_STEPS = [
@@ -64,14 +65,21 @@ export function runLabel(run) {
   return run?.model ? `StudioOS · ${run.model}` : 'StudioOS · model not recorded';
 }
 
-/** The assistant badge's text for a session, or null for a session recorded here. */
+/**
+ * The assistant badge's text for a session, or null for a session recorded
+ * here. A session from a connected channel (D684) stores its provider's label
+ * in the same column, but it is the member's own conversation, not an
+ * assistant's: it has its own badge (channelOrigin.js).
+ */
 export function sessionBadge(session) {
+  if (channelOrigin(session)) return null;
   const name = String(session?.submitted_via_name || '').trim();
   return name ? `From ${name}` : null;
 }
 
 /** The step a session opens on: one an assistant submitted opens on review. */
 export function openingStep(session) {
+  if (channelOrigin(session)) return null;
   if (session?.submitted_via_name) return 'review';
   return null;
 }
