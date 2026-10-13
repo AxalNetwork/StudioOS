@@ -9,7 +9,6 @@ import { founderZoneFilters } from '../founderZoneFilters';
 import { founderZoneActions } from '../founderZoneActions';
 import FillProposals from '../FillProposals';
 import InterviewRecording from './InterviewRecording';
-import RecordSessionSheet from '../../pages/founder/RecordSessionSheet';
 import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
@@ -123,6 +122,7 @@ const INTERVIEW_VIEWS = {
 };
 
 function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneActions }) {
+  const location = useLocation();
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [view, setView] = useState('all');
@@ -133,8 +133,6 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
   // Bumped after an upload or a transcription so the row re-reads itself
   // rather than holding a stale copy of the record it just changed.
   const [localKey, setLocalKey] = useState(0);
-  // D660 — "Record a session" opens on one interview; a session hangs off it.
-  const [sessionFor, setSessionFor] = useState(null);
   const navigate = useNavigate();
   const saveEvidence = async (id, patch) => {
     await api.updateInterviewEvidence(id, patch);
@@ -265,7 +263,7 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
                   <button
                     type="button"
                     data-testid={`button-record-session-${r.id}`}
-                    onClick={() => setSessionFor(r)}
+                    onClick={() => navigate(`/validate/record?interview=${encodeURIComponent(r.id)}&project_id=${encodeURIComponent(projectId)}`, { state: { under: `${location.pathname}${location.search}` } })}
                     className="mt-2 rounded-[7px] border border-violet-200 px-[9px] py-1 text-[10.5px] font-bold text-violet-800 hover:border-violet-300 dark:border-violet-800 dark:text-violet-200"
                   >
                     Record a session
@@ -299,13 +297,6 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog, zoneFilters, zoneA
               );
             })}
           </ul>
-          {sessionFor && (
-            <RecordSessionSheet
-              interview={sessionFor}
-              onClose={() => setSessionFor(null)}
-              onCreated={(session) => navigate(`/validate/session/${session.id}`, { state: { interview: sessionFor } })}
-            />
-          )}
           <p className="mt-3 border-t border-axal-hairline pt-3 text-[11px] leading-relaxed text-axal-faint">
             These are the same records Discovery writes — one log, two doors. Consent to quote is a real field on
             an interview and it is three-state: yes, no, or never asked. Never-asked is counted apart from
@@ -1159,10 +1150,12 @@ export default function FounderValidateWorkspace() {
   const board = useBoard(projectId, ready, boardKey);
 
   /**
-   * `?new=notes|record|upload` — the three ways in the A2 artboard draws on the
+   * `?new=notes|upload` — two of the three ways in the A2 artboard draws on the
    * overview's interview card, arriving here because this is where the form is.
+   * (`record` is the Record a session lightbox since D685: it redirects to
+   * `/validate/record`, below.)
    *
-   * ALL THREE OPEN THE SAME FORM, and the reason is a real one about this
+   * BOTH OPEN THE SAME FORM, and the reason is a real one about this
    * product rather than a shortcut. Audio ATTACHES to an interview: every row
    * on this page carries its own recorder and uploader (`InterviewRecording`),
    * and there is no create-an-interview-from-a-clip path anywhere. So the first
@@ -1170,16 +1163,26 @@ export default function FounderValidateWorkspace() {
    * founder chose so the form can say what happens next instead of leaving them
    * looking for a record button that is one save away.
    *
-   * WITHOUT THIS, THE THREE OPS WOULD BE THREE LINKS TO ONE PAGE. Naming three
+   * WITHOUT THIS, THE TWO OPS WOULD BE TWO LINKS TO ONE PAGE. Naming two
    * different things and doing the same nothing is the defect this workspace's
    * own guards keep finding elsewhere; it is not worth shipping to add a row to
    * an artboard checklist.
    */
   const [intent, setIntent] = useState(null);
   const newParam = searchParams.get('new');
+  const navigate = useNavigate();
   useEffect(() => {
     if (!newParam) return;
-    if (!['notes', 'record', 'upload'].includes(newParam)) return;
+    // D685 §5.4: "Record a session" is the lightbox at /validate/record, not
+    // this form. The old address still arrives from bookmarks and old links.
+    if (newParam === 'record') {
+      const q = new URLSearchParams(location.search);
+      q.delete('new');
+      const rest = q.toString();
+      navigate(`/validate/record${rest ? `?${rest}` : ''}`, { replace: true });
+      return;
+    }
+    if (!['notes', 'upload'].includes(newParam)) return;
     setIntent(newParam);
     setLogOpen(true);
     // Consumed, so a reload or a back-navigation does not reopen the form over
@@ -1189,7 +1192,7 @@ export default function FounderValidateWorkspace() {
       next.delete('new');
       return next;
     }, { replace: true });
-  }, [newParam, setSearchParams]);
+  }, [newParam, setSearchParams, navigate, location.search]);
 
   const saveInterview = async (payload) => {
     await api.createInterview(projectId, payload);

@@ -155,7 +155,7 @@ export const DOORS = {
     live: [
       { t: 'Spin-Out Lab', route: '/spinout-lab' },
       { t: 'Customer interviews', route: '/validate/interviews' },
-      { t: 'Record a session', route: '/validate/session/:id' },
+      { t: 'Record a session', route: '/validate/record' },
       { t: 'Pain map, hypotheses, and verdict', route: '/validate/hypotheses' },
       { t: 'This week and the board', route: '/build/this-week' },
       { t: 'Roadmap', route: '/build/roadmap' },

@@ -11,7 +11,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
-import RecordSessionSheet, { ModelList, canStart, parseConversation, perMinute } from '../src/pages/founder/RecordSessionSheet.jsx';
+import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
+import { ModelList, canStart, parseConversation, perMinute } from '../src/pages/founder/RecordSessionSheet.jsx';
 import { StartPanel, TranscriptReview, SessionRail } from '../src/pages/founder/InterviewSessionPage.jsx';
 import RecordingView, { recordingState, STATES } from '../src/pages/founder/RecordingView.jsx';
 import { runRing, bandLevels, BANDS } from '../src/lib/ringViz.js';
@@ -31,21 +32,18 @@ const MODELS = {
 };
 const INTERVIEW = { id: 7, interviewee_name: 'Dana Ruiz', interviewee_role: 'Ops lead', interviewee_company: 'Acme' };
 const html = (el) => renderToStaticMarkup(React.createElement(MemoryRouter, null, el));
-const startButton = (h) => /<button[^>]*data-testid="button-start-recording"[^>]*>/.exec(h)[0];
+const startButton = (h) => /<button[^>]*data-testid="record-start"[^>]*>/.exec(h)[0];
+const lightbox = (extra = {}) => html(React.createElement(RecordLightbox, { projectId: 3, interview: INTERVIEW, initialModels: MODELS, initialBoard: { hypotheses: [] }, onClose() {}, ...extra }));
 
-test('Start is disabled on an audio channel until consent is recorded, and the foot says why', () => {
-  const none = html(React.createElement(RecordSessionSheet, { interview: INTERVIEW, initialModels: MODELS }));
-  assert.match(startButton(none), /disabled=""/);
-  assert.match(renderedText(none), /Start unlocks once consent is recorded\./);
-  assert.match(renderedText(none), /Not recorded · ask before you start/);
+test('Start is disabled on an audio channel until consent is recorded, and the note says why (D685: the lightbox replaces the sheet)', () => {
+  const none = lightbox();
+  assert.match(startButton(none), /aria-disabled="true"/);
+  assert.match(renderedText(none), /Audio starts only once consent is recorded\./);
 
-  const declined = html(React.createElement(RecordSessionSheet, { interview: INTERVIEW, initialModels: MODELS, initialConsent: { status: 'declined', method: '' } }));
-  assert.match(startButton(declined), /disabled=""/);
-
-  const given = html(React.createElement(RecordSessionSheet, { interview: INTERVIEW, initialModels: MODELS, initialConsent: { status: 'given', method: 'verbal' } }));
-  assert.doesNotMatch(startButton(given), /disabled=""/);
-  assert.match(renderedText(given), /Transcribe with Whisper Large v3 Turbo/);
-  assert.doesNotMatch(renderedText(given), /Start unlocks/);
+  const given = lightbox({ initialConsent: 'verbal' });
+  assert.doesNotMatch(startButton(given), /aria-disabled/);
+  assert.match(renderedText(given), /Consent recorded\. Audio starts when you press Start\./);
+  assert.doesNotMatch(renderedText(given), /Audio starts only once/);
 
   assert.equal(canStart('in_person', { status: 'not_recorded' }), false);
   assert.equal(canStart('video', { status: 'given', method: '' }), false, 'given needs a method, as the Worker does');
