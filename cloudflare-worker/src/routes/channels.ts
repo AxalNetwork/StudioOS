@@ -284,6 +284,29 @@ channels.post('/threads/:uid/ignore', async c => {
   return ack();
 });
 
+/** A send accepted before a storage outage can repair its transcript on retry. */
+async function recordReply(
+  env: Env, conn: ChannelConnection, thread: { id: number; external_chat_id: string },
+  outbound: { uid: string; external_message_id: string | null }, text: string,
+): Promise<void> {
+  if (!outbound.external_message_id) return;
+  const claim = await claimEvent(env, conn.provider, await sha256Hex('reply-record:' + outbound.uid), 'echo');
+  if (!claim) return;
+  let stored = false;
+  try {
+    await storeMessage(env, conn, {
+      externalChatId: thread.external_chat_id, externalMessageId: outbound.external_message_id, side: 'me', contactName: null,
+      text, kind: 'text', sentAt: new Date().toISOString(), origin: 'axal',
+    });
+    stored = true;
+    await finishEvent(env, claim, 'done', { userId: conn.userId, threadId: thread.id });
+  } catch {
+    if (stored) return;
+    await releaseEvent(env, claim);
+    throw new Error('reply_record_unavailable');
+  }
+}
+
 export async function replyToThread(env: Env, userId: number, uid: string, text: string, clientKey: string): Promise<Response> {
   const thread = await threadForReply(env, userId, uid);
   const conn = await memberConnection(env, userId, thread.provider);
@@ -295,6 +318,7 @@ export async function replyToThread(env: Env, userId: number, uid: string, text:
   const outbound = await beginOutbound(env, thread.provider, userId, thread.id, clientKey);
   if (outbound.existing) {
     if (Number(outbound.row.thread_id) !== thread.id || outbound.row.provider !== thread.provider) return error('client_key_conflict', 409);
+    if (['submitted', 'delivered', 'read'].includes(outbound.row.status)) await recordReply(env, conn, thread, outbound.row, text);
     return json({ ok: outbound.row.status !== 'failed', uid: outbound.row.uid, status: outbound.row.status });
   }
   let result: SendResult;
@@ -308,12 +332,7 @@ export async function replyToThread(env: Env, userId: number, uid: string, text:
     result = row ? await sendWhatsApp(env, conn, row.external_account_id, thread.external_chat_id, text, thread.last_inbound_at) : { ok: false, code: 'not_connected' };
   }
   await finishOutbound(env, outbound.row.id, result);
-  if (result.ok && result.externalMessageId) {
-    await storeMessage(env, conn, {
-      externalChatId: thread.external_chat_id, externalMessageId: result.externalMessageId, side: 'me', contactName: null,
-      text, kind: 'text', sentAt: new Date().toISOString(), origin: 'axal',
-    });
-  }
+  if (result.ok && result.externalMessageId) await recordReply(env, conn, thread, { uid: outbound.row.uid, external_message_id: result.externalMessageId }, text);
   return json({ ok: result.ok, uid: outbound.row.uid, status: result.ok ? 'submitted' : 'failed', ...(result.ok ? {} : { error: result.code ?? 'send_failed' }) }, result.ok ? 200 : 502);
 }
 channels.post('/threads/:uid/reply', async c => {

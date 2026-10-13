@@ -587,6 +587,30 @@ const checks: Check[] = [
     },
   },
 
+  {
+    name: 'Accepted reply repairs a failed transcript write on retry without sending twice',
+    module: 'routes', before: "if (['submitted', 'delivered', 'read'].includes(outbound.row.status)) await recordReply",
+    after: "if (false) await recordReply",
+    run: async m => {
+      const { env, db } = world(); let sends = 0;
+      await tgPost(env, m.routes.channels, tgMessage());
+      const { uid } = db.prepare('SELECT uid FROM channel_threads').get();
+      const original = env.DB.prepare.bind(env.DB);
+      let fail = true;
+      env.DB.prepare = (sql: string) => {
+        if (fail && sql.includes('INSERT OR IGNORE INTO channel_thread_messages')) { fail = false; throw new Error('fixture_storage_outage'); }
+        return original(sql);
+      };
+      await mocked(() => { sends++; return respond({ ok: true, result: { message_id: 43 } }); }, async () => {
+        const first = await signed(env, m.routes.channels, '/threads/' + uid + '/reply', { text: 'Reply fixture.', client_key: 'repair-reply' });
+        const second = await signed(env, m.routes.channels, '/threads/' + uid + '/reply', { text: 'Reply fixture.', client_key: 'repair-reply' });
+        const third = await signed(env, m.routes.channels, '/threads/' + uid + '/reply', { text: 'Reply fixture.', client_key: 'repair-reply' });
+        snap([first.status, second.status, third.status, sends, rowCount(db, 'channel_thread_messages'), rowCount(db, 'channel_outbound')],
+          [503, 200, 200, 1, 2, 1]);
+      });
+    },
+  },
+
 ];
 function objectHeader(v: any): any { return Object.fromEntries(Array.from(new Headers(v).entries()).map(([k, value]) => [k === 'authorization' ? 'Authorization' : k, value])); }
 
