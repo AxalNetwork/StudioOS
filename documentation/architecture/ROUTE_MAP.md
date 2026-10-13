@@ -797,11 +797,19 @@ signed-PDF endpoints expose safe projections and the exact PDF fingerprint.
 The legacy Legal deep link redirects with a moved notice. Formation orders are
 reached through the existing Spin-Out Lab page. Canvas reference: #1456 K1–K8.
 
-D653 (#1465): Raise’s Call for Capital header opens the five-step Extensions pause responses until renewed approval; deck-content hashes cover mutable slides.
-`RoundCallSheet`; `/round-calls?project_id=…` lists owned calls and
-`/round-calls/:uid` is private. The Worker `round_calls.ts` mounts
-`/api/round-calls`: availability/context/list, draft create/update, audience
-preview/update, send, responses, questions, manage and counsel-approval.
+D653 (#1465), reshaped by D686 (#1598): Raise’s Call for Capital opens the
+five-step `RoundCallSheet` (The round, Materials, Audience, Preview, Send),
+which resumes the venture's newest draft rather than starting a second one, and
+shows the open call instead when there is one. A founder's sent call lives in
+the Raise shell at `/raise/calls/:uid` (`RaiseCallPage`: responses with search,
+filters and paging, the closed and paused banners, Extend the date and Close
+the call); a founder opening `/round-calls/:uid` is sent there, while
+investors and counsel keep `/round-calls/:uid`, and drafts stay on it for
+"Continue draft". `/round-calls?project_id=…` lists owned calls.
+Extensions pause responses until renewed approval; deck-content hashes cover mutable slides.
+The Worker `round_calls.ts` mounts `/api/round-calls`: availability/context/list,
+draft create/update, audience preview/update, send, responses, questions, manage
+and counsel-approval.
 Founder ownership and active company, verified investor recipient entitlement,
 and HQ/Super Admin counsel review are enforced server-side. Production flag
 ROUND_CALLS_ENABLED stays false. Deck versions and NDA/grant data-room materials

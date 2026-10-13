@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { roundCallsApi } from '../../lib/api/roundCalls';
 import { reportError } from '../../lib/log';
 import RoundCallSheet from './RoundCallSheet';
@@ -9,7 +9,7 @@ export function RoundCallIndex() {
   const [params]=useSearchParams();
   const projectId=params.get('project_id');
   const read=useCallRead(()=>roundCallsApi.list(projectId),[projectId]);
-  return <main className="p-5 space-y-4"><h1 className="text-2xl font-bold">Round calls</h1><CallReadState read={read}>{read.data&&(read.data.items.length?<ul>{read.data.items.map(call=><li key={call.uid}><Link className="underline" to={'/round-calls/'+call.uid}>{call.name}</Link> · {call.state} · closes {callDate(call.target_close)}</li>)}</ul>:<p>No round calls are recorded for this view.</p>)}</CallReadState></main>;
+  return <main className="p-5 space-y-4"><h1 className="text-2xl font-bold">Round calls</h1><CallReadState read={read}>{read.data&&(read.data.items.length?<ul>{read.data.items.map(call=><li key={call.uid}><Link className="underline" to={(projectId?'/raise/calls/':'/round-calls/')+call.uid}>{call.name}</Link> · {call.state} · closes {callDate(call.target_close)}</li>)}</ul>:<p>No round calls are recorded for this view.</p>)}</CallReadState></main>;
 }
 export default function RoundCallPage() {
   const {uid}=useParams();
@@ -36,6 +36,8 @@ export default function RoundCallPage() {
     counsel:()=>perform(()=>roundCallsApi.counsel(uid,{reference,terms_hash:read.data.call.terms_hash,revision:read.data.call.revision}),'Counsel’s approval reference recorded for this version.'),
     edit:()=>setShowSheet(true),
   };
+  // D686: a founder's call lives in the Raise shell; investors and counsel keep this page.
+  if(read.data?.viewer==='founder'&&read.data.call.state!=='draft')return <Navigate to={'/raise/calls/'+encodeURIComponent(uid)} replace/>;
   return <main className="p-5 space-y-4 text-axal-ink dark:text-gray-100"><CallReadState read={read}>{read.data&&<RoundCallPageView state={{data:read.data,busy,error,message,amount,question,answers,target,reference,recipientPage}} on={on}/>}</CallReadState>
     {showSheet&&<RoundCallSheet projectId={read.data.call.project_id} initialCall={read.data.call.state==='draft'?read.data.call:null} onClose={()=>{setShowSheet(false);read.retry();}}/>}</main>;
 }
