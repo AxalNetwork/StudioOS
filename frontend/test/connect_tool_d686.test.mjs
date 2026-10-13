@@ -186,3 +186,171 @@ test('the list: Try again syncs and says how it went, a tool with no sync falls 
     await m.unmount();
   }
 });
+
+// ---------------------------------------------------------------- GitHub's sync view
+
+import { repoLine, successBanner, syncFinished, syncProgress, syncRefusal } from '../src/pages/account/githubSync.js';
+import GithubSyncSheet from '../src/pages/account/GithubSyncSheet.jsx';
+import { readFileSync } from 'node:fs';
+
+test('the sync view\'s rules: refusals in the Worker\'s words, a repository\'s line, a percentage only when reported, the banner only from a result', () => {
+  assert.equal(syncRefusal({ status: 403, code: 'write_scope_refused', message: 'GitHub grants this connection more than read access. Change the StudioOS app to read-only in GitHub, then choose again.' }),
+    'GitHub grants this connection more than read access. Change the StudioOS app to read-only in GitHub, then choose again.', 'the Worker\'s sentence as sent');
+  assert.match(syncRefusal({ status: 403, code: 'company_not_enabled', message: 'company_not_enabled' }), /^This connection is not enabled for this project’s company\./, 'a bare code gets its sentence');
+  for (const code of ['repositories_not_supported', 'repositories_unreadable', 'project_not_enabled', 'grant_unreadable', 'repositories_required', 'too_many_repositories', 'repository_not_accessible', 'sync_failed']) {
+    assert.doesNotMatch(syncRefusal({ code, message: code }), /_/, `${code} reads as a sentence`);
+  }
+  assert.equal(repoLine({ private: true, updated_at: '2026-10-03T08:00:00Z' }), 'Private · updated 3 Oct');
+  assert.equal(repoLine({ private: false, updated_at: null }), 'Public · last update not recorded');
+  assert.deepEqual(syncProgress({ state: 'running', pct: 42.4, reading: 'acme/app' }), { state: 'running', pct: 42, reading: 'acme/app' });
+  assert.equal(syncProgress({ state: 'idle', pct: null }).pct, null, 'no percentage without one');
+  assert.equal(syncProgress(null).state, 'idle');
+  assert.equal(syncFinished({ state: 'done' }) && syncFinished({ state: 'failed' }) && !syncFinished({ state: 'running' }), true);
+  assert.equal(successBanner('github', { counts: { issues: 12, pull_requests: 1, releases: 3 } }),
+    'Synced 12 issues and 1 pull request. Product roadmap and Prototype / MVP now show them. 3 releases were read; Product roadmap has no store for them yet.');
+  assert.equal(successBanner('github', { counts: { issues: 0, pull_requests: 4, releases: 0 } }), 'Synced 0 issues and 4 pull requests. Product roadmap and Prototype / MVP now show them.', 'no releases line at 0');
+  assert.equal(successBanner('stripe', { summary: 'Synced 40 charges.' }), 'Synced 40 charges.', 'another provider\'s summary as given');
+  assert.equal(successBanner('github', null), null, 'no result, no banner');
+  assert.equal(successBanner('stripe', {}), null);
+});
+
+function fakeGithub(over = {}) {
+  const calls = [];
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let status = { state: 'running', pct: null, reading: 'Reading acme/app' };
+  const api = {
+    repositories: async (uid, opts) => { calls.push(['repositories', uid, opts ?? null]); return { ok: true, available: [{ full_name: 'acme/app', private: true, updated_at: '2026-10-03T08:00:00Z' }, { full_name: 'acme/site', private: false, updated_at: null }], selected: ['acme/app'], project_id: null }; },
+    setRepositories: async (uid, repos, pid, opts) => { calls.push(['setRepositories', uid, repos, pid, opts ?? null]); return { ok: true }; },
+    sync: async (uid, opts) => { calls.push(['sync', uid, opts ?? null]); await gate; return { ok: true, summary: 'x', counts: { issues: 2, pull_requests: 1, releases: 0 } }; },
+    syncStatus: async () => { calls.push(['syncStatus']); const s = status; status = { state: 'running', pct: 50, reading: 'Reading acme/app' }; return s; },
+    ...over,
+  };
+  return { api, calls, release };
+}
+
+test('GitHub\'s sync view: preselected from GET, Sync disabled with nothing chosen, progress read before the sync answers, then the honest banner', async () => {
+  const f = fakeGithub();
+  const savedFed = connectorsApi.fed;
+  connectorsApi.fed = async () => ({ ok: true, modules: [{ module: 'product_roadmap', label: 'Product roadmap', count: 3, linked: 2, unlanded: 1, reason: '1 arrived with no store to land in.', href: '/build/product-roadmap' }, { module: 'prototype_mvp', label: 'Prototype / MVP', count: 1, linked: 1, href: null }] });
+  let waits = 0;
+  const p = { key: 'github', display_name: 'GitHub' };
+  const m = await mount(h(MemoryRouter, null, h(GithubSyncSheet, { p, conn: { uid: 'g1' }, projectId: 7, companyId: 5, eyebrow: 'Build', onClose() {}, api: f.api, wait: async () => { waits += 1; if (waits > 2) f.release(); await new Promise((r) => setTimeout(r, 0)); } })));
+  try {
+    assert.match(m.text(), /^Build Connect GitHub Choose what StudioOS reads\. You can change this later\./);
+    assert.deepEqual(f.calls[0], ['repositories', 'g1', { companyId: 5 }], 'read for the project\'s company');
+    assert.equal(m.pr(m.by('repo-acme/app'))['aria-pressed'], true, 'preselected from GET\'s selected');
+    assert.equal(m.pr(m.by('repo-acme/site'))['aria-pressed'], false);
+    assert.ok(m.text().includes('acme/app Private · updated 3 Oct'));
+    assert.ok(m.text().includes('Reads issues, pull requests and releases only.'));
+    await m.click('repo-acme/app');
+    assert.equal(m.pr(m.by('button-sync-selected')).disabled, true, 'nothing chosen: Sync disabled');
+    await m.click('repo-acme/site');
+    await m.click('button-sync-selected');
+    const order = f.calls.map((c) => c[0]);
+    assert.deepEqual(f.calls.find((c) => c[0] === 'setRepositories'), ['setRepositories', 'g1', ['acme/site'], 7, { companyId: 5 }]);
+    assert.ok(order.indexOf('syncStatus') > order.indexOf('sync'), 'polled after the sync started…');
+    assert.ok(waits >= 1, '…and before it answered: the sync was still held open');
+    assert.match(m.text(), /Synced 2 issues and 1 pull request\. Product roadmap and Prototype \/ MVP now show them\./);
+    assert.ok(m.text().includes('Product roadmap 1 arrived with no store to land in. 2 items'), 'Now fed by counts the linked items, not every one that arrived');
+    assert.equal(m.pr(m.by('fed-open-product_roadmap')).href, '/build/product-roadmap?project_id=7', 'Open carries the project');
+    assert.equal(m.by('fed-open-prototype_mvp'), undefined, 'no href, no Open');
+  } finally { connectorsApi.fed = savedFed; await m.unmount(); }
+});
+
+test('the sync view\'s refusals, in the Worker\'s words; the Connectors page picks a project when none is chosen', async () => {
+  const refused = fakeGithub({ repositories: async () => { throw Object.assign(new Error('company_not_enabled'), { status: 403, code: 'company_not_enabled' }); } });
+  const a = await mount(h(MemoryRouter, null, h(GithubSyncSheet, { p: { key: 'github', display_name: 'GitHub' }, conn: { uid: 'g1' }, projectId: 7, onClose() {}, api: refused.api })));
+  try { assert.match(a.text(a.by('sync-refused')), /^This connection is not enabled for this project’s company\./); } finally { await a.unmount(); }
+  const scope = fakeGithub({ setRepositories: async () => { throw Object.assign(new Error('GitHub grants this connection more than read access.'), { status: 403, code: 'write_scope_refused' }); } });
+  const b = await mount(h(MemoryRouter, null, h(GithubSyncSheet, { p: { key: 'github', display_name: 'GitHub' }, conn: { uid: 'g1' }, projectId: 7, onClose() {}, api: scope.api })));
+  try {
+    await b.click('button-sync-selected');
+    assert.equal(b.text(b.by('sync-error')), 'GitHub grants this connection more than read access.');
+    assert.equal(scope.calls.some((c) => c[0] === 'sync'), false, 'nothing synced after a refused choice');
+  } finally { await b.unmount(); }
+  const failed = fakeGithub({ sync: async () => { throw Object.assign(new Error('The sync did not complete. Check the connection and try again.'), { status: 502, code: 'sync_failed' }); } });
+  const c = await mount(h(MemoryRouter, null, h(GithubSyncSheet, { p: { key: 'github', display_name: 'GitHub' }, conn: { uid: 'g1' }, projectId: 7, onClose() {}, api: failed.api, wait: async () => {} })));
+  try {
+    await c.click('button-sync-selected');
+    assert.equal(c.text(c.by('sync-error')), 'The sync did not complete. Check the connection and try again.');
+    assert.equal(c.by('connect-success-banner'), undefined, 'no result, no banner');
+  } finally { await c.unmount(); }
+  const pick = fakeGithub();
+  const listed = [];
+  const d = await mount(h(MemoryRouter, null, h(GithubSyncSheet, { p: { key: 'github', display_name: 'GitHub' }, conn: { uid: 'g1' }, onClose() {}, api: pick.api, wait: async () => { pick.release(); }, projectsApi: { listProjects: async () => { listed.push(1); return [{ id: 3, name: 'Acme' }, { id: 4, name: 'Beta' }]; } } })));
+  try {
+    assert.equal(listed.length, 1, 'no project from Build or GET: the member\'s projects are read');
+    assert.equal(d.pr(d.by('button-sync-selected')).disabled, true, 'no project yet: nothing can sync');
+    await act(async () => { d.pr(d.by('sync-project-select')).onChange({ target: { value: '4' } }); });
+    await d.click('button-sync-selected');
+    assert.equal(pick.calls.find((x) => x[0] === 'setRepositories')[3], 4);
+    assert.equal(pick.calls.find((x) => x[0] === 'setRepositories')[4], null, 'no company header off Build');
+  } finally { await d.unmount(); }
+  const src = readFileSync('frontend/src/lib/api/connectors.js', 'utf8');
+  assert.match(src, /setRepositories: \(uid, repositories, projectId, opts\) => request\(`\/connectors\/\$\{enc\(uid\)\}\/repositories`, \{\s*method: 'PUT', body: JSON\.stringify\(\{ repositories, project_id: projectId \}\), \.\.\.co\(opts\),/);
+  assert.match(src, /syncStatus: \(uid\) => request\(`\/connectors\/\$\{enc\(uid\)\}\/sync-status`\)/);
+  assert.match(src, /const co = \(opts\) => \(opts\?\.companyId \? \{ headers: \{ 'X-Company-Id': String\(opts\.companyId\) \} \} : \{\}\);/);
+  assert.doesNotMatch(readFileSync('frontend/src/pages/account/ConnectToolSheet.jsx', 'utf8'), /is not built here/, 'the old note is gone');
+});
+
+// ---------------------------------------------------------------- the project's company
+
+import { companiesWith, companyBanner, projectCompany, servesCompany } from '../src/pages/account/connectorsModel.js';
+
+test('the project\'s company decides whom Build connects for', () => {
+  const companies = [{ id: 5, company_name: 'Acme' }, { id: 9, company_name: 'Beta' }];
+  assert.deepEqual(projectCompany({ id: 7, company_id: 5 }, companies), { state: 'ok', companyId: 5, name: 'Acme' });
+  assert.deepEqual(projectCompany({ id: 7, company_id: null }, companies), { state: 'none', companyId: null, name: null });
+  assert.deepEqual(projectCompany({ id: 7, company_id: 12 }, companies), { state: 'outside', companyId: 12, name: null });
+  assert.equal(projectCompany(null, companies).state, 'unreadable');
+  assert.equal(projectCompany({ company_id: 5 }, null).state, 'unreadable', 'memberships unread: not guessed');
+  assert.equal(projectCompany(undefined, companies).state, 'loading');
+  assert.equal(companyBanner({ state: 'none' }), 'This project has no company, so connected tools cannot feed it.');
+  assert.match(companyBanner({ state: 'outside' }), /^You are not a member of this project’s company/);
+  assert.equal(companyBanner({ state: 'ok' }), null);
+  assert.equal(servesCompany({ company_ids: [9] }, 5), false);
+  assert.equal(servesCompany({ company_ids: [9, 5] }, 5), true);
+  assert.equal(servesCompany({ first_party: true }, 5), null, 'first-party connections are personal');
+  assert.deepEqual(companiesWith({ company_ids: [9, 3] }, 5), [9, 3, 5], 'the PUT replaces the set: the enabled ones go too');
+  assert.deepEqual(companiesWith({ company_ids: [5] }, 5), [5]);
+});
+
+test('Build\'s list for the project\'s company: Use for it keeps the others, outside it nothing connects, the teammate is looked up for it', async () => {
+  const cat = buildCatalogue({
+    providers: [
+      { key: 'hubspot', display_name: 'HubSpot', category: 'CRM', status: 'live', has_implementation: true },
+      { key: 'calendly', display_name: 'Calendly', category: 'Calendar', status: 'live', has_implementation: true },
+    ],
+    items: [{ uid: 'u-hub', provider_key: 'hubspot', status: 'active', company_ids: [9], last_synced_at: ago(3600000) }],
+    firstParty: {},
+  });
+  const companies = [{ id: 5, company_name: 'Acme' }, { id: 9, company_name: 'Beta' }];
+  const saved = { setCompanies: connectorsApi.setCompanies, teammate: connectorsApi.teammate };
+  const calls = [];
+  let reloads = 0;
+  connectorsApi.setCompanies = async (uid, ids) => { calls.push(['setCompanies', uid, ids]); return { ok: true }; };
+  connectorsApi.teammate = async (key, opts) => { calls.push(['teammate', key, opts ?? null]); return { teammate: { name: 'Ana' } }; };
+  const view = (project) => h(MemoryRouter, null, h(ConnectToolView, { data: { status: 'ready', catalogue: cat, companies, reload: () => { reloads += 1; } }, project, projectId: 7, onClose() {} }));
+  const m = await mount(view({ id: 7, company_id: 5 }));
+  try {
+    assert.equal(m.by('connect-tool-company-ok'), undefined, 'no banner when Build can connect');
+    assert.equal(m.text(m.by('tool-action-hubspot')), 'Use for Acme');
+    await m.click('tool-action-hubspot');
+    assert.deepEqual(calls[0], ['setCompanies', 'u-hub', [9, 5]], 'Beta stays on, Acme is added');
+    assert.equal(reloads, 1);
+    await m.click('tool-action-calendly');
+    assert.deepEqual(calls.at(-1), ['teammate', 'calendly', { companyId: 5 }], 'asked for the project\'s company, not the sidebar\'s');
+    assert.ok(m.text().includes('Ana already connected Calendly for Acme. Use theirs, or connect your own.'));
+  } finally { await m.unmount(); }
+  const out = await mount(view({ id: 7, company_id: 12 }));
+  try {
+    assert.match(out.text(out.by('connect-tool-company-outside')), /^You are not a member of this project’s company/);
+    assert.equal(out.by('tool-action-calendly'), undefined, 'outside the company: no Connect');
+  } finally { await out.unmount(); }
+  const none = await mount(view({ id: 7, company_id: null }));
+  try {
+    assert.equal(none.text(none.by('connect-tool-company-none')), 'This project has no company, so connected tools cannot feed it.');
+    assert.equal(none.text(none.by('tool-action-calendly')), 'Connect', 'still connectable, for the member');
+  } finally { Object.assign(connectorsApi, saved); await none.unmount(); }
+});
