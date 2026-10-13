@@ -48,9 +48,9 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
       sort_order INTEGER NOT NULL DEFAULT 0, retired_at TEXT);
   `);
   db.exec(MIGRATION);
-  // 447 adds submitted_via (an assistant's or a channel's session); 450 is D685's setup.
+  // 447 adds submitted_via (an assistant's or a channel's session); 452 is D685's setup.
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
-  db.exec(readFileSync(new URL('../sql/migrations/450_record_session_setup.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../sql/migrations/452_record_session_setup.sql', import.meta.url), 'utf8'));
   // D658 (#1471): the receipt read also lists the structuring lines, which
   // live in `interview_structure_receipts`, beside 439's columns on 214/246's
   // `validate_proposals`, as they will in production.
@@ -441,7 +441,7 @@ test('batch output: Whisper Turbo keeps its segments and language', () => {
 // ===========================================================================
 // D685 S03-A (#1583) — the setup call, talking points, language, the
 // interview's stage and channel, one live session per member, and the
-// interview delete. Same fixture: migration 450 and the 211/440 columns.
+// interview delete. Same fixture: migration 452 and the 211/440 columns.
 // ===========================================================================
 
 const P = '/sessions';

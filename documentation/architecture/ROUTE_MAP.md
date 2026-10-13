@@ -160,7 +160,7 @@ D631 (#1389), Ops area 6:
 
 `founder_validate_sessions.ts` is mounted on `/api/founder/validate` beside `founder_validate.ts` (migration 438). A session hangs off a `discovery_interviews` row, so a Spin-Out Lab venture's interviews get it unchanged. Every route but the model list is gated on `canWrite`; since D685 another member gets 404, not 403.
 
-D685 S03-A (#1583, migration 450) adds the Worker half of "Record a session" set up in one call:
+D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set up in one call:
 - `POST /sessions` creates the interview from Who (booked, today, under the free-tier cap) or takes a picked one still in the pipeline, and opens the session on it. It takes `channel`, `call_provider`, `meeting_url`, the models, `language`, `points`, `messages` and an idempotent `client_key`. `POST /interviews/:id/sessions` takes the same new fields.
 - `GET /sessions/:id` and `GET /interviews/:id/sessions` carry the interview (name, company, stage), `call_label`, `meeting_url` (a pasted link, else a scheduled D684 call's `join_url`) and the talking points with their covered count.
 - `PUT /sessions/:id/points/:pointId { covered }` ticks a point on the Worker's clock.

@@ -1,4 +1,4 @@
--- 450 — Record a session, set up in one call (D685 §5.1, §5.2; #1583).
+-- 452 — Record a session, set up in one call (D685 §5.1, §5.2; #1583).
 --
 -- Additive only: three columns on interview_sessions, one table, two indexes
 -- and a backfill. No table is rebuilt, and there is no BEGIN or pragma.
