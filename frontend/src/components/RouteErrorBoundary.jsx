@@ -4,6 +4,7 @@ import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { reportError } from '../lib/log';
 import { isChunkLoadError } from '../lib/chunkLoadError';
 import { readAttempts, reloadWithinBudget } from '../lib/reloadGuard';
+import { whenIdle } from '../lib/captureGuard';
 
 /**
  * Page-level error boundary that wraps the lazy `<Routes>` tree.
@@ -71,7 +72,8 @@ class RouteErrorBoundary extends React.Component {
 
     // Auto-recover from chunk-load failures exactly once per tab (storage or URL).
     if (isChunkLoadError(error)) {
-      const reloaded = reloadWithinBudget(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM, MAX_BOUNDARY_RELOADS);
+      // A running recording is never reloaded away (D685 §5.6.8): the reload waits for it.
+      const reloaded = reloadWithinBudget(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM, MAX_BOUNDARY_RELOADS, whenIdle);
       if (!reloaded) {
         // Budget spent or storage refused with no URL marker — show the actionable card.
         this.setState({ reloading: false });

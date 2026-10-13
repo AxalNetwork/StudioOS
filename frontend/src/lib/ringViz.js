@@ -38,7 +38,16 @@ export function animates({ reduced, paused }) {
 }
 
 /** Draw one frame. `progress` (0..1) draws the stopping arc instead of rings. */
-export function drawRing(ctx, { W, H, energy, t, mode, dark, reduced, progress }) {
+/** How long a marked moment lights the ring (D685 §5.7.4, RV5). */
+export const FLASH_MS = 450;
+
+/** The flash's strength at `elapsed` ms after the mark: 1 → 0, nothing under reduced motion. */
+export function flashLevel(elapsed, reduced) {
+  if (reduced || elapsed == null || elapsed < 0 || elapsed >= FLASH_MS) return 0;
+  return 1 - elapsed / FLASH_MS;
+}
+
+export function drawRing(ctx, { W, H, energy, t, mode, dark, reduced, progress, flash = 0 }) {
   const cx = W / 2, cy = H / 2, scale = Math.min(W, H) / 400;
   ctx.clearRect(0, 0, W, H);
   if (mode === 'stopping') {
@@ -73,13 +82,20 @@ export function drawRing(ctx, { W, H, energy, t, mode, dark, reduced, progress }
     }
     ctx.restore();
   });
+  if (flash > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.55 * flash;
+    ctx.beginPath(); ctx.arc(cx, cy, 150 * scale, 0, Math.PI * 2);
+    ctx.lineWidth = 10 * scale; ctx.strokeStyle = dark ? '#c4b5fd' : '#7c3aed'; ctx.stroke();
+    ctx.restore();
+  }
 }
 
 /**
  * Run the ring on a canvas context. Returns a stop function.
  * `raf`/`caf`/`now` are injected so a test can count the frames asked for.
  */
-export function runRing({ ctx, size, analyser, sampleRate, mode, dark, reduced, progress, raf, caf, now }) {
+export function runRing({ ctx, size, analyser, sampleRate, mode, dark, reduced, progress, raf, caf, now, flashAt = null }) {
   const energy = [0, 0, 0];
   const freq = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
   let t = 0, last = now(), id = null, alive = true;
@@ -93,9 +109,11 @@ export function runRing({ ctx, size, analyser, sampleRate, mode, dark, reduced, 
       const s = bandLevels(freq, sampleRate);
       for (let i = 0; i < 3; i += 1) energy[i] += (s[i] - energy[i]) * Math.min(1, s[i] > energy[i] ? dt / 0.08 : dt / 0.4);
     }
-    drawRing(ctx, { W: size.w, H: size.h, energy, t, mode, dark, reduced, progress });
-    // Reduced motion and pause are one still frame; nothing is scheduled after it.
-    if (animates({ reduced, paused })) id = raf(frame);
+    const flash = flashAt == null ? 0 : flashLevel(n - flashAt, reduced);
+    drawRing(ctx, { W: size.w, H: size.h, energy, t, mode, dark, reduced, progress, flash });
+    // Reduced motion and pause are one still frame; nothing is scheduled after
+    // it, except to finish a flash that is still fading.
+    if (animates({ reduced, paused }) || flash > 0) id = raf(frame);
   };
   frame();
   return () => { alive = false; if (id != null) caf(id); };

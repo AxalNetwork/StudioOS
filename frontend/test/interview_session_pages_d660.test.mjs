@@ -14,7 +14,7 @@ import { renderedText } from './_renderedText.mjs';
 import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
 import { ModelList, canStart, parseConversation, perMinute } from '../src/pages/founder/RecordSessionSheet.jsx';
 import { StartPanel, TranscriptReview, SessionRail } from '../src/pages/founder/InterviewSessionPage.jsx';
-import RecordingView, { recordingState, STATES } from '../src/pages/founder/RecordingView.jsx';
+import RecordingView, { layers, STATES } from '../src/pages/founder/RecordingView.jsx';
 import { runRing, bandLevels, BANDS } from '../src/lib/ringViz.js';
 import { createCapture, memoryQueue, flushQueue, downsampleTo16k, readLiveEvent } from '../src/lib/interviewCapture.js';
 
@@ -141,27 +141,31 @@ test('reduced motion draws one still frame and asks for no other; paused does no
   assert.deepEqual(bandLevels(freq, 48000), [1, 1, 1]);
 });
 
-test('each of the eleven states is reachable, and the Recording View says the canvas words', () => {
-  const seen = new Set([
-    recordingState({}), recordingState({ silentMs: 3000 }), recordingState({ paused: true }),
-    recordingState({ markedAt: 0, now: 100 }), recordingState({ online: false }), recordingState({ mic: 'denied' }),
-    recordingState({ silentMs: 9000 }), recordingState({ stopping: true }), recordingState({ reduced: true }),
-    recordingState({ drawer: true }), recordingState({ confirm: true }),
-  ]);
-  assert.deepEqual([...seen].sort(), [...STATES].sort());
-  const view = (state, extra = {}) => renderedText(html(React.createElement(RecordingView, { state, elapsedMs: 61000, interviewee: 'Dana', liveAvailable: true, liveOn: true, ...extra })));
-  assert.match(view('offline'), /Saved on this device, uploading when online/);
-  assert.match(view('denied'), /StudioOS cannot hear the microphone/);
-  assert.match(view('nosound'), /We can't hear anything\. Check the microphone\./);
-  assert.match(view('marked', { lastMark: 24000 }), /Moment marked at 00:24/);
-  assert.match(view('confirm'), /Stop and process this session\?/);
-  assert.match(view('confirm'), /Keep recording/);
-  assert.match(view('speech', { liveOn: false }), /Live transcript off\. The transcript appears when you stop\./);
-  assert.match(view('stopping', { stage: 1 }), /Uploading.*Transcribing.*Summarising/);
-  assert.match(view('speech'), /01:01/);
-  const dark = html(React.createElement(RecordingView, { state: 'speech', theme: 'dark' }));
-  assert.match(dark, /data-theme="dark"/);
-  assert.match(html(React.createElement(RecordingView, { state: 'speech' })), /data-theme="light"/);
+test('each canvas state is reachable as a layer of its own (D685 §5.7.11), and the Recording View says the canvas words', () => {
+  const base = { phase: 'recording', session: { id: 1, status: 'recording', active_ms: 61000, live_model: 'nova' }, interview: { interviewee_name: 'Dana' }, cap: { live: true, caption: 'hello' }, online: true };
+  const on = (patch) => Object.entries(layers({ ...base, ...patch, cap: { ...base.cap, ...(patch.cap || {}) } }, { reduced: patch.reduced })).filter(([, v]) => v === true).map(([k]) => k);
+  assert.deepEqual(on({}), [], 'speech: nothing over it');
+  assert.deepEqual(on({ cap: { silentMs: 3000 } }), ['silence']);
+  assert.deepEqual(on({ cap: { silentMs: 31000 } }), ['nosound', 'silence'], 'no sound for 30 s');
+  assert.deepEqual(on({ phase: 'paused', online: false }), ['paused', 'offline'], 'paused AND offline, never one hiding the other');
+  assert.deepEqual(on({ toast: { at: 1, offset: 24000 }, drawer: true }), ['drawer', 'toast'], 'a toast over the drawer');
+  assert.deepEqual(on({ phase: 'denied' }), ['denied']);
+  assert.deepEqual(on({ phase: 'stopping' }), ['stopping']);
+  assert.deepEqual(on({ confirm: true }), ['confirm']);
+  assert.deepEqual(on({ reduced: true }), ['reduced']);
+  assert.equal(STATES.length, 11);
+  const view = (patch = {}, extra = {}) => renderedText(html(React.createElement(RecordingView, { st: { ...base, ...patch, cap: { ...base.cap, ...(patch.cap || {}) } }, now: 0, ...extra })));
+  assert.match(view({ online: false }), /Saved on this device, uploading when online/);
+  assert.match(view({ phase: 'denied' }), /StudioOS cannot hear the microphone/);
+  assert.match(view({ cap: { silentMs: 31000 } }), /We can't hear anything\. Check the microphone\./);
+  assert.match(view({ toast: { at: 1, offset: 24000 } }), /Moment marked at 00:24/);
+  assert.match(view({ confirm: true }), /Stop and process this session\?/);
+  assert.match(view({ confirm: true }), /Keep recording/);
+  assert.match(view({ cap: { live: false } }), /Live transcript off\. The transcript appears when you stop\./);
+  assert.match(view({ phase: 'stopping', stage: 1 }), /Uploading.*Transcribing.*Summarising/);
+  assert.match(view({ phase: 'paused', session: { ...base.session, status: 'paused' } }), /00:01:01/, 'hh:mm:ss, as drawn');
+  assert.match(html(React.createElement(RecordingView, { st: base, theme: 'dark' })), /data-theme="dark"/);
+  assert.match(html(React.createElement(RecordingView, { st: base })), /data-theme="light"/);
 });
 
 test('speakers are assigned with one tap; the receipt and the meter read the Worker', () => {
