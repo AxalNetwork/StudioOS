@@ -90,7 +90,7 @@ function world() {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql']) db.exec(mig(m));
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1), ('bc-2', 'BC-UNLINKED', '777', NULL, 1, 1),
                   ('bc-3', 'BC-OFF', '555001', ${ME}, 0, 1)`);
@@ -136,6 +136,27 @@ test('migration 449 is idempotent and frees an identity on disconnect', () => {
   assert.throws(() => db.exec(`INSERT INTO integrations (uid, user_id, provider_key, external_account_id) VALUES ('dup', 5, 'whatsapp', 'PNID-1')`));
   db.exec(`UPDATE integrations SET status = 'disconnected' WHERE id = ${WA_INT}`);
   db.exec(`INSERT INTO integrations (uid, user_id, provider_key, external_account_id) VALUES ('dup', 5, 'whatsapp', 'PNID-1')`);
+});
+
+test('migration 450 widens channel_events to the delete kind the adapter writes, keeping every row', async () => {
+  // On 449 alone (what main applied first) the claim the Telegram adapter makes
+  // for a deleted business message is refused by the CHECK.
+  const { DatabaseSync } = await import('node:sqlite');
+  const raw = new DatabaseSync(':memory:');
+  raw.exec(`CREATE TABLE integrations (id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, auth_type TEXT, external_account_id TEXT, status TEXT DEFAULT 'connected')`);
+  raw.exec(`CREATE TABLE interview_sessions (id INTEGER PRIMARY KEY)`);
+  raw.exec(mig('449_interview_channels.sql'));
+  raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind, status) VALUES ('e1', 'telegram', 'h1', 'message', 'done')`);
+  assert.throws(() => raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e2', 'telegram', 'h2', 'delete')`), /CHECK/);
+  raw.exec(mig('450_channel_events_delete_kind.sql'));
+  assert.deepEqual({ ...raw.prepare(`SELECT uid, kind, status FROM channel_events WHERE uid = 'e1'`).get() }, { uid: 'e1', kind: 'message', status: 'done' });
+  raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e2', 'telegram', 'h2', 'delete')`);
+  assert.throws(() => raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e3', 'telegram', 'h3', 'nonsense')`), /CHECK/);
+  assert.throws(() => raw.exec(`INSERT INTO channel_events (uid, provider, external_event_id, kind) VALUES ('e4', 'telegram', 'h1', 'message')`), /UNIQUE/);
+  assert.ok(raw.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_channel_events_user'`).get(), '449\'s index is gone');
+  // And through the service, on the world every other test uses.
+  const { env } = world();
+  assert.ok(await claimEvent(env, 'telegram', 'del-1', 'delete'));
 });
 
 test('an event is claimed once; a released claim lets the retry through', async () => {
