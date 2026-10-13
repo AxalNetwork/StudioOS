@@ -40,9 +40,17 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, interviewee_name TEXT NOT NULL,
       transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT,
+      -- D685: the columns production carries (211, 440) that the session routes now write.
+      interviewee_company TEXT, interview_date TEXT, quote_consent INTEGER,
+      stage TEXT, invited_at TEXT, booked_at TEXT, done_at TEXT, channel TEXT,
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
+    CREATE TABLE hypotheses (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, code TEXT NOT NULL, claim TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0, retired_at TEXT);
   `);
   db.exec(MIGRATION);
+  // 447 adds submitted_via (an assistant's or a channel's session); 452 is D685's setup.
+  db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
+  db.exec(readFileSync(new URL('../sql/migrations/452_record_session_setup.sql', import.meta.url), 'utf8'));
   // D658 (#1471): the receipt read also lists the structuring lines, which
   // live in `interview_structure_receipts`, beside 439's columns on 214/246's
   // `validate_proposals`, as they will in production.
@@ -181,8 +189,8 @@ test('chunks refuse the wrong type, a bad sequence number and another founder', 
   await call(f.env, FOUNDER, 'POST', `/sessions/${id}/start`);
   assert.equal((await call(f.env, FOUNDER, 'PUT', `/sessions/${id}/chunks/0`, new Uint8Array(10), { 'content-type': 'text/plain' })).status, 415);
   assert.equal((await putChunk(f, id, -1)).status, 400);
-  assert.equal((await putChunk(f, id, 0, new Uint8Array(10), OTHER)).status, 403);
-  assert.equal((await call(f.env, OTHER, 'GET', `/sessions/${id}`)).status, 403);
+  assert.equal((await putChunk(f, id, 0, new Uint8Array(10), OTHER)).status, 404, 'D685: another member gets 404, not 403');
+  assert.equal((await call(f.env, OTHER, 'GET', `/sessions/${id}`)).status, 404);
 });
 
 // ── The final transcript ─────────────────────────────────────────────────────
@@ -321,7 +329,7 @@ test('a Lab venture’s interview records a session with no Lab-specific code', 
   const t = await call(f.env, LAB, 'POST', `/sessions/${id}/transcribe`, {});
   assert.equal(t.status, 200, JSON.stringify(t.body));
   assert.ok(f.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = 2').get().transcript);
-  assert.equal((await call(f.env, FOUNDER, 'GET', `/sessions/${id}`)).status, 403, 'another founder read a Lab session');
+  assert.equal((await call(f.env, FOUNDER, 'GET', `/sessions/${id}`)).status, 404, 'another founder read a Lab session');
 });
 
 // ── Duration, receipt, models ────────────────────────────────────────────────
@@ -428,4 +436,238 @@ test('batch output: Whisper Turbo keeps its segments and language', () => {
     { start_ms: 0, end_ms: 1000, text: 'a', speaker: null }, { start_ms: 1000, end_ms: 2000, text: 'b', speaker: null }] });
   const plain = parseAudioOutput('@cf/openai/whisper', { text: '' });
   assert.deepEqual(plain, { text: '', language: null, segments: [] }, 'silence is an answer, not a passage');
+});
+
+// ===========================================================================
+// D685 S03-A (#1583) — the setup call, talking points, language, the
+// interview's stage and channel, one live session per member, and the
+// interview delete. Same fixture: migration 452 and the 211/440 columns.
+// ===========================================================================
+
+const P = '/sessions';
+const setup = (f: any, body: any, user = FOUNDER) => call(f.env, user, 'POST', P, { project_id: 10, live_model: null, ...body });
+const interviewRow = (f: any, id: number) => f.db.prepare('SELECT * FROM discovery_interviews WHERE id = ?').get(id) as any;
+
+test('D685: the setup call creates the interview from Who, booked today, and opens the session on it', async () => {
+  const f = fixture();
+  const r = await setup(f, { channel: 'video', call_provider: 'zoom', meeting_url: 'https://acme.zoom.us/j/123456789',
+    interviewee: { name: 'Priya', company: 'Northwind' }, consent: { status: 'given', method: 'verbal' }, client_key: 'k1' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.interview.interviewee_name, 'Priya');
+  assert.equal(r.body.interview.interviewee_company, 'Northwind');
+  assert.equal(r.body.interview.stage, 'booked');
+  assert.equal(r.body.call_label, 'Video call · Zoom');
+  assert.equal(r.body.meeting_url, 'https://acme.zoom.us/j/123456789');
+  const row = interviewRow(f, r.body.interview.id);
+  assert.equal(row.channel, 'video');
+  assert.ok(row.booked_at);
+  assert.equal(row.interview_date, new Date().toISOString().slice(0, 10));
+  // A reload keeps the interviewee and the company: GET /sessions/:id carries them.
+  const read = await call(f.env, FOUNDER, 'GET', `/sessions/${r.body.session.id}`);
+  assert.equal(read.body.interview.interviewee_company, 'Northwind');
+  assert.equal(read.body.call_label, 'Video call · Zoom');
+  // The per-interview list carries the interview too.
+  const list = await call(f.env, FOUNDER, 'GET', `/interviews/${r.body.interview.id}/sessions`);
+  assert.equal(list.body.interview.interviewee_name, 'Priya');
+  assert.equal(list.body.items[0].call_label, 'Video call · Zoom');
+});
+
+test('D685: a repeated client_key answers the same pair; a double Start makes one interview', async () => {
+  const f = fixture();
+  const body = { channel: 'in_person', interviewee: { name: 'Lee' }, consent: { status: 'given', method: 'written' }, client_key: 'same' };
+  const a = await setup(f, body);
+  const b = await setup(f, body);
+  assert.equal(a.status, 201);
+  assert.equal(b.status, 200);
+  assert.equal(b.body.session.id, a.body.session.id);
+  assert.equal(b.body.interview.id, a.body.interview.id);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Lee'").get().n, 1);
+  // Another member's key is their own.
+  assert.equal((await call(f.env, OTHER, 'POST', P, { project_id: 10, ...body })).status, 404, 'not their project');
+});
+
+test('D685: a picked interview must be on the project and still to come', async () => {
+  const f = fixture();
+  f.db.exec("INSERT INTO discovery_interviews (id, project_id, interviewee_name, stage) VALUES (5, 10, 'Kim', 'invited'), (6, 10, 'Held', 'done'), (7, 20, 'Elsewhere', 'lead')");
+  const ok = await setup(f, { channel: 'text', interview_id: 5, messages: [{ author: 'Kim', text: 'Hello' }] });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.equal(ok.body.interview.id, 5);
+  assert.equal((await setup(f, { channel: 'text', interview_id: 6 })).status, 409, 'already held');
+  assert.equal((await setup(f, { channel: 'text', interview_id: 7 })).status, 404, 'another project');
+  // A text session is held the moment its chat is in.
+  assert.equal(interviewRow(f, 5).stage, 'done');
+});
+
+test('D685: the free tier cap applies to the interviews the setup call creates', async () => {
+  const f = fixture();
+  for (let i = 0; i < 5; i++) f.db.prepare('INSERT INTO discovery_interviews (project_id, interviewee_name) VALUES (10, ?)').run(`P${i}`);
+  const r = await setup(f, { channel: 'text', interviewee: { name: 'Sixth' } });
+  assert.equal(r.status, 402);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Sixth'").get().n, 0);
+});
+
+test('D685: channel × call provider pairs and the meeting-link host rules', async () => {
+  const f = fixture();
+  const one = (b: any) => setup(f, { interviewee: { name: 'X' }, consent: { status: 'given', method: 'verbal' }, ...b });
+  assert.equal((await one({ channel: 'in_person', call_provider: 'zoom' })).status, 400);
+  assert.equal((await one({ channel: 'phone', call_provider: 'zoom' })).status, 400);
+  assert.equal((await one({ channel: 'phone', call_provider: 'signal' })).status, 201);
+  assert.equal((await one({ channel: 'video', call_provider: 'zoom', meeting_url: 'http://zoom.us/j/1' })).status, 400, 'not https');
+  assert.equal((await one({ channel: 'video', call_provider: 'zoom', meeting_url: 'https://zoom.us.evil.com/j/1' })).status, 400, 'host spoof');
+  assert.equal((await one({ channel: 'video', call_provider: 'google_meet', meeting_url: 'https://acme.zoom.us/j/1' })).status, 400, 'wrong provider');
+  const wa = await one({ channel: 'video', call_provider: 'whatsapp', meeting_url: 'https://wa.me/1' });
+  assert.equal(wa.status, 400);
+  assert.match(wa.body.message, /no meeting link to check/);
+  assert.equal((await one({ channel: 'video', call_provider: 'teams', meeting_url: 'https://teams.microsoft.com/l/meetup' })).status, 201);
+  const audioLink = await one({ channel: 'phone', call_provider: 'whatsapp', meeting_url: 'https://teams.microsoft.com/l/x' });
+  assert.equal(audioLink.status, 400);
+  assert.equal(audioLink.body.message, 'Only a video call has a meeting link.');
+  const phone = await one({ channel: 'phone', call_provider: 'whatsapp' });
+  assert.equal(phone.body.call_label, 'Audio call · WhatsApp call');
+  assert.equal((await one({ channel: 'manual' })).status, 400, 'manual is no longer offered by the setup call');
+});
+
+test('D685: language per model — stored, passed to Nova-3 and Turbo, never to Whisper v1; Flux is English only', async () => {
+  const f = fixture();
+  const flux = await setup(f, { channel: 'in_person', live_model: '@cf/deepgram/flux', language: 'fr', interviewee: { name: 'A' } });
+  assert.equal(flux.status, 400);
+  assert.match(flux.body.message, /English only/);
+  const fluxDetect = await setup(f, { channel: 'in_person', live_model: '@cf/deepgram/flux', interviewee: { name: 'B' } });
+  assert.equal(fluxDetect.body.session.language, 'en', 'a Flux session on Detect stores en');
+  assert.equal((await setup(f, { channel: 'in_person', language: 'xx', interviewee: { name: 'C' } })).status, 400);
+  const models = await call(f.env, FOUNDER, 'GET', '/sessions/models');
+  assert.deepEqual(models.body.languages.map((l: any) => l.code), ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl']);
+  const { audioInputFor, liveInputFor } = await import('../src/services/sttFormats.ts');
+  const bytes = new Uint8Array([1, 2]);
+  assert.equal(audioInputFor('@cf/openai/whisper-large-v3-turbo', bytes, 'audio/webm', 'fr').language, 'fr');
+  assert.equal('language' in audioInputFor('@cf/openai/whisper', bytes, 'audio/webm', 'fr'), false);
+  const nova = audioInputFor('@cf/deepgram/nova-3', bytes, 'audio/webm', 'de');
+  assert.equal(nova.language, 'de');
+  assert.equal('detect_language' in nova, false, 'a set language replaces detection');
+  assert.equal(audioInputFor('@cf/deepgram/nova-3', bytes, 'audio/webm', null).detect_language, true);
+  assert.equal(liveInputFor('@cf/deepgram/nova-3', 'es').language, 'es');
+  assert.equal('language' in liveInputFor('@cf/deepgram/flux', 'en'), false);
+});
+
+test('D685: talking points — checked against the project, capped, snapshotted, ticked on the Worker clock', async () => {
+  const f = fixture();
+  f.db.exec(`INSERT INTO hypotheses (id, project_id, code, claim, sort_order, retired_at) VALUES
+    (1, 10, 'H1', 'Ops leads lose a day a week', 0, NULL),
+    (2, 10, 'H2', 'They would pay', 1, NULL),
+    (3, 10, 'H3', 'Retired claim', 2, '2026-01-01'),
+    (4, 20, 'H9', 'Another project', 0, NULL)`);
+  for (let i = 10; i < 22; i++) f.db.prepare("INSERT INTO hypotheses (id, project_id, code, claim) VALUES (?, 10, ?, 'c')").run(i, `X${i}`);
+  const r = await setup(f, { channel: 'in_person', interviewee: { name: 'Pat' }, consent: { status: 'given', method: 'verbal' },
+    points: [2, 1, 3, 4, 2] });
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.body.points.map((p: any) => p.text), ['H2 · They would pay', 'H1 · Ops leads lose a day a week'],
+    'retired and other-project ids dropped, duplicates once, order kept');
+  const many = await setup(f, { channel: 'in_person', interviewee: { name: 'Q' }, points: [1, 2, ...Array.from({ length: 12 }, (_, i) => 10 + i)] });
+  assert.equal(many.body.points.length, 10, 'capped at 10');
+
+  const sid = r.body.session.id;
+  const [p1, p2] = r.body.points;
+  f.db.prepare("UPDATE interview_sessions SET status = 'paused', active_ms = 61000, recording_since = NULL WHERE id = ?").run(sid);
+  const tick = await call(f.env, FOUNDER, 'PUT', `/sessions/${sid}/points/${p1.id}`, { covered: true, covered_offset_ms: 5 });
+  assert.equal(tick.status, 200);
+  assert.equal(tick.body.points_covered, 1);
+  const stored = f.db.prepare('SELECT covered_at, covered_offset_ms FROM interview_session_points WHERE id = ?').get(p1.id) as any;
+  assert.equal(stored.covered_offset_ms, 61000, 'the Worker clock, never the client value');
+  assert.ok(stored.covered_at);
+  const untick = await call(f.env, FOUNDER, 'PUT', `/sessions/${sid}/points/${p1.id}`, { covered: false });
+  assert.equal(untick.body.points_covered, 0);
+  const cleared = f.db.prepare('SELECT covered_at, covered_offset_ms FROM interview_session_points WHERE id = ?').get(p1.id) as any;
+  assert.equal(cleared.covered_at, null);
+  assert.equal(cleared.covered_offset_ms, null);
+  // Another session's point, or another member, is 404.
+  assert.equal((await call(f.env, FOUNDER, 'PUT', `/sessions/${many.body.session.id}/points/${p2.id}`, { covered: true })).status, 404);
+  assert.equal((await call(f.env, OTHER, 'PUT', `/sessions/${sid}/points/${p2.id}`, { covered: true })).status, 404);
+  // Deleting the session deletes its points explicitly, not by the CASCADE.
+  f.db.exec('PRAGMA foreign_keys = OFF');
+  await call(f.env, FOUNDER, 'DELETE', `/sessions/${sid}`);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(sid).n, 0);
+});
+
+test('D685: stopping moves the interview to done, through both stop paths; one live session per member', async () => {
+  const f = fixture();
+  const consent = { status: 'given', method: 'verbal' };
+  const a = await setup(f, { channel: 'in_person', interviewee: { name: 'One' }, consent });
+  const b = await setup(f, { channel: 'in_person', interviewee: { name: 'Two' }, consent });
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/start`)).status, 200);
+  const second = await call(f.env, FOUNDER, 'POST', `/sessions/${b.body.session.id}/start`);
+  assert.equal(second.status, 409);
+  assert.equal(second.body.error, 'session_active');
+  assert.equal(second.body.session_id, a.body.session.id);
+  // An assistant's or a channel's session does not count.
+  f.db.prepare("UPDATE interview_sessions SET submitted_via = 'chatgpt' WHERE id = ?").run(a.body.session.id);
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${b.body.session.id}/start`)).status, 200);
+  f.db.prepare('UPDATE interview_sessions SET submitted_via = NULL WHERE id = ?').run(a.body.session.id);
+
+  // Path 1: the stop action.
+  assert.equal(interviewRow(f, b.body.interview.id).stage, 'booked');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${b.body.session.id}/stop`);
+  const held = interviewRow(f, b.body.interview.id);
+  assert.equal(held.stage, 'done');
+  assert.ok(held.done_at);
+  // Path 2: consent withdrawn while paused stops it.
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/pause`);
+  await call(f.env, FOUNDER, 'PATCH', `/sessions/${a.body.session.id}/consent`, { status: 'declined' });
+  assert.equal(interviewRow(f, a.body.interview.id).stage, 'done');
+  // Idempotent: a second pass over a held interview writes nothing more.
+  const { markInterviewHeld } = await import('../src/services/sessionSetup.ts');
+  const before = f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'interview_stage_set'").get().n;
+  await markInterviewHeld(f.env, { interview_id: b.body.interview.id, project_id: 10, channel: 'in_person' }, null);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'interview_stage_set'").get().n, before);
+  // The channel fills only where none was set.
+  f.db.exec("INSERT INTO discovery_interviews (id, project_id, interviewee_name, stage, channel) VALUES (9, 10, 'Chan', 'booked', 'phone')");
+  const c9 = await setup(f, { channel: 'in_person', interview_id: 9, consent });
+  await call(f.env, FOUNDER, 'POST', `/sessions/${c9.body.session.id}/start`);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${c9.body.session.id}/stop`);
+  assert.equal(interviewRow(f, 9).channel, 'phone');
+});
+
+test('D685: a text session records quote consent when a method is picked, and nothing when none is', async () => {
+  const f = fixture();
+  const with_ = await setup(f, { channel: 'text', interviewee: { name: 'T1' }, consent: { method: 'in_app' }, messages: [{ text: 'hi' }] });
+  assert.equal(interviewRow(f, with_.body.interview.id).quote_consent, 1);
+  const without = await setup(f, { channel: 'text', interviewee: { name: 'T2' }, messages: [{ text: 'hi' }] });
+  assert.equal(interviewRow(f, without.body.interview.id).quote_consent, null);
+});
+
+test('D685: the meeting link falls back to a scheduled D684 call\'s join link', async () => {
+  const f = fixture();
+  f.db.exec(readFileSync(new URL('../sql/migrations/449_interview_channels.sql', import.meta.url), 'utf8')
+    .split(';').filter((sql) => /interview_channel_refs/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
+  const r = await setup(f, { channel: 'video', call_provider: 'zoom', interviewee: { name: 'Z' }, consent: { status: 'given', method: 'verbal' } });
+  assert.equal(r.body.meeting_url, null);
+  f.db.prepare("INSERT INTO interview_channel_refs (uid, provider, external_ref, session_id, interview_id, user_id, join_url) VALUES ('u', 'zoom', '123456', ?, ?, 2, 'https://zoom.us/j/123456')")
+    .run(r.body.session.id, r.body.interview.id);
+  assert.equal((await call(f.env, FOUNDER, 'GET', `/sessions/${r.body.session.id}`)).body.meeting_url, 'https://zoom.us/j/123456');
+});
+
+test('D685 §5.11: deleting an interview deletes its sessions the way DELETE /sessions/:id does — audio, rows, pending proposals', async () => {
+  const f = fixture();
+  const { default: progress } = await import('../src/routes/progress.ts');
+  // progress.ts reads the project the way the rest of the product does.
+  for (const col of ['company_id INTEGER', 'deleted_at TEXT', 'status TEXT', 'owner_id INTEGER']) {
+    try { f.db.exec(`ALTER TABLE projects ADD COLUMN ${col}`); } catch { /* present */ }
+  }
+  const papp = new Hono();
+  papp.route('/api/progress', progress as any);
+  papp.onError((err: any, c) => (err instanceof Response ? err : c.json({ detail: String(err?.message) }, 500)));
+  const s = await setup(f, { channel: 'in_person', interviewee: { name: 'Gone' }, consent: { status: 'given', method: 'verbal' } });
+  const sid = s.body.session.id;
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/start`);
+  assert.equal((await putChunk(f, sid, 0, new Uint8Array(32))).status, 201);
+  assert.equal(f.objects.size, 1);
+  f.db.prepare(`INSERT INTO validate_proposals (project_id, kind, payload_json, status, session_id, citation_json)
+     VALUES (10, 'pain_tag', '{}', 'pending', ?, '{"quote":"q"}')`).run(sid);
+  const tok = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await papp.request(`/api/progress/discovery/interview/${s.body.interview.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${tok}` } }, f.env);
+  assert.equal(res.status, 200, await res.clone().text());
+  assert.equal(f.objects.size, 0, 'the R2 audio is gone');
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM interview_sessions WHERE id = ?').get(sid).n, 0);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM validate_proposals WHERE session_id = ?').get(sid).n, 0, 'pending proposals and their quotes are gone');
+  assert.equal(interviewRow(f, s.body.interview.id), undefined);
 });

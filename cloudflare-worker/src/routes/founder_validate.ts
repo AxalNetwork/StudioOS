@@ -174,7 +174,7 @@ export { claimFills };
  */
 async function buildBoard(env: Env, projectId: number) {
   const hyps = await env.DB.prepare(
-    `SELECT id, code, claim, sort_order, retired_at
+    `SELECT id, code, claim, sort_order, retired_at, sprint
        FROM hypotheses WHERE project_id = ? ORDER BY sort_order, id`,
   ).bind(projectId).all<any>().catch(() => ({ results: [] as any[] }));
 
