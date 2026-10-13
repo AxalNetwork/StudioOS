@@ -308,7 +308,7 @@ export async function queueVoiceTranscriptions(
   for (const r of rows) {
     const job = crypto.randomUUID();
     const claimed = await env.DB.prepare(
-      `UPDATE channel_thread_messages SET transcribe_job = ?, updated_at = datetime('now')
+      `UPDATE channel_thread_messages SET transcribe_job = ?, transcribe_error = NULL, updated_at = datetime('now')
         WHERE uid = ? AND voice_ref_enc IS NOT NULL
           AND (transcribe_job IS NULL OR datetime(updated_at) < datetime('now', '-60 minutes'))
         RETURNING id`,
@@ -354,10 +354,20 @@ export async function voiceNoteForJob(env: Env, messageUid: string, job: string)
   };
 }
 
-/** The job could not transcribe the note now (the day's cap, the member's budget, a refused download): the next assignment may queue it again. */
-export async function releaseVoiceNote(env: Env, messageUid: string, job: string): Promise<void> {
-  await env.DB.prepare(`UPDATE channel_thread_messages SET transcribe_job = NULL WHERE uid = ? AND transcribe_job = ?`)
-    .bind(messageUid, job).run();
+/**
+ * The job could not transcribe the note now (the day's cap, the member's
+ * budget, a refused download): the next assignment may queue it again. `error`
+ * (#1586) is why, as a code, kept on the note so the thread read can say so.
+ */
+export async function releaseVoiceNote(env: Env, messageUid: string, job: string, error: string | null = null): Promise<void> {
+  await env.DB.prepare(`UPDATE channel_thread_messages SET transcribe_job = NULL, transcribe_error = ? WHERE uid = ? AND transcribe_job = ?`)
+    .bind(error ? String(error).slice(0, 80) : null, messageUid, job).run();
+}
+
+/** #1586: the job still holds the note and will try again; `error` says why the last try failed. */
+export async function noteVoiceTry(env: Env, messageUid: string, job: string, error: string): Promise<void> {
+  await env.DB.prepare(`UPDATE channel_thread_messages SET transcribe_error = ? WHERE uid = ? AND transcribe_job = ?`)
+    .bind(String(error).slice(0, 80), messageUid, job).run();
 }
 
 /**
@@ -463,7 +473,15 @@ async function memberThread(env: Env, userId: number, threadUid: string): Promis
   return row;
 }
 
-export type AssignTarget = { interviewId: number } | { projectId: number; intervieweeName: string };
+export type AssignTarget = { interviewId: number } | { projectId: number; intervieweeName: string; intervieweeCompany?: string | null };
+
+/**
+ * D685 §5.1.4 (#1586) — quote consent for a text chat. The member says the
+ * interviewee agreed to be quoted: `discovery_interviews.quote_consent`
+ * becomes 1. It is consent to quote, not recording consent; leaving it out
+ * changes nothing (NULL stays NULL, and a 1 is never taken back here).
+ */
+export type AssignOptions = { quoteConsent?: boolean };
 
 export interface AssignResult {
   interviewId: number; sessionId: number; moved: number;
@@ -546,8 +564,18 @@ function refuseIfBusy(thread: ThreadRow): void {
  * repeated press leaves no empty interview behind.
  */
 export async function assignThread(
-  env: Env, userId: number, threadUid: string, target: AssignTarget,
+  env: Env, userId: number, threadUid: string, target: AssignTarget, opts: AssignOptions = {},
 ): Promise<AssignResult> {
+  const r = await assignInto(env, userId, threadUid, target);
+  // Recorded only once the assignment has succeeded, on the interview it
+  // landed in, which `writableInterview` has checked: a refused assign changes nothing.
+  if (opts.quoteConsent === true) {
+    await env.DB.prepare('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = ?').bind(r.interviewId).run();
+  }
+  return r;
+}
+
+async function assignInto(env: Env, userId: number, threadUid: string, target: AssignTarget): Promise<AssignResult> {
   const thread = await memberThread(env, userId, threadUid);
   if ('interviewId' in target) {
     const scoped = await writableInterview(env, userId, Number(target.interviewId));
@@ -561,7 +589,7 @@ export async function assignThread(
     return moveInto(env, userId, thread, scoped, null);
   }
   refuseIfBusy(thread);
-  const created = await createInterview(env, userId, Number(target.projectId), target.intervieweeName);
+  const created = await createInterview(env, userId, Number(target.projectId), target.intervieweeName, target.intervieweeCompany ?? null);
   let scoped: ScopedInterview;
   try {
     scoped = await writableInterview(env, userId, created);

@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CONSENTS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, callLabel, cents, chipStatus, connectionOf, consentNote, defaultProvider, estimate,
+  CONSENTS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, callLabel, cents, chipStatus, connectionOf, consentNote, defaultProvider, estimate, isConnected,
   hasMeetingLink, meetingLinkProblem, money, parseConversation, sessionBody, startState, talkingPoints,
 } from '../src/pages/founder/recordSetup.js';
 
@@ -170,4 +170,37 @@ test('the body sent to today\'s route carries only what the Worker stores', () =
   assert.deepEqual(text, { channel: 'text', messages: [{ author: 'Dana', text: 'hi' }, { author: 'Me', text: 'we log it' }] });
   assert.equal('consent' in text, false, 'a text chat records no audio consent');
   assert.deepEqual(parseConversation(''), []);
+});
+
+// #1586: the Text chips read their real status from the Worker's own read.
+const WORKER_READ = {
+  providers: [{ provider: 'telegram', available: true, missing: [] }, { provider: 'whatsapp', available: true, missing: [] }],
+  connections: {
+    telegram: { status: 'active', external_account_name: '@dana_biz', can_reply: true, business_connected: true },
+    whatsapp: { status: 'active', external_account_name: 'Ledger Co', can_reply: true },
+  },
+  pending: { telegram: 2, whatsapp: 0 },
+};
+
+test('#1586 the chips read GET /api/channels as the Worker answers it', () => {
+  assert.equal(SETUP_FIELDS.channels, true, 'the read is mounted on main (D684), so the chips use it');
+  assert.deepEqual(chipStatus('text', chip('text', 'whatsapp'), WORKER_READ), { word: 'Connected', disabled: false });
+  assert.deepEqual(chipStatus('text', chip('text', 'telegram'), WORKER_READ), { word: 'Connected', disabled: false });
+  // Telegram linked, but Telegram Business not yet: no chat can arrive, so not Connected.
+  const linkedOnly = { ...WORKER_READ, connections: { ...WORKER_READ.connections, telegram: { status: 'active', business_connected: false } } };
+  assert.deepEqual(chipStatus('text', chip('text', 'telegram'), linkedOnly), { word: 'Connect', disabled: false, connectHref: '/account/connectors' });
+  // A connection with a problem is not Connected either.
+  const broken = { ...WORKER_READ, connections: { whatsapp: { status: 'error' } } };
+  assert.deepEqual(chipStatus('text', chip('text', 'whatsapp'), broken), { word: 'Connect', disabled: false, connectHref: '/account/connectors' });
+  assert.equal(defaultProvider('text', WORKER_READ), 'whatsapp');
+});
+
+test('#1586 isConnected: the Worker shape, the older flag, and nothing else', () => {
+  assert.equal(isConnected({ status: 'active' }, 'whatsapp'), true);
+  assert.equal(isConnected({ status: 'active', business_connected: true }, 'telegram'), true);
+  assert.equal(isConnected({ status: 'active', business_connected: false }, 'telegram'), false);
+  assert.equal(isConnected({ status: 'active' }, 'telegram'), true, 'a read without the flag is not taken for a missing link');
+  assert.equal(isConnected({ status: 'disconnected' }, 'whatsapp'), false);
+  assert.equal(isConnected({ connected: true }, 'zoom'), true);
+  assert.equal(isConnected(null, 'whatsapp'), false);
 });

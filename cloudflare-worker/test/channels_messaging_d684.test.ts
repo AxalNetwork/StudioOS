@@ -52,6 +52,7 @@ import channels, { channelsAdmin } from '../src/routes/channels.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { encryptCredentials, decryptCredentials } from '../src/integrations/secrets.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
+import { transcriptionFailures } from '../src/services/channels/voiceFailures.ts';
 import { createLinkCode } from '../src/services/channels/linkCodes.ts';
 import { normaliseTelegramUpdate } from '../src/services/channels/telegram.ts';
 import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/whatsapp.ts';
@@ -119,7 +120,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql', '454_channel_voice_failures.sql']) db.exec(mig(m));
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
       db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
@@ -1051,7 +1052,7 @@ test('Availability names missing secrets to admins only, hands the browser the s
   assert.deepEqual(wa.signup, { app_id: SECRETS.WHATSAPP_APP_ID, config_id: SECRETS.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID });
   assert.deepEqual(forMember.body.providers.map((p: any) => p.provider), ['telegram', 'whatsapp', 'zoom', 'google_meet']);
   assert.equal(forMember.body.providers.find((p: any) => p.provider === 'zoom').available, false);
-  assert.deepEqual(Object.keys(forMember.body.connections.whatsapp).sort(), ['can_reply', 'connected_at', 'external_account_name', 'status']);
+  assert.deepEqual(Object.keys(forMember.body.connections.whatsapp).sort(), ['calls', 'can_reply', 'connected_at', 'external_account_name', 'status'], 'calls: the Calling eligibility read (#1586)');
 
   const forAdmin = await call(partial, ADMIN, 'GET', '', undefined, 'admin');
   assert.deepEqual(forAdmin.body.providers.find((p: any) => p.provider === 'telegram').missing, ['TELEGRAM_CHANNEL_WEBHOOK_SECRET']);
@@ -1171,4 +1172,254 @@ test('WhatsApp: a coexistence signup that sends only the WABA takes its one numb
     assert.deepEqual([several.status, several.body.code], [409, 'choose_number']);
     assert.equal(count(db, `SELECT COUNT(*) n FROM integrations WHERE user_id = ${OTHER}`), 0);
   } finally { f.restore(); }
+});
+
+// ---------------------------------------------------------------------------
+// D685 S19 (#1586): import from the lightbox, voice-note failures, Calling eligibility
+// ---------------------------------------------------------------------------
+
+/** One pending Telegram conversation for ME, and its uid. */
+async function pendingThread(env: any, text = 'Invoices eat my Friday.', chat = 8001): Promise<string> {
+  const f = mockFetch(telegramApi);
+  try { assert.equal((await tgHook(env, businessMessage('BC-ME', { chat, text }))).status, 200); } finally { f.restore(); }
+  const items = (await call(env, ME, 'GET', '/threads?status=pending')).body.items;
+  return items.find((t: any) => t.status === 'pending').uid;
+}
+
+test('#1586 assign: { create } keeps the company, and quote_consent: true records quote consent', async () => {
+  const { env, db } = await world({ seed: true });
+  const uid = await pendingThread(env);
+  const r = await call(env, ME, 'POST', `/threads/${uid}/assign`, {
+    create: { interviewee_name: 'Sam Okafor', interviewee_company: '  Okafor Logistics  ', project_id: PROJECT }, quote_consent: true,
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const row = db.prepare('SELECT interviewee_name, interviewee_company, quote_consent FROM discovery_interviews WHERE id = ?').get(r.body.interview_id);
+  assert.deepEqual({ ...row }, { interviewee_name: 'Sam Okafor', interviewee_company: 'Okafor Logistics', quote_consent: 1 });
+
+  // Without consent: NULL stays NULL. A company over 160 characters is cut, a blank one is NULL.
+  const uid2 = await pendingThread(env, 'Second chat.', 8002);
+  const r2 = await call(env, ME, 'POST', `/threads/${uid2}/assign`, { create: { interviewee_name: 'Ana', interviewee_company: 'x'.repeat(200), project_id: PROJECT } });
+  const row2 = db.prepare('SELECT interviewee_company, quote_consent FROM discovery_interviews WHERE id = ?').get(r2.body.interview_id);
+  assert.equal(row2.interviewee_company.length, 160);
+  assert.equal(row2.quote_consent, null, 'no consent given, none recorded');
+  const uid3 = await pendingThread(env, 'Third chat.', 8003);
+  const r3 = await call(env, ME, 'POST', `/threads/${uid3}/assign`, { create: { interviewee_name: 'Bo', interviewee_company: '   ', project_id: PROJECT } });
+  assert.equal(db.prepare('SELECT interviewee_company FROM discovery_interviews WHERE id = ?').get(r3.body.interview_id).interviewee_company, null);
+});
+
+test('#1586 assign: quote consent on an existing interview; only the literal true; a refused assign records nothing', async () => {
+  const { env, db } = await world({ seed: true });
+  const uid = await pendingThread(env);
+  const consent = (id: number) => db.prepare('SELECT quote_consent FROM discovery_interviews WHERE id = ?').get(id).quote_consent;
+  assert.equal((await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW, quote_consent: 'yes' })).status, 400);
+  assert.equal(consent(INTERVIEW), null);
+  assert.equal((await call(env, OTHER, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW, quote_consent: true })).status, 404);
+  assert.equal(consent(INTERVIEW), null, 'another member\'s request touches nothing');
+  db.prepare(`INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (202, ${OTHER_PROJECT}, 'Theirs')`).run();
+  assert.notEqual((await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: 202, quote_consent: true })).status, 200);
+  assert.equal(consent(202), null, 'an interview the member cannot write is untouched');
+  assert.equal((await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW, quote_consent: false })).status, 200);
+  assert.equal(consent(INTERVIEW), null);
+  assert.equal((await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW, quote_consent: true })).status, 200, 'the same interview again');
+  assert.equal(consent(INTERVIEW), 1);
+  assert.equal((await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW, quote_consent: false })).status, 200);
+  assert.equal(consent(INTERVIEW), 1, 'false never takes it back');
+});
+
+/** The waiting voice notes on a thread, as the member reads them. */
+async function waitingNotes(env: any, uid: string) {
+  const read = await call(env, ME, 'GET', `/threads/${uid}`);
+  assert.equal(read.status, 200);
+  for (const m of read.body.messages) assert.ok('transcription_failure' in m, 'every message carries the field');
+  return read.body.messages.filter((m: any) => m.awaiting_transcription);
+}
+
+test('#1586 voice: a spent budget shows on the note in our words; a retry runs once the budget allows', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true, budget: 0 });
+  const f = mockFetch(telegramApi);
+  try {
+    const { uid } = await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'VOICE-1', duration: 4 } }));
+    await runChannelJob(env, 'channel_followup', voiceJobs(queued)[0].payload);
+    assert.equal(aiCalls.length, 0);
+
+    let [note] = await waitingNotes(env, uid);
+    assert.deepEqual(note.transcription_failure, {
+      reason: 'budget', sentence: 'Your AI budget was spent, so this voice note was not transcribed.', retry: 'after_budget',
+    });
+    const early = await call(env, ME, 'POST', `/threads/${uid}/voice/${note.uid}/retry`);
+    assert.deepEqual([early.status, early.body.code], [402, 'budget_spent']);
+    assert.equal(voiceJobs(queued).length, 1, 'nothing queued while the budget is spent');
+    assert.equal((await call(env, OTHER, 'POST', `/threads/${uid}/voice/${note.uid}/retry`)).status, 404, 'not another member\'s');
+
+    db.prepare('UPDATE ai_licence_caps SET daily_microusd = 50000000, monthly_microusd = 50000000').run();
+    [note] = await waitingNotes(env, uid);
+    assert.equal(note.transcription_failure.retry, 'available');
+    const ok = await call(env, ME, 'POST', `/threads/${uid}/voice/${note.uid}/retry`);
+    assert.deepEqual([ok.status, ok.body.queued], [200, 1]);
+    [note] = await waitingNotes(env, uid);
+    assert.equal(note.transcription_failure, null, 'queued again: no failure to show');
+    assert.equal((await call(env, ME, 'POST', `/threads/${uid}/voice/${note.uid}/retry`)).status, 409, 'a second press queues nothing');
+
+    await runChannelJob(env, 'channel_followup', voiceJobs(queued)[1].payload);
+    assert.equal(aiCalls.length, 1, 'transcribed this time');
+    assert.deepEqual(await waitingNotes(env, uid), []);
+  } finally { f.restore(); }
+  noSecretsSeen();
+});
+
+test('#1586 voice: the daily cap, too large, unreadable and an expired connection each say why; only the cap is retried', async () => {
+  const { env, db, queued } = await world({ seed: true });
+  const huge: Route = (url, init) => {
+    if (url.pathname.endsWith('/getFile')) {
+      const id = String(JSON.parse(String(init.body)).file_id);
+      if (id === 'HUGE') return { json: { ok: true, result: { file_id: 'HUGE', file_size: 25 * 1024 * 1024, file_path: 'voice/huge.oga' } } };
+      if (id === 'EMPTY') return { json: { ok: true, result: { file_id: 'EMPTY', file_size: 10, file_path: 'voice/empty.oga' } } };
+    }
+    if (url.pathname.endsWith('/voice/empty.oga')) return { body: new Uint8Array(0), headers: { 'content-type': 'audio/ogg' } };
+    return telegramApi(url, init);
+  };
+  const f = mockFetch(huge);
+  try {
+    const { uid } = await assignedTelegramChat(env);
+    for (const id of ['HUGE', 'EMPTY', 'CAPPED']) {
+      if (id === 'CAPPED') {
+        const integration = db.prepare(`SELECT id FROM integrations WHERE uid = 'tg-me'`).get().id;
+        db.prepare(`UPDATE channel_counters SET n = ? WHERE integration_id = ? AND counter = 'transcriptions_day'`).run(CHANNEL_LIMITS.transcriptionsPerDay, integration);
+        if (!count(db, `SELECT COUNT(*) n FROM channel_counters WHERE counter = 'transcriptions_day'`)) {
+          db.prepare(`INSERT INTO channel_counters (integration_id, counter, window_start, n) VALUES (?, 'transcriptions_day', date('now'), ?)`).run(integration, CHANNEL_LIMITS.transcriptionsPerDay);
+        }
+      }
+      await tgHook(env, businessMessage('BC-ME', { voice: { file_id: id === 'CAPPED' ? 'VOICE-1' : id, duration: 4 } }));
+      const jobs = voiceJobs(queued);
+      await runChannelJob(env, 'channel_followup', jobs[jobs.length - 1].payload);
+    }
+    const notes = await waitingNotes(env, uid);
+    assert.deepEqual(notes.map((m: any) => [m.transcription_failure.reason, m.transcription_failure.retry]),
+      [['too_large', null], ['unreadable', null], ['daily_cap', 'available']]);
+    assert.equal(notes[0].transcription_failure.sentence, 'This voice note is larger than Axal can transcribe from Telegram (20 MB).');
+    assert.equal(notes[2].transcription_failure.sentence, 'This Telegram account reached its voice notes for today, so this one waits. Retry it tomorrow.');
+    assert.equal((await call(env, ME, 'POST', `/threads/${uid}/voice/${notes[0].uid}/retry`)).status, 409, 'too large is never retried');
+  } finally { f.restore(); }
+
+  // WhatsApp: the member's token has expired.
+  await waHook(env, waPayload(PNID, { messages: [{ from: WA_CUSTOMER, id: 'wamid.T', timestamp: String(now()), type: 'text', text: { body: 'Hi' } }] }));
+  const wa = (await call(env, ME, 'GET', '/threads')).body.items.find((t: any) => t.provider === 'whatsapp');
+  assert.equal((await call(env, ME, 'POST', `/threads/${wa.uid}/assign`, { interview_id: INTERVIEW })).status, 200);
+  await waHook(env, waPayload(PNID, { messages: [{ from: WA_CUSTOMER, id: 'wamid.EXP', timestamp: String(now()), type: 'audio', audio: { id: 'MEDIA-EXP' } }] }));
+  const g = mockFetch((url) => (url.pathname === '/v23.0/MEDIA-EXP' ? { status: 401, json: { error: { code: 190, message: 'Session has expired for +447700900123' } } } : undefined));
+  try { const jobs = voiceJobs(queued); await runChannelJob(env, 'channel_followup', jobs[jobs.length - 1].payload); } finally { g.restore(); }
+  const [exp] = await waitingNotes(env, wa.uid);
+  assert.equal(exp.transcription_failure.reason, 'reconnect');
+  assert.match(exp.transcription_failure.sentence, /Connect it again in Account › Connectors\.$/);
+  noSecretsSeen();
+  assert.equal(seen.join('\n').includes('Session has expired'), false, 'no provider text');
+});
+
+test('#1586 voice: Telegram unreachable is retried by the job itself, said while it tries, and said when it stops', async () => {
+  const { env, db, queued } = await world({ seed: true });
+  const f = mockFetch(telegramApi);
+  let uid = '';
+  try { ({ uid } = await assignedTelegramChat(env)); await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'VOICE-1', duration: 4 } })); } finally { f.restore(); }
+  const down: Route = (url) => { if (url.hostname === 'api.telegram.org') throw new Error('connect ECONNREFUSED'); return undefined; };
+  let payload = voiceJobs(queued)[0].payload;
+  for (let i = 1; i <= 4; i++) {
+    const g = mockFetch(down);
+    try { await runChannelJob(env, 'channel_followup', payload); } finally { g.restore(); }
+    const [note] = await waitingNotes(env, uid);
+    if (i < 4) {
+      assert.deepEqual(note.transcription_failure, {
+        reason: 'retrying', sentence: 'This voice note could not be transcribed yet. Axal tries again in a few minutes.', retry: null,
+      }, `try ${i}`);
+      const next = voiceJobs(queued)[voiceJobs(queued).length - 1];
+      assert.equal(next.payload.try, i + 1, 'the next try is queued by the job');
+      assert.equal(next.payload.job, payload.job, 'the same claim');
+      assert.ok(next.idempotency_key.endsWith(`-try-${i + 1}`));
+      payload = next.payload;
+    } else {
+      assert.deepEqual([note.transcription_failure.reason, note.transcription_failure.retry], ['unreachable', 'available']);
+      assert.equal(note.transcription_failure.sentence, 'Telegram could not be reached to fetch this voice note, after several tries.');
+    }
+  }
+  assert.equal(db.prepare(`SELECT transcribe_job FROM channel_thread_messages WHERE kind = 'voice'`).get().transcribe_job, null, 'given back');
+  // Retried by the member: a fresh claim, so the old code is gone, not "still trying".
+  const [given] = await waitingNotes(env, uid);
+  assert.equal((await call(env, ME, 'POST', `/threads/${uid}/voice/${given.uid}/retry`)).status, 200);
+  const [fresh] = await waitingNotes(env, uid);
+  assert.equal(fresh.transcription_failure, null);
+});
+
+test('#1586 voice: the failure read is the member\'s own, and a note on a pending chat waits for its assignment', async () => {
+  const { env, db, queued } = await world({ seed: true, budget: 0 });
+  const f = mockFetch(telegramApi);
+  try {
+    const { uid } = await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'VOICE-1', duration: 4 } }));
+    await runChannelJob(env, 'channel_followup', voiceJobs(queued)[0].payload);
+    assert.equal((await transcriptionFailures(env, ME, uid)).size, 1);
+    assert.equal((await transcriptionFailures(env, OTHER, uid)).size, 0, 'below the route\'s check too');
+    // The chat leaves its interview: the retry waits for the next assignment.
+    db.prepare(`UPDATE channel_threads SET status = 'pending', interview_id = NULL, session_id = NULL WHERE uid = ?`).run(uid);
+    const [note] = await waitingNotes(env, uid);
+    assert.equal(note.transcription_failure.retry, 'after_assign');
+    assert.equal((await call(env, ME, 'POST', `/threads/${uid}/voice/${note.uid}/retry`)).status, 409);
+  } finally { f.restore(); }
+});
+
+test('#1586 Calling eligibility: recorded at signup and on Test, read honestly, and no number is kept', async () => {
+  const { env, db } = await world({ seed: true });
+  let read = await call(env, ME, 'GET', '');
+  let calls = read.body.connections.whatsapp.calls;
+  assert.equal(calls.available, false);
+  assert.deepEqual(calls.reasons.map((r: any) => r.code), ['not_built', 'not_checked']);
+  assert.match(calls.sentence, /^Calls: not yet, because Axal does not answer or place WhatsApp calls yet; this number has not been checked yet/);
+
+  const f = mockFetch((url) => (url.hostname === 'graph.facebook.com' && url.pathname === `/v23.0/${PNID}`
+    ? { json: { verified_name: 'Ledger Co', quality_rating: 'GREEN', messaging_limit_tier: 'TIER_1K', display_phone_number: '+1 555-000-1234', id: PNID } }
+    : undefined));
+  try { assert.equal((await call(env, ME, 'POST', '/whatsapp/test')).status, 200); } finally { f.restore(); }
+  assert.ok(f.calls[0].url.includes('messaging_limit_tier'), 'the tier is asked of Graph');
+  const cfg = JSON.parse(db.prepare(`SELECT config_json FROM integrations WHERE uid = 'wa-me'`).get().config_json);
+  assert.deepEqual(Object.keys(cfg.calling).sort(), ['checked_at', 'region', 'tier']);
+  assert.deepEqual([cfg.calling.tier, cfg.calling.region], ['TIER_1K', 'US_CA']);
+  assert.equal(/555-?000-?1234|5550001234/.test(JSON.stringify(cfg)), false, 'the number is not kept');
+  assert.equal(cfg.phone_number_id, PNID, 'the rest of the config is untouched');
+
+  read = await call(env, ME, 'GET', '');
+  calls = read.body.connections.whatsapp.calls;
+  assert.deepEqual(calls.reasons.map((r: any) => r.code), ['not_built', 'tier_low', 'region']);
+  assert.equal(calls.sentence,
+    'Calls: not yet, because Axal does not answer or place WhatsApp calls yet; this number can start 1,000 conversations a day, and WhatsApp Calling needs at least 2,000; Meta does not offer business-initiated calls for numbers in the US or Canada (+1).');
+  assert.equal(calls.tier, 'TIER_1K');
+  assert.equal(JSON.stringify(read.body).includes('555'), false, 'no number on the read');
+  assert.equal(read.body.connections.telegram?.calls, undefined, 'Telegram has no calls block');
+
+  const g = mockFetch((url) => (url.pathname === `/v23.0/${PNID}` ? { json: { messaging_limit_tier: 'TIER_10K', display_phone_number: '+44 7700 900999' } } : undefined));
+  try { await call(env, ME, 'POST', '/whatsapp/test'); } finally { g.restore(); }
+  calls = (await call(env, ME, 'GET', '')).body.connections.whatsapp.calls;
+  assert.deepEqual(calls.reasons.map((r: any) => r.code), ['not_built']);
+  assert.equal(calls.available, false, 'never available: no calling is built');
+  noSecretsSeen();
+});
+
+test('#1586 Calling eligibility: Embedded Signup records the tier and region', async () => {
+  const { env, db } = await world({ seed: false });
+  const f = mockFetch((url) => {
+    if (url.pathname === '/v23.0/oauth/access_token') return { json: { access_token: 'EAAG-new-business-token-SECRET' } };
+    if (url.pathname === '/v23.0/2000009/phone_numbers') {
+      assert.ok(url.searchParams.get('fields')?.includes('messaging_limit_tier'));
+      return { json: { data: [{ id: '1000009', display_phone_number: '+20 100 000 0000', verified_name: 'Cairo Co', messaging_limit_tier: 'TIER_250' }] } };
+    }
+    if (url.pathname === '/v23.0/2000009/subscribed_apps') return { json: { success: true } };
+    return undefined;
+  });
+  try {
+    const r = await call(env, ME, 'POST', '/whatsapp/connect', { code: 'C0DE', waba_id: '2000009', phone_number_id: '1000009' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+  } finally { f.restore(); }
+  const cfg = JSON.parse(db.prepare(`SELECT config_json FROM integrations WHERE user_id = ${ME} AND provider_key = 'whatsapp'`).get().config_json);
+  assert.deepEqual([cfg.calling.tier, cfg.calling.region], ['TIER_250', 'EG']);
+  const calls = (await call(env, ME, 'GET', '')).body.connections.whatsapp.calls;
+  assert.deepEqual(calls.reasons.map((r: any) => r.code), ['not_built', 'tier_low', 'region']);
+  assert.match(calls.sentence, /numbers in Egypt\.$/);
 });

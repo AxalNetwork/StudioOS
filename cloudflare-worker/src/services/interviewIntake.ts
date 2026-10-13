@@ -78,7 +78,15 @@ export async function writableInterview(env: Env, userId: number, interviewId: n
  * A new interview, made only by an explicit member action ("Create interview
  * from this chat"). Never called because an unknown contact wrote in.
  */
-export async function createInterview(env: Env, userId: number, projectId: number, intervieweeName: string): Promise<number> {
+/** The interviewee's company as Who gave it (D685 §5.3): trimmed, at most 160 characters, or NULL. */
+const companyOf = (v: unknown): string | null => {
+  const t = typeof v === 'string' ? v.trim() : '';
+  return t ? t.slice(0, 160) : null;
+};
+
+export async function createInterview(
+  env: Env, userId: number, projectId: number, intervieweeName: string, intervieweeCompany: string | null = null,
+): Promise<number> {
   const member = await activeMember(env, userId);
   const name = String(intervieweeName ?? '').trim().slice(0, 120);
   if (!name) throw new IntakeError(400, 'interviewee_required', 'Give the interview a name.');
@@ -88,8 +96,8 @@ export async function createInterview(env: Env, userId: number, projectId: numbe
     throw new IntakeError(404, 'project_not_found', 'That venture is not one you can add interviews to.');
   }
   const row = await env.DB.prepare(
-    `INSERT INTO discovery_interviews (project_id, interviewee_name, interview_date) VALUES (?, ?, date('now')) RETURNING id`,
-  ).bind(project.id, name).first<{ id: number }>();
+    `INSERT INTO discovery_interviews (project_id, interviewee_name, interviewee_company, interview_date) VALUES (?, ?, ?, date('now')) RETURNING id`,
+  ).bind(project.id, name, companyOf(intervieweeCompany)).first<{ id: number }>();
   if (!row) throw new IntakeError(500, 'not_stored', 'The interview could not be created.');
   return Number(row.id);
 }

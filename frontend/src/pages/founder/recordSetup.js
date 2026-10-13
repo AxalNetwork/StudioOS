@@ -22,7 +22,7 @@ export const SETUP_FIELDS = Object.freeze({
   language: false, // §5.1.3
   call_provider: false, // §5.1.2
   meeting_url: false, // §5.1.2
-  channels: false, // GET /api/channels is not mounted on main (D684, S01)
+  channels: true, // GET /api/channels (D684, #1581): the Text chips read their real status (#1586)
 });
 
 export const NOT_STORED = 'Not saved yet: the Worker does not store this field.';
@@ -90,6 +90,19 @@ export function connectionOf(channels, key) {
   if (Array.isArray(c)) return c.find((x) => x?.provider === key) || null;
   return Object.hasOwn(c, key) ? c[key] : null;
 }
+/**
+ * Whether a connection from `GET /api/channels` is one a chat can be imported
+ * from. The Worker answers `{ status: 'active', … }` per provider
+ * (routes/channels.ts); a Telegram account counts once Telegram Business is
+ * linked too (`business_connected`), because only then do its chats arrive.
+ * `connected: true` is accepted as well, for a read that says it that way.
+ */
+export function isConnected(conn, key) {
+  if (!conn) return false;
+  if (conn.connected === true) return true;
+  if (conn.status !== 'active') return false;
+  return key === 'telegram' ? conn.business_connected !== false : true;
+}
 const availableOf = (channels, key) => {
   const p = Array.isArray(channels?.providers) ? channels.providers.find((x) => x?.provider === key) : null;
   return p ? p.available !== false : null;
@@ -112,7 +125,7 @@ export function chipStatus(mode, chip, channels) {
   const conn = connectionOf(channels, chip.link);
   if (!channels || known === null) return { word: 'Not available yet', disabled: mode === 'text' };
   if (known === false) return { word: 'Not available yet', disabled: mode === 'text' };
-  if (conn?.connected) return { word: 'Connected', disabled: false };
+  if (isConnected(conn, chip.link)) return { word: 'Connected', disabled: false };
   return { word: 'Connect', disabled: false, connectHref: '/account/connectors' };
 }
 
