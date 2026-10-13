@@ -18,7 +18,7 @@ import { createLinkCode, consumeLinkCode } from '../services/channels/linkCodes'
 import { beginOutbound, finishOutbound, applyDeliveryStatus } from '../services/channels/outbound';
 import { storeInbound, storeMessage, applyEdit, applyDelete, assignThread, setThreadIgnored, listThreads, readThread, threadForReply, forgetConnection } from '../services/channels/threads';
 import { registerChannelJob, enqueueChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
-import { CHANNEL_LIMITS, type InboundEvent, type InboundMessage, type MessagingProvider } from '../services/channels/types';
+import { CHANNEL_LIMITS, type InboundEvent, type InboundMessage, type MessagingProvider, type SendResult } from '../services/channels/types';
 import { boundedBytes, identifier, object, secret, normaliseTelegram, verifyTelegram, sendTelegram, fetchTelegramMedia, setTelegramWebhook } from '../services/channels/telegram';
 import { normaliseWhatsApp, verifyWhatsApp, whatsAppChallenge, replyWindowOpen, sendWhatsApp, fetchWhatsAppMedia, exchangeWhatsAppSignup } from '../services/channels/whatsapp';
 
@@ -48,7 +48,7 @@ async function bodyBytes(request: Request): Promise<Uint8Array> {
 }
 async function bodyObject(request: Request): Promise<Record<string, any>> {
   const bytes = await bodyBytes(request);
-  try { return object(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))); }
+  try { return object(JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes))); }
   catch { throw new Error('invalid_json'); }
 }
 async function user(c: any) {
@@ -89,7 +89,7 @@ export async function processChannelEvent(env: Env, event: InboundEvent): Promis
     try { await activeMember(env, linked.user_id); } catch (e) { if (e instanceof IntakeError) return 200; throw e; }
   }
   const id = await claimEvent(env, event.provider, await sha256Hex(event.eventId),
-    event.kind === 'message' ? (event.voice ? 'voice' : event.side === 'me' ? 'echo' : 'message') : event.kind);
+    event.kind === 'message' ? (event.voice ? 'voice' : event.side === 'me' ? 'echo' : 'message') : event.kind === 'delete' ? 'edit' : event.kind);
   if (!id) return 200;
   let stored = false;
   try {
@@ -190,7 +190,7 @@ channels.post('/whatsapp/webhook', async c => {
   const verified = await verifyWhatsApp(c.env, bytes, c.req.header('X-Hub-Signature-256') ?? null);
   if (verified !== 'ok') return error(verified === 'unavailable' ? 'provider_unavailable' : 'invalid_signature', verified === 'unavailable' ? 503 : 401);
   let payload: unknown;
-  try { payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { return error('invalid_json', 400); }
+  try { payload = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes)); } catch { return error('invalid_json', 400); }
   for (const event of normaliseWhatsApp(payload)) {
     const status = await processChannelEvent(c.env, event);
     if (status !== 200) return error(status === 429 ? 'rate_limited' : 'channel_unavailable', status);
@@ -295,7 +295,7 @@ export async function replyToThread(env: Env, userId: number, uid: string, text:
     if (Number(outbound.row.thread_id) !== thread.id || outbound.row.provider !== thread.provider) return error('client_key_conflict', 409);
     return json({ ok: outbound.row.status !== 'failed', uid: outbound.row.uid, status: outbound.row.status });
   }
-  let result;
+  let result: SendResult;
   if (thread.provider === 'telegram') {
     const bc = await env.DB.prepare('SELECT business_connection_id FROM telegram_business_connections WHERE user_id = ? AND is_enabled = 1 AND can_reply = 1 ORDER BY updated_at DESC LIMIT 1')
       .bind(userId).first<{ business_connection_id: string }>();

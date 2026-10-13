@@ -469,6 +469,83 @@ const checks: Check[] = [
       snap([failure, calls], ['invalid_media', 1]);
     },
   },
+  {
+    name: 'Owner assignment moves messages and refuses an interview outside the member scope',
+    module: 'routes', before: "interviewId: Number(body.interview_id)", after: "interviewId: 501",
+    run: async m => {
+      const { env, db } = world();
+      await tgPost(env, m.routes.channels, tgMessage());
+      const { uid } = db.prepare('SELECT uid FROM channel_threads').get();
+      const refused = await signed(env, m.routes.channels, '/threads/' + uid + '/assign', { interview_id: THEIR_INTERVIEW });
+      const assigned = await signed(env, m.routes.channels, '/threads/' + uid + '/assign', { interview_id: INTERVIEW });
+      snap([refused.status, assigned.status, rowCount(db, 'channel_thread_messages'), rowCount(db, 'interview_transcript_segments')],
+        [404, 200, 0, 1]);
+    },
+  },
+  {
+    name: 'Reply client keys send once and Telegram only reports submitted',
+    module: 'routes', before: "if (outbound.existing)", after: "if (false)",
+    run: async m => {
+      const { env, db } = world(); let sends = 0;
+      await tgPost(env, m.routes.channels, tgMessage());
+      const { uid } = db.prepare('SELECT uid FROM channel_threads').get();
+      await mocked(() => { sends++; return respond({ ok: true, result: { message_id: 43 } }); }, async () => {
+        const one = await signed(env, m.routes.channels, '/threads/' + uid + '/reply', { text: 'Reply fixture.', client_key: 'one-reply' });
+        const two = await signed(env, m.routes.channels, '/threads/' + uid + '/reply', { text: 'Reply fixture.', client_key: 'one-reply' });
+        snap([one.status, two.status, (await one.json()).status, (await two.json()).status, sends, rowCount(db, 'channel_outbound')],
+          [200, 200, 'submitted', 'submitted', 1, 1]);
+      });
+    },
+  },
+  {
+    name: 'Disconnect removes pending conversations and encrypted tokens',
+    module: 'routes', before: "await forgetConnection(c.env, conn.integrationId);", after: "await Promise.resolve();",
+    run: async m => {
+      const { env, db } = world(); await waCredentials(env, db);
+      await waPost(env, m.routes.channels, waText());
+      const r = await signed(env, m.routes.channels, '/whatsapp', undefined, ME, 'DELETE');
+      const row = db.prepare("SELECT status, credentials_enc, external_account_id FROM integrations WHERE uid = 'wa-me'").get();
+      snap([r.status, counts(db), [row.status, row.credentials_enc, row.external_account_id]],
+        [200, { events: 1, messages: 0, threads: 0 }, ['disconnected', null, null]]);
+    },
+  },
+  {
+    name: 'Telegram voice jobs download once and persist a voice transcript',
+    module: 'routes', before: "event.provider === 'telegram' ? await fetchTelegramMedia", after: "event.provider !== 'telegram' ? await fetchTelegramMedia",
+    run: async m => {
+      const { env, db, jobs } = world();
+      await tgPost(env, m.routes.channels, tgMessage(10, { text: undefined, voice: { file_id: 'voice_fixture', mime_type: 'audio/ogg', duration: 3 } }));
+      await mocked(url => {
+        if (url.endsWith('/getFile')) return respond({ ok: true, result: { file_path: 'voice/fixture.ogg', file_size: 16 } });
+        if (url.endsWith('/voice/fixture.ogg')) return new Response(new Uint8Array(16));
+        throw new Error('unexpected_provider_call');
+      }, async () => {
+        let failure = '';
+        try { await m.routes.channelFollowup(env, jobs[0].payload); } catch (e: any) { failure = e.message; }
+        const thread = db.prepare('SELECT uid FROM channel_threads').get();
+        const messages = thread ? (await readThread(env, ME, thread.uid)).messages.map(x => [x.kind, x.text]) : [];
+        snap([failure, messages], ['', [['voice', 'Voice transcript fixture.']]]);
+      });
+    },
+  },
+  {
+    name: 'Signup rejects a number not owned by the granted WABA before subscribing',
+    module: 'whatsapp', before: "numbers.status !== 200 || !number", after: "numbers.status !== 200",
+    run: async m => {
+      const { env } = world(); let subscriptions = 0, failure = '';
+      await mocked(url => {
+        if (url.includes('/oauth/access_token')) return respond({ access_token: 'signup-token-fixture' });
+        if (url.includes('/debug_token')) return respond({ data: { is_valid: true, app_id: '55555', scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'], granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['20001'] }] } });
+        if (url.includes('/phone_numbers')) return respond({ data: [{ id: '999999' }] });
+        if (url.includes('/subscribed_apps')) { subscriptions++; return respond({ success: true }); }
+        throw new Error('unexpected_provider_call');
+      }, async () => {
+        try { await m.whatsapp.exchangeWhatsAppSignup(env, { code: 'code-fixture', wabaId: '20001', phoneNumberId: '10001' }); } catch (e: any) { failure = e.message; }
+        snap([failure, subscriptions], ['signup_number_mismatch', 0]);
+      });
+    },
+  },
+
 ];
 function objectHeader(v: any): any { return Object.fromEntries(Array.from(new Headers(v).entries()).map(([k, value]) => [k === 'authorization' ? 'Authorization' : k, value])); }
 
