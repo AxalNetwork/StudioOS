@@ -46,6 +46,7 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
 import { callbackBase } from '../../util/url';
+import { withDeadline } from '../../util/deadline';
 import {
   getDescriptor, registerProvider, type ConnectInput, type ConnectResult, type IntegrationRow,
 } from '../../integrations/registry';
@@ -103,22 +104,26 @@ interface ZoomTokenResponse {
  * POST /oauth/token. A refusal (400/401: a used, revoked or expired grant) is
  * not retryable — the member reconnects; anything else may pass later.
  */
+/** Token headers and body must both finish before the 30-second refresh lease. */
+const TOKEN_DEADLINE_MS = 10_000;
 async function tokenRequest(env: Env, params: Record<string, string>): Promise<ZoomTokenResponse> {
-  let res: Response;
   try {
-    res = await fetch(`${ZOOM_AUTH}/oauth/token`, {
-      method: 'POST',
-      headers: { Authorization: basicAuth(env), 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(params),
-    });
-  } catch {
+    return await withDeadline((async () => {
+      const res = await fetch(`${ZOOM_AUTH}/oauth/token`, {
+        method: 'POST', signal: AbortSignal.timeout(TOKEN_DEADLINE_MS),
+        headers: { Authorization: basicAuth(env), 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(params),
+      });
+      if (res.status === 400 || res.status === 401) throw new MeetingProviderError('zoom_reconnect', false);
+      if (!res.ok) throw new MeetingProviderError('zoom_unreachable', true);
+      const tok = await res.json().catch(() => null) as ZoomTokenResponse | null;
+      if (!tok?.access_token) throw new MeetingProviderError('zoom_unreachable', true);
+      return tok;
+    })(), TOKEN_DEADLINE_MS, 'zoom_token');
+  } catch (e) {
+    if (e instanceof MeetingProviderError) throw e;
     throw new MeetingProviderError('zoom_unreachable', true);
   }
-  if (res.status === 400 || res.status === 401) throw new MeetingProviderError('zoom_reconnect', false);
-  if (!res.ok) throw new MeetingProviderError('zoom_unreachable', true);
-  const tok = await res.json().catch(() => null) as ZoomTokenResponse | null;
-  if (!tok?.access_token) throw new MeetingProviderError('zoom_unreachable', true);
-  return tok;
 }
 
 const grantedScopes = (tok: ZoomTokenResponse) => String(tok.scope ?? '').split(/[\s,]+/).filter(Boolean);
@@ -745,6 +750,18 @@ async function listRecordings(env: Env, conn: ZoomConnection, id: string): Promi
   };
 }
 
+/** Past instances recover a restart whose webhook was missed; only ids and start times are read. */
+async function pastInstances(env: Env, conn: ZoomConnection, meetingId: string): Promise<Array<{ uuid: string; started: number }>> {
+  const res = await zoomApi(env, conn, `/past_meetings/${meetingPathId(meetingId)}/instances`);
+  if (res.status === 404) return [];
+  if (res.status === 400 || res.status === 401 || res.status === 403) throw new MeetingProviderError('zoom_reconnect', false);
+  if (!res.ok) throw new MeetingProviderError('zoom_unreachable', true);
+  const body = await res.json().catch(() => null) as { meetings?: Array<{ uuid?: unknown; start_time?: unknown }> } | null;
+  if (!Array.isArray(body?.meetings)) throw new MeetingProviderError('zoom_fetch_failed', false);
+  return body.meetings.map(m => ({ uuid: String(m.uuid ?? '').trim().slice(0,100), started: Date.parse(String(m.start_time ?? '')) }))
+    .filter(m => m.uuid && Number.isFinite(m.started)).sort((a,b) => a.started - b.started);
+}
+
 /**
  * An instance's TRANSCRIPT file (the audio transcript; a CC file, Zoom's live
  * captions, when there is no transcript), downloaded and parsed.
@@ -906,6 +923,27 @@ export async function importZoomRef(env: Env, ref: MeetingRef, hint: Record<stri
   const named = typeof hint.meetingUuid === 'string' ? hint.meetingUuid.trim().slice(0, 100) : '';
   const own = await ownInstance(env, ref);
   if (!named) {
+    const conn = await zoomConnection(env, Number(ref.user_id));
+    if (conn) {
+      let instances: Array<{ uuid: string; started: number }>;
+      try { instances = await pastInstances(env, conn, ref.external_ref); }
+      catch (e) {
+        if (!(e instanceof MeetingProviderError)) throw e;
+        // An already-imported first part stays intact, while a missing grant is visible on the call.
+        await env.DB.prepare("UPDATE interview_channel_refs SET last_error = ?, updated_at = datetime('now') WHERE id = ? AND status <> 'cancelled'")
+          .bind(MEETING_ERRORS[e.code], ref.id).run();
+        return { status: 'failed', code: e.code, retryable: e.retryable, segments: 0 };
+      }
+      const within = instances.filter(instance => withinCallSlot(instance.started, ref));
+      if (within.length) {
+        let result: ImportOutcome = SKIPPED;
+        for (const instance of within) {
+          const got = await importZoomRef(env, ref, { meetingUuid: instance.uuid });
+          if (got.status !== 'skipped') result = got;
+        }
+        return result;
+      }
+    }
     if (ref.status === 'imported') return SKIPPED;
     if (own) return importInstance(env, own, fetchTranscript);
   }
@@ -913,7 +951,13 @@ export async function importZoomRef(env: Env, ref: MeetingRef, hint: Record<stri
   // call holds its own, onto nothing (a retryable failure still retries the job).
   const settle = async (got: TranscriptFetch): Promise<ImportOutcome> => {
     if (!own) return importMeetingRef(env, ref, async () => got);
-    if (got.kind === 'error') return { status: 'failed', code: got.code, retryable: got.retryable, segments: 0 };
+    if (got.kind === 'error') {
+      if (named) {
+        const instance = await bindInstance(env, ref, named);
+        return importInstance(env, instance, async () => got);
+      }
+      return { status: 'failed', code: got.code, retryable: got.retryable, segments: 0 };
+    }
     return SKIPPED;
   };
 
@@ -968,6 +1012,7 @@ export async function sweepZoom(env: Env, now: Date): Promise<number> {
     endedBefore: new Date(now.getTime() - QUIET_AFTER_END_MS).toISOString(),
     idleBefore: new Date(now.getTime() - 30 * 60_000).toISOString(),
     limit: 20,
+    importedAfter: new Date(now.getTime() - 7 * 24 * 60 * 60_000).toISOString(),
   });
   for (const ref of refs) {
     await touchRef(env, ref.id);

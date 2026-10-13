@@ -170,7 +170,7 @@ function mockFetch(t: any, routes: Record<string, Handler>) {
     const key = `${(init.method || 'GET').toUpperCase()} ${url.origin}${url.pathname}`;
     const body = init.body == null ? null : String(init.body);
     calls.push({ key, url, headers: new Headers(init.headers), body });
-    const handler = routes[key];
+    const handler = routes[key] ?? (/^GET https:\/\/api\.zoom\.us\/v2\/past_meetings\/\d+\/instances$/.test(key) ? (() => json({ meetings: [] })) : undefined);
     if (!handler) throw new Error(`unmocked fetch: ${key}`);
     return handler(url, init);
   }) as typeof fetch;
@@ -1104,7 +1104,7 @@ test('schedule, list, cancel and retry a Zoom call', async (t) => {
   assert.equal(retried.body.outcome, 'imported');
   assert.equal(retried.body.segments, 3);
   assert.equal(retried.body.meeting.status, 'imported');
-  assert.equal((await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings/${uid}/import`)).body.error, 'already_imported');
+  assert.equal((await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings/${uid}/import`)).body.outcome, 'skipped', 'an imported Zoom call can check for a missed restart without reimporting its first part');
   assert.equal((await call(f.env, ME, 'DELETE', `/interviews/${INTERVIEW}/meetings/${uid}`)).status, 409, 'an imported call is not cancelled');
 });
 
@@ -1198,7 +1198,7 @@ test('Zoom is a Connectors provider: PKCE on the authorize URL, Basic auth on th
   assert.equal(desc.auth_type, 'oauth2');
   assert.equal(desc.tier, 'free');
   assert.deepEqual(desc.oauth_scopes, ['meeting:write:meeting', 'meeting:delete:meeting',
-    'cloud_recording:read:list_recording_files', 'meeting:read:meeting', 'user:read:user']);
+    'cloud_recording:read:list_recording_files', 'meeting:read:meeting', 'meeting:read:list_past_instances', 'user:read:user']);
   assert.equal(CONNECTOR_METADATA.zoom.permissions.length, desc.oauth_scopes!.length, 'one plain sentence per scope');
   assert.equal(CONNECTOR_METADATA.zoom.category, 'Messaging');
 

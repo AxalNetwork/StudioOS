@@ -20,7 +20,7 @@
  * can act on, never a provider's text — and `errorCodeOf` gives back its code.
  */
 import type { Env } from '../../types';
-import { IntakeError, importTranscript, writableSession } from '../interviewIntake';
+import { IntakeError, writableSession } from '../interviewIntake';
 import { enqueueSessionStructure } from '../sessionAutoStructure';
 import { PROVIDER_LABEL } from './types';
 import type { ChannelJobPayload } from './jobs';
@@ -63,7 +63,7 @@ export function withinCallSlot(startedMs: number, ref: Pick<MeetingRef, 'starts_
 export const MEETING_ERRORS = {
   zoom_not_connected: 'Zoom is not connected to your Axal account. Connect it in Account › Connectors, then retry.',
   zoom_reconnect: 'Zoom no longer accepts Axal’s access. Reconnect Zoom in Account › Connectors, then retry.',
-  zoom_unreachable: 'Zoom did not answer. Axal will try again; you can also retry now.',
+  zoom_unreachable: 'Zoom did not answer. Try again in a minute.',
   zoom_create_failed: 'Zoom could not create the call. Try again in a minute.',
   zoom_fetch_failed: 'Zoom refused the request for this call’s transcript. Try again later.',
   zoom_no_transcript: 'Zoom has no transcript for this call. Transcripts need a paid Zoom plan with cloud recording and “Audio transcript” turned on, and the call recorded to the cloud. You can still use the recorder or paste the conversation.',
@@ -73,7 +73,7 @@ export const MEETING_ERRORS = {
   meet_transcripts_unavailable: 'Google Meet transcripts are not available on Axal yet, so this call’s transcript will not be imported. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.',
   meet_reconnect: 'Google no longer accepts Axal’s access. Reconnect Google in Account › Connectors, then retry.',
   meet_api_disabled: 'Reading Google Meet transcripts is not turned on for Axal yet, so this transcript cannot be fetched.',
-  meet_unreachable: 'Google Meet did not answer. Axal will try again; you can also retry now.',
+  meet_unreachable: 'Google Meet did not answer. Try again in a minute.',
   meet_create_failed: 'Google Calendar could not create the call. Try again in a minute.',
   meet_link_unavailable: 'Google Calendar created the event but gave it no Meet link. Check that Google Meet is on for your account, then try again.',
   meet_fetch_failed: 'Google Meet refused the request for this call’s transcript. Try again later.',
@@ -83,6 +83,8 @@ export const MEETING_ERRORS = {
   transcript_too_large: 'The transcript is larger than Axal imports. Paste the part you need instead.',
   interview_gone: 'The interview or its session no longer exists, or is no longer yours, so nothing was imported.',
   member_inactive: 'The Axal account that scheduled this call is no longer active, so nothing was imported.',
+  zoom_cancel_unconfirmed: 'Axal stopped importing this call, but Zoom did not confirm cancellation. Cancel it in Zoom too.',
+  meet_cancel_unconfirmed: 'Axal stopped importing this call, but Google did not confirm cancellation. Cancel it in Google Calendar too.',
   import_failed: 'The transcript could not be imported. Try again in a minute.',
 } as const;
 export type MeetingErrorCode = keyof typeof MEETING_ERRORS;
@@ -156,11 +158,11 @@ export async function touchRef(env: Env, refId: number): Promise<void> {
   await env.DB.prepare(`UPDATE interview_channel_refs SET updated_at = datetime('now') WHERE id = ?`).bind(refId).run();
 }
 
-export async function cancelRef(env: Env, refId: number): Promise<boolean> {
+export async function cancelRef(env: Env, refId: number, notice: MeetingErrorCode | null = null): Promise<boolean> {
   const res = await env.DB.prepare(
-    `UPDATE interview_channel_refs SET status = 'cancelled', last_error = NULL, updated_at = datetime('now')
+    `UPDATE interview_channel_refs SET status = 'cancelled', last_error = ?, updated_at = datetime('now')
       WHERE id = ? AND status <> 'imported'`,
-  ).bind(refId).run();
+  ).bind(notice ? MEETING_ERRORS[notice] : null, refId).run();
   return Number(res.meta?.changes ?? 0) > 0;
 }
 
@@ -187,15 +189,17 @@ export async function closeAttachedRefs(env: Env, sessionId: number): Promise<nu
  * nothing has touched it since `idleBefore`, so a sweep never hammers a call.
  */
 export async function dueRefs(
-  env: Env, provider: MeetingProvider, opts: { endedBefore: string; idleBefore: string; limit: number },
+  env: Env, provider: MeetingProvider, opts: { endedBefore: string; idleBefore: string; limit: number; importedAfter?: string },
 ): Promise<MeetingRef[]> {
   const rows = await env.DB.prepare(
     `SELECT * FROM interview_channel_refs
       WHERE provider = ? AND datetime(updated_at) < datetime(?)
         AND ((status IN ('scheduled', 'ended') AND ends_at IS NOT NULL AND datetime(ends_at) < datetime(?))
-             OR status = 'transcript_ready')
+             OR status = 'transcript_ready'
+             OR (status = 'imported' AND provider = 'zoom' AND instr(external_ref, ':') = 0
+                 AND ? IS NOT NULL AND datetime(ends_at) >= datetime(?) AND datetime(ends_at) < datetime(?)))
       ORDER BY datetime(updated_at), id LIMIT ?`,
-  ).bind(provider, opts.idleBefore, opts.endedBefore, Math.min(Math.max(opts.limit, 1), 100)).all<MeetingRef>();
+  ).bind(provider, opts.idleBefore, opts.endedBefore, opts.importedAfter ?? null, opts.importedAfter ?? null, opts.endedBefore, Math.min(Math.max(opts.limit, 1), 100)).all<MeetingRef>();
   return rows.results ?? [];
 }
 
@@ -256,7 +260,7 @@ async function destinationSession(env: Env, ref: MeetingRef): Promise<{ id: numb
 }
 
 /** Store a provider transcript in its own session while preserving a live recording's interview transcript. */
-async function storeWithoutReplacingRecording(env: Env, ref: MeetingRef, sessionId: number, segments: ImportedSegment[]): Promise<number> {
+async function storeWithoutReplacingRecording(env: Env, ref: MeetingRef, sessionId: number, segments: ImportedSegment[], mirror = false): Promise<number> {
   await writableSession(env, Number(ref.user_id), sessionId);
   const clean = segments.map((s) => ({
     text: String(s.text ?? '').trim(), speaker: String(s.speaker ?? '').trim().slice(0, 80) || 'Speaker ?',
@@ -273,6 +277,19 @@ async function storeWithoutReplacingRecording(env: Env, ref: MeetingRef, session
     env.DB.prepare(
       `UPDATE interview_sessions SET status = 'transcribed', final_model = ?, updated_at = datetime('now') WHERE id = ?`,
     ).bind(`${ref.provider}_transcript`, sessionId),
+    ...(mirror ? [env.DB.prepare(
+      `UPDATE discovery_interviews SET transcript = (
+         SELECT group_concat(text, char(10)) FROM (
+           SELECT t.text FROM interview_sessions s JOIN interview_transcript_segments t ON t.session_id = s.id
+            WHERE s.interview_id = ? AND s.created_by_user_id = ? AND s.submitted_via IN ('zoom','google_meet')
+              AND t.source = 'final' ORDER BY s.created_at, s.id, t.id
+         )
+       ), transcribed_at = datetime('now'), transcribed_by_model = 'meeting_sessions', updated_at = datetime('now')
+       WHERE id = ? AND NOT EXISTS (
+         SELECT 1 FROM interview_sessions s JOIN interview_transcript_segments t ON t.session_id = s.id
+          WHERE s.interview_id = ? AND s.submitted_via IS NULL AND t.source = 'final'
+       )`,
+    ).bind(ref.interview_id, ref.user_id, ref.interview_id, ref.interview_id)] : []),
   ]);
   return clean.length;
 }
@@ -319,9 +336,7 @@ export async function importMeetingRef(
       `SELECT 1 FROM interview_sessions s WHERE s.interview_id = ? AND s.id <> ? AND s.submitted_via IS NULL
         AND EXISTS (SELECT 1 FROM interview_transcript_segments t WHERE t.session_id = s.id AND t.source = 'final') LIMIT 1`,
     ).bind(ref.interview_id, destination.id).first());
-    const n = recordedElsewhere
-      ? await storeWithoutReplacingRecording(env, ref, destination.id, got.segments)
-      : await importTranscript(env, Number(ref.user_id), destination.id, got.segments, ref.provider);
+    const n = await storeWithoutReplacingRecording(env, ref, destination.id, got.segments, !recordedElsewhere);
     await setRefStatus(env, ref.id, 'imported', null);
     // The transcript is in: the Worker AI proposes its findings (pain points
     // and the rest) for the founder to review, without waiting for a button.
@@ -358,7 +373,7 @@ export function meetingImportHandler(provider: MeetingProvider, importer: Meetin
 export function meetingView(ref: MeetingRef, label: string) {
   return {
     uid: ref.uid, provider: ref.provider, label, join_url: ref.join_url, starts_at: ref.starts_at, ends_at: ref.ends_at,
-    status: ref.status, error: ref.last_error, error_code: errorCodeOf(ref.last_error),
+    status: ref.status, provider_cancelled: ref.status === 'cancelled' && ['zoom_cancel_unconfirmed','meet_cancel_unconfirmed'].includes(errorCodeOf(ref.last_error) ?? '') ? false : null, error: ref.last_error, error_code: errorCodeOf(ref.last_error),
     interview_id: Number(ref.interview_id), session_id: Number(ref.session_id),
     created_at: ref.created_at, updated_at: ref.updated_at,
   };
