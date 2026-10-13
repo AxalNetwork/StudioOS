@@ -92,6 +92,7 @@ import {
 import * as telegram from '../services/channels/telegram';
 import * as whatsapp from '../services/channels/whatsapp';
 
+// #1602 mutation marker
 const channels = new Hono<{ Bindings: Env }>();
 export const channelsAdmin = new Hono<{ Bindings: Env }>();
 
