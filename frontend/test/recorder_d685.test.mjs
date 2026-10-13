@@ -197,7 +197,9 @@ function processingApi(reads, over = {}) {
   w.api.process = async () => { w.calls.push(['process']); return { ok: true, processing: { stage: 'transcribing', done: 1, total: 2, error: null } }; };
   w.api.get = async () => {
     w.calls.push(['get']);
-    const p = reads[Math.min(i, reads.length - 1)]; i += 1;
+    // Past the script, the run reads as done: a poll that ignores a stale or
+    // failed stage then ends in the wrong state instead of spinning forever.
+    const p = i < reads.length + 20 ? reads[Math.min(i, reads.length - 1)] : P('done'); i += 1;
     if (p instanceof Error) throw p;
     return { session: w.session(p?.stage === 'done' ? 'transcribed' : 'stopped'), processing: p };
   };
@@ -310,6 +312,7 @@ test('a dropped read keeps polling; a stale run fails in words; a chunk left on 
   assert.deepEqual(w.calls.find((c) => c[0] === 'finish'), ['finish', 0, true], 'the queued seq is the last one');
   assert.ok(w.calls.some((c) => c[0] === 'chunk' && c[1] === 0), 'sent by the poll while the Worker waited for it');
   assert.deepEqual(await queue.list(7), []);
+  assert.equal(w.calls.some((c) => c[0] === 'action'), false, 'already stopped: no second stop is posted');
 
   const w2 = processingApi([P('transcribing', 1, 4, null, true)]);
   const r2 = createRecorder({ api: w2.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()), wait: async () => {} });

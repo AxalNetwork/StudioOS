@@ -88,7 +88,7 @@ export function DeleteConfirm({ name, busy, error, onCancel, onDelete }) {
         {error && <p role="alert" className="mt-2 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="delete-interview-error">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <button ref={cancel} type="button" onClick={onCancel} data-testid="button-cancel-delete" className="rounded-md border border-axal-hairline px-3 py-1.5 text-[12.5px] font-semibold dark:border-gray-700">Cancel</button>
-          <button type="button" onClick={onDelete} disabled={busy} data-testid="button-confirm-delete" className="rounded-md bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-500">{busy ? 'Deleting…' : 'Delete the interview'}</button>
+          <button type="button" onClick={onDelete} disabled={busy} data-testid="button-confirm-delete" className="rounded-md bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-600">{busy ? 'Deleting…' : 'Delete the interview'}</button>
         </div>
       </div>
     </div>

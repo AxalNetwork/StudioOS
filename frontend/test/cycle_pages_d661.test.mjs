@@ -139,7 +139,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 2, 'the overview and the module page are handed the venture');
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 3, 'the overview, the module page and Validate\'s phone focus (D685 §5.12) are handed the venture');
 });
 
 test('GROW: money in a chart reads in dollars, the checklist says what ticked it, and Share an update opens the sheet', () => {
