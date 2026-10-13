@@ -34,6 +34,27 @@ export interface MeetingRef {
   status: MeetingStatus; last_error: string | null; created_at: string; updated_at: string;
 }
 
+/** How early before its slot a call may start, and how late after it. */
+export const SLOT_EARLY_MS = 30 * 60 * 1000;
+export const SLOT_LATE_MS = 60 * 60 * 1000;
+/** A ref with no end is taken to last this long. */
+const SLOT_DEFAULT_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Whether a conference that started at `startedMs` is this interview's call:
+ * it started within the scheduled slot, up to SLOT_EARLY_MS before it or
+ * SLOT_LATE_MS after it ends. A rejoin or a restart during the call is kept;
+ * another use of the same link later that day is someone else's conversation
+ * and never lands in the interview. False when either time is unknown.
+ */
+export function withinCallSlot(startedMs: number, ref: Pick<MeetingRef, 'starts_at' | 'ends_at'>): boolean {
+  const start = Date.parse(String(ref.starts_at ?? ''));
+  if (!Number.isFinite(startedMs) || !Number.isFinite(start)) return false;
+  const parsedEnd = Date.parse(String(ref.ends_at ?? ''));
+  const end = Number.isFinite(parsedEnd) && parsedEnd >= start ? parsedEnd : start + SLOT_DEFAULT_MS;
+  return startedMs >= start - SLOT_EARLY_MS && startedMs <= end + SLOT_LATE_MS;
+}
+
 /**
  * Every reason a call can stop short of an imported transcript, as the member
  * reads it. The codes travel in API responses; the sentences are stored.
@@ -46,7 +67,9 @@ export const MEETING_ERRORS = {
   zoom_fetch_failed: 'Zoom refused the request for this call’s transcript. Try again later.',
   zoom_no_transcript: 'Zoom has no transcript for this call. Transcripts need a paid Zoom plan with cloud recording and “Audio transcript” turned on, and the call recorded to the cloud. You can still use the recorder or paste the conversation.',
   meet_not_connected: 'Google is not connected to your Axal account. Connect Google in Account › Connectors, then retry.',
-  meet_scope_missing: 'Google needs to be reconnected to allow transcripts: reconnect Google in Account › Connectors and allow Axal to read your Meet transcripts, then retry.',
+  // No Axal consent asks for Meet's transcript permission yet (#1585), so no
+  // reconnect can grant it: the sentence says so, and what to do instead.
+  meet_transcripts_unavailable: 'Google Meet transcripts are not available on Axal yet, so this call’s transcript will not be imported. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.',
   meet_reconnect: 'Google no longer accepts Axal’s access. Reconnect Google in Account › Connectors, then retry.',
   meet_api_disabled: 'Reading Google Meet transcripts is not turned on for Axal yet, so this transcript cannot be fetched.',
   meet_unreachable: 'Google Meet did not answer. Axal will try again; you can also retry now.',
@@ -171,6 +194,13 @@ export type TranscriptFetch =
 /** `hint` is the job's payload (Zoom passes the meeting instance's uuid); {} from a retry or a sweep. */
 export type TranscriptFetcher = (env: Env, ref: MeetingRef, hint: Record<string, unknown>) => Promise<TranscriptFetch>;
 
+/**
+ * One provider's whole import of a ref: `importMeetingRef` with its fetcher
+ * (Meet), or an adapter's own path that ends there (Zoom, whose restarted call
+ * has more than one instance — services/channels/zoom.ts).
+ */
+export type MeetingImporter = (env: Env, ref: MeetingRef, hint: Record<string, unknown>) => Promise<ImportOutcome>;
+
 export interface ImportOutcome {
   status: MeetingStatus | 'skipped' | 'waiting';
   code: MeetingErrorCode | null;
@@ -241,11 +271,11 @@ export async function importMeetingRef(
  * do. A failure worth retrying throws — with its code only — so the queue
  * tries again; the ref already says what happened.
  */
-export function meetingImportHandler(provider: MeetingProvider, fetcher: TranscriptFetcher) {
+export function meetingImportHandler(provider: MeetingProvider, importer: MeetingImporter) {
   return async (env: Env, payload: ChannelJobPayload): Promise<void> => {
     const ref = await loadRef(env, String(payload.refUid ?? ''));
     if (!ref || ref.provider !== provider) return;
-    const out = await importMeetingRef(env, ref, fetcher, payload);
+    const out = await importer(env, ref, payload);
     if (out.status === 'failed' && out.retryable) throw new Error(`meeting_import_retry:${out.code}`);
   };
 }

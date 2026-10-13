@@ -283,9 +283,6 @@ export function meetingCard(provider, overview, catalogue = []) {
   if (available !== true) return out('unavailable', { why: UNAVAILABLE_WHY, connectorKey: entry && conn ? key : null });
   if (conn) {
     const account = accountName(conn);
-    if (provider === 'google_meet' && (own?.needs_reconnect === true || own?.scope_missing === true)) {
-      return out('problem', { account, connectorKey: key, why: 'Reconnect Google once so Axal can read Meet transcripts. Your calendar keeps working meanwhile.' });
-    }
     const problem = connectionProblem(provider, conn);
     if (problem) return out('problem', { account, connectorKey: key, why: problem });
     return out('connected', { account, connectorKey: entry ? key : null });
@@ -296,7 +293,12 @@ export function meetingCard(provider, overview, catalogue = []) {
   return out('not_connected', { connectorKey: key });
 }
 
+/**
+ * What each call card says. A transcript is promised only on the provider's
+ * terms: Zoom makes one only from a cloud recording (the Schedule panel's
+ * "Record in the cloud"), Meet only when transcription is turned on in the call.
+ */
 export const MEETING_NOTES = {
-  zoom: 'Schedule a Zoom call from an interview; its transcript comes in when the call ends. Transcripts need a paid Zoom plan with cloud recording and audio transcripts turned on.',
-  google_meet: 'Schedule a Meet call from an interview; its transcript comes in after the call. Transcripts need a Google Workspace edition with Meet transcription turned on in the call.',
+  zoom: 'Schedule a Zoom call from an interview with Record in the cloud turned on, and its transcript comes in when the call ends. Transcripts need a paid Zoom plan with cloud recording and audio transcripts turned on; without a cloud recording, Zoom makes none.',
+  google_meet: 'Schedule a Meet call from an interview; a transcript comes in after the call only if someone turned on transcription in it. Transcripts need a Google Workspace edition that includes Meet transcription.',
 };

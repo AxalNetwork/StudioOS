@@ -8,7 +8,7 @@ import { CHANNELS_HREF, MESSAGING_PROVIDERS } from '../account/channelsModel';
 import { ProviderTag } from './InterviewChannels';
 import {
   THREAD_TABS, assignedSentence, clientKeyFor, composerState, contactLabel, interviewOptions, keepKeyAfter, messageView,
-  replyOutcome, sessionHref, threadItems, threadRow,
+  replyFailureText, replyOutcome, sessionHref, threadItems, threadRow,
 } from './channelThreads.js';
 
 /**
@@ -23,6 +23,7 @@ import {
  * The reply composer sends through the member's own account and says why it
  * cannot when the provider's 24-hour rule or the bot's rights forbid it. A
  * Telegram reply is "Sent", never "Delivered": Telegram reports acceptance only.
+ * No reply is "Sent" before a provider took it.
  *
  * The rules are `channelThreads.js`; the Worker's shapes are in its header.
  */
@@ -99,42 +100,51 @@ export function MessageList({ messages, contact }) {
 }
 
 /**
- * The reply box. One `client_key` per composed message: kept when a send got
- * no answer, so pressing Send again cannot send it twice; dropped once it is
- * sent, once the Worker has refused it (that key is spent), or when the words
- * change (`keepKeyAfter`).
+ * The reply box. One `client_key` per composed message: kept after any failure
+ * that is not the Worker's refusal (no answer, a 5xx), so pressing Send again
+ * cannot send it twice; dropped once it is sent, once the Worker has refused
+ * it (that key is spent), or when the words change (`keepKeyAfter`). A repeat
+ * whose first attempt has no outcome yet is never "Sent": the words stay, with
+ * what to do next (`replyOutcome`).
  */
 export function ReplyComposer({ thread, api = channelsApi, onSent, makeKey }) {
   const [text, setText] = useState('');
   const key = useRef(null);
-  const [st, setSt] = useState({ busy: false, sent: '', error: '' });
+  const [st, setSt] = useState({ busy: false, sent: '', error: '', pending: '' });
   const cs = composerState(thread);
   const send = async () => {
     const body = text.trim();
     if (!body || !cs.enabled || st.busy) return;
     key.current = clientKeyFor(key.current, makeKey);
-    setSt({ busy: true, sent: '', error: '' });
+    setSt({ busy: true, sent: '', error: '', pending: '' });
     try {
       const out = replyOutcome(thread.provider, await api.reply(thread.uid, body, key.current));
+      if (out.ok === null) {
+        // Not known to have gone: the words stay, and the key stays while the first attempt may still be running.
+        if (!out.keepKey) key.current = null;
+        setSt({ busy: false, sent: '', error: '', pending: out.text });
+        return;
+      }
       key.current = null;
-      if (!out.ok) { setSt({ busy: false, sent: '', error: out.text }); return; }
+      if (!out.ok) { setSt({ busy: false, sent: '', error: out.text, pending: '' }); return; }
       setText('');
-      setSt({ busy: false, sent: out.label, error: '' });
+      setSt({ busy: false, sent: out.label, error: '', pending: '' });
       onSent?.();
     } catch (e) {
       if (!keepKeyAfter(e)) key.current = null;
-      setSt({ busy: false, sent: '', error: e?.message || 'No answer came back, so it may not have gone. Press Send again: it will not send twice.' });
+      setSt({ busy: false, sent: '', error: replyFailureText(e), pending: '' });
     }
   };
   return (
     <div className="space-y-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="reply-composer" data-enabled={cs.enabled ? 'true' : 'false'}>
       <label htmlFor="channel-reply" className="text-[11px] font-bold uppercase tracking-wide text-axal-faint">Reply</label>
       <textarea id="channel-reply" rows={3} maxLength={8000} className={FIELD} disabled={!cs.enabled || st.busy} value={text}
-        onChange={(e) => { setText(e.target.value); key.current = null; setSt((s) => ({ ...s, sent: '' })); }} data-testid="input-reply" />
+        onChange={(e) => { setText(e.target.value); key.current = null; setSt((s) => ({ ...s, sent: '', pending: '' })); }} data-testid="input-reply" />
       {!cs.enabled && cs.reason && <p className={NOTE} data-testid="reply-disabled-reason">{cs.reason}</p>}
       <div className="flex items-center justify-between gap-2">
         <span className="text-[12px]">
           {st.sent && <span role="status" className="text-emerald-700 dark:text-emerald-300" data-testid="reply-sent">{st.sent}</span>}
+          {st.pending && <span role="status" className="text-amber-800 dark:text-amber-300" data-testid="reply-pending">{st.pending}</span>}
           {st.error && <span role="alert" className="text-red-700 dark:text-red-300" data-testid="reply-error">{st.error}</span>}
         </span>
         <button type="button" className={PRIMARY} disabled={!cs.enabled || st.busy || !text.trim()} onClick={send} data-testid="button-reply-send">{st.busy ? 'Sending…' : 'Send'}</button>

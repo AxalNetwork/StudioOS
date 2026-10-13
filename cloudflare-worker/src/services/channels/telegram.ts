@@ -11,8 +11,10 @@
  * What this file does, and nothing else (types.ts):
  *   verify     X-Telegram-Bot-Api-Secret-Token against TELEGRAM_CHANNEL_WEBHOOK_SECRET
  *   normalise  an Update into one InboundEvent
- *   link       `/start <code>` proves which Telegram account is the member's;
- *              a `business_connection` is recorded against that account
+ *   link       `/start <code>` names the Telegram account redeeming the code,
+ *              and that account's own `/confirm` (after the bot names the Axal
+ *              account) joins the two; a `business_connection` is recorded
+ *              against that account
  *   talk       sendMessage (business and private), getFile + download, setWebhook
  *
  * Bot API facts relied on (core.telegram.org/bots/api, read 2026-10-13):
@@ -36,10 +38,10 @@
 import type { Env } from '../../types';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { IntakeError, activeMember } from '../interviewIntake';
-import { consumeLinkCode } from './linkCodes';
+import { confirmLinkClaim, consumeLinkCode } from './linkCodes';
 import { forgetConnection } from './threads';
 import {
-  CHANNEL_LIMITS, type InboundConnection, type InboundEvent, type InboundLink, type SendResult,
+  CHANNEL_LIMITS, type InboundConnection, type InboundEvent, type InboundLink, type InboundLinkConfirm, type SendResult,
 } from './types';
 
 export const TELEGRAM_API = 'https://api.telegram.org';
@@ -120,7 +122,7 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
   const ignored = (reason: string): InboundEvent => ({ kind: 'ignored', provider: 'telegram', eventId, reason });
   if (!u || !eventId) return ignored('malformed');
 
-  // `/start <code>` in the member's own private chat with the bot.
+  // `/start <code>`, then `/confirm`, in the member's own private chat with the bot.
   const pm = obj(u.message);
   if (pm) {
     const chat = obj(pm.chat);
@@ -130,6 +132,9 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
     const start = /^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{1,64})$/.exec(text);
     const tgUser = idStr(from.id);
     const chatId = idStr(chat.id);
+    if (tgUser && chatId && /^\/confirm(?:@[A-Za-z0-9_]+)?$/.test(text)) {
+      return { kind: 'link_confirm', provider: 'telegram', eventId, telegramUserId: tgUser, chatId, displayName: displayName(from) };
+    }
     if (!start || !tgUser || !chatId) return ignored('not_a_link');
     return {
       kind: 'link', provider: 'telegram', eventId, telegramUserId: tgUser, chatId,
@@ -264,29 +269,72 @@ export async function recordBusinessConnection(env: Env, ev: InboundConnection):
   return { userId };
 }
 
+export type ClaimOutcome =
+  | { claimed: true; userId: number; account: string | null }
+  | { claimed: false; reason: 'code_invalid' | 'member_inactive' | 'identity_taken' };
+
 export type LinkOutcome =
   | { linked: true; userId: number; integrationId: number; businessConnected: boolean }
-  | { linked: false; reason: 'code_invalid' | 'member_inactive' | 'identity_taken' };
+  | { linked: false; reason: 'nothing_to_confirm' | 'member_inactive' | 'identity_taken' };
 
 const hexUid = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-/**
- * `/start <code>`: the code names the member, the update names the Telegram
- * account, and the two are joined. A Telegram account already active on
- * ANOTHER member is refused — the partial unique index on `integrations`
- * enforces it too, for the race — and nothing is stored. A member re-linking
- * a different Telegram account loses the old account's conversations (as a
- * disconnect would) and its business connections are detached.
- */
-export async function linkTelegramAccount(env: Env, link: InboundLink): Promise<LinkOutcome> {
-  const userId = await consumeLinkCode(env, link.code, 'telegram');
-  if (!userId) return { linked: false, reason: 'code_invalid' };
+/** 'm•••@example.com': enough for the owner of a Telegram account to tell their own Axal account from a stranger's. */
+export function maskEmail(email: unknown): string | null {
+  const m = /^([^@\s])[^@\s]*@([^@\s]+)$/.exec(String(email ?? '').trim());
+  return m ? `${m[1]}•••@${m[2]}` : null;
+}
+
+async function memberStanding(env: Env, userId: number): Promise<boolean> {
   try {
     await activeMember(env, userId);
+    return true;
   } catch (err) {
-    if (err instanceof IntakeError) return { linked: false, reason: 'member_inactive' };
+    if (err instanceof IntakeError) return false;
     throw err;
   }
+}
+
+/**
+ * `/start <code>`, step one of two. The code names the member and the update
+ * names the Telegram account, but redeeming a code proves only that someone
+ * held it — and a member can hand their code to anyone. So nothing is linked
+ * here: the Telegram account is recorded on the spent code, and the bot asks
+ * that account to confirm, naming the Axal account (masked) it would join.
+ *
+ * WHY THE CONFIRMATION IS ON THE TELEGRAM SIDE. The harm the review found was
+ * a member sending their link to someone else's Telegram Business account:
+ * one tap on Start used to hand that account's customer chats, and any
+ * business connection it already had, to the member. A confirmation in Axal
+ * would be pressed by that same member. Only the owner of the Telegram
+ * account can protect it, so the owner is the one asked, and told which Axal
+ * account is asking; only their own `/confirm` (Telegram sets `from.id`, and
+ * the webhook is secret-verified) completes it. A stranger who merely sees a
+ * member's code can redeem it but cannot confirm for anyone else's account.
+ */
+export async function claimTelegramLink(env: Env, link: InboundLink): Promise<ClaimOutcome> {
+  const userId = await consumeLinkCode(env, link.code, 'telegram', link.telegramUserId);
+  if (!userId) return { claimed: false, reason: 'code_invalid' };
+  if (!(await memberStanding(env, userId))) return { claimed: false, reason: 'member_inactive' };
+  const holder = await linkedMember(env, link.telegramUserId);
+  if (holder && holder !== userId) return { claimed: false, reason: 'identity_taken' };
+  const row = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(userId).first<{ email: string | null }>();
+  return { claimed: true, userId, account: maskEmail(row?.email) };
+}
+
+/**
+ * `/confirm`, step two: the Telegram account that redeemed a code in the last
+ * ten minutes agrees, and the two are joined. A Telegram account already
+ * active on ANOTHER member is refused — the partial unique index on
+ * `integrations` enforces it too, for the race — and nothing is stored. A
+ * member re-linking a different Telegram account loses the old account's
+ * conversations (as a disconnect would) and its business connections are
+ * detached.
+ */
+export async function confirmTelegramLink(env: Env, link: InboundLinkConfirm): Promise<LinkOutcome> {
+  const userId = await confirmLinkClaim(env, 'telegram', link.telegramUserId);
+  if (!userId) return { linked: false, reason: 'nothing_to_confirm' };
+  if (!(await memberStanding(env, userId))) return { linked: false, reason: 'member_inactive' };
   const holder = await linkedMember(env, link.telegramUserId);
   if (holder && holder !== userId) return { linked: false, reason: 'identity_taken' };
 
@@ -334,8 +382,14 @@ export async function linkTelegramAccount(env: Env, link: InboundLink): Promise<
 
 /** What the bot says in the member's private chat. Plain sentences; never a code or a token. */
 export const TELEGRAM_COPY = {
+  /** Step one of linking: names the Axal account and waits for this Telegram account's own /confirm. */
+  confirm: (account: string | null) => `This link would connect your Telegram account to the Axal account ${account ?? 'that made it'}. `
+    + 'Axal would then receive the customer chats you let this bot see in Telegram Business. '
+    + 'If that is your Axal account and you asked for this, send /confirm here within 10 minutes. '
+    + 'If not, ignore this message: nothing is linked.',
   linked: 'Your Telegram account is now linked to Axal. Next, in Telegram open Settings › Telegram Business › Chatbots, add this bot, and choose the chats it can see.',
   linkedConnected: 'Your Telegram account is now linked to Axal. Conversations from the chats this bot can see will wait in Axal › Interviews until you assign them.',
+  nothingToConfirm: 'There is no link waiting for you to confirm, or it is more than 10 minutes old. In Axal, open Account › Connectors and press Link Telegram for a new one.',
   codeInvalid: 'That link has expired or was already used. In Axal, open Account › Connectors and press Link Telegram for a new one.',
   identityTaken: 'This Telegram account is already linked to another Axal account. Disconnect it there first, then try again.',
   memberInactive: 'The Axal account behind that link is no longer active.',

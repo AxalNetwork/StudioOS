@@ -6,8 +6,9 @@ import { TelegramChannelCard, WhatsAppChannelCard, useChannelsOverview } from '.
 import { CHANNELS_HREF, INBOX_HREF, MESSAGING_PROVIDERS, channelCard } from '../account/channelsModel';
 import { channelOf } from './assistantSession.js';
 import {
-  DURATIONS, MEETING_CONSENT, MEETING_PROVIDERS, PROVIDER_LABEL, assignedSentence, callWhen, defaultMeetingForm, meetingBody, meetingItems,
-  meetingProviders, meetingStatus, providerNote, safeJoinUrl, scheduleRefusal, sessionHref, threadItems, threadRow,
+  DURATIONS, MEETING_CONSENT, MEETING_PROVIDERS, PROVIDER_LABEL, assignedSentence, callWhen, cancelOutcome, cancelQuestion, defaultMeetingForm,
+  meetingBody, meetingItems, meetingProviders, meetingStatus, providerNote, safeJoinUrl, scheduleRefusal, sessionHref, threadItems, threadRow,
+  transcriptNote,
 } from './channelThreads.js';
 
 /**
@@ -132,21 +133,29 @@ export function ConnectPanel({ interview, api = channelsApi, onAssigned, now }) 
   );
 }
 
-/** One scheduled call: when, its status in plain words, its join link, and what can be done. */
+/**
+ * One scheduled call: when, its status in plain words, its join link, and what
+ * can be done. After a cancel, the row says what the provider confirmed
+ * (`cancelOutcome`) in place of the bare "Cancelled.", for as long as it is on
+ * screen: a call Zoom or Google did not confirm may still be live there.
+ */
 export function MeetingRow({ meeting, interview, api = channelsApi, onChanged, now = Date.now(), initialConfirming = false }) {
   const [confirming, setConfirming] = useState(initialConfirming);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const st = meetingStatus(meeting, now);
+  const [cancelled, setCancelled] = useState(null);
+  const st = cancelled ? { ...meetingStatus({ ...meeting, status: 'cancelled' }, now), ...cancelled } : meetingStatus(meeting, now);
   const join = safeJoinUrl(meeting.join_url, meeting.provider);
   const href = sessionHref(meeting.session_id);
   const interviewId = interview?.id ?? meeting.interview_id;
   const act = async (kind) => {
     setBusy(kind); setError('');
     try {
-      if (kind === 'cancel') { await api.cancelMeeting(interviewId, meeting.uid); setConfirming(false); }
-      else await api.importMeeting(interviewId, meeting.uid);
+      if (kind === 'cancel') {
+        setCancelled(cancelOutcome(meeting.provider, await api.cancelMeeting(interviewId, meeting.uid)));
+        setConfirming(false);
+      } else await api.importMeeting(interviewId, meeting.uid);
       onChanged?.();
     } catch (e) {
       setError(e?.message || (kind === 'cancel' ? 'The call could not be cancelled. Try again.' : 'The transcript could not be imported. Try again.'));
@@ -158,8 +167,8 @@ export function MeetingRow({ meeting, interview, api = channelsApi, onChanged, n
         <ProviderTag provider={meeting.provider} />
         <span>{callWhen(meeting)}</span>
       </div>
-      <p className={`text-[12.5px] ${STATUS_TONE[st.tone] || STATUS_TONE.neutral}`} data-testid="meeting-status">{st.text}</p>
-      {join && meeting.status !== 'cancelled' && (
+      <p role={cancelled ? 'status' : undefined} className={`text-[12.5px] ${STATUS_TONE[st.tone] || STATUS_TONE.neutral}`} data-testid="meeting-status">{st.text}</p>
+      {join && meeting.status !== 'cancelled' && !cancelled && (
         <div className="flex min-w-0 items-center gap-2">
           <a href={join} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate font-mono text-[12px] text-violet-800 underline dark:text-violet-200" data-testid="meeting-join">{join}</a>
           <button type="button" className={SMALL} onClick={async () => { try { await navigator.clipboard?.writeText(join); setCopied(true); } catch { setCopied(false); } }}>{copied ? 'Copied' : 'Copy'}</button>
@@ -175,7 +184,7 @@ export function MeetingRow({ meeting, interview, api = channelsApi, onChanged, n
         {st.can.cancel && !confirming && <button type="button" className={SMALL} onClick={() => setConfirming(true)} data-testid={`button-meeting-cancel-${meeting.uid}`}>Cancel the call</button>}
         {st.can.cancel && confirming && (
           <span className="inline-flex flex-wrap items-center gap-2" data-testid={`meeting-cancel-confirm-${meeting.uid}`}>
-            <span className={NOTE}>Cancel this call? Its link stops working.</span>
+            <span className={NOTE}>{cancelQuestion(meeting.provider)}</span>
             <button type="button" className="rounded-md bg-red-700 px-2.5 py-1 text-[12px] font-bold text-white disabled:opacity-50" disabled={busy === 'cancel'} onClick={() => act('cancel')}>Cancel it</button>
             <button type="button" className={SMALL} onClick={() => setConfirming(false)}>Keep</button>
           </span>
@@ -190,6 +199,10 @@ export function MeetingRow({ meeting, interview, api = channelsApi, onChanged, n
  * Schedule a Zoom or Google Meet call for this interview, and follow each
  * call to its transcript. One read (`GET …/meetings`) gives the calls and,
  * per provider, whether it is on here and whether the member is connected.
+ * A transcript is promised only when the provider will make one: a Zoom call
+ * is recorded to the cloud only when the member turns that on
+ * (`auto_record`), and Meet only transcribes when someone turns it on in the
+ * call (`transcriptNote`).
  */
 export function SchedulePanel({ interview, api = channelsApi, now, initialForm }) {
   const [refs, setRefs] = useState({ status: 'loading', items: [], providers: meetingProviders(null) });
@@ -223,7 +236,7 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
 
   return (
     <div className="space-y-3" data-testid="interview-schedule">
-      <p className="text-[12.5px] text-gray-700 dark:text-gray-300">Axal creates the call and a session for it. When the call ends, its transcript comes into that session for you to review. Calls over Telegram or WhatsApp cannot be recorded this way; use the in-app recorder for those.</p>
+      <p className="text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="schedule-intro">Axal creates the call and a session for it. {transcriptNote(form.provider, form.record)} Calls over Telegram or WhatsApp cannot be recorded this way; use the in-app recorder for those.</p>
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Call on">
         {MEETING_PROVIDERS.map((p) => (
           <button key={p.key} type="button" role="radio" aria-checked={form.provider === p.key} disabled={!available(p.key)} data-testid={`meeting-provider-${p.key}`}
@@ -255,8 +268,18 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
             </button>
           ))}
         </div>
-        <p className={NOTE}>After the call, its transcript lands in this interview and the Worker AI proposes the pain points and other findings for you to review. Nothing is added to Validate until you accept it.</p>
+        <p className={NOTE}>When the call has a transcript, it lands in this interview and the Worker AI proposes the pain points and other findings for you to review. Nothing is added to Validate until you accept it.</p>
       </fieldset>
+      {form.provider === 'zoom' && (
+        <div className="space-y-1" data-testid="meeting-record">
+          <label className="flex items-center gap-2 text-[12.5px] font-semibold text-gray-800 dark:text-gray-200">
+            <input type="checkbox" className="h-4 w-4 accent-violet-700" checked={form.record === true}
+              onChange={(e) => setForm((f) => ({ ...f, record: !!e.target.checked }))} data-testid="input-meeting-record" />
+            Record in the cloud (needed for the transcript)
+          </label>
+          <p className={NOTE}>Zoom starts recording to your Zoom cloud when the call starts, and Zoom’s own recording notice tells everyone on the call that it is being recorded. Cloud recording needs a paid Zoom plan.</p>
+        </div>
+      )}
       {note && (
         <p className="text-[12px] text-amber-800 dark:text-amber-300" data-testid="schedule-provider-note">
           {note}{refs.providers[form.provider]?.available !== false && <> <Link to={CHANNELS_HREF} className="underline">Open Connectors</Link></>}

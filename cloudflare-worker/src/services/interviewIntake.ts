@@ -134,13 +134,24 @@ export async function writableSession(env: Env, userId: number, sessionId: numbe
 export const intakeModel = (provider: ChannelProvider) => `channel:${provider}`;
 
 /**
+ * The most `discovery_interviews.transcript` grows to by channel appends, in
+ * bytes. D1 refuses a string or row over 2,000,000 bytes; a chat that kept
+ * appending would reach it, and from then every append to the interview —
+ * every later message, and the member's own replies — would fail. Past this
+ * bound the mirror stops growing; the segments, which are the session's
+ * record and what Structure and Ask read, keep every message.
+ */
+export const TRANSCRIPT_MIRROR_MAX_BYTES = 1_000_000;
+
+/**
  * Append messages to a channel session, in order, as final segments — the same
  * rows the paste-in Text chat writes. A session that was `draft` (or already
  * `structured`) becomes `transcribed`, so Structure is offered on what is new.
  * The plain text is appended to `discovery_interviews.transcript` for its
- * existing readers. One batch: a reader sees all of it or none. `alongside`
- * joins that batch — the thread store passes the deletion of the pending
- * copies, so a message is never in both places or neither.
+ * existing readers, up to TRANSCRIPT_MIRROR_MAX_BYTES. One batch: a reader
+ * sees all of it or none. `alongside` joins that batch — the thread store
+ * passes the deletion of the pending copies, so a message is never in both
+ * places or neither.
  */
 export async function appendSegments(
   env: Env, userId: number, sessionId: number, segments: StoredSegment[], provider: ChannelProvider,
@@ -169,10 +180,13 @@ export async function appendSegments(
     ).bind(model, session.id),
     env.DB.prepare(
       `UPDATE discovery_interviews
-          SET transcript = CASE WHEN transcript IS NULL OR transcript = '' THEN ? ELSE transcript || char(10) || ? END,
+          SET transcript = CASE
+                WHEN COALESCE(length(CAST(transcript AS BLOB)), 0) + length(CAST(? AS BLOB)) + 1 > ? THEN transcript
+                WHEN transcript IS NULL OR transcript = '' THEN ?
+                ELSE transcript || char(10) || ? END,
               transcribed_at = datetime('now'), transcribed_by_model = ?, updated_at = datetime('now')
         WHERE id = ?`,
-    ).bind(plain, plain, model, session.interview_id),
+    ).bind(plain, TRANSCRIPT_MIRROR_MAX_BYTES, plain, plain, model, session.interview_id),
     ...alongside,
   ]);
   return clean.length;

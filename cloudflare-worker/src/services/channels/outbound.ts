@@ -15,6 +15,7 @@ import type { MessagingProvider, SendResult } from './types';
 export interface OutboundRow {
   id: number; uid: string; provider: MessagingProvider; user_id: number; thread_id: number | null;
   client_key: string; external_message_id: string | null; status: string; error_code: string | null;
+  created_at?: string;
 }
 
 /** The new row, or `{ existing }` when this client_key was already used. */
@@ -41,10 +42,16 @@ export async function finishOutbound(env: Env, id: number, result: SendResult): 
   ).bind(result.ok ? 'submitted' : 'failed', ext, result.ok ? null : (result.code ?? 'send_failed'), id).run();
 }
 
-/** Whether a provider message id is one Axal sent (a provider's copy of our own reply). */
-export async function isOurSend(env: Env, provider: MessagingProvider, externalMessageId: string): Promise<boolean> {
-  const row = await env.DB.prepare('SELECT 1 AS hit FROM channel_outbound WHERE provider = ? AND external_message_id = ?')
-    .bind(provider, await refKey(provider, externalMessageId)).first();
+/**
+ * Whether a provider message id is one Axal sent for this member (a provider's
+ * copy of our own reply). Scoped to the member: a Telegram ref is
+ * `<chat id>:<message_id>`, and two business accounts writing to the same
+ * customer draw message_ids from their own counters, so another member's reply
+ * can carry the same ref as this member's own message.
+ */
+export async function isOurSend(env: Env, provider: MessagingProvider, userId: number, externalMessageId: string): Promise<boolean> {
+  const row = await env.DB.prepare('SELECT 1 AS hit FROM channel_outbound WHERE provider = ? AND user_id = ? AND external_message_id = ?')
+    .bind(provider, userId, await refKey(provider, externalMessageId)).first();
   return !!row;
 }
 
@@ -52,19 +59,24 @@ const RANK: Record<string, number> = { pending: 0, submitted: 1, delivered: 2, r
 
 /**
  * A WhatsApp status report. Statuses only move forward (a late 'delivered'
- * never overwrites 'read'); 'failed' always lands.
+ * never overwrites 'read'); 'failed' always lands. The rank check is in the
+ * UPDATE itself, so two reports handled at once cannot both read the old
+ * status and the slower one move it backwards.
  */
 export async function applyDeliveryStatus(
   env: Env, externalMessageId: string, status: 'sent' | 'delivered' | 'read' | 'failed', errorCode: string | null,
 ): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `SELECT id, status FROM channel_outbound WHERE provider = 'whatsapp' AND external_message_id = ?`,
-  ).bind(await refKey('whatsapp', externalMessageId)).first<{ id: number; status: string }>();
-  if (!row) return false;
+  const ref = await refKey('whatsapp', externalMessageId);
   const next = status === 'sent' ? 'submitted' : status;
-  if (next !== 'failed' && (RANK[next] ?? 0) <= (RANK[row.status] ?? 0)) return true;
-  await env.DB.prepare(
-    `UPDATE channel_outbound SET status = ?, error_code = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(next, next === 'failed' ? (errorCode ?? 'failed') : null, row.id).run();
-  return true;
+  const moved = await env.DB.prepare(
+    `UPDATE channel_outbound SET status = ?, error_code = ?, updated_at = datetime('now')
+      WHERE provider = 'whatsapp' AND external_message_id = ?
+        AND (? = 'failed' OR (CASE status WHEN 'pending' THEN 0 WHEN 'submitted' THEN 1 WHEN 'delivered' THEN 2
+                                          WHEN 'read' THEN 3 WHEN 'failed' THEN 4 ELSE 0 END) < ?)
+      RETURNING id`,
+  ).bind(next, next === 'failed' ? (errorCode ?? 'failed') : null, ref, next, RANK[next] ?? 0).first<{ id: number }>();
+  if (moved) return true;
+  // Not moved: a report that arrived late for a message of ours, or not ours at all.
+  return !!(await env.DB.prepare(`SELECT 1 AS hit FROM channel_outbound WHERE provider = 'whatsapp' AND external_message_id = ?`)
+    .bind(ref).first());
 }

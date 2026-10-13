@@ -42,8 +42,17 @@ export const CHANNEL_LIMITS = {
   pendingDays: 30,
   /** A link code lives this long. */
   linkCodeMinutes: 10,
-  /** Webhook events a single connection may deliver per minute (KV). */
+  /**
+   * Webhook events a single connection may deliver per minute, counted in D1
+   * (`events.ts`; KV's one write per key per second could never reach it).
+   */
   eventsPerMinute: 120,
+  /**
+   * Voice notes a single connection may have transcribed per UTC day, counted
+   * in D1 and checked before the model runs: it fails closed. Only chats the
+   * member assigned are transcribed at all.
+   */
+  transcriptionsPerDay: 50,
   /**
    * Free-form reply window, ms. WhatsApp: since the customer's last message
    * (after it, only an approved template). Telegram Business: the bot may act
@@ -151,6 +160,19 @@ export interface InboundLink {
   code: string;
 }
 
+/**
+ * Telegram: `/confirm` in a private chat with the bot — the Telegram account
+ * that redeemed a link code agreeing to join the Axal account the bot named.
+ */
+export interface InboundLinkConfirm {
+  kind: 'link_confirm';
+  provider: 'telegram';
+  eventId: string;
+  telegramUserId: string;
+  chatId: string;
+  displayName: string | null;
+}
+
 /** Anything verified but not acted on (unsupported update types, groups, bots). */
 export interface InboundIgnored {
   kind: 'ignored';
@@ -161,7 +183,7 @@ export interface InboundIgnored {
 
 export type InboundEvent =
   | InboundMessage | InboundEdit | InboundDelete | InboundStatus
-  | InboundConnection | InboundLink | InboundIgnored;
+  | InboundConnection | InboundLink | InboundLinkConfirm | InboundIgnored;
 
 /** What a send returns. `submitted` is acceptance by the provider, never delivery. */
 export interface SendResult {
