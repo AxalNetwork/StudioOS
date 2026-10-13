@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../../lib/api';
 import { Pill, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { connectorsApi } from '../../lib/api/connectors';
 import { Banner, ConnectorPanel, Group, Row, Sheet, disconnect, openingView, useConnectors } from './ConnectorSheet';
-import { TOOL_FILTERS, disconnectNote, retryOutcome, toolBanner, toolGroups, toolRow } from './connectorsModel';
+import {
+  TOOL_FILTERS, companiesWith, companyBanner, disconnectNote, projectCompany, retryOutcome, servesCompany, toolBanner, toolGroups, toolRow,
+} from './connectorsModel';
 
 /**
  * D651 (#1463) — Build's "Connect a tool", drawn to `Cycle Action.dc.html`'s
@@ -13,20 +16,36 @@ import { TOOL_FILTERS, disconnectNote, retryOutcome, toolBanner, toolGroups, too
  *
  * `refused` and `success` are the panel's own `refused` and `connected` views.
  * A provider's sign-in still returns to `/integrations`, which lands on the
- * Connectors page; the Worker's callback chooses that address (D651).
+ * Connectors page; the Worker's callback chooses that address (D651) until
+ * S18-A's `return_to=build` merges (D686 §5.2).
  *
- * The canvas's `sync` view (choosing GitHub repositories) is not built here
- * yet. Its routes (`/:uid/repositories`, D655) are on main; GitHub is listed
- * as the Worker reports it meanwhile.
+ * D686 §5.4 (#1597): the rows say what is true (`toolRow`), GitHub chooses
+ * its repositories in the `sync` view (`GithubSyncSheet.jsx`), and every
+ * connection is made for THIS project's company (`projectCompany`), which
+ * is sent as the header the Worker scopes it by.
  */
 
-export default function ConnectToolSheet({ onClose }) {
-  const data = useConnectors();
-  return <ConnectToolView data={data} onClose={onClose} />;
+export default function ConnectToolSheet({ projectId = null, onClose, onChanged }) {
+  // The project's company: undefined while read, null when it could not be.
+  const [project, setProject] = useState(projectId ? undefined : null);
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let live = true;
+    api.getProject(projectId).then((r) => { if (live) setProject(r || null); }, () => { if (live) setProject(null); });
+    return () => { live = false; };
+  }, [projectId]);
+  const companyId = project?.company_id && Number.isSafeInteger(Number(project.company_id)) ? Number(project.company_id) : null;
+  const data = useConnectors({ companyId });
+  const reload = () => { data.reload(); onChanged?.(); };
+  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} />;
 }
 
-/** The sheet, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectToolView({ data, onClose }) {
+/**
+ * The sheet, drawn from one `useConnectors()` read; exported so a test can
+ * hand it each state. `project` is `GET /projects/:id` (undefined while read,
+ * null when unreadable, false when the sheet has no project).
+ */
+export function ConnectToolView({ data, onClose, project = false, projectId = null }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('All');
   const [panel, setPanel] = useState(null); // { key, view }
@@ -34,6 +53,9 @@ export function ConnectToolView({ data, onClose }) {
   const [confirm, setConfirm] = useState(null);
   const [rowNote, setRowNote] = useState({});
   const [busy, setBusy] = useState(null);
+  const scope = project === false ? null : projectCompany(project, data.companies);
+  const cannotConnect = !!scope && (scope.state === 'outside' || scope.state === 'unreadable' || scope.state === 'loading');
+  const companyNote = scope ? companyBanner(scope) : null;
   const banner = toolBanner(data.catalogue);
   // While the failed banner shows, the failing tool's group is drawn first.
   const pin = banner?.view === 'failed' ? (data.catalogue.find((p) => p.key === banner.key)?.category || 'Other') : null;
@@ -51,6 +73,9 @@ export function ConnectToolView({ data, onClose }) {
         onChanged={data.reload}
         onClose={() => setPanel(null)}
         back={() => setPanel(null)}
+        projectId={projectId}
+        companyId={scope?.state === 'ok' ? scope.companyId : null}
+        companyName={scope?.state === 'ok' ? scope.name : null}
       />
     );
   }
@@ -70,8 +95,21 @@ export function ConnectToolView({ data, onClose }) {
     finally { setBusy(null); }
   };
 
+  const enableHere = async (p) => {
+    setBusy(p.key);
+    try { await connectorsApi.setCompanies(p.connection.uid, companiesWith(p.connection, scope.companyId)); data.reload(); }
+    catch (e) { setRowNote((n) => ({ ...n, [p.key]: { tone: 'danger', text: e?.message || 'The company could not be turned on.' } })); }
+    finally { setBusy(null); }
+  };
+
   const action = (p, row) => {
     const testid = `tool-action-${p.key}`;
+    // Connecting or reconnecting is for a company the member is in (D686 §5.4).
+    if (cannotConnect && (row.action === 'connect' || row.action === 'reconnect' || row.action === 'upgrade')) return null;
+    // A connection that does not serve this project's company yet: add it, keeping the others (the PUT replaces the set).
+    if (scope?.state === 'ok' && servesCompany(p.connection, scope.companyId) === false) {
+      return <button type="button" className={BTN.primary} data-testid={testid} disabled={busy === p.key} onClick={() => enableHere(p)}>{`Use for ${scope.name || 'this company'}`}</button>;
+    }
     if (rowNote[p.key]?.reconnect || row.action === 'reconnect') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: 'pre' })}>Reconnect</button>;
     if (row.action === 'upgrade') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: 'pro' })}>{row.actionLabel}</button>;
     if (row.action === 'retry') return <button type="button" className={BTN.primary} data-testid={testid} disabled={busy === p.key} onClick={() => retry(p)}>{busy === p.key ? 'Trying…' : row.actionLabel}</button>;
@@ -83,6 +121,7 @@ export function ConnectToolView({ data, onClose }) {
   return (
     <Sheet eyebrow="Build" title="Connect a tool" sub="Connected tools fill your modules with real data. Each one says what it feeds." onClose={onClose} data-testid="connect-tool-sheet">
       {data.status === 'unreadable' && <div className="mx-5 mt-4"><Unreadable what="The tools" claim="This is not a claim that none is connected." onRetry={data.reload} /></div>}
+      {companyNote && <Banner tone="warn" data-testid={`connect-tool-company-${scope.state}`}>{companyNote}</Banner>}
       {banner && <Banner tone={banner.tone} data-testid={`connect-tool-${banner.view}`}>{banner.text}</Banner>}
       <div className="mx-5 mt-4 flex flex-col gap-2">
         <input type="search" aria-label="Search tools" placeholder="Search tools…" className={INPUT} value={q} onChange={(e) => setQ(e.target.value)} />

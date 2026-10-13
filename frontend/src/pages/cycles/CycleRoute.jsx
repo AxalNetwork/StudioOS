@@ -513,7 +513,7 @@ export default function CycleRoute({ cycle, record = false }) {
               : navigate(`/validate/session/${session.id}`, { state: { interview } }))} />
         )}
         {Sheet && sheetOpen && projectId && (
-          <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />
+          <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} onChanged={() => setReload((n) => n + 1)} />
         )}
       </div>
     </RailFrame>

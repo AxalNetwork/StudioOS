@@ -571,6 +571,46 @@ export function toolGroups(catalogue, { q = '', filter = 'All', pin = null } = {
   return { groups, total: list.length };
 }
 
+/**
+ * Whose company Build's connections serve (D686 §5.4): the project's own,
+ * not the sidebar's. `project` is `GET /projects/:id` (or null when it could
+ * not be read); `companies` the member's memberships (or null).
+ *   none      the project has no company: nothing a tool reads can feed it.
+ *   outside   the member is not in that company: they cannot connect for it.
+ *   unreadable the project or the memberships could not be read.
+ *   ok        connect, sign-in, teammate and suggestions send this company.
+ */
+export function projectCompany(project, companies) {
+  if (project === undefined) return { state: 'loading', companyId: null, name: null };
+  if (!project) return { state: 'unreadable', companyId: null, name: null };
+  const id = Number(project.company_id);
+  if (!Number.isSafeInteger(id) || id <= 0) return { state: 'none', companyId: null, name: null };
+  if (!Array.isArray(companies)) return { state: 'unreadable', companyId: id, name: null };
+  const mine = companies.find((c) => Number(c?.id) === id);
+  if (!mine) return { state: 'outside', companyId: id, name: null };
+  return { state: 'ok', companyId: id, name: mine.company_name || mine.name || null };
+}
+
+/** The sentence above Build's list for a company it cannot connect for; null when it can. */
+export function companyBanner(scope) {
+  if (scope.state === 'none') return 'This project has no company, so connected tools cannot feed it.';
+  if (scope.state === 'outside') return 'You are not a member of this project\u2019s company, so you cannot connect tools for it.';
+  if (scope.state === 'unreadable') return 'This project\u2019s company could not be read. Connected tools are listed, but connecting waits until it can be.';
+  return null;
+}
+
+/** Whether a registry connection already serves the project's company; null when it cannot be told. */
+export function servesCompany(conn, companyId) {
+  if (!conn || conn.first_party || !companyId || !Array.isArray(conn.company_ids)) return null;
+  return conn.company_ids.map(Number).includes(Number(companyId));
+}
+
+/** The company set `PUT /:uid/companies` takes to add the project's: the route replaces the set, so the enabled ones go too. */
+export function companiesWith(conn, companyId) {
+  const ids = (Array.isArray(conn?.company_ids) ? conn.company_ids : []).map(Number).filter(Number.isSafeInteger);
+  return [...new Set([...ids, Number(companyId)])];
+}
+
 /** The plan a locked tool needs, in the Worker's tier words; never the canvas's placeholder "Pro". */
 export const UPGRADE_TIER = Object.freeze({ growth: 'Growth', studio: 'Studio' });
 

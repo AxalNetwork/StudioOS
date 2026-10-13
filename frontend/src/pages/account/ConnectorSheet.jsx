@@ -9,6 +9,7 @@ import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
 import { Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
+import GithubSyncSheet from './GithubSyncSheet';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
@@ -41,7 +42,7 @@ export function suggestionsNote(e) {
  * suggestions. A 403 on the catalogue is the Worker refusing this role, and
  * reads as `forbidden` with the Worker's own sentence: retrying cannot help.
  */
-export function useConnectors() {
+export function useConnectors({ companyId = null } = {}) {
   const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -57,7 +58,7 @@ export function useConnectors() {
       soft(api.microsoftCalStatus()),
       soft(api.linkedinStatus()),
       soft(api.listMyCompanies()),
-      settle(connectorsApi.suggestions()),
+      settle(connectorsApi.suggestions(companyId ? { companyId } : undefined)),
     ]).then(([av, mine, wl, google, microsoft, linkedin, companies, sug]) => {
       if (!live) return;
       setState({
@@ -76,7 +77,7 @@ export function useConnectors() {
       if (live) setState((s) => ({ ...s, status: e?.status === 403 ? 'forbidden' : 'unreadable', message: e?.message || '' }));
     });
     return () => { live = false; };
-  }, [attempt]);
+  }, [attempt, companyId]);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const catalogue = state.status === 'ready'
     ? buildCatalogue({ providers: state.providers, items: state.items || [], waitlist: state.waitlist, firstParty: state.firstParty, companies: state.companies })
@@ -242,7 +243,18 @@ export function CompaniesGroup({ conn, onChanged }) {
  * `GET /:uid/fed`. A connector that does not record its deliveries says so,
  * per module, in the Worker's words.
  */
-export function FedGroup({ conn, name }) {
+/**
+ * "Now fed by": per module, the items that landed in it (`linked`, D686 §5.4;
+ * `count` also holds what arrived with no store to land in), and an Open link
+ * to the module when the Worker gives its `href`, carrying the project.
+ */
+export function moduleHref(href, projectId) {
+  if (typeof href !== 'string' || !/^\/(?!\/)/.test(href)) return null;
+  if (projectId == null || /[?&]project_id=/.test(href)) return href;
+  return `${href}${href.includes('?') ? '&' : '?'}project_id=${encodeURIComponent(projectId)}`;
+}
+
+export function FedGroup({ conn, name, projectId = null, onOpen }) {
   const [state, setState] = useState({ status: 'loading', modules: [], message: '' });
   const uid = conn?.uid;
   useEffect(() => {
@@ -260,11 +272,16 @@ export function FedGroup({ conn, name }) {
       {state.status === 'loading' && <div className="px-3 py-2"><LoadingRows lines={2} /></div>}
       {state.status === 'unreadable' && <div className="px-3 py-2"><Unreadable what="What it delivered" claim="This is not a claim that nothing arrived." /></div>}
       {state.status === 'ready' && !state.modules.length && <Row a="No module" b={`${name} feeds no StudioOS module.`} />}
-      {state.status === 'ready' && state.modules.map((m) => (
-        <Row key={m.module} a={m.label || m.module}
-          b={m.count == null ? <Unrecorded reason={m.reason || 'Not recorded'}>Not recorded</Unrecorded> : m.reason || null}
-          pill={m.count == null ? null : <Pill tone={m.count ? 'ok' : 'neutral'}>{`${m.count} ${m.count === 1 ? 'item' : 'items'}`}</Pill>} />
-      ))}
+      {state.status === 'ready' && state.modules.map((m) => {
+        const n = m.linked ?? null;
+        const href = moduleHref(m.href, projectId);
+        return (
+          <Row key={m.module} a={m.label || m.module}
+            b={n == null ? <Unrecorded reason={m.reason || 'Not recorded'}>Not recorded</Unrecorded> : m.reason || null}
+            pill={n == null ? null : <Pill tone={n ? 'ok' : 'neutral'}>{`${n} ${n === 1 ? 'item' : 'items'}`}</Pill>}
+            action={href ? <Link className={BTN.link} to={href} onClick={() => onOpen?.()} data-testid={`fed-open-${m.module}`}>Open</Link> : null} />
+        );
+      })}
     </Group>
   );
 }
@@ -350,7 +367,9 @@ function keyLabel(p, updating) {
  * owns `view` so a return from a provider's sign-in can open the panel on
  * `connected` or `refused` directly.
  */
-export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back }) {
+export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back, projectId = null, companyId = null, companyName = null }) {
+  // Build acts for its project's company (D686 §5.4); elsewhere, the active one.
+  const opts = companyId ? { companyId } : undefined;
   const navigate = useNavigate();
   const conn = p.connection;
   const status = connectionStatus(conn, p);
@@ -375,14 +394,17 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   useEffect(() => {
     if (!askTeammate) return undefined;
     let live = true;
-    connectorsApi.teammate(p.key).then((r) => { if (live) setTeammate(r?.teammate || null); }, () => { if (live) setTeammate(null); });
+    connectorsApi.teammate(p.key, opts).then((r) => { if (live) setTeammate(r?.teammate || null); }, () => { if (live) setTeammate(null); });
     return () => { live = false; };
-  }, [askTeammate, p.key]);
+    // `opts` is derived from companyId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askTeammate, p.key, companyId]);
   const updating = !!conn && view === 'key';
   const name = p.display_name;
   const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' ? 'Key' : 'Sign in', 'Connected'];
 
   const go = (v) => { setMessage(''); setView(v); };
+  const syncView = view === 'sync' && p.key === 'github' && !!conn?.uid;
 
   const startOauth = async () => {
     setBusy(true); setMessage('');
@@ -396,7 +418,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
         // Always demo=0|1: a missing query makes the Worker default to demo.
         if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
-        const r = await connectorsApi.oauthStart(p.key, params);
+        const r = await connectorsApi.oauthStart(p.key, params, opts);
         url = r?.authorize_url;
       }
       if (!url) throw Object.assign(new Error(`${name} did not return a sign-in address.`), { status: 0 });
@@ -417,7 +439,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     }
     setBusy(true);
     try {
-      await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: webhookSecret || undefined, config });
+      await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: webhookSecret || undefined, config }, opts);
       setApiKey(''); setWebhookSecret('');
       setView('connected');
       onChanged?.();
@@ -429,7 +451,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 
   const syncNow = async () => {
     setSyncing(true); setSyncNote('');
-    try { await connectorsApi.sync(conn.uid); setSyncNote('Synced.'); onChanged?.(); }
+    try { await connectorsApi.sync(conn.uid, opts); setSyncNote('Synced.'); onChanged?.(); }
     catch (e) { setSyncNote(e?.message || 'The sync failed.'); }
     finally { setSyncing(false); }
   };
@@ -465,7 +487,12 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <UsesGroups p={p} />
         <PermissionsGroup p={p} />
         <CompaniesGroup conn={conn} onChanged={onChanged} />
-        <FedGroup conn={conn} name={name} />
+        <FedGroup conn={conn} name={name} projectId={projectId} onOpen={onClose} />
+        {p.key === 'github' && conn.uid && (
+          <Group label="Repositories">
+            <Row a="What StudioOS reads" b="Choose the repositories, and sync them." action={<button type="button" className={BTN.link} onClick={() => go('sync')} data-testid="button-choose-repositories">Choose</button>} />
+          </Group>
+        )}
         <Group label="Sync">
           <Row a="How often" b={syncFrequencyLabel(conn)} />
           <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
@@ -506,7 +533,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={onClose}>See plans</Link></>;
   } else if (view === 'pre' && teammate && !ownChosen) {
     title = `Connect ${name}`;
-    banner = <Banner tone="neutral" data-testid="connector-teammate">{teammate.name || 'A teammate'} already connected {name} for your active company. Use theirs, or connect your own.</Banner>;
+    banner = <Banner tone="neutral" data-testid="connector-teammate">{`${teammate.name || 'A teammate'} already connected ${name} for ${companyName || 'your active company'}. Use theirs, or connect your own.`}</Banner>;
     footer = (
       <>
         {backBtn}
@@ -522,7 +549,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <Steps names={keySteps} at={0} />
         <UsesGroups p={p} read="It will read" write="It will write" />
         <Group label="It will serve">
-          <Row a={p.first_party ? 'Your account' : 'Your active company'} b={p.first_party ? 'It connects to you, not to a company.' : 'Once connected, choose the other companies it feeds from its sheet.'} />
+          <Row a={p.first_party ? 'Your account' : (companyName || 'Your active company')} b={p.first_party ? 'It connects to you, not to a company.' : 'Once connected, choose the other companies it feeds from its sheet.'} />
         </Group>
         {p.key === 'salesforce' && (
           <Group label="Org type">
@@ -640,6 +667,11 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   } else {
     body = <div className="mx-5 mt-4"><Unrecorded reason="This connector is not connected.">Not connected</Unrecorded></div>;
     footer = <button type="button" className={BTN.primary} onClick={() => go(p.locked ? 'pro' : 'pre')}>Connect</button>;
+  }
+
+  // GitHub's choice of repositories is its own sheet (D686 §5.4).
+  if (syncView) {
+    return <GithubSyncSheet p={p} conn={conn} projectId={projectId} companyId={companyId} eyebrow={eyebrow} onClose={onClose} onChanged={onChanged} back={() => go('detail')} />;
   }
 
   return (
