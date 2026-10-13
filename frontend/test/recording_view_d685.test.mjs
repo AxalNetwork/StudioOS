@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import RecordingView, { SHARE_NOTES, clock, initials, languageName, layers, statusWord } from '../src/pages/founder/RecordingView.jsx';
@@ -108,6 +108,13 @@ test('every state draws: silence, no sound for 30 s, the mic lost, offline, the 
   assert.equal(SHARE_NOTES.not_shared, 'Recording your microphone only: the call’s audio was not shared.');
   assert.ok(renderedText(view({ wake: 'unsupported' })).includes('This browser cannot keep the screen on.'));
   assert.ok(renderedText(view({ error: 'The Worker says no.' })).includes('The Worker says no.'));
+});
+
+test('between Start and the microphone answering, the view says so and offers no controls', () => {
+  const out = view({ phase: 'idle', session: { ...SESSION, status: 'draft' } });
+  assert.ok(renderedText(out).includes('Opening the microphone…'));
+  for (const id of ['button-pause', 'button-stop', 'live-caption']) assert.doesNotMatch(out, new RegExp(id));
+  assert.doesNotMatch(view(), /recording-opening/, 'not once recording');
 });
 
 test('the denied card draws in draft, with Try again; the video share step offers the tab or the mic only', () => {

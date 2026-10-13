@@ -31,6 +31,8 @@ export function layers(st, { reduced = false } = {}) {
   const live = st?.phase === 'recording';
   const silent = live ? Number(cap.silentMs) || 0 : 0;
   return {
+    // Start was pressed; the microphone has not answered yet.
+    opening: st?.phase === 'idle' && !!st?.session,
     share: st?.phase === 'share',
     denied: st?.phase === 'denied' || cap.mic === 'denied',
     micLost: live && (cap.mic === 'ended' || cap.mic === 'muted'),
@@ -261,6 +263,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
       </div>
 
       <div className="min-h-[56px] space-y-2 px-6 text-center text-[14px]" data-testid="recording-notes">
+        {l.opening && <p className="text-gray-600 dark:text-gray-300" data-testid="recording-opening">Opening the microphone…</p>}
         {l.toast && <p role="status" className="font-semibold text-violet-700 dark:text-violet-300" data-testid="recording-toast">Moment marked at {short(st.toast.offset)}</p>}
         {l.nosound && <p className="font-semibold text-amber-700 dark:text-amber-300" data-testid="recording-nosound">We can't hear anything. Check the microphone.</p>}
         {l.micLost && <p className="font-semibold text-amber-700 dark:text-amber-300" data-testid="recording-mic-lost">The microphone stopped sending sound. Check it is connected and not muted.</p>}
@@ -269,7 +272,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         {l.shareNote && SHARE_NOTES[l.shareNote] && <p className="text-gray-600 dark:text-gray-300" data-testid="recording-share-note">{SHARE_NOTES[l.shareNote]}</p>}
         {st?.wake === 'unsupported' && (l.paused || st?.phase === 'recording') && <p className="text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="recording-wake">This browser cannot keep the screen on. Keep it awake so the recording continues.</p>}
         {st?.error && <p role="alert" className="font-semibold text-red-700 dark:text-red-300" data-testid="recording-error">{st.error}</p>}
-        {!l.share && !l.denied && !l.stopping && !l.offline && (
+        {!l.share && !l.denied && !l.stopping && !l.offline && !l.opening && (
           liveOn && liveAvailable
             ? <p className="text-gray-700 dark:text-gray-300" data-testid="live-caption">{st?.cap?.caption || '…'}</p>
             : !l.budget && <p className="text-gray-500 dark:text-gray-400" data-testid="live-off-note">Live transcript off. The transcript appears when you stop.</p>
@@ -295,7 +298,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         </div>
       )}
 
-      {!l.stopping && !l.share && !l.denied && (
+      {!l.stopping && !l.share && !l.denied && !l.opening && (
         <footer className="flex items-center justify-center gap-3 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 sm:gap-4">
           {l.paused
             ? <button type="button" data-testid="button-resume" className={ROUND_PLAIN} onClick={() => actions.resume?.()} aria-label="Resume"><Play size={20} />Resume</button>

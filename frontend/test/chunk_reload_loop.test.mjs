@@ -106,7 +106,9 @@ test('the service-worker reload is bounded by something that outlives a reload',
   assert.doesNotMatch(pwa, /let _reloadingForUpdate/,
     'a closure flag dies with the document and cannot bound a reload loop');
   assert.match(pwa, /MAX_SW_RELOADS = \d+/, 'the SW reload must be bounded by a number');
-  assert.match(pwa, /reloadWithinBudget\(SW_RELOAD_KEY, SW_RELOAD_PARAM, MAX_SW_RELOADS\)/,
+  // D685 §5.6.8: the reload may wait for a running recording (`whenIdle`, the
+  // budget's own `before` hook); it still goes through the shared budget.
+  assert.match(pwa, /reloadWithinBudget\(SW_RELOAD_KEY, SW_RELOAD_PARAM, MAX_SW_RELOADS(, whenIdle)?\)/,
     'the SW reload must go through the shared budget');
   assert.doesNotMatch(pwa, /addEventListener\('controllerchange'[\s\S]{0,200}?window\.location\.reload\(\)/,
     'controllerchange must not reload directly, without reading a budget');

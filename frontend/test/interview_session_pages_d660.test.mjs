@@ -145,6 +145,7 @@ test('each canvas state is reachable as a layer of its own (D685 §5.7.11), and 
   const base = { phase: 'recording', session: { id: 1, status: 'recording', active_ms: 61000, live_model: 'nova' }, interview: { interviewee_name: 'Dana' }, cap: { live: true, caption: 'hello' }, online: true };
   const on = (patch) => Object.entries(layers({ ...base, ...patch, cap: { ...base.cap, ...(patch.cap || {}) } }, { reduced: patch.reduced })).filter(([, v]) => v === true).map(([k]) => k);
   assert.deepEqual(on({}), [], 'speech: nothing over it');
+  assert.deepEqual(on({ phase: 'idle' }), ['opening'], 'Start pressed, the mic not yet answered');
   assert.deepEqual(on({ cap: { silentMs: 3000 } }), ['silence']);
   assert.deepEqual(on({ cap: { silentMs: 31000 } }), ['nosound', 'silence'], 'no sound for 30 s');
   assert.deepEqual(on({ phase: 'paused', online: false }), ['paused', 'offline'], 'paused AND offline, never one hiding the other');
