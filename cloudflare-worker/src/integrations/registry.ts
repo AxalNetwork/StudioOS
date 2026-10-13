@@ -379,6 +379,8 @@ export const REGISTRY: ProviderDescriptor[] = [
     // the meetings routes imports it. Scopes are granular General-app names,
     // UNVERIFIED until the Zoom app exists: create, delete, and list a
     // meeting's recordings (which carries the transcript's download link).
+    // D685 adds meeting and user reads to prove a pasted call is hosted by
+    // this member and to resolve Zoom's deauthorization event to their grant.
     // Zoom sets scopes on the app itself; the callback refuses a wider grant.
     status: 'beta',
     tier: 'free',
@@ -386,7 +388,8 @@ export const REGISTRY: ProviderDescriptor[] = [
     capabilities: ['Schedule interview calls', 'Import cloud transcripts'],
     docs_url: 'https://developers.zoom.us/docs/integrations/oauth/',
     icon: 'Video',
-    oauth_scopes: ['meeting:write:meeting', 'meeting:delete:meeting', 'cloud_recording:read:list_recording_files'],
+    oauth_scopes: ['meeting:write:meeting', 'meeting:delete:meeting', 'cloud_recording:read:list_recording_files',
+      'meeting:read:meeting', 'user:read:user'],
   },
   {
     key: 'google_calendar', display_name: 'Google Calendar', integration_type: 'scheduling',
@@ -426,7 +429,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   stripe: { category: 'Payments', verified: true, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   affinity: { category: 'CRM', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read relationship data from your Affinity account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Releases', module: 'product_roadmap' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases in the repositories you choose.', 'Read repository names and visibility.'] },
-  zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.'] },
+  zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'Read your Zoom user id to identify the connection when you disconnect it.'] },
   google_calendar: { category: 'Calendar and workspace', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read Gmail messages linked to invitations.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   microsoft_365: { category: 'Calendar and workspace', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };

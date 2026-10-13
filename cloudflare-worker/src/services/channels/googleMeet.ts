@@ -183,6 +183,38 @@ export async function cancelMeeting(env: Env, conn: GoogleConnection, externalRe
   return deleteEventFromGoogle(await accessToken(env, conn.userId), externalRef);
 }
 
+/** Confirm the join link is on an event organised by this connected Google account. */
+export async function verifyHostedMeet(env: Env, conn: GoogleConnection, joinUrl: string, startedAt: string): Promise<boolean> {
+  const code = meetingCodeOf(joinUrl);
+  const start = Date.parse(startedAt);
+  if (!code || !Number.isFinite(start)) return false;
+  const token = await accessToken(env, conn.userId);
+  let pageToken = '';
+  for (let page = 0; page < 10; page++) {
+    const q = new URLSearchParams({
+      singleEvents: 'true', showDeleted: 'false', maxResults: '250',
+      timeMin: new Date(start - 24 * 60 * 60_000).toISOString(),
+      timeMax: new Date(start + 24 * 60 * 60_000).toISOString(),
+      ...(pageToken ? { pageToken } : {}),
+    });
+    const res = await calendarFetch(token, `/calendars/primary/events?${q}`);
+    if (res.status === 401 || res.status === 403) throw new MeetingProviderError('meet_reconnect', false);
+    if (!res.ok) throw new MeetingProviderError('meet_unreachable', true);
+    const body = await res.json().catch(() => null) as {
+      items?: Array<{ status?: string; organizer?: { self?: boolean }; hangoutLink?: string;
+        conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> } }>;
+      nextPageToken?: string;
+    } | null;
+    if (body?.items?.some((item) => item.status !== 'cancelled' && item.organizer?.self === true &&
+      meetingCodeOf(item.hangoutLink || item.conferenceData?.entryPoints?.find((entry) => entry.entryPointType === 'video')?.uri) === code)) {
+      return true;
+    }
+    pageToken = String(body?.nextPageToken || '');
+    if (!pageToken) return false;
+  }
+  return false;
+}
+
 // ───────────────────────────────────────────────────────────── Meet REST
 
 const RECORD_NAME = /^conferenceRecords\/[A-Za-z0-9_-]+$/;

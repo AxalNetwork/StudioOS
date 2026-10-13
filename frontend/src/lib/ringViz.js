@@ -37,7 +37,6 @@ export function animates({ reduced, paused }) {
   return !reduced && !paused;
 }
 
-/** Draw one frame. `progress` (0..1) draws the stopping arc instead of rings. */
 /** How long a marked moment lights the ring (D685 §5.7.4, RV5). */
 export const FLASH_MS = 450;
 
@@ -47,13 +46,32 @@ export function flashLevel(elapsed, reduced) {
   return 1 - elapsed / FLASH_MS;
 }
 
+/** The share of the circle the indeterminate arc covers (D685 §5.9.2). */
+export const INDETERMINATE_SWEEP = 0.25;
+
+/**
+ * Where the stopping arc starts and how far it goes. A count (0..1) is drawn
+ * from the top; null is no count, so a quarter arc turns with `t` instead of
+ * claiming a percentage, and holds still under reduced motion.
+ */
+export function stoppingArc(progress, t, reduced) {
+  const top = -Math.PI / 2;
+  if (progress == null || !Number.isFinite(Number(progress))) {
+    const start = top + (reduced ? 0 : t * Math.PI * 1.5);
+    return { start, end: start + Math.PI * 2 * INDETERMINATE_SWEEP, indeterminate: true };
+  }
+  return { start: top, end: top + Math.PI * 2 * Math.max(0, Math.min(1, Number(progress))), indeterminate: false };
+}
+
+/** Draw one frame. In `stopping`, the processing arc (`stoppingArc`) replaces the rings. */
 export function drawRing(ctx, { W, H, energy, t, mode, dark, reduced, progress, flash = 0 }) {
   const cx = W / 2, cy = H / 2, scale = Math.min(W, H) / 400;
   ctx.clearRect(0, 0, W, H);
   if (mode === 'stopping') {
     ctx.beginPath(); ctx.arc(cx, cy, 90 * scale, 0, Math.PI * 2);
     ctx.strokeStyle = dark ? '#4c1d95' : '#ddd6fe'; ctx.lineWidth = 6; ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, 90 * scale, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, progress || 0)));
+    const arc = stoppingArc(progress, t, reduced);
+    ctx.beginPath(); ctx.arc(cx, cy, 90 * scale, arc.start, arc.end);
     ctx.strokeStyle = dark ? '#ede9fe' : '#2e1065'; ctx.lineCap = 'round'; ctx.stroke();
     return;
   }
@@ -99,7 +117,8 @@ export function runRing({ ctx, size, analyser, sampleRate, mode, dark, reduced, 
   const energy = [0, 0, 0];
   const freq = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
   let t = 0, last = now(), id = null, alive = true;
-  const paused = mode === 'paused' || mode === 'stopping';
+  // A counted processing arc is one still frame; an indeterminate one turns (§5.9.2).
+  const paused = mode === 'paused' || (mode === 'stopping' && stoppingArc(progress, 0, true).indeterminate === false);
   const frame = () => {
     if (!alive) return;
     const n = now(), dt = Math.min(0.05, (n - last) / 1000); last = n;

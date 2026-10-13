@@ -11,7 +11,7 @@ export function prefersReducedMotion(motion) {
  * The Recording View's ring (D660). Reads an `AnalyserNode`; with none (the
  * microphone is not yet open, or was denied) it draws the resting rings.
  */
-export default function RingViz({ analyser = null, mode = 'speech', theme = 'light', motion, progress = 0, label, flash = null }) {
+export default function RingViz({ analyser = null, mode = 'speech', theme = 'light', motion, progress = null, label, flash = null }) {
   const ref = useRef(null);
   useEffect(() => {
     const canvas = ref.current;

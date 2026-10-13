@@ -97,7 +97,7 @@ it, where in their nav, and how do they get there.*
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/validate/record/live` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
+| Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/validate/record/live` · `/validate/interviews/:id` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
 
 ## Advisor — 17 canvases
 
@@ -184,7 +184,7 @@ it, where in their nav, and how do they get there.*
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
-| Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/validate/record/live` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/validate/record/live` · `/validate/interviews/:id` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
 ## Super Admin — 9 canvases
 

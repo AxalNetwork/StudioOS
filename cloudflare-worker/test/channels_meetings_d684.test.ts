@@ -1197,7 +1197,8 @@ test('Zoom is a Connectors provider: PKCE on the authorize URL, Basic auth on th
   const desc = getDescriptor('zoom')!;
   assert.equal(desc.auth_type, 'oauth2');
   assert.equal(desc.tier, 'free');
-  assert.deepEqual(desc.oauth_scopes, ['meeting:write:meeting', 'meeting:delete:meeting', 'cloud_recording:read:list_recording_files']);
+  assert.deepEqual(desc.oauth_scopes, ['meeting:write:meeting', 'meeting:delete:meeting',
+    'cloud_recording:read:list_recording_files', 'meeting:read:meeting', 'user:read:user']);
   assert.equal(CONNECTOR_METADATA.zoom.permissions.length, desc.oauth_scopes!.length, 'one plain sentence per scope');
   assert.equal(CONNECTOR_METADATA.zoom.category, 'Messaging');
 
@@ -1212,8 +1213,11 @@ test('Zoom is a Connectors provider: PKCE on the authorize URL, Basic auth on th
   assert.equal(url.searchParams.get('code_challenge'), 'the-challenge');
   assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
 
-  const calls = mockFetch(t, { 'POST https://zoom.us/oauth/token': () => json({
-    access_token: 'at', refresh_token: 'rt', expires_in: 3599, scope: 'meeting:write:meeting meeting:delete:meeting cloud_recording:read:list_recording_files' }) });
+  const calls = mockFetch(t, {
+    'POST https://zoom.us/oauth/token': () => json({
+      access_token: 'at', refresh_token: 'rt', expires_in: 3599, scope: desc.oauth_scopes!.join(' ') }),
+    'GET https://api.zoom.us/v2/users/me': () => json({ id: 'zoom-user-fixture', account_id: 'zoom-account-fixture' }),
+  });
   const out = await impl.connect(c, { id: ME } as any, { oauth_code: 'the-code', config: { pkce_verifier: 'the-verifier' } });
   const sent = new URLSearchParams(calls[0].body!);
   assert.equal(calls[0].headers.get('authorization'), `Basic ${btoa('zoom-client-id:zoom-client-secret')}`);
@@ -1222,6 +1226,8 @@ test('Zoom is a Connectors provider: PKCE on the authorize URL, Basic auth on th
   assert.equal(out.credentials.refresh_token, 'rt');
   assert.ok(Number(out.credentials.expires_at) > Date.now());
   assert.deepEqual(out.scopes, desc.oauth_scopes);
+  assert.equal(out.external_account_id, 'zoom-user-fixture');
+  assert.deepEqual(out.config, { zoom_account_id: 'zoom-account-fixture' });
 
   const dark: any = { env: { ...f.env, ZOOM_CLIENT_ID: undefined } };
   await assert.rejects(impl.buildAuthorizeUrl!(dark, { id: ME } as any, 's'), /^Error: zoom_oauth_unconfigured/);

@@ -298,7 +298,10 @@ export const RECORDS = {
   'customer-research': {
     keys: ['interviewee', 'company', 'date', 'icp_fit', 'consent', 'channel', 'stage'],
     row: (r) => ({ id: r.id, cells: {
-      interviewee: r.interviewee ?? null,
+      // D685 §5.11: the interviewee opens the interview's review. The scoped
+      // read carries the project, so no ?project_id= is threaded.
+      interviewee: r.interviewee == null || r.interviewee === '' ? null
+        : r.id != null && /^\d+$/.test(String(r.id)) ? { text: r.interviewee, href: `/validate/interviews/${r.id}` } : r.interviewee,
       company: r.company ?? null,
       date: r.date ?? null,
       icp_fit: pill(FIT, r.icp_fit),

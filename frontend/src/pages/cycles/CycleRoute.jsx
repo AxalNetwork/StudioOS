@@ -16,6 +16,7 @@ import RecordLightbox from '../founder/RecordLightbox';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
+import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import RecordFormSheet from './RecordFormSheet';
@@ -341,6 +342,8 @@ export default function CycleRoute({ cycle, record = false }) {
   const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && (drafts.length || fillKind)) });
 
   const [overview, setOverview] = useState(null);
+  // D685 §5.12: the phone focus reads the overview as sent; adapting a card replaces its series.
+  const [rawOverview, setRawOverview] = useState(null);
   const [overviewStatus, setOverviewStatus] = useState('loading');
   const [module, setModule] = useState(null);
   const [moduleStatus, setModuleStatus] = useState('loading');
@@ -356,7 +359,7 @@ export default function CycleRoute({ cycle, record = false }) {
     let alive = true;
     setOverviewStatus('loading');
     cyclesApi.overview(cycle, projectId)
-      .then((data) => { if (alive) { setOverview(adaptOverview(cycle, data)); setOverviewStatus('ready'); } })
+      .then((data) => { if (alive) { setRawOverview(data); setOverview(adaptOverview(cycle, data)); setOverviewStatus('ready'); } })
       .catch(() => { if (alive) setOverviewStatus('unreadable'); });
     return () => { alive = false; };
   }, [cycle, slug, projectId, reload, def]);
@@ -418,6 +421,7 @@ export default function CycleRoute({ cycle, record = false }) {
   } else if (!slug) {
     body = (
       <>
+        {cycle === 'validate' && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus raw={rawOverview} search={q} projectId={projectId} onChanged={() => setReload((n) => n + 1)} />}
         <CycleOverview
           cycle={cycle}
           data={overview}

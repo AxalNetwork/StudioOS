@@ -12,6 +12,10 @@
 //   tickPoint        PUT    /sessions/:id/points/:pointId  { covered } → { points, points_covered } (D685 §5.2)
 //   liveSocketUrl    GET    /sessions/:id/live          WebSocket, linear16 at 16 kHz
 //   transcribe       POST   /sessions/:id/transcribe
+// D685 §5.9–§5.10 (#1589), on #1605's routes:
+//   finish           POST   /sessions/:id/finish        { last_seq, auto } → { processing, queued }
+//   process          POST   /sessions/:id/process       retry a failed or stale run → { processing }
+//   summarise        POST   /sessions/:id/summarise     { model? } → { summary }
 //   setSpeaker       PATCH  /sessions/:id/segments/:segId
 //   sessionReceipt   GET    /sessions/:id/receipt
 //   deleteSession    DELETE /sessions/:id
@@ -62,6 +66,13 @@ export const interviewSessionsApi = {
     return `${proto}//${host}/api${P}/sessions/${enc(id)}/live`;
   },
   transcribe: (id, model) => request(`${P}/sessions/${enc(id)}/transcribe`, {
+    method: 'POST', body: JSON.stringify(model ? { model } : {}),
+  }),
+  finish: (id, lastSeq, auto = true) => request(`${P}/sessions/${enc(id)}/finish`, {
+    method: 'POST', body: JSON.stringify({ last_seq: lastSeq, auto: auto !== false }),
+  }),
+  process: (id) => request(`${P}/sessions/${enc(id)}/process`, { method: 'POST', body: JSON.stringify({}) }),
+  summarise: (id, model) => request(`${P}/sessions/${enc(id)}/summarise`, {
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
   setSpeaker: (id, segmentId, speakerLabel) => request(`${P}/sessions/${enc(id)}/segments/${enc(segmentId)}`, {

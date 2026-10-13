@@ -80,6 +80,8 @@ import {
   voiceNoteForJob, type AssignTarget, type ThreadRow,
 } from '../services/channels/threads';
 import { enqueueChannelJob, registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
+import * as zoom from '../services/channels/zoom';
+import * as meet from '../services/channels/googleMeet';
 import {
   VOICE_RETRY_DELAYS, VOICE_TRIES, retryVoiceNote, transcriptionFailures,
 } from '../services/channels/voiceFailures';
@@ -233,6 +235,11 @@ channels.get('/', member(async (c, user) => {
       // #1586: what WhatsApp Calling would need for this number, and why it is not yet (no calling is built).
       : { ...base, can_reply: r.status === 'active', calls: whatsapp.callingEligibility(cfg) };
   }
+  const [zoomConn, meetConn] = await Promise.all([
+    zoom.zoomConnection(env, user.id), meet.googleConnection(env, user.id),
+  ]);
+  if (zoomConn) connections.zoom = { status: 'active' };
+  if (meetConn) connections.google_meet = { status: 'active', transcript_access: meet.transcriptAccess(meetConn) };
 
   const counts = (await env.DB.prepare(
     `SELECT t.provider AS provider, COUNT(*) AS n FROM channel_threads t

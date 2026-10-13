@@ -583,7 +583,7 @@ function buildFixture() {
     CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
     CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE integrations(id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT);
+    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT);
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
@@ -594,6 +594,8 @@ function buildFixture() {
     INSERT INTO entities VALUES (501, 'DE');
   `);
   db.exec(sqlOf('441_build_cycle_stores.sql'));
+  db.exec(sqlOf('455_core_systems_workspace.sql'));
+  db.exec('CREATE TABLE google_oauth_tokens(user_id INTEGER PRIMARY KEY); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER PRIMARY KEY)');
   return db;
 }
 

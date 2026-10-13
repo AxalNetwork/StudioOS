@@ -7,6 +7,7 @@ import { ChannelOriginBadge } from './ChannelOriginBadge.jsx';
 import { channelOf, openingStep } from './assistantSession.js';
 import { ModelList, AUDIO } from './RecordSessionSheet';
 import InterviewReview from './InterviewReview';
+import SessionSummary from './SessionSummary';
 import { ChannelSessionPanel } from './InterviewChannels';
 
 /**
@@ -19,10 +20,12 @@ import { ChannelSessionPanel } from './InterviewChannels';
  * receipt and the meter read `GET /sessions/:id/receipt`; a budget that cannot
  * be read says "Unreadable", never $0.
  *
- * STOP → TRANSCRIBE → POLL. Stopping flushes the device's queue, asks the
- * Worker to transcribe with the session's final model, and re-reads the session
- * until it leaves `transcribing`. Summarising and placing findings are #1471's
- * (D658) and say "Not recorded" until that lands.
+ * STOP → FINISH → POLL (D685 §5.9). The recorder above the routes stops,
+ * flushes, calls `finish` and follows the Worker's processing to the review
+ * (`lib/activeRecording.js`). A session whose processing is under way or has
+ * failed, opened here after a reload, is handed to it and shown in the live
+ * view, from the Worker's processing state. `Transcribe` stays for a stopped
+ * session that never reached `finish`.
  */
 
 const POLL_MS = 3000;
@@ -62,7 +65,7 @@ export function TranscriptReview({ segments, intervieweeName, onAssign }) {
   return (
     <ol className="space-y-3" data-testid="transcript">
       {rows.map((s) => (
-        <li key={s.id} className="text-[13px]">
+        <li key={s.id} id={`seg-${s.id}`} className="scroll-mt-4 text-[13px]">
           <div className="mb-1 flex flex-wrap items-center gap-1">
             {SPEAKER_CHOICES(intervieweeName).map((label) => (
               <button key={label} type="button" data-testid={`speaker-${s.id}-${label}`} aria-pressed={s.speaker_label === label}
@@ -219,6 +222,14 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const loadReceipt = useCallback(() => api.receipt(id).then(setReceipt).catch(() => setReceipt(null)), [api, id]);
 
   useEffect(() => { load(); loadReceipt(); api.models().then(setModels).catch(() => setModels(null)); }, [api, load, loadReceipt]);
+  // §5.9.5: processing under way, or failed, and not followed in this tab: the live view shows it from the Worker's state.
+  const followed = rec.session?.id != null && data?.session && String(rec.session.id) === String(data.session.id);
+  const handOver = !!data?.session && !followed && !!data?.processing?.stage && data.processing.stage !== 'done';
+  useEffect(() => {
+    if (!handOver) return;
+    recorder.follow({ session: data.session, interview: location.state?.interview || data.interview || null, processing: data.processing, callLabel: data.call_label ?? null });
+    navigate(`/validate/record/live?session=${encodeURIComponent(data.session.id)}`, { replace: true });
+  }, [handOver, data, recorder, navigate, location.state]);
   // Poll while the Worker transcribes.
   useEffect(() => {
     if (data?.session?.status !== 'transcribing') return undefined;
@@ -279,6 +290,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const review = ['transcribed', 'structured', 'reviewed'].includes(session.status) && (
     <section data-testid="session-review" data-first={reviewFirst ? 'true' : 'false'} className="space-y-2">
       <h2 className="text-[16px] font-bold">Review</h2>
+      <SessionSummary summary={data.summary || null} segments={segments} />
       <ReviewStep api={api} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
     </section>
   );
@@ -309,6 +321,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
           </section>
         )}
         {session.status === 'transcribing' && <p className="text-[13px] text-axal-faint" data-testid="session-transcribing">Transcribing…</p>}
+        {data.processing?.stage === 'done' && data.processing.error && <p role="status" className="text-[13px] font-semibold text-amber-800 dark:text-amber-300" data-testid="processing-note">{data.processing.error}</p>}
         {['stopped', 'transcribed', 'structured', 'reviewed'].includes(session.status) && (
           <section className="space-y-3">
             <h2 className="text-[16px] font-bold">Transcript</h2>

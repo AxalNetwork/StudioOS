@@ -56,7 +56,7 @@ import { claimEvent, finishEvent, releaseEvent } from './events';
 import { enqueueChannelJob, registerChannelJob, registerChannelSweep } from './jobs';
 import { providerAvailable } from './connections';
 import {
-  MeetingProviderError, cancelRef, dueRefs, importMeetingRef, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef, withinCallSlot,
+  MEETING_ERRORS, MeetingProviderError, cancelRef, dueRefs, importMeetingRef, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef, withinCallSlot,
   type ImportOutcome, type MeetingErrorCode, type MeetingRef, type TranscriptFetch, type TranscriptFetcher,
 } from './meetings';
 import type { ImportedSegment } from './types';
@@ -143,15 +143,23 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
     token_type: 'bearer',
     expires_at: Date.now() + Math.max(60, Number(tok.expires_in) || 3600) * 1000,
   };
+  // D685: the extra user-read grant makes a deauthorization event resolvable
+  // to one stored connection. Older grants lack it and must reconnect before
+  // using attach-by-link; never guess an account from the webhook payload.
+  let identity: { id?: string; account_id?: string } | null = null;
+  if (grantedScopes(tok).includes('user:read:user')) {
+    const res = await fetch(`${ZOOM_API}/users/me`, { headers: { Authorization: `Bearer ${tok.access_token}` } });
+    if (!res.ok) throw new Error('zoom_identity_unreadable');
+    identity = await res.json().catch(() => null) as { id?: string; account_id?: string } | null;
+    if (!identity?.id || !identity.account_id) throw new Error('zoom_identity_unreadable');
+  }
   return {
     credentials,
     scopes: grantedScopes(tok),
-    // Not read: knowing the Zoom user would take a further scope, and a call's
-    // tenancy is its ref row, not the Zoom account (see the file header).
-    external_account_id: null,
+    external_account_id: identity?.id || null,
     external_account_name: null,
     capabilities: getDescriptor(PROVIDER_KEY)?.capabilities,
-    config: {},
+    config: identity?.account_id ? { zoom_account_id: identity.account_id } : {},
   };
 }
 
@@ -421,6 +429,29 @@ export async function cancelMeeting(env: Env, conn: ZoomConnection, externalRef:
   return res.status === 204 || res.status === 200 || res.status === 404;
 }
 
+/** A pasted meeting must belong to this member's Zoom user, not just to someone in their account. */
+export async function verifyHostedMeeting(env: Env, conn: ZoomConnection, meetingId: string): Promise<boolean> {
+  if (!/^\d{6,20}$/.test(meetingId)) return false;
+  const [me, meeting] = await Promise.all([
+    zoomApi(env, conn, '/users/me'), zoomApi(env, conn, `/meetings/${meetingId}`),
+  ]);
+  if (me.status === 401 || me.status === 403 || meeting.status === 401 || meeting.status === 403) {
+    throw new MeetingProviderError('zoom_reconnect', false);
+  }
+  if (meeting.status === 404) return false;
+  if (!me.ok || !meeting.ok) throw new MeetingProviderError('zoom_unreachable', true);
+  const self = await me.json().catch(() => null) as { id?: unknown; account_id?: unknown } | null;
+  const call = await meeting.json().catch(() => null) as { host_id?: unknown; id?: unknown } | null;
+  const hosted = !!self?.id && String(call?.id ?? '') === meetingId && String(call?.host_id ?? '') === String(self.id);
+  if (hosted && self?.account_id) {
+    await env.DB.prepare(
+      `UPDATE integrations SET external_account_id = ?, config_json = json_set(COALESCE(config_json, '{}'), '$.zoom_account_id', ?),
+         updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND provider_key = 'zoom' AND status = 'active'`,
+    ).bind(String(self.id), String(self.account_id), conn.id, conn.user_id).run();
+  }
+  return hosted;
+}
+
 // ───────────────────────────────────────────────────────────── webhook
 
 async function hmacHex(secret: string, message: string): Promise<string> {
@@ -475,7 +506,9 @@ export async function handleZoomWebhook(env: Env, rawBody: string, headers: Head
   if (verdict !== 'ok') {
     return { status: 401, body: { error: `signature_${verdict}`, message: 'The request is not signed by Zoom.' } };
   }
-  let event: { event?: unknown; payload?: { plainToken?: unknown; object?: { id?: unknown; uuid?: unknown } } };
+  let event: { event?: unknown; event_id?: unknown; event_ts?: unknown;
+    payload?: { plainToken?: unknown; client_id?: unknown; user_id?: unknown; account_id?: unknown;
+      object?: { id?: unknown; uuid?: unknown } } };
   try { event = JSON.parse(rawBody); } catch {
     return { status: 400, body: { error: 'malformed', message: 'The request body is not JSON.' } };
   }
@@ -485,6 +518,39 @@ export async function handleZoomWebhook(env: Env, rawBody: string, headers: Head
     const plainToken = String(event.payload?.plainToken ?? '');
     if (!PLAIN_TOKEN.test(plainToken)) return { status: 400, body: { error: 'malformed', message: 'The challenge has no usable token.' } };
     return { status: 200, body: { plainToken, encryptedToken: await hmacHex(secret, plainToken) } };
+  }
+  if (name === 'app_deauthorized') {
+    const clientId = String(event.payload?.client_id ?? '').trim();
+    if (clientId && clientId !== env.ZOOM_CLIENT_ID) return { status: 200, body: { ok: true, ignored: 'other_app' } };
+    const userId = String(event.payload?.user_id ?? '').trim().slice(0, 200);
+    const accountId = String(event.payload?.account_id ?? '').trim().slice(0, 200);
+    if (!userId) return { status: 400, body: { error: 'malformed', message: 'The deauthorization has no user.' } };
+    const key = String(event.event_id || `${name}:${accountId}:${userId}:${event.event_ts || ''}`).slice(0, 200);
+    const claim = await claimEvent(env, 'zoom', key, 'connection');
+    if (claim == null) return { status: 200, body: { ok: true, duplicate: true } };
+    try {
+      const rows = (await env.DB.prepare(
+        `SELECT id, user_id FROM integrations WHERE provider_key = 'zoom' AND status = 'active'
+           AND (? = '' OR external_account_id = ?)
+           AND (? = '' OR json_extract(config_json, '$.zoom_account_id') = ?)`,
+      ).bind(userId, userId, accountId, accountId).all<{ id: number; user_id: number }>()).results ?? [];
+      for (const row of rows) {
+        await env.DB.prepare(
+          `UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, webhook_secret_enc = NULL,
+             config_json = NULL, scopes_json = NULL, external_account_id = NULL, external_account_name = NULL,
+             updated_at = CURRENT_TIMESTAMP WHERE id = ? AND provider_key = 'zoom'`,
+        ).bind(row.id).run();
+        await env.DB.prepare(
+          `UPDATE interview_channel_refs SET status = 'failed', join_url = NULL, last_error = ?, updated_at = datetime('now')
+            WHERE provider = 'zoom' AND user_id = ? AND status IN ('scheduled', 'ended', 'transcript_ready')`,
+        ).bind(MEETING_ERRORS.zoom_not_connected, row.user_id).run();
+      }
+      await finishEvent(env, claim, rows.length ? 'done' : 'ignored', { userId: rows[0]?.user_id });
+      return { status: 200, body: { ok: true } };
+    } catch {
+      await releaseEvent(env, claim).catch(() => undefined);
+      return { status: 500, body: { error: 'not_stored', message: 'The connection change could not be stored. Zoom will send it again.' } };
+    }
   }
   if (name !== 'meeting.ended' && name !== 'recording.transcript_completed') {
     return { status: 200, body: { ok: true, ignored: 'event' } };
