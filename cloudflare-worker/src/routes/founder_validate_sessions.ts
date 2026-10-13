@@ -4,7 +4,9 @@
  * `founder_validate.ts`, whose paths it does not share.
  *
  *   GET    /sessions/models                 the live and final speech-to-text models, priced
+ *   POST   /sessions                        D685: set up in one call (Who, How, Transcript, Consent)
  *   POST   /interviews/:id/sessions         open a session on an interview
+ *   PUT    /sessions/:id/points/:pointId    D685: tick or untick a talking point
  *   GET    /interviews/:id/sessions         the interview's sessions
  *   GET    /sessions/:id                    one session: segments, marks, chunks
  *   PATCH  /sessions/:id/consent            record consent to record
@@ -38,6 +40,12 @@ import {
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
 import { WHISPER_TURBO } from '../services/sttFormats';
 import { holdBlock, openLiveRelay } from '../services/liveTranscription';
+import {
+  SETUP_CHANNELS, activeSessionOf, callRefusal, interviewCard, languageFor, listPoints, markInterviewHeld,
+  pointStatements, sessionExtras,
+} from '../services/sessionSetup';
+import { setInterviewStage } from '../services/validateWriters';
+import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -59,7 +67,9 @@ async function scopeInterview(c: any, interviewId: number): Promise<{ user: User
   const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
     .bind(interview.project_id).first() as ProjectRef | null;
   if (!project) return notFound('Project');
-  if (!canWrite(project, user)) return json({ detail: 'Forbidden' }, 403);
+  // D685 — 404, not 403: another member learns nothing, not even that the
+  // interview exists.
+  if (!canWrite(project, user)) return notFound('Interview');
   return { user, interview };
 }
 
@@ -116,15 +126,22 @@ function messagesToSegments(raw: unknown): StoredSegment[] | null {
   return out;
 }
 
-sessions.post('/interviews/:id/sessions', async (c) => {
-  const s = await scopeInterview(c, Number(c.req.param('id')));
-  if (s instanceof Response) return s;
-  const body = await c.req.json<any>().catch(() => ({}));
+/**
+ * Open a session on an interview the caller may write (D657, widened by D685
+ * §5.1). Shared by the setup call and the per-interview route, so the two
+ * cannot disagree on a rule. Every value is checked before anything is
+ * written; the refusal is a Response.
+ */
+type OpenPlan = {
+  channel: string; audio: boolean; consent: string; method: string; liveModel: string | null; finalModel: string | null;
+  language: string | null; callProvider: string | null; meetingUrl: string | null; clientKey: string | null;
+  messages: StoredSegment[] | null; quoteConsent: boolean;
+};
 
+function planSession(body: any, legacy: boolean): OpenPlan | Response {
   const channel = String(body?.channel || '');
-  if (!(CHANNELS as readonly string[]).includes(channel)) {
-    return json({ detail: 'invalid_channel', accepted: CHANNELS }, 400);
-  }
+  const offered: readonly string[] = legacy ? CHANNELS : SETUP_CHANNELS;
+  if (!offered.includes(channel)) return json({ detail: 'invalid_channel', accepted: offered }, 400);
   const audio = AUDIO_CHANNELS.has(channel);
 
   const consent = audio ? String(body?.consent?.status || 'not_recorded') : 'not_recorded';
@@ -133,6 +150,14 @@ sessions.post('/interviews/:id/sessions', async (c) => {
   if (consent === 'given' && !(CONSENT_METHODS as readonly string[]).includes(method)) {
     return json({ detail: 'consent_method_required', accepted: CONSENT_METHODS }, 400);
   }
+  // A text session records no audio, so it has no recording consent. A method
+  // picked there is consent to QUOTE the chat (D685 §5.1.4).
+  const quoteConsent = channel === 'text' && (CONSENT_METHODS as readonly string[]).includes(String(body?.consent?.method || ''));
+
+  const callProvider = text(body?.call_provider, 40);
+  const meetingUrl = text(body?.meeting_url, 500);
+  const refusal = callRefusal(channel, callProvider, meetingUrl);
+  if (refusal) return json({ detail: 'invalid_call', message: refusal }, 400);
 
   // `live_model: null` is "Live transcript off": no socket, no cost.
   let liveModel: string | null = null;
@@ -143,27 +168,135 @@ sessions.post('/interviews/:id/sessions', async (c) => {
     finalModel = String(body?.final_model || DEFAULT_FINAL_MODEL);
     if (!isChoosable(finalModel, 'final')) return json({ detail: 'model_not_offered', model: finalModel, kind: 'final' }, 400);
   }
+  const lang = languageFor(body?.language, liveModel);
+  if (!lang.ok) return json({ detail: 'invalid_language', message: lang.message }, 400);
 
-  const messages = audio ? null : messagesToSegments(body?.messages);
+  return {
+    channel, audio, consent, method, liveModel, finalModel, language: lang.language, callProvider,
+    meetingUrl, clientKey: text(body?.client_key, 100), messages: audio ? null : messagesToSegments(body?.messages), quoteConsent,
+  };
+}
+
+/** The session already opened under this member's `client_key`, if any. */
+async function replayed(env: Env, userId: number, clientKey: string | null): Promise<SessionRow | null> {
+  if (!clientKey) return null;
+  return await env.DB.prepare('SELECT * FROM interview_sessions WHERE created_by_user_id = ? AND client_key = ?')
+    .bind(userId, clientKey).first<SessionRow>() ?? null;
+}
+
+async function sessionBody(env: Env, session: SessionRow) {
+  return { session, ...(await sessionExtras(env, session)) };
+}
+
+/** Insert the session for an interview, then its points and any pasted chat. */
+async function openOn(env: Env, user: User, interview: { id: number; project_id: number }, plan: OpenPlan, body: any): Promise<SessionRow> {
   const uid = crypto.randomUUID();
-  const ins = await c.env.DB.prepare(
+  const ins = await env.DB.prepare(
     `INSERT INTO interview_sessions
        (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-        live_model, final_model)
-     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?)`,
-  ).bind(uid, s.interview.id, s.interview.project_id, s.user.id, channel, consent, method || null, consent,
-    liveModel, finalModel).run();
-  const session = await loadSession(c.env, Number(ins.meta?.last_row_id));
-  if (!session) return json({ detail: 'session_not_created' }, 500);
+        live_model, final_model, language, call_provider, meeting_url, client_key)
+     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?, ?, ?, ?, ?)`,
+  ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, plan.consent, plan.method || null, plan.consent,
+    plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey).run();
+  const session = (await loadSession(env, Number(ins.meta?.last_row_id)))!;
 
-  if (messages && messages.length) {
-    await replaceWithFinal(c.env, session, messages, channel === 'text' ? 'text_chat' : 'manual_entry', null);
+  const stmts = [
+    ...(await pointStatements(env, session.id, interview.project_id, body?.points)),
+    // The interview takes its channel from its first session (D685 §5.4).
+    env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(plan.channel, interview.id),
+    ...(plan.quoteConsent ? [env.DB.prepare('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = ?').bind(interview.id)] : []),
+    env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
+      .bind('interview_session_created', JSON.stringify({ session_uid: uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent }),
+        `user:${user.id}`, user.id, interview.project_id),
+  ];
+  await env.DB.batch(stmts);
+
+  if (plan.messages && plan.messages.length) {
+    await replaceWithFinal(env, session, plan.messages, plan.channel === 'text' ? 'text_chat' : 'manual_entry', null);
+    // A text session is held the moment its chat is in.
+    await markInterviewHeld(env, session, user.id);
   }
-  await c.env.DB.prepare(
-    `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
-  ).bind('interview_session_created', JSON.stringify({ session_uid: uid, interview_id: s.interview.id, channel, consent }),
-    `user:${s.user.id}`, s.user.id, s.interview.project_id).run();
-  return json({ session: await loadSession(c.env, session.id) }, 201);
+  return (await loadSession(env, session.id))!;
+}
+
+sessions.post('/interviews/:id/sessions', async (c) => {
+  const s = await scopeInterview(c, Number(c.req.param('id')));
+  if (s instanceof Response) return s;
+  const body = await c.req.json<any>().catch(() => ({}));
+  const plan = planSession(body, true);
+  if (plan instanceof Response) return plan;
+  const again = await replayed(c.env, s.user.id, plan.clientKey);
+  if (again) return json(await sessionBody(c.env, again), 200);
+  const session = await openOn(c.env, s.user, s.interview, plan, body);
+  return json(await sessionBody(c.env, session), 201);
+});
+
+/**
+ * D685 §5.1 — one setup call. Creates the interview from Who when none is
+ * picked (booked, today), or takes a picked one still in the pipeline, and
+ * opens the session on it. A repeated `client_key` answers the same pair.
+ */
+sessions.post('/sessions', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const body = await c.req.json<any>().catch(() => ({}));
+  const projectId = Number(body?.project_id);
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return json({ detail: 'project_id_required' }, 400);
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(projectId).first() as ProjectRef | null;
+  if (!project) return notFound('Project');
+  if (!canWrite(project, user)) return notFound('Project');
+
+  const plan = planSession(body, false);
+  if (plan instanceof Response) return plan;
+  const again = await replayed(c.env, user.id, plan.clientKey);
+  if (again) return json(await sessionBody(c.env, again), 200);
+
+  let interview: { id: number; project_id: number };
+  const pickedId = body?.interview_id == null ? null : Number(body.interview_id);
+  if (pickedId != null) {
+    const picked = await c.env.DB.prepare('SELECT id, project_id, stage FROM discovery_interviews WHERE id = ?')
+      .bind(pickedId).first<{ id: number; project_id: number; stage: string | null }>();
+    if (!picked || picked.project_id !== projectId) return notFound('Interview');
+    if (!['lead', 'invited', 'booked'].includes(String(picked.stage))) {
+      return json({ detail: 'interview_not_in_pipeline', message: 'That interview has already been held. Pick one still to come, or name someone new.' }, 409);
+    }
+    if (picked.stage !== 'booked') {
+      await setInterviewStage(c.env, { projectId, userId: user.id, interviewId: picked.id, stage: 'booked' });
+    }
+    interview = picked;
+  } else {
+    const name = text(body?.interviewee?.name, 120);
+    if (!name) return json({ detail: 'interviewee_name_required', message: 'Name the person you are talking to.' }, 400);
+    if (typeof body?.interviewee?.name === 'string' && body.interviewee.name.trim().length > 120) {
+      return json({ detail: 'interviewee_name_too_long', message: 'A name is at most 120 characters.' }, 400);
+    }
+    // progress.ts's whole free-tier check, not the constant alone.
+    if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+      await ensureTierSchema(c.env);
+      const existing = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
+        .bind(projectId).first<{ n: number }>();
+      if (Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews) {
+        try { ensureTier(user, 'growth'); } catch (e) { if (e instanceof Response) return e; throw e; }
+      }
+    }
+    const created = await c.env.DB.prepare(
+      `INSERT INTO discovery_interviews
+         (project_id, interviewee_name, interviewee_company, interview_date, channel, stage, booked_at, created_at, updated_at)
+       VALUES (?, ?, ?, date('now'), ?, 'booked', datetime('now'), datetime('now'), datetime('now'))`,
+    ).bind(projectId, name, text(body?.interviewee?.company, 160), plan.channel).run();
+    interview = { id: Number(created.meta?.last_row_id), project_id: projectId };
+  }
+
+  let session: SessionRow;
+  try {
+    session = await openOn(c.env, user, interview, plan, body);
+  } catch (e) {
+    // Two Start clicks racing past the replay check meet the unique index:
+    // the second answers the first's session.
+    const raced = await replayed(c.env, user.id, plan.clientKey);
+    if (raced) return json(await sessionBody(c.env, raced), 200);
+    throw e;
+  }
+  return json(await sessionBody(c.env, session), 201);
 });
 
 sessions.get('/interviews/:id/sessions', async (c) => {
@@ -172,7 +305,13 @@ sessions.get('/interviews/:id/sessions', async (c) => {
   const rows = await c.env.DB.prepare(
     'SELECT * FROM interview_sessions WHERE interview_id = ? ORDER BY created_at DESC, id DESC',
   ).bind(s.interview.id).all<SessionRow>();
-  return json({ items: rows.results || [] });
+  const card = await interviewCard(c.env, s.interview.id);
+  const items = [];
+  for (const row of rows.results || []) {
+    const extra = await sessionExtras(c.env, row);
+    items.push({ ...row, call_label: extra.call_label, meeting_url: extra.meeting_url, points: extra.points, points_covered: extra.points_covered });
+  }
+  return json({ interview: card, items });
 });
 
 sessions.get('/sessions/:id', async (c) => {
@@ -189,10 +328,38 @@ sessions.get('/sessions/:id', async (c) => {
   ]);
   return json({
     session: s.session,
+    ...(await sessionExtras(c.env, s.session)),
     segments: segments.results || [],
     marks: marks.results || [],
     chunks: chunks.map((ch) => ({ seq: ch.seq, size_bytes: ch.size_bytes, start_ms: ch.start_ms })),
   });
+});
+
+/**
+ * D685 §5.2 — tick or untick a talking point. The offset is the Worker's:
+ * the active time so far, counting the open interval while recording.
+ */
+sessions.put('/sessions/:id/points/:pointId', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const body = await c.req.json<any>().catch(() => ({}));
+  if (typeof body?.covered !== 'boolean') return json({ detail: 'covered_required' }, 400);
+  const pointId = Number(c.req.param('pointId'));
+  const r = body.covered
+    ? await c.env.DB.prepare(
+      `UPDATE interview_session_points
+          SET covered_at = datetime('now'),
+              covered_offset_ms = (SELECT active_ms + CASE WHEN status = 'recording' AND recording_since IS NOT NULL
+                   THEN MAX(0, CAST(ROUND((julianday('now') - julianday(recording_since)) * 86400000) AS INTEGER)) ELSE 0 END
+                 FROM interview_sessions WHERE id = ?)
+        WHERE id = ? AND session_id = ?`,
+    ).bind(s.session.id, pointId, s.session.id).run()
+    : await c.env.DB.prepare(
+      'UPDATE interview_session_points SET covered_at = NULL, covered_offset_ms = NULL WHERE id = ? AND session_id = ?',
+    ).bind(pointId, s.session.id).run();
+  if (!Number(r.meta?.changes || 0)) return notFound('Point');
+  const points = await listPoints(c.env, s.session.id);
+  return json({ points, points_covered: points.filter((p) => p.covered).length });
 });
 
 sessions.patch('/sessions/:id/consent', async (c) => {
@@ -230,6 +397,11 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
     if (action === 'start' || action === 'resume') {
       const blocked = consentBlocks(s.session.channel, s.session.consent_status);
       if (blocked) return json(blocked, 409);
+    }
+    // D685 §5.1 — one live session per member: a second Start refuses.
+    if (action === 'start' || action === 'resume') {
+      const live = await activeSessionOf(c.env, s.user.id, s.session.id);
+      if (live) return json({ error: 'session_active', session_id: live.id, message: 'You are already recording another session. Stop it, or return to it, first.' }, 409);
     }
     if (!(await transition(c.env, s.session, action))) {
       return json({ detail: 'invalid_transition', status: s.session.status, action }, 409);
@@ -380,6 +552,7 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
       audio: new Uint8Array(await obj.arrayBuffer()),
       audioMime: ch.mime,
       audioMinutes: minutesPer[i],
+      language: s.session.language,
     });
     if (!r.ok) {
       const budget = String(r.refusal || '').startsWith('budget');

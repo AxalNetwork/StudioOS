@@ -84,7 +84,9 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
-    '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql']) {
+    '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
+    // D685: the session's talking points, which deleteSession now deletes.
+    '450_record_session_setup.sql']) {
     db.exec(mig(m));
   }
   const env: any = {

@@ -13,6 +13,7 @@
  */
 import { PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, ROUTE } from './aiRouter';
 import { FLUX, NOVA_3, WHISPER, WHISPER_TINY_EN, WHISPER_TURBO } from './sttFormats';
+import { LANGUAGES } from './sessionSetup';
 
 export type SttKind = 'live' | 'final';
 export type SttTag = 'Real-time' | 'Batch' | 'Default' | 'Beta' | 'Retired';
@@ -77,5 +78,7 @@ export function listSttModels() {
     live: STT_MODELS.filter((m) => m.kind === 'live').map(row),
     final: STT_MODELS.filter((m) => m.kind === 'final').map(row),
     defaults: { live: DEFAULT_LIVE_MODEL, final: DEFAULT_FINAL_MODEL },
+    // D685 — the languages both final models take; none chosen is Detect.
+    languages: LANGUAGES,
   };
 }

@@ -113,6 +113,13 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `sttFormats.ts` has, for each speech-to-text model, its request and response shapes and its live events, plus the speaker labels.
 - `sttModels.ts` lists the models the rail offers, priced from `aiRouter`'s own tables.
 - `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed.
+- `sessionSetup.ts` (D685, #1583) holds the setup call's rules:
+  - which call providers each channel admits, and the meeting-link host check (video only, HTTPS, the provider's own host);
+  - `callLabel`, derived on every read and never stored;
+  - the ten languages both final models take, with Flux English-only;
+  - the talking points, checked against the project, capped at 10 and snapshotted;
+  - `markInterviewHeld`, which moves the interview to `done` and fills its channel when a session stops or a text session's chat is in;
+  - `activeSessionOf`, the one-live-session-per-member check (assistant and channel sessions excluded).
 
 ### Founder round calls (D653)
 

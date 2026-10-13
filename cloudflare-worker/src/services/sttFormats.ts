@@ -42,19 +42,33 @@ const ms = (s: unknown): number | null => {
 };
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-/** The request body a batch model takes for this clip. */
-export function audioInputFor(model: string, bytes: Uint8Array, mime: string): Record<string, unknown> {
+/**
+ * The request body a batch model takes for this clip. `language` (D685) is an
+ * ISO-639-1 code or null for Detect. Nova-3 takes it instead of detecting;
+ * Whisper Large v3 Turbo takes it as `language`; Whisper v1 is given none.
+ */
+export function audioInputFor(model: string, bytes: Uint8Array, mime: string, language: string | null = null): Record<string, unknown> {
   if (model === NOVA_3) {
     return {
       // A stream, as the binding's examples pass it; never a number[] copy.
       audio: { body: new Response(bytes).body, contentType: mime || 'audio/webm' },
       diarize: true,
-      detect_language: true,
+      ...(language ? { language } : { detect_language: true }),
       punctuate: true,
       smart_format: true,
     };
   }
+  if (model === WHISPER_TURBO && language) return { audio: Array.from(bytes), language };
   return { audio: Array.from(bytes) };
+}
+
+/** The options a live socket opens with. Nova-3 takes the language; Flux is English-only and takes none. */
+export function liveInputFor(model: string, language: string | null): Record<string, string> {
+  return {
+    encoding: 'linear16',
+    sample_rate: '16000',
+    ...(model === NOVA_3 && language ? { language } : {}),
+  };
 }
 
 /** Consecutive words by the same speaker become one passage. */

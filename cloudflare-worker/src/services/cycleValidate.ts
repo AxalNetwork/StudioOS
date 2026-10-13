@@ -38,7 +38,8 @@ export const QUESTION = 'Is this worth building?';
 
 export const MODULES = [
   { slug: 'problem-discovery', name: 'Problem discovery' },
-  { slug: 'customer-research', name: 'Customer research' },
+  // D685 §5.4: its table is the interviews, so the list says so.
+  { slug: 'customer-research', name: 'Customer research', records_title: 'Interviews' },
   { slug: 'ideal-customer-profile', name: 'Ideal customer profile' },
   { slug: 'market-intelligence', name: 'Market intelligence' },
   { slug: 'demand-signals', name: 'Demand and urgency signals' },
@@ -52,6 +53,8 @@ export const LAB_MIN_INTERVIEWS = 3;
 export type Ctx = { env: Env; projectId: number; today: string };
 
 const href = (ctx: Ctx, slug: string) => `/validate/${slug}?project=${ctx.projectId}`;
+/** D685 §5.4 — the setup modal's own route. */
+const recordHref = (ctx: Ctx) => `/validate/record?project=${ctx.projectId}`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** `YYYY-MM-DD` `n` days before `today`. */
@@ -524,7 +527,7 @@ export async function problemDiscoveryCard(ctx: Ctx): Promise<Card> {
     ]);
     const themes = themesOf(interviews, model, sev, ctx.today, supportsByGroup(hyps, links));
     if (themes.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Record your first session', href: href(ctx, 'customer-research') }, reason: 'No interviews yet. Pain themes appear as interviews are logged.' };
+      return { state: 'empty', series: null, next: { text: 'Record your first session', href: recordHref(ctx) }, reason: 'No interviews yet. Pain themes appear as interviews are logged.' };
     }
     const ungrouped = themes.filter((t) => t.group_id == null);
     const unjudged = themes.filter((t) => t.severity == null);
@@ -585,7 +588,7 @@ export async function customerResearchCard(ctx: Ctx): Promise<Card> {
       getPainGroupsView(ctx.env, ctx.projectId, { strict: true }),
     ]);
     if (interviews.length === 0 && signups.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Record your first session', href: href(ctx, 'customer-research') }, reason: 'No interviews yet. Validate starts with the first conversation.' };
+      return { state: 'empty', series: null, next: { text: 'Record your first session', href: recordHref(ctx) }, reason: 'No interviews yet. Validate starts with the first conversation.' };
     }
     const funnel = pipelineOf(interviews, signups);
     const waitingSlot = interviews.filter((i) => i.stage === 'invited' && !i.booked_at).length;
@@ -959,20 +962,21 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const f = rq.filter;
   const icp = ['strong', 'partial', 'none'].includes(f.icp) ? f.icp : f.icp === 'not_recorded' ? 'not_recorded' : '';
   const consent = ['agreed', 'declined', 'not_asked'].includes(f.consent) ? f.consent : '';
-  const stage = ['lead', 'invited', 'booked', 'done'].includes(f.stage) ? f.stage : '';
-  const channel = f.channel ? f.channel : '';
+  // D685: `pipeline` is the recruiting picker's filter, the three stages still to come.
+  const stage = ['lead', 'invited', 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
+  const channel = ['in_person', 'video', 'phone', 'text', 'manual'].includes(f.channel) ? f.channel : '';
   const like = rq.q ? `%${rq.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
   // Every condition is a bound parameter; an empty one switches itself off.
   // The statement is literal twice over (count and page) rather than spliced.
-  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, stage, stage, channel, channel];
-  const sort = rq.sort === 'oldest' || rq.sort === 'name' ? rq.sort : 'newest';
+  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, stage, stage, stage, channel, channel];
+  const sort = rq.sort === 'oldest' || rq.sort === 'name' || rq.sort === 'booked' ? rq.sort : 'newest';
   const total = await ctx.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM discovery_interviews
       WHERE project_id = ?
         AND (? = '' OR lower(interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(interviewee_company, '')) LIKE ? ESCAPE '\\')
         AND (? = '' OR (? = 'not_recorded' AND icp_fit IS NULL) OR icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND quote_consent = 1) OR (? = 'declined' AND quote_consent = 0) OR (? = 'not_asked' AND quote_consent IS NULL))
-        AND (? = '' OR COALESCE(stage, 'done') = ?)
+        AND (? = '' OR COALESCE(stage, 'done') = ? OR (? = 'pipeline' AND stage IN ('lead', 'invited', 'booked')))
         AND (? = '' OR channel = ?)`,
   ).bind(...binds).first<{ n: number }>();
   const rows = await ctx.env.DB.prepare(
@@ -983,15 +987,16 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR lower(interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(interviewee_company, '')) LIKE ? ESCAPE '\\')
         AND (? = '' OR (? = 'not_recorded' AND icp_fit IS NULL) OR icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND quote_consent = 1) OR (? = 'declined' AND quote_consent = 0) OR (? = 'not_asked' AND quote_consent IS NULL))
-        AND (? = '' OR COALESCE(stage, 'done') = ?)
+        AND (? = '' OR COALESCE(stage, 'done') = ? OR (? = 'pipeline' AND stage IN ('lead', 'invited', 'booked')))
         AND (? = '' OR channel = ?)
-      ORDER BY CASE WHEN ? = 'name' THEN lower(interviewee_name) END ASC,
+      ORDER BY CASE WHEN ? = 'booked' THEN CASE stage WHEN 'booked' THEN 0 WHEN 'invited' THEN 1 WHEN 'lead' THEN 2 ELSE 3 END END ASC,
+               CASE WHEN ? = 'name' THEN lower(interviewee_name) END ASC,
                CASE WHEN ? = 'oldest' THEN d END ASC,
                CASE WHEN ? = 'newest' THEN d END DESC,
                CASE WHEN ? = 'oldest' THEN id END ASC,
                id DESC
       LIMIT ? OFFSET ?`,
-  ).bind(...binds, sort, sort, sort, sort, PAGE_SIZE, (rq.page - 1) * PAGE_SIZE).all<any>();
+  ).bind(...binds, sort, sort, sort, sort, sort, PAGE_SIZE, (rq.page - 1) * PAGE_SIZE).all<any>();
   return {
     cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'Channel', 'Stage'],
     rows: (rows.results || []).map((r) => ({

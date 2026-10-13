@@ -95,7 +95,7 @@ cycleValidate.get('/modules/:slug', async (c) => {
     console.warn('[cycle_validate] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
-  return c.json({ module: { slug: mod.slug, name: mod.name }, card, records });
+  return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card, records });
 });
 
 /** The Lab market page's three stored checks. */
