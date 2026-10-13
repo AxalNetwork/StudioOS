@@ -104,6 +104,9 @@ export interface RunOptions {
   // The clip's content type, for a model that decodes a container itself
   // (Nova-3 takes `{ body, contentType }`). Ignored by the Whisper models.
   audioMime?: string;
+  // D685 — the session's language for a transcription task, an ISO-639-1 code;
+  // absent is Detect. `audioInputFor` decides which models take it.
+  language?: string | null;
   // A model the CALLER picked, validated against `ROUTE[task].alternates`.
   // Absent means "whatever the route says", which is every internal caller.
   // A model not on that list is REFUSED, never quietly swapped for the
@@ -839,7 +842,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       // See `MAX_RECORDING_BYTES` in `routes/founder_validate.ts`.
       const bytes = opts.audio;
       if (!bytes || !bytes.byteLength) return { ok: false, status: 400, error: 'no audio' };
-      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || ''), gatewayOpt);
+      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null), gatewayOpt);
       // Silence and non-speech transcribe to an empty string. That is an
       // answer, not a failure: the clip contained no words, and reporting it
       // as an error would have the caller retry and pay again.

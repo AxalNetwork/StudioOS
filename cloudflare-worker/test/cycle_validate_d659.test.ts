@@ -566,3 +566,35 @@ test('D659: a pain-group store that cannot be read makes the pain card unreadabl
   assert.equal(card(r.body, 'customer-research').state, 'unreadable', 'the Lab funnel reads the pain-group view');
   assert.equal(card(r.body, 'demand-signals').state, 'empty', 'the waitlist card reads no pain group');
 });
+
+// ---------------------------------------------------------------------------
+// D685 S03-A (#1583)
+// ---------------------------------------------------------------------------
+
+test('D685: the recruiting picker\'s pipeline filter and booked-first order; the Channel filter; the list says Interviews', async () => {
+  const db = fixture();
+  interview(db, P, { name: 'Held', stage: 'done', channel: 'video', date: ago(1) });
+  interview(db, P, { name: 'Old held', stage: null, channel: 'phone', date: ago(2) });
+  // Inserted out of stage order, so neither id nor date gives the booked-first order.
+  interview(db, P, { name: 'A booking', stage: 'booked', date: ago(5) });
+  interview(db, P, { name: 'A lead', stage: 'lead', date: ago(3) });
+  interview(db, P, { name: 'An invite', stage: 'invited', date: ago(4) });
+  let m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}&filter=stage:pipeline&sort=booked`);
+  assert.equal(m.status, 200);
+  assert.deepEqual(m.body.records.rows.map((x: any) => x.interviewee), ['A booking', 'An invite', 'A lead']);
+  assert.equal(m.body.module.records_title, 'Interviews');
+  m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}&filter=stage:pipeline`);
+  assert.deepEqual(m.body.records.rows.map((x: any) => x.interviewee), ['A lead', 'An invite', 'A booking'], 'newest first by default');
+  m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}&filter=channel:video`);
+  assert.deepEqual(m.body.records.rows.map((x: any) => x.interviewee), ['Held']);
+  m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}&filter=channel:fax`);
+  assert.equal(m.body.records.total, 5, 'an unknown channel is no filter, not an empty list');
+});
+
+test('D685: "Record your first session" opens the setup route', async () => {
+  const db = fixture();
+  const r = await overview(db);
+  for (const slug of ['problem-discovery', 'customer-research']) {
+    assert.equal(card(r.body, slug).next.href, `/validate/record?project=${P}`, slug);
+  }
+});

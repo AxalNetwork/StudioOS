@@ -158,7 +158,16 @@ D631 (#1389), Ops area 6:
 
 ### Interview sessions Worker contract (D657, #1470)
 
-`founder_validate_sessions.ts` is mounted on `/api/founder/validate` beside `founder_validate.ts` (migration 438). A session hangs off a `discovery_interviews` row, so a Spin-Out Lab venture's interviews get it unchanged. Every route but the model list is gated on `canWrite`.
+`founder_validate_sessions.ts` is mounted on `/api/founder/validate` beside `founder_validate.ts` (migration 438). A session hangs off a `discovery_interviews` row, so a Spin-Out Lab venture's interviews get it unchanged. Every route but the model list is gated on `canWrite`; since D685 another member gets 404, not 403.
+
+D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set up in one call:
+- `POST /sessions` creates the interview from Who (booked, today, under the free-tier cap) or takes a picked one still in the pipeline, and opens the session on it. It takes `channel`, `call_provider`, `meeting_url`, the models, `language`, `points`, `messages` and an idempotent `client_key`. `POST /interviews/:id/sessions` takes the same new fields.
+- `GET /sessions/:id` and `GET /interviews/:id/sessions` carry the interview (name, company, stage), `call_label`, `meeting_url` (a pasted link, else a scheduled D684 call's `join_url`) and the talking points with their covered count.
+- `PUT /sessions/:id/points/:pointId { covered }` ticks a point on the Worker's clock.
+- `start` refuses 409 `session_active` while the member records another session.
+- A stop moves the interview to `done` and fills its channel. `GET /sessions/models` lists the ten languages.
+- The Customer research list takes `stage:pipeline` and `sort=booked` for the recruiting picker, and its Channel filter reads the channel the sessions set.
+- Deleting an interview (`DELETE /api/progress/discovery/interview/:id`) now deletes each session's audio, rows and pending proposals.
 - `GET /sessions/models` lists the live and final speech-to-text models, priced from the router's own tables, with their tags.
 - `POST /interviews/:id/sessions` opens a session (channel, consent to record, models). `GET /interviews/:id/sessions` lists them, and `GET /sessions/:id` returns segments, marks and chunks.
 - `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`.

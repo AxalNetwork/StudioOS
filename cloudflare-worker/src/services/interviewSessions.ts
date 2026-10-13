@@ -21,6 +21,7 @@
  */
 import type { Env } from '../types';
 import { speakerLabel, type SttSegment } from './sttFormats';
+import { markInterviewHeld } from './sessionSetup';
 
 export const CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
 export type Channel = typeof CHANNELS[number];
@@ -55,6 +56,7 @@ export interface SessionRow {
   language: string | null; live_model: string | null; final_model: string | null;
   active_ms: number; recording_since: string | null; started_at: string | null; stopped_at: string | null;
   audio_bytes: number; created_at: string; updated_at: string;
+  call_provider?: string | null; meeting_url?: string | null; client_key?: string | null; submitted_via?: string | null;
 }
 
 export async function loadSession(env: Env, id: number): Promise<SessionRow | null> {
@@ -105,7 +107,11 @@ export async function transition(env: Env, session: SessionRow, action: keyof ty
       WHERE id = ? AND status IN (?, ?)`,
   ).bind(t.to, closesInterval ? 1 : 0, opensInterval ? 1 : 0, closesInterval ? 1 : 0, opensInterval ? 1 : 0,
     action, session.id, fromA, fromB).run();
-  return Number(r.meta?.changes || 0) === 1;
+  const changed = Number(r.meta?.changes || 0) === 1;
+  // D685 §5.1.6 — "it lands in Interviews when you stop". Every stop passes
+  // here: the action route and the consent-withdrawal stop alike.
+  if (changed && action === 'stop') await markInterviewHeld(env, session, null);
+  return changed;
 }
 
 /** The chunk's R2 key: derived from the session and the sequence number, never from the request. */
@@ -240,6 +246,8 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
     env.DB.prepare('DELETE FROM interview_session_marks WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_session_receipts WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ?').bind(session.id),
+    // D685 §5.2 — deleted explicitly, not left to the CASCADE.
+    env.DB.prepare('DELETE FROM interview_session_points WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_sessions WHERE id = ?').bind(session.id),
     env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,

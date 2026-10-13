@@ -21,7 +21,7 @@
 import type { Env } from '../types';
 import * as aiBudget from './aiBudget';
 import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, budgetRefusalMessage } from './aiRouter';
-import { parseLiveEvent } from './sttFormats';
+import { liveInputFor, parseLiveEvent } from './sttFormats';
 import { labelSegments, recordReceipt, storeLiveSegment, type SessionRow } from './interviewSessions';
 
 /** Under the reservation's five-minute expiry, so a held block never lapses mid-stream. */
@@ -104,7 +104,7 @@ export async function openLiveRelay(
 ): Promise<Response> {
   const model = session.live_model!;
   const ai = (env as unknown as { AI: { run(m: string, i: unknown, o: unknown): Promise<Response> } }).AI;
-  const upstreamResp = await ai.run(model, { encoding: 'linear16', sample_rate: '16000' }, { websocket: true });
+  const upstreamResp = await ai.run(model, liveInputFor(model, session.language), { websocket: true });
   const upstream = (upstreamResp as unknown as { webSocket?: AnyWebSocket }).webSocket;
   if (!upstream) {
     await aiBudget.settleAiReservation(env, first, 0, true).catch(() => {});
