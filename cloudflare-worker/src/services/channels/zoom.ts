@@ -267,9 +267,10 @@ async function readCreds(env: Env, conn: ZoomConnection): Promise<StoredCreds | 
 async function swapCreds(env: Env, conn: ZoomConnection, from: string, to: string, settled = false): Promise<boolean> {
   const res = await env.DB.prepare(
     `UPDATE integrations SET credentials_enc = ?, last_error = CASE WHEN ? = 1 THEN NULL ELSE last_error END,
+            last_error_at = CASE WHEN ? = 1 THEN NULL ELSE last_error_at END,
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND credentials_enc = ?`,
-  ).bind(to, settled ? 1 : 0, conn.id, from).run();
+  ).bind(to, settled ? 1 : 0, settled ? 1 : 0, conn.id, from).run();
   return Number(res.meta?.changes ?? 0) > 0;
 }
 

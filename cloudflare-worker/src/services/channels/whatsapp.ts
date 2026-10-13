@@ -530,7 +530,7 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
       }
       await env.DB.prepare(
         `UPDATE integrations SET status = 'active', auth_type = 'oauth2', display_name = 'WhatsApp', credentials_enc = ?, config_json = ?,
-                external_account_id = ?, external_account_name = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+                external_account_id = ?, external_account_name = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`,
       ).bind(credentials, config, input.phoneNumberId, name, existing.id).run();
       return { ok: true, integrationId: Number(existing.id), name };

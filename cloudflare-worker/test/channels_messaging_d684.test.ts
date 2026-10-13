@@ -120,7 +120,8 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql', '454_channel_voice_failures.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql', '454_channel_voice_failures.sql',
+    '457_integrations_last_error_at.sql']) db.exec(mig(m));
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
       db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
@@ -926,6 +927,50 @@ test('WhatsApp: Embedded Signup stores the token encrypted, subscribes the app, 
     const body = JSON.stringify(status.body);
     assert.equal(body.includes('3000009') || body.includes('3000001'), false, 'no phone_number_id or waba_id in the connections');
     assert.equal(status.body.connections.whatsapp.can_reply, true);
+  } finally { f.restore(); }
+});
+
+// D686 (#1592): a connection that is linked again is no longer failing, so the
+// stored failure time goes with the failure.
+const STALE_FAILURE = { last_error: 'sync failed', last_error_at: '2026-10-01 08:00:00' };
+const failureOf = (db: any, provider: string) =>
+  ({ ...db.prepare('SELECT last_error, last_error_at FROM integrations WHERE user_id = ? AND provider_key = ?').get(ME, provider) });
+
+test('D686 #1592: Telegram linked again clears the stored failure and its time', async () => {
+  const { env, db } = await world({ seed: true });
+  db.prepare(`UPDATE integrations SET last_error = ?, last_error_at = ? WHERE user_id = ? AND provider_key = 'telegram'`)
+    .run(STALE_FAILURE.last_error, STALE_FAILURE.last_error_at, ME);
+  const f = mockFetch(telegramApi);
+  try {
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    assert.equal((await tgHook(env, startUpdate(code, TG_ME))).status, 200);
+    assert.deepEqual(failureOf(db, 'telegram'), STALE_FAILURE, 'redeeming the code alone links nothing');
+    assert.equal((await tgHook(env, confirmUpdate(TG_ME))).status, 200);
+    assert.deepEqual(failureOf(db, 'telegram'), { last_error: null, last_error_at: null });
+  } finally { f.restore(); }
+});
+
+test('D686 #1592: WhatsApp connected again clears the stored failure and its time', async () => {
+  const { env, db } = await world({ seed: true });
+  db.prepare(`UPDATE integrations SET last_error = ?, last_error_at = ? WHERE user_id = ? AND provider_key = 'whatsapp'`)
+    .run(STALE_FAILURE.last_error, STALE_FAILURE.last_error_at, ME);
+  const f = mockFetch((url) => {
+    if (url.hostname !== 'graph.facebook.com') return undefined;
+    if (url.pathname === '/v23.0/oauth/access_token') {
+      return url.searchParams.get('code') === 'GOOD-CODE' ? { json: { access_token: 'EAAG-new-business-token-SECRET', token_type: 'bearer' } }
+        : { status: 400, json: { error: { message: 'Invalid verification code format.', code: 100 } } };
+    }
+    if (url.pathname === '/v23.0/2000001/phone_numbers') return { json: { data: [{ id: PNID, display_phone_number: '+44 7700 901234', verified_name: 'Ledger Co' }] } };
+    if (url.pathname === '/v23.0/2000001/subscribed_apps') return { json: { success: true } };
+    return undefined;
+  });
+  try {
+    const bad = await call(env, ME, 'POST', '/whatsapp/connect', { code: 'BAD', waba_id: '2000001', phone_number_id: PNID });
+    assert.equal(bad.status, 400);
+    assert.deepEqual(failureOf(db, 'whatsapp'), STALE_FAILURE, 'a refused signup changes nothing');
+    const ok = await call(env, ME, 'POST', '/whatsapp/connect', { code: 'GOOD-CODE', waba_id: '2000001', phone_number_id: PNID });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(failureOf(db, 'whatsapp'), { last_error: null, last_error_at: null });
   } finally { f.restore(); }
 });
 
