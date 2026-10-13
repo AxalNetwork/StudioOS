@@ -125,6 +125,9 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - the job transcribes chunk by chunk into `interview_chunk_transcripts`, so a retry (`POST /sessions/:id/process`) resumes where it stopped, then summarises and places through `structureSession` (`trigger: 'recording_processed'`);
   - the stage is `uploading`, `transcribing`, `summarising`, `placing`, `done` or `failed`, with `processing_error` in words; a run idle 15 minutes counts as stale and may be retried;
   - `summariseSession` keeps only sentences that cite a transcript segment, and writes a row to `interview_summary_receipts`.
+- `sessionSweeper.ts` (D685 §5.6, #1584) is the recording that outlives its tab, on the Worker:
+  - `activeSessionsOf` (`GET /sessions/active`) is the caller's own sessions recording, paused, transcribing or still processing, newest first, without channel or assistant sessions;
+  - `sweepInterviewSessions`, every minute from the cron: a draft never started for 24 hours is deleted (with the interview made for it, never one logged by hand), a recording silent for 10 minutes is paused with its time counted to the last chunk, and an upload stalled for 30 minutes goes on with what arrived, naming the missing parts in `processing_error`.
 
 ### Founder round calls (D653)
 

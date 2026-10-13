@@ -15,7 +15,8 @@
  *   PATCH  /sessions/:id/consent            record consent to record
  *   POST   /sessions/:id/{start,pause,resume,stop}
  *   PUT    /sessions/:id/chunks/:seq        one audio chunk, idempotent by seq
- *   POST   /sessions/:id/marks              mark a moment
+ *   GET    /sessions/active                 D685: the caller's recordings in flight
+ *   POST   /sessions/:id/marks              mark a moment (D685: gated, client_key, capped)
  *   GET    /sessions/:id/live               WebSocket: the live transcript
  *   POST   /sessions/:id/transcribe         the final transcript
  *   PATCH  /sessions/:id/segments/:segId    assign a passage's speaker
@@ -51,6 +52,7 @@ import {
   afterChunkStored, finishSession, isStale, processingOf, recoverSession, summariseSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
 import { consentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
+import { activeSessionsOf } from '../services/sessionSweeper';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 
 const sessions = new Hono<{ Bindings: Env }>();
@@ -104,6 +106,14 @@ const text = (v: unknown, max: number): string | null => {
 sessions.get('/sessions/models', async (c) => {
   await requireAuth(c);
   return json(listSttModels());
+});
+
+// D685 §5.6 — the caller's own recordings in flight, for the pill and the
+// recovery on app load. Declared above `/sessions/:id` so "active" is never
+// read as an id. Filtered on the caller, not on a project scope.
+sessions.get('/sessions/active', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  return json({ items: await activeSessionsOf(c.env, user.id) });
 });
 
 // ---------------------------------------------------------------------------
@@ -452,16 +462,44 @@ sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   }
 });
 
+/** The furthest a mark can sit: the time recorded so far, on the Worker's clock. */
+export function markCeiling(session: { active_ms: number; recording_since: string | null }, now = Date.now()): number {
+  const since = session.recording_since ? Date.parse(session.recording_since.replace(' ', 'T') + 'Z') : NaN;
+  return Math.max(0, session.active_ms + (Number.isFinite(since) ? Math.max(0, now - since) : 0));
+}
+
+// D685 §5.7 — a mark is taken while recording or paused, and after Stop too:
+// Stop is posted before the capture's last flush, as for chunks. A replayed
+// `client_key` answers the mark already stored; the offset is capped at the
+// time actually recorded.
 sessions.post('/sessions/:id/marks', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  if (!['recording', 'paused', 'stopped'].includes(s.session.status)) {
+    return json({ detail: 'not_recording', message: 'A moment can be marked only while the session is recording, paused or just stopped.', status: s.session.status }, 409);
+  }
   const body = await c.req.json<any>().catch(() => ({}));
   const offset = Number(body?.offset_ms);
   if (!Number.isSafeInteger(offset) || offset < 0) return json({ detail: 'invalid_offset' }, 400);
+  const key = typeof body?.client_key === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(body.client_key) ? body.client_key : null;
+  if (body?.client_key != null && !key) return json({ detail: 'invalid_client_key' }, 400);
+  if (key) {
+    const prior = await c.env.DB.prepare('SELECT id, offset_ms, label FROM interview_session_marks WHERE session_id = ? AND client_key = ?')
+      .bind(s.session.id, key).first<{ id: number; offset_ms: number; label: string | null }>();
+    if (prior) return json({ mark: prior, duplicate: true });
+  }
+  const at = Math.min(offset, markCeiling(s.session));
+  const label = text(body?.label, 200);
   const r = await c.env.DB.prepare(
-    'INSERT INTO interview_session_marks (session_id, offset_ms, label) VALUES (?, ?, ?)',
-  ).bind(s.session.id, offset, text(body?.label, 200)).run();
-  return json({ mark: { id: Number(r.meta?.last_row_id), offset_ms: offset, label: text(body?.label, 200) } }, 201);
+    'INSERT OR IGNORE INTO interview_session_marks (session_id, offset_ms, label, client_key) VALUES (?, ?, ?, ?)',
+  ).bind(s.session.id, at, label, key).run();
+  if (key && Number(r.meta?.changes || 0) === 0) {
+    // Two replays raced; the other one stored it.
+    const prior = await c.env.DB.prepare('SELECT id, offset_ms, label FROM interview_session_marks WHERE session_id = ? AND client_key = ?')
+      .bind(s.session.id, key).first<{ id: number; offset_ms: number; label: string | null }>();
+    return json({ mark: prior, duplicate: true });
+  }
+  return json({ mark: { id: Number(r.meta?.last_row_id), offset_ms: at, label } }, 201);
 });
 
 // ---------------------------------------------------------------------------
