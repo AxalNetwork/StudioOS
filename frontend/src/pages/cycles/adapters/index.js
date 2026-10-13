@@ -30,7 +30,7 @@ export function fnOf(map, key) {
 }
 
 const ADAPTERS = new Map([
-  ['validate', { cards: toFnMap(validate.CARDS), records: new Map(Object.entries(validate.RECORDS)), figure: validate.figure }],
+  ['validate', { cards: toFnMap(validate.CARDS), records: new Map(Object.entries(validate.RECORDS)), titles: new Map(Object.entries(validate.TITLES)), figure: validate.figure }],
   ['grow', { cards: toFnMap(grow.CARDS), records: new Map(Object.entries(grow.RECORDS)), figure: grow.figure }],
 ]);
 
@@ -84,8 +84,13 @@ export function adaptModule(cycle, slug, data) {
   const records = data.records == null && data.records_state === 'unreadable'
     ? { state: 'unreadable', reason: data.reason || 'This table could not be read.', cols: [], rows: [] }
     : adaptRecords(cycle, slug, data.records);
+  // A table's own title, when the module's name is not it (`records_title`).
+  const title = ADAPTERS.get(cycle)?.titles?.get(slug);
+  const base = data.module && typeof data.module === 'object' ? data.module : {};
+  const module = title && base.records_title == null ? { ...base, records_title: title } : data.module;
   return {
     ...data,
+    ...(module !== data.module ? { module } : {}),
     card: adaptCard(cycle, data.card ? { slug, ...data.card } : data.card),
     records,
   };

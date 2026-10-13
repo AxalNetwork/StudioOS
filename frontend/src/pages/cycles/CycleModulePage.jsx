@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
-import { cardView, cellView, cycleOf, nextHref, pageButtons, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, isPlainClick, nextHref, pageButtons, recordsCount, safeHref } from './cycleModel';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -74,7 +74,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
           <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{title}</h2>
           {addBtn?.text && (addBtn.onClick
             ? <button type="button" onClick={addBtn.onClick} className="whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep">{addBtn.text}</button>
-            : addHref ? <Link to={addHref} className="whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep">{addBtn.text}</Link> : null)}
+            : addHref ? <Link to={addHref} data-testid="records-add" onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className="whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep">{addBtn.text}</Link> : null)}
         </div>
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}

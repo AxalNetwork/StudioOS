@@ -17,7 +17,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import ConnectAssistantPage from '../src/pages/connect/ConnectAssistantPage.jsx';
 import { AssistantsSection } from '../src/pages/account/AssistantsGroup.jsx';
-import RecordSessionSheet from '../src/pages/founder/RecordSessionSheet.jsx';
+import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 
 const h = React.createElement;
@@ -111,21 +111,21 @@ test('Connectors: the group reads grants, revokes after asking, and with the fla
   try { await bad.flush(); assert.ok(bad.byTestId('assistant-grants-unreadable')); } finally { await bad.unmount(); }
 });
 
-test('the Record a session sheet offers "From an AI assistant": the entry with the company named, and no Start', async () => {
+test('the Record a session lightbox offers "Send it from your AI assistant": the entry with the company named, shown on request', async () => {
   const models = { live: [], final: [], defaults: { live: null, final: null } };
   const el = h(ActiveCompanyContext.Provider, { value: { company: { company_name: 'Acme Robotics' } } },
-    h(RecordSessionSheet, { interview: { id: 1, interviewee_name: 'Ana' }, initialModels: models, onClose() {}, onCreated() {} }));
+    h(RecordLightbox, { projectId: 1, interview: { id: 1, interviewee_name: 'Ana' }, initialModels: models, initialBoard: { hypotheses: [] }, onClose() {}, onStarted() {} }));
   const m = await mount(el);
   try {
-    assert.ok(m.byTestId('button-start-recording'));
-    await m.clickTestId('channel-assistant');
+    assert.ok(m.byTestId('record-start'));
+    assert.equal(m.byTestId('assistant-entry'), undefined, 'a secondary link, not a mode: nothing is open until it is pressed');
+    await m.clickTestId('record-assistant-link');
     assert.ok(m.byTestId('assistant-entry'));
-    assert.equal(m.byTestId('button-start-recording'), undefined, 'the assistant sends it; nothing to start here');
+    assert.ok(m.byTestId('record-start'), 'the link opens the entry beside Start; it does not replace the lightbox');
     assert.match(m.text(), /consent must cover your AI assistant processing the interview/);
-    assert.match(m.text(), /Your assistant sends the interview/);
   } finally { await m.unmount(); }
-  const prompt = readFileSync('frontend/src/pages/founder/RecordSessionSheet.jsx', 'utf8');
-  assert.match(prompt, /<AssistantEntry companyName=\{company\?\.company_name \|\| ''\} \/>/);
+  const src = readFileSync('frontend/src/pages/founder/RecordLightbox.jsx', 'utf8');
+  assert.match(src, /<AssistantEntry companyName=\{active\?\.company_name \|\| ''\} \/>/);
 });
 
 test('/connect/assistant is mounted, signed in, with sign-in and back for a visitor', () => {

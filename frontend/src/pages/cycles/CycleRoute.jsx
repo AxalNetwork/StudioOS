@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { WorkerRail } from '../../ui';
@@ -12,6 +12,7 @@ import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
 import ShareUpdateSheet from '../founder/ShareUpdateSheet';
 import ConnectToolSheet from '../account/ConnectToolSheet';
+import RecordLightbox from '../founder/RecordLightbox';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
 import CycleModulePage from './CycleModulePage';
@@ -50,9 +51,10 @@ import { moduleToolLinks } from './founderToolNavigation.js';
 const CYCLE_DEFS = {
   validate: {
     modules: MODULES.validate,
-    // The primary action opens the interview form; a session attaches to the
-    // interview it records (`RecordSessionSheet`), so the form comes first.
-    action: (q) => ({ label: 'Record a session', href: `/validate/interviews?new=record${q ? `&${q.slice(1)}` : ''}` }),
+    // D685 §5.4: "Record a session" is the lightbox at /validate/record. A plain
+    // click opens it over this page (`onOpen`); a new tab or a deep link follows
+    // the href to the same place. The interview comes with it, or is made at Start.
+    action: (q, open, record) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: record }),
     tools: toFnMap({
       'problem-discovery': (q) => ({ label: 'Curate pain themes: merge, rename, judge severity', href: `/validate/pain-map${q}` }),
       'customer-research': (q) => ({ label: 'Open the interview log: notes, recordings, evidence', href: `/validate/interviews${q}` }),
@@ -60,7 +62,7 @@ const CYCLE_DEFS = {
       experiments: (q) => ({ label: 'Open the hypothesis board and the verdict', href: `/validate/hypotheses${q}` }),
     }),
     add: toFnMap({
-      'customer-research': (q) => ({ text: 'Record a session', href: `/validate/interviews?new=record${q ? `&${q.slice(1)}` : ''}` }),
+      'customer-research': (q, record) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: record }),
     }),
     // The AI fill bands the Validate desk carried, on the module they fill.
     fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
@@ -263,10 +265,51 @@ function useProject(reloadKey = 0) {
   return { projectId, status };
 }
 
-export default function CycleRoute({ cycle }) {
-  const { slug } = useParams();
+/** The module page under the lightbox: the founder's, when it is one of this cycle's modules; else the overview (null). */
+export function underModule(modules, path) {
+  const slug = underSlug(path);
+  return (modules || []).some((m) => m.slug === slug) ? slug : null;
+}
+
+/**
+ * The lightbox, with the interview it was opened on (`?interview=<id>`, from a
+ * row's "Record a session") read first so Who is pre-filled. An interview that
+ * cannot be found opens the lightbox with Who empty rather than not at all.
+ */
+function RecordMount({ projectId, interviewId, onClose, onStarted }) {
+  const [interview, setInterview] = useState(interviewId ? undefined : null);
+  useEffect(() => {
+    if (!interviewId) { setInterview(null); return undefined; }
+    let alive = true;
+    api.listInterviews(projectId)
+      .then((rows) => { if (alive) setInterview((rows || []).find((r) => String(r.id) === String(interviewId)) || null); })
+      .catch(() => { if (alive) setInterview(null); });
+    return () => { alive = false; };
+  }, [projectId, interviewId]);
+  if (interview === undefined) return null;
+  return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} />;
+}
+
+/** The module slug of a Validate path (`/validate/customer-research?…`), or null for the overview. */
+export function underSlug(path) {
+  const m = /^\/validate\/([a-z0-9-]+)(?:[/?#]|$)/.exec(String(path || ''));
+  return m && m[1] !== 'record' ? m[1] : null;
+}
+
+/**
+ * `record` is `/validate/record` (D685 §5.4): the Validate page with the Record
+ * a session lightbox open over it. The page underneath is the one the founder
+ * was on (`location.state.under`), the overview on a deep link. Closing goes
+ * back to it; the lightbox makes no server call.
+ */
+export default function CycleRoute({ cycle, record = false }) {
+  const { slug: routeSlug } = useParams();
+  const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
+  // Under the lightbox is the module page the founder was on, when it is one of
+  // this cycle's modules; otherwise (a deep link, or the interview log) the overview.
+  const slug = record ? underModule(def?.modules, location.state?.under) : routeSlug;
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
   const { projectId, status: projectStatus } = useProject(projectsKey);
@@ -340,7 +383,11 @@ export default function CycleRoute({ cycle }) {
   if (!def) return null;
   if (!known) return <Navigate to={`/${cycle}${q}`} replace />;
 
-  const action = def.action(q, projectId && def.sheet ? () => setSheetOpen(true) : undefined);
+  const openRecord = cycle === 'validate' && projectId
+    ? () => navigate(`/validate/record${q}`, { state: { under: `${location.pathname}${location.search}` } })
+    : undefined;
+  const closeRecord = () => (location.state?.under ? navigate(-1) : navigate(`/validate${q}`, { replace: true }));
+  const action = def.action(q, projectId && def.sheet ? () => setSheetOpen(true) : undefined, openRecord);
   const Sheet = def.sheet || null;
   const rail = (
     <WorkerRail
@@ -397,7 +444,7 @@ export default function CycleRoute({ cycle }) {
         query={query}
         onQuery={setQuery}
         action={action}
-        add={fnOf(def.add, slug)?.(q) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
+        add={fnOf(def.add, slug)?.(q, openRecord) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
         rowAction={edit && projectId ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
@@ -451,6 +498,10 @@ export default function CycleRoute({ cycle }) {
             onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
             onSaved={() => setReload((n) => n + 1)}
             onClose={() => setEditing(null)} />
+        )}
+        {record && cycle === 'validate' && projectId && (
+          <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={closeRecord}
+            onStarted={(session, interview) => navigate(`/validate/session/${session.id}`, { state: { interview } })} />
         )}
         {Sheet && sheetOpen && projectId && (
           <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} />

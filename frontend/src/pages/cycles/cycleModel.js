@@ -261,7 +261,12 @@ export function safeHref(href) {
 export function cycleTabs(cycle, cards, active = null, search = '') {
   const base = `/${cycle}`;
   const s = linkSearch(search);
+  // D685 §3.1: Validate's second tab is the interview log, `/validate/interviews`,
+  // the parent of the review. It is not a module: Customer research stays the
+  // module page with its Interviews list.
+  const log = cycle === 'validate' ? [{ key: 'interviews', name: 'Interviews', href: `${base}/interviews${s}`, active: active === 'interviews' }] : [];
   return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }]
+    .concat(log)
     .concat((cards || []).filter((c) => c?.slug).map((c) => ({ key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug })));
 }
 
@@ -279,4 +284,13 @@ export function nextHref(href, search = '') {
 /** A query string a link may carry: `?…`, or nothing. */
 export function linkSearch(search) {
   return typeof search === 'string' && /^\?[^#]*$/.test(search) && search.length > 1 ? search : '';
+}
+
+/**
+ * A left click with no modifier: the only click a link may take over. A click
+ * with Ctrl, Cmd, Shift or Alt, or a middle click, opens a tab or a window and
+ * must follow the href (D685 §5.4.2).
+ */
+export function isPlainClick(e) {
+  return !!e && !e.defaultPrevented && (e.button == null || e.button === 0) && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
 }
