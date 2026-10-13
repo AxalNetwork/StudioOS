@@ -318,6 +318,10 @@ test('the pill shows on a route outside Validate, never on the live view, and st
   setRecorder(stubRecorder(ST({ phase: 'ready' })));
   const ready = html(h(RecordingPill), '/build');
   assert.match(ready, /<a [^>]*href="\/validate\/session\/7"/, '"Ready to review" links to the review');
+  setRecorder(stubRecorder(ST({ phase: 'ready', session: { ...SESSION, interview_id: 41 } })));
+  assert.match(html(h(RecordingPill), '/build'), /<a [^>]*href="\/validate\/interviews\/41\?session=7"/, 'the interview\'s review, on this session');
+  setRecorder(stubRecorder(ST({ phase: 'stopping', processing: { stage: 'failed', error: 'No.' } })));
+  assert.match(html(h(RecordingPill), '/build'), /aria-label="Processing stopped · tap to retry"/);
   setRecorder(stubRecorder({ ...ST(), session: null, phase: 'idle' }));
   assert.equal(html(h(RecordingPill), '/build'), '', 'nothing recording, no pill');
 });

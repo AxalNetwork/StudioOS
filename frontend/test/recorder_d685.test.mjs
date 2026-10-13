@@ -236,6 +236,16 @@ test('Stop and process: stop, flush, finish with the last seq recorded, then the
   assert.ok(b.log.includes('wake.release'), 'the screen lock is let go');
 });
 
+test('the client posts finish with last_seq and auto, process and summarise, to #1605\'s mounted routes', () => {
+  const client = readFileSync('frontend/src/lib/api/interviewSessions.js', 'utf8');
+  assert.match(client, /finish: \(id, lastSeq, auto = true\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/finish`, \{\s*method: 'POST', body: JSON\.stringify\(\{ last_seq: lastSeq, auto: auto !== false \}\),/);
+  assert.match(client, /process: \(id\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/process`, \{ method: 'POST'/);
+  assert.match(client, /summarise: \(id, model\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/summarise`/);
+  const worker = readFileSync('cloudflare-worker/src/routes/founder_validate_sessions.ts', 'utf8');
+  for (const r of ['finish', 'process', 'summarise']) assert.match(worker, new RegExp(`sessions\\.post\\('/sessions/:id/${r}'`), r);
+  assert.match(worker, /body\?\.auto !== false/, 'the Worker reads auto the same way');
+});
+
 test('the honest ring: a fraction only while uploading or transcribing, from the Worker\'s counts; none for summarising or placing', () => {
   assert.equal(processingProgress(P('uploading', 3, 4)), 0.75);
   assert.equal(processingProgress(P('transcribing', 1, 4)), 0.25);

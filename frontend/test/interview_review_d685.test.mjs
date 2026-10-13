@@ -81,7 +81,7 @@ test('the summary: each sentence links to the passages it cites, the model is na
   assert.match(out, /<a href="#seg-92"[^>]*>0:12–0:19<\/a>/);
   assert.match(tag(out, 'summary-cite-text'), /title="gone"/, 'a span outside the transcript keeps its label, with no dead link');
   assert.ok(renderedText(out).includes('Written by @cf/meta/llama-3.3-70b-instruct-fp8-fast · 2026-10-13 18:00'));
-  assert.doesNotMatch(out, /button-summarise/, 'a summary is there: nothing to offer');
+  assert.doesNotMatch(html(h(SessionSummary, { summary: SUMMARY, segments: SEGMENTS, canSummarise: true })), /button-summarise/, 'a summary is there: nothing to offer, even where Summarise is allowed');
   const none = html(h(SessionSummary, { summary: null, segments: SEGMENTS }));
   assert.match(none, /data-testid="summary-none">Not recorded</);
   assert.doesNotMatch(none, /summary-model|button-summarise/);
