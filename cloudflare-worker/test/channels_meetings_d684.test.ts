@@ -1093,7 +1093,7 @@ test('schedule, list, cancel and retry a Zoom call', async (t) => {
   assert.equal(cancelled.body.provider_cancelled, true);
   assert.equal(cancelled.body.meeting.status, 'cancelled');
   assert.equal(deletes(), 2, 'cancelled at Zoom');
-  assert.equal((await call(f.env, ME, 'DELETE', `/interviews/${INTERVIEW}/meetings/${m.uid}`)).body.provider_cancelled, null, 'twice is a no-op');
+  assert.equal((await call(f.env, ME, 'DELETE', `/interviews/${INTERVIEW}/meetings/${m.uid}`)).body.provider_cancelled, true, 'twice is a no-op and preserves provider confirmation');
   assert.equal(deletes(), 2);
   assert.equal((await call(f.env, ME, 'POST', `/interviews/${INTERVIEW}/meetings/${m.uid}/import`)).body.error, 'meeting_cancelled');
 
