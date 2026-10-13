@@ -245,6 +245,16 @@ const CLAIM_WORD = { supported: 'Supported', refuted: 'Refuted', testing: 'Testi
 const FIT = { strong: ['Strong', 'ok'], partial: ['Partial', 'v2'], none: ['None', 'grey'] };
 const CONSENT = { agreed: ['Agreed', 'ok'], declined: ['Declined', 'bad'] };
 const STAGE = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+/**
+ * The channel as words (D685 §5.4.5), over the four the Worker stores
+ * (`in_person | video | phone | text`). `manual` is the old "Entered by hand"
+ * row. A value this table does not know is shown as the Worker wrote it, never
+ * dropped; a missing one is "Not recorded".
+ */
+export const CHANNEL = { in_person: 'In person', video: 'Video call', phone: 'Audio call', text: 'Text chat', manual: 'Entered by hand' };
+
+/** The list's title: the module is Customer research, the table is the interview log. */
+export const TITLES = { 'customer-research': 'Interviews' };
 const EVIDENCE = { anecdote: ['Anecdote', 'warn'], pattern: ['Pattern', 'v2'], measured: ['Measured', 'ok'] };
 const SIGNAL = { loi: 'Letter of intent', pre_sale: 'Pre-sale', waitlist: 'Waitlist', need_to_have: 'Need-to-have', would_pay: 'Would pay' };
 const COUNTS = { confirmed: ['Confirmed', 'ok'], counted: ['Counted', 'v2'], to_confirm: ['To confirm', 'warn'] };
@@ -293,13 +303,14 @@ export const RECORDS = {
       date: r.date ?? null,
       icp_fit: pill(FIT, r.icp_fit),
       consent: r.consent ? pill(CONSENT, r.consent) : { text: 'Not asked', tone: 'grey' },
-      channel: r.channel ?? null,
+      channel: word(CHANNEL, r.channel),
       stage: word(STAGE, r.stage),
     } }),
     filters: [
       { key: 'icp', label: 'ICP fit', options: [{ value: 'strong', label: 'Strong' }, { value: 'partial', label: 'Partial' }, { value: 'none', label: 'None' }, { value: 'not_recorded', label: 'Not recorded' }] },
       { key: 'consent', label: 'Consent', options: [{ value: 'agreed', label: 'Agreed' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'stage', label: 'Stage', options: Object.entries(STAGE).map(([value, label]) => ({ value, label })) },
+      { key: 'channel', label: 'Channel', options: ['in_person', 'video', 'phone', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },

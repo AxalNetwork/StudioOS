@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
-import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
+import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -42,7 +42,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, search
         <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{title || meta.name}</h1>
         {action?.onClick
           ? <button type="button" className={btn} onClick={action.onClick} data-testid="cycle-action">{label}</button>
-          : href ? <Link className={btn} to={href} data-testid="cycle-action">{label}</Link> : null}
+          : href ? <Link className={btn} to={href} data-testid="cycle-action" onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
       </div>
       <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{meta.outcome}</p>
       <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 md:flex" data-testid="cycle-tabs">

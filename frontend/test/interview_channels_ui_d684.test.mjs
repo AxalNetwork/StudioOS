@@ -23,7 +23,7 @@ import ChannelsInboxPage, { AssignControls, MessageList, ReplyComposer } from '.
 import { ChannelSessionPanel, ConnectPanel, MeetingRow, SchedulePanel } from '../src/pages/founder/InterviewChannels.jsx';
 import { AssistantBadge } from '../src/pages/founder/AssistantEntry.jsx';
 import { ChannelOriginBadge } from '../src/pages/founder/ChannelOriginBadge.jsx';
-import RecordSessionSheet from '../src/pages/founder/RecordSessionSheet.jsx';
+import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 
 const h = React.createElement;
@@ -434,24 +434,27 @@ test('a scheduled call shows its join link with Copy and Cancel (asked first); a
   assert.doesNotMatch(evil, /javascript:/);
 });
 
-test('Record a session offers "From Telegram or WhatsApp" and "Schedule a Zoom or Meet call", with nothing to start for either', async () => {
+test('Record a session keeps D684\'s two ways in: a picked interview offers the chat import and the call for later; a new person goes to the inbox', async () => {
   const models = { live: [], final: [], defaults: { live: null, final: null } };
   // The panels read the real client here; every answer is an empty body.
   const prevFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  const el = h(ActiveCompanyContext.Provider, { value: { company: { company_name: 'Acme' } } },
-    h(RecordSessionSheet, { interview: { id: 1, interviewee_name: 'Ana' }, initialModels: models, onClose() {}, onCreated() {} }));
-  const m = await mount(el);
+  const lightbox = (props) => h(ActiveCompanyContext.Provider, { value: { company: { company_name: 'Acme' } } },
+    h(RecordLightbox, { projectId: 3, initialModels: models, initialBoard: { hypotheses: [] }, onClose() {}, onStarted() {}, ...props }));
+  const m = await mount(lightbox({ interview: { id: 1, interviewee_name: 'Ana' } }));
   try {
-    assert.ok(m.byTestId('button-start-recording'));
-    await m.click('channel-from-chat');
+    assert.equal(m.byTestId('interview-connect'), undefined);
+    await m.click('record-chat-link');
     assert.ok(m.byTestId('interview-connect'));
-    assert.equal(m.byTestId('button-start-recording'), undefined);
-    assert.match(m.text(), /The chat’s messages become this interview’s transcript; nothing is recorded here\./);
-    await m.click('channel-schedule-call');
+    assert.match(m.text(), /Choose a customer conversation waiting in your inbox\./);
+    await m.click('record-schedule-link');
     assert.ok(m.byTestId('interview-schedule'));
-    assert.equal(m.byTestId('button-start-recording'), undefined);
   } finally { await m.unmount(); globalThis.fetch = prevFetch; }
+  const fresh = await mount(lightbox({}));
+  try {
+    assert.equal(fresh.byTestId('record-chat-link'), undefined, 'a chat needs an interview to land in');
+    assert.ok(fresh.byTestId('record-inbox-link'));
+  } finally { await fresh.unmount(); }
 });
 
 // ------------------------------------------------------------------ the session page
@@ -498,9 +501,9 @@ test('mounted: the inbox route, the Connectors group, the sheet’s two ways in;
   assert.match(app, /<Route path="\/validate\/inbox" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ChannelsInboxPage \/>\)\} \/>/);
   const conn = readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8');
   assert.match(conn, /<ChannelsSection catalogue=\{data\.catalogue\} onOpenConnector=/);
-  const sheet = readFileSync('frontend/src/pages/founder/RecordSessionSheet.jsx', 'utf8');
-  assert.match(sheet, /<ConnectPanel interview=\{interview\}/);
-  assert.match(sheet, /<SchedulePanel interview=\{interview\} \/>/);
+  const lightbox = readFileSync('frontend/src/pages/founder/RecordLightbox.jsx', 'utf8');
+  assert.match(lightbox, /<ConnectPanel interview=\{interview\}/);
+  assert.match(lightbox, /<SchedulePanel interview=\{interview\} \/>/);
   assert.doesNotMatch(readFileSync('frontend/public/_headers', 'utf8').replace(/^#.*$/gm, ''), /Content-Security-Policy/i, 'the SDK is blocked by nothing on the shell');
   assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /http-equiv="Content-Security-Policy"/i);
   // The SDK is never a static script on the page: only the click adds it.

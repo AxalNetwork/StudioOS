@@ -33,3 +33,5 @@ write a bordered white box with a title, it already exists here.
   AI naming and surfaces.
 - Every primitive supports dark mode. A new one that does not will fail
   `check-dark-mode`.
+
+`Lightbox.jsx` (D685) is the one lightbox shell: a centred dialog, a full-screen sheet on a phone, with a focus trap, Escape and backdrop close, focus returned to what opened it, an inert background and no scroll bleed. `lightboxFocus.js` holds its rules as pure functions. Record a session is its first user; Build's, Raise's and Grow's cycle CTAs reuse it.

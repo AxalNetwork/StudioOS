@@ -132,7 +132,8 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
     ...[...navOf(over).matchAll(/href="([^"]+)"/g)].map((m) => m[1]),
     ...[...over.matchAll(/href="([^"]+)"[^>]*>[^<]* ›</g)].map((m) => m[1]),
   ];
-  assert.equal(own.length, 1 + MODULES.validate.length * 2, 'the tabs and every card title');
+  // Overview, the Interviews tab (D685 §3.1), then each module, and each card's title.
+  assert.equal(own.length, 2 + MODULES.validate.length * 2, 'the tabs and every card title');
   for (const l of own) assert.match(l, /\?project_id=7$/, l);
   const mod = html(h(CycleModulePage, { cycle: 'validate', slug: slugOf(MODULES.validate[0]), cards: OVERVIEWS.validate.cards, data: { card: OVERVIEWS.validate.cards[0] }, search: '?project_id=7' }));
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
@@ -210,7 +211,7 @@ test('ADD FORMS: one side sheet draws each form, the module offers it, and the c
   assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /add=\{fnOf\(def\.add, slug\)\?\.\(q\) \|\| \(form && projectId \? \{ text: form\.button, onClick: \(\) => setFormOpen\(true\) \} : undefined\)\}/);
+  assert.match(route, /add=\{fnOf\(def\.add, slug\)\?\.\(q, openRecord\) \|\| \(form && projectId \? \{ text: form\.button, onClick: \(\) => setFormOpen\(true\) \} : undefined\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => form\.submit\(cyclesWrite, projectId, values\)\}/);
   assert.match(route, /onSaved=\{\(\) => setReload\(\(n\) => n \+ 1\)\}/, 'a save reads the module again');
   // The checklist: tick an open item, undo your own tick, never undo the Lab's.
