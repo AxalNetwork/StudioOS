@@ -563,7 +563,7 @@ app.get('/systems/choices', async c => {
        JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
       WHERE i.user_id = ? ORDER BY i.id`,
   ).bind(project.company_id, user.id).all<{ uid: string; provider_key: string }>());
-  const workspace = [];
+  const workspace: string[] = [];
   for (const provider of ['google_calendar', 'microsoft_365']) if (await workspaceConnected(c.env, user.id, provider)) workspace.push(provider);
   return c.json({ kinds: SYSTEM_KINDS.map(kind => ({
     kind, label: SYSTEM_LABEL[kind],
