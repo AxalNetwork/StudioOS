@@ -15,11 +15,15 @@
  *
  * Every browser and Worker call is injected, so tests drive it without either.
  *
- * WAITS ON THE WORKER (wired when each merges):
- *   · #1584: `GET /sessions/active`, so a reload restores an active recording on
- *     its own; and the marks' `client_key`, so a replayed mark is never doubled.
- *     Until then a session opened from its page after a reload is paused and
- *     resumed by hand, with its seqs continued from `GET /sessions/:id`.
+ * RECOVERY ON APP LOAD (§5.6.7, on #1584's `GET /sessions/active`): `recover`
+ * flushes what this member left queued on the device, then restores the newest
+ * recording or paused session, or follows one still processing. A recording is
+ * paused, never left running, unless another tab holds it: the tab that
+ * captures holds the Web Lock `rec-<id>`, and recovery only asks whether it is
+ * free (`ifAvailable`), so a second tab never pauses the first one's recording.
+ *
+ * Each mark carries a `client_key` the Worker accepts (`[A-Za-z0-9_-]`), made
+ * once when the moment is marked, so a replay is answered `duplicate`.
  *
  * The talking points are the Worker's (#1583, merged as #1591): the session
  * read carries them with their own ids, and a tick is `PUT
@@ -59,7 +63,7 @@ const TOAST_MS = 2500;
 const blank = () => ({
   phase: 'idle', session: null, interview: null, callLabel: null, channel: null, points: [],
   cap: {}, confirm: false, drawer: false, toast: null, error: null, wake: null, refused: null,
-  marksQueued: [], online: true, video: false, pointError: null,
+  marksQueued: [], online: true, video: false, pointError: null, meetingUrl: null,
   processing: null, stageAt: -1, stopStep: null, lastSeq: null,
 });
 
@@ -119,8 +123,21 @@ export function reviewPath(session) {
     : `/validate/session/${sid}`;
 }
 
-/** A key a replayed mark can be recognised by, once the Worker takes one (#1584). */
-export const markKey = (sessionId, offset) => `${sessionId}:${Math.round(offset)}`;
+/**
+ * A mark's `client_key`: the session, the offset and a few random characters,
+ * in the Worker's alphabet (`[A-Za-z0-9_-]{1,80}`). Made once per mark, so its
+ * replays are one mark and two marks in the same millisecond are two.
+ */
+export const markKey = (sessionId, offset, rand = () => Math.random().toString(36).slice(2, 8)) =>
+  `m${String(sessionId).replace(/[^A-Za-z0-9]/g, '')}-${Math.max(0, Math.round(Number(offset) || 0))}-${String(rand()).replace(/[^A-Za-z0-9]/g, '').slice(0, 12) || '0'}`;
+
+/** The Web Lock a capturing tab holds for its session (§5.6.7). */
+export const lockName = (sessionId) => `rec-${sessionId}`;
+
+/** A meeting link the view may open: https only, as the Worker stored it. */
+export function joinHref(url) {
+  try { const u = new URL(String(url || '')); return u.protocol === 'https:' ? u.toString() : null; } catch { return null; }
+}
 
 export function createRecorder({ api, browser = {}, queue = null, now = () => Date.now(), setTimeout: st = (f, ms) => globalThis.setTimeout(f, ms), wait = null } = {}) {
   let state = blank();
@@ -130,6 +147,8 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
   let capture = null;
   let pre = null;
   let wakeLock = null;
+  let userId = null;
+  let heldLock = null; // { id, release }
   const listeners = new Set();
   const set = (patch) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; listeners.forEach((l) => l(state)); };
   const q = () => queue || (queue = indexedDbQueue());
@@ -147,7 +166,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
         liveUrl: api.liveUrl?.(s.id),
       },
       api: { uploadChunk: (seq, blob, startMs) => api.uploadChunk(s.id, seq, blob, startMs) },
-      queue: q(), sessionId: s.id, liveOn: !!s.live_model, startSeq, baseOffsetMs: Number(s.active_ms) || 0,
+      queue: q(), sessionId: s.id, liveOn: !!s.live_model, startSeq, baseOffsetMs: Number(s.active_ms) || 0, userId,
       onState: (cap) => set((x) => ({ cap: { ...x.cap, ...cap } })),
     });
     return capture;
@@ -159,6 +178,24 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     try { wakeLock = await wl.request('screen'); set({ wake: 'on' }); } catch { set({ wake: 'unsupported' }); }
   };
   const letSleep = () => { try { wakeLock?.release?.(); } catch { /* gone */ } wakeLock = null; set({ wake: null }); };
+
+  /** Hold `rec-<id>` while this tab captures, so another tab's recovery leaves it alone. */
+  const holdLock = (id) => {
+    const locks = browser.locks;
+    if (!locks || typeof locks.request !== 'function' || heldLock?.id === id) return;
+    dropLock();
+    let release;
+    const held = new Promise((r) => { release = r; });
+    heldLock = { id, release };
+    locks.request(lockName(id), () => held).catch(() => {});
+  };
+  const dropLock = () => { heldLock?.release?.(); heldLock = null; };
+  /** Is `rec-<id>` free here? Asked without waiting; with no Web Locks, every lock is free. */
+  const lockFree = async (id) => {
+    const locks = browser.locks;
+    if (!locks || typeof locks.request !== 'function') return true;
+    try { return await locks.request(lockName(id), { ifAvailable: true }, (lock) => lock !== null); } catch { return true; }
+  };
 
   /** Open the microphone, then post start (or resume) only once it is granted (D685 §5.6.5). */
   const goLive = async ({ display = false, resume = false } = {}) => {
@@ -172,6 +209,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       set({ session: r.session, phase: 'recording', error: null, refused: null });
       c.start();
       keepAwake();
+      holdLock(s.id);
       return 'recording';
     } catch (e) {
       await c.stop({ flush: false });
@@ -188,7 +226,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     const s = state.session;
     const left = [];
     for (const m of state.marksQueued) {
-      try { await api.mark(s.id, m.offset); } catch { left.push(m); }
+      try { await api.mark(s.id, m.offset, undefined, m.key); } catch { left.push(m); }
     }
     set({ marksQueued: left });
   };
@@ -306,9 +344,9 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      * The modal hands over its draft. Audio starts here; a video call waits
      * for the second click, "Share the call's tab" (§5.8.1).
      */
-    async begin({ session, interview = null, callLabel = null, points = [], video = false, storedSeqs = [] }) {
+    async begin({ session, interview = null, callLabel = null, points = [], video = false, storedSeqs = [], meetingUrl = null }) {
       capture = null;
-      set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, points, video, storedSeqs, phase: video ? 'share' : 'idle' });
+      set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, points, video, storedSeqs, phase: video ? 'share' : 'idle', meetingUrl: joinHref(meetingUrl) });
       if (video) { api_.release(); return 'share'; }
       return goLive();
     },
@@ -343,9 +381,10 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       const offset = capture?.offsetMs() ?? elapsedMs(state.session, now());
       set({ toast: { at: now(), offset } });
       st(() => set((x) => (x.toast && now() - x.toast.at >= TOAST_MS ? { toast: null } : {})), TOAST_MS);
-      if (state.online === false) { set((x) => ({ marksQueued: [...x.marksQueued, { offset, key: markKey(x.session.id, offset) }] })); return 'queued'; }
-      try { await api.mark(state.session.id, offset); return 'sent'; } catch {
-        set((x) => ({ marksQueued: [...x.marksQueued, { offset, key: markKey(x.session.id, offset) }] }));
+      const key = markKey(state.session.id, offset);
+      if (state.online === false) { set((x) => ({ marksQueued: [...x.marksQueued, { offset, key }] })); return 'queued'; }
+      try { await api.mark(state.session.id, offset, undefined, key); return 'sent'; } catch {
+        set((x) => ({ marksQueued: [...x.marksQueued, { offset, key }] }));
         return 'queued';
       }
     },
@@ -379,6 +418,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     async confirmStop({ auto = true } = {}) {
       set({ confirm: false, phase: 'stopping', error: null, auto: auto !== false, stopStep: null, lastSeq: null,
         processing: { stage: 'uploading', done: null, total: null, error: null }, stageAt: 0 });
+      dropLock(); // nothing is captured from here: another tab may follow the processing
       try { return await process(auto !== false); } catch (e) {
         failWith(e?.message || 'Processing could not start. Nothing was lost; try again.');
         return 'failed';
@@ -424,6 +464,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
         letSleep();
         try { await api.setConsent(s.id, 'declined'); } catch { /* the delete removes it all the same */ }
         await api.remove(s.id);
+        dropLock();
         set({ ...blank(), phase: 'discarded' });
         return 'discarded';
       } catch (e) {
@@ -444,10 +485,57 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       await capture?.stop({ flush: false });
       capture = null;
       letSleep();
+      dropLock();
+      userId = null;
       set(blank());
     },
     /** Done with the review: the pill goes. */
-    clear() { if (!api_.isCapturing()) { pollGen += 1; set(blank()); } },
+    clear() { if (!api_.isCapturing()) { pollGen += 1; dropLock(); set(blank()); } },
+    /** The signed-in member: queued chunks are tagged with them, and only theirs flush on load. */
+    setUser(id) { userId = id ?? null; },
+    /** Can this browser share a tab? iOS Safari and Android Chrome cannot (§5.8.6). */
+    get canShareTab() { return typeof browser.getDisplayMedia === 'function'; },
+    /**
+     * Recovery on app load (D685 §5.6.7), from `GET /sessions/active`:
+     *   1. what this member left queued on the device is flushed, every
+     *      session (stopped ones too: `PUT /chunks` admits `stopped`);
+     *   2. the newest recording or paused session is restored, paused, unless
+     *      another tab holds its lock; its full read gives the points, the
+     *      Worker's call label and the stored seqs, so a resume continues them;
+     *   3. else the newest one still processing reopens its processing view.
+     * Nothing is done for a tab that already holds a session, or with no member.
+     */
+    async recover() {
+      if (state.session || userId == null) return 'skipped';
+      let items;
+      try { const r = await api.active(); items = Array.isArray(r?.items) ? r.items : []; } catch { return 'unread'; }
+      const ids = await q().sessions(userId).catch(() => []);
+      for (const id of ids) { try { await flushQueue(q(), id, upload(id)); } catch { /* the next load tries again */ } }
+      if (state.session) return 'skipped'; // a Start made while this ran wins
+      const live = items.find((x) => x.status === 'recording' || x.status === 'paused');
+      if (live) {
+        if (!(await lockFree(live.id))) return 'other_tab';
+        let full;
+        try { full = await api.get(live.id); } catch { return 'unread'; }
+        if (state.session) return 'skipped';
+        const who = full.interview || { id: live.interview_id, interviewee_name: live.interviewee_name ?? null, interviewee_company: live.interviewee_company ?? null };
+        await api_.adopt({
+          session: full.session, interview: who, callLabel: full.call_label ?? live.call_label ?? null, points: full.points || [],
+          storedSeqs: (full.chunks || []).map((c) => c.seq),
+        });
+        set({ meetingUrl: joinHref(full.meeting_url) });
+        return 'restored';
+      }
+      const busy = items.find((x) => x.processing && x.processing.stage && x.processing.stage !== 'done');
+      if (busy) {
+        api_.follow({
+          session: busy, interview: { id: busy.interview_id, interviewee_name: busy.interviewee_name ?? null, interviewee_company: busy.interviewee_company ?? null },
+          processing: busy.processing, callLabel: busy.call_label ?? null,
+        });
+        return 'following';
+      }
+      return 'none';
+    },
     /** For tests and the route: the capture this recorder holds. */
     get capture() { return capture; },
   };

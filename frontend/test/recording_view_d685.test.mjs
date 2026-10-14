@@ -172,6 +172,25 @@ test('the video tiles: the interviewee\'s from the shared tab, and "You" with in
   assert.doesNotMatch(view(), /recording-tiles/);
 });
 
+test('#1588 a video call: "Start the call" opens the meeting link first, then the share; on a phone the microphone only, and no tiles', () => {
+  const sharing = { phase: 'share', video: true, session: { ...SESSION, status: 'draft', channel: 'video' } };
+  const out = view({ ...sharing, meetingUrl: 'https://acme.zoom.us/j/1' });
+  const link = tag(out, 'button-start-call');
+  assert.match(link, /href="https:\/\/acme\.zoom\.us\/j\/1"/);
+  assert.match(link, /target="_blank"/);
+  assert.match(link, /rel="noopener noreferrer"/);
+  assert.ok(out.indexOf('button-start-call') < out.indexOf('button-share-tab'), 'the link comes first: two clicks, in order');
+  assert.doesNotMatch(view(sharing), /button-start-call/, 'no link, no step');
+  // A phone: no tab to share.
+  const phone = view({ ...sharing, meetingUrl: 'https://acme.zoom.us/j/1' }, { actions: { canShareTab: false } });
+  assert.ok(renderedText(phone).includes('On a phone it records this device’s microphone only.'));
+  assert.doesNotMatch(phone, /button-share-tab/);
+  assert.match(phone, /data-testid="button-mic-only"/);
+  assert.match(phone, /button-start-call/, 'the call can still be opened');
+  assert.doesNotMatch(view({ video: true, cap: { displayVideo: {} } }, { actions: { canShareTab: false } }), /recording-tiles/, 'no tiles on a phone');
+  assert.match(view({ video: true, cap: { displayVideo: {} } }, { actions: { canShareTab: true } }), /recording-tiles/);
+});
+
 test('dark: the canvas\'s ground and vignette, and dark pairs for the pill and the tiles', () => {
   const out = view({ video: true, cap: { displayVideo: {} } }, { theme: 'dark' });
   assert.match(out, /#07050d/);
