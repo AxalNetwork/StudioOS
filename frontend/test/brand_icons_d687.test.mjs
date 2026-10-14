@@ -236,7 +236,7 @@ test('7b. the surfaces this test cannot mount pass the key to BrandIcon at the a
   has('frontend/src/pages/CalendarPage.jsx', /provider="google_calendar" name="Google Calendar"[\s\S]*provider="microsoft_365" name="Microsoft Outlook"/, 'both providers, by key');
   has('frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx', /<BrandIcon provider=\{row\.provider_key\} name=\{label\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/hq/PlatformPage.jsx', /<BrandIcon provider=\{k\.provider_key\} name=\{PROVIDER_LABEL\[k\.provider_key\] \|\| k\.provider_key\} size=\{24\} \/>/, 'a 24px tile by each label');
-  has('frontend/src/pages/admin/consoles/GithubSyncConsole.jsx', /<BrandIcon provider="github" name="GitHub" size=\{18\} variant="bare" \/>/, 'the GitHub mark, not lucide\'s GitBranch');
+  has('frontend/src/pages/admin/consoles/GithubSyncConsole.jsx', /<BrandIcon provider="github" name="GitHub" size=\{18\} variant="bare" tone="current" className="text-gray-800 dark:text-gray-100" \/>/, 'the GitHub mark in GitHub\'s documented monochrome, as the console drew it, not lucide\'s GitBranch');
   has('frontend/src/pages/account/AccountConnectors.jsx', /<BrandIcon provider="telegram" name="Telegram" \/>\s*<span className="text-sm font-bold[^"]*">Telegram · Axal VC channels/, 'the Telegram card\'s tile');
   has('frontend/src/pages/account/AccountConnectors.jsx', /role="img" title="Built and verified by Axal" aria-label="Verified by Axal"/, 'the ✓ is an image');
   has('frontend/src/pages/account/connectorTools.jsx', /<BrandIcon provider="hubspot" name="HubSpot" size=\{24\} \/>HubSpot pipeline/, 'HubSpot\'s modal title');
