@@ -44,10 +44,10 @@ export const CHUNKS_PER_MESSAGE = 20;
 /** A stage other than done or failed that has not moved for this long is stale. */
 export const STALE_MINUTES = 15;
 /**
- * The job's type. Registering it in `models/jobs.ts` and `queueWorker.ts` is
- * S01's (D684 §16); the cast holds until then.
+ * The job's type, registered in `models/jobs.ts` and dispatched by
+ * `queueWorker.ts`'s `handleJob` (S01, D684 §16).
  */
-export const PROCESS_JOB = 'interview_process' as JobType;
+export const PROCESS_JOB: JobType = 'interview_process';
 
 const micro = (usd: number) => Math.max(0, Math.round((usd || 0) * 1_000_000));
 

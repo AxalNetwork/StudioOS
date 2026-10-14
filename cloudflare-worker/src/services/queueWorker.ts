@@ -603,6 +603,15 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await runSessionStructureJob(env, payload);
       return;
     }
+    case 'interview_process': {
+      // D685 §5.9 — Stop reaches the transcript, the summary and the findings.
+      // The runner resumes from the stage the session reached and stores any
+      // refusal or failure on the session as a sentence, so it does not throw
+      // for a retry; POST /sessions/:id/process retries with a fresh key.
+      const { runInterviewProcessJob } = await import('./interviewProcessing');
+      await runInterviewProcessJob(env, payload);
+      return;
+    }
     case 'channel_followup':
     case 'meeting_import': {
       // D684 — each provider's adapter registered its handler at module load.
@@ -616,7 +625,23 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
 }
 
 // AI calls are expensive — cap per drain so a backlog doesn't burn the AI quota.
-const AI_JOB_TYPES = new Set(['ai_scoring', 'traction_review', 'liquidity_valuation', 'liquidity_matching', 'lpa_generation']);
+// `src/queue-consumer.ts` keeps the same set for the Cloudflare Queues path;
+// test/queue_interview_process_d685.test.ts fails if the two differ.
+//
+// `interview_process` (D685 §5.9) is deliberately NOT here, though D685 §5.9.4
+// asked for it. On the Cloudflare Queues path, which every environment runs
+// (USE_CF_QUEUE = "true"), an over-cap message is deferred with
+// `message.retry({ delaySeconds: 60 })`, and Cloudflare counts an explicit
+// retry against the consumer's `max_retries` (3 in wrangler.toml). A message
+// deferred on four deliveries goes to the dead-letter queue, and nothing
+// replays it. The cap counts messages across the whole platform, five a
+// minute, and a recording sends one message for every 20 chunks (five minutes
+// of audio at 15-second chunks), so a few long recordings processed at once
+// would fill it. A dropped message strands its session in `uploading` (the
+// sweeper resumes it after 30 minutes) or `transcribing` (only the member's
+// Retry resumes it). Each AI call the job makes already reserves and settles
+// the member's own D640 budget.
+export const AI_JOB_TYPES = new Set(['ai_scoring', 'traction_review', 'liquidity_valuation', 'liquidity_matching', 'lpa_generation']);
 const MAX_AI_PER_DRAIN = 5;
 
 export async function processQueueBatch(env: Env, batchSize = 10): Promise<{ processed: number; failed: number; deferred: number }> {
