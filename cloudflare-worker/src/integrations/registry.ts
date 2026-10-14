@@ -16,12 +16,13 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
+import { MODULE_LABELS, moduleHref } from './moduleLabels';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 export type AuthType = 'api_key' | 'oauth2' | 'webhook';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
-export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace';
 export interface ConnectorMetadata {
   category: ConnectorCategory;
   verified: boolean;
@@ -76,6 +77,7 @@ export interface IntegrationRow {
   external_account_name: string | null;
   last_synced_at: string | null;
   last_error: string | null;
+  last_error_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -197,6 +199,7 @@ export function getProviderImpl(key: string): ProviderImpl | null {
  * their entry's `status` from 'coming_soon' to 'live'/'beta' when shipping.
  */
 export const REGISTRY: ProviderDescriptor[] = [
+  { key: 'figma', display_name: 'Figma', integration_type: 'data_feed', description: 'Design files for Prototype / MVP.', status: 'coming_soon', tier: 'free', auth_type: 'oauth2', capabilities: [], docs_url: null, icon: 'Figma' },
   {
     key: 'hubspot',
     display_name: 'HubSpot',
@@ -415,6 +418,7 @@ export const REGISTRY: ProviderDescriptor[] = [
 // Calendar connections are read from calendar.ts; they do not create a second
 // integrations row or a second OAuth flow.
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
+  figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },
   hubspot: { category: 'CRM', verified: true, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },
   calendly: { category: 'Calendar', verified: true, pulls: [{ what: 'Booked meetings', module: 'customer_research' }], sends: [], feeds: ['customer_research'], permissions: ['Read your Calendly calendar through its default grant.', 'Read your Calendly profile and scheduled events.'] },
   salesforce: { category: 'CRM', verified: false, pulls: [{ what: 'Opportunity stages', module: 'capital_relationships' }], sends: [{ what: 'New account', target: 'Salesforce account', default_mode: 'ask' }, { what: 'Deal stage change', target: 'Salesforce deal', default_mode: 'auto' }], feeds: ['capital_relationships'], permissions: ['Read and update Salesforce records.', 'Maintain the connection when you are away.', 'Read your Salesforce account identity.'] },
@@ -426,8 +430,8 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   affinity: { category: 'CRM', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read relationship data from your Affinity account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Releases', module: 'product_roadmap' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases in the repositories you choose.', 'Read repository names and visibility.'] },
   zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.'] },
-  google_calendar: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read Gmail messages linked to invitations.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
-  microsoft_365: { category: 'Calendar', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
+  google_calendar: { category: 'Calendar and workspace', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read Gmail messages linked to invitations.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
+  microsoft_365: { category: 'Calendar and workspace', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
 
 const REGISTRY_BY_KEY: Map<string, ProviderDescriptor> = new Map(
@@ -465,10 +469,13 @@ export async function ensureIntegrationsSchema(env: Env): Promise<void> {
       'external_account_name TEXT, ' +
       'last_synced_at TIMESTAMP, ' +
       'last_error TEXT, ' +
+      'last_error_at TEXT, ' +
       'created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ' +
       'updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ' +
       'UNIQUE(user_id, provider_key))',
     );
+    try { await env.DB.exec('ALTER TABLE integrations ADD COLUMN last_error_at TEXT'); }
+    catch (e) { if (!/duplicate column name/i.test(e instanceof Error ? e.message : String(e))) throw e; }
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_user ON integrations(user_id)');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_provider ON integrations(provider_key)');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_status ON integrations(status)');
@@ -523,6 +530,7 @@ export function publicDescriptor(p: ProviderDescriptor) {
     supports_pat: !!p.supports_pat,
     has_implementation: PROVIDER_IMPLS.has(p.key),
     ...CONNECTOR_METADATA[p.key],
+    feed_modules: (CONNECTOR_METADATA[p.key]?.feeds ?? []).map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),
     connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens' : 'integrations',
   };
 }

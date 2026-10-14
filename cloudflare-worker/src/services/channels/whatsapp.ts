@@ -34,6 +34,7 @@
  * errors are codes.
  */
 import type { Env } from '../../types';
+import { providerJson } from './providerHttp';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { decryptCredentials, encryptCredentials } from '../../integrations/secrets';
 import type { ChannelConnection } from './connections';
@@ -210,13 +211,15 @@ async function graph(
   if (init.token) headers.authorization = `Bearer ${init.token}`;
   if (init.json !== undefined) headers['content-type'] = 'application/json';
   let res: Response;
+  let data: any;
   try {
-    res = await fetch(url, { method: init.method ?? 'GET', headers, body: init.json === undefined ? undefined : JSON.stringify(init.json) });
+    ({ res, data } = await providerJson(url, { method: init.method ?? 'GET', headers, body: init.json === undefined ? undefined : JSON.stringify(init.json) }));
   } catch {
-    console.error(`[channels] whatsapp ${what} network_error`);
-    return { ok: false, code: 'network', retryable: true };
+    const code = what === 'send' ? 'send_unknown' : 'network';
+    console.error(`[channels] whatsapp ${what} ${code}`);
+    return { ok: false, code, retryable: code !== 'send_unknown' };
   }
-  const data = await res.json().catch(() => null) as any;
+  if (what === 'send' && res.ok && !data) return { ok: false, code: 'send_unknown', retryable: false };
   if (res.ok && data && !data.error) return { ok: true, data };
   const graphCode = Number.isFinite(Number(data?.error?.code)) ? Number(data.error.code) : null;
   const f = graphFailure(res.status, graphCode);
@@ -251,7 +254,7 @@ export async function sendWhatsAppText(env: Env, conn: ChannelConnection, to: st
   });
   if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
   const id = idStr(r.data?.messages?.[0]?.id);
-  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'unexpected_response' };
+  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
 }
 
 function mediaHostAllowed(raw: string): boolean {
@@ -530,7 +533,7 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
       }
       await env.DB.prepare(
         `UPDATE integrations SET status = 'active', auth_type = 'oauth2', display_name = 'WhatsApp', credentials_enc = ?, config_json = ?,
-                external_account_id = ?, external_account_name = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+                external_account_id = ?, external_account_name = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`,
       ).bind(credentials, config, input.phoneNumberId, name, existing.id).run();
       return { ok: true, integrationId: Number(existing.id), name };

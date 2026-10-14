@@ -165,6 +165,10 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
   // update replaces that address with its own page, so Back never reopens it.
   assert.match(route, /path: 'update',\s*Mount: GrowMount,\s*action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
   assert.match(route, /return <ShareUpdateSheet projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>;/);
+  // D686 §5.4: the mount also re-reads the cycle page after a change (Build's
+  // Connect a tool), once the lightbox closes, so nothing reloads behind it.
+  assert.match(route, /<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\} onDone=\{onDone\}\s*onChanged=\{\(\) => \{ dirty\.current = true; \}\} \/>/);
+  assert.match(route, /const closeAction = \(\) => \{\s*if \(dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}/);
   assert.match(route, /cycle === 'grow' \? \(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`, \{ replace: true \}\)/,
     'a sent update opens its page, as it did from the Grow desk');
 });
@@ -250,11 +254,11 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
   assert.match(sheet, /id="cycle-form-demand_score"[^>]*value="7"/);
   assert.match(sheet, /id="cycle-form-demand_source"[^>]*value="Waitlist"/);
   assert.match(sheet, /<option value="entering" selected="">Entering<\/option>/);
-  // Every module with an Edit form, and the page wiring.
+  // Every module with an Edit form, and the page wiring. D686 §5.4 adds Operating systems' connector mapping.
   assert.deepEqual(Object.entries(EDITS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
-    ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
+    ['build/company-creation', 'build/operating-systems', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /rowAction=\{edit && projectId \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change');
+  assert.match(route, /rowAction=\{edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
   assert.match(route, /<RecordFormSheet key=\{String\(editing\.id\)\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
   assert.match(route, /useEffect\(\(\) => \{ setFormOpen\(false\); setEditing\(null\); \}, \[slug\]\);/, 'a sheet does not follow the founder to another module');

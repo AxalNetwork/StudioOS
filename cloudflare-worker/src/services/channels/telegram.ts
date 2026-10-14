@@ -36,6 +36,7 @@
  * Nothing here logs a token, a message's text or a name; errors are codes.
  */
 import type { Env } from '../../types';
+import { providerJson } from './providerHttp';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { IntakeError, activeMember } from '../interviewIntake';
 import { confirmLinkClaim, consumeLinkCode } from './linkCodes';
@@ -354,7 +355,7 @@ export async function confirmTelegramLink(env: Env, link: InboundLinkConfirm): P
       }
       await env.DB.prepare(
         `UPDATE integrations SET status = 'active', auth_type = 'webhook', display_name = 'Telegram', credentials_enc = NULL,
-                external_account_id = ?, external_account_name = ?, config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+                external_account_id = ?, external_account_name = ?, config_json = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`,
       ).bind(link.telegramUserId, name, config, existing.id).run();
       integrationId = Number(existing.id);
@@ -416,15 +417,20 @@ async function call(env: Env, method: string, body: Record<string, unknown>): Pr
   const token = String(env.TELEGRAM_CHANNEL_BOT_TOKEN ?? '').trim();
   if (!token) return { ok: false, code: 'not_configured', retryable: false, status: 0 };
   let res: Response;
+  let data: any;
   try {
-    res = await fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
+    ({ res, data } = await providerJson(`${TELEGRAM_API}/bot${token}/${method}`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-    });
+    }));
   } catch {
-    console.error(`[channels] telegram ${method} network_error`);
-    return { ok: false, code: 'network', retryable: true, status: 0 };
+    const code = method === 'sendMessage' ? 'send_unknown' : 'network';
+    console.error(`[channels] telegram ${method} ${code}`);
+    return { ok: false, code, retryable: code !== 'send_unknown', status: 0 };
   }
-  const data = await res.json().catch(() => null) as { ok?: boolean; result?: unknown; error_code?: number } | null;
+  // Without an explicit rejection a successful HTTP response may have sent it.
+  if (method === 'sendMessage' && res.ok && data?.ok !== true && data?.ok !== false) {
+    return { ok: false, code: 'send_unknown', retryable: false, status: 0 };
+  }
   if (res.ok && data?.ok === true) return { ok: true, result: data.result };
   const status = Number(data?.error_code) || res.status || 500;
   const f = failure(status);
@@ -436,7 +442,7 @@ function sendResult(r: CallResult, chatId: string): SendResult {
   if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
   const id = idStr(r.result?.message_id);
   // Acceptance by Telegram, never delivery (outbound.ts).
-  return id ? { ok: true, externalMessageId: telegramMessageRef(chatId, id) } : { ok: false, code: 'unexpected_response', retryable: false };
+  return id ? { ok: true, externalMessageId: telegramMessageRef(chatId, id) } : { ok: false, code: 'send_unknown', retryable: false };
 }
 
 /**

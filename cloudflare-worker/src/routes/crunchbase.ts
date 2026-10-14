@@ -64,7 +64,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
       }, 429);
     }
     if (e instanceof CrunchbaseUnauthorized) {
-      await c.env.DB.prepare('UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      await c.env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .bind('unauthorized', conn.row.id).run();
       // Returned as 412 (not 401) so the SPA's global session-expiry
       // handler doesn't force-logout the user on a domain credential

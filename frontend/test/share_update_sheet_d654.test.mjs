@@ -138,6 +138,9 @@ test('Grow\'s header opens the sheet, and /updates/:uid is routed', () => {
   assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
   assert.match(route, /<ShareUpdateSheet projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>/);
   assert.match(route, /\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`, \{ replace: true \}\)/);
+  // D686 §5.4: the mount also re-reads the cycle page after a change (Build's Connect a tool), on close.
+  assert.match(route, /<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\} onDone=\{onDone\}\s*onChanged=\{\(\) => \{ dirty\.current = true; \}\} \/>/);
+  assert.match(route, /if \(dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}/);
   assert.match(readFileSync('frontend/src/App.jsx', 'utf8'), /path="\/updates\/:uid" element=\{guard\(\[[^\]]+\], <SentUpdatePage \/>\)\}/);
 });
 

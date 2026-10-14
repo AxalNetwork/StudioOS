@@ -93,6 +93,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/templates/components',       'landing-page section blocks'],
   ['cloudflare-worker/src/middleware',        'the gates every request passes'],
   ['cloudflare-worker/src/util',              'small shared helpers'],
+  ['cloudflare-worker/src/integrations',      'the connector framework — registry, credentials, OAuth state, company scope, module doors'],
   ['cloudflare-worker/src/integrations/providers', 'third-party provider clients'],
   ['cloudflare-worker/src/services/advisor',  'the advisor state machine'],
   ['cloudflare-worker/src/services/advisor/banks', 'its question banks'],

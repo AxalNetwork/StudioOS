@@ -149,7 +149,7 @@ test('Yours: search, filter, sort, and a count with pages', () => {
 });
 
 test('Discover: the chips, the sections, and each card’s corner and pill', () => {
-  assert.deepEqual(discoverChips(CAT), ['All', 'Suggested for you', 'CRM', 'Payments', 'Calendar', 'Messaging', 'Cap table', 'Data']);
+  assert.deepEqual(discoverChips(CAT), ['All', 'Suggested for you', 'CRM', 'Payments', 'Calendar', 'Calendar and workspace', 'Messaging', 'Cap table', 'Data'], 'Google Calendar and Microsoft 365 sit in Calendar and workspace (D686 §3.1 item 6)');
   const all = discoverSections(CAT, 'All');
   assert.deepEqual(all.map((s) => s.title), ['Top connectors', 'Coming soon']);
   assert.deepEqual(all[1].cards.map((p) => p.key), ['salesforce', 'affinity']);
@@ -194,10 +194,34 @@ test('a provider’s sign-in return: which sheet opens, on which view, and what 
 
 test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on Connectors with its query, and opens the sheet', () => {
   // Every place a provider's sign-in returns to, as the Worker writes it.
+  // D686 (#1592): the connector callback returns through one destination,
+  // read from the signed state. It is still /integrations unless that state
+  // says build, so every legacy return below keeps landing here.
   const integrations = read('cloudflare-worker/src/routes/integrations.ts');
-  assert.match(integrations, /c\.redirect\(`\/integrations\?oauth=ok&provider=\$\{encodeURIComponent\(provider\)\}`\)/);
-  assert.match(read('cloudflare-worker/src/routes/calendar.ts'), /returnTo === 'integrations' \? `\$\{base\}\/integrations`/);
-  assert.match(read('cloudflare-worker/src/routes/linkedin.ts'), /returnTo === 'integrations' \? '\/integrations'/);
+  const base = integrations.match(/export function returnBase\(extra: [^)]*\): string \{\n([\s\S]*?)\n\}/);
+  assert.ok(base, 'integrations.ts defines returnBase(extra)');
+  const returnBase = new Function('extra', base[1]);
+  for (const extra of [undefined, null, {}, { return_to: 'integrations' }, { return_to: 'https://evil.example' }, { return_to: '/x' }, { return_to: 'BUILD' }]) {
+    assert.equal(returnBase(extra), '/integrations', `${JSON.stringify(extra)} returns to /integrations`);
+  }
+  assert.equal(returnBase({ return_to: 'build' }), '/build/connect');
+  assert.match(integrations, /const destination = returnBase\(consumed\?\.extra\);/);
+  assert.match(integrations, /c\.redirect\(`\$\{destination\}\?oauth=ok&provider=\$\{encodeURIComponent\(provider\)\}`\)/);
+  // Every callback redirect (ok, provider error, company not linked,
+  // rolling out, scope overreach, a failed connect) goes through it.
+  const redirects = integrations.match(/c\.redirect\([^\n]*/g) || [];
+  assert.equal(redirects.length, 6, 'the six callback redirects');
+  for (const r of redirects) assert.match(r, /^c\.redirect\(`\$\{destination\}\?oauth=(ok|error|rolling_out)&provider=\$\{encodeURIComponent\(provider\)\}/, r);
+  for (const reason of ['company_not_linked', 'scope_overreach']) {
+    assert.ok(redirects.some(r => r.includes(`&reason=${reason}\``)), `${reason} redirects through the destination`);
+  }
+  assert.ok(redirects.some(r => r.includes('?oauth=rolling_out&')), 'rolling_out redirects through the destination');
+  const calendar = read('cloudflare-worker/src/routes/calendar.ts');
+  assert.match(calendar, /returnTo === 'integrations' \? `\$\{base\}\/integrations`/);
+  assert.match(calendar, /returnTo === 'build' \? `\$\{base\}\/build\/connect`/);
+  const linkedin = read('cloudflare-worker/src/routes/linkedin.ts');
+  assert.match(linkedin, /returnTo === 'integrations' \? '\/integrations'/);
+  assert.match(linkedin, /returnTo === 'build' \? '\/build\/connect'/);
   for (const search of ['?oauth=ok&provider=stripe', '?google=connected', '?microsoft=connected', '?linkedin=connected']) {
     const to = connectorsRedirect({ search, hash: '#x' });
     assert.deepEqual(to, { pathname: '/account/connectors', search, hash: '#x' });
@@ -242,7 +266,9 @@ test('Build’s tools: grouped by category, filtered, with the failing banner be
   assert.equal(toolState(byKey('salesforce')), 'soon');
   assert.equal(toolState(byKey('microsoft')), 'unavailable');
   const all = toolGroups(CAT);
-  assert.deepEqual(all.groups.map((g) => g.label), ['CRM', 'Payments', 'Calendar', 'Messaging', 'Cap table', 'Data']);
+  assert.deepEqual(all.groups.map((g) => g.label), ['Payments', 'CRM', 'Calendar and workspace', 'Calendar', 'Messaging', 'Cap table', 'Data'], 'Build\'s order (D686 §5.4), not the Connectors chips\'');
+  assert.deepEqual(toolGroups(CAT, { pin: 'Cap table' }).groups.map((g) => g.label)[0], 'Cap table', 'the failing tool\'s group first');
+  assert.deepEqual(toolGroups(CAT, { pin: 'Nowhere' }).groups.map((g) => g.label), all.groups.map((g) => g.label), 'an absent pin changes nothing');
   assert.equal(all.total, CAT.length);
   assert.deepEqual(toolGroups(CAT, { filter: 'Failing' }).groups.map((g) => g.rows.map((p) => p.key)), [['hubspot']]);
   assert.deepEqual(toolGroups(CAT, { filter: 'Connected' }).groups.flatMap((g) => g.rows.map((p) => p.key)), ['stripe', 'google', 'slack']);
@@ -282,7 +308,7 @@ test('yoursEmpty, loading, unreadable, noresults and an unread connection list e
 test('discover and discoverCat: chips, sections, corners, the Notify-me state and the Coming-soon pill', () => {
   const out = html(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
   const t = text(out);
-  assert.match(t, /All Suggested for you CRM Payments Calendar Messaging Cap table Data/);
+  assert.match(t, /All Suggested for you CRM Payments Calendar Calendar and workspace Messaging Cap table Data/);
   assert.match(t, /Top connectors \d+[\s\S]*Coming soon 2/);
   assert.match(out, /data-testid="connector-card-calendly" data-action="add"/);
   assert.match(out, /data-testid="connector-card-stripe" data-action="connected"/);
@@ -390,11 +416,12 @@ test('Build’s "Connect a tool": list, failed, locked and loading', () => {
   assert.match(t, /CRM Affinity .*Coming soon HubSpot Sign-in expired · last good sync \d+ days? ago Failing Reconnect/);
   assert.match(t, /Microsoft 365 Calendar, Two-way sync Not set up here/);
   assert.match(t, /LinkedIn .* Status unreadable/);
-  assert.match(t, /Salesforce Salesforce cap one, Salesforce cap two Coming soon/);
-  assert.match(t, /Payments Stripe Stripe cap one, Stripe cap two · synced \d+ (min|h) ago Connected Manage|Payments Stripe .* Connected Manage/);
-  assert.match(t, /Cap table Carta Carta cap one, Carta cap two Studio Upgrade/);
+  assert.match(t, /Salesforce What it will feed is not recorded Coming soon/, 'D686 §5.4: a coming-soon row says what it will feed, or that it is not recorded');
+  assert.match(t, /Sorted by category · 1–\d+ of \d+ CRM /, 'the failing tool\'s group first while the failed banner shows');
+  assert.match(t, /Payments Stripe Stripe cap one, Stripe cap two · synced \d+ (min|h|days?) ago Connected Disconnect/, 'D686 §3.1 item 2: a connected row offers Disconnect');
+  assert.match(t, /Cap table Carta Carta cap one, Carta cap two Studio Upgrade to Studio/, 'the real tier, never "Pro"');
   assert.match(t, /Calendar Calendly .* Not connected Connect/);
-  assert.match(t, /Google Calendar Calendar, Gmail invites · last sync not recorded Connected Manage/);
+  assert.match(t, /Google Calendar Calendar, Gmail invites · last sync not recorded Connected Disconnect/);
   const locked = html(h(ConnectToolView, { data: ready(CAT.filter((p) => p.key !== 'hubspot')), onClose() {} }));
   assert.match(locked, /data-testid="connect-tool-locked"[^>]*>Cap table connections are part of the Studio plan\./);
   assert.match(text(html(h(ConnectToolView, { data: { status: 'loading', catalogue: [], reload() {} }, onClose() {} }))), /Loading tools…/);
@@ -417,7 +444,8 @@ test('the doors: the user menu under Usage, the Account section after Usage, and
   const build = read('frontend/src/pages/cycles/CycleRoute.jsx');
   const def = build.slice(build.indexOf('\n  build: {'), build.indexOf('\n};', build.indexOf('\n  build: {')));
   assert.match(def, /path: 'connect',\s*Mount: BuildMount,\s*action: \(q, open\) => \(\{ label: 'Connect a tool', href: `\/build\/connect\$\{q\}`, onOpen: open \}\),/);
-  assert.match(build, /function BuildMount\(\{ onClose \}\) \{\s*return <ConnectToolSheet onClose=\{onClose\} \/>;/);
+  // D686 §5.4 (#1597): the sheet connects for the project's company and tells the page a tool changed.
+  assert.match(build, /function BuildMount\(\{ projectId, onClose, onChanged \}\) \{\s*return <ConnectToolSheet projectId=\{projectId\} onClose=\{onClose\} onChanged=\{onChanged\} \/>;/);
   assert.match(build, /import ConnectToolSheet from '\.\.\/account\/ConnectToolSheet';/);
   assert.match(build, /\{lightbox && Mount && projectId && \(\s*<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\}/);
 });

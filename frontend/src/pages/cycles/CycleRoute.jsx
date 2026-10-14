@@ -21,6 +21,7 @@ import CycleOverview from './CycleOverview';
 import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
+import ToolsHistory from './ToolsHistory';
 import RecordFormSheet from './RecordFormSheet';
 import { editFor, formFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
@@ -215,6 +216,10 @@ const CYCLE_DEFS = {
     path: 'connect',
     Mount: BuildMount,
     action: (q, open) => ({ label: 'Connect a tool', href: `/build/connect${q}`, onOpen: open }),
+    // D686 §5.4: Operating systems' Tools history, anchored at #tools.
+    parts: toFnMap({
+      'operating-systems': (data) => <ToolsHistory tools={data?.parts?.tools} />,
+    }),
     tools: toFnMap({
       'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
       'founding-team': () => ({ label: 'Open the cap table and vesting', href: '/raise/capital/cap-table' }),
@@ -319,8 +324,10 @@ export function underSlug(path, cycle = 'validate', action = 'record') {
 function ValidateMount({ projectId, searchParams, onClose, onDone }) {
   return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} />;
 }
-function BuildMount({ onClose }) {
-  return <ConnectToolSheet onClose={onClose} />;
+// D686 §5.4 (#1597): the sheet connects for this project's company, and a
+// change re-reads the Build page once the lightbox closes.
+function BuildMount({ projectId, onClose, onChanged }) {
+  return <ConnectToolSheet projectId={projectId} onClose={onClose} onChanged={onChanged} />;
 }
 function RaiseMount({ projectId, onClose }) {
   return <RoundCallSheet projectId={projectId} onClose={onClose} />;
@@ -497,7 +504,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
         onQuery={setQuery}
         action={action}
         add={fnOf(def.add, slug)?.(q, openAction) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
-        rowAction={edit && projectId ? (row) => (edit.idOf(row) == null ? null : {
+        rowAction={edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => setEditing(row),
@@ -547,6 +554,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
         )}
         {edit && editing && projectId && edit.idOf(editing) != null && (
           <RecordFormSheet key={String(editing.id)} form={edit} current={edit.valuesOf(editing)} cycle={name}
+            loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
             onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
             onSaved={() => setReload((n) => n + 1)}
             onClose={() => setEditing(null)} />
