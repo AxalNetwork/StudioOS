@@ -444,3 +444,14 @@ test('D686: the preview opens with "<Venture> · October" once the context names
   assert.match(sheet({ step: 5, period, context: { ...base.context, project: { name: 'Acme' } } }).text, /Acme · October/);
   assert.doesNotMatch(sheet({ step: 5, period }).text, / · October[^ ]/);
 });
+
+test('D686: no metrics offers Connect a tool as a button, with figures by hand as the second way', () => {
+  const html = sheet({ step: 1, metrics: [], context: { ...base.context, metrics: [], no_metrics: true }, projectId: 7 }).html;
+  assert.match(html, /<button type="button" class="[^"]*bg-violet-600[^"]*">Connect a tool<\/button>/, 'a primary button, not a link');
+  assert.match(html, /<a [^>]*class="[^"]*border-axal-hairline[^"]*"[^>]*href="\/build\/metrics\?project_id=7"[^>]*>Enter figures by hand<\/a>|<a [^>]*href="\/build\/metrics\?project_id=7"[^>]*class="[^"]*border-axal-hairline[^"]*"[^>]*>Enter figures by hand<\/a>/);
+  const src = readFileSync('frontend/src/pages/founder/ShareUpdateSheet.jsx', 'utf8');
+  assert.match(src, /onClick=\{on\.connectTool\}>Connect a tool<\/button>/);
+  assert.match(src, /connectTool: \(\) => set\(\{ connecting: true \}\)/);
+  assert.match(src, /\{s\.connecting && <ConnectToolSheet projectId=\{projectId\} onClose=\{\(\) => \{ set\(\{ connecting: false \}\); loadContext\(s\.period\); \}\} \/>\}/,
+    'Build\'s lightbox stacks on top, and closing it re-reads the period');
+});

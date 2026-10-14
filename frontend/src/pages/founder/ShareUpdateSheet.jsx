@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ActionSheet, { primary as PRIMARY, ghost as GHOST } from '../../ui/ActionSheet';
 import { shareUpdateApi } from '../../lib/api/shareUpdate.js';
+import ConnectToolSheet from '../account/ConnectToolSheet';
 
 /**
  * Grow › Share an update (D654, #1466), to `design/incoming/Cycle Action.dc.html`,
@@ -212,8 +213,11 @@ export function ShareUpdateView({ s, on }) {
   if (step === 1) {
     if (ctx?.no_metrics || !s.metrics.some((m) => m.value != null)) {
       banner = 'No metrics are connected yet. The update still sends, with the metrics left out.';
-      // "Connect a tool" opens Build's lightbox once S02-B lands; until then only the hand route is drawn.
-      body = <ul><li className={ROW}><div><div className="font-semibold">Connect Stripe or accounting</div><div className="text-axal-muted">Then figures fill in here each month.</div></div><Link className={GHOST} to={`/build/metrics?project_id=${encodeURIComponent(s.projectId ?? '')}`}>Enter figures by hand</Link></li></ul>;
+      // D686 §5.8 item 5: "Connect a tool" opens Build's Connect a tool lightbox on top
+      // (S02-B, #1597); closing it re-reads the context. By hand stays the second way.
+      body = <ul><li className={ROW}><div><div className="font-semibold">Connect Stripe or accounting</div><div className="text-axal-muted">Then figures fill in here each month.</div></div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2"><button type="button" className={PRIMARY} onClick={on.connectTool}>Connect a tool</button>
+          <Link className={GHOST} to={`/build/metrics?project_id=${encodeURIComponent(s.projectId ?? '')}`}>Enter figures by hand</Link></div></li></ul>;
     } else {
       const removed = s.removedMetrics || [];
       body = (
@@ -377,6 +381,7 @@ export default function ShareUpdateSheet({ projectId, onClose, onSent }) {
 
   const on = {
     close: onClose,
+    connectTool: () => set({ connecting: true }),
     period: (p) => set({ period: p }),
     removeMetric: (key) => set((p) => ({ removedMetrics: [...p.removedMetrics.filter((k) => k !== key), key] })),
     restoreMetric: (key) => set((p) => ({ removedMetrics: p.removedMetrics.filter((k) => k !== key) })),
@@ -401,5 +406,9 @@ export default function ShareUpdateSheet({ projectId, onClose, onSent }) {
       return set((p) => ({ step: p.step + 1, error: '' }));
     },
   };
-  return <ShareUpdateView s={s} on={on} />;
+  return (<>
+    <ShareUpdateView s={s} on={on} />
+    {/* A second lightbox on the stack; closing it re-reads the period's metrics. */}
+    {s.connecting && <ConnectToolSheet projectId={projectId} onClose={() => { set({ connecting: false }); loadContext(s.period); }} />}
+  </>);
 }
