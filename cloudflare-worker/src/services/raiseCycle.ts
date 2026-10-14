@@ -1086,3 +1086,25 @@ export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Prom
   'use-of-funds': fundsRecords,
   'capital-relationships': capitalRecords,
 };
+
+/** D686 #1594: the venture's Calls history, separate from the founder-only list route. */
+export async function callsHistory(ctx: Ctx) {
+  if (!roundCallsEnabled(ctx.env)) return {enabled:false};
+  try {
+    const rows = await ctx.env.DB.prepare(
+      `SELECT c.uid,c.name,c.state,c.sent_at,c.target_close,c.amount_cents,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id) AS recipients,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.opened_at IS NOT NULL) AS opened,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.data_room_requested_at IS NOT NULL) AS data_room_requests,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.commitment_cents IS NOT NULL) AS commitments,
+        (SELECT COALESCE(SUM(r.commitment_cents),0) FROM round_call_recipients r WHERE r.call_id=c.id) AS committed_cents,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.responded_at IS NOT NULL) AS responded,
+        (SELECT COUNT(*) FROM round_call_questions q WHERE q.call_id=c.id AND q.answer IS NULL) AS unanswered_questions
+       FROM round_calls c WHERE c.project_id=? ORDER BY c.created_at DESC,c.id DESC`,
+    ).bind(ctx.projectId).all<{state:string;target_close:string} & Record<string,unknown>>();
+    return {enabled:true,items:(rows.results || []).map(row=>({...row,
+      effective_state:row.state==='sent'?(row.target_close>=ctx.today?'open':'expired'):row.state}))};
+  } catch {
+    return {state:'unreadable'};
+  }
+}

@@ -1,0 +1,42 @@
+name: Round call Worker contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cloudflare-worker/src/services/roundCalls.ts'
+      - 'cloudflare-worker/src/services/roundCallPolicy.ts'
+      - 'cloudflare-worker/src/services/raiseCycle.ts'
+      - 'cloudflare-worker/src/routes/round_calls.ts'
+      - 'cloudflare-worker/src/routes/cycle_raise.ts'
+      - 'cloudflare-worker/sql/migrations/*round_call*'
+      - 'cloudflare-worker/test/round_calls_d653.test.ts'
+      - 'cloudflare-worker/test/round_call_policy_d653.test.ts'
+      - 'cloudflare-worker/test/cycle_raise_d663.test.ts'
+      - '.github/workflows/round-call-worker-contracts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: round-call-worker-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Round call policy and Worker contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare-worker/package-lock.json
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+      - name: Policies and real round-call requests
+        run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/round_call_policy_d653.test.ts cloudflare-worker/test/round_calls_d653.test.ts
+      - name: Raise cycle reads
+        run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/cycle_raise_d663.test.ts

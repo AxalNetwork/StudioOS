@@ -463,6 +463,7 @@ test('a database migrated before 442 gets the version columns and loses the two-
 function callFixture() {
   const db = fixture();
   db.exec(sqlOf('436_round_calls.sql'));
+  db.exec(sqlOf('456_round_call_counsel_terms.sql'));
   const u = db.prepare("INSERT INTO users (id, role, name, email, is_active, kyc_status) VALUES (?, 'investor', ?, ?, 1, 'approved')");
   u.run(71, 'Rhea Responder', 'rhea@example.test');
   u.run(72, 'Quinn Quiet', 'quinn@example.test');
@@ -523,4 +524,73 @@ test('with the flag off the call tables are not read: a database without them st
   try {
     assert.equal(card((await overview(db)).body, 'capital-relationships').state, 'unreadable', 'the flag on reads them, so the missing table is said, not hidden');
   } finally { FLAGS = {}; }
+});
+
+
+test('D686 #1594: Calls history is scoped, newest first, with independent recipient/question counts and UTC effective states',async()=>{
+  const db=callFixture();FLAGS={ROUND_CALLS_ENABLED:'true'};
+  try {
+    db.exec("UPDATE round_calls SET created_at='2020-01-01T00:00:00Z'; UPDATE round_call_recipients SET opened_at='2026-10-10',data_room_requested_at='2026-10-11' WHERE call_id=1 AND investor_user_id=71");
+    const ins=db.prepare("INSERT INTO round_calls(uid,project_id,name,amount_cents,instrument,terms,minimum_cheque_cents,target_close,state,terms_hash,created_by,created_at) VALUES(?,1,?,100000000,'safe','Cap',2500000,?,?, 'h',?,?)");
+    for(const [uid,state,close,at] of [
+      ['draft','draft','2999-01-01','2020-01-02'],['paused','awaiting_counsel','2999-01-01','2020-01-03'],
+      ['expired','sent','2000-01-01','2020-01-04'],['closed','closed','2000-01-01','2020-01-05'],
+    ])ins.run(uid,uid,close,state,FOUNDER,at);
+    db.exec("INSERT INTO round_call_questions(uid,call_id,investor_user_id,question,answer) VALUES('q1',1,71,'One?',NULL),('q2',1,71,'Two?','Answered'),('q3',1,72,'Three?',NULL)");
+    const res=await moduleRead(db,'capital-relationships','',ADMIN);
+    const calls=res.body.parts.calls;
+    assert.deepEqual([res.status,calls.enabled,calls.items.map((i:any)=>[i.uid,i.effective_state])],
+      [200,true,[['closed','closed'],['expired','expired'],['paused','awaiting_counsel'],['draft','draft'],['call-1','open']]]);
+    const sent=calls.items.find((r:any)=>r.uid==='call-1');
+    assert.deepEqual([sent.recipients,sent.opened,sent.data_room_requests,sent.commitments,sent.committed_cents,sent.responded,sent.unanswered_questions],
+      [3,1,1,2,9000000,2,2]);
+    assert.deepEqual([calls.items[0].recipients,calls.items[0].committed_cents,calls.items[0].unanswered_questions],[0,0,0]);
+    assert.equal(JSON.stringify(calls).includes('rhea@example.test')||JSON.stringify(calls).includes('Quinn Quiet'),false);
+    assert.equal((await moduleRead(db,'capital-relationships','',OTHER)).status,403);
+    assert.equal(Object.hasOwn((await moduleRead(db,'use-of-funds')).body,'parts'),false,'only Capital relationships gains Calls');
+  } finally {FLAGS={};}
+  assert.deepEqual((await moduleRead(db,'capital-relationships')).body.parts.calls,{enabled:false});
+});
+
+test('D686 #1594: unreadable Calls stays an explicit part, and the flag off never reads the call tables',async()=>{
+  const db=fixture();
+  assert.deepEqual((await moduleRead(db,'capital-relationships')).body.parts.calls,{enabled:false});
+  FLAGS={ROUND_CALLS_ENABLED:'true'};
+  try {
+    const res=await moduleRead(db,'capital-relationships');
+    assert.equal(res.status,200);
+    assert.deepEqual(res.body.parts.calls,{state:'unreadable'});
+  } finally {FLAGS={};}
+});
+
+test('D686 #1594 Calls history mutations: flag, project scope, date, counts and source failure are observable',async()=>{
+  const {stripTypeScriptTypes}=await import('node:module');
+  const file=new URL('../src/services/raiseCycle.ts',import.meta.url),source=readFileSync(file,'utf8');
+  const real=await import('../src/services/raiseCycle.ts');
+  const cases=[
+    ["if (!roundCallsEnabled(ctx.env)) return {enabled:false};","if (false) return {enabled:false};",'flag'],
+    ['FROM round_calls c WHERE c.project_id=? ORDER BY c.created_at DESC,c.id DESC','FROM round_calls c WHERE ? IS NOT NULL ORDER BY c.created_at DESC,c.id DESC','scope'],
+    ["row.target_close>=ctx.today?'open':'expired'","true?'open':'expired'",'date'],
+    ['COALESCE(SUM(r.commitment_cents),0)','COUNT(*)','sum'],
+    ["return {state:'unreadable'};","return {enabled:true,items:[]};",'unreadable'],
+  ];
+  const check=async(api:any,which:string)=>{
+    if(which==='flag'){assert.deepEqual(await api.callsHistory({env:env(fixture()),projectId:P,today:'2026-10-14'}),{enabled:false});return;}
+    const db=which==='unreadable'?fixture():callFixture();
+    if(which==='date')db.exec("UPDATE round_calls SET target_close='2000-01-01' WHERE id=1");
+    const c:any=await api.callsHistory({env:{...env(db),ROUND_CALLS_ENABLED:'true'},projectId:P,today:'2026-10-14'});
+    if(which==='unreadable'){assert.deepEqual(c,{state:'unreadable'});return;}
+    if(which==='scope')assert.deepEqual(c.items.map((i:any)=>i.uid),['call-1']);
+    if(which==='date')assert.equal(c.items[0].effective_state,'expired');
+    if(which==='sum')assert.equal(c.items[0].committed_cents,9000000);
+  };
+  for(const [index,[before,after,which]] of cases.entries()) {
+    assert.ok(source.includes(before),'mutation target exists');
+    let js=stripTypeScriptTypes(source.replace(before,after),{mode:'strip'});
+    js=js.replace(/^((?:import\s+[^'";]+|export\s*\{[^}]*\})\s+from\s*['"])([^'"]+)(['"])/gm,
+      (_all,prefix,spec,quote)=>prefix+(spec.startsWith('.')?new URL(/\.[mc]?[jt]s$/.test(spec)?spec:spec+'.ts',file).href:import.meta.resolve(spec))+quote);
+    const bad=await import('data:text/javascript;base64,'+Buffer.from(js+'\n// calls history '+index).toString('base64'));
+    await check(real,which);
+    await assert.rejects(()=>check(bad,which),{name:'AssertionError'});
+  }
 });
