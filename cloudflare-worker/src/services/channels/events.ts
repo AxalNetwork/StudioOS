@@ -14,6 +14,8 @@
  * number in base64, and equality is all any of these lookups need.
  */
 import type { Env } from '../../types';
+import { indexHmac } from '../columnCipher';
+import { withDeadline } from '../../util/deadline';
 import { sha256Hex } from '../../rpc/secret';
 import { CHANNEL_LIMITS, type ChannelProvider } from './types';
 
@@ -132,4 +134,16 @@ export async function readCappedBody(req: Request, max: number = CHANNEL_LIMITS.
   let at = 0;
   for (const chunk of chunks) { out.set(chunk, at); at += chunk.byteLength; }
   return out.buffer;
+}
+
+/** One atomic count per hashed subject/hour. A D1 error throws: never fail open. */
+export async function linkAttemptOverLimit(env: Env, subject: string, limit: number, now = new Date()): Promise<boolean> {
+  const hash = await indexHmac(env, 'channel_link_attempts', 'subject_hash', subject);
+  const row = await withDeadline(env.DB.prepare(
+    `INSERT INTO channel_link_attempts (subject_hash, window_start, n) VALUES (?, ?, 1)
+     ON CONFLICT (subject_hash, window_start) DO UPDATE SET n = n + 1
+     RETURNING n`,
+  ).bind(hash, now.toISOString().slice(0, 13) + ':00:00.000Z').first<{ n: number }>(), 2_000, 'channel-link-limit');
+  if (!row) throw new Error('channel_link_counter_unavailable');
+  return Number(row.n) > limit;
 }

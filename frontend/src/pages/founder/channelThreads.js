@@ -154,7 +154,7 @@ export function replyFailureText(error) {
  * waiting on the provider (`send_in_flight`, the key is kept so the next press
  * only asks again), or cut off before the provider answered (`send_unknown`,
  * and an answer with no status Axal can read). The member is told to look in
- * the chat before sending it again, and the key is dropped so they can. It is
+ * the chat; the key is retained so another press checks the same attempt. It is
  * never called sent: Axal claims "Sent" only on a provider's word.
  */
 export function replyOutcome(provider, r) {
@@ -165,7 +165,7 @@ export function replyOutcome(provider, r) {
   if (r?.code === 'send_in_flight') {
     return { ok: null, keepKey: true, text: `Sending… ${name} has not confirmed it yet. Press Send again in a moment to check: it will not send twice.` };
   }
-  return { ok: null, keepKey: false, text: `Not confirmed yet: check the chat in ${name} before sending again. If it is not there, press Send to send it again.` };
+  return { ok: null, keepKey: true, text: `Not confirmed yet: check the chat in ${name}. Press Send to check this attempt again; it will not send twice.` };
 }
 
 export function newClientKey() {

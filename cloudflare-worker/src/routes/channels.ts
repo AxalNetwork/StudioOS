@@ -51,8 +51,8 @@
  * Only the text is kept; the audio is never stored.
  *
  * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
- * account, and that account's own `/confirm`, after the bot has named the Axal
- * account it would join, links it (telegram.ts says why).
+ * account, and that account's own `/confirm` plus the member's Confirm in Axal
+ * must both arrive within the original ten-minute code lifetime.
  *
  * Nothing here returns or logs message text, a phone number, a token or a
  * platform secret. Refusals carry a code and a sentence we wrote.
@@ -61,18 +61,17 @@ import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, requireSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
-import { withDeadline } from '../util/deadline';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { IntakeError, activeMember } from '../services/interviewIntake';
 import {
-  claimEvent, connectionOverLimit, finishEvent, finishEventStatement, readCappedBody, releaseEvent, reserveTranscription,
+  claimEvent, connectionOverLimit, linkAttemptOverLimit, finishEvent, finishEventStatement, readCappedBody, releaseEvent, reserveTranscription,
   type EventFields, type EventKind, type EventStatus,
 } from '../services/channels/events';
 import {
   availability, connectionForTelegram, connectionForWhatsApp, memberConnection, providerAvailable, type ChannelConnection,
 } from '../services/channels/connections';
-import { createLinkCode } from '../services/channels/linkCodes';
+import { createLinkCode, pendingLinkView } from '../services/channels/linkCodes';
 import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
 import {
   applyDelete, applyEdit, assignThread, forgetConnection, inInterview, listThreads, noteVoiceTry, queueVoiceTranscriptions, readThread,
@@ -102,8 +101,11 @@ const THREAD_STATUSES = new Set(['pending', 'assigned', 'ignored']);
 
 /** Our sentence for each code a route or a provider call can end in. */
 const SENTENCE: Record<string, string> = {
+  link_limit_unavailable: 'Axal cannot check link attempts right now. Wait a moment and try again; nothing was linked.',
   not_available: 'This channel is not available on Axal yet.',
   not_configured: 'This channel is not set up on Axal yet.',
+  identity_taken: 'This Telegram account is already linked to another Axal account. Disconnect it there first.',
+  link_cancelled: 'This Telegram link was replaced or cancelled. Request a new link.',
   not_connected: 'Connect this account in Account › Connectors first.',
   unknown_provider: 'That is not a messaging channel Axal connects.',
   rate_limited: 'Too many attempts right now. Try again in a little while.',
@@ -172,29 +174,6 @@ const parseJson = (s: string | null): Record<string, unknown> => {
 /** A D1 or ISO timestamp, in ms; NaN when unreadable. */
 const ms = (s: string | null | undefined) => (s ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`) : NaN);
 
-/**
- * A KV counter (middleware/rateLimit.ts's pattern), for the link-attempt limits
- * only: a few attempts an hour per IP or Telegram account. KV takes one write
- * per key per second, so a KV counter cannot count faster than that — the
- * per-connection webhook limit is a D1 counter (`connectionOverLimit`). Fails
- * OPEN: a KV outage must not lock a member out of linking.
- */
-async function overLimit(env: Env, key: string, limit: number, windowSec: number): Promise<boolean> {
-  const kv = env.RATE_LIMITS;
-  if (!kv) return false;
-  const bucket = `${key}:${Math.floor(Date.now() / 1000 / windowSec)}`;
-  try {
-    const n = await withDeadline((async () => {
-      const next = (parseInt((await kv.get(bucket)) || '0', 10) || 0) + 1;
-      await kv.put(bucket, String(next), { expirationTtl: Math.max(60, windowSec) });
-      return next;
-    })(), 2_000, 'channels-ratelimit');
-    return n > limit;
-  } catch {
-    return false;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Availability and connections
 // ---------------------------------------------------------------------------
@@ -249,16 +228,33 @@ channels.get('/', member(async (c, user) => {
   const pending = { telegram: 0, whatsapp: 0 } as Record<MessagingProvider, number>;
   for (const r of counts) if (r.provider === 'telegram' || r.provider === 'whatsapp') pending[r.provider] = Number(r.n) || 0;
 
-  return c.json({ providers, connections, pending });
+  return c.json({ providers, connections, pending, telegram_link: await pendingLinkView(env, user.id) });
 }));
 
 channels.post('/telegram/link', member(async (c, user) => {
   if (!providerAvailable(c.env, 'telegram')) return no(c, 503, 'not_available');
   const ip = c.req.header('cf-connecting-ip') || (c.req.header('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
-  if (await overLimit(c.env, `rl:ch:link:ip:${ip}`, 20, 3600)) return no(c, 429, 'rate_limited');
+  await activeMember(c.env, user.id);
+  try {
+    if (await linkAttemptOverLimit(c.env, `ip:${ip}`, 20)) return no(c, 429, 'rate_limited');
+  } catch { return no(c, 503, 'link_limit_unavailable'); }
   const { code, expiresAt } = await createLinkCode(c.env, user.id, 'telegram');
   const bot = String(c.env.TELEGRAM_CHANNEL_BOT_USERNAME ?? '').trim().replace(/^@/, '');
   return c.json({ code, url: `https://t.me/${encodeURIComponent(bot)}?start=${code}`, expires_at: expiresAt });
+}));
+
+
+channels.get('/telegram/link', member(async (c, user) => {
+  await activeMember(c.env, user.id);
+  return c.json({ claim: await pendingLinkView(c.env, user.id) });
+}));
+
+channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
+  const out = await telegram.confirmAxalTelegramLink(c.env, user.id, c.req.param('uid') ?? '');
+  if (!out.linked && out.reason === 'member_inactive') return no(c, 403, 'member_inactive');
+  if (!out.linked && out.reason === 'identity_taken') return no(c, 409, 'identity_taken');
+  if (!out.linked && out.reason === 'nothing_to_confirm') return no(c, 409, 'link_cancelled');
+  return c.json({ ok: true, linked: out.linked, claim: await pendingLinkView(c.env, user.id, c.req.param('uid') ?? '') });
 }));
 
 channels.post('/whatsapp/connect', member(async (c, user) => {
@@ -280,6 +276,7 @@ channels.delete('/:provider', member(async (c, user) => {
   const provider = c.req.param('provider') ?? '';
   if (!MESSAGING.has(provider)) return no(c, 404, 'unknown_provider');
   const env = c.env;
+  if (provider === 'telegram') await env.DB.prepare("UPDATE channel_link_codes SET cancelled_at = datetime('now') WHERE user_id = ? AND provider = 'telegram' AND activated_at IS NULL").bind(user.id).run();
   const row = await env.DB.prepare(
     `SELECT id, uid, status, credentials_enc, config_json, external_account_id FROM integrations WHERE user_id = ? AND provider_key = ?`,
   ).bind(user.id, provider).first<{
@@ -518,8 +515,15 @@ async function tell(env: Env, chatId: string, text: string): Promise<void> {
  * caller is Telegram, so the account, not an IP, is who is guessing.
  */
 async function handleLink(env: Env, claim: number, ev: InboundLink | InboundLinkConfirm): Promise<void> {
-  if (await overLimit(env, `rl:ch:link:tg:${ev.telegramUserId}`, 10, 3600)) {
-    await finishEvent(env, claim, 'ignored', { error: 'rate_limited' });
+  try {
+    if (await linkAttemptOverLimit(env, `telegram:${ev.telegramUserId}`, 10)) {
+      await finishEvent(env, claim, 'ignored', { error: 'rate_limited' });
+      await tell(env, ev.chatId, sentence('rate_limited'));
+      return;
+    }
+  } catch {
+    await finishEvent(env, claim, 'ignored', { error: 'link_limit_unavailable' });
+    await tell(env, ev.chatId, sentence('link_limit_unavailable'));
     return;
   }
   const copy = telegram.TELEGRAM_COPY;
@@ -539,6 +543,11 @@ async function handleLink(env: Env, claim: number, ev: InboundLink | InboundLink
   if (out.linked) {
     await finishEvent(env, claim, 'done', { userId: out.userId });
     await tell(env, ev.chatId, out.businessConnected ? copy.linkedConnected : copy.linked);
+    return;
+  }
+  if (out.reason === 'waiting_axal' || out.reason === 'waiting_telegram') {
+    await finishEvent(env, claim, 'done');
+    await tell(env, ev.chatId, out.reason === 'waiting_axal' ? copy.waitingAxal : copy.waitingTelegram);
     return;
   }
   await finishEvent(env, claim, 'ignored', { error: out.reason });

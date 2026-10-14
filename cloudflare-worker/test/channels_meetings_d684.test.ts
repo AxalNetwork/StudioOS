@@ -108,7 +108,7 @@ function world(over: Record<string, unknown> = {}) {
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql']) db.exec(mig(m));
+    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
   const jobs: any[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48),
