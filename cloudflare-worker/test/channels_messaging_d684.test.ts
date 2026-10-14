@@ -1810,7 +1810,7 @@ test('#1602 link attempts: atomic D1 counting trips despite KV 429s; missing D1 
   assert.deepEqual([issued.filter((r) => r.status === 200).length, issued.filter((r) => r.status === 429).length, kvCalls], [20, 5, 0]);
   const { linkAttemptOverLimit } = await import('../src/services/channels/events.ts');
   const checks = await Promise.all(Array.from({ length: 12 }, () => linkAttemptOverLimit(env, 'ip:203.0.113.17', 10, new Date('2026-10-14T12:05:00Z'))));
-  assert.deepEqual(checks, Array(10).fill(false).concat([true, true]));
+  assert.deepEqual([checks.filter((over) => !over).length, checks.filter(Boolean).length], [10, 2], 'concurrent callers may finish in any order');
   const rows = db.prepare('SELECT * FROM channel_link_attempts').all();
   assert.equal(JSON.stringify(rows).includes('203.0.113.17') || JSON.stringify(rows).includes('unknown'), false, 'raw IP is not stored');
   db.exec("UPDATE channel_link_attempts SET window_start = '2000-01-01T00:00:00.000Z'");
@@ -1880,4 +1880,36 @@ test('#1602 mutation tripwires: neither consent may be omitted, expiry/cancellat
     const counts = await Promise.all(Array.from({ length: 11 }, () => counter.linkAttemptOverLimit(counterEnv, 'ip:fixture', 10)));
     assert.throws(() => assert.deepEqual(counts, Array(10).fill(false).concat([true])), { name: 'AssertionError' });
   } finally { f.restore(); }
+});
+
+
+test('#1602 mutation tripwires: claim ownership, cancellation, encrypted names and private counter keys', async () => {
+  const { env, db } = await world();
+  const first = await createLinkCode(env, ME, 'telegram');
+  const uid = db.prepare('SELECT uid FROM channel_link_codes WHERE code_hash = ?').get(refCode(first.code)).uid;
+  const store = await import('../src/services/channels/linkCodes.ts');
+  assert.equal(await store.memberLinkClaim(env, OTHER, uid), null);
+  const unscoped = await deadlineMutant('../src/services/channels/linkCodes.ts',
+    "SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = 'telegram' AND uid = ?",
+    "SELECT * FROM channel_link_codes WHERE ? IS NOT NULL AND provider = 'telegram' AND uid = ?");
+  const stolen = await unscoped.memberLinkClaim(env, OTHER, uid);
+  assert.throws(() => assert.equal(stolen, null), { name: 'AssertionError' });
+
+  const cancelled = await deadlineMutant('../src/services/channels/linkCodes.ts',
+    'activated_at IS NULL AND cancelled_at IS NULL', 'activated_at IS NOT NULL AND cancelled_at IS NULL');
+  const next = await cancelled.createLinkCode(env, ME, 'telegram');
+  const oldResult = await store.consumeLinkCode(env, first.code, 'telegram', TG_ME);
+  assert.throws(() => assert.equal(oldResult, null), { name: 'AssertionError' });
+
+  const plaintext = await deadlineMutant('../src/services/channels/linkCodes.ts',
+    "await encryptColumn(env, 'channel_link_codes', 'claim_details_enc', codeRow.uid, JSON.stringify(details))",
+    "JSON.stringify(details)");
+  await plaintext.consumeLinkCode(env, next.code, 'telegram', TG_NEW, { display_name: 'Dana', username: '@dana_biz' });
+  const stored = db.prepare('SELECT claim_details_enc FROM channel_link_codes WHERE code_hash = ?').get(refCode(next.code)).claim_details_enc;
+  assert.throws(() => assert.equal(stored.includes('Dana') || stored.includes('dana_biz'), false), { name: 'AssertionError' });
+
+  const counter = await deadlineMutant('../src/services/channels/events.ts',
+    "const hash = await indexHmac(env, 'channel_link_attempts', 'subject_hash', subject);", "const hash = subject;");
+  await counter.linkAttemptOverLimit(env, 'ip:203.0.113.17', 10);
+  assert.throws(() => assert.equal(JSON.stringify(db.prepare('SELECT * FROM channel_link_attempts').all()).includes('203.0.113.17'), false), { name: 'AssertionError' });
 });
