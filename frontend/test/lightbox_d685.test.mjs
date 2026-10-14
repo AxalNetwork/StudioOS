@@ -195,7 +195,7 @@ test('the shell is wired the way the contract says: Tab handler on the dialog, n
   const src = readFileSync('frontend/src/ui/Lightbox.jsx', 'utf8');
   assert.match(src, /onKeyDown=\{onTab\}/);
   assert.match(src, /tabTarget\(list, document\.activeElement, e\.shiftKey\)/);
-  assert.match(src, /e\.key === 'Escape' && topmost\(id\)/);
+  assert.match(src, /if \(e\.key !== 'Escape' \|\| e\.defaultPrevented \|\| !topmost\(id\)\) return;/, 'only the top dialog acts, and never on an Escape already handled');
   assert.doesNotMatch(src, /createPortal/, 'a portal cannot be server-rendered, and a dialog that cannot be rendered cannot be tested');
   assert.doesNotMatch(src, /fetch\(|api\./, 'closing makes no server call');
   assert.match(src, /opener\.focus\?\.\(\)/);

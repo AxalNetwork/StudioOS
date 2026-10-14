@@ -4,8 +4,12 @@
  *
  *   · `FOCUSABLE`      what Tab may land on inside the dialog.
  *   · `tabTarget`      where Tab / Shift+Tab goes, so focus never leaves.
- *   · `lockScroll`     the page behind stops scrolling; counted, so two open
- *                      dialogs release it only when the last one closes.
+ *   · `tabbable`       the controls Tab may reach now, inside the innermost
+ *                      modal dialog of the box (D686): drawn, not inert, not
+ *                      hidden. Re-read on every Tab.
+ *   · `lockScroll`     the page behind stops scrolling, the body and the
+ *                      shell's own scroller (`[data-app-scroll]`); counted, so
+ *                      two open dialogs release it only when the last closes.
  *   · `inertOutside`   everything that is not the dialog becomes inert and
  *                      hidden from a screen reader, and is put back on close.
  *   · `topmost`        a stack, so Escape closes only the dialog on top.
@@ -37,14 +41,53 @@ export function tabTarget(focusables, active, shift) {
   return null;
 }
 
-/** Lock the body's scroll. Returns the release function. Ref-counted. */
+/**
+ * The controls Tab may land on inside `box`, in order. The scope is the
+ * innermost `[aria-modal="true"]` inside the box, so a dialog opened over the
+ * lightbox keeps Tab to itself. A control is drawn when it has a client rect
+ * (`offsetParent` is null for every `position: fixed` element, which would
+ * drop a nested fixed dialog's buttons); one under an `[inert]` or `[hidden]`
+ * ancestor is skipped. `active` is kept even when it has no rect, so focus on
+ * it is never lost.
+ */
+export function tabbable(box, active = null) {
+  if (!box || typeof box.querySelectorAll !== 'function') return [];
+  const modals = Array.from(box.querySelectorAll('[aria-modal="true"]'));
+  const scope = modals.length ? modals[modals.length - 1] : box;
+  const blocked = (n) => {
+    for (let p = n; p && p !== box; p = p.parentNode) {
+      if (typeof p.hasAttribute === 'function' && (p.hasAttribute('inert') || p.hasAttribute('hidden'))) return true;
+    }
+    return false;
+  };
+  return Array.from(scope.querySelectorAll(FOCUSABLE)).filter((n) => {
+    if (n === active) return true;
+    if (blocked(n)) return false;
+    return typeof n.getClientRects !== 'function' || n.getClientRects().length > 0;
+  });
+}
+
+/**
+ * Lock the page's scroll: the body, and the shell's own scroller (`scrollers`,
+ * by default every `[data-app-scroll]`), whose overflow the body lock alone
+ * leaves free. The first lock saves each inline overflow and scroll position
+ * and reserves the scrollbar's gutter; the last release puts them back.
+ * Returns the release function. Ref-counted.
+ */
 let locks = 0;
 let saved = null;
-export function lockScroll(body) {
+export function lockScroll(body, scrollers) {
   if (!body || !body.style) return () => {};
   if (locks === 0) {
-    saved = { overflow: body.style.overflow, paddingRight: body.style.paddingRight };
+    const list = scrollers ?? (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function' ? Array.from(document.querySelectorAll('[data-app-scroll]')) : []);
+    saved = {
+      overflow: body.style.overflow, paddingRight: body.style.paddingRight,
+      scrollers: Array.from(list || []).filter((el) => el && el.style).map((el) => ({
+        el, overflow: el.style.overflow, gutter: el.style.scrollbarGutter, top: el.scrollTop,
+      })),
+    };
     body.style.overflow = 'hidden';
+    for (const s of saved.scrollers) { s.el.style.overflow = 'hidden'; s.el.style.scrollbarGutter = 'stable'; }
   }
   locks += 1;
   let released = false;
@@ -55,6 +98,11 @@ export function lockScroll(body) {
     if (locks === 0 && saved) {
       body.style.overflow = saved.overflow;
       body.style.paddingRight = saved.paddingRight;
+      for (const s of saved.scrollers) {
+        s.el.style.overflow = s.overflow;
+        s.el.style.scrollbarGutter = s.gutter;
+        if (typeof s.top === 'number') s.el.scrollTop = s.top;
+      }
       saved = null;
     }
   };

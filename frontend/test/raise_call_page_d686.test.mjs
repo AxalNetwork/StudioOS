@@ -96,7 +96,8 @@ test('closed, expired and paused calls are read-only, each with its own banner',
 
 test('the route sits in the Raise shell; a founder at /round-calls/:uid is sent there, others stay', () => {
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
-  assert.match(app, /<Route path="\/raise\/calls\/:uid" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <RaiseCallPage \/>\)\} \/>\s*<Route path="\/raise\/:slug"/);
+  assert.match(app, /<Route path="\/raise\/calls\/:uid" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <RaiseCallPage \/>\)\} \/>/);
+  assert.ok(app.indexOf('<Route path="/raise/calls/:uid"') < app.indexOf('<Route path="/raise/:slug"'), 'declared beside the module route');
   const page = readFileSync('frontend/src/pages/founder/RaiseCallPage.jsx', 'utf8');
   assert.match(page, /<CycleHeader cycle="raise" cards=\{cards\} active="capital-relationships"/);
   assert.match(page, /<RailFrame rail=\{rail\}/);

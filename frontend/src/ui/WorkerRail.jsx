@@ -8,6 +8,7 @@ import useAiSpend, { railCards } from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { formatCost, formatRate, formatSpend, isRecordablePage, lastRunReceipt, spendMeter } from './assistCost';
+import { useEscapeClose } from '../components/useEscapeClose';
 import { ASSIST_SURFACES, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY, jobsFor } from './railModels';
 import { readRailModel, writeRailModel } from './railModelChoice';
@@ -677,16 +678,16 @@ export default function WorkerRail({
     mq.addEventListener?.('change', onChange);
     return () => mq.removeEventListener?.('change', onChange);
   }, []);
-  // Escape closes; focus moves into the sheet on open and back to the button
-  // on close, as the More sheet does.
+  // Escape closes, on the one dialog stack (D686), so it never also closes a
+  // lightbox under or over the sheet; focus moves into the sheet on open and
+  // back to the button on close, as the More sheet does.
+  useEscapeClose(() => dispatchSheet({ type: 'escape' }), { active: sheet.open });
   const wasOpen = useRef(false);
   useEffect(() => {
     if (sheet.open) {
       sheetCloseRef.current?.focus();
-      const onKey = (e) => { if (e.key === 'Escape') dispatchSheet({ type: 'escape' }); };
-      document.addEventListener('keydown', onKey);
       wasOpen.current = true;
-      return () => document.removeEventListener('keydown', onKey);
+      return undefined;
     }
     if (wasOpen.current) {
       wasOpen.current = false;
