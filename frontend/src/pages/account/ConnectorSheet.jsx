@@ -10,6 +10,7 @@ import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import GithubSyncSheet from './GithubSyncSheet';
+import { successBanner } from './githubSync';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
@@ -521,7 +522,8 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 
   const syncNow = async () => {
     setSyncing(true); setSyncNote('');
-    try { await connectorsApi.sync(conn.uid, opts); setSyncNote('Synced.'); onChanged?.(); }
+    // The Worker's own words for what the sync did, when it says (#1597).
+    try { const r = await connectorsApi.sync(conn.uid, opts); setSyncNote(successBanner(p.key, r) || 'Synced.'); onChanged?.(); }
     catch (e) { setSyncNote(e?.message || 'The sync failed.'); }
     finally { setSyncing(false); }
   };

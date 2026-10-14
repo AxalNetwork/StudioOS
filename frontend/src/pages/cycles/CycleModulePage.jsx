@@ -39,10 +39,10 @@ const PILL = {
 const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
 const CONTROL = 'rounded-full border border-axal-hairline bg-white px-[11px] py-[5px] text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-export function Cell({ cell, first = false }) {
+export function Cell({ cell, first = false, linkState = undefined }) {
   const v = cellView(cell);
   if (v.nr) return <span className={NR}>Not recorded</span>;
-  const text = v.href ? <Link to={v.href} className="hover:underline">{v.text}</Link> : v.text;
+  const text = v.href ? <Link to={v.href} state={linkState} className="hover:underline">{v.text}</Link> : v.text;
   if (v.tone) return <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL[v.tone]}`}>{text}</span>;
   return <span className={first ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-ink/80 dark:text-gray-300'}>{text}</span>;
 }

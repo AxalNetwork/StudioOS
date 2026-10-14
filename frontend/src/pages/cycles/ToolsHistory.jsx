@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import { Cell } from './CycleModulePage';
 
 /**
@@ -11,7 +12,10 @@ import { Cell } from './CycleModulePage';
  * personal and listed only in Connect a tool; the Worker's note says so.
  */
 export default function ToolsHistory({ tools }) {
+  // A row's Open is Connect a tool over this page: `under` is where closing it returns (#1597).
+  const location = useLocation();
   if (!tools || typeof tools !== 'object') return null;
+  const under = { under: `${location.pathname}${location.search}` };
   const cols = Array.isArray(tools.cols) ? tools.cols.filter((c) => c && c.key) : [];
   const rows = Array.isArray(tools.rows) ? tools.rows : [];
   return (
@@ -31,7 +35,7 @@ export default function ToolsHistory({ tools }) {
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={r.id ?? i} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid={`tools-row-${i}`}>
-                      {cols.map((c, j) => <td key={c.key} className="px-2 py-1.5 align-top"><Cell cell={r.cells?.[c.key]} first={j === 0} /></td>)}
+                      {cols.map((c, j) => <td key={c.key} className="px-2 py-1.5 align-top"><Cell cell={r.cells?.[c.key]} first={j === 0} linkState={under} /></td>)}
                     </tr>
                   ))}
                 </tbody>

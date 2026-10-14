@@ -453,7 +453,7 @@ test('the Tools history on Operating systems: one row per connection with its Op
   const none = renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: { cols: tools.cols, rows: [], total: null, state: 'not_recorded', reason: 'This project has no company scope for connectors.' } })));
   assert.match(none, /data-testid="tools-not-recorded"[^>]*>This project has no company scope for connectors\./);
   assert.doesNotMatch(none, /tools<\/span>/, 'no count without a company');
-  assert.equal(renderToStaticMarkup(h(ToolsHistory, { tools: null })), '', 'no part, nothing drawn');
+  assert.equal(renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: null }))), '', 'no part, nothing drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.match(route, /'operating-systems': \(data\) => <ToolsHistory tools=\{data\?\.parts\?\.tools\} \/>/);
   assert.match(route, /loadOptions=\{edit\.loadOptions \? \(\) => edit\.loadOptions\(cyclesWrite, projectId, edit\.idOf\(editing\)\) : null\}/);
