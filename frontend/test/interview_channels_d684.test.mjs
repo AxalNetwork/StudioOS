@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import {
   CHANNEL_PROVIDERS, MEETING_NOTES, accountName, botHandle, channelCard, meetingCard, pendingLabel, pendingTotal, readOverview,
   safeTelegramUrl, telegramLinkView, telegramSteps, testOutcome, whatsappSignupConfig,
+  TELEGRAM_CLAIM_STATES, TELEGRAM_CLAIM_WORDS, TELEGRAM_CONFIRM_REFUSALS, TELEGRAM_CONFIRM_STEP, telegramClaim, telegramClaimView, telegramConfirmRefusal,
 } from '../src/pages/account/channelsModel.js';
 import {
   DEFAULT_GRAPH_VERSION, SDK_URL, SignupError, isFacebookOrigin, loadFacebookSdk, readSignupMessage, runEmbeddedSignup,
@@ -128,8 +129,8 @@ test('every request in the module is written as a literal path the drift check c
   const calls = extractClientCalls(readFileSync('frontend/src/lib/api/channels.js', 'utf8')).map((c) => `${c.method} ${normalizePath(c.path)}`);
   assert.deepEqual(calls.sort(), [
     'DELETE /channels/:p', 'DELETE /founder/validate/interviews/:p/meetings/:p',
-    'GET /channels', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /founder/validate/interviews/:p/meetings',
-    'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/threads/:p/assign', 'POST /channels/threads/:p/ignore',
+    'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /founder/validate/interviews/:p/meetings',
+    'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign', 'POST /channels/threads/:p/ignore',
     'POST /channels/threads/:p/reply', 'POST /channels/whatsapp/connect', 'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
   ], 'one per route of D684 §9, as the drift check will read them');
@@ -244,6 +245,80 @@ test('the Telegram link is only one Axal issued, names the bot, says when it sto
   assert.match(steps, /Settings › Telegram Business › Chatbots/);
   assert.match(steps, /Add @AxalStudioBot as your chatbot/);
   assert.match(steps, /Choose which chats it can see/);
+});
+
+// ------------------------------------------------------------------ #1625: the two-sided Telegram link
+
+const CLAIM = { uid: 'lc1', display_name: 'Dana Ruiz', username: '@dana_biz', expires_at: '2026-10-14T10:10:00Z', telegram_confirmed: true, axal_confirmed: false, status: 'waiting_axal', message: 'Confirm the claimed Telegram account in Axal to finish linking.' };
+
+test('#1625 the overview keeps telegram_link; the claimed account is kept exactly as Telegram sent it', () => {
+  const o = readOverview({ ...RAW, telegram_link: { ...CLAIM, display_name: '  Dana  Ruiz ' } });
+  assert.deepEqual(o.telegramLink, {
+    uid: 'lc1', displayName: '  Dana  Ruiz ', username: '@dana_biz', expiresAt: '2026-10-14T10:10:00Z',
+    telegramConfirmed: true, axalConfirmed: false, status: 'waiting_axal', message: 'Confirm the claimed Telegram account in Axal to finish linking.',
+  }, 'the name as sent, spaces and all');
+  assert.equal(readOverview(RAW).telegramLink, null, 'no claim');
+  assert.equal(telegramClaim({ ...CLAIM, status: 'made_up' }), null, 'only the Worker\'s states');
+  assert.equal(telegramClaim({ ...CLAIM, uid: '' }), null);
+  assert.equal(telegramClaim({ ...CLAIM, message: '' }).message, TELEGRAM_CLAIM_WORDS.waiting_axal, 'no sentence sent: ours');
+  assert.equal(telegramClaim({ ...CLAIM, telegram_confirmed: 'yes' }).telegramConfirmed, false, 'only true is true');
+  assert.deepEqual(TELEGRAM_CLAIM_STATES, ['waiting_claim', 'waiting_telegram', 'waiting_axal', 'ready', 'linked', 'expired', 'cancelled', 'unreadable']);
+  for (const st of TELEGRAM_CLAIM_STATES) assert.match(TELEGRAM_CLAIM_WORDS[st], /^[A-Z].+\.$/, `${st} is a sentence`);
+  assert.equal(TELEGRAM_CLAIM_WORDS.ready, 'Both owners confirmed. Press Confirm again to finish activating this link.');
+});
+
+test('#1625 the claim view: who claimed it, each state\'s sentence, and Confirm until Axal\'s half is in', () => {
+  const view = (patch) => telegramClaimView(telegramClaim({ ...CLAIM, ...patch }));
+  const v = view({});
+  assert.deepEqual(v, {
+    uid: 'lc1', who: 'Dana Ruiz · @dana_biz', sentence: 'Confirm the claimed Telegram account in Axal to finish linking.', canConfirm: true, stale: false,
+    steps: [{ label: 'Confirmed in Telegram', done: true }, { label: 'Confirmed in Axal', done: false }],
+  });
+  assert.equal(view({ status: 'waiting_telegram', telegram_confirmed: false }).canConfirm, true, 'Axal may confirm first');
+  assert.equal(view({ status: 'waiting_telegram', telegram_confirmed: false, axal_confirmed: true }).canConfirm, false, 'Axal\'s half is in: Telegram is awaited');
+  assert.equal(view({ status: 'ready', telegram_confirmed: true, axal_confirmed: true }).canConfirm, true, 'ready: Confirm again activates');
+  for (const status of ['expired', 'cancelled', 'unreadable']) {
+    const s = view({ status });
+    assert.deepEqual([s.canConfirm, s.stale], [false, true], status);
+  }
+  assert.equal(view({ status: 'waiting_claim' }), null, 'an unclaimed code is drawn as its steps');
+  assert.equal(view({ status: 'linked' }), null);
+  assert.equal(telegramClaimView(null), null);
+  assert.equal(view({ display_name: null, username: null }).who, null);
+  assert.equal(view({ display_name: null }).who, '@dana_biz');
+});
+
+test('#1625 every Confirm refusal is a sentence: the Worker\'s own, else ours, never a code', () => {
+  const codes = { link_not_found: 404, link_cancelled: 409, link_expired: 410, link_not_claimed: 409, member_inactive: 403, identity_taken: 409 };
+  assert.deepEqual(Object.keys(TELEGRAM_CONFIRM_REFUSALS).sort(), Object.keys(codes).sort());
+  for (const [code, status] of Object.entries(codes)) {
+    const bare = telegramConfirmRefusal(Object.assign(new Error(code), { status, code }));
+    assert.equal(bare, TELEGRAM_CONFIRM_REFUSALS[code], `${code} with no sentence`);
+    assert.doesNotMatch(bare, /_/, `${code} reads as words`);
+    assert.equal(telegramConfirmRefusal(Object.assign(new Error('The Worker says so.'), { status, code })), 'The Worker says so.', `${code}: the Worker's words first`);
+  }
+  assert.equal(telegramConfirmRefusal({}), 'Axal could not confirm this link. Try again in a minute.');
+});
+
+test('#1625 the steps ask for both confirmations: /confirm in Telegram and Confirm here, inside ten minutes', () => {
+  assert.equal(TELEGRAM_CONFIRM_STEP, 'Send /confirm in Telegram, then press Confirm here, within ten minutes of the code.');
+  const steps = telegramSteps('@AxalStudioBot');
+  assert.equal(steps[1], TELEGRAM_CONFIRM_STEP, 'right after Start');
+  assert.match(steps.join(' '), /\/confirm in Telegram/);
+  assert.match(steps.join(' '), /press Confirm here/);
+});
+
+test('#1625 the claim and Axal\'s confirm are the Worker\'s routes', async () => {
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.document ??= { cookie: '' };
+  const f = mockFetch({});
+  try {
+    const { channelsApi } = await import('../src/lib/api/channels.js');
+    await channelsApi.telegramClaim();
+    await channelsApi.confirmTelegram('lc 1');
+  } finally { f.restore(); }
+  assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), ['GET /channels/telegram/link', 'POST /channels/telegram/link/lc%201/confirm']);
+  assert.deepEqual(f.calls[1].body, {});
 });
 
 // ------------------------------------------------------------------ WhatsApp: Embedded Signup

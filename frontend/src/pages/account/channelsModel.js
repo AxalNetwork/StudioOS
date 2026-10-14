@@ -66,7 +66,86 @@ export function readOverview(raw) {
   // on the provider entry (`signup`) or beside it (`whatsapp`).
   if (providers.whatsapp && !providers.whatsapp.signup && isObj(raw.whatsapp)) providers.whatsapp.signup = raw.whatsapp;
   if (!providers.whatsapp && isObj(raw.whatsapp)) providers.whatsapp = { available: null, signup: raw.whatsapp };
-  return { providers, connections, pending };
+  return { providers, connections, pending, telegramLink: telegramClaim(raw.telegram_link) };
+}
+
+// ---------- Telegram: the two-sided link (#1625, migration 458) ------------
+
+/** The Worker's link states (`services/channels/linkCodes.ts`, `pendingLinkView`). */
+export const TELEGRAM_CLAIM_STATES = ['waiting_claim', 'waiting_telegram', 'waiting_axal', 'ready', 'linked', 'expired', 'cancelled', 'unreadable'];
+
+/** Each state in words, for a read that sends no sentence of its own. */
+export const TELEGRAM_CLAIM_WORDS = {
+  waiting_claim: 'Open the link in your Telegram account first.',
+  waiting_telegram: 'Confirm in Telegram by sending /confirm to the Axal bot.',
+  waiting_axal: 'Confirm the claimed Telegram account in Axal to finish linking.',
+  ready: 'Both owners confirmed. Press Confirm again to finish activating this link.',
+  linked: 'Both owners confirmed this Telegram link.',
+  expired: 'Both confirmations must arrive within ten minutes. Request a new Telegram link.',
+  cancelled: 'This link was replaced or cancelled. Request a new Telegram link.',
+  unreadable: 'The claimed Telegram account could not be read. Request a new link before confirming.',
+};
+
+/**
+ * `telegram_link` from `GET /api/channels` (or `claim` from `GET
+ * /channels/telegram/link`), normalised; null when there is none. The
+ * claimed account's name and @username are kept exactly as Telegram sent
+ * them, so the member can see whose account it is.
+ */
+export function telegramClaim(raw) {
+  if (!isObj(raw) || !str(raw.uid) || !TELEGRAM_CLAIM_STATES.includes(raw.status)) return null;
+  return {
+    uid: str(raw.uid),
+    displayName: typeof raw.display_name === 'string' && raw.display_name ? raw.display_name : null,
+    username: typeof raw.username === 'string' && raw.username ? raw.username : null,
+    expiresAt: str(raw.expires_at) || null,
+    telegramConfirmed: raw.telegram_confirmed === true,
+    axalConfirmed: raw.axal_confirmed === true,
+    status: raw.status,
+    message: str(raw.message) || TELEGRAM_CLAIM_WORDS[raw.status],
+  };
+}
+
+/**
+ * What the Telegram card draws for a claim: who claimed it, the state's
+ * sentence, and whether Confirm is offered. Axal may confirm before or after
+ * Telegram's /confirm (`confirmAxalTelegramLink`), so Confirm stands until
+ * Axal's half is in, and again at `ready`. Null when there is nothing to draw:
+ * no claim, an unclaimed code (its steps are drawn instead), or a link done.
+ */
+export function telegramClaimView(claim) {
+  if (!claim || claim.status === 'waiting_claim' || claim.status === 'linked') return null;
+  const who = [claim.displayName, claim.username].filter(Boolean).join(' · ');
+  const open = claim.status === 'waiting_telegram' || claim.status === 'waiting_axal' || claim.status === 'ready';
+  return {
+    uid: claim.uid,
+    who: who || null,
+    sentence: claim.message,
+    canConfirm: (open && !claim.axalConfirmed) || claim.status === 'ready',
+    stale: claim.status === 'expired' || claim.status === 'cancelled' || claim.status === 'unreadable',
+    steps: [
+      { label: 'Confirmed in Telegram', done: claim.telegramConfirmed },
+      { label: 'Confirmed in Axal', done: claim.axalConfirmed },
+    ],
+  };
+}
+
+/** The confirm route's refusals in words, for an answer that carries no sentence of its own. */
+export const TELEGRAM_CONFIRM_REFUSALS = {
+  link_not_found: 'That Telegram link is not waiting on this Axal account.',
+  link_cancelled: 'This link was replaced or cancelled. Request a new Telegram link.',
+  link_expired: 'Both confirmations must arrive within ten minutes. Request a new Telegram link.',
+  link_not_claimed: 'Open the link in your Telegram account and check its name in Axal before confirming.',
+  member_inactive: 'This Axal account is no longer active, so nothing was linked.',
+  identity_taken: 'This Telegram account is already linked to another Axal account. Disconnect it there first.',
+};
+
+/** A refused Confirm: the Worker's own sentence when it wrote one, else this table's, never a code. */
+export function telegramConfirmRefusal(e) {
+  const code = typeof e?.code === 'string' ? e.code : '';
+  const msg = typeof e?.message === 'string' ? e.message.trim() : '';
+  if (msg && msg !== code && !/^[a-z0-9_]+$/.test(msg)) return msg;
+  return TELEGRAM_CONFIRM_REFUSALS[code] || 'Axal could not confirm this link. Try again in a minute.';
 }
 
 /** The name a connected account goes by on its card: a display name or a masked number. Never an id. */
@@ -223,11 +302,15 @@ function defaultTime(d) {
   try { return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(d); } catch { return d.toISOString().slice(11, 16); }
 }
 
+/** Both owners confirm the claim (migration 458): Telegram first or Axal first, inside the code's ten minutes. */
+export const TELEGRAM_CONFIRM_STEP = 'Send /confirm in Telegram, then press Confirm here, within ten minutes of the code.';
+
 /** What the member does in Telegram after opening the link, in order. */
 export function telegramSteps(bot) {
   const handle = bot || 'the Axal bot';
   return [
     'Open the link and press Start. That proves this Telegram account is yours.',
+    TELEGRAM_CONFIRM_STEP,
     'In Telegram, open Settings › Telegram Business › Chatbots.',
     `Add ${handle} as your chatbot.`,
     'Choose which chats it can see: only those can reach Axal.',
