@@ -44,6 +44,16 @@ export const CHUNKS_PER_MESSAGE = 20;
 /** A stage other than done or failed that has not moved for this long is stale. */
 export const STALE_MINUTES = 15;
 /**
+ * What a run the minute sweeper resumed says while it runs, and how the
+ * sweeper knows it already tried: a run still carrying this note that stalls
+ * again is failed (`STALLED_TWICE`), not resumed a second time. The job clears
+ * it at done; a member's Retry clears it too.
+ */
+export const RESTARTED_NOTE = 'Processing stalled, so Axal restarted it from where it stopped.';
+export const STALLED_TWICE = 'Processing stalled twice, so Axal stopped restarting it. Nothing was lost; try again.';
+/** At done the restart note has served its purpose; any other note (missing parts, a placement refusal) stays. */
+const doneNote = (session: SessionRow) => (session.processing_error === RESTARTED_NOTE ? { error: null } : {});
+/**
  * The job's type. Registering it in `models/jobs.ts` and `queueWorker.ts` is
  * S01's (D684 §16); the cast holds until then.
  */
@@ -211,7 +221,10 @@ export async function afterChunkStored(env: Env, sessionId: number, userId: numb
 // The job
 // ---------------------------------------------------------------------------
 
-async function fail(env: Env, session: SessionRow, sentence: string) {
+export const NO_CONSENT_SENTENCE = 'The interviewee’s consent to be recorded is not recorded, so nothing was processed.';
+
+/** Stage `failed` with a sentence. The sweeper also uses it, for a stale run it cannot resume. */
+export async function failProcessing(env: Env, session: SessionRow, sentence: string) {
   await setStage(env, session.id, 'failed', { error: sentence });
   // Back to where a person can act: stopped (retry), or transcribed if the transcript is in.
   await env.DB.prepare(
@@ -224,7 +237,7 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
   const lastSeq = session.expected_last_seq ?? -1;
   const chunks = expectedChunks(await listChunks(env, session.id), lastSeq);
   if (chunks.some((ch) => !ch.r2_key.startsWith(AUDIO_PREFIX))) {
-    await fail(env, session, 'The recording could not be read. Nothing was transcribed.');
+    await failProcessing(env, session, 'The recording could not be read. Nothing was transcribed.');
     return 'failed';
   }
   const staged = await env.DB.prepare('SELECT seq FROM interview_chunk_transcripts WHERE session_id = ?')
@@ -244,7 +257,7 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
         audio_minutes: audioMinutesFromBytes(ch.size_bytes), cost_microusd: 0,
         outcome: r.budget ? 'refused' : 'failed', refusal: r.refusal,
       });
-      await fail(env, session, r.message);
+      await failProcessing(env, session, r.message);
       return 'failed';
     }
     await env.DB.prepare(
@@ -307,7 +320,7 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   if (session.created_by_user_id !== userId) return null;
   // #1470: no consent, no AI over the recording.
   if (consentBlocks(session.channel, session.consent_status)) {
-    await fail(env, session, 'The interviewee’s consent to be recorded is not recorded, so nothing was processed.');
+    await failProcessing(env, session, NO_CONSENT_SENTENCE);
     return 'failed';
   }
   const interview = await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?')
@@ -328,7 +341,7 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
       await assemble(env, session);
       if (session.processing_auto === 0) {
         // Manual mode: stop after Transcribing; the review offers Summarise and Structure.
-        await setStage(env, session.id, 'done');
+        await setStage(env, session.id, 'done', doneNote(session));
         return 'done';
       }
       await setStage(env, session.id, 'summarising');
@@ -348,13 +361,13 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
           : placed.reason === 'refused'
             ? 'The findings could not be placed. The transcript is ready; try Structure again.'
             : null;
-      await setStage(env, session.id, 'done', error ? { error } : {});
+      await setStage(env, session.id, 'done', error ? { error } : doneNote(session));
       return 'done';
     }
     return session.processing_stage as Stage;
   } catch (e) {
     console.warn('[processing] job failed', sessionId, (e as Error)?.message);
-    await fail(env, session, 'Processing stopped unexpectedly. Nothing was lost; try again.');
+    await failProcessing(env, session, 'Processing stopped unexpectedly. Nothing was lost; try again.');
     return 'failed';
   }
 }
@@ -374,10 +387,15 @@ export function isStale(session: SessionRow, now = Date.now()): boolean {
  * Resume a failed or stale run, or a session left in `transcribing` by the old
  * synchronous route. Staged chunks are kept, so nothing is billed twice. A
  * fresh idempotency key, so the queue does not ack the retry as a repeat.
+ *
+ * Two callers, `POST /sessions/:id/process` and the minute sweeper, can reach
+ * the same row at once. The resume is one UPDATE guarded on the stage, the
+ * stage's time and the status the caller read, so only one of them queues a
+ * run; the other is told the session is still being processed.
  */
-export async function recoverSession(env: Env, session: SessionRow, userId: number): Promise<{ ok: true; stage: Stage } | { ok: false; detail: string; message: string }> {
+export async function recoverSession(env: Env, session: SessionRow, userId: number, now = Date.now(), note: string | null = null): Promise<{ ok: true; stage: Stage } | { ok: false; detail: string; message: string }> {
   const legacyStuck = !session.processing_stage && session.status === 'transcribing';
-  if (!legacyStuck && session.processing_stage !== 'failed' && !isStale(session)) {
+  if (!legacyStuck && session.processing_stage !== 'failed' && !isStale(session, now)) {
     return { ok: false, detail: 'not_retryable', message: session.processing_stage ? 'This session is still being processed.' : 'Finish the recording first.' };
   }
   if (!AUDIO_CHANNELS.has(session.channel)) return { ok: false, detail: 'no_audio_on_this_channel', message: 'This session has no recording to process.' };
@@ -389,11 +407,17 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
   if (lastSeq == null) return { ok: false, detail: 'no_audio', message: 'This session has no recorded audio yet.' };
   // Resume where it stopped: a transcript already in skips straight to the summary.
   const resumeAt: Stage = session.status === 'transcribed' || session.status === 'structured' ? 'summarising' : 'transcribing';
-  await env.DB.prepare(
-    `UPDATE interview_sessions SET expected_last_seq = ?, processing_auto = COALESCE(processing_auto, 1),
-            status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(lastSeq, session.id).run();
-  await setStage(env, session.id, resumeAt, { error: null });
+  const claimed = await env.DB.prepare(
+    `UPDATE interview_sessions
+        SET expected_last_seq = ?, processing_auto = COALESCE(processing_auto, 1),
+            status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END,
+            processing_stage = ?, processing_done = NULL, processing_total = NULL, processing_error = ?,
+            processing_updated_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ? AND processing_stage IS ? AND processing_updated_at IS ? AND status = ?`,
+  ).bind(lastSeq, resumeAt, note, session.id, session.processing_stage ?? null, session.processing_updated_at ?? null, session.status).run();
+  if (Number(claimed.meta?.changes || 0) !== 1) {
+    return { ok: false, detail: 'not_retryable', message: 'This session is still being processed.' };
+  }
   await enqueueProcess(env, session.id, userId);
   return { ok: true, stage: resumeAt };
 }
