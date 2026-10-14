@@ -139,6 +139,23 @@ test('2b. a project whose company the member is in still connects from a deep li
   } finally { reads.restore(); await m.unmount(); }
 });
 
+test('2c. a blocked panel\'s key form starts nothing: Enter in the key field, and HubSpot\'s "Connect with OAuth instead"', async () => {
+  const { ConnectorPanel } = await import('../src/pages/account/ConnectorSheet.jsx');
+  const providers = [{ key: 'hubspot', display_name: 'HubSpot', category: 'CRM', status: 'live', auth_type: 'oauth2', supports_pat: true, has_implementation: true }];
+  const reads = stubReads({ companyId: 12, providers, items: [] });
+  const p = buildCatalogue({ providers, items: [], firstParty: {} }).find((x) => x.key === 'hubspot');
+  const m = await mount(h(MemoryRouter, null, h(ConnectorPanel, { p, view: 'key', setView() {}, onClose() {}, projectId: 7, companyId: 12, returnTo: 'build', blocked: true, companyNote: 'Not your company.', companyState: 'outside' })));
+  try {
+    const form = m.walk().find((n) => m.pr(n).id === 'connector-key-form');
+    assert.ok(form, 'the key view is drawn');
+    await act(async () => { await m.pr(form).onSubmit({ preventDefault() {} }); });
+    const instead = m.walk().find((n) => n.nodeName === 'BUTTON' && /Connect with OAuth instead/.test(m.text(n)));
+    assert.ok(instead, 'HubSpot offers its OAuth fallback in the body');
+    await act(async () => { await m.pr(instead).onClick(); });
+    assert.deepEqual(reads.calls, [], 'neither connects nor starts a sign-in');
+  } finally { await m.unmount(); reads.restore(); }
+});
+
 // ── 5 & 12. GitHub's sheet ──────────────────────────────────────────────────
 
 const GH = { key: 'github', display_name: 'GitHub', connection: { uid: 'u-gh' } };
@@ -276,4 +293,59 @@ test('9–10. the frame\'s dialog is the same node from list to tool and back, a
     assert.equal(dialog() ?? first, first, 'tool → list: still the same node');
     assert.ok(first.focused > mid || !dialog(), 'and focus follows again');
   } finally { connectorsApi.fed = saved; await m.unmount(); }
+});
+
+// ── 13. CycleRoute itself draws Operating systems' Tools history and loads a system's choices ──
+
+test('13. mounted CycleRoute: Operating systems draws the Worker\'s parts.tools, and Choose connector reads that kind\'s choices', async () => {
+  const { default: CycleRoute } = await import('../src/pages/cycles/CycleRoute.jsx');
+  const reads = [];
+  const json = (body) => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
+  const savedFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url); reads.push(u);
+    if (u.includes('/cycles/build/modules/operating-systems')) {
+      return json({
+        module: { slug: 'operating-systems', name: 'Operating systems' }, card: { state: 'ok' },
+        records: { cols: [{ key: 'system', label: 'System' }, { key: 'used_by', label: 'Used by' }], rows: [{ id: 'workspace', cells: { system: 'Workspace', used_by: 'Everyone' } }], total: 1 },
+        parts: { tools: { cols: [{ key: 'tool', label: 'Tool' }, { key: 'action', label: 'Action' }], rows: [{ id: 'tool-0', cells: { tool: 'HubSpot', action: { text: 'Open', href: '/build/connect?tool=hubspot&project_id=7' } } }], total: 1, state: 'ok' } },
+      });
+    }
+    if (u.includes('/cycles/build/systems/choices')) return json({ kinds: [{ kind: 'workspace', label: 'Workspace', choices: [{ provider_key: 'google', display_name: 'Google Workspace' }] }] });
+    if (/\/projects(\?|$)/.test(u)) return json([{ id: 7, name: 'Acme' }]);
+    return json({});
+  };
+  const m = await mount(h(MemoryRouter, { initialEntries: ['/build/operating-systems?project_id=7'] },
+    h(Routes, null, h(Route, { path: '/build/:slug', element: h(CycleRoute, { cycle: 'build' }) }))), { dom: true });
+  try {
+    await m.settle();
+    assert.ok(m.by('cycle-part-tools') && m.by('tools-row-0'), 'the Tools history is drawn from the module read\'s parts.tools');
+    const open = m.walk().find((n) => m.pr(n).href === '/build/connect?tool=hubspot&project_id=7');
+    assert.ok(open, 'its Open link is the Worker\'s href');
+    assert.ok(!reads.some((u) => u.includes('/systems/choices')), 'no choices read before a row is chosen');
+    const choose = m.walk().find((n) => /^Choose connector /.test(m.pr(n)['aria-label'] || ''));
+    assert.ok(choose, 'the Workspace row offers Choose connector');
+    await act(async () => { m.pr(choose).onClick(); });
+    await m.settle();
+    assert.ok(reads.some((u) => /\/cycles\/build\/systems\/choices\?project=7$/.test(u)), 'the form loads the choices for this project');
+    assert.match(m.text(), /Google Workspace/, 'the kind\'s choice is offered');
+    assert.match(m.text(), /None \(removes Workspace, Used by included\)/, 'and Workspace\'s None says what it removes');
+  } finally { await m.unmount(); globalThis.fetch = savedFetch; }
+});
+
+// ── 14–15. the docs say what the code now does ──────────────────────────────
+
+test('14–15. ROUTE_MAP says the venture rides in the signed state and both keys go in one write; the account README names the lightbox, /build/connect, ?tool= and the return', async () => {
+  const { readFileSync } = await import('node:fs');
+  const row = readFileSync('documentation/architecture/ROUTE_MAP.md', 'utf8').split('\n').find((l) => l.startsWith('| `Cycle Action.dc.html` · `connect`'));
+  assert.match(row, /which ride in the signed OAuth state, so a return through the callback host \(`OAUTH_CALLBACK_BASE_URL`\) still lands on `\/build\/connect\?…&project_id=<id>`/);
+  assert.match(row, /`oauth` and `provider` are stripped in the same address write that keeps `project_id`/);
+  assert.match(row, /a plan-locked tool on `pro`, a coming-soon or unavailable one on nothing/);
+  assert.doesNotMatch(row, /both keys are stripped after/);
+  const line = readFileSync('frontend/src/pages/account/README.md', 'utf8').split('\n').find((l) => l.startsWith('| `ConnectToolSheet.jsx` |'));
+  assert.match(line, /"Connect a tool" lightbox/);
+  assert.doesNotMatch(line, /"Connect a tool" sheet/);
+  assert.match(line, /`\/build\/connect`/);
+  assert.match(line, /`\?tool=<key>`/);
+  assert.match(line, /a sign-in returns to `\/build\/connect` with `\?oauth=` and the venture/);
 });

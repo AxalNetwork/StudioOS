@@ -14,7 +14,7 @@ live here, one file each:
 | `AccountUsage.jsx` | Usage (D642): the AI allowance, the last 30 days, where it went, models and rates, the last run, and storage (U1–U6) |
 | `AccountConnectors.jsx` | Connectors (D651): Yours, Discover, the Add menu, the request form and the page states; reads a provider's sign-in return from the address |
 | `ConnectorSheet.jsx` | The connector sheet and the connect flow, and `useConnectors`, the catalogue read every connectors surface shares |
-| `ConnectToolSheet.jsx` | Build's "Connect a tool" sheet (D651), the Build cycle overview's primary action in `../cycles/CycleRoute.jsx`. D686 §5.4 (#1597): its rows say what is true, and it connects for the project's company |
+| `ConnectToolSheet.jsx` | Build's "Connect a tool" lightbox (D651, D686 §5.1), at `/build/connect` over the Build page, the cycle overview's primary action in `../cycles/CycleRoute.jsx`. `?tool=<key>` opens one tool where its row would; a sign-in returns to `/build/connect` with `?oauth=` and the venture, and reopens that tool's view. D686 §5.4 (#1597): its rows say what is true, and every path connects for the project's company |
 | `GithubSyncSheet.jsx`, `githubSync.js` | GitHub's `sync` view (D686 §5.4): choose the repositories, sync them with the Worker's progress, then the success banner; `githubSync.js` holds its rules (refusals, progress, the banner) |
 | `connectorTools.jsx` | The provider tools the sheet opens, moved from the retired Integrations page: the LinkedIn import, HubSpot's pipeline and Salesforce's mapping |
 | `AccountFollowing.jsx` | Following |
