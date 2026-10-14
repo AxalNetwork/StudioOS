@@ -711,6 +711,13 @@ test('#1588 recovery never pauses a recording another tab holds; a processing se
   const r3 = createRecorder({ api: w3.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
   r3.setUser(7);
   assert.equal(await r3.recover(), 'unread');
+  // A paused session comes back too, paused, with nothing posted.
+  const w5 = fakeApi({ active: async () => ({ items: [ACTIVE({ status: 'paused' })] }), get: async () => ({ ...FULL, session: { ...FULL.session, status: 'paused' } }) });
+  const r5 = createRecorder({ api: w5.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r5.setUser(7);
+  assert.equal(await r5.recover(), 'restored');
+  assert.equal(r5.getSnapshot().phase, 'paused');
+  assert.deepEqual(w5.calls.filter((c) => c[0] === 'action'), [], 'already paused: no pause is posted');
   const w4 = fakeApi({ active: async () => ({ items: [] }) });
   const r4 = createRecorder({ api: w4.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
   r4.setUser(7);
@@ -747,6 +754,13 @@ test('#1588 a meeting link the view may open is https only; the recorder knows w
   assert.equal(joinHref(null), null);
   const r = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
   assert.equal(r.canShareTab, true);
+  // The lightbox's link is kept for the share step; anything but https is not.
+  const v = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
+  return v.begin({ session: draft({ channel: 'video' }), video: true, meetingUrl: 'https://acme.zoom.us/j/1' }).then(async () => {
+    assert.equal(v.getSnapshot().meetingUrl, 'https://acme.zoom.us/j/1');
+    await v.begin({ session: draft({ channel: 'video' }), video: true, meetingUrl: 'http://acme.zoom.us/j/1' });
+    assert.equal(v.getSnapshot().meetingUrl, null);
+  });
   const phone = createRecorder({ api: fakeApi().api, browser: { ...fakeBrowser().browser, getDisplayMedia: undefined }, queue: memoryQueue() });
   assert.equal(phone.canShareTab, false);
 });
