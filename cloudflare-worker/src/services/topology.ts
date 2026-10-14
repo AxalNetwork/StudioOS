@@ -54,6 +54,8 @@ export type BindingSpec = {
   branch: (code: string) => string | null;
   /** One resource every Worker in the account shares, by design. */
   shared: boolean;
+  /** D681: this binding is declared only on HQ, never in a branch config. */
+  hqOnly?: boolean;
 };
 
 /**
@@ -87,6 +89,7 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'DB', kind: 'D1 database', hq: 'studioos-db', branch: (c) => branchResourceNames(c).d1, shared: false },
   { name: 'TOKENS', kind: 'KV namespace', hq: null, branch: () => null, shared: false },
   { name: 'RATE_LIMITS', kind: 'KV namespace', hq: null, branch: () => null, shared: false },
+  { name: 'OAUTH_KV', kind: 'KV namespace', hq: null, branch: () => null, shared: false, hqOnly: true },
   { name: 'FILES', kind: 'R2 bucket', hq: 'studioos-files', branch: (c) => branchResourceNames(c).r2.FILES, shared: false },
   { name: 'PUBLICATIONS', kind: 'R2 bucket', hq: 'studioos-publications', branch: (c) => branchResourceNames(c).r2.PUBLICATIONS, shared: false },
   { name: 'BACKUPS', kind: 'R2 bucket', hq: 'studioos-backups', branch: (c) => branchResourceNames(c).r2.BACKUPS, shared: false },
@@ -286,7 +289,7 @@ export function describeTopology(env: Env) {
   const bag = env as unknown as Record<string, unknown>;
   const present = (name: string) => bag[name] != null;
 
-  const bindings = BINDINGS.map((b) => ({
+  const bindings = BINDINGS.filter((b) => !code || !b.hqOnly).map((b) => ({
     name: b.name,
     kind: b.kind,
     resource: code ? b.branch(code) : b.hq,

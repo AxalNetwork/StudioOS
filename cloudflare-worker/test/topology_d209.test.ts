@@ -182,11 +182,11 @@ test('BINDINGS is exactly the set [env.production] declares, each naming the res
   }
 });
 
-test('a generated branch config binds the same set plus HQ, under the names the page says', () => {
+test('a generated branch config binds the branch-applicable set plus HQ, under the names the page says', () => {
   const names = BRANCH_BOUND.map((b) => b.name).sort();
-  assert.deepEqual(names, [...BINDINGS.map((b) => b.name), 'HQ'].sort(),
-    'a branch binds every HQ binding and one link to HQ — nothing more');
-  for (const b of BINDINGS) {
+  assert.deepEqual(names, [...BINDINGS.filter((b) => !b.hqOnly).map((b) => b.name), 'HQ'].sort(),
+    'a branch binds each applicable binding and one HQ link; HQ-only OAuth is omitted');
+  for (const b of BINDINGS.filter((b) => !b.hqOnly)) {
     const br = BRANCH_BOUND.find((x) => x.name === b.name)!;
     assert.equal(b.branch(EXAMPLE.code), br.resource,
       `${b.name}: the page names ${b.branch(EXAMPLE.code)} on a branch, the generated config binds ${br.resource}`);
@@ -194,7 +194,7 @@ test('a generated branch config binds the same set plus HQ, under the names the 
 });
 
 test('shared means one account-level resource under both configs, and nothing else', () => {
-  for (const b of BINDINGS) {
+  for (const b of BINDINGS.filter((b) => !b.hqOnly)) {
     const hq = HQ_OWN.find((x) => x.name === b.name)!;
     const br = BRANCH_BOUND.find((x) => x.name === b.name)!;
     let shared: boolean;
@@ -205,6 +205,12 @@ test('shared means one account-level resource under both configs, and nothing el
   }
   // The one data store every Worker shares is the Analytics Engine dataset (D105).
   assert.deepEqual(BINDINGS.filter((b) => b.shared && b.hq).map((b) => b.name), ['ANALYTICS']);
+});
+
+test('D681: only OAuth is HQ-only, derived from the actual branch config omissions', () => {
+  const omitted = HQ_OWN.filter((b) => !BRANCH_BOUND.some((x) => x.name === b.name)).map((b) => b.name).sort();
+  assert.deepEqual(BINDINGS.filter((b) => b.hqOnly).map((b) => b.name).sort(), omitted);
+  assert.deepEqual(omitted, ['OAUTH_KV']);
 });
 
 test('the branch naming rule is the generator\'s, for any code', () => {
@@ -589,4 +595,36 @@ test('HQ reads it super-admin only; a branch reads its own admin-only, and only 
   const catchAll = index.indexOf("app.route('/api/admin', admin);");
   assert.ok(platformAt > 0 && catchAll > platformAt, '/api/admin/platform is mounted before the /api/admin catch-all');
   assert.ok(index.includes("app.route('/api/branch', branchDeploymentRoutes);"));
+});
+
+async function checkOAuthTopology(api: any) {
+  const hq = api.describeTopology({ OAUTH_KV: { value: 'fixture-oauth-store-content' } }).bindings.find((b: any) => b.name === 'OAUTH_KV');
+  assert.deepEqual([hq?.name,hq?.kind,hq?.resource,hq?.shared,hq?.present], ['OAUTH_KV','KV namespace',null,false,true]);
+  assert.equal(api.describeTopology({}).bindings.find((b: any) => b.name === 'OAUTH_KV')?.present, false);
+  const branch = api.describeTopology({ BRANCH_CODE: 'fr' }).bindings;
+  assert.equal(branch.some((b: any) => b.name === 'OAUTH_KV'), false, 'HQ OAuth is not declared on a branch');
+  assert.equal(JSON.stringify(api.describeTopology({ OAUTH_KV: { value: 'fixture-oauth-store-content' } })).includes('fixture-oauth-store-content'), false);
+}
+
+test('D681: topology reports only OAuth presence at HQ and keeps the binding out of the branch declaration', async () => {
+  await checkOAuthTopology({ describeTopology });
+});
+
+test('D681 topology mutation/restoration: missing catalog row, HQ-only scope and actual presence', async () => {
+  const { stripTypeScriptTypes } = await import('node:module');
+  const file = new URL('../src/services/topology.ts', import.meta.url), source = readFileSync(file, 'utf8');
+  const cases = [
+    ["  { name: 'OAUTH_KV', kind: 'KV namespace', hq: null, branch: () => null, shared: false, hqOnly: true },", ''],
+    ["shared: false, hqOnly: true", "shared: false, hqOnly: false"],
+    ["BINDINGS.filter((b) => !code || !b.hqOnly)", 'BINDINGS'],
+    ["present: present(b.name)", 'present: false'],
+  ];
+  for (const [i,[before,after]] of cases.entries()) {
+    assert.ok(source.includes(before), 'live topology mutation target');
+    let js = stripTypeScriptTypes(source.replace(before, after), { mode: 'strip' });
+    js = js.replace(/from (['"])([^'"]+)\1/g, (_all,quote,spec) => 'from ' + quote + (spec.startsWith('.') ? new URL(spec + '.ts', file).href : import.meta.resolve(spec)) + quote);
+    const bad = await import('data:text/javascript;base64,' + Buffer.from(js + '\n// D681 topology ' + i).toString('base64'));
+    await assert.rejects(() => checkOAuthTopology(bad), assert.AssertionError);
+    await checkOAuthTopology({ describeTopology });
+  }
 });
