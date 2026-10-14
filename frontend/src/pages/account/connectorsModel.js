@@ -233,10 +233,15 @@ export function companiesLabel(conn) {
   return `${on} of ${list.length}`;
 }
 
+/** A Worker time in ms: UTC whether or not it carries its zone (D1 writes `YYYY-MM-DD HH:MM:SS`). */
+function utcTime(iso) {
+  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${String(iso).replace(' ', 'T')}Z`);
+}
+
 /** Relative time, as the canvas writes it: "12 min ago", "3 h ago", "2 days ago". */
 export function agoLabel(iso, now = Date.now()) {
   if (!iso) return null;
-  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${String(iso).replace(' ', 'T')}Z`);
+  const t = utcTime(iso);
   if (!Number.isFinite(t)) return null;
   const s = Math.max(0, Math.round((now - t) / 1000));
   if (s < 60) return 'just now';
@@ -733,7 +738,7 @@ export function retryOutcome(e) {
  */
 export function failedAt(iso, timeZone = undefined) {
   if (!iso) return null;
-  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${String(iso).replace(' ', 'T')}Z`);
+  const t = utcTime(iso);
   if (!Number.isFinite(t)) return null;
   const d = new Date(t);
   try {

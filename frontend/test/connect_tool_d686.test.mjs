@@ -512,6 +512,9 @@ test('the venture is kept across a sign-in and taken back once', () => {
 
 test('the failed banner says when the sync failed, in the viewer\'s zone; without a time it keeps the last good sync', () => {
   assert.equal(failedAt('2026-10-03 14:05:00', 'UTC'), '3 Oct · 14:05', 'the Worker\'s UTC time without a zone');
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/Los_Angeles'; // a machine away from UTC: the zone-less time is still read as UTC
+  try { assert.equal(failedAt('2026-10-03 14:05:00', 'UTC'), '3 Oct · 14:05'); } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }
   assert.equal(failedAt('2026-10-03T14:05:00Z', 'UTC'), '3 Oct · 14:05');
   assert.equal(failedAt('2026-10-03T23:30:00Z', 'Asia/Tokyo'), '4 Oct · 08:30', 'drawn in the viewer\'s zone');
   assert.equal(failedAt('2026-10-03T14:05:00+02:00', 'UTC'), '3 Oct · 12:05');

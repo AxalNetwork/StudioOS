@@ -115,7 +115,7 @@ test('the module read query, the count, the pages, the cells and the links a rea
   assert.equal(safeHref('/validate/x'), '/validate/x');
   for (const bad of ['//evil.test', 'https://evil.test', 'javascript:alert(1)', 'validate', null]) assert.equal(safeHref(bad), null, String(bad));
   assert.deepEqual(cycleTabs('build', [{ slug: 'founding-team', name: 'Founding team' }], 'founding-team').map((t) => [t.name, t.href, t.active]),
-    [['Overview', '/build', false], ['Founding team', '/build/founding-team', true]]);
+    [['Overview', '/build', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Tools history is its second tab (#1597)');
 });
 
 test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module page keep `?project_id=`', () => {
