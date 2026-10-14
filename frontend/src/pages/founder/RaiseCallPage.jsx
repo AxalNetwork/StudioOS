@@ -47,8 +47,16 @@ export function responseOf(r) {
 /** Who a recipient is: a matching investor's name is hidden until they respond. */
 export const whoOf = (r) => (r.name ? `${r.name} · ${r.email}` : 'Matching investor · name hidden until they respond');
 
-/** The rows the controls leave, newest response first. */
-export function visibleRows(recipients, { q = '', filter = 'all' } = {}) {
+/** When a recipient last did something: the latest of their recorded times, or null. */
+export function lastActivity(r) {
+  const times = [r.committed_at, r.responded_at, r.data_room_requested_at, r.opened_at].filter(Boolean).map((t) => String(t).replace(' ', 'T'));
+  return times.length ? times.sort().at(-1) : null;
+}
+
+export const SORTS = [['latest', 'Latest'], ['furthest', 'Furthest along']];
+
+/** The rows the controls leave: latest activity first (no activity last), or furthest along. */
+export function visibleRows(recipients, { q = '', filter = 'all', sort = 'latest' } = {}) {
   const needle = q.trim().toLowerCase();
   const latest = (r) => r.commitment_cents != null ? 3 : r.data_room_requested_at ? 2 : r.opened_at ? 1 : 0;
   return (recipients || [])
@@ -58,7 +66,15 @@ export function visibleRows(recipients, { q = '', filter = 'all' } = {}) {
       || (filter === 'opened' && !!r.opened_at))
     .filter((r) => !needle || `${r.name || ''} ${r.email || ''} ${responseOf(r).text}`.toLowerCase().includes(needle))
     .map((r, i) => ({ r, i }))
-    .sort((a, b) => latest(b.r) - latest(a.r) || a.i - b.i)
+    .sort(sort === 'furthest'
+      ? (a, b) => latest(b.r) - latest(a.r) || a.i - b.i
+      : (a, b) => {
+        const x = lastActivity(a.r); const y = lastActivity(b.r);
+        if (x === y) return a.i - b.i;
+        if (!x) return 1;
+        if (!y) return -1;
+        return x < y ? 1 : -1;
+      })
     .map(({ r }) => r);
 }
 
@@ -72,7 +88,7 @@ export function callBanner(call, progress, today = new Date().toISOString().slic
 
 export function RaiseCallView({ state: s, on }) {
   const d = s.data; const c = d.call; const p = d.progress;
-  const rows = useMemo(() => visibleRows(d.recipients, { q: s.q, filter: s.filter }), [d.recipients, s.q, s.filter]);
+  const rows = useMemo(() => visibleRows(d.recipients, { q: s.q, filter: s.filter, sort: s.sort }), [d.recipients, s.q, s.filter, s.sort]);
   const page = rows.slice(s.page * PAGE_SIZE, s.page * PAGE_SIZE + PAGE_SIZE);
   const banner = callBanner(c, p);
   const open = c.state === 'sent' && !d.read_only;
@@ -84,7 +100,8 @@ export function RaiseCallView({ state: s, on }) {
     <section className="space-y-3 rounded-xl border border-axal-hairline p-4 dark:border-gray-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">Committed {moneyCents(p.committed_cents)} of {moneyCents(p.target_cents)}</h2>
-        <span className="text-xs text-axal-muted">Latest</span>
+        <select aria-label="Sort responses" className={`${callInput} w-auto`} value={s.sort} onChange={(e) => on.sort(e.target.value)}>
+          {SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <input type="search" aria-label="Search responses" placeholder="Search responses…" className={`${callInput} max-w-xs`} value={s.q} onChange={(e) => on.q(e.target.value)} />
@@ -126,7 +143,7 @@ export function RaiseCallView({ state: s, on }) {
 export default function RaiseCallPage() {
   const { uid } = useParams();
   const read = useCallRead(() => roundCallsApi.page(uid), [uid]);
-  const [q, setQ] = useState(''); const [filter, setFilter] = useState('all'); const [page, setPage] = useState(0);
+  const [q, setQ] = useState(''); const [filter, setFilter] = useState('all'); const [page, setPage] = useState(0); const [sort, setSort] = useState('latest');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [message, setMessage] = useState('');
   const [answers, setAnswers] = useState({}); const [target, setTarget] = useState(''); const [extending, setExtending] = useState(false); const [newCall, setNewCall] = useState(false);
   async function perform(action, label) {
@@ -136,7 +153,7 @@ export default function RaiseCallPage() {
     finally { setBusy(false); }
   }
   const on = {
-    q: (v) => { setQ(v); setPage(0); }, filter: (v) => { setFilter(v); setPage(0); }, page: setPage, target: setTarget,
+    q: (v) => { setQ(v); setPage(0); }, filter: (v) => { setFilter(v); setPage(0); }, sort: (v) => { setSort(v); setPage(0); }, page: setPage, target: setTarget,
     answerValue: (key, value) => setAnswers((a) => ({ ...a, [key]: value })),
     answer: (key) => perform(() => roundCallsApi.answer(uid, key, answers[key]), 'Answer recorded.'),
     extend: () => (extending ? perform(() => roundCallsApi.manage(uid, { action: 'extend', target_close: target }), 'Target close extended. Responses are paused until counsel approves the extended terms.') : setExtending(true)),
@@ -153,7 +170,7 @@ export default function RaiseCallPage() {
         <CycleHeader cycle="raise" cards={cards} active="capital-relationships" title={d ? `Call for Capital · ${d.call.name}` : 'Call for Capital'}
           search={d ? `?project_id=${d.call.project_id}` : ''} />
         {read.error?.status === 403 ? <p role="alert">The Worker refused this call: {read.error.message || 'you cannot open it.'}</p>
-          : <CallReadState read={read}>{d && <RaiseCallView state={{ data: d, q, filter, page, busy, error, message, answers, target, extending }} on={on} />}</CallReadState>}
+          : <CallReadState read={read}>{d && <RaiseCallView state={{ data: d, q, filter, sort, page, busy, error, message, answers, target, extending }} on={on} />}</CallReadState>}
         {newCall && d && <RoundCallSheet projectId={d.call.project_id} onClose={() => { setNewCall(false); read.retry(); }} />}
       </main>
     </RailFrame>

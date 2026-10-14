@@ -9,7 +9,7 @@ export function RoundCallIndex() {
   const [params]=useSearchParams();
   const projectId=params.get('project_id');
   const read=useCallRead(()=>roundCallsApi.list(projectId),[projectId]);
-  return <main className="p-5 space-y-4"><h1 className="text-2xl font-bold">Round calls</h1><CallReadState read={read}>{read.data&&(read.data.items.length?<ul>{read.data.items.map(call=><li key={call.uid}><Link className="underline" to={(projectId?'/raise/calls/':'/round-calls/')+call.uid}>{call.name}</Link> · {call.state} · closes {callDate(call.target_close)}</li>)}</ul>:<p>No round calls are recorded for this view.</p>)}</CallReadState></main>;
+  return <main className="p-5 space-y-4"><h1 className="text-2xl font-bold">Round calls</h1><CallReadState read={read}>{read.data&&(read.data.items.length?<ul>{read.data.items.map(call=><li key={call.uid}><Link className="underline" to={(projectId&&call.state!=='draft'?'/raise/calls/':'/round-calls/')+call.uid}>{call.name}</Link> · {call.state} · closes {callDate(call.target_close)}</li>)}</ul>:<p>No round calls are recorded for this view.</p>)}</CallReadState></main>;
 }
 export default function RoundCallPage() {
   const {uid}=useParams();
