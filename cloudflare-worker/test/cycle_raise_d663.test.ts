@@ -573,16 +573,34 @@ test('D686 #1594 Calls history mutations: flag, project scope, date, counts and 
     ["row.target_close>=ctx.today?'open':'expired'","true?'open':'expired'",'date'],
     ['COALESCE(SUM(r.commitment_cents),0)','COUNT(*)','sum'],
     ["return {state:'unreadable'};","return {enabled:true,items:[]};",'unreadable'],
+    ["(SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id) AS recipients","0 AS recipients","metrics"],
+    ["r.call_id=c.id AND r.opened_at IS NOT NULL","r.call_id=c.id","metrics"],
+    ["r.call_id=c.id AND r.data_room_requested_at IS NOT NULL","r.call_id=c.id","metrics"],
+    ["r.call_id=c.id AND r.commitment_cents IS NOT NULL","r.call_id=c.id","metrics"],
+    ["r.call_id=c.id AND r.responded_at IS NOT NULL","r.call_id=c.id","metrics"],
+    ["q.call_id=c.id AND q.answer IS NULL","q.call_id=c.id","metrics"],
+    ["ORDER BY c.created_at DESC,c.id DESC","ORDER BY c.created_at ASC,c.id DESC","order"],
+    ["ORDER BY c.created_at DESC,c.id DESC","ORDER BY c.created_at DESC,c.id ASC","order"],
+    ["row.target_close>=ctx.today?'open':'expired'","row.target_close>ctx.today?'open':'expired'","boundary"],
   ];
   const check=async(api:any,which:string)=>{
     if(which==='flag'){assert.deepEqual(await api.callsHistory({env:env(fixture()),projectId:P,today:'2026-10-14'}),{enabled:false});return;}
     const db=which==='unreadable'?fixture():callFixture();
     if(which==='date')db.exec("UPDATE round_calls SET target_close='2000-01-01' WHERE id=1");
+    if(which==='boundary')db.exec("UPDATE round_calls SET target_close='2026-10-14' WHERE id=1");
+    if(which==='metrics')db.exec("UPDATE round_call_recipients SET opened_at='2026-10-10',data_room_requested_at='2026-10-11' WHERE call_id=1 AND investor_user_id=71; INSERT INTO round_call_questions(uid,call_id,investor_user_id,question,answer) VALUES('qm1',1,71,'One?',NULL),('qm2',1,71,'Two?','Answered'),('qm3',1,72,'Three?',NULL)");
+    if(which==='order')db.exec("UPDATE round_calls SET created_at='2020-01-01'; INSERT INTO round_calls(uid,project_id,name,amount_cents,instrument,terms,minimum_cheque_cents,target_close,state,terms_hash,created_by,created_at) SELECT 'tie',project_id,'Tie',amount_cents,instrument,terms,minimum_cheque_cents,target_close,state,terms_hash,created_by,'2020-01-01' FROM round_calls WHERE id=1; INSERT INTO round_calls(uid,project_id,name,amount_cents,instrument,terms,minimum_cheque_cents,target_close,state,terms_hash,created_by,created_at) SELECT 'newer',project_id,'Newer',amount_cents,instrument,terms,minimum_cheque_cents,target_close,state,terms_hash,created_by,'2020-01-02' FROM round_calls WHERE id=1");
     const c:any=await api.callsHistory({env:{...env(db),ROUND_CALLS_ENABLED:'true'},projectId:P,today:'2026-10-14'});
     if(which==='unreadable'){assert.deepEqual(c,{state:'unreadable'});return;}
     if(which==='scope')assert.deepEqual(c.items.map((i:any)=>i.uid),['call-1']);
     if(which==='date')assert.equal(c.items[0].effective_state,'expired');
     if(which==='sum')assert.equal(c.items[0].committed_cents,9000000);
+    if(which==='boundary')assert.equal(c.items[0].effective_state,'open');
+    if(which==='order')assert.deepEqual(c.items.map((i:any)=>i.uid),['newer','tie','call-1']);
+    if(which==='metrics'){
+      const r=c.items[0];
+      assert.deepEqual([r.recipients,r.opened,r.data_room_requests,r.commitments,r.responded,r.unanswered_questions],[3,1,1,2,2,2]);
+    }
   };
   for(const [index,[before,after,which]] of cases.entries()) {
     assert.ok(source.includes(before),'mutation target exists');
