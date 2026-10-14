@@ -22,8 +22,10 @@
 import type { Env, JobMessage } from './types';
 import { handleJob } from './services/queueWorker';
 
-// Mirrors AI_JOB_TYPES in services/queueWorker.ts.
-const AI_JOB_TYPES = new Set([
+// Mirrors AI_JOB_TYPES in services/queueWorker.ts, which says why
+// `interview_process` is not in it: a deferral below spends one of the
+// message's Cloudflare retries.
+export const AI_JOB_TYPES = new Set([
   'ai_scoring',
   'traction_review',
   'liquidity_valuation',

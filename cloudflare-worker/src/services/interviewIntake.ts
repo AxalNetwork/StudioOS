@@ -20,6 +20,9 @@
 import type { Env, User } from '../types';
 import { canWrite, type ProjectRef } from '../routes/_founder_validate_helpers';
 import { loadSession, replaceWithFinal, type SessionRow, type StoredSegment } from './interviewSessions';
+// A static import is safe: nothing sessionSetup.ts loads reaches this file
+// (interviewSessions.ts already imports it the same way).
+import { CALL_PROVIDERS, markInterviewHeld } from './sessionSetup';
 import { PROVIDER_LABEL, type ChannelProvider, type ImportedSegment } from './channels/types';
 
 export class IntakeError extends Error {
@@ -109,20 +112,32 @@ export async function createInterview(
  * records the interviewee's consent when it is scheduled (`consent.method`,
  * one of CONSENT_METHODS): without it #1470's rule keeps the AI off the
  * transcript, as it does for a recording.
+ *
+ * D685 §5.1: the session also records how the call is held, in the setup
+ * modal's terms — `call_provider` is the provider's own key (zoom and
+ * google_meet on video, telegram and whatsapp on text), and only on a channel
+ * that admits it — and the interview takes its channel from this session if
+ * it had none. One batch: both land, or neither. `submitted_via` keeps its
+ * own meaning (imported from elsewhere).
  */
 export async function openSession(
   env: Env, scoped: ScopedInterview, provider: ChannelProvider, channel: 'text' | 'video',
   consent: { method: string } | null = null,
 ): Promise<SessionRow> {
   const uid = crypto.randomUUID();
-  const row = await env.DB.prepare(
-    `INSERT INTO interview_sessions
-       (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-        submitted_via, submitted_via_name)
-     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END, ?, ?) RETURNING id`,
-  ).bind(uid, scoped.interview.id, scoped.project.id, scoped.member.id, channel,
-    consent ? 'given' : 'not_recorded', consent?.method ?? null, consent?.method ?? null, provider, PROVIDER_LABEL[provider])
-    .first<{ id: number }>();
+  const callProvider = (CALL_PROVIDERS[channel] ?? []).includes(provider) ? provider : null;
+  const [inserted] = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO interview_sessions
+         (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
+          submitted_via, submitted_via_name, call_provider)
+       VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END, ?, ?, ?) RETURNING id`,
+    ).bind(uid, scoped.interview.id, scoped.project.id, scoped.member.id, channel,
+      consent ? 'given' : 'not_recorded', consent?.method ?? null, consent?.method ?? null, provider, PROVIDER_LABEL[provider],
+      callProvider),
+    env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(channel, scoped.interview.id),
+  ]);
+  const row = (inserted?.results?.[0] ?? null) as { id: number } | null;
   const session = row ? await loadSession(env, Number(row.id)) : null;
   if (!session) throw new IntakeError(500, 'not_stored', 'The session could not be created.');
   return session;
@@ -160,6 +175,16 @@ export const TRANSCRIPT_MIRROR_MAX_BYTES = 1_000_000;
  * sees all of it or none. `alongside` joins that batch — the thread store
  * passes the deletion of the pending copies, so a message is never in both
  * places or neither.
+ *
+ * D685 §5.1.6: the batch that FIRST moves the session to `transcribed` (from
+ * `draft`) means the conversation has happened, so the interview is then
+ * marked held (stage `done`, its channel filled) — see `markHeld`. The move is
+ * decided inside the batch, by a statement that changes a row only while the
+ * session is still `draft`, so of two first messages delivered at once only
+ * one marks it. A chat that was `structured` (the quiet-chat sweep does that
+ * on its own) and gets new text goes back to `transcribed` without a mark, so
+ * a stage the member set by hand stays. The mark is best-effort: it never
+ * fails the append.
  */
 export async function appendSegments(
   env: Env, userId: number, sessionId: number, segments: StoredSegment[], provider: ChannelProvider,
@@ -175,11 +200,16 @@ export async function appendSegments(
   }
   const model = intakeModel(provider);
   const plain = clean.map((s) => s.text).join('\n');
-  await env.DB.batch([
+  const results = await env.DB.batch([
     ...clean.map((s) => env.DB.prepare(
       `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model)
        VALUES (?, 'final', ?, ?, ?, ?, ?, ?)`,
     ).bind(session.id, s.start_ms, s.end_ms, s.speaker_label, s.speaker_raw, s.text, model)),
+    // The first move to transcribed, claimed inside the write: it changes a
+    // row only for the one batch that finds the session still a draft.
+    env.DB.prepare(
+      `UPDATE interview_sessions SET status = 'transcribed' WHERE id = ? AND status = 'draft'`,
+    ).bind(session.id),
     env.DB.prepare(
       `UPDATE interview_sessions
           SET status = CASE WHEN status IN ('draft', 'structured') THEN 'transcribed' ELSE status END,
@@ -197,12 +227,44 @@ export async function appendSegments(
     ).bind(plain, TRANSCRIPT_MIRROR_MAX_BYTES, plain, plain, model, session.interview_id),
     ...alongside,
   ]);
+  if (Number(results[clean.length]?.meta?.changes ?? 0) > 0) await markHeld(env, session, userId);
   return clean.length;
+}
+
+/**
+ * The interview marked held through `markInterviewHeld`, which skips one
+ * already `done`. An interview with no stage at all is left as it is (its
+ * channel still filled): a hand-logged interview, or one made by "Create
+ * interview from this chat", has none, and every reader already counts it as
+ * held on its `interview_date` (`cycleValidate.ts`'s `interviewsFigure` and
+ * `weeklyHeld`, `pipelineOf`). Moving it to `done` would stamp `done_at` today
+ * and move it out of the month it was held in. Guarded once more: nothing
+ * here may fail the write that called it.
+ */
+async function markHeld(env: Env, session: SessionRow, userId: number): Promise<void> {
+  try {
+    const row = await env.DB.prepare('SELECT stage FROM discovery_interviews WHERE id = ?')
+      .bind(session.interview_id).first<{ stage: string | null }>();
+    if (!row) return;
+    if (row.stage != null) {
+      await markInterviewHeld(env, session, userId);
+      return;
+    }
+    await env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?')
+      .bind(session.channel, session.interview_id).run();
+  } catch (e) {
+    console.warn('[intake] marking the interview held failed', (e as Error)?.message);
+  }
 }
 
 /**
  * A meeting's whole transcript, imported once: it replaces the session's
  * segments (as an audio session's final transcript replaces its live draft).
+ * A transcript means the call took place, so once it is stored the interview
+ * is marked held, best-effort, as an append does (D685 §5.1.6) — only when
+ * this import is the session's first move to `transcribed`. Importing again
+ * over a session already transcribed or structured leaves the stage, so a
+ * stage the member set by hand stays.
  */
 export async function importTranscript(
   env: Env, userId: number, sessionId: number, segments: ImportedSegment[], provider: ChannelProvider,
@@ -218,6 +280,8 @@ export async function importTranscript(
     }))
     .filter((s) => s.text.length > 0);
   if (!stored.length) throw new IntakeError(422, 'transcript_empty', 'The meeting transcript had no text to import.');
+  const first = session.status !== 'transcribed' && session.status !== 'structured';
   await replaceWithFinal(env, session, stored, `${provider}_transcript`, null, 'transcribed');
+  if (first) await markHeld(env, session, userId);
   return stored.length;
 }

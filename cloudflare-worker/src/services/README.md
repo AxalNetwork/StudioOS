@@ -22,6 +22,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `researchFundRead.ts` | The dossier overlap sentence. A missing cheque end stays open; a missing raise is not an overlap of zero. |
 | `researchTaxonomy.ts` | The Research crosswalk (D533, migration 376): which market a company sector label or a fund focus token belongs to, which country a place string means, and each market's market-intelligence sector. Exact-match dictionaries plus hand overrides; every answer carries `method` and `rule`, and a value nothing names stays unmapped — no substring guessing. |
 | `securityEvents.ts` | The `security_events` ledger (D200): refusals and step-ups at the auth boundary, subject hashed and network bucketed, one row per minute, 90-day retention sealed by trigger. Never throws — a refusal's own status is never changed by its telemetry. |
+| `queueWorker.ts` | `handleJob`, the one dispatch for every queued job type in `../models/jobs.ts`, used by the D1 cron drain here and by `../queue-consumer.ts` for Cloudflare Queues. A new job type needs both a `JobType` entry and a case here, or its messages fail as "unknown job type" (D685's `interview_process` was cast into being without either until S1 registered it, #1584). `AI_JOB_TYPES` is the per-drain AI cap, mirrored in `../queue-consumer.ts` (a test keeps the two equal). `interview_process` stays out of it: on the Cloudflare path a deferral spends one of the message's retries, so the cap would dead-letter a recording's run, which only an admin's manual DLQ retry (`../routes/infra.ts`) replays. The member's D640 budget already bounds that job's AI calls. |
 | `deadLetters.ts` | The dead-letter backlog counted once, over **both** of its tables (`dead_letter_queue` and `cf_dlq_mirror`). Read-only, and either table failing makes the whole answer unreadable with the table named — half a sum is never sent as the sum (D202). |
 | `platformSwitches.ts` | The switches the platform does have, for HQ Platform (D202) and Switches (D203). **It parses no variable of its own**: each entry calls the predicate its reader calls, because the readers disagree about what "on" means. States only — never a value, never a variable name. `eadwyn_off` is the one with two halves, the deployment's and HQ's, and both are read through `advisorKillState` — the predicate every advisor route calls. |
 | `operatorSwitches.ts` | The switch store HQ throws from Platform → Switches (D203, migration 283). **Kill-only**: it can switch a capability off and release its own kill, never switch one on and never lift a deployment's. Read as one 30-second reading per database binding; the writing isolate clears its own reading, a failed read keeps the last good one and retries after the same 30 seconds rather than latching, and with none the store is unreadable — which the gate reads as "not thrown", because a D1 blip must not switch Eadwyn off for everyone. The D1 reads live here and not in `platformSwitches.ts`, whose guard forbids it reading the environment. |
@@ -119,10 +120,10 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - `callLabel`, derived on every read and never stored;
   - the ten languages both final models take, with Flux English-only;
   - the talking points, checked against the project, capped at 10 and snapshotted;
-  - `markInterviewHeld`, which moves the interview to `done` and fills its channel when a session stops or a text session's chat is in;
+  - `markInterviewHeld`, which moves the interview to `done` and fills its channel when a session stops, a text session's chat is in (pasted, or a channel chat's first text) or a call's transcript is imported;
   - `activeSessionOf`, the one-live-session-per-member check (assistant and channel sessions excluded).
 - `interviewProcessing.ts` (D685, #1584) runs a stopped recording to the review:
-  - `finishSession` (`POST /sessions/:id/finish`) records the last sequence number and queues the `interview_process` job; a chunk that arrives late is taken and the job picks it up;
+  - `finishSession` (`POST /sessions/:id/finish`) records the last sequence number and queues the `interview_process` job (a `JobType` that `queueWorker.ts`'s `handleJob` dispatches to `runInterviewProcessJob`); a chunk that arrives late is taken and the job picks it up;
   - the job transcribes chunk by chunk into `interview_chunk_transcripts`, so a retry (`POST /sessions/:id/process`) resumes where it stopped, then summarises and places through `structureSession` (`trigger: 'recording_processed'`);
   - the stage is `uploading`, `transcribing`, `summarising`, `placing`, `done` or `failed`, with `processing_error` in words; a run idle 15 minutes counts as stale and may be retried;
   - `summariseSession` keeps only sentences that cite a transcript segment, and writes a row to `interview_summary_receipts`.
@@ -146,7 +147,17 @@ D684 (#1575): `interviewIntake.ts` is the one way an outside channel writes
 into an interview. It reloads the member and re-checks the venture on every
 write, takes the interview only from an id already scoped to the member, and
 stores text where the paste-in Text chat stores it, so Structure and Ask work
-on a channel session unchanged. `channels/` holds the rest.
+on a channel session unchanged. Under D685 §5.1 (S1, #1583), `openSession`
+also stores `call_provider` (`zoom`, `google_meet`, `telegram`, `whatsapp`,
+each only on a channel `sessionSetup.ts` admits it for) and fills the
+interview's `channel` when it had none. The append that first moves a chat
+from `draft` to `transcribed` (claimed inside its batch, so it happens once) and
+an imported call transcript's first move to `transcribed` mark the interview
+held through `markInterviewHeld`, best-effort, after the write lands. New text
+on a `structured` chat does not mark it again, so a stage the member set stays,
+and an interview with no stage is left alone: the readers already count it as
+held on its `interview_date`.
+`submitted_via` is unchanged. `channels/` holds the rest.
 `sessionAutoStructure.ts` runs D658's Structure without the button: when a
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps
