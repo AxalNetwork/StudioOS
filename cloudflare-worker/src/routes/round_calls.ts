@@ -6,9 +6,10 @@ import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { mapError } from './_t13t14t15_helpers';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { refuse } from '../util/refusal';
 import { roundCallsEnabled, verifiedInvestor } from '../services/roundCallPolicy';
 import { RoundCallError, loadCall, projectFacts, roundContext, saveDraft, audience, saveAudience,
-  founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion } from '../services/roundCalls';
+  founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview } from '../services/roundCalls';
 
 type Ctx = Context<{ Bindings: Env }>;
 const routes = new Hono<{ Bindings: Env }>();
@@ -43,13 +44,16 @@ function id(value: unknown): number {
   return Number(parsed);
 }
 function failure(c:Ctx,error:unknown) {
-  if(error instanceof RoundCallError) return c.json({error:error.code,code:error.code},error.status);
+  if(error instanceof RoundCallError) {
+    if(error.sentence) return refuse(c,error.status,{code:error.code,message:error.sentence,extra:{code:error.code}});
+    return c.json({error:error.code,code:error.code},error.status);
+  }
   const message=error instanceof Error?error.message:'';
   if(AUTH_ERROR_STATUSES[message] || message==='step_up_required' || message==='admin_frozen' || message==='branch_suspended') return mapError(c,error);
   return c.json({error:'Round calls are unreadable. Try again.',code:'round_calls_unreadable'},503);
 }
-// Availability reveals no venture/investor data and lets the disabled button
-// show Coming soon. Every operational request independently enforces the flag.
+// Availability reveals no venture/investor data and lets the lightbox show
+// Coming soon before requesting any operational data. Every operational request independently enforces the flag.
 routes.get('/availability',async c=>{
   try { await requireAuth(c); return c.json({enabled:roundCallsEnabled(c.env)}); }
   catch(e){return failure(c,e);}
@@ -79,6 +83,11 @@ routes.post('/',async c=>{
   try { const body=await input(c),access=await owner(c,id(body.project_id)); return c.json(await saveDraft(c.env,access.project,access.user,body),201); }
   catch(e){return failure(c,e);}
 });
+// Static queue path must precede /:uid, which accepts 'counsel-queue' as a UID.
+routes.get('/counsel-queue',async c=>{
+  try { await requireHqAuthoring(c); const user=await requireSuperAdmin(c); return c.json(await counselQueue(c.env,user)); }
+  catch(e){return failure(c,e);}
+});
 routes.get('/:uid',async c=>{
   try {
     const user=await requireAuth(c),call=await loadCall(c.env,(c.req.param('uid') || ''));
@@ -94,12 +103,15 @@ routes.put('/:uid',async c=>{
 routes.post('/:uid/audience-preview',async c=>{
   try { const {call}=await callOwner(c),body=await input(c);
     const rows=await audience(c.env,call,body.chosen_prospect_ids,body.include_matches);
-    return c.json({chosen:rows.filter(r=>r.origin==='chosen').length,matched:rows.filter(r=>r.origin==='match').length,
-      match_reasons:[...new Set(rows.filter(r=>r.origin==='match').flatMap(r=>r.reasons))]});
+    return c.json(audiencePreview(call,rows));
   } catch(e){return failure(c,e);}
 });
 routes.put('/:uid/audience',async c=>{
   try { const {call,user}=await callOwner(c); return c.json(await saveAudience(c.env,call,user,await input(c))); }
+  catch(e){return failure(c,e);}
+});
+routes.post('/:uid/counsel-request',async c=>{
+  try { const {call,user}=await callOwner(c),body=await input(c); return c.json(await requestCounsel(c.env,call,user,body.revision)); }
   catch(e){return failure(c,e);}
 });
 routes.post('/:uid/send',async c=>{

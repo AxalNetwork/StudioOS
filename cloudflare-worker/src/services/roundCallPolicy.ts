@@ -4,6 +4,7 @@ export type RoundCallTerms = {
   minimum_cheque_cents: number; target_close: string;
   deck_id: number | null; deck_version: number | null; deck_content_hash?: string | null;
   data_room_project_uid: string | null; stage: string | null; sector: string | null;
+  valuation_cap_cents?: number | null; discount_bps?: number | null; pre_money_cents?: number | null;
 };
 export function roundCallsEnabled(env: { ROUND_CALLS_ENABLED?: string }): boolean {
   return env.ROUND_CALLS_ENABLED === 'true';
@@ -29,7 +30,8 @@ export function counselApproved(call: { terms_hash: string; counsel_approved_has
 export async function termsHash(t: RoundCallTerms): Promise<string> {
   const canonical = JSON.stringify([t.name, t.amount_cents, t.instrument, t.terms,
     t.minimum_cheque_cents, t.target_close, t.deck_id, t.deck_version,
-    t.data_room_project_uid, t.stage, t.sector, t.deck_content_hash ?? null]);
+    t.data_room_project_uid, t.stage, t.sector, t.deck_content_hash ?? null,
+    t.valuation_cap_cents ?? null, t.discount_bps ?? null, t.pre_money_cents ?? null]);
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
   return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
 }
@@ -72,12 +74,13 @@ export function matchReasons(call: RoundCallTerms, profile: InvestorThesis, proj
   if (!list(profile.thesis_keywords_json).some(word => words.has(word))) return [];
   return ['Stage fits ' + call.stage, 'Sector fits ' + call.sector, 'Cheque range fits', 'Recorded thesis fits the venture'];
 }
-export function founderRecipient(row: { origin: string; responded_at: string | null; name: string; email: string; investor_user_id: number; opened_at: string | null; data_room_requested_at: string | null; commitment_cents: number | null; delivery_state: string; match_reasons_json: string }) {
+export function founderRecipient(row: { origin: string; responded_at: string | null; committed_at?: string | null; last_response_at?: string | null; name: string; email: string; investor_user_id: number; opened_at: string | null; data_room_requested_at: string | null; commitment_cents: number | null; delivery_state: string; match_reasons_json: string }) {
   const visible = row.origin === 'chosen' || row.responded_at != null;
   return {
     origin: row.origin, ...(visible ? { investor_user_id: row.investor_user_id, name: row.name, email: row.email } : {}),
     opened_at: row.opened_at, data_room_requested_at: row.data_room_requested_at,
-    commitment_cents: row.commitment_cents, responded_at: row.responded_at,
+    commitment_cents: row.commitment_cents, committed_at: row.committed_at ?? null,
+    responded_at: row.responded_at, last_response_at: row.last_response_at ?? null,
     delivery_state: row.delivery_state, reasons: list(row.match_reasons_json),
   };
 }

@@ -11,7 +11,7 @@ const thesis = { sectors_json: '["Climate"]', stages_json: '["Seed"]', thesis_ke
   ticket_min_usd: 25000, ticket_max_usd: 250000, anti_thesis_sectors_json: '[]', anti_thesis_stages_json: '[]' };
 const verified = { role: 'investor', is_active: 1, kyc_status: 'approved' };
 const recipient = { investor_user_id: 4, name: 'Private investor', email: 'private@example.test', origin: 'match',
-  responded_at: null, opened_at: '2030-01-01', data_room_requested_at: null, commitment_cents: null,
+  responded_at: null, committed_at: '2030-01-02', last_response_at: '2030-01-03', opened_at: '2030-01-01', data_room_requested_at: null, commitment_cents: null,
   delivery_state: 'pending', match_reasons_json: '["Stage fits Seed"]' };
 const checks: Record<string, (p: any) => Promise<void> | void> = {
   flag(p) { assert.equal(p.roundCallsEnabled({ ENVIRONMENT: 'production' }), false);
@@ -47,13 +47,14 @@ const checks: Record<string, (p: any) => Promise<void> | void> = {
   privacy(p) { const hidden = p.founderRecipient(recipient);
     for (const key of ['name', 'email', 'investor_user_id']) assert.equal(Object.hasOwn(hidden, key), false);
     assert.equal(hidden.opened_at, '2030-01-01');
+    assert.deepEqual([hidden.committed_at,hidden.last_response_at],['2030-01-02','2030-01-03']);
     assert.equal(p.founderRecipient({ ...recipient, responded_at: '2030-01-02' }).name, 'Private investor');
     assert.equal(p.founderRecipient({ ...recipient, origin: 'chosen' }).email, 'private@example.test'); },
   async hash(p) { const original = await p.termsHash(terms);
     assert.equal(original.length, 64); assert.equal(await p.termsHash({ ...terms }), original);
     for (const [key, value] of Object.entries({ name: 'Series A', amount_cents: 2, instrument: 'equity',
       terms: 'Changed', minimum_cheque_cents: 1, target_close: '2031-01-01', deck_id: 2, deck_version: 4, deck_content_hash: 'changed',
-      data_room_project_uid: null, stage: 'Series A', sector: 'Finance' }))
+      data_room_project_uid: null, stage: 'Series A', sector: 'Finance', valuation_cap_cents: 800000000, discount_bps: 2000, pre_money_cents: 1200000000 }))
       assert.notEqual(await p.termsHash({ ...terms, [key]: value }), original); },
 };
 for (const [name, verify] of Object.entries(checks)) test('D653 policy: ' + name, async () => verify(policy));
@@ -87,7 +88,9 @@ const mutations = [
   ['match', 'list(profile.anti_thesis_stages_json).includes(stage)', 'false'],
   ['match', '!list(profile.thesis_keywords_json).some(word => words.has(word))', 'false'],
   ['privacy', "row.origin === 'chosen' || row.responded_at != null", 'true'],
-  ...['name','amount_cents','instrument','terms','minimum_cheque_cents','target_close','deck_id','deck_version','deck_content_hash','data_room_project_uid','stage','sector']
+  ['privacy', 'committed_at: row.committed_at ?? null', 'committed_at: null'],
+  ['privacy', 'last_response_at: row.last_response_at ?? null', 'last_response_at: null'],
+  ...['name','amount_cents','instrument','terms','minimum_cheque_cents','target_close','deck_id','deck_version','deck_content_hash','data_room_project_uid','stage','sector','valuation_cap_cents','discount_bps','pre_money_cents']
     .map(key => ['hash', 't.' + key, "'removed'"]),
 ];
 for (const [index, [check, old, replacement]] of mutations.entries()) {

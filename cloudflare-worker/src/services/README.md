@@ -89,7 +89,7 @@ and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
 
-D663: `raiseCycle.ts` computes the Raise figures, seven cards and records for
+D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus D686's independently readable, project-scoped Calls history, for
 `../routes/cycle_raise.ts`, including the computed readiness checks, the
 diligence checklist and the narrative consistency check (fixed patterns, no
 model). `raiseWriters.ts` has one writer per migration 442 record.
@@ -132,7 +132,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 
 ### Founder round calls (D653)
 
-`roundCalls.ts` orchestrates private founder calls, counsel fingerprints, recipient entitlements, notification outcomes and atomic Raise pipeline responses. `roundCallPolicy.ts` contains flag, verification, readiness, matching and identity policies. The GP capital-call domain is separate. See [D653](../../../documentation/architecture/decisions/D653.md).
+`roundCalls.ts` orchestrates private founder calls, counsel fingerprints, idempotent counsel requests and the independent HQ queue, structured term seeds, recipient entitlements, notification outcomes and atomic Raise pipeline responses. Unchanged drafts and computed audience sets preserve approval (D686 #1594, migration 456). `roundCallPolicy.ts` contains flag, verification, readiness, matching and identity policies. The GP capital-call domain is separate. See [D653](../../../documentation/architecture/decisions/D653.md).
 
 D667 (#1497): `assistantInterviews.ts` holds `submit_interview`,
 `propose_placements` and `structure_with_studioos` for #1496's MCP server.
