@@ -354,7 +354,7 @@ export async function confirmTelegramLink(env: Env, link: InboundLinkConfirm): P
       }
       await env.DB.prepare(
         `UPDATE integrations SET status = 'active', auth_type = 'webhook', display_name = 'Telegram', credentials_enc = NULL,
-                external_account_id = ?, external_account_name = ?, config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+                external_account_id = ?, external_account_name = ?, config_json = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`,
       ).bind(link.telegramUserId, name, config, existing.id).run();
       integrationId = Number(existing.id);

@@ -45,7 +45,7 @@ async function freshEnv() {
     CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
     CREATE TABLE integrations (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL, user_id INTEGER NOT NULL,
       provider_key TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', credentials_enc TEXT, config_json TEXT,
-      last_synced_at TEXT, last_error TEXT, updated_at TEXT);
+      last_synced_at TEXT, last_error TEXT, last_error_at TEXT, updated_at TEXT);
     INSERT INTO users (id, role, email, founder_id) VALUES
       (1, 'admin', 'a@example.test', NULL), (10, 'founder', 'f@example.test', 1001), (20, 'founder', 'g@example.test', 1002);
     INSERT INTO projects (id, name, founder_id) VALUES (1, 'Acme', 1001), (2, 'Beta', 1002);

@@ -92,7 +92,7 @@ function world(opts: { reply?: string } = {}) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT,
       status TEXT, auth_type TEXT, credentials_enc TEXT, config_json TEXT, capabilities_json TEXT, scopes_json TEXT,
       external_account_id TEXT, external_account_name TEXT, webhook_secret_enc TEXT,
-      last_synced_at TEXT, last_error TEXT, created_at TEXT, updated_at TEXT
+      last_synced_at TEXT, last_error TEXT, last_error_at TEXT, created_at TEXT, updated_at TEXT
     );
     INSERT INTO integrations (id, uid, user_id, provider_key, status, last_synced_at) VALUES
       (1, 'i1', ${ME}, 'hubspot', 'active', '2026-10-09 10:00:00'),

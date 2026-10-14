@@ -234,13 +234,13 @@ function computeResetEpoch(hint?: string): number {
 async function markRateLimited(env: Env, row: IntegrationRow, hint?: string): Promise<void> {
   const epoch = computeResetEpoch(hint);
   await env.DB.prepare(
-    'UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
   ).bind(`rate_limited:${epoch}`, row.id).run();
 }
 
 async function clearRateLimited(env: Env, row: IntegrationRow): Promise<void> {
   await env.DB.prepare(
-    "UPDATE integrations SET last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND last_error LIKE 'rate_limited%'",
+    "UPDATE integrations SET last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND last_error LIKE 'rate_limited%'",
   ).bind(row.id).run();
 }
 
@@ -320,7 +320,7 @@ async function action(c: Context<{ Bindings: Env }>, _user: User, row: Integrati
       throw new Error('crunchbase_rate_limited');
     }
     if (e instanceof CrunchbaseUnauthorized) {
-      await c.env.DB.prepare('UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      await c.env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .bind('unauthorized', row.id).run();
       throw new Error('crunchbase_unauthorized');
     }

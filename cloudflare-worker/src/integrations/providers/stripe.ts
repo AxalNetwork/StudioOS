@@ -614,12 +614,12 @@ export async function syncStripeForUser(env: Env, userId: number, projectId: num
       await projectMetricsToProject(env, projectId, metrics);
     }
     await env.DB.prepare(
-      'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?',
+      'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?',
     ).bind(row.id).run();
     return { ok: true, imported: hasData ? 1 : 0, mrr: metrics.mrr, customers: metrics.paying_customers };
   } catch (e) {
     const msg = (e as Error).message?.slice(0, 500) || 'sync failed';
-    try { await env.DB.prepare('UPDATE integrations SET last_error = ? WHERE id = ?').bind(msg, row.id).run(); } catch { /* non-fatal */ }
+    try { await env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP WHERE id = ?').bind(msg, row.id).run(); } catch { /* non-fatal */ }
     return { ok: false, imported: 0, detail: msg };
   }
 }
@@ -710,7 +710,7 @@ export async function syncAllStripeIntegrations(env: Env): Promise<{ scanned: nu
       const stubUser = { id: row.user_id } as User;
       const out = await sync(stubCtx, stubUser, row);
       await env.DB.prepare(
-        'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?',
+        'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?',
       ).bind(row.id).run();
       ok++;
       console.info(`[stripe] cron sync ok integration=${row.id}: ${out.summary}`);
@@ -718,7 +718,7 @@ export async function syncAllStripeIntegrations(env: Env): Promise<{ scanned: nu
       failed++;
       const msg = (e as Error).message?.slice(0, 500) || 'sync failed';
       try {
-        await env.DB.prepare('UPDATE integrations SET last_error = ? WHERE id = ?').bind(msg, row.id).run();
+        await env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP WHERE id = ?').bind(msg, row.id).run();
       } catch { /* non-fatal */ }
       console.error(`[stripe] cron sync failed integration=${row.id}: ${msg}`);
     }

@@ -22,7 +22,7 @@
 import type { Env } from '../types';
 import type { IntegrationRow } from '../integrations/registry';
 import { companyEnabled } from '../integrations/companyScope';
-import { MODULE_LABELS } from '../integrations/fed';
+import { MODULE_LABELS } from '../integrations/moduleLabels';
 import type { ConnectorRead, ConnectorReader } from './eadwynConnectors';
 
 /** At most this many rows feed one connector's lines. */

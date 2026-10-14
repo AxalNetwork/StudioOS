@@ -107,7 +107,8 @@ function world(over: Record<string, unknown> = {}) {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql', '454_channel_voice_failures.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql', '454_channel_voice_failures.sql',
+    '457_integrations_last_error_at.sql']) db.exec(mig(m));
   const jobs: any[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48),
@@ -569,6 +570,32 @@ test('a refused Zoom grant fails the import with a reconnect sentence and no pro
   globalThis.fetch = (async () => json({ message: 'upstream exploded' }, 502)) as typeof fetch;
   await assert.rejects(runChannelJob(g.env, 'meeting_import', { provider: 'zoom', refUid: busy }), /^Error: meeting_import_retry:zoom_unreachable$/);
   assert.equal(refRow(g, busy).last_error, MEETING_ERRORS.zoom_unreachable);
+});
+
+test('D686 #1592: a Zoom refresh that lands clears the stored failure and its time; a refused one keeps both', async (t) => {
+  const failure = (f: World) => ({ ...f.db.prepare("SELECT last_error, last_error_at FROM integrations WHERE provider_key = 'zoom'").get() });
+  const stale = { last_error: 'sync failed', last_error_at: '2026-10-01 08:00:00' };
+  const ok = world();
+  await connectZoom(ok, { access_token: 'stale-at', expires_at: Date.now() - 1000 });
+  ok.db.prepare("UPDATE integrations SET last_error = ?, last_error_at = ? WHERE provider_key = 'zoom'").run(stale.last_error, stale.last_error_at);
+  const { uid } = await seedRef(ok, { status: 'ended' });
+  mockFetch(t, {
+    'POST https://zoom.us/oauth/token': () => json({ access_token: 'fresh-at', refresh_token: 'rotated-rt', expires_in: 3599, token_type: 'bearer' }),
+    'GET https://api.zoom.us/v2/meetings/85746065432/recordings': () => zoomRecordings([TRANSCRIPT_FILE]),
+    'GET https://zoom.us/rec/download/transcript-file': () => new Response(VTT),
+  });
+  await runChannelJob(ok.env, 'meeting_import', { provider: 'zoom', refUid: uid });
+  assert.equal(refRow(ok, uid).status, 'imported');
+  assert.deepEqual(failure(ok), { last_error: null, last_error_at: null });
+
+  const refused = world();
+  await connectZoom(refused, { access_token: 'stale-at', expires_at: Date.now() - 1000 });
+  refused.db.prepare("UPDATE integrations SET last_error = ?, last_error_at = ? WHERE provider_key = 'zoom'").run(stale.last_error, stale.last_error_at);
+  const { uid: denied } = await seedRef(refused, { status: 'ended' });
+  globalThis.fetch = (async () => json({ reason: 'Invalid Token!', error: 'invalid_grant' }, 400)) as typeof fetch;
+  await runChannelJob(refused.env, 'meeting_import', { provider: 'zoom', refUid: denied });
+  assert.equal(refRow(refused, denied).status, 'failed');
+  assert.deepEqual(failure(refused), stale, 'giving the lease back is not a good sync');
 });
 
 test('the Zoom sweep asks once about a quiet call a day after it ended, and settles it', async (t) => {
