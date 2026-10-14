@@ -24,7 +24,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
 /api/projects      → projects.ts
-/api/cycles/build  → cycle_build.ts      (Build overview, six module reads, and D662 field writes)
+/api/cycles/build  → cycle_build.ts      (Build overview, six module reads, D662 field writes, and D686 system mappings)
 /api/legal         → legal.ts
 /api/legalcap      → legalcap.ts
 /api/partners      → partners.ts
@@ -84,6 +84,31 @@ widened guard on this very sentence, which is the rule working.)
 Prefixes mirror the FastAPI routers in `backend/app/api/routes/*.py` so the
 local FastAPI dev backend exposes the same `/api/...` paths the frontend
 calls in production.
+
+### Build operating systems (D686)
+
+`GET /api/cycles/build/systems/choices?project=<id>` returns the caller's own
+company-enabled connector choices by system kind. Workspace choices come from
+the caller's personal Google Calendar or Microsoft 365 token. A caller outside
+the project's company receives `403 not_in_company`.
+
+`PUT /api/cycles/build/systems/:kind?project=<id>` maps one of `bank`,
+`accounting`, `payroll`, `crm`, or `workspace`. For connector kinds, send
+`integration_uid` (or the legacy numeric `integration_id`); `null` unmaps.
+Workspace takes `provider_key` (`google_calendar` or `microsoft_365`) instead;
+`null` unmaps. The caller must own the enabled connector or Workspace token
+and belong to the project's company. The route records the actor. Refusals
+include `400 invalid_kind`, `400 kind_mismatch`, `403 not_in_company`,
+`403 workspace_not_connected`, and `409` when the project has no company.
+An unowned or company-disabled connector also returns `403`.
+
+`GET /api/cycles/build/modules/operating-systems?project=<id>` includes
+`parts.tools` with `cols`, `rows`, and `total`: Tool, Category, State, Last
+good sync, Failed at (`integrations.last_error_at`), Feeds, Owner, and an Open
+action. Its facts include `tools_connected`, `tools_failing`, and `tools_total`.
+The rows include only company-enabled connectors whose owner remains a company
+member; personal Workspace connections are excluded. A member sees teammate
+names, while an admin or partner outside the company sees no teammate name.
 
 ## Known gaps vs the FastAPI dev backend
 

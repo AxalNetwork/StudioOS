@@ -36,12 +36,12 @@ function fixture() {
     CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
     CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT);
+    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT, last_error_at TEXT);
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
     CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, action TEXT, details TEXT, actor TEXT);
-    INSERT INTO users(id, role, founder_id, name) VALUES (1, 'founder', 11, 'One'), (2, 'founder', 22, 'Two'), (3, 'admin', NULL, 'Admin');
+    INSERT INTO users(id, role, founder_id, name) VALUES (1, 'founder', 11, 'One'), (2, 'founder', 22, 'Two'), (3, 'admin', NULL, 'Admin'), (4, 'partner', NULL, 'Partner');
     INSERT INTO projects(id, founder_id, company_id, entity_id) VALUES (101, 11, 10, 501), (202, 22, 20, 502);
     INSERT INTO user_company_links VALUES (1, 10), (2, 20);
     INSERT INTO entities VALUES (501, 'DE'), (502, 'NY');
@@ -56,29 +56,30 @@ function fixture() {
 
 function appFor(route=build){const app=new Hono<any>();app.route('/api/cycles/build',route);app.onError((e,c)=>c.json({error:e.message},500));return app;}
 async function request(route:any,env:any,path:string,id=1,method='GET',body?:unknown){
- const token=await new SignJWT({user_id:id,role:id===3?'admin':'founder'}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+ const token=await new SignJWT({user_id:id,role:id===3?'admin':id===4?'partner':'founder'}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
  const r=await appFor(route).request('/api/cycles/build'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})},env);
  return {status:r.status,body:await r.json() as any};
 }
 function connectors(db:any){
- db.exec("INSERT INTO integrations(id,uid,user_id,provider_key,display_name,status) VALUES(11,'own-crm',1,'hubspot','Private own account','active'),(12,'foreign-crm',2,'salesforce','Private teammate account','error'),(13,'disabled-crm',1,'hubspot','Disabled','active'),(14,'own-payments',1,'stripe','Private payments','active'); INSERT INTO user_company_links VALUES(2,10); INSERT INTO integration_companies VALUES(11,10,1),(12,10,1),(13,10,0),(14,10,1)");
+ db.exec("INSERT INTO integrations(id,uid,user_id,provider_key,display_name,status,last_error_at) VALUES(11,'own-crm',1,'hubspot','Private own account','active',NULL),(12,'foreign-crm',2,'salesforce','Private teammate account','error','2026-10-09 08:15:00'),(13,'disabled-crm',1,'hubspot','Disabled','active',NULL),(14,'own-payments',1,'stripe','Private payments','active',NULL); INSERT INTO user_company_links VALUES(2,10); INSERT INTO integration_companies VALUES(11,10,1),(12,10,1),(13,10,0),(14,10,1)");
 }
 const snap=(got:unknown,want:unknown)=>assert.deepEqual(got,want);
-const checks=[
+type MutationCheck = { name: string; before: string; after: string; run: (route: any) => Promise<void>; secondBefore?: string; secondAfter?: string; thirdBefore?: string; thirdAfter?: string };
+const checks: MutationCheck[]=[
  {name:'Tools history includes only enabled current members, with canonical fields and private owner names',before:"viewerMember ? tool.owner_name ?? null : null",after:"tool.owner_name ?? null",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);
- const member=await request(route,env,'/modules/operating-systems?project=101'),admin=await request(route,env,'/modules/operating-systems?project=101',3);
+ const member=await request(route,env,'/modules/operating-systems?project=101'),admin=await request(route,env,'/modules/operating-systems?project=101',3),partner=await request(route,env,'/modules/operating-systems?project=101',4);
  const by=(r:any,id:string)=>r.body.parts.tools.rows.find((row:any)=>row.id===id);
- const owned=by(member,'tool-0'),team=by(member,'tool-1'),outside=by(admin,'tool-1');
+ const owned=by(member,'tool-0'),team=by(member,'tool-1'),outside=by(admin,'tool-1'),partnerRow=by(partner,'tool-1');
  const before=member.body.parts.tools.total;db.exec('DELETE FROM user_company_links WHERE user_id=2 AND company_id=10');
  const departed=await request(route,env,'/modules/operating-systems?project=101');
- snap([member.status,before,owned.cells.tool,owned.cells.owner,team.cells.tool,team.cells.owner,outside.cells.owner,JSON.stringify(admin.body).includes('Private teammate account'),member.body.parts.tools.rows.some((r:any)=>r.cells.tool==='HubSpot' && r.cells.owner!=='You'),departed.body.parts.tools.rows.some((r:any)=>r.cells.tool==='Salesforce')],
- [200,3,'HubSpot','You','Salesforce','Two',null,false,false,false]);db.close();}},
+ snap([member.status,before,owned?.cells.tool,owned?.cells.owner,team?.cells.tool,team?.cells.owner,outside?.cells.owner,partner.status,partnerRow?.cells.owner,JSON.stringify(admin.body).includes('Private teammate account'),JSON.stringify(partner.body).includes('Private teammate account'),member.body.parts.tools.rows.some((r:any)=>r.cells.tool==='HubSpot' && r.cells.owner!=='You'),departed.body.parts.tools.rows.some((r:any)=>r.cells.tool==='Salesforce')],
+ [200,3,'HubSpot','You','Salesforce','Two',null,200,null,false,false,false,false]);db.close();}},
  {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
  const action=r.body.parts.tools.rows.find((row:any)=>row.id==='tool-1').cells.action;
  snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next?.text ?? null,r.body.card.next?.href ?? null,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.feeds],
- [2,1,3,'Reconnect Salesforce','/build/connect?tool=salesforce',{text:'Open',href:'/build/connect?tool=salesforce'},'Capital relationships · Network']);db.close();}},
+ [2,1,3,'Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce',{text:'Open',href:'/build/connect?tool=salesforce'},'Capital relationships · Network']);db.close();}},
 
  {name:'The five tiles and rows name Workspace',before:"workspace: 'Workspace'",after:"workspace: 'Analytics'",run:async(route:any)=>{
  const {db,env}=fixture();const r=await request(route,env,'/modules/operating-systems?project=101');
@@ -115,10 +116,34 @@ const checks=[
  const owner=await request(route,env,'/modules/operating-systems?project=101',2),member=await request(route,env,'/modules/operating-systems?project=101',1),admin=await request(route,env,'/modules/operating-systems?project=101',3);
  snap([owner.status,member.body.records.rows.find((r:any)=>r.id==='crm').cells.provider,admin.body.records.rows.find((r:any)=>r.id==='crm').cells.provider,JSON.stringify(admin.body).includes('Private teammate account')],
  [403,'Salesforce','Salesforce',false]);db.close();}},
- {name:'A failing system links its provider rather than its kind',before:"encodeURIComponent(byKind.get(failing)?.provider_key)",after:"encodeURIComponent(failing)",run:async(route:any)=>{
+ {name:'A failing system links its provider rather than its kind',before:"reconnect(failedSystem.provider_key, failedSystem.last_error_at, SYSTEM_LABEL[failing!])",after:"reconnect(failing, failedSystem.last_error_at, SYSTEM_LABEL[failing!])",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',12,2)");
- const r=await request(route,env,'/modules/operating-systems?project=101');snap([r.body.card.next.text,r.body.card.next.href],['Reconnect Salesforce','/build/connect?tool=salesforce']);db.close();}},
+ const r=await request(route,env,'/modules/operating-systems?project=101');snap([r.body.card.next.text,r.body.card.next.href],['Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce']);db.close();}},
+ {name:'Failed at is recorded per tool while a healthy tool has no failure time',before:"i.last_error_at, u.name AS owner_name",after:"NULL AS last_error_at, u.name AS owner_name",secondBefore:"failed_at: tool.last_error_at ?? null",secondAfter:"failed_at: null",run:async(route:any)=>{
+ const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
+ const columns=r.body.parts.tools.cols.map((c:any)=>[c.key,c.label]);
+ snap([r.status,columns.filter((c:any)=>c[0]==='failed_at').length,columns.find((c:any)=>c[0]==='failed_at'),r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.failed_at,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-1').cells.failed_at,Object.hasOwn(r.body.parts.tools,'failure_time_reason')],
+ [200,1,['failed_at','Failed at'],null,'2026-10-09 08:15:00',false]);db.close();}},
+ {name:'Every system mapping write refuses a non-member admin before changing data',before:"if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);\n  const body = await jsonBody(c)",after:"if (false) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);\n  const body = await jsonBody(c)",secondBefore:".bind(ctx.user.id, ctx.project.company_id).first();\n  if (!member)",secondAfter:".bind(1, ctx.project.company_id).first();\n  if (!member)",run:async(route:any)=>{
+ const {db,env}=fixture();connectors(db);db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',11,1)");
+ const responses=[];for(const kind of ['bank','accounting','payroll','crm','workspace'])responses.push(await request(route,env,`/systems/${kind}?project=101`,3,'PUT',kind==='workspace'?{provider_key:null}:{integration_uid:null}));
+ const row=db.prepare("SELECT integration_id FROM project_core_systems WHERE project_id=101 AND kind='crm'").get() as any;
+ snap([responses.map(r=>[r.status,r.body.error]),row.integration_id,db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='build_system_mapping_changed'").get()?.n],[[[403,'not_in_company'],[403,'not_in_company'],[403,'not_in_company'],[403,'not_in_company'],[403,'not_in_company']],11,0]);db.close();}},
 ];
+const secondMutations: Array<[string,string]> = [
+ ["AND ic.enabled = 1\n       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id\n       LEFT JOIN users", "AND ic.enabled = 0\n       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id\n       LEFT JOIN users"],
+ ["tools.filter(tool => tool.status === 'active').length", "tools.length"],
+ ["'workspace'] as const", "'crm'] as const"],
+ ["if (workspace && await workspaceConnected", "if (false && await workspaceConnected"],
+ ["integrationId = enabled.id", "integrationId = null"],
+ ["error: 'invalid_kind', detail: 'Unknown system kind'", "error: 'kind_mismatch', detail: 'Unknown system kind'"],
+ ["kind === 'workspace' ? workspace.map", "kind === 'workspace' ? [].map"],
+ ["kind === 'workspace' && providerKey == null", "false"],
+ ["getDescriptor(c.provider_key)?.display_name", "c.display_name"],
+ ["getDescriptor(providerKey)?.display_name ?? fallbackName", "fallbackName"],
+];
+for(const [index, pair] of secondMutations.entries()){checks[index].secondBefore=pair[0];checks[index].secondAfter=pair[1];}
+for(const index of [1,9]){checks[index].thirdBefore='const since = failureDate(failedAt);';checks[index].thirdAfter='const since = null;';}
 for(const c of checks)test(c.name,()=>c.run(build));
 let serial=0;
 async function mutated(c:any){
@@ -128,7 +153,13 @@ async function mutated(c:any){
  src=src.replace(/(from\s*['"])([^'"]+)(['"])/g,(_a,b,path,end)=>b+(path.startsWith('.')?new URL(/\.(?:ts|mjs|js)$/.test(path)?path:path+'.ts',file).href:import.meta.resolve(path))+end);
  return (await import('data:text/javascript;base64,'+Buffer.from(src+'\n// mutant '+serial++).toString('base64'))).default;
 }
-for(const c of checks)test('Mutation and restoration: '+c.name,async()=>{await c.run(build);await assert.rejects(c.run(await mutated(c)),assert.AssertionError);await c.run(build);});
+for(const c of checks)test('Mutation and restoration: '+c.name,async()=>{
+ await c.run(build);
+ await assert.rejects(c.run(await mutated(c)),assert.AssertionError);
+ await c.run(build);
+ if(c.secondBefore){await assert.rejects(c.run(await mutated({...c,before:c.secondBefore,after:c.secondAfter})),assert.AssertionError);await c.run(build);}
+ if(c.thirdBefore){await assert.rejects(c.run(await mutated({...c,before:c.thirdBefore,after:c.thirdAfter})),assert.AssertionError);await c.run(build);}
+});
 
 const rebuild=readFileSync('cloudflare-worker/sql/migrations/455_core_systems_workspace.sql','utf8');
 const oldTable=readFileSync('cloudflare-worker/sql/migrations/441_build_cycle_stores.sql','utf8').split('CREATE TABLE IF NOT EXISTS project_core_systems')[1];
