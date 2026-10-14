@@ -5,7 +5,7 @@ import { X, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
 import { useEscapeClose } from '../../../components/useEscapeClose';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Unrecorded } from '../../../ui';
+import { BrandIcon, Unrecorded } from '../../../ui';
 // D223 — the elevation the secret-writing consoles gate on; its own line so
 // the `branchOfUser` import D128's test pins stays exactly as it was.
 import { isSuperAdminUser } from '../../../lib/shellRole';
@@ -186,6 +186,7 @@ export function IntegrationKeysPanel() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2">
+                      <BrandIcon provider={row.provider_key} name={label} size={24} />
                       <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{label}</h3>
                       <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${sourceBadge.cls}`}>{sourceBadge.text}</span>
                     </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { assistantsApi } from '../../lib/api/assistants.js';
+import BrandIcon from '../../ui/BrandIcon.jsx';
 import { ASSISTANT_LIMITS, scopesOf, approveBody, canApprove, consentState, hostOf, safeRedirect } from './assistantConsentModel.js';
 
 /**
@@ -64,7 +65,8 @@ export function ConsentView({ request, error, loading = false, busy = false, sen
       <h1 className="mt-1 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">
         {name ? <><span data-testid="consent-client-name">{name}</span> wants to connect to StudioOS</> : 'An assistant wants to connect to StudioOS'}
       </h1>
-      <p className="mt-2 text-[12px] font-bold text-amber-800 dark:text-amber-300" data-testid="consent-assistant-identity">{request.verified_assistant || 'Unverified assistant'}</p>
+      {/* D687: the mark follows only the identity the Worker verified from the redirect URI (assistantIdentity.ts), never the self-declared client_name above. */}
+      <p className="mt-2 flex items-center gap-1.5 text-[12px] font-bold text-amber-800 dark:text-amber-300" data-testid="consent-assistant-identity"><BrandIcon provider={verifiedAssistantKey(request.verified_assistant)} size={16} variant="bare" />{request.verified_assistant || 'Unverified assistant'}</p>
       <p className="mt-1 text-[12px] text-axal-muted dark:text-gray-400">Approving another company keeps your earlier connections.</p>
       <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-900 dark:bg-amber-950/30" data-testid="consent-redirect-host">
         <div className="text-[11px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">It returns to</div>
@@ -114,6 +116,12 @@ export function ConsentView({ request, error, loading = false, busy = false, sen
  * follows the Worker's `redirectTo` only when `safeRedirect` allows it. The
  * route itself sends a signed-out visitor to sign-in and back (`App.jsx`).
  */
+// D687: the four identities assistantIdentity.ts verifies, to their keys. Anything else is the generic client.
+const VERIFIED_KEY = Object.freeze({ ChatGPT: 'chatgpt', Claude: 'claude', Gemini: 'gemini', Grok: 'grok' });
+export function verifiedAssistantKey(verified) {
+  return typeof verified === 'string' && Object.hasOwn(VERIFIED_KEY, verified) ? VERIFIED_KEY[verified] : 'other';
+}
+
 export default function ConnectAssistantPage({ api = assistantsApi, go = (url) => window.location.assign(url) }) {
   const location = useLocation();
   const id = new URLSearchParams(location.search).get('request') || '';

@@ -51,7 +51,7 @@ import { Link } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { BrandIcon, Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
@@ -523,8 +523,8 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
             const date = keyDateLine(k);
             return (
               <li key={k.provider_key} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate font-medium">{PROVIDER_LABEL[k.provider_key] || k.provider_key}</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2"><BrandIcon provider={k.provider_key} name={PROVIDER_LABEL[k.provider_key] || k.provider_key} size={24} /><span className="min-w-0 truncate font-medium">{PROVIDER_LABEL[k.provider_key] || k.provider_key}</span></span>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
                 </div>
                 {date && <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{date}</div>}

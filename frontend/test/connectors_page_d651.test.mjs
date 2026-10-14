@@ -413,13 +413,14 @@ test('Build’s "Connect a tool": list, failed, locked and loading', () => {
   assert.match(t, /Build Connect a tool Connected tools fill your modules with real data\. Each one says what it feeds\./);
   assert.match(out, /data-testid="connect-tool-failed"/);
   assert.match(t, /All Connected Not connected Failing Sorted by category · 1–\d+ of \d+/);
-  assert.match(t, /CRM Affinity .*Coming soon HubSpot Sign-in expired · last good sync \d+ days? ago Failing Reconnect/);
+  // D687: a row's tile sits before its name; Affinity's is its recorded monogram, HubSpot's its mark.
+  assert.match(t, /CRM A Affinity .*Coming soon HubSpot Sign-in expired · last good sync \d+ days? ago Failing Reconnect/);
   assert.match(t, /Microsoft 365 Calendar, Two-way sync Not set up here/);
   assert.match(t, /LinkedIn .* Status unreadable/);
   assert.match(t, /Salesforce What it will feed is not recorded Coming soon/, 'D686 §5.4: a coming-soon row says what it will feed, or that it is not recorded');
   assert.match(t, /Sorted by category · 1–\d+ of \d+ CRM /, 'the failing tool\'s group first while the failed banner shows');
   assert.match(t, /Payments Stripe Stripe cap one, Stripe cap two · synced \d+ (min|h|days?) ago Connected Disconnect/, 'D686 §3.1 item 2: a connected row offers Disconnect');
-  assert.match(t, /Cap table Carta Carta cap one, Carta cap two Studio Upgrade to Studio/, 'the real tier, never "Pro"');
+  assert.match(t, /Cap table C Carta Carta cap one, Carta cap two Studio Upgrade to Studio/, 'the real tier, never "Pro"');
   assert.match(t, /Calendar Calendly .* Not connected Connect/);
   assert.match(t, /Google Calendar Calendar, Gmail invites · last sync not recorded Connected Disconnect/);
   const locked = html(h(ConnectToolView, { data: ready(CAT.filter((p) => p.key !== 'hubspot')), onClose() {} }));

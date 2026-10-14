@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { reportError } from '../../../lib/log';
 import { api } from '../../../lib/api';
-import { Check, XCircle, CheckCircle2, RefreshCw, Loader2, GitBranch as Github, Copy } from 'lucide-react';
+import { Check, XCircle, CheckCircle2, RefreshCw, Loader2, Copy } from 'lucide-react';
+import { BrandIcon } from '../../../ui';
 import { useToast } from '../../../components/useToast';
 import { useAuth } from '../../../hooks/useAuthSync';
 // D223 — the elevation the secret-writing consoles gate on; its own line so
@@ -153,7 +154,7 @@ export function GithubSyncPanel() {
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-5">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
-            <Github size={18} className="text-gray-800 dark:text-gray-100" />
+            <BrandIcon provider="github" name="GitHub" size={18} variant="bare" />
             <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Support ticket → GitHub sync</h3>
           </div>
           <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${statusBadge.cls}`}>{statusBadge.text}</span>

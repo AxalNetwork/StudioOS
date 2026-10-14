@@ -108,7 +108,7 @@ export default function GithubSyncSheet({ p, conn, projectId = null, companyId =
   if (phase === 'done') {
     const banner = successBanner(p?.key || 'github', result);
     return (
-      <Sheet eyebrow={eyebrow} title={`${name} is synced`} onClose={onClose} data-testid="connector-sheet-success"
+      <Sheet eyebrow={eyebrow} title={`${name} is synced`} provider="github" providerName={name} onClose={onClose} data-testid="connector-sheet-success"
         footer={<button type="button" className={BTN.primary} onClick={() => { onChanged?.(); dismiss?.(); }} data-testid="button-connected-done">Done</button>}>
         {banner && <Banner tone="ok" data-testid="connect-success-banner">{banner}</Banner>}
         <FedGroup conn={conn} name={name} projectId={project} onOpen={dismiss} />
@@ -128,7 +128,7 @@ export default function GithubSyncSheet({ p, conn, projectId = null, companyId =
   );
 
   return (
-    <Sheet eyebrow={eyebrow} title={`Connect ${name}`} sub="Choose what StudioOS reads. You can change this later." onClose={onClose} footer={footer} data-testid="connector-sheet-sync">
+    <Sheet eyebrow={eyebrow} title={`Connect ${name}`} provider="github" providerName={name} sub="Choose what StudioOS reads. You can change this later." onClose={onClose} footer={footer} data-testid="connector-sheet-sync">
       {error && <Banner tone="danger" data-testid="sync-error">{error}</Banner>}
       {phase === 'syncing' && progress && (
         <div className="mx-5 mt-3" role="status" data-testid="sync-progress">

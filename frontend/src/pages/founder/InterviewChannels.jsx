@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { channelsApi } from '../../lib/api/channels.js';
-import { Unreadable } from '../../ui';
+import { BrandIcon, Unreadable } from '../../ui';
 import { TelegramChannelCard, WhatsAppChannelCard, useChannelsOverview } from '../account/ChannelsGroup';
 import { CHANNELS_HREF, INBOX_HREF, MESSAGING_PROVIDERS, channelCard } from '../account/channelsModel';
 import { channelOf } from './assistantSession.js';
@@ -51,7 +51,8 @@ const STATUS_TONE = {
 
 /** The provider a conversation or call came through, as a small tag. */
 export function ProviderTag({ provider }) {
-  return <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${TAG[provider] || TAG.other}`} data-testid="provider-tag" data-provider={provider}>{PROVIDER_LABEL[provider] || 'Unknown'}</span>;
+  // D687: the bare mark before the name; `other` draws nothing (fallback none), never the assistant Bot.
+  return <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-bold ${TAG[provider] || TAG.other}`} data-testid="provider-tag" data-provider={provider}><BrandIcon provider={provider} size={14} variant="bare" fallback="none" />{PROVIDER_LABEL[provider] || 'Unknown'}</span>;
 }
 
 function Alert({ children }) {
@@ -241,8 +242,8 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
         {MEETING_PROVIDERS.map((p) => (
           <button key={p.key} type="button" role="radio" aria-checked={form.provider === p.key} disabled={!available(p.key)} data-testid={`meeting-provider-${p.key}`}
             onClick={() => setForm((f) => ({ ...f, provider: p.key }))}
-            className={`rounded-full border px-3 py-1 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${form.provider === p.key ? 'border-violet-700 bg-violet-700 text-white dark:border-violet-400 dark:bg-violet-500' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`}>
-            {p.label}{available(p.key) ? '' : ' · not set up on Axal yet'}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${form.provider === p.key ? 'border-violet-700 bg-violet-700 text-white dark:border-violet-400 dark:bg-violet-500' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`}>
+            <BrandIcon provider={p.key} size={16} variant="bare" tone={form.provider === p.key ? 'current' : 'brand'} fallback="none" />{p.label}{available(p.key) ? '' : ' · not set up on Axal yet'}
           </button>
         ))}
       </div>

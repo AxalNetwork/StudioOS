@@ -28,7 +28,8 @@ test('each of the four channels gets its own badge', () => {
     assert.equal(channelOrigin(channel(key)), key);
     assert.equal(originBadge(channel(key)), `From ${label}`);
     const h = html(React.createElement(ChannelOriginBadge, { session: channel(key) }));
-    assert.match(h, new RegExp(`data-testid="channel-origin-badge"[^>]*data-provider="${key}"[^>]*>From ${label}<`));
+    // D687: the channel's mark sits between the badge's opening tag and its words.
+    assert.match(h, new RegExp(`data-testid="channel-origin-badge"[^>]*data-provider="${key}"[^>]*><svg[^>]*data-provider="${key}"[^>]*>.*?</svg>From ${label}<`));
   }
 });
 
