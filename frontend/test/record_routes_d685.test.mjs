@@ -49,7 +49,7 @@ test('the header draws the tab, and the phone select lists it too', () => {
   const nav = /data-testid="cycle-tabs"[\s\S]*?<\/nav>/.exec(out)[0];
   assert.deepEqual([...nav.matchAll(/>([^<>]+)<\/a>/g)].map((m) => m[1]), ['Overview', 'Interviews', 'Problem discovery', 'Customer research']);
   assert.match(nav, /href="\/validate\/interviews\?project_id=7"/);
-  assert.match(out, /<option value="\/validate\/interviews\?project_id=7">Interviews<\/option>/);
+  assert.match(out, /<option value="interviews">Interviews<\/option>/, 'the phone select is keyed by tab (D686), so two tabs on one path never collide');
 });
 
 test('a left click with no modifier opens in place; a modified click or a middle click follows the href', () => {
@@ -136,27 +136,28 @@ test('App.jsx serves /validate/record behind the founder guard, as the page and 
   const slug = app.indexOf('<Route path="/validate/:slug"');
   assert.ok(rec > 0 && slug > rec, '/validate/record is declared before the slug route');
   const line = app.slice(rec, app.indexOf('\n', rec));
-  assert.match(line, /guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" record \/>\)/);
+  assert.match(line, /guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" lightbox \/>\)/);
   assert.doesNotMatch(line, /<Navigate/);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /export default function CycleRoute\(\{ cycle, record = false \}\)/);
+  assert.match(route, /export default function CycleRoute\(\{ cycle, lightbox = false \}\)/);
 });
 
 test('closing goes back to the page underneath, makes no server call, and a plain click records where it came from', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /const closeRecord = \(\) => \(location\.state\?\.under \? navigate\(-1\) : navigate\(`\/validate\$\{q\}`, \{ replace: true \}\)\);/);
-  assert.match(route, /navigate\(`\/validate\/record\$\{q\}`, \{ state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)/);
+  // D686 §5.1: one mechanism for every cycle's lightbox.
+  assert.match(route, /if \(location\.state\?\.under\) navigate\(-1\);\s*else navigate\(`\/\$\{cycle\}\$\{q\}`, \{ replace: true \}\);/);
+  assert.match(route, /navigate\(`\/\$\{cycle\}\/\$\{def\.path\}\$\{q\}`, \{ state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)/);
   assert.match(route, /<RecordMount projectId=\{projectId\} interviewId=\{searchParams\.get\('interview'\)\}/);
-  assert.match(route, /record && cycle === 'validate' && projectId/);
-  assert.match(route, /navigate\(`\/validate\/session\/\$\{session\.id\}`, \{ state: \{ interview \} \}\)/, 'until /validate/record/live exists (S02-B)');
-  const m = /const closeRecord[^\n]*/.exec(route)[0];
+  assert.match(route, /\{lightbox && Mount && projectId && \(/);
+  assert.match(route, /navigate\(`\/validate\/session\/\$\{session\.id\}`, \{ state: \{ interview \}, replace: true \}\)/, 'the session replaces /record, so Back does not reopen the setup');
+  const m = /const closeAction = \(\) => \{[\s\S]*?\n {2}\};/.exec(route)[0];
   assert.doesNotMatch(m, /api\.|fetch|sessions\./);
 });
 
 test('both entry points name /validate/record; the old ?new=record is gone from the cycle page and redirects from the log', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /action: \(q, open, record\) => \(\{ label: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: record \}\)/);
-  assert.match(route, /'customer-research': \(q, record\) => \(\{ text: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: record \}\)/);
+  assert.match(route, /action: \(q, open\) => \(\{ label: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
+  assert.match(route, /'customer-research': \(q, open\) => \(\{ text: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
   assert.doesNotMatch(route, /new=record/);
   const ws = read('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx');
   assert.match(ws, /if \(newParam === 'record'\) \{[\s\S]*navigate\(`\/validate\/record\$\{rest \? `\?\$\{rest\}` : ''\}`, \{ replace: true \}\);/);

@@ -342,11 +342,11 @@ test('the composer: a 500 keeps the key; a pending first attempt keeps the words
     await m.click('button-reply-send');
     assert.deepEqual(keys, ['key-1', 'key-1', 'key-1'], 'in flight: the next press only asks again');
     assert.equal(m.byTestId('reply-sent'), undefined);
-    assert.match(m.props(m.byTestId('reply-pending')).children, /^Not confirmed yet: check the chat in Telegram before sending again\./);
+    assert.match(m.props(m.byTestId('reply-pending')).children, /^Not confirmed yet: check the chat in Telegram\./);
     assert.equal(m.props(m.byTestId('input-reply')).value, 'Could we talk Thursday?');
     assert.equal(sent, 0);
     await m.click('button-reply-send');
-    assert.deepEqual(keys, ['key-1', 'key-1', 'key-1', 'key-2'], 'after checking the chat, the member may send it again, as a new attempt');
+    assert.deepEqual(keys, ['key-1', 'key-1', 'key-1', 'key-1'], 'an uncertain send retains the key; another press only checks the same attempt');
     assert.equal(m.props(m.byTestId('reply-sent')).children, 'Sent');
     assert.equal(m.byTestId('reply-pending'), undefined);
     assert.equal(sent, 1);

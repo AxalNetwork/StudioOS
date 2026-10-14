@@ -157,6 +157,9 @@ export interface InboundLink {
   chatId: string;
   /** Display name for the Connectors card: '@username' or first name. */
   displayName: string | null;
+  /** Telegram's first/last name and username kept separately for pending consent. */
+  accountName?: string | null;
+  username?: string | null;
   code: string;
 }
 

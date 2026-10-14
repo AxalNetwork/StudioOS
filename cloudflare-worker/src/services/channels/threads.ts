@@ -780,7 +780,7 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
   const day = new Date(now.getTime() - 86_400_000).toISOString();
   const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs, counters] = await env.DB.batch([
+  const [msgs, threads, codes, evs, counters, linkAttempts] = await env.DB.batch([
     env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
@@ -794,10 +794,11 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
     ).bind(now.toISOString(), day),
     env.DB.prepare(`DELETE FROM channel_events WHERE datetime(created_at) < datetime(?)`).bind(events),
     env.DB.prepare(`DELETE FROM channel_counters WHERE datetime(created_at) < datetime(?)`).bind(twoDays),
+    env.DB.prepare(`DELETE FROM channel_link_attempts WHERE window_start < ?`).bind(twoDays),
   ]);
   return {
     messages: Number(msgs.meta?.changes ?? 0), threads: Number(threads.meta?.changes ?? 0),
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
-    counters: Number(counters.meta?.changes ?? 0),
+    counters: Number(counters.meta?.changes ?? 0) + Number(linkAttempts.meta?.changes ?? 0),
   };
 }

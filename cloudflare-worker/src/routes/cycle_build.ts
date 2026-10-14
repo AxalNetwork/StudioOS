@@ -43,6 +43,15 @@ function dateOnly(raw: unknown): Date | null {
   const date = new Date(`${raw}T00:00:00Z`);
   return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== raw ? null : date;
 }
+function failureDate(raw: unknown): string | null {
+  const date = typeof raw === 'string' ? dateOnly(raw.slice(0, 10)) : null;
+  return date ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date) : null;
+}
+function reconnect(providerKey: string, failedAt: unknown, fallbackName = providerKey): Card['next'] {
+  const name = getDescriptor(providerKey)?.display_name ?? fallbackName;
+  const since = failureDate(failedAt);
+  return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: `/build/connect?tool=${encodeURIComponent(providerKey)}` };
+}
 
 async function solution(env: Env, p: Project): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
@@ -208,7 +217,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   // The company's enabled mapping is the only source. A member's personal
   // connector list would include tools withheld from this company.
   const connectors = p.company_id == null ? [] : rows(await env.DB.prepare(
-    `SELECT s.kind, s.used_by, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at
+    `SELECT s.kind, s.used_by, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at
        FROM project_core_systems s
        JOIN integrations i ON i.id = s.integration_id
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
@@ -223,14 +232,14 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   if (workspace && await workspaceConnected(env, workspace.updated_by, workspace.provider_key)) connectors.push({
     kind: 'workspace', used_by: workspace.used_by, user_id: workspace.updated_by,
     provider_key: workspace.provider_key, display_name: getDescriptor(workspace.provider_key)?.display_name,
-    status: 'active', last_synced_at: null,
+    status: 'active', last_synced_at: null, last_error_at: null,
   });
   const byKind = new Map(connectors.map(c => [c.kind, c]));
   const viewerMember = p.company_id != null && !!await env.DB.prepare(
     'SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?',
   ).bind(viewer.id, p.company_id).first();
   const tools = p.company_id == null ? [] : rows(await env.DB.prepare(
-    `SELECT i.id, i.user_id, i.provider_key, i.status, i.last_synced_at, u.name AS owner_name
+    `SELECT i.id, i.user_id, i.provider_key, i.status, i.last_synced_at, i.last_error_at, u.name AS owner_name
        FROM integrations i
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
        JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
@@ -245,6 +254,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       tool: descriptor?.display_name ?? 'Unknown tool', category: metadata?.category ?? 'Not recorded',
       state: tool.status === 'active' ? 'Connected' : tool.status === 'error' ? 'Failing' : 'Not connected',
       last_sync: tool.last_synced_at ?? null,
+      failed_at: tool.last_error_at ?? null,
       feeds: metadata?.feeds.map(key => MODULE_LABELS[key] ?? key).join(' · ') || 'Not recorded',
       owner: tool.user_id === viewer.id ? 'You' : viewerMember ? tool.owner_name ?? null : null,
       action: href ? { text: 'Open', href } : null,
@@ -262,19 +272,18 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   const series: ChartSpec[] = [{ kind: 'tiles', items: tiles }];
   if (reviews.length) series.push({ kind: 'dots', values: reviews, label: 'Weekly reviews held' });
   const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
-  const failingLast = failing ? byKind.get(failing)?.last_synced_at : null;
-  const toolNext = failingTool ? { text: `Reconnect ${getDescriptor(failingTool.provider_key)!.display_name}`, href: `/build/connect?tool=${encodeURIComponent(failingTool.provider_key)}` } : null;
-  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failing ? { text: `Reconnect ${getDescriptor(byKind.get(failing)?.provider_key)?.display_name ?? SYSTEM_LABEL[failing]}${failingLast ? ` · last good sync ${String(failingLast).slice(0, 10)}` : ''}`, href: `/build/connect?tool=${encodeURIComponent(byKind.get(failing)?.provider_key)}` } : toolNext),
+  const failedSystem = failing ? byKind.get(failing) : null;
+  const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at) : null;
+  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k); return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: !c ? 'Not connected' : c.status === 'error' ? 'Failing' : c.status === 'active' ? 'Connected' : 'Not connected', last_sync: c?.last_synced_at ?? null, used_by: c?.used_by ?? null }); }),
     facts: { connected, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
       tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
     parts: { tools: {
-      cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
+      cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
       state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
-      failure_time_reason: 'Failure time is not recorded.',
     } } };
 
 }
@@ -615,13 +624,13 @@ app.put('/systems/:kind', async c => {
   if (!(SYSTEM_KINDS as readonly string[]).includes(rawKind)) return c.json({ error: 'invalid_kind', detail: 'Unknown system kind' }, 400);
   const kind = rawKind as SystemKind;
   if (!ctx.project.company_id) return c.json({ detail: 'Project has no company' }, 409);
+  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?')
+    .bind(ctx.user.id, ctx.project.company_id).first();
+  if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
   const body = await jsonBody(c), usedBy = text(body?.used_by, 200);
   if (!body || usedBy === false) return c.json({ detail: 'Invalid mapping' }, 400);
   let integrationId: number | null = null, providerKey: string | null = null;
   if (kind === 'workspace') {
-    const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?')
-      .bind(ctx.user.id, ctx.project.company_id).first();
-    if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
     if (body.integration_uid != null || body.integration_id != null) return c.json({ error: 'kind_mismatch', detail: 'That connector is not a workspace tool.' }, 400);
     if (body.provider_key != null) {
       if (typeof body.provider_key !== 'string' || !fitsKind(kind, body.provider_key)) return c.json({ error: 'kind_mismatch', detail: 'That connector is not a workspace tool.' }, 400);

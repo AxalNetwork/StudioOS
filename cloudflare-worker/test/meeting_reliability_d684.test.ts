@@ -69,7 +69,7 @@ function world(over: Record<string, unknown> = {}) {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql']) db.exec(mig(m));
+    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
   const jobs: any[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48),

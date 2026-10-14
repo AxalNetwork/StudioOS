@@ -320,10 +320,10 @@ test('Escape closes the dialog inside the sheet, not the sheet with it', async (
     await m.flush();
     await m.click('Change');
     await m.flush();
-    assert.equal(m.listeners(), 1, 'only the open dialog listens for Escape');
+    assert.equal(m.listeners(), 1, 'only the top dialog acts on Escape (D686: one stack)');
     await m.escape();
     assert.equal(closed, 0, 'the sheet stays open');
-    assert.equal(m.listeners(), 1, 'the sheet listens again once the dialog is gone');
+    assert.equal(m.listeners(), 1, 'the sheet is the top dialog again once the dialog is gone');
     await m.escape();
     assert.equal(closed, 1);
   } finally { await m.unmount(); f.restore(); }

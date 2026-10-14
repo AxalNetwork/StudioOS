@@ -110,7 +110,7 @@ function world() {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
-    '452_record_session_setup.sql', '454_channel_voice_failures.sql']) db.exec(mig(m));
+    '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1), ('bc-2', 'BC-UNLINKED', '777', NULL, 1, 1),
                   ('bc-3', 'BC-OFF', '555001', ${ME}, 0, 1)`);
