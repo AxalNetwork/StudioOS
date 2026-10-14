@@ -798,10 +798,14 @@ signed-PDF endpoints expose safe projections and the exact PDF fingerprint.
 The legacy Legal deep link redirects with a moved notice. Formation orders are
 reached through the existing Spin-Out Lab page. Canvas reference: #1456 K1–K8.
 
-D653 (#1465), reshaped by D686 (#1598): Raise’s Call for Capital opens the
-five-step `RoundCallSheet` (The round, Materials, Audience, Preview, Send),
-which resumes the venture's newest draft rather than starting a second one, and
-shows the open call instead when there is one. A founder's sent call lives in
+D653 (#1465), reshaped by D686 (#1598): Raise’s Call for Capital header links
+to `/round-calls` today, the founder's list of calls; it becomes `/raise/call`,
+the lightbox over the Raise page, with D686 S02-A (#1596). The five-step
+`RoundCallSheet` (The round, Materials, Audience, Preview, Send) opens from a
+draft's page ("Continue draft") and a closed call's ("Open a new call"); it
+resumes the venture's newest draft rather than starting a second one, with its
+counsel approval and recorded audience, and shows the open call instead when
+there is one. A founder's sent call lives in
 the Raise shell at `/raise/calls/:uid` (`RaiseCallPage`: responses with search,
 filters and paging, the closed and paused banners, Extend the date and Close
 the call); a founder opening `/round-calls/:uid` is sent there, while

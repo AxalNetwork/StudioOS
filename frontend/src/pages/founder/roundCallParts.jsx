@@ -21,7 +21,12 @@ export function CallReadState({read,children}) {
   if(read.error)return read.error.code==='round_calls_disabled'?<p>Coming soon. Round calls are not enabled.</p>:<p role="alert">Unreadable. <button type="button" className={callButton} onClick={read.retry}>Try again</button></p>;
   return children;
 }
-export function moneyCents(value) {return value==null?'Not recorded':new Intl.NumberFormat('en-GB',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(value/100);}
+/** "$100,000", or "$1,234.50" when there are cents; never "US$" (D686 §5.6). */
+export function moneyCents(value) {
+  if(value==null)return 'Not recorded';
+  const whole=value%100===0;
+  return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:whole?0:2,maximumFractionDigits:whole?0:2}).format(value/100);
+}
 export function dollarsToCents(value) {
   if(!/^\d+(?:\.\d{1,2})?$/.test(String(value)))return null;
   const cents=Math.round(Number(value)*100);
