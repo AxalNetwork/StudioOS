@@ -112,11 +112,12 @@ const page = (data, extra = {}) => renderToStaticMarkup(React.createElement(Memo
 test('the sent page: replies open in their module; noreply offers Ask again; opens and non-delivery shown', () => {
   const html = page(PAGE);
   const text = renderedText(html);
-  assert.match(html, /<a [^>]*href="\/grow\/talent"[^>]*>Open in Talent<\/a>/);
-  assert.match(text, /No replies after 14 days\.Ask again/);
-  assert.match(text, /Opened 2026-11-01/);
-  assert.match(text, /No Axal account for this email/);
-  assert.match(text, /to 2 investors, 1 team members and 4 in the Axal network \(asks only\)/);
+  // D686 §5.8: Grow's module names and routes.
+  assert.match(html, /<a [^>]*href="\/grow\/team-expansion"[^>]*>Open in Team expansion<\/a>/);
+  assert.match(text, /No replies after 14 days\.No repliesAsk again/);
+  assert.match(text, /Opened 1 Nov/);
+  assert.match(text, /Not delivered · No Axal account for this email/);
+  assert.match(text, /Sent 1 Nov to 2 investors, 1 team member and the Axal network \(asks only\)/);
   const fresh = renderedText(page({ ...PAGE, asks: [{ ...PAGE.asks[1], can_ask_again: false }] }));
   assert.doesNotMatch(fresh, /Ask again/);
 });
@@ -136,7 +137,7 @@ test('Grow\'s header opens the sheet, and /updates/:uid is routed', () => {
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   // D686 §5.1: at /grow/update over the page; a sent update replaces it with its page.
   assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
-  assert.match(route, /<ShareUpdateSheet projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>/);
+  assert.match(route, /<ShareUpdateLightbox projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>/);
   assert.match(route, /\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`, \{ replace: true \}\)/);
   // D686 §5.4: the mount also re-reads the cycle page after a change (Build's Connect a tool), on close.
   assert.match(route, /<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\} onDone=\{onDone\}\s*onChanged=\{\(\) => \{ dirty\.current = true; \}\} \/>/);
@@ -263,4 +264,122 @@ test('Raise lists updates shared from Grow beside the ones posted there', () => 
   assert.doesNotMatch(text, /No updates yet/);
   assert.doesNotMatch(text, /Updates are recorded here and on each investor's contact timeline — they are not emailed/);
   assert.match(renderedText(renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(UpdatesPanel, { projectId: 1, updates: [], shared: [], onPosted: () => {} })))), /No updates yet/);
+});
+
+// ── D686 §5.8 (#1599): the sent page's author view ───────────────────────────
+import { sentTitle, sentSub, sentRows, recipientState, moduleHref, REPLY_PILL, PAGE_SIZE } from '../src/pages/founder/SentUpdatePage.jsx';
+
+test('D686: the sent page is titled by its period, with no duplicate eyebrow', () => {
+  const html = page({ ...PAGE, period_start: '2026-10-01', period_end: '2026-10-31' });
+  assert.match(html, /<h1[^>]*>Update · October 2026<\/h1>/);
+  assert.doesNotMatch(html, /tracking-\[\.1em\][^>]*>Update</, 'the "Update" eyebrow is gone');
+  assert.equal(sentTitle({ title: 'Stored title' }), 'Stored title');
+  assert.equal(sentTitle({ period_start: '2026-10-01', period_end: '2026-10-15', title: 'x' }), 'Update · 1 Oct – 15 Oct');
+});
+
+test('D686: the sub names only the audiences the update went to', () => {
+  const at = '2026-11-01T09:00:00Z';
+  assert.equal(sentSub({ sent_at: at, sent_to: { investors: 3, team: 0, network: 0 } }), 'Sent 1 Nov to 3 investors');
+  assert.equal(sentSub({ sent_at: at, sent_to: { investors: 1, team: 2, network: 0 } }), 'Sent 1 Nov to 1 investor and 2 team members');
+  assert.equal(sentSub({ sent_at: at, network_includes_metrics: true, sent_to: { investors: 2, team: 1, network: 9 } }),
+    'Sent 1 Nov to 2 investors, 1 team member and the Axal network (asks only, with metrics)');
+});
+
+test('D686: search, the three filters, latest first and 1–25 of N paging', () => {
+  const html = page(PAGE);
+  assert.match(html, /placeholder="Search replies…"/);
+  assert.match(renderedText(html), /AllRepliesOpened/);
+  assert.match(html, /<option value="latest"[^>]*>Latest<\/option>/);
+  const many = { ...PAGE, recipients: Array.from({ length: 30 }, (_, i) => ({ audience: 'investor', label: `R${i}`, opened_at: `2026-11-${String(i + 1).padStart(2, '0')}T10:00:00Z` })) };
+  const p1 = sentRows(many);
+  assert.equal(p1.total, 31);
+  assert.equal(`${p1.from}–${p1.to} of ${p1.total}`, '1–25 of 31');
+  assert.equal(PAGE_SIZE, 25);
+  assert.equal(p1.recipients[0].label, 'R29', 'the latest open first');
+  const p2 = sentRows(many, { page: 2 });
+  assert.equal(`${p2.from}–${p2.to}`, '26–31');
+  assert.match(renderedText(page(many)), /1–25 of 31/);
+  assert.deepEqual(sentRows(PAGE, { filter: 'replies' }).recipients, []);
+  assert.deepEqual(sentRows(PAGE, { filter: 'opened' }).replies, []);
+  assert.equal(sentRows(PAGE, { q: 'lee' }).replies.length, 1, 'a reply message is searched');
+  assert.equal(sentRows(PAGE, { q: 'ivy' }).recipients.length, 1, 'a recipient label is searched');
+  assert.equal(sentRows(PAGE, { q: 'nobody' }).total, 0);
+  const two = { ...PAGE, asks: [{ uid: 'a1', kind: 'customer', text: 'Intro', replies: [
+    { uid: 'o', name: 'Old', message: 'm', created_at: '2026-11-02 10:00:00' }, { uid: 'n', name: 'New', message: 'm', created_at: '2026-11-05 10:00:00' }] }] };
+  assert.deepEqual(sentRows(two).replies.map((x) => x.reply.uid), ['n', 'o']);
+});
+
+test('D686: reply rows carry their pill; a hire reply proposes a candidate', () => {
+  assert.deepEqual(REPLY_PILL, { hire: 'Candidate', customer: 'Lead', market: 'Contact', partner: 'Partner', capital: 'Investor' });
+  const data = { ...PAGE, asks: [{ uid: 'a1', kind: 'hire', text: 'Engineer', replies: [{ uid: 'r1', name: 'Nia', message: 'Try Lee', created_at: '2026-11-03 09:00:00', landed_module: 'talent' }] }] };
+  const text = renderedText(page(data));
+  assert.match(text, /Nia proposed a candidate · 3 Nov/);
+  assert.match(text, /Candidate/);
+});
+
+test('D686: a capital ask linked to a call has no noreply row, and links to the call in Raise', () => {
+  const data = { ...PAGE, asks: [{ uid: 'c1', kind: 'capital', text: 'Seed', link_ref: 'call-1', replies: [], can_ask_again: true }] };
+  const html = page(data);
+  assert.doesNotMatch(renderedText(html), /No replies after 14 days/);
+  assert.match(html, /href="\/raise\/calls\/call-1"/);
+});
+
+test('D686: the Opened states, and module links keep the venture once the Worker sends it', () => {
+  assert.equal(recipientState({ not_delivered_reason: 'Bounced' }), 'Not delivered · Bounced');
+  assert.equal(recipientState({ replied: true, opened_at: '2026-11-01T00:00:00Z' }), 'Replied');
+  assert.equal(recipientState({ opened_at: '2026-11-04T08:00:00Z' }), 'Opened 4 Nov');
+  assert.equal(recipientState({}), 'Not opened');
+  assert.equal(moduleHref('customers', null), '/grow/distribution');
+  assert.equal(moduleHref('partnerships', 7), '/grow/partner-network?project_id=7');
+  assert.equal(moduleHref('capital', null), '/raise/capital-relationships');
+  assert.equal(moduleHref('nowhere', 7), null);
+});
+
+// ── D686 §5.8 (#1599): the frame, the flags, the preview heading, market replies ──
+import { SHARE_FIELDS, previewHeading } from '../src/pages/founder/ShareUpdateSheet.jsx';
+import ShareUpdateLightbox from '../src/pages/founder/ShareUpdateLightbox.jsx';
+import { RECORDS as GROW_RECORDS, marketWithReplies } from '../src/pages/cycles/adapters/grow.js';
+
+test('D686: the sheet is an ActionSheet in the tall cycle lightbox, never a fixed side panel', () => {
+  const { html } = sheet({ step: 0 });
+  assert.doesNotMatch(html, /fixed inset-y-0|border-l /);
+  assert.match(html, /data-testid="share-update-sheet"/);
+  assert.match(html, /<h2 id="share-update-title"[^>]*>Share an update<\/h2>/);
+  assert.match(html, /data-testid="share-update-sheet-steps"/);
+  assert.match(html, /aria-current="step"[^>]*>1 · Period</);
+  assert.match(html, /data-testid="share-update-sheet-close"/);
+  const box = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(ShareUpdateLightbox, { projectId: 1, onClose: () => {} })));
+  assert.match(box, /data-testid="share-update-lightbox-layer" data-size="tall"/);
+  assert.match(box, /role="dialog" aria-modal="true" aria-label="Share an update"/);
+  assert.match(box, /data-testid="share-update-sheet"/);
+});
+
+test('D686: the banner and an error go to the sheet banner; the error wins', () => {
+  const nometrics = sheet({ step: 1, metrics: [], context: { ...base.context, metrics: [], no_metrics: true } });
+  assert.match(nometrics.html, /data-testid="share-update-sheet-banner"/);
+  const failed = sheet({ step: 0, error: 'That did not work. Nothing was sent.' });
+  assert.match(failed.html, /role="alert" data-tone="error"[^>]*>That did not work\. Nothing was sent\.</);
+});
+
+test('D686: the preview group is headed by its period', () => {
+  assert.equal(previewHeading('2026-10-01', '2026-10-31'), 'Preview · October update');
+  assert.equal(previewHeading('2026-10-01', '2026-10-15'), 'Preview · 1 Oct – 15 Oct update');
+  const { text } = sheet({ step: 5, period: { key: 'this', start: '2026-10-01', end: '2026-10-31' } });
+  assert.match(text, /Preview · October update/);
+});
+
+test('D686: SHARE_FIELDS exists, frozen, with the network default off until S19-B', () => {
+  assert.ok(Object.isFrozen(SHARE_FIELDS));
+  assert.deepEqual(SHARE_FIELDS, { network_default_on: false });
+  const src = readFileSync('frontend/src/pages/founder/ShareUpdateSheet.jsx', 'utf8');
+  assert.match(src, /network: SHARE_FIELDS\.network_default_on/);
+});
+
+test('D686: Market expansion rows draw the replies their update asks brought in', () => {
+  assert.equal(marketWithReplies('Spain', []), 'Spain');
+  assert.equal(marketWithReplies('Spain', [{ name: 'Ana', created_at: '2026-11-02' }]), 'Spain · 1 reply from updates · latest Ana');
+  assert.equal(marketWithReplies('Spain', [{ name: 'Old', created_at: '2026-11-01' }, { name: 'New', created_at: '2026-11-05' }]), 'Spain · 2 replies from updates · latest New');
+  const row = GROW_RECORDS['market-expansion'].row({ uid: 'm1', name: 'Spain', replies: [{ name: 'Ana', created_at: '2026-11-02' }] }, 0);
+  assert.equal(row.cells.market, 'Spain · 1 reply from updates · latest Ana');
+  assert.equal(GROW_RECORDS['market-expansion'].row({ uid: 'm2', name: null }, 1).cells.market, null);
 });
