@@ -112,6 +112,33 @@ test('every channels call hits D684 §9’s method and path, with the body the W
   assert.deepEqual(f.calls[14].body, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, topic: 'Interview' });
 });
 
+test('#1587 the assignment carries Who\'s company and quote consent, as the Worker reads them', async () => {
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.document ??= { cookie: '' };
+  const f = mockFetch({});
+  try {
+    const { channelsApi } = await import('../src/lib/api/channels.js');
+    await channelsApi.assign('t1', { create: { interviewee_name: ' Ada ', interviewee_company: ' Acme ', project_id: '3' }, quote_consent: true });
+    await channelsApi.assign('t1', { create: { interviewee_name: 'Ada', interviewee_company: '  ', project_id: 3 }, quote_consent: 'yes' });
+    await channelsApi.assign('t1', { interview_id: 7, quote_consent: true });
+  } finally { f.restore(); }
+  assert.deepEqual(f.calls[0].body, { create: { interviewee_name: 'Ada', interviewee_company: 'Acme', project_id: 3 }, quote_consent: true });
+  assert.deepEqual(f.calls[1].body, { create: { interviewee_name: 'Ada', project_id: 3 } }, 'a blank company and anything but true are left out');
+  assert.deepEqual(f.calls[2].body, { interview_id: 7, quote_consent: true });
+});
+
+test('#1587 the setup call is POST /founder/validate/sessions with the body as given', async () => {
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.document ??= { cookie: '' };
+  const f = mockFetch({});
+  try {
+    const { interviewSessionsApi } = await import('../src/lib/api/interviewSessions.js');
+    await interviewSessionsApi.open({ project_id: 3, channel: 'in_person', client_key: 'k' });
+  } finally { f.restore(); }
+  assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), ['POST /founder/validate/sessions']);
+  assert.deepEqual(f.calls[0].body, { project_id: 3, channel: 'in_person', client_key: 'k' });
+});
+
 test('the client refuses a provider, status or meeting provider the routes do not have, before any fetch', async () => {
   const f = mockFetch({});
   try {

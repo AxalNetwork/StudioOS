@@ -58,10 +58,23 @@ const TOAST_MS = 2500;
 
 const blank = () => ({
   phase: 'idle', session: null, interview: null, callLabel: null, channel: null, points: [],
-  cap: {}, confirm: false, drawer: false, toast: null, error: null, wake: null,
+  cap: {}, confirm: false, drawer: false, toast: null, error: null, wake: null, refused: null,
   marksQueued: [], online: true, video: false, pointError: null,
   processing: null, stageAt: -1, stopStep: null, lastSeq: null,
 });
+
+/**
+ * A Start the Worker refused, in its words (D685 §5.5.8). On 409
+ * `session_active` the session already recording is named, so the view can
+ * offer it instead of a second recording.
+ */
+export function startRefused(e) {
+  const sid = Number(e?.data?.session_id);
+  return {
+    text: (typeof e?.message === 'string' && e.message.trim()) || 'The recording could not start.',
+    sessionId: e?.code === 'session_active' && Number.isSafeInteger(sid) && sid > 0 ? sid : null,
+  };
+}
 
 /** The pill's variant, from the phase (D685 §5.6.4). Null when nothing is recording. */
 export function pillVariant(st) {
@@ -156,14 +169,17 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     if (mic === 'denied') { set({ phase: 'denied' }); return 'denied'; }
     try {
       const r = await api.action(s.id, resume ? 'resume' : 'start');
-      set({ session: r.session, phase: 'recording', error: null });
+      set({ session: r.session, phase: 'recording', error: null, refused: null });
       c.start();
       keepAwake();
       return 'recording';
     } catch (e) {
       await c.stop({ flush: false });
       capture = null;
-      set({ phase: resume ? 'paused' : 'denied', error: e?.message || 'The recording could not start.' });
+      // The Worker said no (it answered with a status): its words, never the
+      // microphone's. 409 `session_active` names the recording already live.
+      const refused = !resume && e?.status ? startRefused(e) : null;
+      set({ phase: resume ? 'paused' : 'denied', error: e?.message || 'The recording could not start.', refused });
       return 'refused';
     }
   };

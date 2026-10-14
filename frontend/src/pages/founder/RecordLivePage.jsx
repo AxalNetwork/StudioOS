@@ -65,6 +65,6 @@ export default function RecordLivePage() {
 
   return (
     <RecordingView st={state} now={now} theme={theme} reduced={prefersReducedMotion()} you={user?.name || user?.full_name || ''}
-      onExit={exit} actions={actions} />
+      onExit={exit} onOpen={(href) => navigate(href, { replace: true })} actions={actions} />
   );
 }

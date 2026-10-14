@@ -4,13 +4,15 @@ import Lightbox from '../../ui/Lightbox.jsx';
 import { api as defaultApi } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { channelsApi } from '../../lib/api/channels.js';
+import { cycleValidateApi } from '../../lib/api/cycleValidate.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
-import { ConnectPanel, SchedulePanel } from './InterviewChannels';
-import { INBOX_HREF } from '../account/channelsModel';
+import { SchedulePanel } from './InterviewChannels';
+import { assignedSentence, threadRow } from './channelThreads.js';
 import {
-  CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, callLabel, chipStatus, consentNote, defaultProvider, estimate,
-  hasMeetingLink, meetingLinkProblem, modeOf, sessionBody, startState, talkingPoints,
+  CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callLabel, chipStatus, consentNote,
+  defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
+  startRefusal, startState, talkingPoints, threadsFor,
 } from './recordSetup.js';
 
 /**
@@ -19,16 +21,18 @@ import {
  * D660 built. Design: `design/canvases/integrated/Cycle Overview.dc.html`,
  * `lbOpen`; the rules and the copy are in `recordSetup.js`.
  *
- * AGAINST TODAY'S ROUTES, until D685 §5.1's `POST /sessions` lands (S03-A):
- *   · A picked interview opens its session with `POST /interviews/:id/sessions`.
- *   · A new person is logged first (`POST /progress/discovery/:project`), then
- *     the session opens. If the session cannot open, the interview just made is
- *     deleted again, so a refused Start leaves nothing behind.
- *   · It then opens `/validate/session/:id`, where the session page's own
- *     Start waits. `onStarted` is the caller's. When `/validate/record/live`
- *     exists (S02-B) Start goes there and the second Start goes.
- *   · A field the Worker does not yet store (`SETUP_FIELDS`) is drawn disabled,
- *     with that reason. A choice the Worker would drop is never taken.
+ * ONE SETUP CALL (D685 §5.1). Start makes one `POST /sessions`: the Worker
+ * creates the interview from Who (or takes the one picked from the recruiting
+ * pipeline) and opens its session, under this lightbox's `client_key`, so a
+ * repeated Start answers the same pair and a refused one leaves nothing. An
+ * interview the lightbox was opened on may already be held, which that call
+ * refuses: it opens on `POST /interviews/:id/sessions`, with the same fields.
+ *   · Audio hands the draft to the app's recorder (`recorder`), and the caller
+ *     opens `/validate/record/live`. Without a recorder, the session's page.
+ *   · Text chat pastes the conversation into the same call, or imports a
+ *     waiting WhatsApp or Telegram chat (`POST /channels/threads/:uid/assign`).
+ *   · 409 `session_active`: the founder is already recording. The Worker's
+ *     sentence is printed, with a link back to that recording.
  *
  * ONE SEND PER START: `busy` holds the button, and a refusal prints in the
  * Worker's own words. Closing makes no server call.
@@ -81,6 +85,7 @@ function Section({ title, children, testId }) {
 export default function RecordLightbox({
   projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels: initialChannels, fields = SETUP_FIELDS,
   initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, channelsSource = channelsApi, returnFocusTo,
+  cycle = cycleValidateApi,
   // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
   recorder = null,
 }) {
@@ -98,6 +103,8 @@ export default function RecordLightbox({
   }, [channelsSource, initialChannels, fields.channels]);
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
+  const startKey = useRef(null);
+  if (startKey.current === null) startKey.current = newStartKey();
   const [name, setName] = useState(interview?.interviewee_name || '');
   const [company, setCompany] = useState(interview?.interviewee_company || '');
   const [mode, setMode] = useState(initialMode);
@@ -108,17 +115,23 @@ export default function RecordLightbox({
   const [models, setModels] = useState(initialModels);
   const [live, setLive] = useState(initialModels?.defaults?.live ?? null);
   const [final, setFinal] = useState(initialModels?.defaults?.final ?? null);
+  const [language, setLanguage] = useState('');
   const [minutes, setMinutes] = useState(30);
   const [board, setBoard] = useState(initialBoard);
   const [selected, setSelected] = useState(null); // null: the defaults (the first two), until the founder toggles one
   const [assistant, setAssistant] = useState(false);
-  // D684's two other ways in, kept from the sheet this replaces: assign a
-  // Telegram or WhatsApp chat to this interview, or schedule a Zoom or Meet
-  // call for later. Both need the interview, so a new person goes to the inbox.
-  const [chatImport, setChatImport] = useState(false);
+  // Who, picked from the recruiting pipeline (§5.1.7): booked first. Closed until asked for.
+  const [picked, setPicked] = useState(null);
+  const [pipeline, setPipeline] = useState({ open: false, status: 'idle', rows: [] });
+  // A WhatsApp or Telegram chat waiting in the inbox, imported inline under the Text chips.
+  const [threads, setThreads] = useState({ status: 'idle', items: [] });
+  const [thread, setThread] = useState(null);
+  // D684's call for later. A new person is added to the pipeline first, since a call needs an interview.
   const [scheduleLater, setScheduleLater] = useState(false);
+  const [planning, setPlanning] = useState({ busy: false, error: null });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const [refusal, setRefusal] = useState(null);
+  const [assigned, setAssigned] = useState(null);
   const { company: active } = useActiveCompany() || {};
 
   useEffect(() => {
@@ -138,20 +151,50 @@ export default function RecordLightbox({
     return () => { alive = false; };
   }, [api, projectId, initialBoard]);
 
+  const who = interview || picked; // the interview Start lands on; none makes one from Who
   const m = modeOf(mode);
   const chips = PROVIDERS[mode] || [];
   const chosen = chips.find((c) => c.value === provider) || null;
   const status = chosen ? chipStatus(mode, chosen, channels) : null;
   const points = useMemo(() => talkingPoints(board?.hypotheses), [board]);
   const isOn = (p) => (selected ? selected.has(p.id) : p.on);
-  const picked = points.filter(isOn);
+  const chosenPoints = points.filter(isOn);
   const eta = estimate(models, live, final, minutes);
-  const state = startState({ mode, consent, name, interview, conversation, hasThread: false });
+  // Importing: a Text chip for an app whose chats can be read (not paste, not disabled).
+  const importing = mode === 'text' && provider !== 'paste' && !!status && !status.disabled;
+  // While importing, the chat is the content: the paste box is not asked for.
+  const state = startState({ mode, consent, name, interview: who, conversation, hasThread: importing });
+  const blockedReason = importing && !thread && state.ok ? 'Choose a chat to import.' : null;
   const linkProblem = hasMeetingLink(mode, provider) ? meetingLinkProblem(provider, link) : null;
-  const ready = state.ok && !linkProblem && !busy;
+  const ready = state.ok && !blockedReason && !linkProblem && !busy;
   const label = m.start;
+  const languages = languageOptions(models, live);
 
-  const pickMode = (next) => { setMode(next); setProvider(defaultProvider(next, channels)); setLink(''); setError(null); };
+  // The chats waiting for this app, read when its chip is chosen.
+  useEffect(() => {
+    if (!importing) return undefined;
+    let alive = true;
+    setThreads({ status: 'loading', items: [] }); setThread(null);
+    Promise.resolve().then(() => channelsSource.threads('pending'))
+      .then((r) => { if (alive) setThreads({ status: 'ready', items: threadsFor(r, provider) }); })
+      .catch(() => { if (alive) setThreads({ status: 'unreadable', items: [] }); });
+    return () => { alive = false; };
+  }, [importing, provider, channelsSource]);
+
+  const openPipeline = () => {
+    const open = !pipeline.open;
+    setPipeline((p) => ({ ...p, open }));
+    if (!open || pipeline.status === 'ready' || pipeline.status === 'loading' || !projectId) return;
+    setPipeline({ open: true, status: 'loading', rows: [] });
+    cycle.module(projectId, 'customer-research', { filter: 'stage:pipeline', sort: 'booked' })
+      .then((r) => setPipeline({ open: true, status: 'ready', rows: pipelineRows(r) }))
+      .catch(() => setPipeline({ open: true, status: 'unreadable', rows: [] }));
+  };
+  const pick = (row) => { setPicked(row); setPipeline((p) => ({ ...p, open: false })); setRefusal(null); };
+
+  const pickMode = (next) => { setMode(next); setProvider(defaultProvider(next, channels)); setLink(''); setRefusal(null); setThread(null); };
+  // Flux transcribes English only: choosing it takes a language it cannot take back to Detect.
+  const pickLive = (v) => { const next = v || null; setLive(next); if (!languageOptions(models, next).some((l) => l.code === language)) setLanguage(''); };
 
   const togglePoint = (p) => setSelected((prev) => {
     const next = new Set(prev ?? points.filter((x) => x.on).map((x) => x.id));
@@ -159,37 +202,73 @@ export default function RecordLightbox({
     return next;
   });
 
+  /**
+   * "Schedule the call for later". A call needs an interview: a new person is
+   * added to the pipeline, booked, and becomes Who's pick, so Start does not
+   * make a second one.
+   */
+  const scheduleCall = async () => {
+    if (scheduleLater) { setScheduleLater(false); return; }
+    if (who) { setScheduleLater(true); return; }
+    const named = name.trim();
+    if (!named) { setPlanning({ busy: false, error: 'Add who you are talking to first.' }); return; }
+    setPlanning({ busy: true, error: null });
+    let made = null;
+    try {
+      made = await api.createInterview(projectId, { interviewee_name: named, interviewee_company: company.trim() || null });
+      await cycle.setInterviewStage(projectId, made.id, 'booked');
+      setPicked({ id: made.id, interviewee_name: made.interviewee_name ?? named, interviewee_company: made.interviewee_company ?? (company.trim() || null), stage: 'booked' });
+      setPlanning({ busy: false, error: null });
+      setScheduleLater(true);
+    } catch (e) {
+      // Not left half-made: an interview with no stage would count as held.
+      if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the refusal is the message */ } }
+      setPlanning({ busy: false, error: e?.message || 'The call could not be planned.' });
+    }
+  };
+
   const submit = async () => {
     if (!ready || sending.current) return;
     sending.current = true;
-    setBusy(true); setError(null);
-    let made = null;
+    setBusy(true); setRefusal(null); setAssigned(null);
     // In person and Audio call: the microphone and the AudioContext are asked
     // for inside this click, before anything is awaited, so iOS Safari does not
     // start the context suspended (D685 §5.6.5). A video call asks in its own
     // second click, "Share the call's tab" (§5.8.1).
     const handsOver = !!recorder && m.audio;
     if (handsOver && mode !== 'video') recorder.prepare();
+    const person = (r) => ({
+      id: r?.id ?? who?.id,
+      interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? name.trim(),
+      interviewee_company: r?.interviewee_company ?? who?.interviewee_company ?? (company.trim() || null),
+    });
     try {
-      let target = interview;
-      if (!target) {
-        made = await api.createInterview(projectId, { interviewee_name: name.trim(), interviewee_company: company.trim() || null });
-        target = made;
-      }
-      const body = sessionBody({ mode, consent, live, final, conversation, provider, link, points: picked.map((p) => p.id) }, fields);
-      const r = await sessions.create(target.id, body);
-      if (handsOver) {
-        const who = { id: target.id, interviewee_name: target.interviewee_name ?? name.trim(), interviewee_company: target.interviewee_company ?? (company.trim() || null) };
-        recorder.begin({ session: r.session, interview: who, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video' });
-        onStarted?.(r.session, who, 'live');
+      if (importing) {
+        const r = await channelsSource.assign(thread, assignTarget({ name, company, consent }, { projectId, interview: who }));
+        const into = person({ id: r?.interview_id });
+        if (r?.session_id != null) { onStarted?.({ id: r.session_id }, into); return; }
+        setAssigned(assignedSentence(r, into.interviewee_name));
+        setBusy(false); sending.current = false;
         return;
       }
-      onStarted?.(r.session, target);
+      const setup = { mode, consent, live, final, language, conversation, provider, link, points: chosenPoints.map((p) => p.id), name, company };
+      // An interview it was opened on (a row's "Record a session") may already
+      // be held, which the setup call refuses: it opens on that interview's own
+      // route, with the same fields. A pick from the pipeline, or a new person,
+      // is the one setup call.
+      const r = interview
+        ? await sessions.create(interview.id, { ...sessionBody(setup, fields), client_key: startKey.current })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: startKey.current }, fields));
+      const into = person(r.interview);
+      if (handsOver) {
+        recorder.begin({ session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video' });
+        onStarted?.(r.session, into, 'live');
+        return;
+      }
+      onStarted?.(r.session, into);
     } catch (e) {
       recorder?.release();
-      // A refused Start leaves nothing behind: the interview made for it goes too.
-      if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the Worker's refusal is the message */ } }
-      setError(e?.message || 'The session could not be created.');
+      setRefusal(startRefusal(e));
       setBusy(false);
       sending.current = false;
     }
@@ -213,17 +292,47 @@ export default function RecordLightbox({
       )}>
       <div className="divide-y divide-axal-hairline dark:divide-gray-800">
         <Section title="Who" testId="record-who">
-          {interview ? (
-            <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="record-who-picked">{[interview.interviewee_name, interview.interviewee_company].filter(Boolean).join(' · ') || 'Name not recorded'}</p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Name
-                <input ref={nameRef} className={FIELD} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoComplete="off" data-testid="record-name" />
-              </label>
-              <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Company
-                <input className={FIELD} value={company} onChange={(e) => setCompany(e.target.value)} maxLength={120} autoComplete="off" data-testid="record-company" />
-              </label>
+          {who ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="record-who-picked">
+                {[who.interviewee_name, who.interviewee_company].filter(Boolean).join(' · ') || 'Name not recorded'}
+                {who.stage && STAGE_WORD[who.stage] ? <span className="ml-1.5 text-[11.5px] text-axal-faint">{`· ${STAGE_WORD[who.stage]}`}</span> : null}
+              </p>
+              {!interview && <button type="button" onClick={() => { setPicked(null); setScheduleLater(false); }} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-who-clear">Someone else</button>}
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Name
+                  <input ref={nameRef} className={FIELD} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoComplete="off" data-testid="record-name" />
+                </label>
+                <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Company
+                  <input className={FIELD} value={company} onChange={(e) => setCompany(e.target.value)} maxLength={120} autoComplete="off" data-testid="record-company" />
+                </label>
+              </div>
+              <button type="button" aria-expanded={pipeline.open} aria-controls="record-pipeline" onClick={openPipeline}
+                className="w-fit text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-pipeline-link">or pick from Recruiting pipeline ▾</button>
+              {pipeline.open && (
+                <div id="record-pipeline" data-testid="record-pipeline">
+                  {pipeline.status === 'loading' && <p className="m-0 text-[12px] text-axal-faint">Reading your recruiting pipeline…</p>}
+                  {pipeline.status === 'unreadable' && <p className="m-0 text-[12px] text-axal-faint" data-testid="record-pipeline-unreadable">Unreadable: your recruiting pipeline could not be read. This is not a claim that it is empty.</p>}
+                  {pipeline.status === 'ready' && pipeline.rows.length === 0 && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-pipeline-none">Nobody is in your recruiting pipeline. Name the person above.</p>}
+                  {pipeline.status === 'ready' && pipeline.rows.length > 0 && (
+                    <ul className="m-0 list-none divide-y divide-axal-hairline overflow-hidden rounded-[9px] border border-axal-hairline p-0 dark:divide-gray-800 dark:border-gray-700">
+                      {pipeline.rows.map((r) => (
+                        <li key={r.id}>
+                          <button type="button" onClick={() => pick(r)} data-testid={`record-pipeline-${r.id}`}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">
+                            <span className="min-w-0 truncate">{[r.interviewee_name || 'Name not recorded', r.interviewee_company].filter(Boolean).join(' · ')}</span>
+                            <span className="shrink-0 text-[11.5px] text-axal-faint">{STAGE_WORD[r.stage]}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </Section>
 
@@ -251,29 +360,33 @@ export default function RecordLightbox({
               <span className="font-normal text-axal-faint">One line each, as “Name: what they said”.</span>
             </label>
           )}
-          {mode === 'text' && provider !== 'paste' && (
-            <p className="m-0 text-[12px] text-axal-faint" data-testid="record-import-note">
-              {chosen && chipStatus(mode, chosen, channels).disabled ? 'Importing from this app is not available yet. Paste the conversation instead.' : 'Pick a chat to import once its app is connected.'}
-            </p>
+          {mode === 'text' && provider !== 'paste' && !importing && (
+            <p className="m-0 text-[12px] text-axal-faint" data-testid="record-import-note">Importing from this app is not available yet. Paste the conversation instead.</p>
+          )}
+          {importing && (
+            <div className="flex flex-col gap-1.5" data-testid="record-threads">
+              {threads.status === 'loading' && <p className="m-0 text-[12px] text-axal-faint">Reading the chats waiting in your inbox…</p>}
+              {threads.status === 'unreadable' && <p className="m-0 text-[12px] text-axal-faint" data-testid="record-threads-unreadable">Unreadable: your waiting chats could not be read. This is not a claim that none is waiting.</p>}
+              {threads.status === 'ready' && threads.items.length === 0 && (
+                <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-threads-none">{status.word === 'Connected'
+                  ? `No ${chosen.label} chat is waiting. When a customer writes to your connected ${chosen.label}, the chat appears here.`
+                  : `Connect ${chosen.label} first: its chats arrive once it is connected.`}</p>
+              )}
+              {threads.status === 'ready' && threads.items.length > 0 && (
+                <Radios label="The chat to import" testId="record-thread" value={thread} onChange={setThread} className="flex flex-col gap-1.5"
+                  style={(on) => `${chip(on)} !rounded-[9px] text-left`}
+                  options={threads.items.map((t) => { const row = threadRow(t); return { value: t.uid, label: `${row.name} · ${row.count} · ${row.when}` }; })} />
+              )}
+              <p className="m-0 text-[11.5px] text-axal-faint">{`Its messages become this interview’s Text session, and new messages in the chat follow.`}</p>
+            </div>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
             <button type="button" aria-expanded={assistant} aria-controls="record-assistant" onClick={() => setAssistant((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-assistant-link">Send it from your AI assistant</button>
-            {interview ? (
-              <>
-                <button type="button" aria-expanded={chatImport} aria-controls="record-chat-import" onClick={() => setChatImport((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-chat-link">Import a Telegram or WhatsApp chat</button>
-                <button type="button" aria-expanded={scheduleLater} aria-controls="record-schedule" onClick={() => setScheduleLater((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-schedule-link">Schedule the call for later</button>
-              </>
-            ) : (
-              <Link to={INBOX_HREF} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-inbox-link">Import a chat from your inbox</Link>
-            )}
+            <button type="button" aria-expanded={scheduleLater} aria-controls="record-schedule" onClick={scheduleCall} disabled={planning.busy} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-schedule-link">{planning.busy ? 'Adding them to your pipeline…' : 'Schedule the call for later'}</button>
           </div>
+          {planning.error && <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="record-schedule-error">{planning.error}</p>}
           {assistant && <div id="record-assistant" className="-mx-1"><AssistantEntry companyName={active?.company_name || ''} /></div>}
-          {interview && chatImport && (
-            <div id="record-chat-import" className="-mx-1">
-              <ConnectPanel interview={interview} onAssigned={(r) => r?.session_id && onStarted?.({ id: r.session_id }, interview)} />
-            </div>
-          )}
-          {interview && scheduleLater && <div id="record-schedule" className="-mx-1"><SchedulePanel interview={interview} /></div>}
+          {who && scheduleLater && <div id="record-schedule" className="-mx-1"><SchedulePanel interview={who} /></div>}
         </Section>
 
         <Section title="Talking points" testId="record-points">
@@ -298,7 +411,7 @@ export default function RecordLightbox({
                 : (
                   <>
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]"><span className="text-axal-muted dark:text-gray-300">Live captions</span>
-                      <Radios label="Live captions" testId="record-live" value={live === null ? '' : live} onChange={(v) => setLive(v || null)}
+                      <Radios label="Live captions" testId="record-live" value={live === null ? '' : live} onChange={pickLive}
                         options={[{ value: '', label: 'Off' }, ...(models.live || []).map((x) => ({ value: x.model, label: `${x.label} · ${Number.isFinite(x.price_usd_per_minute) ? `$${x.price_usd_per_minute.toFixed(4)}/min` : 'Not priced'}`, disabled: !x.choosable }))]} />
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]"><span className="text-axal-muted dark:text-gray-300">Final transcript</span>
@@ -306,7 +419,9 @@ export default function RecordLightbox({
                         options={(models.final || []).map((x) => ({ value: x.model, label: `${x.label} · ${Number.isFinite(x.price_usd_per_minute) ? `$${x.price_usd_per_minute.toFixed(4)}/min` : 'Not priced'}`, disabled: !x.choosable }))} />
                     </div>
                     <div className="flex items-center justify-between gap-2 text-[13px]"><label htmlFor="record-language" className="text-axal-muted dark:text-gray-300">Language</label>
-                      <select id="record-language" disabled={!fields.language} className={`${FIELD} !w-auto`} data-testid="record-language" defaultValue=""><option value="">Detect</option></select>
+                      <select id="record-language" disabled={!fields.language} className={`${FIELD} !w-auto`} data-testid="record-language" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                        {languages.map((l) => <option key={l.code || 'detect'} value={l.code}>{l.name}</option>)}
+                      </select>
                     </div>
                     {!fields.language && <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-language-note">{NOT_STORED}</p>}
                     <div className="flex items-center justify-between gap-2 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-estimate">
@@ -329,8 +444,14 @@ export default function RecordLightbox({
         </Section>
       </div>
       <div className="px-5 pb-3">
-        {!ready && !(m.audio && !consent) && state.reason && <p id="record-start-reason" className="m-0 text-[11.5px] text-axal-faint" data-testid="record-start-reason">{state.reason}</p>}
-        {error && <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-error">{error}</p>}
+        {!ready && !(m.audio && !consent) && (state.reason || blockedReason) && <p id="record-start-reason" className="m-0 text-[11.5px] text-axal-faint" data-testid="record-start-reason">{state.reason || blockedReason}</p>}
+        {refusal && (
+          <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-error">
+            {refusal.text}
+            {refusal.liveHref && <>{' '}<Link to={refusal.liveHref} replace className="underline" data-testid="record-error-live">Return to that recording</Link></>}
+          </p>
+        )}
+        {assigned && <p role="status" className="m-0 mt-1 text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="record-assigned">{assigned}</p>}
       </div>
     </Lightbox>
   );

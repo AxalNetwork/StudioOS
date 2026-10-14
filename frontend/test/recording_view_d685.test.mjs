@@ -123,6 +123,32 @@ test('between Start and the microphone answering, the view says so and offers no
   assert.doesNotMatch(view(), /recording-opening/, 'not once recording');
 });
 
+test('#1587 a refused Start draws the Worker\'s words, Return to that recording, and Back; never the microphone card', async () => {
+  const st = { phase: 'denied', session: { ...SESSION, status: 'draft' }, refused: { text: 'You are already recording another session. Stop it, or return to it, first.', sessionId: 88 } };
+  const out = view(st);
+  assert.ok(renderedText(out).includes('You are already recording another session. Stop it, or return to it, first.'));
+  assert.doesNotMatch(out, /StudioOS cannot hear the microphone|button-retry-mic/);
+  assert.doesNotMatch(out, /button-pause/);
+  const opened = [];
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  try {
+    await act(async () => { root.render(h(RecordingView, { st, now: 0, onExit: () => opened.push('exit'), onOpen: (href) => opened.push(href) })); });
+    assert.equal(pr(by('refused-card')).role, 'alert');
+    await act(async () => { pr(by('button-refused-live')).onClick(); });
+    await act(async () => { pr(by('button-refused-exit')).onClick(); });
+    assert.deepEqual(opened, ['/validate/record/live?session=88', 'exit']);
+    await act(async () => { root.render(h(RecordingView, { st: { ...st, refused: { text: 'Record consent first.', sessionId: null } }, now: 0, onExit() {}, onOpen() {} })); });
+    assert.equal(by('button-refused-live'), undefined, 'no recording to return to');
+  } finally { await act(async () => root.unmount()); restore(); }
+  const live = readFileSync('frontend/src/pages/founder/RecordLivePage.jsx', 'utf8');
+  assert.match(live, /onOpen=\{\(href\) => navigate\(href, \{ replace: true \}\)\}/);
+});
+
 test('the denied card draws in draft, with Try again; the video share step offers the tab or the mic only', () => {
   const denied = view({ phase: 'denied', session: { ...SESSION, status: 'draft' } });
   assert.ok(renderedText(denied).includes('StudioOS cannot hear the microphone'));
@@ -421,7 +447,7 @@ test('the lightbox hands its draft over: the mic is opened in the Start click, t
   };
   const api = { createInterview: async () => { order.push('createInterview'); return { id: 41, interviewee_name: 'Dana' }; }, deleteInterview: async () => {}, getValidationBoard: async () => ({ hypotheses: [] }) };
   // The Worker answers with its own point rows: their ids are not the hypotheses'.
-  const sessions = { models: async () => ({}), create: async () => { order.push('create'); return { session: { id: 501, status: 'draft' }, call_label: 'Audio call · as the Worker words it', points: [{ id: 88, hypothesis_id: 2, text: 'H2 · They would pay', covered: false }] }; } };
+  const sessions = { models: async () => ({}), open: async () => { order.push('open'); return { session: { id: 501, status: 'draft' }, interview: { id: 41, interviewee_name: 'Dana', interviewee_company: null }, call_label: 'Audio call · as the Worker words it', points: [{ id: 88, hypothesis_id: 2, text: 'H2 · They would pay', covered: false }] }; } };
   const started = [];
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
@@ -439,7 +465,7 @@ test('the lightbox hands its draft over: the mic is opened in the Start click, t
       assert.equal(order[0], 'prepare', 'synchronously, inside the click: before anything is awaited');
       await pending;
     });
-    assert.deepEqual(order.slice(1), ['createInterview', 'create', ['begin', 'Audio call · as the Worker words it', false, [88]]], 'the Worker\'s label, and the drawer ticks the Worker\'s rows');
+    assert.deepEqual(order.slice(1), ['open', ['begin', 'Audio call · as the Worker words it', false, [88]]], 'one setup call; the Worker\'s label, and the drawer ticks the Worker\'s rows');
     assert.equal(started[0][2], 'live');
     order.length = 0; started.length = 0;
     await mount('video');

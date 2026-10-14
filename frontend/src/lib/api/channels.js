@@ -11,7 +11,7 @@
 //   test             POST   /channels/:provider/test
 //   threads          GET    /channels/threads?status=      → { items: ThreadView[] }
 //   thread           GET    /channels/threads/:uid         → { thread, messages }
-//   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, project_id } }
+//   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } }, quote_consent?
 //   ignore           POST   /channels/threads/:uid/ignore  { ignored }
 //   reply            POST   /channels/threads/:uid/reply   { text, client_key }
 //   meetings         GET    /founder/validate/interviews/:id/meetings
@@ -40,12 +40,22 @@ function threadsQuery(status) {
   return `?status=${status}`;
 }
 
-/** The assignment body: an interview the member already has, or one made from this chat. */
+/**
+ * The assignment body: an interview the member already has, or one made from
+ * this chat (with Who's company, D685 §5.3). Quote consent (§5.1.4) is sent
+ * only as the literal true.
+ */
 function assignBody(target) {
-  if (target && target.create) {
-    return { create: { interviewee_name: String(target.create.interviewee_name ?? '').trim(), project_id: Number(target.create.project_id) } };
-  }
-  return { interview_id: Number(target?.interview_id) };
+  const body = target && target.create
+    ? { create: {
+      interviewee_name: String(target.create.interviewee_name ?? '').trim(),
+      ...(typeof target.create.interviewee_company === 'string' && target.create.interviewee_company.trim()
+        ? { interviewee_company: target.create.interviewee_company.trim() } : {}),
+      project_id: Number(target.create.project_id),
+    } }
+    : { interview_id: Number(target?.interview_id) };
+  if (target?.quote_consent === true) body.quote_consent = true;
+  return body;
 }
 
 export const channelsApi = {
