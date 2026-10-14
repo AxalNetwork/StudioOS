@@ -7,6 +7,7 @@ import {
   CARD_TITLE, CHANNELS_HREF, INBOX_HREF, MEETING_NOTES, PROVIDER_LABEL, TELEGRAM_LIMITS, WHATSAPP_CALLS, WHATSAPP_NOTES,
   channelCard, disconnectNote, meetingCard, pendingLabel, pendingTotal, readOverview, telegramLinkView,
   telegramSteps, testOutcome, whatsappSignupConfig,
+  telegramClaimView, telegramConfirmRefusal,
 } from './channelsModel';
 import { SignupError, loadFacebookSdk, runEmbeddedSignup } from './whatsappSignup';
 
@@ -138,7 +139,53 @@ export function TelegramLinkSteps({ link, now = Date.now(), onCheck, onAgain, co
   );
 }
 
-export function TelegramChannelCard({ card, pending = null, api = channelsApi, onChanged, initialLink = null, now }) {
+/**
+ * The claimed Telegram account, waiting on both owners (#1625, migration 458):
+ * its name and @username exactly as Telegram sent them, where each half
+ * stands, and Confirm, Axal's half. Confirm re-reads the overview whatever
+ * the answer; a refusal is a sentence, never a code.
+ */
+export function TelegramClaim({ view, api = channelsApi, onChanged, onAgain, busyAgain = false }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+  const confirm = async () => {
+    setBusy(true); setError(''); setDone(false);
+    try {
+      const r = await api.confirmTelegram(view.uid);
+      if (r?.linked === true) setDone(true);
+    } catch (e) {
+      setError(telegramConfirmRefusal(e));
+    } finally {
+      setBusy(false);
+      onChanged?.();
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700" data-testid="telegram-claim">
+      <p className="text-[12.5px] text-axal-ink dark:text-gray-100">
+        <span className="font-semibold">Claimed by </span>
+        {view.who ? <span data-testid="telegram-claim-who">{view.who}</span> : <span className={NOTE}>a Telegram account whose name could not be read</span>}
+      </p>
+      <p className={NOTE} data-testid="telegram-claim-state">{view.sentence}</p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-axal-ink/90 dark:text-gray-300" data-testid="telegram-claim-steps">
+        {view.steps.map((st) => <li key={st.label}>{`${st.done ? '✓' : '○'} ${st.label}`}</li>)}
+      </ul>
+      <div className="flex flex-wrap gap-2">
+        {view.canConfirm && <button type="button" className={BTN.primary} disabled={busy} onClick={confirm} data-testid="button-telegram-confirm">{busy ? 'Confirming…' : 'Confirm'}</button>}
+        {view.stale && onAgain && <button type="button" className={BTN.primary} disabled={busyAgain} onClick={onAgain} data-testid="button-telegram-new-link">Make a new link</button>}
+      </div>
+      {done && <p role="status" className="text-[12px] text-emerald-700 dark:text-emerald-300" data-testid="telegram-claim-linked">Telegram is linked.</p>}
+      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="telegram-claim-error">{error}</p>}
+    </div>
+  );
+}
+
+export function TelegramChannelCard({ card, claim = null, pending = null, api = channelsApi, onChanged, initialLink = null, now }) {
+  // A claim still open is drawn whatever the card says (a re-link while
+  // connected); an expired or cancelled one only while nothing is connected.
+  const view = telegramClaimView(claim);
+  const claimed = view && (!view.stale || card.state === 'not_connected') ? view : null;
   const [link, setLink] = useState(initialLink);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -151,20 +198,22 @@ export function TelegramChannelCard({ card, pending = null, api = channelsApi, o
   }, [link, onChanged]);
   const makeLink = async () => {
     setBusy(true); setError('');
-    try { setLink(await api.linkTelegram()); }
+    // A new code replaces the last claim: the overview is read again so the old one goes.
+    try { setLink(await api.linkTelegram()); onChanged?.(); }
     catch (e) { setError(e?.message || 'Axal could not make a Telegram link. Try again in a minute.'); }
     finally { setBusy(false); }
   };
   return (
     <CardFrame card={card}>
-      {card.state === 'not_connected' && !link && (
+      {claimed && <TelegramClaim view={claimed} api={api} onChanged={onChanged} onAgain={() => { setLink(null); makeLink(); }} busyAgain={busy} />}
+      {card.state === 'not_connected' && !link && !claimed && (
         <button type="button" className={`${BTN.primary} self-start`} disabled={busy} onClick={makeLink} data-testid="button-link-telegram">{busy ? 'Making a link…' : 'Link Telegram'}</button>
       )}
-      {card.state === 'not_connected' && link && <TelegramLinkSteps link={link} now={now} onCheck={onChanged} onAgain={makeLink} />}
+      {card.state === 'not_connected' && link && !claimed && <TelegramLinkSteps link={link} now={now} onCheck={onChanged} onAgain={makeLink} />}
       {card.state === 'linked' && (
         <>
           <ol className="list-decimal space-y-1 pl-4 text-[12.5px] leading-relaxed text-axal-ink/90 dark:text-gray-300">
-            {telegramSteps(null).slice(1).map((s) => <li key={s}>{s}</li>)}
+            {telegramSteps(null).slice(2).map((s) => <li key={s}>{s}</li>)}
           </ol>
           {onChanged && <button type="button" className={`${SMALL} self-start`} onClick={onChanged} data-testid="button-telegram-check">I’ve done this. Check again</button>}
         </>
@@ -286,7 +335,7 @@ export function ChannelsGroup({ status, overview, catalogue = [], api = channels
       )}
       {overview && (
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <TelegramChannelCard card={channelCard('telegram', overview)} pending={overview.pending?.telegram ?? null} api={api} onChanged={onChanged} />
+          <TelegramChannelCard card={channelCard('telegram', overview)} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={onChanged} />
           <WhatsAppChannelCard card={channelCard('whatsapp', overview)} overview={overview} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={onChanged} sdk={sdk} />
           <MeetingChannelCard card={meetingCard('zoom', overview, catalogue)} onOpenConnector={onOpenConnector} />
           <MeetingChannelCard card={meetingCard('google_meet', overview, catalogue)} onOpenConnector={onOpenConnector} />
