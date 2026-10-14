@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { Pill, Unreadable } from '../../ui';
+import Lightbox from '../../ui/Lightbox.jsx';
+import ActionSheet from '../../ui/ActionSheet.jsx';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { connectorsApi } from '../../lib/api/connectors';
-import { Banner, ConnectorPanel, Group, Row, Sheet, disconnect, openingView, useConnectors } from './ConnectorSheet';
+import { Banner, ConnectorPanel, Group, Row, SheetFrame, disconnect, openingView, useConnectors } from './ConnectorSheet';
 import {
   TOOL_FILTERS, companiesWith, companyBanner, disconnectNote, projectCompany, retryOutcome, servesCompany, toolBanner, toolGroups, toolRow,
 } from './connectorsModel';
@@ -18,6 +20,14 @@ import {
  * A provider's sign-in still returns to `/integrations`, which lands on the
  * Connectors page; the Worker's callback chooses that address (D651) until
  * S18-A's `return_to=build` merges (D686 §5.2).
+ *
+ * ONE FRAME (D686 §5.4). The list and every panel view swap inside one
+ * `<Lightbox size="tall">`, so a swap never remounts it or pulls focus back to
+ * the CTA. The list is an `ActionSheet`; a panel is its `Sheet` in the frame's
+ * layout (`SheetFrame`). × and the backdrop close the lightbox; Escape steps
+ * back from a panel, and closes from the list; Back returns to the list; Done
+ * and an Open link close it all. A tool's settings dialog is a nested
+ * Lightbox, so it takes Escape alone.
  *
  * D686 §5.4 (#1597): the rows say what is true (`toolRow`), GitHub chooses
  * its repositories in the `sync` view (`GithubSyncSheet.jsx`), and every
@@ -62,8 +72,15 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
   const { groups, total } = toolGroups(data.catalogue, { q, filter, pin });
   const panelP = panel && data.catalogue.find((p) => p.key === panel.key);
 
+  const back = () => setPanel(null);
+  const frame = (body) => (
+    <Lightbox label="Connect a tool" size="tall" width={600} onClose={onClose} onEscape={panelP ? back : onClose} testId="connect-tool-lightbox">
+      <SheetFrame.Provider value={{ onDismiss: onClose }}>{body}</SheetFrame.Provider>
+    </Lightbox>
+  );
+
   if (panelP) {
-    return (
+    return frame(
       <ConnectorPanel
         key={`${panel.key}:${panelP.connection ? 'c' : 'n'}`}
         eyebrow="Build"
@@ -71,12 +88,12 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
         view={panel.view}
         setView={(view) => setPanel((s) => ({ ...s, view }))}
         onChanged={data.reload}
-        onClose={() => setPanel(null)}
-        back={() => setPanel(null)}
+        onClose={back}
+        back={back}
         projectId={projectId}
         companyId={scope?.state === 'ok' ? scope.companyId : null}
         companyName={scope?.state === 'ok' ? scope.name : null}
-      />
+      />,
     );
   }
 
@@ -118,8 +135,10 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
     return null;
   };
 
-  return (
-    <Sheet eyebrow="Build" title="Connect a tool" sub="Connected tools fill your modules with real data. Each one says what it feeds." onClose={onClose} data-testid="connect-tool-sheet">
+  return frame(
+    <ActionSheet eyebrow="Build" title="Connect a tool" sub="Connected tools fill your modules with real data. Each one says what it feeds." onClose={onClose} testId="connect-tool-sheet">
+      {/* The rows keep the side sheet's own insets. */}
+      <div className="-mx-5 -my-4">
       {data.status === 'unreadable' && <div className="mx-5 mt-4"><Unreadable what="The tools" claim="This is not a claim that none is connected." onRetry={data.reload} /></div>}
       {companyNote && <Banner tone="warn" data-testid={`connect-tool-company-${scope.state}`}>{companyNote}</Banner>}
       {banner && <Banner tone={banner.tone} data-testid={`connect-tool-${banner.view}`}>{banner.text}</Banner>}
@@ -162,6 +181,7 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
           })}
         </Group>
       ))}
-    </Sheet>
+      </div>
+    </ActionSheet>,
   );
 }

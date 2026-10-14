@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Pill, Unreadable } from '../../ui';
 import { api as mainApi } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
-import { Banner, FedGroup, Group, Row, Sheet } from './ConnectorSheet';
+import { Banner, FedGroup, Group, Row, Sheet, SheetFrame } from './ConnectorSheet';
 import { repoLine, successBanner, syncFinished, syncProgress, syncRefusal } from './githubSync';
 
 /**
@@ -27,6 +27,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default function GithubSyncSheet({ p, conn, projectId = null, companyId = null, eyebrow = 'Connector', onClose, back, onChanged, api = connectorsApi, projectsApi = mainApi, wait = sleep }) {
   const uid = conn?.uid;
+  // In Build's lightbox Done and Open close it all (D686 §5.4); elsewhere they close the sheet.
+  const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
   const opts = companyId ? { companyId } : undefined;
   const [read, setRead] = useState({ status: 'loading', available: [], message: '' });
   const [chosen, setChosen] = useState(new Set());
@@ -107,9 +109,9 @@ export default function GithubSyncSheet({ p, conn, projectId = null, companyId =
     const banner = successBanner(p?.key || 'github', result);
     return (
       <Sheet eyebrow={eyebrow} title={`${name} is synced`} onClose={onClose} data-testid="connector-sheet-success"
-        footer={<button type="button" className={BTN.primary} onClick={() => { onChanged?.(); onClose?.(); }} data-testid="button-connected-done">Done</button>}>
+        footer={<button type="button" className={BTN.primary} onClick={() => { onChanged?.(); dismiss?.(); }} data-testid="button-connected-done">Done</button>}>
         {banner && <Banner tone="ok" data-testid="connect-success-banner">{banner}</Banner>}
-        <FedGroup conn={conn} name={name} projectId={project} onOpen={onClose} />
+        <FedGroup conn={conn} name={name} projectId={project} onOpen={dismiss} />
       </Sheet>
     );
   }
