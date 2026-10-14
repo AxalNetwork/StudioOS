@@ -270,3 +270,19 @@ test('the built docs/ ships _headers and no Pages entry script (docs/ is built, 
     assert.ok(!existsSync(resolve(root, gone)), `${gone} is back in the build`);
   }
 });
+
+test('#1587 Permissions-Policy lets this origin use the microphone, and nothing more', () => {
+  // The interview recorder and the advisor's voice input call getUserMedia;
+  // `microphone=()` refused them in every Chromium browser, on both hosts.
+  const callers = ['frontend/src/lib/interviewCapture.js', 'frontend/src/components/advisor/PersonalAdvisor.jsx'];
+  for (const f of callers) assert.match(at(f), /getUserMedia\(/, `${f} records from the microphone`);
+  const directives = (value) => Object.fromEntries(value.split(',').map((d) => d.trim().split('=')));
+  for (const [where, value] of [[HEADERS_FILE, staticHeaderRules().get('permissions-policy')], [WORKER_HEADERS, workerHeaderValues().get('permissions-policy')]]) {
+    const d = directives(value);
+    assert.equal(d.microphone, '(self)', `${where}: the microphone, to this origin only`);
+    for (const off of ['geolocation', 'camera', 'payment', 'usb', 'bluetooth', 'accelerometer', 'gyroscope', 'magnetometer', 'midi', 'serial', 'hid', 'interest-cohort']) {
+      assert.equal(d[off], '()', `${where}: ${off} stays off`);
+    }
+    assert.doesNotMatch(value, /\*/, `${where}: no feature is granted to every origin`);
+  }
+});

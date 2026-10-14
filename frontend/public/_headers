@@ -29,12 +29,16 @@
 # carry ids and query params; these static pages carry neither and benefit
 # from cross-origin referral attribution. The split is intentional — see
 # GOTCHAS, "Referrer-Policy is two-tier". Do not unify them.
+# Permissions-Policy allows the microphone to this origin only, `(self)`: the
+# interview recorder (D685, lib/interviewCapture.js) and the advisor's voice
+# input call getUserMedia, and `microphone=()` refused them in every
+# Chromium browser (#1587). No other origin, no frame, gets it.
 /*
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()
+  Permissions-Policy: geolocation=(), camera=(), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()
 
 # NO Content-Security-Policy here, and that is a decision rather than an
 # omission. The Worker's CSP is nonce-based and generated per request, which a
