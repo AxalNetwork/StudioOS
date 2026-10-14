@@ -170,10 +170,6 @@ export default function AdminForms() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-sm rounded-lg px-3 py-2 mb-3">{error}</div>
-      )}
-
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {!items.length && <p>No form is available.</p>}
         {items.map((form) => (
