@@ -67,12 +67,15 @@ prepares validated documents from those snapshots, and publishes with an actor
 audit in one batch. It never infers publication from draft activity or bootstraps
 migration 434 at runtime.
 
-D654: `updateShare.ts` holds Grow › Share an update's rules for `../routes/portfolio_updates.ts`:
-metrics from `project_metrics` with source and date (a missing one is null, never 0),
-highlights and lowlights that must name a source, Eadwyn's draft through `aiRouter`
-(`AI_SURFACE.growUpdate`) that keeps only lines citing a stored fact, what each audience
-may read (the network: asks only unless metrics are included), and where a reply to
-each kind of ask lands.
+D654/D686: `updateShare.ts` holds Grow › Share an update's rules for `../routes/portfolio_updates.ts`:
+metrics from `project_metrics` with source and date (a missing one is null, never 0;
+growth needs MRR in the prior calendar month), sourced highlights and lowlights,
+and Eadwyn's draft through `aiRouter` (`AI_SURFACE.growUpdate`) from metrics and
+shipped roadmap or feedback facts. A role or contact alone yields "nothing new".
+The audience defaults on for investors, team and network. Network readers get
+asks only unless metrics are included. Ask labels use the Grow module names:
+Team expansion, Distribution, Partner network, Market expansion and Capital
+relationships; stored link keys remain unchanged.
 
 D659 (#1472): `cycleCards.ts` is the shape every cycle read returns: `Figure`,
 `Card`, the five states, and `safeCard` / `safeFigure`, which turn a thrown

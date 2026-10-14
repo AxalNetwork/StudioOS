@@ -28,6 +28,8 @@ import {
   channelRows, checklist, growFigures, marketRows, readiness, readSnapshots, type Ctx, type GrowSlug,
 } from '../services/growCycle';
 import { billingPeriods, readRecurring } from '../services/revenueMovements';
+import { canAskAgain } from '../services/updateShare';
+import { isAdmin } from './_t13t14t15_helpers';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -92,7 +94,7 @@ type RecordSet = { cols: string[]; rows: Row[]; parts?: Row };
 
 const lower = (v: unknown) => String(v ?? '').toLowerCase();
 
-async function recordsFor(x: Ctx, slug: GrowSlug): Promise<RecordSet> {
+async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User): Promise<RecordSet> {
   const { env, projectId } = x;
   if (slug === 'product-improvement') {
     const q = await env.DB.prepare(
@@ -104,7 +106,8 @@ async function recordsFor(x: Ctx, slug: GrowSlug): Promise<RecordSet> {
   }
   if (slug === 'distribution') {
     return { cols: ['Channel', 'State', 'Spend · 30 d', 'Customers', 'CAC'],
-      rows: (await channelRows(x)).map((ch) => ({ ...ch, spend_source: ch.spend_cents == null ? null : 'manual' })) };
+      rows: (await channelRows(x)).map((ch) => ({ ...ch, spend_source: ch.spend_cents == null ? null : 'manual' })),
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer') } };
   }
   if (slug === 'revenue-and-traction') {
     const snaps = await readSnapshots(env, projectId);
@@ -150,7 +153,8 @@ async function recordsFor(x: Ctx, slug: GrowSlug): Promise<RecordSet> {
          FROM growth_partners g WHERE g.project_id = ? ORDER BY g.name COLLATE NOCASE`,
     ).bind(projectId).all<Row>();
     return { cols: ['Partner', 'Type', 'Stage', 'Terms', 'Revenue sourced'],
-      rows: (q.results || []).map((p) => ({ ...p, revenue_cents: p.revenue_cents ?? null, revenue_source: p.revenue_cents == null ? null : 'manual' })) };
+      rows: (q.results || []).map((p) => ({ ...p, revenue_cents: p.revenue_cents ?? null, revenue_source: p.revenue_cents == null ? null : 'manual' })),
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'partner') } };
   }
   if (slug === 'market-expansion') {
     const rows = await marketRows(env, projectId);
@@ -163,7 +167,62 @@ async function recordsFor(x: Ctx, slug: GrowSlug): Promise<RecordSet> {
     `SELECT id, title, kind, due_at, owner_name, status FROM compliance_events WHERE project_id = ? ORDER BY due_at IS NULL, due_at`,
   ).bind(projectId).all<Row>();
   return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State'], rows: ev.results || [],
-    parts: { checklist: await checklist(env, projectId) } };
+    parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)) } };
+}
+
+/** Customer and partner asks have no linked record; expose their replies beside the module's rows. */
+export async function updateAskReplies(env: Env, projectId: number, kind: 'customer' | 'partner'): Promise<Row[]> {
+  try {
+    const q = await env.DB.prepare(`SELECT r.uid, r.name, r.message, r.created_at, r.landed_module, r.landed_ref, r.landed_reason,
+      a.uid AS ask_uid, a.text AS ask_text FROM update_ask_replies r
+      JOIN update_asks a ON a.id = r.ask_id JOIN portfolio_updates u ON u.id = a.update_id
+      WHERE u.project_id = ? AND a.kind = ? ORDER BY r.id DESC`).bind(projectId, kind).all<Row>();
+    return q.results || [];
+  } catch { return []; }
+}
+
+async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|null; updates_reason: string|null}> {
+  const { env, projectId } = x;
+  try {
+    const q = await env.DB.prepare(`SELECT id, uid, title, author_user_id, period, period_start, period_end, status,
+      submitted_at, sent_at, updated_at FROM portfolio_updates WHERE project_id = ?
+      AND (sent_at IS NOT NULL OR status = 'submitted')
+      ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100`).bind(projectId).all<any>();
+    const updates = q.results || [];
+    if (!updates.length) return { updates: [], updates_reason: null };
+    const ids = updates.map((u) => u.id);
+    const marks = ids.map(() => '?').join(',');
+    const recipients = await env.DB.prepare(`SELECT update_id, audience, COUNT(*) AS sent,
+      SUM(CASE WHEN delivered_via IS NOT NULL THEN 1 ELSE 0 END) AS delivered,
+      SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) AS opened
+      FROM update_recipients WHERE update_id IN (${marks}) GROUP BY update_id, audience`).bind(...ids).all<any>();
+    const asks = await env.DB.prepare(`SELECT a.id, a.update_id, a.asked_again_at, COUNT(r.id) AS replies
+      FROM update_asks a LEFT JOIN update_ask_replies r ON r.ask_id = a.id
+      WHERE a.update_id IN (${marks}) GROUP BY a.id`).bind(...ids).all<any>();
+    const byRecipients = new Map<number, any[]>();
+    for (const row of recipients.results || []) byRecipients.set(row.update_id, [...(byRecipients.get(row.update_id) || []), row]);
+    const byAsks = new Map<number, any[]>();
+    for (const row of asks.results || []) byAsks.set(row.update_id, [...(byAsks.get(row.update_id) || []), row]);
+    return { updates: updates.map((u) => {
+      const base = { uid: u.uid, title: u.title, period: u.period_start ? null : u.period,
+        period_start: u.period_start, period_end: u.period_end, sent_at: u.sent_at,
+        submitted_at: u.sent_at ? null : u.submitted_at,
+        href: u.author_user_id === viewer.id || isAdmin(viewer) ? `/updates/${u.uid}` : null };
+      if (!u.sent_at) return { ...base, href: null, label: "Submitted to the investors' inbox", sent_to: null,
+        delivered: null, opened: null, asks: null, replies: null, asks_to_ask_again: null };
+      const rs = byRecipients.get(u.id) || [];
+      const as = byAsks.get(u.id) || [];
+      const count = (audience: string) => Number(rs.find((r) => r.audience === audience)?.sent ?? 0);
+      return { ...base, label: null, sent_to: { investors: count('investor'), team: count('team'), network: count('network') },
+        delivered: rs.reduce((n, r) => n + Number(r.delivered || 0), 0),
+        opened: rs.reduce((n, r) => n + Number(r.opened || 0), 0), asks: as.length,
+        replies: as.reduce((n, a) => n + Number(a.replies || 0), 0),
+        asks_to_ask_again: as.filter((a) => canAskAgain(u.sent_at, Number(a.replies || 0), a.asked_again_at, x.now)).length };
+    }), updates_reason: null };
+  } catch (e) {
+    console.warn('[cycle_grow] updates history unreadable', (e as Error).message);
+    return { updates: null, updates_reason: 'Unreadable: Updates history could not be read' };
+  }
 }
 
 /**
@@ -218,7 +277,7 @@ r.get('/modules/:slug', async (c) => {
     const x = ctxFor(c.env, pid);
     const card = await cardFor(x, meta.slug);
     let recs: RecordSet;
-    try { recs = await recordsFor(x, meta.slug); } catch (e) {
+    try { recs = await recordsFor(x, meta.slug, user); } catch (e) {
       console.error('[cycle_grow] records unreadable:', meta.slug, (e as Error).message);
       return c.json({ module: meta.slug, card, records: null, records_state: 'unreadable', reason: `Unreadable: ${meta.source} could not be read` });
     }
@@ -273,10 +332,11 @@ r.post('/feedback', async (c) => {
     const source = oneOf(b.source, FEEDBACK_SOURCES, 'source', true);
     const id = uid();
     await c.env.DB.prepare(
-      `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, theme, roadmap_item_ref, roadmap_item_label, status, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, theme, roadmap_item_ref, roadmap_item_label, status, shipped_on, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(id, pid, text, source, str(b.from_name, 200), str(b.from_email, 200)?.toLowerCase() ?? null, str(b.theme, 80),
-      str(b.roadmap_item_ref, 80), str(b.roadmap_item_label, 200), oneOf(b.status, FEEDBACK_STATUS, 'status') ?? 'open', user.id, user.id).run();
+      str(b.roadmap_item_ref, 80), str(b.roadmap_item_label, 200), oneOf(b.status, FEEDBACK_STATUS, 'status') ?? 'open',
+      b.status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id).run();
     await logWrite(c.env, user.id, 'grow_feedback_logged', 'product_feedback', id);
     return c.json({ uid: id }, 201);
   } catch (e) { return fail(c, e); }

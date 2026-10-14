@@ -55,7 +55,7 @@ function latest(rows: Snapshot[], col: keyof Snapshot): Snapshot | null {
  * The period's metrics. `inPeriod` are the snapshots dated inside the period,
  * `before` those dated before it (for growth). Nothing missing becomes 0.
  */
-export function buildMetrics(inPeriod: Snapshot[], before: Snapshot[]): Metric[] {
+export function buildMetrics(inPeriod: Snapshot[], before: Snapshot[], periodStart: string): Metric[] {
   const sort = (r: Snapshot[]) => [...r].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
   const cur = sort(inPeriod);
   const prev = sort(before);
@@ -66,12 +66,14 @@ export function buildMetrics(inPeriod: Snapshot[], before: Snapshot[]): Metric[]
       : { key, label, unit, value: null, source: null, as_of: null, reason: `${NOT_RECORDED}: no snapshot in this period records it` };
   };
   const mrr = pick('mrr', 'MRR', 'usd', 'mrr');
-  const prevMrr = latest(prev, 'mrr');
+  const [year, month] = periodStart.slice(0, 7).split('-').map(Number);
+  const previousMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7);
+  const prevMrr = latest(prev.filter((s) => s.snapshot_date.slice(0, 7) === previousMonth), 'mrr');
   const growth: Metric = mrr.value != null && prevMrr && (prevMrr.mrr as number) > 0
     ? { key: 'growth', label: 'Growth', unit: 'pct', value: Math.round((((mrr.value - (prevMrr.mrr as number)) / (prevMrr.mrr as number)) * 1000)) / 10,
         source: mrr.source, as_of: mrr.as_of, reason: null }
     : { key: 'growth', label: 'Growth', unit: 'pct', value: null, source: null, as_of: null,
-        reason: `${NOT_RECORDED}: growth needs MRR recorded in this period and the one before` };
+        reason: `${NOT_RECORDED}: growth needs MRR recorded in this period and the month before` };
   const customers = pick('customers', 'Customers', 'count', 'paying_accounts');
   const burn = pick('burn', 'Burn', 'usd', 'net_burn');
   const cash = latest(cur, 'cash_balance');
@@ -141,21 +143,30 @@ export function cleanLines(raw: unknown, field: string): Line[] {
 }
 
 /** A fact Eadwyn may draft from: stored data of the period, with its source. */
-export interface Fact { text: string; source: LineSource }
+export interface Fact { kind: 'metric' | 'shipped' | 'role' | 'contacts'; text: string; source: LineSource }
+
+export interface ShippedItem { label: string; shipped_on: string; kind: 'roadmap' | 'feedback'; customers?: number }
+
+const dayMonth = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /** The period's facts: metric figures, roles open, customers captured. */
 export function periodFacts(metrics: Metric[], openRoles: Array<{ title: string; opened: string | null }>,
-  contactsInPeriod: number | null): Fact[] {
+  contactsInPeriod: number | null, periodEnd: string, shipped: ShippedItem[] = []): Fact[] {
   const facts: Fact[] = [];
   for (const m of metrics) {
     if (m.value == null) continue;
-    facts.push({ text: `${m.label}: ${m.value}${m.unit === 'pct' ? '%' : ''}`, source: { label: `${m.source} · ${m.label}`, ref: 'revenue_and_traction', as_of: m.as_of } });
+    facts.push({ kind: 'metric', text: `${m.label}: ${m.value}${m.unit === 'pct' ? '%' : ''}`, source: { label: `${m.source} · ${m.label}`, ref: 'revenue_and_traction', as_of: m.as_of } });
   }
+  for (const item of shipped) facts.push({ kind: 'shipped', text: `${item.label} shipped${item.customers ? `, asked for by ${item.customers} customers` : ''}`,
+    source: { label: `${item.kind === 'roadmap' ? 'Product roadmap' : 'Product improvement'} · ${item.label} shipped ${dayMonth(item.shipped_on)}`,
+      ref: item.kind === 'roadmap' ? 'roadmap' : 'product_feedback', as_of: item.shipped_on } });
   for (const r of openRoles) {
-    facts.push({ text: `Open role: ${r.title}`, source: { label: `Talent · ${r.title} open`, ref: 'job_postings', as_of: r.opened } });
+    if (!r.opened || r.opened > periodEnd) continue;
+    const days = Math.max(0, Math.floor((Date.parse(`${periodEnd}T00:00:00Z`) - Date.parse(`${r.opened}T00:00:00Z`)) / 86_400_000));
+    facts.push({ kind: 'role', text: `Open role: ${r.title}`, source: { label: `Team expansion · ${r.title} open ${days} days`, ref: 'job_postings', as_of: r.opened } });
   }
   if (contactsInPeriod != null && contactsInPeriod > 0) {
-    facts.push({ text: `${contactsInPeriod} new customer contacts`, source: { label: 'Customers · contacts captured', ref: 'contacts', as_of: null } });
+    facts.push({ kind: 'contacts', text: `${contactsInPeriod} new customer contacts`, source: { label: 'Distribution · customer contacts captured', ref: 'contacts', as_of: null } });
   }
   return facts;
 }
@@ -187,7 +198,7 @@ export function parseDraft(output: string, facts: Fact[]): { highlights: Line[];
  * by hand".
  */
 export async function draftLines(env: Env, userId: number, facts: Fact[]) {
-  if (facts.length === 0) return { status: 'nothing' as const, highlights: [], lowlights: [] };
+  if (!facts.some((f) => f.kind === 'metric' || f.kind === 'shipped')) return { status: 'nothing' as const, highlights: [], lowlights: [] };
   const prompt = [
     'Draft a monthly company update\'s highlights and lowlights from these facts only.',
     'Each line must draw on exactly one fact, named by its number. Never add a figure the facts do not hold.',
@@ -207,9 +218,9 @@ export type AskKind = typeof ASK_KINDS[number];
 
 /** The module each kind of ask belongs to, and where its replies land. */
 export const ASK_MODULE: Record<AskKind, { module: string; label: string; lands: string | null; reason: string | null }> = {
-  hire: { module: 'talent', label: 'Talent', lands: 'job_applications', reason: null },
-  customer: { module: 'customers', label: 'Customers', lands: 'contacts', reason: null },
-  partner: { module: 'partnerships', label: 'Partnerships', lands: 'contacts', reason: null },
+  hire: { module: 'talent', label: 'Team expansion', lands: 'job_applications', reason: null },
+  customer: { module: 'customers', label: 'Distribution', lands: 'contacts', reason: null },
+  partner: { module: 'partnerships', label: 'Partner network', lands: 'contacts', reason: null },
   // D664 (#1477, answer A1 on #1466): once `markets` exists (migration 443), a
   // market ask links to one market and its replies are read under it.
   market: { module: 'market-expansion', label: 'Market expansion', lands: 'markets', reason: null },
@@ -232,7 +243,7 @@ export interface AudienceChoice { investors: boolean; team: boolean; network: bo
 
 export function cleanAudience(raw: unknown): AudienceChoice {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  return { investors: r.investors !== false, team: r.team !== false, network: r.network === true };
+  return { investors: r.investors !== false, team: r.team !== false, network: r.network !== false };
 }
 
 /**
