@@ -79,7 +79,7 @@ const checks: MutationCheck[]=[
  const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
  const action=r.body.parts.tools.rows.find((row:any)=>row.id==='tool-1').cells.action;
  snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next?.text ?? null,r.body.card.next?.href ?? null,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.feeds],
- [2,1,3,'Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce',{text:'Open',href:'/build/connect?tool=salesforce'},'Capital relationships · Network']);db.close();}},
+ [2,1,3,'Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce&project_id=101',{text:'Open',href:'/build/connect?tool=salesforce&project_id=101'},'Capital relationships · Network']);db.close();}},
 
  {name:'The five tiles and rows name Workspace',before:"workspace: 'Workspace'",after:"workspace: 'Analytics'",run:async(route:any)=>{
  const {db,env}=fixture();const r=await request(route,env,'/modules/operating-systems?project=101');
@@ -116,9 +116,9 @@ const checks: MutationCheck[]=[
  const owner=await request(route,env,'/modules/operating-systems?project=101',2),member=await request(route,env,'/modules/operating-systems?project=101',1),admin=await request(route,env,'/modules/operating-systems?project=101',3);
  snap([owner.status,member.body.records.rows.find((r:any)=>r.id==='crm').cells.provider,admin.body.records.rows.find((r:any)=>r.id==='crm').cells.provider,JSON.stringify(admin.body).includes('Private teammate account')],
  [403,'Salesforce','Salesforce',false]);db.close();}},
- {name:'A failing system links its provider rather than its kind',before:"reconnect(failedSystem.provider_key, failedSystem.last_error_at, SYSTEM_LABEL[failing!])",after:"reconnect(failing, failedSystem.last_error_at, SYSTEM_LABEL[failing!])",run:async(route:any)=>{
+ {name:'A failing system links its provider rather than its kind',before:"reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!])",after:"reconnect(failing, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!])",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',12,2)");
- const r=await request(route,env,'/modules/operating-systems?project=101');snap([r.body.card.next.text,r.body.card.next.href],['Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce']);db.close();}},
+ const r=await request(route,env,'/modules/operating-systems?project=101');snap([r.body.card.next.text,r.body.card.next.href],['Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce&project_id=101']);db.close();}},
  {name:'Failed at is recorded per tool while a healthy tool has no failure time',before:"i.last_error_at, u.name AS owner_name",after:"NULL AS last_error_at, u.name AS owner_name",secondBefore:"failed_at: tool.last_error_at ?? null",secondAfter:"failed_at: null",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
  const columns=r.body.parts.tools.cols.map((c:any)=>[c.key,c.label]);
@@ -129,6 +129,15 @@ const checks: MutationCheck[]=[
  const responses=[];for(const kind of ['bank','accounting','payroll','crm','workspace'])responses.push(await request(route,env,`/systems/${kind}?project=101`,3,'PUT',kind==='workspace'?{provider_key:null}:{integration_uid:null}));
  const row=db.prepare("SELECT integration_id FROM project_core_systems WHERE project_id=101 AND kind='crm'").get() as any;
  snap([responses.map(r=>[r.status,r.body.error]),row.integration_id,db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='build_system_mapping_changed'").get()?.n],[[[403,'not_in_company'],[403,'not_in_company'],[403,'not_in_company'],[403,'not_in_company'],[403,'not_in_company']],11,0]);db.close();}},
+ {name:'Choices say which kinds already name a connector, with their Used by, and nothing of another project',before:"mapped: current.get(kind)?.integration_id != null || current.get(kind)?.provider_key != null,",after:"mapped: false,",secondBefore:"used_by: current.get(kind)?.used_by ?? null,",secondAfter:"used_by: null,",thirdBefore:"FROM project_core_systems WHERE project_id = ?',\n  ).bind(project.id)",thirdAfter:"FROM project_core_systems WHERE project_id <> ?',\n  ).bind(project.id)",run:async(route:any)=>{
+ const {db,env}=fixture();connectors(db);db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,used_by,updated_by) VALUES(101,'crm',11,'Sales',1),(101,'bank',NULL,'Finance',1),(202,'payroll',NULL,'Ops',2),(202,'accounting',NULL,NULL,2)");
+ db.exec("UPDATE project_core_systems SET integration_id=12 WHERE project_id=202 AND kind='accounting'");
+ const r=await request(route,env,'/systems/choices?project=101');
+ snap([r.status,r.body.kinds.map((k:any)=>[k.kind,k.mapped,k.used_by])],[200,[['bank',false,'Finance'],['accounting',false,null],['payroll',false,null],['crm',true,'Sales'],['workspace',false,null]]]);db.close();}},
+ {name:'Links into Connect a tool keep the venture',before:"&project_id=${encodeURIComponent(String(projectId))}",after:"",run:async(route:any)=>{
+ const {db,env}=fixture();connectors(db);db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',12,2)");
+ const r=await request(route,env,'/modules/operating-systems?project=101');
+ snap([r.body.card.next.href,r.body.parts.tools.rows.map((row:any)=>row.cells.action?.href)],['/build/connect?tool=salesforce&project_id=101',['/build/connect?tool=hubspot&project_id=101','/build/connect?tool=salesforce&project_id=101','/build/connect?tool=stripe&project_id=101']]);db.close();}},
 ];
 const secondMutations: Array<[string,string]> = [
  ["AND ic.enabled = 1\n       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id\n       LEFT JOIN users", "AND ic.enabled = 0\n       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id\n       LEFT JOIN users"],

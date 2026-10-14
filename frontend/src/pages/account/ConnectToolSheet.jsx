@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Pill, Unreadable } from '../../ui';
 import Lightbox from '../../ui/Lightbox.jsx';
@@ -7,7 +8,7 @@ import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { connectorsApi } from '../../lib/api/connectors';
 import { Banner, ConnectorPanel, Group, Row, SheetFrame, disconnect, openingView, useConnectors } from './ConnectorSheet';
 import {
-  TOOL_FILTERS, companiesWith, companyBanner, disconnectNote, projectCompany, retryOutcome, servesCompany, toolBanner, toolGroups, toolRow,
+  TOOL_FILTERS, companiesWith, companyBanner, disconnectNote, projectCompany, retryOutcome, servesCompany, toolBanner, toolDeepLink, toolGroups, toolRow,
 } from './connectorsModel';
 
 /**
@@ -47,7 +48,17 @@ export default function ConnectToolSheet({ projectId = null, onClose, onChanged 
   const companyId = project?.company_id && Number.isSafeInteger(Number(project.company_id)) ? Number(project.company_id) : null;
   const data = useConnectors({ companyId });
   const reload = () => { data.reload(); onChanged?.(); };
-  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} />;
+  // A sign-in's return (`?oauth=…`) or `?tool=<key>` (D686 §5.4): read once,
+  // then its keys are stripped so a reload does not replay it. The functional
+  // update keeps the `project_id` the page itself just set.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [deepSearch] = useState(() => searchParams.toString());
+  useEffect(() => {
+    const link = toolDeepLink(`?${deepSearch}`, []);
+    if (!link?.strip?.length) return;
+    setSearchParams((old) => { const next = new URLSearchParams(old); for (const k of link.strip) next.delete(k); return next; }, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} deepLink={`?${deepSearch}`} />;
 }
 
 /**
@@ -55,7 +66,7 @@ export default function ConnectToolSheet({ projectId = null, onClose, onChanged 
  * hand it each state. `project` is `GET /projects/:id` (undefined while read,
  * null when unreadable, false when the sheet has no project).
  */
-export function ConnectToolView({ data, onClose, project = false, projectId = null }) {
+export function ConnectToolView({ data, onClose, project = false, projectId = null, deepLink = '' }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('All');
   const [panel, setPanel] = useState(null); // { key, view }
@@ -63,6 +74,14 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
   const [confirm, setConfirm] = useState(null);
   const [rowNote, setRowNote] = useState({});
   const [busy, setBusy] = useState(null);
+  // The deep link opens its panel once the catalogue is read: only a key it holds opens anything.
+  const linked = useRef(false);
+  useEffect(() => {
+    if (linked.current || data.status !== 'ready' || !deepLink) return;
+    linked.current = true;
+    const link = toolDeepLink(deepLink, data.catalogue);
+    if (link?.panel) setPanel(link.panel);
+  }, [data.status, data.catalogue, deepLink]);
   const scope = project === false ? null : projectCompany(project, data.companies);
   const cannotConnect = !!scope && (scope.state === 'outside' || scope.state === 'unreadable' || scope.state === 'loading');
   const companyNote = scope ? companyBanner(scope) : null;
@@ -86,6 +105,8 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
         eyebrow="Build"
         p={panelP}
         view={panel.view}
+        ret={panel.ret || {}}
+        returnTo="build"
         setView={(view) => setPanel((s) => ({ ...s, view }))}
         onChanged={data.reload}
         onClose={back}
@@ -100,7 +121,8 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
   const retry = async (p) => {
     setBusy(p.key);
     let out;
-    try { await connectorsApi.sync(p.connection.uid); out = retryOutcome(null); } catch (e) { out = retryOutcome(e); }
+    // The sync runs for the project's company, as the panel's Sync now does.
+    try { await connectorsApi.sync(p.connection.uid, scope?.state === 'ok' ? { companyId: scope.companyId } : undefined); out = retryOutcome(null); } catch (e) { out = retryOutcome(e); }
     setRowNote((n) => ({ ...n, [p.key]: out }));
     setBusy(null);
     if (out.tone === 'ok') data.reload();

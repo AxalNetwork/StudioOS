@@ -13,7 +13,10 @@ import GithubSyncSheet from './GithubSyncSheet';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
+  keepBuildProject, coreSystemOffer,
+  FREE_KEEPS_CONNECTORS,
 } from './connectorsModel';
+import { cyclesWrite } from '../../lib/api/cycles';
 
 /**
  * D651 (#1463) — the connector sheet and the connect flow, drawn to the
@@ -354,16 +357,18 @@ function whenLabel(iso) {
   return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-async function startFirstParty(key) {
+/** Google, Microsoft or LinkedIn's own sign-in; it returns to `returnTo` (Build's lightbox, or the Connectors page). */
+export async function startFirstParty(key, returnTo = 'integrations', client = api) {
+  const return_to = returnTo === 'build' ? 'build' : 'integrations';
   if (key === 'google') {
-    const r = await api.googleCalConnect({ return_to: 'integrations' });
+    const r = await client.googleCalConnect({ return_to });
     return r?.redirect_url || r?.auth_url;
   }
   if (key === 'microsoft') {
-    const r = await api.microsoftCalConnect({ return_to: 'integrations' });
+    const r = await client.microsoftCalConnect({ return_to });
     return r?.redirect_url || r?.auth_url || r?.authorize_url;
   }
-  const r = await api.linkedinOAuthStart({ return_to: 'integrations' });
+  const r = await client.linkedinOAuthStart({ return_to });
   return r?.authorize_url;
 }
 
@@ -392,7 +397,7 @@ function keyLabel(p, updating) {
  * owns `view` so a return from a provider's sign-in can open the panel on
  * `connected` or `refused` directly.
  */
-export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back, projectId = null, companyId = null, companyName = null }) {
+export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back, projectId = null, companyId = null, companyName = null, returnTo = null }) {
   // In Build's lightbox, finishing (Done, an Open link, See plans, Report)
   // closes the whole lightbox; `onClose` steps back to the list (D686 §5.4).
   const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
@@ -427,6 +432,31 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     // `opts` is derived from companyId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [askTeammate, p.key, companyId]);
+  // From Build, the success view offers "Use as your <kind>" when the Worker
+  // says exactly one unmapped core system fits this connection (D686 §5.4).
+  const [useAs, setUseAs] = useState(null); // { offer, state: 'idle'|'saving'|'done'|'error', text }
+  const askUseAs = view === 'connected' && returnTo === 'build' && !!projectId && !!conn;
+  useEffect(() => {
+    if (!askUseAs) return undefined;
+    let live = true;
+    cyclesWrite.build.systemChoices(projectId).then(
+      (r) => { const offer = coreSystemOffer(r, p, conn); if (live) setUseAs(offer ? { offer, state: 'idle', text: '' } : null); },
+      () => { if (live) setUseAs(null); },
+    );
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askUseAs, projectId, p.key, conn?.uid]);
+  const applyUseAs = async () => {
+    const { offer } = useAs;
+    setUseAs((u) => ({ ...u, state: 'saving', text: '' }));
+    try {
+      await cyclesWrite.build.system(projectId, offer.kind, offer.body);
+      setUseAs((u) => ({ ...u, state: 'done', text: `${p.display_name} is now your ${offer.label}.` }));
+      onChanged?.();
+    } catch (e) {
+      setUseAs((u) => ({ ...u, state: 'error', text: e?.message || `${p.display_name} could not be set as your ${offer.label}.` }));
+    }
+  };
   const updating = !!conn && view === 'key';
   const name = p.display_name;
   const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' ? 'Key' : 'Sign in', 'Connected'];
@@ -439,10 +469,12 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     setView('signin');
     try {
       let url;
+      // From Build, the sign-in comes back to /build/connect: the venture is kept for it (D686 §5.4).
+      if (returnTo === 'build') keepBuildProject(projectId);
       if (kind === 'first_party') {
-        url = await startFirstParty(p.key);
+        url = await startFirstParty(p.key, returnTo || 'integrations');
       } else {
-        const params = {};
+        const params = returnTo === 'build' ? { return_to: 'build' } : {};
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
         // Always demo=0|1: a missing query makes the Worker default to demo.
         if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
@@ -556,7 +588,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     );
   } else if (view === 'pro') {
     sub = `by ${p.by || name}${p.status === 'beta' ? ' · Beta' : ''}`;
-    banner = <Banner tone="neutral" data-testid="connector-pro">{name} is part of the {TIER_LABEL[p.tier] || 'paid'} plan.{message ? ` ${message}` : ''}</Banner>;
+    banner = <Banner tone="neutral" data-testid="connector-pro">{`${name} is part of the ${TIER_LABEL[p.tier] || 'paid'} plan. ${FREE_KEEPS_CONNECTORS}${message ? ` ${message}` : ''}`}</Banner>;
     body = <UsesGroups p={p} />;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={dismiss}>See plans</Link></>;
   } else if (view === 'pre' && teammate && !ownChosen) {
@@ -668,7 +700,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       <>
         <Steps names={keySteps} at={2} />
         {conn?.uid
-          ? <FedGroup conn={conn} name={name} />
+          ? <FedGroup conn={conn} name={name} projectId={projectId} onOpen={dismiss} />
           : (
             <Group label={`Now fed by ${name}`}>
               {feeds
@@ -676,6 +708,20 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
                 : <Row a={<Unrecorded reason={NR_REGISTRY}>Not recorded</Unrecorded>} b="The first sync runs in the background. Its items appear in the modules it fills." />}
             </Group>
           )}
+        {useAs && (
+          <Group label="Core systems">
+            <Row
+              a={`Your ${useAs.offer.label}`}
+              b={useAs.text || `Operating systems has no ${useAs.offer.label} yet.`}
+              tone={useAs.state === 'error' ? 'danger' : undefined}
+              action={useAs.state === 'done' ? null : (
+                <button type="button" className={BTN.primary} disabled={useAs.state === 'saving'} onClick={applyUseAs} data-testid={`button-use-as-${useAs.offer.kind}`}>
+                  {useAs.state === 'saving' ? 'Saving…' : `Use as your ${useAs.offer.label}`}
+                </button>
+              )}
+            />
+          </Group>
+        )}
       </>
     );
     footer = <button type="button" className={BTN.primary} onClick={() => { onChanged?.(); dismiss?.(); }} data-testid="button-connected-done">Done</button>;

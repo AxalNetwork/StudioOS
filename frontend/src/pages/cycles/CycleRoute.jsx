@@ -13,6 +13,7 @@ import useAiSpend from '../../hooks/useAiSpend';
 import useScrollToHash from '../../hooks/useScrollToHash';
 import ShareUpdateSheet from '../founder/ShareUpdateSheet';
 import ConnectToolSheet from '../account/ConnectToolSheet';
+import { takeBuildProject } from '../account/connectorsModel';
 import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
 import { recordingHref } from '../founder/recordSetup';
@@ -261,11 +262,19 @@ const CYCLE_DEFS = {
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
 
-function useProject(reloadKey = 0) {
+export function useProject(reloadKey = 0, { kept = null } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   // The read's own links (`next.href`) say `?project=`; the page's say
   // `?project_id=`. Either picks the venture.
-  const requested = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
+  const named = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
+  // Back from a provider's sign-in at /build/connect with no venture named: the
+  // one Build kept before the redirect (D686 §5.4), taken once.
+  const [stashed] = useState(() => (named ? null : kept?.() ?? null));
+  const requested = named || stashed;
+  useEffect(() => {
+    if (named || !stashed) return;
+    setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(stashed)); return next; }, { replace: true });
+  }, [named, stashed, setSearchParams]);
   const [projectId, setProjectId] = useState(requested);
   const [status, setStatus] = useState(requested ? 'ready' : 'loading');
   useEffect(() => {
@@ -358,7 +367,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : routeSlug;
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
-  const { projectId, status: projectStatus } = useProject(projectsKey);
+  const { projectId, status: projectStatus } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null });
   const creates = Boolean(def?.creates);
   const [creating, setCreating] = useState(() => creates && searchParams.get('new') === '1');
   // Followed, not only seeded: the Command Palette can address `?new=1` from

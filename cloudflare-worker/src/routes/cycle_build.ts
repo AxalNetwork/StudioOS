@@ -47,10 +47,16 @@ function failureDate(raw: unknown): string | null {
   const date = typeof raw === 'string' ? dateOnly(raw.slice(0, 10)) : null;
   return date ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date) : null;
 }
-function reconnect(providerKey: string, failedAt: unknown, fallbackName = providerKey): Card['next'] {
+// Build's Connect a tool for one tool, keeping the venture (D686 §5.4): the
+// sheet reads the project from `project_id`, so a link without it opens on
+// whichever venture the page picks first.
+function connectHref(providerKey: string, projectId: number): string {
+  return `/build/connect?tool=${encodeURIComponent(providerKey)}&project_id=${encodeURIComponent(String(projectId))}`;
+}
+function reconnect(providerKey: string, failedAt: unknown, projectId: number, fallbackName = providerKey): Card['next'] {
   const name = getDescriptor(providerKey)?.display_name ?? fallbackName;
   const since = failureDate(failedAt);
-  return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: `/build/connect?tool=${encodeURIComponent(providerKey)}` };
+  return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: connectHref(providerKey, projectId) };
 }
 
 async function solution(env: Env, p: Project): Promise<ModuleRead> {
@@ -249,7 +255,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   const toolRows = tools.map((tool, index) => {
     const descriptor = getDescriptor(tool.provider_key);
     const metadata = CONNECTOR_METADATA[tool.provider_key];
-    const href = descriptor && /^[a-z0-9_]{1,80}$/.test(descriptor.key) ? `/build/connect?tool=${encodeURIComponent(descriptor.key)}` : null;
+    const href = descriptor && /^[a-z0-9_]{1,80}$/.test(descriptor.key) ? connectHref(descriptor.key, p.id) : null;
     return record(`tool-${index}`, {
       tool: descriptor?.display_name ?? 'Unknown tool', category: metadata?.category ?? 'Not recorded',
       state: tool.status === 'active' ? 'Connected' : tool.status === 'error' ? 'Failing' : 'Not connected',
@@ -273,8 +279,8 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   if (reviews.length) series.push({ kind: 'dots', values: reviews, label: 'Weekly reviews held' });
   const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
   const failedSystem = failing ? byKind.get(failing) : null;
-  const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at) : null;
-  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, SYSTEM_LABEL[failing!]) : toolNext),
+  const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
+  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k); return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: !c ? 'Not connected' : c.status === 'error' ? 'Failing' : c.status === 'active' ? 'Connected' : 'Not connected', last_sync: c?.last_synced_at ?? null, used_by: c?.used_by ?? null }); }),
     facts: { connected, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
@@ -611,8 +617,16 @@ app.get('/systems/choices', async c => {
   ).bind(project.company_id, user.id).all<{ uid: string; provider_key: string }>());
   const workspace: string[] = [];
   for (const provider of ['google_calendar', 'microsoft_365']) if (await workspaceConnected(c.env, user.id, provider)) workspace.push(provider);
+  // Which kinds already name a connector, and their Used by, so Connect a
+  // tool's "Use as your <kind>" offers only an unmapped kind and keeps what
+  // the row says (D686 §5.4). Kinds and booleans only: no connector names.
+  const current = new Map(rows(await c.env.DB.prepare(
+    'SELECT kind, integration_id, provider_key, used_by FROM project_core_systems WHERE project_id = ?',
+  ).bind(project.id).all<{ kind: string; integration_id: number | null; provider_key: string | null; used_by: string | null }>()).map(r => [r.kind, r]));
   return c.json({ kinds: SYSTEM_KINDS.map(kind => ({
     kind, label: SYSTEM_LABEL[kind],
+    mapped: current.get(kind)?.integration_id != null || current.get(kind)?.provider_key != null,
+    used_by: current.get(kind)?.used_by ?? null,
     choices: kind === 'workspace' ? workspace.map(provider_key => ({ uid: null, provider_key, display_name: getDescriptor(provider_key)?.display_name ?? provider_key, category: 'Calendar and workspace' }))
       : own.filter(i => fitsKind(kind, i.provider_key)).map(i => ({ ...i, display_name: getDescriptor(i.provider_key)?.display_name ?? i.provider_key, category: CONNECTOR_METADATA[i.provider_key]?.category })),
   })) });
