@@ -133,6 +133,8 @@ test('Link Telegram shows the t.me button, the expiry and the Telegram Business 
   const l = text(h(TelegramChannelCard, { card: channelCard('telegram', linked), onChanged() {} }));
   assert.match(l, /One step left/);
   assert.match(l, /Add the Axal bot in Telegram Business/);
+  assert.match(l, /In Telegram, open Settings › Telegram Business › Chatbots\./, 'what is left once linked');
+  assert.doesNotMatch(l, /Send \/confirm|press Start/, '#1625: a linked account is not asked to link again');
 });
 
 test('Link Telegram asks the Worker for a link on the click', async () => {
@@ -146,6 +148,86 @@ test('Link Telegram asks the Worker for a link on the click', async () => {
     assert.ok(m.byTestId('link-open-telegram'));
     assert.equal(m.props(m.byTestId('link-open-telegram')).href, 'https://t.me/AxalStudioBot?start=abcDEF234');
   } finally { await m.unmount(); }
+});
+
+// #1625: Axal's half of the two-sided Telegram link.
+const CLAIMED = { uid: 'lc1', display_name: 'Dana Ruiz', username: '@dana_biz', expires_at: '2026-10-14T10:10:00Z', telegram_confirmed: true, axal_confirmed: false, status: 'waiting_axal', message: 'Confirm the claimed Telegram account in Axal to finish linking.' };
+
+test('#1625 the Telegram card draws the claimed account as Telegram sent it, and where each confirmation stands', async () => {
+  const o = readOverview({ ...FRESH, telegram_link: CLAIMED });
+  const m = await mount(h(TelegramChannelCard, { card: channelCard('telegram', o), claim: o.telegramLink, onChanged() {} }));
+  try {
+    assert.equal(m.text().includes('Dana Ruiz · @dana_biz'), true);
+    assert.match(m.text(), /Confirm the claimed Telegram account in Axal to finish linking\./);
+    assert.match(m.text(), /✓ Confirmed in Telegram/);
+    assert.match(m.text(), /○ Confirmed in Axal/);
+    assert.ok(m.byTestId('button-telegram-confirm'));
+    assert.equal(m.byTestId('button-link-telegram'), undefined, 'the claim replaces Link Telegram while it is open');
+  } finally { await m.unmount(); }
+  // Mounted from the overview the Connectors page reads.
+  assert.match(readFileSync('frontend/src/pages/account/ChannelsGroup.jsx', 'utf8'), /<TelegramChannelCard card=\{channelCard\('telegram', overview\)\} claim=\{overview\.telegramLink \?\? null\}/);
+});
+
+test('#1625 Confirm calls the Worker\'s confirm route, then reads the overview again', async () => {
+  const calls = [];
+  const api = { confirmTelegram: async (uid) => { calls.push(['confirm', uid]); return { ok: true, linked: true, claim: { ...CLAIMED, status: 'linked' } }; } };
+  const o = readOverview({ ...FRESH, telegram_link: CLAIMED });
+  const m = await mount(h(TelegramChannelCard, { card: channelCard('telegram', o), claim: o.telegramLink, api, onChanged: () => calls.push(['reread']) }));
+  try {
+    await m.click('button-telegram-confirm');
+    assert.deepEqual(calls, [['confirm', 'lc1'], ['reread']]);
+    assert.equal(m.byTestId('telegram-claim-linked') ? 'linked' : '', 'linked');
+  } finally { await m.unmount(); }
+  // Not linked yet (Axal first): no "linked" line, and the overview is still read again.
+  const calls2 = [];
+  const waiting = { confirmTelegram: async () => ({ ok: true, linked: false, claim: { ...CLAIMED, status: 'waiting_telegram' } }) };
+  const m2 = await mount(h(TelegramChannelCard, { card: channelCard('telegram', o), claim: o.telegramLink, api: waiting, onChanged: () => calls2.push('reread') }));
+  try {
+    await m2.click('button-telegram-confirm');
+    assert.deepEqual(calls2, ['reread']);
+    assert.equal(m2.byTestId('telegram-claim-linked'), undefined);
+  } finally { await m2.unmount(); }
+});
+
+test('#1625 each Confirm refusal is drawn as its sentence, and the overview is read again', async () => {
+  const o = readOverview({ ...FRESH, telegram_link: CLAIMED });
+  const refusals = [
+    [404, 'link_not_found', 'That Telegram link is not waiting on this Axal account.'],
+    [409, 'link_cancelled', 'This link was replaced or cancelled. Request a new Telegram link.'],
+    [410, 'link_expired', 'Both confirmations must arrive within ten minutes. Request a new Telegram link.'],
+    [409, 'link_not_claimed', 'Open the link in your Telegram account and check its name in Axal before confirming.'],
+    [403, 'member_inactive', 'This Axal account is no longer active, so nothing was linked.'],
+    [409, 'identity_taken', 'This Telegram account is already linked to another Axal account. Disconnect it there first.'],
+  ];
+  for (const [status, code, words] of refusals) {
+    let reread = 0;
+    const api = { confirmTelegram: async () => { throw Object.assign(new Error(code), { status, code }); } };
+    const m = await mount(h(TelegramChannelCard, { card: channelCard('telegram', o), claim: o.telegramLink, api, onChanged: () => { reread += 1; } }));
+    try {
+      await m.click('button-telegram-confirm');
+      assert.equal(m.props(m.byTestId('telegram-claim-error')).role, 'alert');
+      assert.ok(m.text().includes(words), `${code}: ${m.text()}`);
+      assert.equal(m.text().includes(code), false, `${code} is never drawn`);
+      assert.equal(reread, 1);
+    } finally { await m.unmount(); }
+  }
+});
+
+test('#1625 a stale claim offers a new link while nothing is connected, and is not drawn over a connected account', async () => {
+  const calls = [];
+  const api = { linkTelegram: async () => { calls.push('link'); return { code: 'x', url: 'https://t.me/AxalStudioBot?start=abcDEF234', expires_at: new Date(Date.now() + 600000).toISOString() }; } };
+  const stale = readOverview({ ...FRESH, telegram_link: { ...CLAIMED, status: 'expired', message: 'Both confirmations must arrive within ten minutes. Request a new Telegram link.' } });
+  const m = await mount(h(TelegramChannelCard, { card: channelCard('telegram', stale), claim: stale.telegramLink, api, onChanged: () => calls.push('reread') }));
+  try {
+    assert.equal(m.byTestId('button-telegram-confirm'), undefined);
+    await m.click('button-telegram-new-link');
+    assert.deepEqual(calls, ['link', 'reread'], 'the new code replaces the claim, so the overview is read again');
+  } finally { await m.unmount(); }
+  const connected = readOverview({ ...RAW, telegram_link: { ...CLAIMED, status: 'expired' } });
+  assert.equal(text(h(TelegramChannelCard, { card: channelCard('telegram', connected), claim: connected.telegramLink, onChanged() {} })).includes('Claimed by'), false);
+  // A re-link still open is drawn on a connected card.
+  const relink = readOverview({ ...RAW, telegram_link: CLAIMED });
+  assert.match(text(h(TelegramChannelCard, { card: channelCard('telegram', relink), claim: relink.telegramLink, onChanged() {} })), /Claimed by Dana Ruiz · @dana_biz/);
 });
 
 test('Connect WhatsApp Business: the SDK loads on the click, Meta’s window opens on the next one, and the result is sent to connect', async () => {

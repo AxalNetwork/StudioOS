@@ -204,17 +204,28 @@ async function sessionBody(env: Env, session: SessionRow) {
   return { session, ...(await sessionExtras(env, session)) };
 }
 
-/** Insert the session for an interview, then its points and any pasted chat. */
-async function openOn(env: Env, user: User, interview: { id: number; project_id: number }, plan: OpenPlan, body: any): Promise<SessionRow> {
+/**
+ * Insert the session for an interview, then its points and any pasted chat.
+ *
+ * `create` is the INSERT of a new interview (POST /sessions with no pick). It
+ * runs in the same D1 batch as the session's INSERT, which takes the new
+ * interview's id from `last_insert_rowid()`: one transaction, so when a second
+ * Start racing past the replay check meets the client_key index, its interview
+ * rolls back with it and a double click makes one interview (D685 §5.1.1).
+ */
+async function openOn(env: Env, user: User, interview: { id: number | null; project_id: number }, plan: OpenPlan, body: any,
+  create: D1PreparedStatement | null = null): Promise<SessionRow> {
   const uid = crypto.randomUUID();
-  const ins = await env.DB.prepare(
+  const insert = env.DB.prepare(
     `INSERT INTO interview_sessions
        (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
         live_model, final_model, language, call_provider, meeting_url, client_key)
-     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, COALESCE(?, last_insert_rowid()), ?, ?, ?, 'draft', ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?, ?, ?, ?, ?)`,
   ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, plan.consent, plan.method || null, plan.consent,
-    plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey).run();
+    plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey);
+  const ins = create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
   const session = (await loadSession(env, Number(ins.meta?.last_row_id)))!;
+  interview = { id: session.interview_id, project_id: interview.project_id };
 
   const stmts = [
     ...(await pointStatements(env, session.id, interview.project_id, body?.points)),
@@ -236,7 +247,7 @@ async function openOn(env: Env, user: User, interview: { id: number; project_id:
 }
 
 /**
- * D685 §5.1 — one live session per member: the setup call refuses an audio
+ * D685 §5.1.1 — one live session per member: the setup call refuses an audio
  * session while another is recording or paused, before anything is written,
  * as `/start` refuses it too. A text session records nothing. The
  * per-interview route keeps opening drafts; its `/start` is the gate.
@@ -277,10 +288,13 @@ sessions.post('/sessions', async (c) => {
   if (plan instanceof Response) return plan;
   const again = await replayed(c.env, user.id, plan.clientKey);
   if (again) return json(await sessionBody(c.env, again), 200);
+  // D685 §5.1.1 — one live session per member: the setup call refuses while
+  // the caller is recording or paused, as Start does (audio only; see liveRefusal).
   const busy = await liveRefusal(c.env, user.id, plan);
   if (busy) return busy;
 
-  let interview: { id: number; project_id: number };
+  let interview: { id: number | null; project_id: number };
+  let create: D1PreparedStatement | null = null;
   const pickedId = body?.interview_id == null ? null : Number(body.interview_id);
   if (pickedId != null) {
     const picked = await c.env.DB.prepare('SELECT id, project_id, stage FROM discovery_interviews WHERE id = ?')
@@ -308,17 +322,18 @@ sessions.post('/sessions', async (c) => {
         try { ensureTier(user, 'growth'); } catch (e) { if (e instanceof Response) return e; throw e; }
       }
     }
-    const created = await c.env.DB.prepare(
+    // Written in the session's own batch (openOn), never on its own.
+    create = c.env.DB.prepare(
       `INSERT INTO discovery_interviews
          (project_id, interviewee_name, interviewee_company, interview_date, channel, stage, booked_at, created_at, updated_at)
        VALUES (?, ?, ?, date('now'), ?, 'booked', datetime('now'), datetime('now'), datetime('now'))`,
-    ).bind(projectId, name, text(body?.interviewee?.company, 160), plan.channel).run();
-    interview = { id: Number(created.meta?.last_row_id), project_id: projectId };
+    ).bind(projectId, name, text(body?.interviewee?.company, 160), plan.channel);
+    interview = { id: null, project_id: projectId };
   }
 
   let session: SessionRow;
   try {
-    session = await openOn(c.env, user, interview, plan, body);
+    session = await openOn(c.env, user, interview, plan, body, create);
   } catch (e) {
     // Two Start clicks racing past the replay check meet the unique index:
     // the second answers the first's session.

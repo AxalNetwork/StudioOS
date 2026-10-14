@@ -22,6 +22,7 @@
 import type { Env } from '../types';
 import { speakerLabel, type SttSegment } from './sttFormats';
 import { markInterviewHeld } from './sessionSetup';
+import { closeAttachedRefs } from './channels/meetings';
 
 export const CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
 export type Channel = typeof CHANNELS[number];
@@ -114,8 +115,13 @@ export async function transition(env: Env, session: SessionRow, action: keyof ty
     action, session.id, fromA, fromB).run();
   const changed = Number(r.meta?.changes || 0) === 1;
   // D685 §5.1.6 — "it lands in Interviews when you stop". Every stop passes
-  // here: the action route and the consent-withdrawal stop alike.
-  if (changed && action === 'stop') await markInterviewHeld(env, session, null);
+  // here: the action route and the consent-withdrawal stop alike. A pasted
+  // call link attached to the session takes the stored stop as its end, so the
+  // transcript sweep can collect it (S18, #1585).
+  if (changed && action === 'stop') {
+    await markInterviewHeld(env, session, null);
+    await closeAttachedRefs(env, session.id);
+  }
   return changed;
 }
 
