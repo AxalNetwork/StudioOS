@@ -9,7 +9,9 @@ import { roundCallPipelineStatements } from '../routes/contacts';
 export class RoundCallError extends Error {
   status: 400 | 403 | 404 | 409 | 422 | 503;
   code: string;
-  constructor(code: string, status: 400 | 403 | 404 | 409 | 422 | 503 = 400, sentence?: string) { super(sentence ?? code); this.code = code; this.status = status; }
+  /** Authored validation copy, separate from unexpected exception/provider text. */
+  sentence?: string;
+  constructor(code: string, status: 400 | 403 | 404 | 409 | 422 | 503 = 400, sentence?: string) { super(sentence ?? code); this.code = code; this.status = status; this.sentence = sentence; }
 }
 export interface CallRow extends RoundCallTerms {
   id: number; uid: string; project_id: number; company_id: number | null; round_id: number | null;

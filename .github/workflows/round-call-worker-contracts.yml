@@ -36,6 +36,8 @@ jobs:
           cache-dependency-path: cloudflare-worker/package-lock.json
       - name: Install Worker dependencies
         run: npm ci --prefix cloudflare-worker
+      - name: Refusal response guard
+        run: node scripts/check-refusal-bodies.mjs
       - name: Policies and real round-call requests
         run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/round_call_policy_d653.test.ts cloudflare-worker/test/round_calls_d653.test.ts
       - name: Raise cycle reads
