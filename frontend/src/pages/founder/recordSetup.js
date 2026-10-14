@@ -36,6 +36,11 @@ export const MODES = [
 ];
 export const modeOf = (key) => MODES.find((m) => m.key === key) || MODES[0];
 
+/** On a phone a video call records the microphone only: there is no tab to share (§5.8.6). */
+export const PHONE_VIDEO_NOTE = 'On a phone it records this device’s microphone only.';
+/** The mode's note, with the phone sentence on Video where this browser cannot share a tab. */
+export const modeNote = (mode, canShareTab = true) => (mode === 'video' && !canShareTab ? `${modeOf(mode).note} ${PHONE_VIDEO_NOTE}` : modeOf(mode).note);
+
 /**
  * The chips under How, per mode (§5.3). `link` names the connection a chip's
  * status reads; `ready` chips need none. `value` is the `call_provider` the

@@ -576,3 +576,191 @@ test('the mark flash: fades over its length, and never under reduced motion; a p
   runRing({ ctx, size: { w: 100, h: 100 }, analyser: null, sampleRate: 48000, mode: 'paused', dark: false, reduced: false, progress: 0, raf: () => { frames += 1; return frames; }, caf: () => {}, now: () => 0, flashAt: 0 });
   assert.equal(frames, 1, 'a fading flash asks for one more frame even while paused');
 });
+
+// ------------------------------------------------- #1588: recovery on load, the lock, marks' keys
+
+import { joinHref, lockName, markKey } from '../src/lib/activeRecording.js';
+
+/** Web Locks with one holder per name; `held` names another tab's locks. */
+function fakeLocks(held = []) {
+  const taken = new Map(held.map((n) => [n, 'other']));
+  const asked = [];
+  return {
+    asked, taken,
+    locks: {
+      request(name, opts, cb) {
+        const fn = typeof opts === 'function' ? opts : cb;
+        const ifAvailable = typeof opts === 'object' && opts?.ifAvailable;
+        asked.push([name, ifAvailable ? 'ifAvailable' : 'hold']);
+        if (ifAvailable) return Promise.resolve(fn(taken.has(name) ? null : { name }));
+        taken.set(name, 'this');
+        return Promise.resolve(fn({ name })).finally(() => taken.delete(name));
+      },
+    },
+  };
+}
+
+test('#1588 a mark carries a client_key the Worker accepts, made once: its replay sends the same key', async () => {
+  for (const [id, off] of [[7, 1234.6], ['12', 0], [7, -5]]) {
+    const k = markKey(id, off);
+    assert.match(k, /^[A-Za-z0-9_-]{1,80}$/, `${k} is in the Worker's alphabet`);
+    assert.doesNotMatch(k, /:/);
+  }
+  assert.notEqual(markKey(7, 1000), markKey(7, 1000), 'two marks in the same millisecond are two');
+  assert.equal(markKey(7, 1000.4, () => 'ab:c'), 'm7-1000-abc');
+  const sent = [];
+  let down = true;
+  const w = fakeApi({ mark: async (id, o, label, key) => { if (down) throw new Error('down'); sent.push([id, Math.round(o), key]); return {}; } });
+  const r = createRecorder({ api: w.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  await r.begin({ session: draft() });
+  assert.equal(await r.mark(), 'queued');
+  const key = r.getSnapshot().marksQueued[0].key;
+  assert.match(key, /^m7-\d+-[a-z0-9]+$/);
+  down = false;
+  r.setOnline(true);
+  await tick();
+  assert.deepEqual(sent.map((x) => x[2]), [key], 'the replay is the same mark');
+  assert.equal(await r.mark(), 'sent');
+  assert.match(sent[1][2], /^m7-/, 'an online mark sends its key too');
+  assert.notEqual(sent[1][2], key);
+});
+
+test('#1588 queued chunks are tagged with the member, and only theirs are listed', async () => {
+  const q = memoryQueue();
+  await q.put({ sessionId: 3, seq: 0, blob: 'a', startMs: 0, userId: 7 });
+  await q.put({ sessionId: 4, seq: 0, blob: 'b', startMs: 0, userId: 7 });
+  await q.put({ sessionId: 5, seq: 0, blob: 'c', startMs: 0, userId: 9 });
+  assert.deepEqual((await q.sessions(7)).sort(), [3, 4]);
+  assert.deepEqual(await q.sessions(9), [5]);
+  // The capture writes the tag.
+  const b = fakeBrowser();
+  const r = createRecorder({ api: fakeApi().api, browser: b.browser, queue: q, setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r.setUser(7);
+  await r.begin({ session: draft({ id: 21 }) });
+  await r.capture.stop({ flush: false });
+  await tick();
+  assert.deepEqual((await q.sessions(7)).sort((x, y) => x - y), [3, 4, 21]);
+  assert.ok((await q.sessions(7)).includes(21), 'the new chunk is tagged with member 7');
+  assert.equal((await q.sessions(9)).includes(21), false);
+});
+
+test('#1588 the capturing tab holds rec-<id>; Stop, Discard and sign-out let it go', async () => {
+  const L = fakeLocks();
+  const r = createRecorder({ api: fakeApi().api, browser: { ...fakeBrowser().browser, locks: L.locks }, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(lockName(7), 'rec-7');
+  await r.begin({ session: draft() });
+  assert.deepEqual(L.asked, [['rec-7', 'hold']]);
+  assert.equal(L.taken.get('rec-7'), 'this');
+  await r.signOut();
+  await tick();
+  assert.equal(L.taken.has('rec-7'), false, 'released on sign-out');
+  // No Web Locks (an old browser): nothing breaks.
+  const plain = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await plain.begin({ session: draft() }), 'recording');
+});
+
+const ACTIVE = (over = {}) => ({ id: 7, status: 'recording', interview_id: 30, interviewee_name: 'Dana', interviewee_company: 'Acme', channel: 'video', call_label: 'Video call · Zoom', active_ms: 5000, recording_since: '2026-10-14T10:00:00Z', chunk_seqs: [0, 1], processing: null, ...over });
+const FULL = { session: { id: 7, status: 'recording', channel: 'video', active_ms: 5000, live_model: null, interview_id: 30 }, interview: { id: 30, interviewee_name: 'Dana', interviewee_company: 'Acme' }, call_label: 'Video call · Zoom', meeting_url: 'https://acme.zoom.us/j/1', points: [{ id: 88, text: 'H2', covered: false }], chunks: [{ seq: 0 }, { seq: 1 }] };
+
+test('#1588 recovery on load: what this member queued is flushed, and the recording in flight comes back paused with the Worker\'s label', async () => {
+  const q = memoryQueue();
+  await q.put({ sessionId: 3, seq: 0, blob: 'a', startMs: 0, userId: 7 });
+  await q.put({ sessionId: 5, seq: 0, blob: 'c', startMs: 0, userId: 9 });
+  const L = fakeLocks();
+  const w = fakeApi({
+    active: async () => ({ items: [ACTIVE()] }),
+    get: async (id) => { w.calls.push(['get', id]); return FULL; },
+    uploadChunk: async (id, seq) => { w.calls.push(['chunk', id, seq]); return {}; },
+  });
+  const r = createRecorder({ api: w.api, browser: { ...fakeBrowser().browser, locks: L.locks }, queue: q, setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await r.recover(), 'skipped', 'no member, nothing is read');
+  r.setUser(7);
+  assert.equal(await r.recover(), 'restored');
+  assert.deepEqual(w.calls.filter((c) => c[0] === 'chunk'), [['chunk', 3, 0]], 'member 9\'s chunk never flushes under member 7');
+  assert.deepEqual(L.asked, [['rec-7', 'ifAvailable']], 'asked, never held: a probe');
+  assert.deepEqual(w.calls.filter((c) => c[0] === 'action'), [['action', 'pause']], 'a recording with no capture here is paused');
+  const st = r.getSnapshot();
+  assert.equal(st.phase, 'paused');
+  assert.equal(st.callLabel, 'Video call · Zoom', 'the Worker\'s label, kept after a reload');
+  assert.equal(st.meetingUrl, 'https://acme.zoom.us/j/1');
+  assert.deepEqual(st.storedSeqs, [0, 1], 'a resume continues after the stored seqs');
+  assert.deepEqual(st.points.map((p) => p.id), [88]);
+  assert.equal(st.interview.interviewee_name, 'Dana');
+  assert.equal(await r.recover(), 'skipped', 'a tab holding a session is left alone');
+});
+
+test('#1588 recovery never pauses a recording another tab holds; a processing session is followed', async () => {
+  const L = fakeLocks(['rec-7']);
+  const w = fakeApi({ active: async () => ({ items: [ACTIVE()] }), get: async () => { throw new Error('never'); } });
+  const r = createRecorder({ api: w.api, browser: { ...fakeBrowser().browser, locks: L.locks }, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r.setUser(7);
+  assert.equal(await r.recover(), 'other_tab');
+  assert.deepEqual(w.calls, [], 'no pause, no read');
+  assert.equal(r.getSnapshot().session, null);
+
+  const busy = ACTIVE({ id: 9, status: 'stopped', processing: { stage: 'transcribing', done: 1, total: 3, error: null } });
+  const w2 = fakeApi({ active: async () => ({ items: [busy] }), get: async () => ({ session: { id: 9, status: 'stopped' }, processing: { stage: 'done' } }) });
+  const r2 = createRecorder({ api: w2.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()), wait: async () => {} });
+  r2.setUser(7);
+  assert.equal(await r2.recover(), 'following');
+  assert.equal(r2.getSnapshot().session.id, 9);
+  assert.equal(r2.getSnapshot().callLabel, 'Video call · Zoom');
+  assert.equal(r2.getSnapshot().interview.interviewee_company, 'Acme');
+
+  const w3 = fakeApi({ active: async () => { throw new Error('offline'); } });
+  const r3 = createRecorder({ api: w3.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r3.setUser(7);
+  assert.equal(await r3.recover(), 'unread');
+  // A paused session comes back too, paused, with nothing posted.
+  const w5 = fakeApi({ active: async () => ({ items: [ACTIVE({ status: 'paused' })] }), get: async () => ({ ...FULL, session: { ...FULL.session, status: 'paused' } }) });
+  const r5 = createRecorder({ api: w5.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r5.setUser(7);
+  assert.equal(await r5.recover(), 'restored');
+  assert.equal(r5.getSnapshot().phase, 'paused');
+  assert.deepEqual(w5.calls.filter((c) => c[0] === 'action'), [], 'already paused: no pause is posted');
+  const w4 = fakeApi({ active: async () => ({ items: [] }) });
+  const r4 = createRecorder({ api: w4.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r4.setUser(7);
+  assert.equal(await r4.recover(), 'none');
+});
+
+test('#1588 the provider runs recovery for the signed-in member; the client reads /sessions/active and sends the mark\'s key', async () => {
+  const ctx = readFileSync('frontend/src/contexts/ActiveRecordingContext.jsx', 'utf8');
+  assert.match(ctx, /r\.setUser\(userId\);\n    r\.recover\(\)/);
+  assert.match(ctx, /locks: nav\.locks,/);
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.document ??= { cookie: '' };
+  const calls = [];
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ method: init.method || 'GET', path: String(url).replace(/^.*\/api/, ''), body: init.body ? JSON.parse(init.body) : undefined });
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const { interviewSessionsApi } = await import('../src/lib/api/interviewSessions.js');
+    await interviewSessionsApi.active();
+    await interviewSessionsApi.mark(7, 1234.6, undefined, 'm7-1235-ab');
+    await interviewSessionsApi.mark(7, 50);
+  } finally { globalThis.fetch = orig; }
+  assert.deepEqual(calls.map((c) => `${c.method} ${c.path}`), ['GET /founder/validate/sessions/active', 'POST /founder/validate/sessions/7/marks', 'POST /founder/validate/sessions/7/marks']);
+  assert.deepEqual(calls[1].body, { offset_ms: 1235, client_key: 'm7-1235-ab' }, 'a whole number of milliseconds, as the Worker takes');
+  assert.deepEqual(calls[2].body, { offset_ms: 50 });
+});
+
+test('#1588 a meeting link the view may open is https only; the recorder knows whether a tab can be shared', () => {
+  assert.equal(joinHref('https://acme.zoom.us/j/1'), 'https://acme.zoom.us/j/1');
+  assert.equal(joinHref('http://acme.zoom.us/j/1'), null);
+  assert.equal(joinHref('javascript:alert(1)'), null);
+  assert.equal(joinHref(null), null);
+  const r = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
+  assert.equal(r.canShareTab, true);
+  // The lightbox's link is kept for the share step; anything but https is not.
+  const v = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
+  return v.begin({ session: draft({ channel: 'video' }), video: true, meetingUrl: 'https://acme.zoom.us/j/1' }).then(async () => {
+    assert.equal(v.getSnapshot().meetingUrl, 'https://acme.zoom.us/j/1');
+    await v.begin({ session: draft({ channel: 'video' }), video: true, meetingUrl: 'http://acme.zoom.us/j/1' });
+    assert.equal(v.getSnapshot().meetingUrl, null);
+  });
+  const phone = createRecorder({ api: fakeApi().api, browser: { ...fakeBrowser().browser, getDisplayMedia: undefined }, queue: memoryQueue() });
+  assert.equal(phone.canShareTab, false);
+});
