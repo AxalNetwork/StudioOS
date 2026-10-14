@@ -1237,7 +1237,13 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // callback recovers it from state.extra and passes through to connect()
   // so we never trust the query string at callback time.
   const extra: Record<string, unknown> = { challenge: pkce.challenge, company_id: selectedCompany };
-  if (c.req.query('return_to') === 'build') extra.return_to = 'build';
+  if (c.req.query('return_to') === 'build') {
+    extra.return_to = 'build';
+    // The venture rides in the state, not in per-origin storage: the callback is
+    // on OAUTH_CALLBACK_BASE_URL's host, so the return names it (#1597).
+    const projectId = Number(c.req.query('project_id'));
+    if (Number.isSafeInteger(projectId) && projectId > 0) extra.project_id = projectId;
+  }
   if (provider === 'salesforce') {
     const sb = c.req.query('sandbox');
     extra.is_sandbox = sb === '1' || sb === 'true';
@@ -1281,6 +1287,13 @@ export function returnBase(extra: Record<string, unknown> | null | undefined): s
   return extra?.return_to === 'build' ? '/build/connect' : '/integrations';
 }
 
+/** The return's query: the outcome, then Build's venture when the sign-in started from Build (#1597). */
+export function returnQuery(extra: Record<string, unknown> | null | undefined, outcome: string): string {
+  const id = Number(extra?.project_id);
+  const venture = extra?.return_to === 'build' && Number.isSafeInteger(id) && id > 0 ? `&project_id=${id}` : '';
+  return `${returnBase(extra)}?${outcome}${venture}`;
+}
+
 integrations.get('/oauth/:provider/callback', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -1291,9 +1304,8 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   const state = c.req.query('state') || '';
   const errorParam = c.req.query('error') || '';
   const consumed = state ? await consumeOauthState(c.env, user.id, provider, state) : null;
-  const destination = returnBase(consumed?.extra);
   if (errorParam) {
-    return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(/^[a-z0-9_]{1,64}$/i.test(errorParam) ? errorParam : 'callback_failed')}`);
+    return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(/^[a-z0-9_]{1,64}$/i.test(errorParam) ? errorParam : 'callback_failed')}`));
   }
   if (!desc || desc.auth_type !== 'oauth2') {
     return c.json({ error: 'oauth_not_supported' }, 404);
@@ -1308,12 +1320,12 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   const linked = Number.isSafeInteger(selectedCompany) && selectedCompany > 0 &&
     await c.env.DB.prepare('SELECT 1 AS allowed FROM user_company_links WHERE user_id = ? AND company_id = ?')
       .bind(user.id, selectedCompany).first();
-  if (!linked && writesProjectData(provider)) return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=company_not_linked`);
+  if (!linked && writesProjectData(provider)) return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=company_not_linked`));
   const impl = getProviderImpl(provider);
   if (!impl) {
-    return c.redirect(`${destination}?oauth=rolling_out&provider=${encodeURIComponent(provider)}`);
+    return c.redirect(returnQuery(consumed?.extra, `oauth=rolling_out&provider=${encodeURIComponent(provider)}`));
   }
-  const { return_to: _returnTo, ...providerExtra } = consumed.extra;
+  const { return_to: _returnTo, project_id: _projectId, ...providerExtra } = consumed.extra;
   try {
     const result = await impl.connect(c, user, {
       oauth_code: code,
@@ -1327,7 +1339,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
         direction: 'internal', event_type: 'overreach', status: 'error',
         response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
       });
-      return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`);
+      return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`));
     }
     const sql = getSQL(c.env);
     try {
@@ -1397,7 +1409,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
     } finally {
       await sql.end();
     }
-    return c.redirect(`${destination}?oauth=ok&provider=${encodeURIComponent(provider)}`);
+    return c.redirect(returnQuery(consumed?.extra, `oauth=ok&provider=${encodeURIComponent(provider)}`));
   } catch (e) {
     // Best-effort failure log — we may not have an integrations row to
     // attach to (the connect threw before insert), so skip integration_logs
@@ -1417,7 +1429,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
     const code = /^[a-z0-9_]+$/i.test(rawMsg.split(/[:\s]/)[0])
       ? rawMsg.split(/[:\s]/)[0].slice(0, 64)
       : 'callback_failed';
-    return c.redirect(`${destination}?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(code)}`);
+    return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(code)}`));
   }
 });
 

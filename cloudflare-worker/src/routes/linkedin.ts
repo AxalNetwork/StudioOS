@@ -25,6 +25,7 @@
  */
 import { Hono } from 'hono';
 import { callbackBase } from '../util/url';
+import { parseReturn, returnFromNonce, returnTag } from '../util/oauthReturn';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
@@ -100,8 +101,8 @@ async function hmacSign(secret: string, body: string): Promise<string> {
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
   return b64url(sig);
 }
-async function makeState(env: Env, userId: number): Promise<string> {
-  const nonce = crypto.randomUUID().replace(/-/g, '');
+async function makeState(env: Env, userId: number, tag = ''): Promise<string> {
+  const nonce = `${tag}${crypto.randomUUID().replace(/-/g, '')}`;
   const sig = await hmacSign(env.JWT_SECRET || '', nonce);
   // KV stores the signed user_id payload under the nonce. TTL is enforced by
   // KV itself; the callback also rechecks the HMAC.
@@ -161,14 +162,18 @@ linkedin.post('/oauth/start', async (c) => {
   // the default /refer. Short-lived, scoped cookie keeps the round-trip
   // self-contained (mirrors the calendar return_to cookie).
   let returnTo = String(c.req.query('return_to') || '').toLowerCase();
+  let projectId: unknown = c.req.query('project_id');
   if (!returnTo) {
     try {
       const body: any = await c.req.json().catch(() => null);
       if (body && typeof body.return_to === 'string') returnTo = body.return_to.toLowerCase();
+      if (body && body.project_id != null) projectId = body.project_id;
     } catch { /* body may be empty */ }
   }
   try {
-    const state = await makeState(c.env, user.id);
+    // Build's return, with its venture, rides in the signed nonce: the callback
+    // runs on OAUTH_CALLBACK_BASE_URL's host, where this host's cookie is absent (#1597).
+    const state = await makeState(c.env, user.id, returnTag(returnTo, projectId));
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: creds.id,
@@ -205,11 +210,20 @@ function readLinkedinReturnTo(c: any): string {
 function clearLinkedinReturnCookie(): string {
   return 'studioos_li_return=; HttpOnly; Secure; SameSite=Lax; Path=/api/linkedin; Max-Age=0';
 }
+/** The return a signed state names (Build, with its venture), or '' (#1597). */
+async function returnFromState(env: Env, raw: string | null | undefined): Promise<string> {
+  if (!raw || typeof raw !== 'string' || !raw.includes('.')) return '';
+  const [nonce, sig] = raw.split('.', 2);
+  if (!nonce || !sig || (await hmacSign(env.JWT_SECRET || '', nonce)) !== sig) return '';
+  return returnFromNonce(nonce);
+}
 function redirectBack(env: Env, status: 'connected' | 'error', returnTo: string, message?: string) {
   const base = callbackBase(env);
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
-  const path = returnTo === 'build' ? '/build/connect' : returnTo === 'integrations' ? '/integrations' : '/refer';
+  const { kind, projectId } = parseReturn(returnTo);
+  if (kind === 'build' && projectId) params.set('project_id', String(projectId));
+  const path = kind === 'build' ? '/build/connect' : returnTo === 'integrations' ? '/integrations' : '/refer';
   return new Response(null, {
     status: 302,
     headers: { Location: `${base}${path}?${params.toString()}`, 'Set-Cookie': clearLinkedinReturnCookie() },
@@ -229,7 +243,7 @@ type LinkedInCallbackCode =
   | 'save_failed';
 
 linkedin.get('/oauth/callback', async (c) => {
-  const returnTo = readLinkedinReturnTo(c);
+  const returnTo = (await returnFromState(c.env, c.req.query('state'))) || readLinkedinReturnTo(c);
   const creds = await loadLinkedinCreds(c.env);
   if (!creds) {
     return redirectBack(c.env, 'error', returnTo, 'not_configured' satisfies LinkedInCallbackCode);

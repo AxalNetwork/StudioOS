@@ -118,6 +118,9 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
         projectId={projectId}
         companyId={scope?.state === 'ok' ? scope.companyId : null}
         companyName={scope?.state === 'ok' ? scope.name : null}
+        companyNote={companyNote}
+        companyState={scope?.state || null}
+        blocked={cannotConnect}
       />,
     );
   }

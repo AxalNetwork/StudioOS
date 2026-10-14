@@ -3156,8 +3156,8 @@ export const api = {
   // current user. The connections-CSV import is parsed in-browser and
   // never hits the worker.
   linkedinStatus: () => request('/linkedin/status'),
-  linkedinOAuthStart: ({ return_to } = {}) =>
-    request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify(return_to ? { return_to } : {}) }),
+  linkedinOAuthStart: ({ return_to, project_id } = {}) =>
+    request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify(return_to ? { return_to, ...(project_id ? { project_id } : {}) } : {}) }),
   linkedinDisconnect: () => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify({}) }),
 
   // Task #67 — Autopopulate profile from LinkedIn (connected account OR a
@@ -4642,15 +4642,15 @@ export const api = {
 
   // Google Calendar sync
   googleCalStatus: () => request('/calendar/google/status'),
-  googleCalConnect: ({ return_to } = {}) =>
-    request(`/calendar/google/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}` : ''}`, { method: 'POST' }),
+  googleCalConnect: ({ return_to, project_id } = {}) =>
+    request(`/calendar/google/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}${project_id ? `&project_id=${encodeURIComponent(project_id)}` : ''}` : ''}`, { method: 'POST' }),
   googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
   googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
 
   // Microsoft 365 / Outlook Calendar sync
   microsoftCalStatus: () => request('/calendar/microsoft/status'),
-  microsoftCalConnect: ({ return_to } = {}) =>
-    request(`/calendar/microsoft/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}` : ''}`, { method: 'POST' }),
+  microsoftCalConnect: ({ return_to, project_id } = {}) =>
+    request(`/calendar/microsoft/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}${project_id ? `&project_id=${encodeURIComponent(project_id)}` : ''}` : ''}`, { method: 'POST' }),
   microsoftCalDisconnect: () => request('/calendar/microsoft', { method: 'DELETE' }),
   microsoftCalSync: () => request('/calendar/microsoft/sync', { method: 'POST' }),
 

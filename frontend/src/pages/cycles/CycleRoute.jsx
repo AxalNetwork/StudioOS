@@ -13,7 +13,7 @@ import useAiSpend from '../../hooks/useAiSpend';
 import useScrollToHash from '../../hooks/useScrollToHash';
 import ShareUpdateLightbox from '../founder/ShareUpdateLightbox';
 import ConnectToolSheet from '../account/ConnectToolSheet';
-import { takeBuildProject } from '../account/connectorsModel';
+import { takeBuildProject, toolDeepLink } from '../account/connectorsModel';
 import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
 import { recordingHref } from '../founder/recordSetup';
@@ -274,8 +274,21 @@ const CYCLE_DEFS = {
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
 
-export function useProject(reloadKey = 0, { kept = null } = {}) {
+export function useProject(reloadKey = 0, { kept = null, drop = [] } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  // Writes build on the latest query, never on a render's (react-router hands a
+  // functional update the search params of the render that made the setter), and
+  // drop `drop`'s keys in the same write: a sign-in's return or `?tool=` that the
+  // lightbox has read must not come back with the venture (D686 §5.4, #1597).
+  const latest = useRef(searchParams);
+  latest.current = searchParams;
+  const dropRef = useRef(drop);
+  const writeProject = useCallback((id) => {
+    const next = new URLSearchParams(latest.current);
+    for (const k of dropRef.current || []) next.delete(k);
+    next.set('project_id', String(id));
+    setSearchParams(next, { replace: true });
+  }, [setSearchParams]);
   // The read's own links (`next.href`) say `?project=`; the page's say
   // `?project_id=`. Either picks the venture.
   const named = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
@@ -285,8 +298,8 @@ export function useProject(reloadKey = 0, { kept = null } = {}) {
   const requested = named || stashed;
   useEffect(() => {
     if (named || !stashed) return;
-    setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(stashed)); return next; }, { replace: true });
-  }, [named, stashed, setSearchParams]);
+    writeProject(stashed);
+  }, [named, stashed, writeProject]);
   const [projectId, setProjectId] = useState(requested);
   const [status, setStatus] = useState(requested ? 'ready' : 'loading');
   useEffect(() => {
@@ -297,10 +310,10 @@ export function useProject(reloadKey = 0, { kept = null } = {}) {
       const first = (list || [])[0];
       setProjectId(first?.id || null);
       setStatus(first ? 'ready' : 'none');
-      if (first) setSearchParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(first.id)); return next; }, { replace: true });
+      if (first) writeProject(first.id);
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
-  }, [requested, setSearchParams, reloadKey]);
+  }, [requested, writeProject, reloadKey]);
   return { projectId, status };
 }
 
@@ -381,7 +394,9 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : routeSlug;
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
-  const { projectId, status: projectStatus } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null });
+  // Build's lightbox reads a sign-in's return or `?tool=` once; the venture's write drops those keys too (#1597).
+  const [connectDrop] = useState(() => (lightbox && cycle === 'build' ? toolDeepLink(location.search, [])?.strip || [] : []));
+  const { projectId, status: projectStatus } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop });
   const creates = Boolean(def?.creates);
   const [creating, setCreating] = useState(() => creates && searchParams.get('new') === '1');
   // Followed, not only seeded: the Command Palette can address `?new=1` from
