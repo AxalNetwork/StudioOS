@@ -805,3 +805,38 @@ The same export also gives the other three cycle CTAs a centred lightbox that im
 **Grade: UPGRADE.** `/validate` and `/validate/session/:id` are live. `/validate/record`, `/validate/record/live` and `/validate/interviews/:id` do not exist yet. `ROUTE_MAP.md`'s Record a session row changes when they ship. D685 lists what is already built and what each slot builds.
 
 `Cycle Action.dc.html` stays here for the three other actions. `Interview Session.dc.html` stays here as before: only its `start` step is superseded. **Counts unchanged: 90 / 28 / 26.** Every figure in these canvases is a bracketed placeholder.
+
+## Landed 2026-10-14 — module pages with one record, Verdict, and the phone layouts
+
+The owner shared seven artifacts on 2026-10-14:
+- `1X7wXqoDBNe3uWn8UusEGn`: the module board, republished;
+- `RkPSFTKNHWDb9verht2qx8`: the cycle overviews on a phone;
+- `SKWT3FCcE7iBk8ZXhusscD`: the module pages on a phone;
+- `Ex1E4N7yPM6zN3VciZ1kJt`: Studio on a phone;
+- `QztA6XP75A3vXbZ78jD34Z`: the account menu's pages on a phone;
+- `9bDXXmxoezij98VN4WRggY`: the account page canvas those import, on its own;
+- `Fxui55FyoHTWvTDi1iXysL`: "Record a Session · Boards", republished.
+
+Each top-level board was normalised with `scripts/read-canvas.mjs`. Each nested canvas is committed as decoded from its bundle. Every nested `Cycle Overview`, `Cycle Action`, `AIRail` and `Recording View` copy was byte-identical across the seven bundles, so each is committed once.
+
+| Canvas | What happened | What it draws | Routes |
+| --- | --- | --- | --- |
+| `Cycle Overview.dc.html` | Replaced in `canvases/integrated/` | Validate gains a seventh module, **Verdict** (decisions: Proceed, Pivot or Stop, for the venture or one hypothesis). Every module page is its chart, then its records table. A row opens **one record** (`record`), and the page's button opens its **add form** (`form="add"`). The records tables of Problem discovery, Customer research and Experiments and evidence are Pain themes, Interviews and Hypotheses. A full phone layout (`mobile`): One Next Thing per cycle and per module, the company and account sheets, the Eadwyn panel and the full-screen recording view. | `/validate`, `/build`, `/raise`, `/grow` and `/:cycle/:module` |
+| `Cycle Modules · Boards.dc.html` | Replaced in `canvases/integrated/` | MV1–MV7 (MV7 is Verdict, new), MB1–MB6, MR1–MR7, MG1–MG7, each with "one record" beneath it | — |
+| `Cycle Overviews · Mobile.dc.html` | New | O1m–O4m, O1nm, O6m (switch company), O7m (account), O8m (Eadwyn), O9m (recording), each beside the page its button opens. On a phone every button opens a page, never a lightbox. | the four cycle roots |
+| `Cycle Modules · Mobile.dc.html` | New | MV1m–MG7m: the module page, one record, and the page its button opens | `/:cycle/:module` |
+| `Studio · Mobile.dc.html` + `Studio Mobile Page.dc.html` | New | S1m–S10m: Conversations, Tasks, My tickets, Open a ticket, the Eadwyn menu, You, Your venture, the archetype card, What others see, Visibility | `/studio`, `/profile`, `/profile/venture`, `/studio/archetype`, `/profile/preview`, `/profile/visibility` |
+| `Account Menu · Mobile.dc.html` + `Account Mobile Page.dc.html` | New | A1m–A10m: Account, Usage, Connectors, Trust Center, Perks, Calendar, Events, Learning, Help Center, Plans & Pricing | `/account`, `/account/usage`, `/account/connectors`, `/trust`, `/perks`, `/calendar`, `/events`, `/learning`, `/help`, `/pricing` |
+| `AIRail.dc.html` | Replaced here, in place | The rail as a Manual / AI fills the blanks switch, with suggested models for the page | — |
+| `Record a Session · Boards.dc.html`, `Recording View Canvas.dc.html`, `Recording View.dc.html`, `Cycle Action.dc.html` | Nothing | Byte-identical to the committed copies once normalised | — |
+
+**The owner's instructions with these canvases (2026-10-14).**
+- The Validate overview's spacing between content and border matches its module pages'.
+- `/validate/interviews`, `/validate/pain-map` and `/validate/hypotheses` stop being pages. Their content becomes the bottom section of Customer research, Problem discovery, and Experiments and evidence.
+- Verdict gets its own module page.
+- The end of Record a session goes to Customer research, to see Interviews.
+- Every module in Validate, Build, Raise and Grow gets the new record and add lightboxes, and every screen gets its phone version.
+
+**Grade: UPGRADE** for the cycle canvases and the Studio and account phone canvases: every route they govern is live. `Account Mobile Page.dc.html` and `Studio Mobile Page.dc.html` name `axal-logo.png`, `eadwyn-ai.png` and two `uploads/` images that the bundles carry only as unnamed assets, so the images are not committed. Every figure in these canvases is a bracketed placeholder. The epic and its slot tasks name the build. **Counts unchanged: 90 / 28 / 26.**
+
+Move each new file to `canvases/integrated/` once its bodies are built.

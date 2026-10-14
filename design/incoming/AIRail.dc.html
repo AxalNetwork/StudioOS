@@ -7,216 +7,101 @@
 </head>
 <body>
 <x-dc>
-<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#7d7889">Worker AI · {{ page }}</span>
-    <span style="font-size:11px;color:#a8a4b4">›</span>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b;display:flex;flex-direction:column;gap:14px;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums">
+  <div style="display:flex;align-items:center;gap:9px"><img src="eadwyn-ai.png" alt="" width="26" height="26" style="width:26px;height:26px;object-fit:contain;image-rendering:pixelated;flex:none"><span style="font-size:15px;font-weight:800;letter-spacing:-.015em">Eadwyn AI</span></div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <span style="align-self:flex-start;{{ profPill }}">{{ profile }}</span>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:12.5px;line-height:1.4"><sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="2"><span style="{{ c.s }}">{{ c.t }}</span><sc-if value="{{ c.sep }}" hint-placeholder-val="{{ false }}"><span style="color:#c9c6d2">›</span></sc-if></sc-for></div>
   </div>
-
-  <!-- MODE -->
-  <div style="display:grid;gap:6px;margin-top:14px">
-    <div style="border:1px solid #e2e1e8;border-radius:9px;padding:9px 11px">
-      <div style="font-size:12px;font-weight:700">Manual</div>
-      <div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.45">No tokens. Page works alone.</div>
-    </div>
-    <div style="border:1px solid #7c3aed;background:#faf7ff;border-radius:9px;padding:9px 11px;box-shadow:0 0 0 2px rgba(124,58,237,.08)">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span style="font-size:12px;font-weight:800;color:#4c1d95">AI fills the blanks</span>
-        <span style="width:24px;height:14px;border-radius:999px;background:#7c3aed;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
-      </div>
-      <div style="font-size:10.5px;color:#4c1d95;margin-top:4px;line-height:1.45">{{ modeNote }}</div>
-    </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#f4f3f7;border-radius:10px;padding:3px"><sc-for list="{{ modes }}" as="m" hint-placeholder-count="2"><span onClick="{{ m.go }}" style="{{ m.s }}">{{ m.t }}</span></sc-for></div>
+  <sc-if value="{{ manual }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#615c6e;line-height:1.5">Eadwyn stays quiet on this page. Your work saves as usual.</div></sc-if>
+  <div style="display:flex;flex-direction:column;gap:6px;{{ listDim }}">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#7d7889">Suggested for this page</span>
+    <sc-for list="{{ sug }}" as="s" hint-placeholder-count="3"><div onClick="{{ s.go }}" style="{{ s.box }}"><span style="{{ s.dot }}"><span style="{{ s.fill }}"></span></span><span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700">{{ s.t }}</span><span style="{{ s.rs }}">{{ s.role }}</span></span><span style="display:block;font-size:11.5px;color:#615c6e;margin-top:2px;line-height:1.4">{{ s.line }}</span></span></div></sc-for>
+    <sc-if value="{{ picked }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#6d28d9">Using {{ picked }} on this page.</div></sc-if>
+    <span onClick="{{ toggleAll }}" style="font-size:12px;font-weight:700;color:#6d28d9;cursor:pointer;min-height:28px;display:flex;align-items:center">{{ allLabel }}</span>
+    <sc-if value="{{ showAll }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ all }}" as="g" hint-placeholder-count="3"><div><div style="font-size:10.5px;font-weight:700;color:#7d7889;margin-bottom:5px">{{ g.t }}</div><div style="display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ g.ms }}" as="x" hint-placeholder-count="3"><span onClick="{{ x.go }}" style="{{ x.s }}">{{ x.t }}</span></sc-for></div></div></sc-for></div></sc-if>
+    <div style="font-size:11px;color:#7d7889;line-height:1.45">Llama Guard 3 8B checks every run. Eadwyn drafts; you send.</div>
   </div>
-
-  <!-- MODELS -->
-  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#7d7889;margin-top:16px">Model · this page</div>
-  <div style="margin-top:9px">
-    <sc-for list="{{ models }}" as="m" hint-placeholder-count="4">
-      <div style="{{ m.rowStyle }}">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
-          <span style="{{ m.nameStyle }}">{{ m.name }}</span>
-          <sc-if value="{{ m.recommended }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:3px;padding:2px 5px;flex:none">DEFAULT</span></sc-if>
-          <sc-if value="{{ m.priceInline }}"><span style="font-size:10px;color:#615c6e;font-variant-numeric:tabular-nums;flex:none">{{ m.priceInline }}</span></sc-if>
-        </div>
-        <sc-if value="{{ m.recommended }}">
-          <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ m.id }}</div>
-        </sc-if>
-        <div style="font-size:10.5px;color:{{ m.whyInk }};margin-top:5px;line-height:1.5">{{ m.why }}</div>
-        <sc-if value="{{ m.recommended }}">
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">
-            <sc-for list="{{ m.tags }}" as="t" hint-placeholder-count="2">
-              <span style="font-size:9.5px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:3px;padding:2px 5px">{{ t }}</span>
-            </sc-for>
-          </div>
-          <div style="font-size:10.5px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:8px;padding-top:7px;border-top:1px solid #f0eff4">{{ m.price }}</div>
-          <sc-if value="{{ m.cached }}"><div style="font-size:10.5px;color:#047857;font-variant-numeric:tabular-nums;margin-top:3px">{{ m.cached }}</div></sc-if>
-          <div style="font-size:11px;font-weight:700;color:#047857;font-variant-numeric:tabular-nums;margin-top:6px">{{ m.est }}</div>
-        </sc-if>
-      </div>
-    </sc-for>
-  </div>
-  <div style="font-size:10px;color:#7d7889;margin-top:3px;line-height:1.5">Remembered per page. Switching changes nothing already accepted.</div>
-
-  <!-- USAGE -->
-  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#7d7889;margin-top:16px">Usage</div>
-  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
-      <span style="font-size:17px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ spend }}</span>
-      <span style="font-size:10.5px;color:#615c6e">of $40.00</span>
-    </div>
-    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ spendPct }}%;background:#7c3aed;border-radius:999px"></div></div>
-    <div style="font-size:10px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:9px;line-height:1.5">This page this month · <strong>{{ pageSpend }}</strong></div>
-    <div style="font-size:10px;color:#7d7889;font-variant-numeric:tabular-nums;margin-top:7px;padding-top:7px;border-top:1px solid #f4f3f7;line-height:1.5">{{ receipt }}</div>
-  </div>
-
-  <!-- SAFETY -->
-  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
-    <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
-    <div style="font-size:10px;color:#615c6e;line-height:1.5">{{ safetyNote }}</div>
+  <div style="border:1px solid #ececf1;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:9px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#7d7889">Usage</span>
+    <sc-for list="{{ usage }}" as="u" hint-placeholder-count="2"><div><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px"><span style="color:#4a4553">{{ u.t }}</span><span style="font-weight:700">{{ u.v }}</span></div><div style="height:6px;background:#ececf1;border-radius:99px;margin-top:5px;overflow:hidden"><div style="height:100%;width:{{ u.pct }};background:#7c3aed;border-radius:99px"></div></div><div style="font-size:10.5px;color:#7d7889;margin-top:4px">{{ u.reset }}</div></div></sc-for>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#4a4553">Held by runs in progress</span><span style="font-weight:700">[$0.05]</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#4a4553">Top-up balance</span><span style="font-weight:700">[$10.00]</span></div>
+    <div style="font-size:11px;color:#7d7889;line-height:1.45">Runs use your plan's allowance first, then your top-up balance.</div>
+    <span style="display:flex;align-items:center;justify-content:center;min-height:36px;border-radius:9px;font-size:12.5px;font-weight:700;color:#6d28d9;border:1px solid #e6dcff;background:#f6f2ff">Add tokens</span>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Validate&quot;,&quot;Build&quot;,&quot;Raise&quot;,&quot;Grow&quot;,&quot;Network&quot;,&quot;Research&quot;],&quot;default&quot;:&quot;Validate&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:280},&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Founder · Validate · Customer research&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;Founder · Studio&quot;,&quot;Founder · Validate&quot;,&quot;Founder · Validate · Problem discovery&quot;,&quot;Founder · Validate · Customer research&quot;,&quot;Founder · Validate · Ideal customer profile&quot;,&quot;Founder · Validate · Market intelligence&quot;,&quot;Founder · Validate · Demand and urgency signals&quot;,&quot;Founder · Validate · Experiments and evidence&quot;,&quot;Founder · Validate · Verdict&quot;,&quot;Founder · Build&quot;,&quot;Founder · Build · Solution design&quot;,&quot;Founder · Build · Prototype / MVP&quot;,&quot;Founder · Build · Product roadmap&quot;,&quot;Founder · Build · Founding team&quot;,&quot;Founder · Build · Company creation&quot;,&quot;Founder · Build · Operating systems&quot;,&quot;Founder · Raise&quot;,&quot;Founder · Raise · Fundraising readiness&quot;,&quot;Founder · Raise · Investor narrative&quot;,&quot;Founder · Raise · Pitch deck&quot;,&quot;Founder · Raise · Data room&quot;,&quot;Founder · Raise · Cap table&quot;,&quot;Founder · Raise · Use of funds&quot;,&quot;Founder · Raise · Capital relationships&quot;,&quot;Founder · Grow&quot;,&quot;Founder · Grow · Product improvement&quot;,&quot;Founder · Grow · Distribution&quot;,&quot;Founder · Grow · Revenue and traction&quot;,&quot;Founder · Grow · Team expansion&quot;,&quot;Founder · Grow · Partner network&quot;,&quot;Founder · Grow · Market expansion&quot;,&quot;Founder · Grow · Durable company-building&quot;,&quot;Founder · Network&quot;,&quot;Founder · Network · Relationships&quot;,&quot;Founder · Network · Introductions&quot;,&quot;Founder · Network · Organizations&quot;,&quot;Founder · Research&quot;,&quot;Founder · Research · Ask&quot;,&quot;Founder · Research · Markets&quot;,&quot;Founder · Research · Geographies&quot;,&quot;Founder · Research · Companies&quot;,&quot;Founder · Research · Funds&quot;,&quot;Founder · Research · Library&quot;,&quot;Investor · Home&quot;,&quot;Investor · Deals&quot;,&quot;Investor · Deals · Pipeline&quot;,&quot;Investor · Deals · Screening&quot;,&quot;Investor · Deals · Commit&quot;,&quot;Investor · Deals · Closing&quot;,&quot;Investor · Portfolio&quot;,&quot;Investor · Portfolio · Positions&quot;,&quot;Investor · Portfolio · Performance&quot;,&quot;Investor · Portfolio · Updates&quot;,&quot;Investor · Portfolio · Value-add&quot;,&quot;Investor · Axal VC Fund&quot;,&quot;Investor · Fund&quot;,&quot;Investor · Fund · Overview&quot;,&quot;Investor · Fund · LPs&quot;,&quot;Investor · Fund · Capital calls&quot;,&quot;Investor · Fund · Distributions&quot;,&quot;Investor · Fund · Reporting&quot;,&quot;Investor · Network&quot;,&quot;Investor · Research&quot;,&quot;Investor · Research · Diligence&quot;,&quot;Investor · Research · Benchmarking&quot;,&quot;Advisor · Home&quot;,&quot;Advisor · Practice&quot;,&quot;Advisor · Practice · Opportunities&quot;,&quot;Advisor · Practice · Engagements&quot;,&quot;Advisor · Practice · Delivery&quot;,&quot;Advisor · Practice · Sessions&quot;,&quot;Advisor · Practice · Earnings&quot;,&quot;Advisor · Cohorts&quot;,&quot;Advisor · Cohorts · Founders&quot;,&quot;Advisor · Cohorts · Guidance&quot;,&quot;Advisor · Cohorts · This week&quot;,&quot;Advisor · Cohorts · Calendar&quot;,&quot;Advisor · Cohorts · Outcomes&quot;,&quot;Advisor · Expertise&quot;,&quot;Advisor · Expertise · Profile&quot;,&quot;Advisor · Expertise · Services&quot;,&quot;Advisor · Expertise · Proof&quot;,&quot;Advisor · Expertise · Thinking&quot;,&quot;Advisor · Expertise · Visibility&quot;,&quot;Advisor · Network&quot;,&quot;Advisor · Research&quot;,&quot;Advisor · Research · Client prep&quot;,&quot;Operating Partner · Home&quot;,&quot;Operating Partner · Pipeline&quot;,&quot;Operating Partner · Pipeline · Leads&quot;,&quot;Operating Partner · Pipeline · Proposals&quot;,&quot;Operating Partner · Pipeline · Negotiations&quot;,&quot;Operating Partner · Pipeline · Retainers&quot;,&quot;Operating Partner · Pipeline · Analytics&quot;,&quot;Operating Partner · Delivery&quot;,&quot;Operating Partner · Delivery · Engagements&quot;,&quot;Operating Partner · Delivery · Deliverables&quot;,&quot;Operating Partner · Delivery · Capacity&quot;,&quot;Operating Partner · Delivery · Reporting&quot;,&quot;Operating Partner · Delivery · Health&quot;,&quot;Operating Partner · Offers&quot;,&quot;Operating Partner · Offers · Catalog&quot;,&quot;Operating Partner · Offers · Perk deals&quot;,&quot;Operating Partner · Offers · Visibility&quot;,&quot;Operating Partner · Offers · Proof&quot;,&quot;Operating Partner · Offers · Audience fit&quot;,&quot;Operating Partner · Network&quot;,&quot;Operating Partner · Research&quot;,&quot;Operating Partner · Research · Client prep&quot;]},&quot;profile&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;&quot;,&quot;Founder&quot;,&quot;Investor&quot;,&quot;Advisor&quot;,&quot;Operating Partner&quot;]},&quot;record&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
   renderVals() {
-    const page = this.props.page || 'Validate';
-
-    // ONE arithmetic for the before-estimate and the after-receipt, from the same token
-    // counts and the same published rates the rail prints. They cannot diverge.
-    const c4 = (n) => '$' + n.toFixed(4);
-    const tok = (n) => n.toLocaleString('en-US');
-    const RUN = {
-      Validate: { tin:21400, tout:1180, pin:0.293, pout:2.253, label:'synthesis of 5 interviews', unit:'per interview synthesis' },
-      Build:    { tin:5900,  tout:680,  pin:0.045, pout:0.384, label:'Monday plan from board state', unit:'per Monday plan' },
-      Raise:    { tin:19800, tout:1510, pin:1.320, pout:3.960, label:'term sheet clause review', unit:'per term-sheet review' },
-      Grow:     { tin:3100,  tout:2040, pin:0.200, pout:0.300, label:'12-email sequence', unit:'per 12-email sequence' },
-      Network:  { tin:2240,  tout:410,  pin:0.351, pout:0.555, label:'intro draft', unit:'per intro email' },
-      Research: { tin:62400, tout:1240, pin:0.440, pout:1.320, cachedIn:0.014, label:'EU market brief', unit:'first question' }
+    const PROF = {
+      Founder: { Studio: [], Validate: ['Problem discovery', 'Customer research', 'Ideal customer profile', 'Market intelligence', 'Demand and urgency signals', 'Experiments and evidence', 'Verdict'], Build: ['Solution design', 'Prototype / MVP', 'Product roadmap', 'Founding team', 'Company creation', 'Operating systems'], Raise: ['Fundraising readiness', 'Investor narrative', 'Pitch deck', 'Data room', 'Cap table', 'Use of funds', 'Capital relationships'], Grow: ['Product improvement', 'Distribution', 'Revenue and traction', 'Team expansion', 'Partner network', 'Market expansion', 'Durable company-building'], Network: ['Relationships', 'Introductions', 'Organizations'], Research: ['Ask', 'Markets', 'Geographies', 'Companies', 'Funds', 'Library'] },
+      Investor: { Home: [], Deals: ['Pipeline', 'Screening', 'Commit', 'Closing'], Portfolio: ['Positions', 'Performance', 'Updates', 'Value-add'], 'Axal VC Fund': [], Fund: ['Overview', 'LPs', 'Capital calls', 'Distributions', 'Reporting'], Network: ['Relationships', 'Introductions', 'Organizations'], Research: ['Ask', 'Diligence', 'Benchmarking', 'Markets', 'Library'] },
+      Advisor: { Home: [], Practice: ['Opportunities', 'Engagements', 'Delivery', 'Sessions', 'Earnings'], Cohorts: ['Founders', 'Guidance', 'This week', 'Calendar', 'Outcomes'], Expertise: ['Profile', 'Services', 'Proof', 'Thinking', 'Visibility'], Network: ['Relationships', 'Introductions', 'Organizations'], Research: ['Ask', 'Client prep', 'Markets', 'Companies', 'Library'] },
+      'Operating Partner': { Home: [], Pipeline: ['Leads', 'Proposals', 'Negotiations', 'Retainers', 'Analytics'], Delivery: ['Engagements', 'Deliverables', 'Capacity', 'Reporting', 'Health'], Offers: ['Catalog', 'Perk deals', 'Visibility', 'Proof', 'Audience fit'], Network: ['Relationships', 'Introductions', 'Organizations'], Research: ['Ask', 'Client prep', 'Market', 'Library'] },
     };
-    const R = RUN[page] || RUN.Validate;
-    const runCost = R.tin / 1e6 * R.pin + R.tout / 1e6 * R.pout;
-    const cachedCost = R.cachedIn ? (R.tin / 1e6 * R.cachedIn + R.tout / 1e6 * R.pout) : null;
-    const runReceipt = 'Last run · ' + R.label + ' · ' + tok(R.tin) + ' in / ' + tok(R.tout) + ' out · ' + c4(runCost);
-    const runEstText = cachedCost
-      ? '≈ ' + c4(runCost) + ' ' + R.unit + ' · ' + c4(cachedCost) + ' each after'
-      : '≈ ' + c4(runCost) + ' ' + R.unit;
-
-    // Real all-in platform rates. Nothing here is invented.
-    const MENUS = {
-      Validate: { spend:'$2.27', mode:'Transcribes uploads, tags quotes to pains, drafts hypothesis cards.',
-        safety:'Nothing on this page is outbound, so screening only applies if you export a summary.',
-        receipt:'Last run · synthesis of 5 interviews · 21,400 in / 1,180 out · $0.0090',
-        models:[
-          { name:'Whisper Large v3 Turbo', id:'@cf/openai/whisper-large-v3-turbo', recommended:true,
-            why:'Turns every interview into searchable text for a tenth of a cent a minute.',
-            tags:['Best for: transcription','Audio'], price:'$0.0005 per audio minute',
-            est:'≈ $0.022 for a 44-min interview' },
-          { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', recommended:true,
-            why:'Paired with Whisper — reads across all interviews at once and writes the synthesis.',
-            tags:['Best for: synthesis','Long context'], price:'$0.293 / M in · $2.253 / M out',
-            runEst:true },
-          { name:'Llama 3.2 3B', id:'@cf/meta/llama-3.2-3b-instruct', priceInline:'$0.051 / $0.335',
-            why:'Fast quote tagging. Six times cheaper, shallower reasoning.' },
-          { name:'BGE-M3', id:'@cf/baai/bge-m3', priceInline:'$0.012 in',
-            why:'Clusters quotes into pain themes. Embeddings only — no prose.' }
-        ] },
-      Build: { spend:'$0.61', mode:'Drafts the Monday plan, summarises standups and retros, annotates odd KPIs.',
-        safety:'Internal page. Screening applies only to anything you paste into an investor update.',
-        receipt:'Last run · Monday plan from board state · 5,900 in / 680 out · $0.0005',
-        models:[
-          { name:'Llama 3.1 8B Fast', id:'@cf/meta/llama-3.1-8b-instruct-fp8-fast', recommended:true,
-            why:'Fast, cheap, and perfectly adequate for weekly planning and summaries.',
-            tags:['Best for: planning','Summaries'], price:'$0.045 / M in · $0.384 / M out',
-            runEst:true },
-          { name:'QwQ 32B', id:'@cf/qwen/qwq-32b', priceInline:'$0.660 / $1.000',
-            why:'Step-by-step reasoning for roadmap tradeoffs. Slower, shows its working.' },
-          { name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro', priceInline:'$0.017 / $0.112',
-            why:'Near-free KPI annotations. Use it when you want a sentence, not an argument.' }
-        ] },
-      Raise: { spend:'$6.41', mode:'Narrates dilution, explains clauses against market norms, finds data-room gaps.',
-        safety:'Everything generated here is investor-facing, so every draft passes @cf/meta/llama-guard-3-8b before it can be shared.',
-        receipt:'Last run · term sheet clause review · 19,800 in / 1,510 out · $0.0321',
-        models:[
-          { name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813', recommended:true,
-            why:'The strongest reasoning available for legal and terms work. On this page you are hiring senior counsel, not a copywriter.',
-            tags:['Best for: legal & terms','Highest quality'], price:'$1.320 / M in · $3.960 / M out',
-            cached:'Cached input $0.044 / M — re-reading the same term sheet is 30× cheaper',
-            runEst:true },
-          { name:'DeepSeek R1 Distill 32B', id:'@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', priceInline:'$0.497 / $4.881',
-            why:'Shows its math on dilution and waterfalls. Cheaper to prompt, dearer to answer.' },
-          { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', priceInline:'$0.293 / $2.253',
-            why:'Pitch narrative. Prose, not proofs — no need to pay for reasoning.' },
-          { name:'FLUX 2 Klein 9B', id:'@cf/black-forest-labs/flux-2-klein-9b', priceInline:'$0.015 / first MP',
-            why:'Deck visuals, generated in place.' }
-        ] },
-      Grow: { spend:'$0.51', mode:'Drafts outreach per segment, generates landing imagery, ranks matches with reasons.',
-        safety:'Outreach and landing copy leave your account — both are screened automatically before send or publish.',
-        receipt:'Last run · 12-email sequence · 3,100 in / 2,040 out · $0.0014',
-        models:[
-          { name:'GPT-OSS 20B', id:'@cf/openai/gpt-oss-20b', recommended:true,
-            why:'High-volume outreach and campaign copy at commodity cost. You will run this hundreds of times a month.',
-            tags:['Best for: outreach','High volume'], price:'$0.200 / M in · $0.300 / M out',
-            runEst:true },
-          { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct', priceInline:'$0.351 / $0.555',
-            why:'Partnership proposals with more polish. Worth it when one person senior reads it.' },
-          { name:'FLUX 1 Schnell', id:'@cf/black-forest-labs/flux-1-schnell', priceInline:'$0.0000528 / tile',
-            why:'Instant landing imagery. Cheap enough that iterating stops being a decision.' },
-          { name:'BGE-M3 + Reranker', id:'@cf/baai/bge-m3 + @cf/baai/bge-reranker-base', priceInline:'$0.012 / $0.003',
-            why:'The matching engine behind candidate and customer ranking.' }
-        ] },
-      Network: { spend:'$0.32', mode:'Drafts intros from both sides\u2019 context, flags cold relationships, suggests pairings.',
-        safety:'Intro emails leave your account, so each draft is screened before it reaches a connector.',
-        receipt:'Last run · intro draft · 2,240 in / 410 out · $0.0010',
-        models:[
-          { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct', recommended:true,
-            why:'Warm, context-aware intro drafting. An intro email is read by someone whose time you are spending — it should sound like you.',
-            tags:['Best for: intro drafting','Tone'], price:'$0.351 / M in · $0.555 / M out',
-            runEst:true },
-          { name:'Gemma 4 26B', id:'@cf/google/gemma-4-26b-a4b-it', priceInline:'$0.100 / $0.300',
-            why:'Cheap relationship summaries when you just need the gist of a long thread.' },
-          { name:'BGE-M3', id:'@cf/baai/bge-m3', priceInline:'$0.012 in',
-            why:'Connection matching — who should meet whom, scored on real context.' }
-        ] },
-      Research: { spend:'$4.08', mode:'Turns a question into a sourced brief; makes any document you drop in queryable.',
-        safety:'Research stays private. Screening applies only when you export a brief into the data room.',
-        receipt:'Last run · EU market brief · 62,400 in / 1,240 out · $0.0290',
-        models:[
-          { name:'DeepSeek V4 Flash', id:'@cf/deepseek-ai/deepseek-v4-flash-0731', recommended:true,
-            why:'Built for interrogating long documents cheaply. The first question pays to read the file; every one after hits cached input.',
-            tags:['Best for: long documents','Cached input'], price:'$0.440 / M in · $1.320 / M out',
-            cached:'Cached input $0.014 / M — 31× cheaper on follow-ups',
-            runEst:true },
-          { name:'GPT-OSS 120B', id:'@cf/openai/gpt-oss-120b', priceInline:'$0.350 / $0.750',
-            why:'Broad market deep-dives where breadth matters more than document recall.' },
-          { name:'Moondream 3.1 9B', id:'@cf/moondream/moondream3.1-9B-A2B', priceInline:'$0.300 / $1.000',
-            why:'Reads the charts and figures inside your PDFs, not just the text.' },
-          { name:'Qwen3 Embedding 0.6B', id:'@cf/qwen/qwen3-embedding-0.6b', priceInline:'$0.012 in',
-            why:'Semantic search across your whole library.' }
-        ] }
+    const TASK = { Studio: 'chat', Home: 'chat', 'Axal VC Fund': 'research', Validate: 'synth', 'Problem discovery': 'synth', 'Customer research': 'speech', 'Ideal customer profile': 'synth', 'Market intelligence': 'research', 'Demand and urgency signals': 'numbers', 'Experiments and evidence': 'reason', Verdict: 'reason',
+      Build: 'plan', 'Solution design': 'plan', 'Prototype / MVP': 'code', 'Product roadmap': 'plan', 'Founding team': 'plan', 'Company creation': 'legal', 'Operating systems': 'plan',
+      Raise: 'reason', 'Fundraising readiness': 'reason', 'Investor narrative': 'write', 'Pitch deck': 'vision', 'Data room': 'vision', 'Cap table': 'numbers', 'Use of funds': 'numbers', 'Capital relationships': 'match',
+      Grow: 'plan', 'Product improvement': 'synth', Distribution: 'write', 'Revenue and traction': 'numbers', 'Team expansion': 'plan', 'Partner network': 'match', 'Market expansion': 'multi', 'Durable company-building': 'legal',
+      Network: 'match', Relationships: 'match', Introductions: 'match', Organizations: 'match', Research: 'research', Ask: 'research', Markets: 'research', Market: 'research', Geographies: 'multi', Companies: 'research', Funds: 'research', Library: 'search', 'Client prep': 'research', Diligence: 'vision', Benchmarking: 'numbers',
+      Deals: 'reason', Pipeline: 'match', Screening: 'reason', Commit: 'reason', Closing: 'legal', Portfolio: 'numbers', Positions: 'numbers', Performance: 'numbers', Updates: 'synth', 'Value-add': 'match',
+      Fund: 'numbers', Overview: 'numbers', LPs: 'match', 'Capital calls': 'numbers', Distributions: 'numbers', Reporting: 'write',
+      Practice: 'plan', Opportunities: 'match', Engagements: 'plan', Delivery: 'plan', Sessions: 'speech', Earnings: 'numbers', Cohorts: 'synth', Founders: 'match', Guidance: 'write', 'This week': 'plan', Calendar: 'plan', Outcomes: 'synth',
+      Expertise: 'write', Profile: 'write', Services: 'write', Proof: 'synth', Thinking: 'write', Visibility: 'match',
+      Leads: 'match', Proposals: 'write', Negotiations: 'legal', Retainers: 'numbers', Analytics: 'numbers', Deliverables: 'write', Capacity: 'plan', Health: 'synth', Offers: 'write', Catalog: 'write', 'Perk deals': 'write', 'Audience fit': 'match' };
+    const M = (t, role, line) => ({ t, role, line });
+    const SUG = {
+      chat: [M('GLM-4.7 Flash', 'Default', 'Fast replies that can use your workspace'), M('Llama 3.3 70B Fast', 'Longer', 'Fuller answers and drafts'), M('GPT-OSS 120B', 'Deeper', 'Hard questions that need reasoning')],
+      synth: [M('Llama 3.3 70B Fast', 'Default', 'Groups notes and quotes into themes'), M('GLM-4.7 Flash', 'Faster', 'Quick tagging at a lower cost'), M('GPT-OSS 120B', 'Deeper', 'Checks a theme against all the evidence')],
+      speech: [M('Whisper Large v3 Turbo', 'Transcribe', 'Turns each recording into a transcript'), M('Deepgram Nova-3', 'Speakers', 'Labels who said what'), M('Deepgram Flux', 'Live', 'Captions while you talk'), M('Llama 3.3 70B Fast', 'Structure', 'Places quotes on themes and hypotheses')],
+      research: [M('Kimi K2.6', 'Default', 'Long sources, cited answers'), M('GPT-OSS 120B', 'Deeper', 'Weighs conflicting sources'), M('BGE-M3', 'Search', 'Finds the right records first'), M('BGE Reranker Base', 'Rank', 'Puts the most relevant on top')],
+      reason: [M('GPT-OSS 120B', 'Default', 'Tests a claim against its evidence'), M('DeepSeek V4 Pro', 'Second view', 'Reviews the first answer'), M('QwQ 32B', 'Challenge', 'Argues the other side')],
+      vision: [M('Gemma 4 26B', 'Default', 'Reads slides, charts and scans'), M('Llama 4 Scout', 'Alternative', 'Mixed text and images'), M('Moondream 3.1', 'Extract', 'Pulls figures out of images')],
+      code: [M('Kimi K2.7 Code', 'Default', 'Reads your repository and its changes'), M('Qwen2.5 Coder 32B', 'Alternative', 'Reviews and writes code')],
+      numbers: [M('DeepSeek V4 Pro', 'Default', 'Shows its working on every figure'), M('GPT-OSS 120B', 'Alternative', 'Explains what moved and why'), M('Granite 4.0 Micro', 'Faster', 'Reads figures out of documents')],
+      write: [M('Llama 3.3 70B Fast', 'Default', 'Drafts in your voice, cited'), M('Mistral Small 3.1 24B', 'Polished', 'Tighter, more formal drafts'), M('GLM-4.7 Flash', 'Faster', 'Short drafts and replies')],
+      match: [M('BGE-M3', 'Match', 'Finds people and firms that fit'), M('BGE Reranker Base', 'Rank', 'Orders them by fit'), M('Llama 3.3 70B Fast', 'Draft', 'Writes the introduction, for you to send')],
+      plan: [M('GLM-4.7 Flash', 'Default', 'Plans, lists and next steps'), M('GPT-OSS 20B', 'Alternative', 'Steady structured output'), M('GPT-OSS 120B', 'Deeper', 'Trade-offs and dependencies')],
+      legal: [M('DeepSeek V4 Pro', 'Default', 'Reads terms and filings closely'), M('GPT-OSS 120B', 'Second view', 'Checks the first reading')],
+      multi: [M('BGE-M3', 'Search', 'Finds sources in any language'), M('M2M100', 'Translate', 'Translates, keeping the original'), M('EuroLLM 9B', 'European', 'Reads European-language sources')],
+      search: [M('BGE-M3', 'Index', 'Makes every document searchable'), M('Qwen3 Embedding 0.6B', 'Alternative', 'A second index to compare'), M('Kimi K2.6', 'Answer', 'Answers from the documents, cited')],
     };
-
-    const M = MENUS[page] || MENUS.Validate;
-    const TOTAL = 14.20;
-
-    return {
-      page,
-      modeNote: M.mode,
-      safetyNote: M.safety,
-      receipt: runReceipt,
-      spend: '$' + TOTAL.toFixed(2),
-      spendPct: String(Math.round(TOTAL / 40 * 100)),
-      pageSpend: M.spend,
-      models: M.models.map(m => ({
-        name:m.name, id:m.id, why:m.why, price:m.price, cached:m.cached || null,
-        est: m.runEst ? runEstText : m.est, tags:m.tags || [], recommended:!!m.recommended,
-        priceInline:m.priceInline || null,
-        nameStyle:'font-size:' + (m.recommended ? '12px;font-weight:800' : '11.5px;font-weight:700') + ';letter-spacing:-.01em;min-width:0',
-        whyInk: m.recommended ? '#4a4553' : '#615c6e',
-        rowStyle:'border-radius:9px;padding:10px 11px;margin-bottom:7px;'
-          + (m.recommended ? 'border:1px solid #7c3aed;background:#faf7ff;box-shadow:0 0 0 2px rgba(124,58,237,.08)'
-                           : 'border:1px solid #ececf1;background:#fff')
-      }))
-    };
+    const ALL = [['Conversation and writing', ['GLM-4.7 Flash', 'Llama 3.3 70B Fast', 'Mistral Small 3.1 24B', 'GPT-OSS 20B', 'Llama 3.1 8B', 'Granite 4.0 Micro']], ['Reasoning', ['GPT-OSS 120B', 'DeepSeek V4 Pro', 'DeepSeek V4 Flash', 'Kimi K2.6', 'QwQ 32B']], ['Documents and images', ['Gemma 4 26B', 'Llama 4 Scout', 'Moondream 3.1', 'Llama 3.2 11B Vision']], ['Code', ['Kimi K2.7 Code', 'Qwen2.5 Coder 32B']], ['Search', ['BGE-M3', 'Qwen3 Embedding 0.6B', 'BGE Reranker Base']], ['Speech and voice', ['Whisper Large v3 Turbo', 'Deepgram Nova-3', 'Deepgram Flux', 'Aura-2 EN', 'MeloTTS']], ['Languages', ['M2M100', 'EuroLLM 9B']], ['Images', ['FLUX.2 Klein 4B', 'FLUX.2 Dev']]];
+    const ACC = { Founder: ['#6d28d9', '#f6f2ff', '#e6dcff'], Investor: ['#4338ca', '#eef2ff', '#c7d2fe'], Advisor: ['#b45309', '#fffbeb', '#fcd34d'], 'Operating Partner': ['#047857', '#ecfdf5', '#a7f3d0'] };
+    const parts = String(this.props.page ?? 'Founder · Studio').split(/[·›]/).map(s => s.trim()).filter(Boolean);
+    let profile = PROF[this.props.profile] ? this.props.profile : '';
+    const rest = parts.filter(p => { if (PROF[p]) { profile = profile || p; return false; } return true; });
+    const order = [profile, 'Founder', 'Investor', 'Advisor', 'Operating Partner'].filter((p, i, a) => p && a.indexOf(p) === i);
+    const find = (n) => { for (const p of order) { const S = PROF[p]; if (S[n]) return { p, section: n }; for (const k in S) if (S[k].includes(n)) return { p, section: k, module: n }; } return null; };
+    let section = '', module = '';
+    rest.forEach(part => { const f = find(part); if (!f) return; profile = profile || f.p; if (!section) section = f.section; if (f.module) module = f.module; });
+    profile = profile || 'Founder';
+    if (!section) section = profile === 'Founder' ? 'Studio' : 'Home';
+    const record = this.props.record || '';
+    const crumbs = [section, module, record].filter(Boolean).map((t, i, a) => ({ t, sep: i < a.length - 1, s: 'font-weight:' + (i === a.length - 1 ? 700 : 500) + ';color:' + (i === a.length - 1 ? '#18181b' : '#615c6e') }));
+    const list = SUG[TASK[module] || TASK[section] || 'chat'];
+    const st = this.state || {};
+    const sel = st.sel || list[0].t, mode = st.mode || 'eadwyn';
+    const inSug = list.some(m => m.t === sel), showAll = !!st.all || !inSug;
+    const sug = list.map(m => { const on = m.t === sel; return Object.assign({}, m, { go: () => this.setState({ sel: m.t }),
+      box: 'display:flex;align-items:flex-start;gap:10px;padding:10px 11px;border-radius:10px;cursor:pointer;border:1px solid ' + (on ? '#c4b5fd' : '#ececf1') + ';background:' + (on ? '#f6f2ff' : '#fff'),
+      dot: 'width:16px;height:16px;border-radius:50%;flex:none;margin-top:1px;box-sizing:border-box;border:2px solid ' + (on ? '#7c3aed' : '#d4d1dc') + ';display:grid;place-items:center',
+      fill: 'width:7px;height:7px;border-radius:50%;background:' + (on ? '#7c3aed' : 'transparent'),
+      rs: 'font-size:10px;font-weight:700;border-radius:99px;padding:1px 7px;white-space:nowrap;' + (m.role === 'Default' ? 'color:#6d28d9;background:#f6f2ff;border:1px solid #e6dcff' : 'color:#6b6577;background:#f4f3f7;border:1px solid #ececf1') }); });
+    const all = ALL.map(([t, ms]) => ({ t, ms: ms.map(x => ({ t: x, go: () => this.setState({ sel: x }), s: 'font-size:11.5px;font-weight:600;border-radius:99px;padding:4px 9px;cursor:pointer;border:1px solid ' + (x === sel ? '#7c3aed' : '#ececf1') + ';background:' + (x === sel ? '#f4f0fe' : '#fff') + ';color:' + (x === sel ? '#6d28d9' : '#4a4553') })) }));
+    const modes = [['eadwyn', 'Eadwyn'], ['manual', 'Manual']].map(([k, t]) => ({ t, go: () => this.setState({ mode: k }), s: 'text-align:center;font-size:12px;font-weight:700;min-height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;' + (mode === k ? 'background:#fff;color:#6d28d9;box-shadow:0 1px 2px rgba(24,24,27,.08)' : 'color:#615c6e') }));
+    const a = ACC[profile];
+    return { profile, profPill: 'font-size:10.5px;font-weight:700;border-radius:99px;padding:2px 8px;color:' + a[0] + ';background:' + a[1] + ';border:1px solid ' + a[2], crumbs, modes,
+      manual: mode === 'manual', listDim: mode === 'manual' ? 'opacity:.5;pointer-events:none' : '', sug, picked: inSug ? '' : sel,
+      toggleAll: () => this.setState({ all: !st.all }), allLabel: showAll ? 'Hide all models' : 'All models ›', showAll, all,
+      usage: [{ t: 'Today', v: '[$0.42] of [$1.00]', pct: '42%', reset: 'Resets at 00:00 UTC' }, { t: 'This month', v: '[$3.10] of [$5.00]', pct: '62%', reset: 'Resets on the 1st' }] };
   }
 }
 </script>
