@@ -101,8 +101,8 @@ export async function claimDetails(env: Env, claim: LinkClaim): Promise<ClaimDet
   try { return JSON.parse(plain) as ClaimDetails; } catch { return null; }
 }
 
-export async function pendingLinkView(env: Env, userId: number) {
-  const row = await env.DB.prepare("SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = 'telegram' ORDER BY id DESC LIMIT 1")
+export async function pendingLinkView(env: Env, userId: number, uid?: string) {
+  const row = uid ? await memberLinkClaim(env, userId, uid) : await env.DB.prepare("SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = 'telegram' ORDER BY id DESC LIMIT 1")
     .bind(userId).first<LinkClaim>();
   if (!row) return null;
   const details = await claimDetails(env, row);

@@ -1732,8 +1732,12 @@ test('#1602 Telegram consent: Telegram alone preserves the old connection and en
       db.prepare("SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-ME'").get().user_id], [TG_NEW, 0, null]);
     await tgHook(env, connectionUpdate('BC-NEW', TG_NEW));
     await tgHook(env, businessMessage('BC-NEW'));
-    const again = await axalConfirm(env);
-    assert.deepEqual([again.body.linked, count(db, 'SELECT COUNT(*) n FROM channel_thread_messages')], [true, 1], 'a repeated confirm cannot purge the new conversations');
+    db.prepare("UPDATE channel_link_codes SET expires_at = '2000-01-01T00:00:00.000Z' WHERE uid = ?").run(claim.uid);
+    const again = await call(env, ME, 'POST', `/telegram/link/${claim.uid}/confirm`);
+    assert.deepEqual([again.status, again.body.linked, again.body.claim.uid, count(db, 'SELECT COUNT(*) n FROM channel_thread_messages')], [200, true, claim.uid, 1], 'a completed confirm remains idempotent past expiry and cannot purge new conversations');
+    await createLinkCode(env, ME, 'telegram');
+    const oldAgain = await call(env, ME, 'POST', `/telegram/link/${claim.uid}/confirm`);
+    assert.deepEqual([oldAgain.body.linked, oldAgain.body.claim.uid], [true, claim.uid], 'the response belongs to the exact claim, not a newer one');
   } finally { f.restore(); }
 });
 

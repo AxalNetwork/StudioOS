@@ -393,17 +393,17 @@ export async function confirmAxalTelegramLink(env: Env, userId: number, uid: str
   if (!claim.telegram_user_id || !(await claimDetails(env, claim))) {
     throw new IntakeError(409, 'link_not_claimed', 'Open the link in your Telegram account and check its name in Axal before confirming.');
   }
+  // Idempotent even after the deadline: both owners already confirmed in time.
+  if (claim.activated_at) {
+    const row = await env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'telegram' AND status = 'active' AND external_account_id = ?")
+      .bind(userId, claim.telegram_user_id).first<{ id: number }>();
+    if (!row) return { linked: false, reason: 'nothing_to_confirm' };
+    return { linked: true, userId, integrationId: Number(row.id), businessConnected: !!(await activeBusinessConnection(env, userId)) };
+  }
   const updated = await env.DB.prepare(`UPDATE channel_link_codes SET axal_confirmed_at = COALESCE(axal_confirmed_at, datetime('now')), updated_at = datetime('now')
     WHERE uid = ? AND user_id = ? AND cancelled_at IS NULL AND expires_at > ? RETURNING *`)
     .bind(uid, userId, new Date().toISOString()).first<LinkClaim>();
   if (!updated) throw new IntakeError(410, 'link_expired', 'Both confirmations must arrive within ten minutes. Request a new Telegram link.');
-  // A repeated POST after activation must not run the destructive batch again.
-  if (updated.activated_at) {
-    const row = await env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'telegram' AND status = 'active' AND external_account_id = ?")
-      .bind(userId, updated.telegram_user_id).first<{ id: number }>();
-    if (!row) return { linked: false, reason: 'nothing_to_confirm' };
-    return { linked: true, userId, integrationId: Number(row.id), businessConnected: !!(await activeBusinessConnection(env, userId)) };
-  }
   return activateTelegramClaim(env, updated);
 }
 

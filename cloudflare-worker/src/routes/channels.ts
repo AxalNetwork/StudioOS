@@ -254,7 +254,7 @@ channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
   if (!out.linked && out.reason === 'member_inactive') return no(c, 403, 'member_inactive');
   if (!out.linked && out.reason === 'identity_taken') return no(c, 409, 'identity_taken');
   if (!out.linked && out.reason === 'nothing_to_confirm') return no(c, 409, 'link_cancelled');
-  return c.json({ ok: true, linked: out.linked, claim: await pendingLinkView(c.env, user.id) });
+  return c.json({ ok: true, linked: out.linked, claim: await pendingLinkView(c.env, user.id, c.req.param('uid') ?? '') });
 }));
 
 channels.post('/whatsapp/connect', member(async (c, user) => {
