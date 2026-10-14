@@ -190,15 +190,19 @@ async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|nul
       ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100`).bind(projectId).all<any>();
     const updates = q.results || [];
     if (!updates.length) return { updates: [], updates_reason: null };
-    const ids = updates.map((u) => u.id);
-    const marks = ids.map(() => '?').join(',');
     const recipients = await env.DB.prepare(`SELECT update_id, audience, COUNT(*) AS sent,
       SUM(CASE WHEN delivered_via IS NOT NULL THEN 1 ELSE 0 END) AS delivered,
       SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) AS opened
-      FROM update_recipients WHERE update_id IN (${marks}) GROUP BY update_id, audience`).bind(...ids).all<any>();
+      FROM update_recipients WHERE update_id IN (SELECT id FROM portfolio_updates WHERE project_id = ?
+        AND (sent_at IS NOT NULL OR status = 'submitted')
+        ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100)
+      GROUP BY update_id, audience`).bind(projectId).all<any>();
     const asks = await env.DB.prepare(`SELECT a.id, a.update_id, a.asked_again_at, COUNT(r.id) AS replies
       FROM update_asks a LEFT JOIN update_ask_replies r ON r.ask_id = a.id
-      WHERE a.update_id IN (${marks}) GROUP BY a.id`).bind(...ids).all<any>();
+      WHERE a.update_id IN (SELECT id FROM portfolio_updates WHERE project_id = ?
+        AND (sent_at IS NOT NULL OR status = 'submitted')
+        ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100)
+      GROUP BY a.id`).bind(projectId).all<any>();
     const byRecipients = new Map<number, any[]>();
     for (const row of recipients.results || []) byRecipients.set(row.update_id, [...(byRecipients.get(row.update_id) || []), row]);
     const byAsks = new Map<number, any[]>();
