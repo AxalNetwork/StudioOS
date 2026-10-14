@@ -312,6 +312,11 @@ test('companies are ticked from the sheet and the Worker’s answer is what the 
 });
 
 test('Escape closes the dialog inside the sheet, not the sheet with it', async () => {
+  // D686 §5.4 (#1597): a tool's settings dialog is a nested Lightbox, which
+  // joins the one Escape stack. This stub DOM has no layout, so the Lightbox's
+  // own listener is not mounted here; the stack entry it pushes is simulated
+  // with `pushDialog`, and the sheet must yield to it.
+  const { pushDialog } = await import('../src/ui/lightboxFocus.js');
   let closed = 0;
   const f = mockFetch({});
   const hub = { ...P('hubspot', 'HubSpot', 'crm', 'live', 'growth', 'oauth2', { supports_pat: true }), by: 'HubSpot', category: 'CRM', connection: { uid: 'u-hub', provider_key: 'hubspot', status: 'active', config: {} } };
@@ -320,12 +325,18 @@ test('Escape closes the dialog inside the sheet, not the sheet with it', async (
     await m.flush();
     await m.click('Change');
     await m.flush();
-    assert.equal(m.listeners(), 1, 'only the top dialog acts on Escape (D686: one stack)');
+    const modal = m.byTestId('hubspot-config-modal');
+    assert.ok(modal, 'the HubSpot dialog is open');
+    assert.equal(m.props(modal).role, 'dialog');
+    assert.equal(m.props(modal)['aria-modal'], 'true');
+    assert.equal(m.props(modal)['aria-label'], 'HubSpot pipeline');
+    assert.equal(m.listeners(), 1, 'the sheet keeps one listener; the dialog has its own place on the stack');
+    const pop = pushDialog('nested-hubspot');
     await m.escape();
-    assert.equal(closed, 0, 'the sheet stays open');
-    assert.equal(m.listeners(), 1, 'the sheet is the top dialog again once the dialog is gone');
+    assert.equal(closed, 0, 'the sheet stays open while a dialog is above it');
+    pop();
     await m.escape();
-    assert.equal(closed, 1);
+    assert.equal(closed, 1, 'and closes on Escape once the dialog is gone');
   } finally { await m.unmount(); f.restore(); }
 });
 

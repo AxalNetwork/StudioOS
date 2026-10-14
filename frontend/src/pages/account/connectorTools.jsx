@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, X } from 'lucide-react';
 import { connectorsApi } from '../../lib/api/connectors';
-import { useEscapeClose } from '../../components/useEscapeClose';
+import Lightbox from '../../ui/Lightbox.jsx';
 import { parseLinkedInCsv } from '../../lib/linkedinCsv';
 
 /**
@@ -31,7 +31,6 @@ export const Linkedin = ({ size = 18 }) => (
 // pipeline. Keeps responsibilities clean: Integrations imports, Refer
 // sends. Max 2 MB file size mirrors the ReferEarnPage check.
 export function LinkedInCsvImportModal({ onClose, onImported }) {
-  useEscapeClose(onClose);
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,8 +64,8 @@ export function LinkedInCsvImportModal({ onClose, onImported }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" data-testid="linkedin-csv-modal" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-lg border border-gray-200 dark:border-gray-800">
+    <Lightbox label="Import LinkedIn contacts" onClose={onClose} width={512} testId="linkedin-csv-modal">
+      <div className="min-h-0 overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <Linkedin size={16} className="text-[#0a66c2]" />
@@ -131,7 +130,7 @@ export function LinkedInCsvImportModal({ onClose, onImported }) {
           </button>
         </div>
       </div>
-    </div>
+    </Lightbox>
   );
 }
 
@@ -149,7 +148,6 @@ function Field({ label, children }) {
 const STUDIO_STAGES = ['applied', 'scored', 'active', 'funded', 'rejected'];
 
 export function HubspotConfigModal({ integration, onClose, onSaved }) {
-  useEscapeClose(onClose);
   const [loading, setLoading] = useState(true);
   const [pipelines, setPipelines] = useState([]);
   const [pipelineId, setPipelineId] = useState(integration?.config?.pipeline_id || 'default');
@@ -202,8 +200,8 @@ export function HubspotConfigModal({ integration, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-lg w-full p-5" onClick={e => e.stopPropagation()}>
+    <Lightbox label="HubSpot pipeline" onClose={onClose} width={512} testId="hubspot-config-modal">
+      <div className="min-h-0 overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">HubSpot pipeline</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
@@ -264,7 +262,7 @@ export function HubspotConfigModal({ integration, onClose, onSaved }) {
           </div>
         )}
       </div>
-    </div>
+    </Lightbox>
   );
 }
 
@@ -277,7 +275,6 @@ const SF_OBJECTS = [
 ];
 
 export function SalesforceConfigModal({ integration, onClose, onSaved }) {
-  useEscapeClose(onClose);
   const [loading, setLoading] = useState(true);
   const [stages, setStages] = useState([]);
   const [stageMap, setStageMap] = useState(integration?.config?.stage_map || {});
@@ -335,8 +332,8 @@ export function SalesforceConfigModal({ integration, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5" onClick={e => e.stopPropagation()}>
+    <Lightbox label="Salesforce field mapping" onClose={onClose} width={672} testId="salesforce-config-modal">
+      <div className="min-h-0 overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">Salesforce field mapping</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
@@ -411,6 +408,6 @@ export function SalesforceConfigModal({ integration, onClose, onSaved }) {
           </div>
         )}
       </div>
-    </div>
+    </Lightbox>
   );
 }

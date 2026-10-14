@@ -377,9 +377,16 @@ const editFeature = {
 export const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'];
 const SYSTEM_LABEL = { bank: 'Bank', accounting: 'Accounting', payroll: 'Payroll', crm: 'CRM', workspace: 'Workspace' };
 export const UNMAP = 'none';
+const connectHref = (projectId) => {
+  const id = Number(projectId);
+  return Number.isSafeInteger(id) && id > 0 ? `/build/connect?project_id=${id}` : '/build/connect';
+};
 
-/** The select's options for one kind, from `GET /systems/choices`, plus unmapping. */
-export function systemOptions(read, kind) {
+/**
+ * The select's options for one kind, from `GET /systems/choices`, plus
+ * unmapping. The no-choice note's link keeps the venture (`project_id`).
+ */
+export function systemOptions(read, kind, projectId = null) {
   const entry = (Array.isArray(read?.kinds) ? read.kinds : []).find((k) => k?.kind === kind);
   const choices = (Array.isArray(entry?.choices) ? entry.choices : []).map((c) => (c?.uid
     ? { value: `uid:${c.uid}`, label: c.display_name || c.provider_key || 'Connector' }
@@ -387,7 +394,7 @@ export function systemOptions(read, kind) {
   const label = entry?.label || SYSTEM_LABEL[kind] || kind;
   return {
     options: [...choices, { value: UNMAP, label: '— None (unmap) —' }],
-    note: choices.length ? null : { text: `No connected ${label} tool is enabled for this company.`, href: '/build/connect' },
+    note: choices.length ? null : { text: `No connected ${label} tool is enabled for this company.`, href: connectHref(projectId) },
   };
 }
 
@@ -402,7 +409,7 @@ const editSystem = {
   idOf: (row) => (SYSTEM_KINDS.includes(String(row?.id)) ? String(row.id) : null),
   valuesOf: (row) => { const u = row?.cells?.used_by; return { choice: '', used_by: typeof u === 'string' ? u : asText(u?.text) }; },
   // Loaded before the form draws: the choices for this row's kind.
-  loadOptions: async (w, projectId, kind) => ({ choice: systemOptions(await w.build.systemChoices(projectId), kind) }),
+  loadOptions: async (w, projectId, kind) => ({ choice: systemOptions(await w.build.systemChoices(projectId), kind, projectId) }),
   toBody: (v, kind) => {
     const usedBy = str(v.used_by);
     const choice = String(v.choice || '');

@@ -26,7 +26,7 @@ export const CYCLES = {
   validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session',
     history: { key: 'interviews', name: 'Interviews', path: '/validate/interviews', hash: '', live: true } },
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
-    history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: false } },
+    history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: true } },
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Call for Capital',
     history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships', hash: '#calls', live: true } },
   grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update',

@@ -275,7 +275,7 @@ const cards = (cycle) => MODULES[cycle].map((m) => ({ slug: m.slug, name: m.name
 test('history: Interviews second in Validate; a history that is not live is not drawn; none without module tabs', () => {
   assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Interviews', '/validate/interviews?project_id=7']]);
   assert.equal(cycleTabs('validate', cards('validate'), 'interviews').find((t) => t.key === 'interviews').active, true);
-  for (const c of ['build', 'grow']) {
+  for (const c of ['grow']) {
     assert.equal(CYCLES[c].history.live, false, `${c} goes live when its section ships`);
     assert.equal(cycleTabs(c, cards(c)).some((t) => t.key === CYCLES[c].history.key), false, `${c} draws no history yet`);
   }
@@ -284,6 +284,15 @@ test('history: Interviews second in Validate; a history that is not live is not 
   assert.equal(cycleTabs('raise', cards('raise')).some((t) => t.key === 'calls'), true);
   assert.deepEqual(cycleTabs('validate', []).map((t) => t.name), ['Overview'], 'no history tab without module tabs');
   assert.deepEqual(cycleTabs('validate', [{ slug: 'x', name: 'Interviews' }]).filter((t) => t.name === 'Interviews').length, 1, 'never twice');
+});
+
+test('Build\'s Tools is live now its section ships (#1597): second, on Operating systems\' #tools, keeping the venture', () => {
+  assert.equal(CYCLES.build.history.live, true);
+  const tabs = cycleTabs('build', cards('build'), 'operating-systems', '?project_id=7');
+  assert.deepEqual([tabs[1].key, tabs[1].name, tabs[1].href, tabs[1].active], ['tools', 'Tools', '/build/operating-systems?project_id=7#tools', false]);
+  assert.equal(tabs.filter((t) => t.name === 'Tools').length, 1);
+  assert.equal(tabs.find((t) => t.key === 'operating-systems').active, true, 'the module tab keeps aria-current');
+  assert.match(read('frontend/src/pages/cycles/ToolsHistory.jsx'), /<section id="tools"/, 'the hash lands on the section');
 });
 
 test('a live history keeps ?project_id= and its hash, and is never current outside Validate', () => {

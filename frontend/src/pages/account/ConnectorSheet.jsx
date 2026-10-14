@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ExternalLink, X } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -13,7 +13,10 @@ import GithubSyncSheet from './GithubSyncSheet';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
+  keepBuildProject, coreSystemOffer,
+  FREE_KEEPS_CONNECTORS,
 } from './connectorsModel';
+import { cyclesWrite } from '../../lib/api/cycles';
 
 /**
  * D651 (#1463) — the connector sheet and the connect flow, drawn to the
@@ -85,25 +88,50 @@ export function useConnectors({ companyId = null } = {}) {
   return { ...state, catalogue, reload };
 }
 
-/** A side sheet, 480px from the right and the full width on a phone. */
-export function Sheet({ eyebrow, title, sub, onClose, children, footer, escapeCloses = true, 'data-testid': testId }) {
-  // A dialog opened inside the sheet takes Escape for itself: one key press
-  // closes one layer, not the dialog and the sheet together.
-  useEscapeClose(escapeCloses ? onClose : null);
+/**
+ * Where a panel is drawn (D686 §5.4). Build's "Connect a tool" draws every
+ * view inside ONE `<Lightbox size="tall">` (`ConnectToolSheet.jsx`), so a view
+ * swap never remounts the frame or pulls focus back to the CTA. Inside it a
+ * `Sheet` is only its header, body and footer: no overlay, no dialog role, no
+ * Escape of its own (the lightbox's), and its × is `onDismiss`, which closes
+ * the whole lightbox, while the panel's own `onClose` steps back to the list.
+ * With no frame, a `Sheet` is the Connectors page's side sheet, as before.
+ */
+export const SheetFrame = createContext(null);
+
+/** A side sheet, 480px from the right and the full width on a phone; inside a `SheetFrame`, the frame's content. */
+export function Sheet({ eyebrow, title, sub, onClose, children, footer, 'data-testid': testId }) {
+  const frame = useContext(SheetFrame);
+  // A dialog opened inside the sheet (a tool's settings) is a nested Lightbox
+  // on the same Escape stack: one key press closes one layer.
+  useEscapeClose(frame ? null : onClose);
+  const head = (
+    <div className="flex items-start justify-between gap-3 border-b border-axal-hairline px-5 py-4 dark:border-gray-800">
+      <div className="min-w-0">
+        {eyebrow && <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-violet-deep dark:text-violet-300">{eyebrow}</div>}
+        <h2 className="text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{title}</h2>
+        {sub && <p className="mt-0.5 text-[12.5px] leading-snug text-axal-muted dark:text-gray-400">{sub}</p>}
+      </div>
+      <button type="button" onClick={frame ? frame.onDismiss : onClose} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>
+    </div>
+  );
+  const foot = footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline px-5 py-3 dark:border-gray-800">{footer}</div>;
+  if (frame) {
+    return (
+      <div className="flex h-full min-h-0 flex-col" data-testid={testId} data-layout="lightbox">
+        {head}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">{children}</div>
+        {foot}
+      </div>
+    );
+  }
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title} data-testid={testId}>
       <button type="button" aria-label="Close" className="absolute inset-0 h-full w-full cursor-default bg-black/30" onClick={onClose} />
       <div className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-axal-hairline bg-white shadow-2xl sm:w-[480px] dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-start justify-between gap-3 border-b border-axal-hairline px-5 py-4 dark:border-gray-800">
-          <div className="min-w-0">
-            {eyebrow && <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-violet-deep dark:text-violet-300">{eyebrow}</div>}
-            <h2 className="text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{title}</h2>
-            {sub && <p className="mt-0.5 text-[12.5px] leading-snug text-axal-muted dark:text-gray-400">{sub}</p>}
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>
-        </div>
+        {head}
         <div className="min-h-0 flex-1 overflow-y-auto pb-4">{children}</div>
-        {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline px-5 py-3 dark:border-gray-800">{footer}</div>}
+        {foot}
       </div>
     </div>
   );
@@ -329,16 +357,18 @@ function whenLabel(iso) {
   return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-async function startFirstParty(key) {
+/** Google, Microsoft or LinkedIn's own sign-in; it returns to `returnTo` (Build's lightbox, or the Connectors page). */
+export async function startFirstParty(key, returnTo = 'integrations', client = api) {
+  const return_to = returnTo === 'build' ? 'build' : 'integrations';
   if (key === 'google') {
-    const r = await api.googleCalConnect({ return_to: 'integrations' });
+    const r = await client.googleCalConnect({ return_to });
     return r?.redirect_url || r?.auth_url;
   }
   if (key === 'microsoft') {
-    const r = await api.microsoftCalConnect({ return_to: 'integrations' });
+    const r = await client.microsoftCalConnect({ return_to });
     return r?.redirect_url || r?.auth_url || r?.authorize_url;
   }
-  const r = await api.linkedinOAuthStart({ return_to: 'integrations' });
+  const r = await client.linkedinOAuthStart({ return_to });
   return r?.authorize_url;
 }
 
@@ -367,7 +397,10 @@ function keyLabel(p, updating) {
  * owns `view` so a return from a provider's sign-in can open the panel on
  * `connected` or `refused` directly.
  */
-export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back, projectId = null, companyId = null, companyName = null }) {
+export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back, projectId = null, companyId = null, companyName = null, returnTo = null }) {
+  // In Build's lightbox, finishing (Done, an Open link, See plans, Report)
+  // closes the whole lightbox; `onClose` steps back to the list (D686 §5.4).
+  const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
   // Build acts for its project's company (D686 §5.4); elsewhere, the active one.
   const opts = companyId ? { companyId } : undefined;
   const navigate = useNavigate();
@@ -399,6 +432,31 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     // `opts` is derived from companyId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [askTeammate, p.key, companyId]);
+  // From Build, the success view offers "Use as your <kind>" when the Worker
+  // says exactly one unmapped core system fits this connection (D686 §5.4).
+  const [useAs, setUseAs] = useState(null); // { offer, state: 'idle'|'saving'|'done'|'error', text }
+  const askUseAs = view === 'connected' && returnTo === 'build' && !!projectId && !!conn;
+  useEffect(() => {
+    if (!askUseAs) return undefined;
+    let live = true;
+    cyclesWrite.build.systemChoices(projectId).then(
+      (r) => { const offer = coreSystemOffer(r, p, conn); if (live) setUseAs(offer ? { offer, state: 'idle', text: '' } : null); },
+      () => { if (live) setUseAs(null); },
+    );
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askUseAs, projectId, p.key, conn?.uid]);
+  const applyUseAs = async () => {
+    const { offer } = useAs;
+    setUseAs((u) => ({ ...u, state: 'saving', text: '' }));
+    try {
+      await cyclesWrite.build.system(projectId, offer.kind, offer.body);
+      setUseAs((u) => ({ ...u, state: 'done', text: `${p.display_name} is now your ${offer.label}.` }));
+      onChanged?.();
+    } catch (e) {
+      setUseAs((u) => ({ ...u, state: 'error', text: e?.message || `${p.display_name} could not be set as your ${offer.label}.` }));
+    }
+  };
   const updating = !!conn && view === 'key';
   const name = p.display_name;
   const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' ? 'Key' : 'Sign in', 'Connected'];
@@ -411,10 +469,12 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     setView('signin');
     try {
       let url;
+      // From Build, the sign-in comes back to /build/connect: the venture is kept for it (D686 §5.4).
+      if (returnTo === 'build') keepBuildProject(projectId);
       if (kind === 'first_party') {
-        url = await startFirstParty(p.key);
+        url = await startFirstParty(p.key, returnTo || 'integrations');
       } else {
-        const params = {};
+        const params = returnTo === 'build' ? { return_to: 'build' } : {};
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
         // Always demo=0|1: a missing query makes the Worker default to demo.
         if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
@@ -487,7 +547,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <UsesGroups p={p} />
         <PermissionsGroup p={p} />
         <CompaniesGroup conn={conn} onChanged={onChanged} />
-        <FedGroup conn={conn} name={name} projectId={projectId} onOpen={onClose} />
+        <FedGroup conn={conn} name={name} projectId={projectId} onOpen={dismiss} />
         {p.key === 'github' && conn.uid && (
           <Group label="Repositories">
             <Row a="What StudioOS reads" b="Choose the repositories, and sync them." action={<button type="button" className={BTN.link} onClick={() => go('sync')} data-testid="button-choose-repositories">Choose</button>} />
@@ -528,9 +588,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     );
   } else if (view === 'pro') {
     sub = `by ${p.by || name}${p.status === 'beta' ? ' · Beta' : ''}`;
-    banner = <Banner tone="neutral" data-testid="connector-pro">{name} is part of the {TIER_LABEL[p.tier] || 'paid'} plan.{message ? ` ${message}` : ''}</Banner>;
+    banner = <Banner tone="neutral" data-testid="connector-pro">{`${name} is part of the ${TIER_LABEL[p.tier] || 'paid'} plan. ${FREE_KEEPS_CONNECTORS}${message ? ` ${message}` : ''}`}</Banner>;
     body = <UsesGroups p={p} />;
-    footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={onClose}>See plans</Link></>;
+    footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={dismiss}>See plans</Link></>;
   } else if (view === 'pre' && teammate && !ownChosen) {
     title = `Connect ${name}`;
     banner = <Banner tone="neutral" data-testid="connector-teammate">{`${teammate.name || 'A teammate'} already connected ${name} for ${companyName || 'your active company'}. Use theirs, or connect your own.`}</Banner>;
@@ -640,7 +700,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       <>
         <Steps names={keySteps} at={2} />
         {conn?.uid
-          ? <FedGroup conn={conn} name={name} />
+          ? <FedGroup conn={conn} name={name} projectId={projectId} onOpen={dismiss} />
           : (
             <Group label={`Now fed by ${name}`}>
               {feeds
@@ -648,9 +708,23 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
                 : <Row a={<Unrecorded reason={NR_REGISTRY}>Not recorded</Unrecorded>} b="The first sync runs in the background. Its items appear in the modules it fills." />}
             </Group>
           )}
+        {useAs && (
+          <Group label="Core systems">
+            <Row
+              a={`Your ${useAs.offer.label}`}
+              b={useAs.text || `Operating systems has no ${useAs.offer.label} yet.`}
+              tone={useAs.state === 'error' ? 'danger' : undefined}
+              action={useAs.state === 'done' ? null : (
+                <button type="button" className={BTN.primary} disabled={useAs.state === 'saving'} onClick={applyUseAs} data-testid={`button-use-as-${useAs.offer.kind}`}>
+                  {useAs.state === 'saving' ? 'Saving…' : `Use as your ${useAs.offer.label}`}
+                </button>
+              )}
+            />
+          </Group>
+        )}
       </>
     );
-    footer = <button type="button" className={BTN.primary} onClick={() => { onChanged?.(); onClose?.(); }} data-testid="button-connected-done">Done</button>;
+    footer = <button type="button" className={BTN.primary} onClick={() => { onChanged?.(); dismiss?.(); }} data-testid="button-connected-done">Done</button>;
   } else if (view === 'cancelled' || view === 'refused' || view === 'overreach') {
     title = `Connect ${name}`;
     banner = <Banner tone={view === 'cancelled' ? 'neutral' : 'danger'} data-testid={`connector-${view}`}>{flowBanner(view, name, ret)}{message && view === 'refused' && !ret.reason ? ` ${message}` : ''}</Banner>;
@@ -659,7 +733,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       <>
         {backBtn}
         {view === 'overreach'
-          ? <Link className={BTN.ghost} to="/help" onClick={onClose}>Report</Link>
+          ? <Link className={BTN.ghost} to="/help" onClick={dismiss}>Report</Link>
           : <button type="button" className={BTN.ghost} onClick={onClose}>Close</button>}
         <button type="button" className={BTN.primary} onClick={() => go('pre')}>Try again</button>
       </>
@@ -675,7 +749,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   }
 
   return (
-    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} escapeCloses={!tool} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
+    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
       {banner}
       {body}
       {tool === 'hubspot' && <HubspotConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}

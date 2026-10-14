@@ -233,10 +233,15 @@ export function companiesLabel(conn) {
   return `${on} of ${list.length}`;
 }
 
+/** A Worker time in ms: UTC whether or not it carries its zone (D1 writes `YYYY-MM-DD HH:MM:SS`). */
+function utcTime(iso) {
+  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${String(iso).replace(' ', 'T')}Z`);
+}
+
 /** Relative time, as the canvas writes it: "12 min ago", "3 h ago", "2 days ago". */
 export function agoLabel(iso, now = Date.now()) {
   if (!iso) return null;
-  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${String(iso).replace(' ', 'T')}Z`);
+  const t = utcTime(iso);
   if (!Number.isFinite(t)) return null;
   const s = Math.max(0, Math.round((now - t) / 1000));
   if (s < 60) return 'just now';
@@ -469,6 +474,75 @@ export function oauthReturn(search) {
   return null;
 }
 
+/**
+ * Build's venture across a provider's sign-in (D686 §5.4). Before the
+ * redirect the project id is kept in `sessionStorage`, a per-viewer
+ * convenience read in try/catch; `/build/connect` with no `?project_id=`
+ * takes it back once.
+ */
+export const BUILD_PROJECT_KEY = 'studioos:build-connect-project';
+const sess = () => { try { return globalThis.sessionStorage || null; } catch { return null; } };
+export function keepBuildProject(projectId, store = sess()) {
+  const id = Number(projectId);
+  if (!store || !Number.isSafeInteger(id) || id <= 0) return;
+  try { store.setItem(BUILD_PROJECT_KEY, String(id)); } catch { /* storage off: the first venture is used */ }
+}
+export function takeBuildProject(store = sess()) {
+  if (!store) return null;
+  try {
+    const id = Number(store.getItem(BUILD_PROJECT_KEY));
+    store.removeItem(BUILD_PROJECT_KEY);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  } catch { return null; }
+}
+
+/**
+ * The panel `/build/connect` opens on (D686 §5.4): a sign-in's return
+ * (`oauthReturn`), else `?tool=<key>`, which opens that tool where its list
+ * row would (failing → `pre`, connected → `detail`, else `pre`). Only a key
+ * the catalogue holds opens anything (D651's crafted-link rule). `strip` names
+ * the query keys to remove, so a reload does not replay it.
+ */
+export function toolDeepLink(search, catalogue) {
+  const ret = oauthReturn(search);
+  const list = Array.isArray(catalogue) ? catalogue : [];
+  if (ret) {
+    const known = list.some((p) => p.key === ret.key);
+    return { panel: known ? { key: ret.key, view: ret.view, ret } : null, strip: ret.strip };
+  }
+  const p = new URLSearchParams(search || '');
+  const key = codeWord((p.get('tool') || '').toLowerCase());
+  if (!p.has('tool')) return null;
+  const tool = key ? list.find((x) => x.key === key) : null;
+  if (!tool) return { panel: null, strip: ['tool'] };
+  const view = toolRow(tool).state === 'failing' ? 'pre' : tool.connection ? 'detail' : 'pre';
+  return { panel: { key: tool.key, view, ret: {} }, strip: ['tool'] };
+}
+
+/**
+ * The success view's "Use as your <kind>" (D686 §5.4), from Build's
+ * `GET /cycles/build/systems/choices`: offered only when exactly one core
+ * system's choices hold this connection and the Worker says that kind names
+ * no connector yet (`mapped: false`; a read without it offers nothing). The
+ * body is the PUT's, keeping the row's Used by.
+ */
+const WORKSPACE_OF = Object.fromEntries(Object.entries(REGISTRY_ALIAS).map(([provider, key]) => [key, provider]));
+export function coreSystemOffer(read, p, conn) {
+  const workspace = WORKSPACE_OF[p?.key] || null;
+  const uid = conn?.uid || null;
+  if (!uid && !workspace) return null;
+  const holds = (c) => (uid && c?.uid === uid) || (workspace && !c?.uid && c?.provider_key === workspace);
+  const fits = (Array.isArray(read?.kinds) ? read.kinds : []).filter((k) => typeof k?.kind === 'string' && Array.isArray(k.choices) && k.choices.some(holds));
+  if (fits.length !== 1 || fits[0].mapped !== false) return null;
+  const k = fits[0];
+  const used = typeof k.used_by === 'string' ? k.used_by : null;
+  return {
+    kind: k.kind,
+    label: k.label || k.kind,
+    body: k.kind === 'workspace' ? { provider_key: workspace, used_by: used } : { integration_uid: uid, used_by: used },
+  };
+}
+
 /** The query left once a return has been read, so a reload does not replay it. */
 export function stripReturn(search, keys) {
   const p = new URLSearchParams(search || '');
@@ -657,16 +731,43 @@ export function retryOutcome(e) {
   return { tone: 'danger', text: e?.message || 'The sync failed.', reconnect: false };
 }
 
+/**
+ * "3 Oct · 14:05": when a sync failed, from the Worker's `last_error_at`
+ * (UTC, with or without its zone, as `agoLabel` reads it), drawn in the
+ * viewer's zone. Null when it is not a time.
+ */
+export function failedAt(iso, timeZone = undefined) {
+  if (!iso) return null;
+  const t = utcTime(iso);
+  if (!Number.isFinite(t)) return null;
+  const d = new Date(t);
+  try {
+    const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone }).format(d);
+    const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(d);
+    return `${day} · ${time}`;
+  } catch { return null; }
+}
+
+/** The locked banner's and the paid-plan panel's promise (D686 §3.1 item 3): a manual sync is not tier-gated since #1611. */
+export const FREE_KEEPS_TOOLS = 'Free keeps every tool you have already connected.';
+export const FREE_KEEPS_CONNECTORS = 'Free keeps every connector you already have.';
+
 /** The banner above Build's list: a failing tool first, then a locked one; null when neither. */
-export function toolBanner(catalogue) {
+export function toolBanner(catalogue, { timeZone } = {}) {
   const failing = (catalogue || []).find((p) => toolState(p) === 'failing');
   if (failing) {
+    // "<Name> sync failed at <D Mon> · <HH:MM>. <feeds> shows the last good data." (D686 §5.4);
+    // without the Worker's failure time, the last good sync is the sentence.
+    const at = failedAt(failing.connection.last_error_at, timeZone);
+    const feeds = feedsLabel(failing);
     const when = agoLabel(failing.connection.last_synced_at);
     return {
       tone: 'danger',
       view: 'failed',
       key: failing.key,
-      text: `${failing.display_name}: ${attentionReason(failing.connection).toLowerCase()}. ${when ? `The last good sync was ${when}; ` : ''}what it feeds keeps the last good data.`,
+      text: at
+        ? `${failing.display_name} sync failed at ${at}. ${feeds ? `${feeds} ${feeds.includes(',') ? 'show' : 'shows'}` : 'What it feeds shows'} the last good data.`
+        : `${failing.display_name}: ${attentionReason(failing.connection).toLowerCase()}. ${when ? `The last good sync was ${when}; ` : ''}what it feeds keeps the last good data.`,
     };
   }
   const locked = (catalogue || []).find((p) => p.locked && p.available && !p.connection);
@@ -674,7 +775,7 @@ export function toolBanner(catalogue) {
     return {
       tone: 'neutral',
       view: 'locked',
-      text: `${locked.category ? `${locked.category} connections` : locked.display_name} ${locked.category ? 'are' : 'is'} part of the ${TIER_LABEL[locked.tier] || 'paid'} plan.`,
+      text: `${locked.category ? `${locked.category} connections` : locked.display_name} ${locked.category ? 'are' : 'is'} part of the ${TIER_LABEL[locked.tier] || 'paid'} plan. ${FREE_KEEPS_TOOLS}`,
     };
   }
   return null;

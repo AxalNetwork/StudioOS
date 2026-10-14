@@ -467,3 +467,289 @@ test('a fed module\'s Open link stays inside StudioOS and carries the project', 
   assert.equal(moduleHref('/build/roadmap', null), '/build/roadmap');
   for (const bad of ['//evil.example/x', 'https://evil.example/x', 'build/roadmap', null]) assert.equal(moduleHref(bad, 7), null, `${bad} is not a StudioOS path`);
 });
+
+// ---------------------------------------------------------------- S1's review of 2026-10-14 (#1597)
+
+import {
+  BUILD_PROJECT_KEY, FREE_KEEPS_CONNECTORS, FREE_KEEPS_TOOLS, coreSystemOffer, failedAt, keepBuildProject, takeBuildProject, toolDeepLink,
+} from '../src/pages/account/connectorsModel.js';
+import { startFirstParty } from '../src/pages/account/ConnectorSheet.jsx';
+import { cyclesWrite } from '../src/lib/api/cycles.js';
+
+test('a deep link opens one tool where its row would; a sign-in\'s return opens its view; only catalogue keys open anything', () => {
+  assert.deepEqual(toolDeepLink('?tool=stripe&project_id=7', ROWS), { panel: { key: 'stripe', view: 'detail', ret: {} }, strip: ['tool'] }, 'connected: its detail');
+  assert.deepEqual(toolDeepLink('?tool=hubspot', ROWS).panel.view, 'pre', 'failing: the reconnect flow');
+  assert.deepEqual(toolDeepLink('?tool=figma', ROWS).panel, { key: 'figma', view: 'pre', ret: {} }, 'not connected: the flow');
+  assert.deepEqual(toolDeepLink('?tool=STRIPE', ROWS).panel.key, 'stripe');
+  assert.deepEqual(toolDeepLink('?tool=nope', ROWS), { panel: null, strip: ['tool'] }, 'an unknown key opens nothing, and is still stripped');
+  assert.deepEqual(toolDeepLink('?tool=constructor', ROWS).panel, null);
+  assert.equal(toolDeepLink('?project_id=7', ROWS), null, 'nothing to open, nothing to strip');
+  assert.equal(toolDeepLink('', ROWS), null);
+  const back = toolDeepLink('?oauth=ok&provider=github&project_id=7', ROWS);
+  assert.deepEqual([back.panel.key, back.panel.view, back.strip], ['github', 'sync', ['oauth', 'provider', 'reason']], 'GitHub returns to choosing its repositories');
+  assert.equal(back.panel.ret.view, 'sync', 'the return rides on the panel');
+  assert.deepEqual(toolDeepLink('?oauth=error&provider=hubspot&reason=access_denied', ROWS).panel.view, 'cancelled');
+  assert.deepEqual(toolDeepLink('?oauth=ok&provider=nope', ROWS), { panel: null, strip: ['oauth', 'provider', 'reason'] }, 'a provider the catalogue lacks opens nothing');
+  assert.equal(toolDeepLink('?oauth=ok&provider=github', null).panel, null, 'no catalogue: nothing opens');
+});
+
+test('the venture is kept across a sign-in and taken back once', () => {
+  const store = () => { const m = new Map(); return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+  const s = store();
+  keepBuildProject(7, s);
+  assert.equal(s.m.get(BUILD_PROJECT_KEY), '7');
+  assert.equal(takeBuildProject(s), 7);
+  assert.equal(takeBuildProject(s), null, 'taken once');
+  for (const bad of [null, 0, -3, 'x', 1.5]) { keepBuildProject(bad, s); assert.equal(s.m.size, 0, `${bad} is not kept`); }
+  s.m.set(BUILD_PROJECT_KEY, 'abc');
+  assert.equal(takeBuildProject(s), null, 'a stored value that is no id is dropped');
+  assert.equal(s.m.size, 0);
+  const broken = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() { throw new Error('denied'); } };
+  assert.doesNotThrow(() => keepBuildProject(7, broken));
+  assert.equal(takeBuildProject(broken), null, 'storage off: no venture, no error');
+  assert.equal(takeBuildProject(null), null);
+});
+
+test('the failed banner says when the sync failed, in the viewer\'s zone; without a time it keeps the last good sync', () => {
+  assert.equal(failedAt('2026-10-03 14:05:00', 'UTC'), '3 Oct · 14:05', 'the Worker\'s UTC time without a zone');
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/Los_Angeles'; // a machine away from UTC: the zone-less time is still read as UTC
+  try { assert.equal(failedAt('2026-10-03 14:05:00', 'UTC'), '3 Oct · 14:05'); } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }
+  assert.equal(failedAt('2026-10-03T14:05:00Z', 'UTC'), '3 Oct · 14:05');
+  assert.equal(failedAt('2026-10-03T23:30:00Z', 'Asia/Tokyo'), '4 Oct · 08:30', 'drawn in the viewer\'s zone');
+  assert.equal(failedAt('2026-10-03T14:05:00+02:00', 'UTC'), '3 Oct · 12:05');
+  for (const bad of [null, '', 'yesterday', undefined]) assert.equal(failedAt(bad, 'UTC'), null);
+  const cat = (items, feeds = ['capital_relationships']) => buildCatalogue({ providers: [{ key: 'hubspot', display_name: 'HubSpot', category: 'CRM', status: 'live', has_implementation: true, feeds }], items, firstParty: {} });
+  assert.deepEqual(toolBanner(cat([{ uid: 'u', provider_key: 'hubspot', status: 'error', last_error: 'invalid_grant', last_error_at: '2026-10-03 14:05:00', last_synced_at: ago(DAY) }]), { timeZone: 'UTC' }),
+    { tone: 'danger', view: 'failed', key: 'hubspot', text: 'HubSpot sync failed at 3 Oct · 14:05. Capital relationships shows the last good data.' });
+  assert.equal(toolBanner(cat([{ uid: 'u', provider_key: 'hubspot', status: 'error', last_error_at: '2026-10-03 14:05:00' }], ['capital_relationships', 'network']), { timeZone: 'UTC' }).text,
+    'HubSpot sync failed at 3 Oct · 14:05. Capital relationships, Network show the last good data.', 'two modules: show');
+  assert.equal(toolBanner(cat([{ uid: 'u', provider_key: 'hubspot', status: 'error', last_error_at: '2026-10-03 14:05:00' }], []), { timeZone: 'UTC' }).text,
+    'HubSpot sync failed at 3 Oct · 14:05. What it feeds shows the last good data.', 'no feeds recorded: no module is named');
+  assert.match(toolBanner(cat([{ uid: 'u', provider_key: 'hubspot', status: 'error', last_error: 'invalid_grant', last_synced_at: ago(DAY) }])).text,
+    /^HubSpot: .+\. The last good sync was .+; what it feeds keeps the last good data\.$/, 'no failure time: the last good sync is the sentence');
+});
+
+test('Free keeps what is connected: the locked banner and the paid-plan panel say so (a manual sync has no tier gate since #1611)', () => {
+  assert.equal(FREE_KEEPS_TOOLS, 'Free keeps every tool you have already connected.');
+  assert.equal(FREE_KEEPS_CONNECTORS, 'Free keeps every connector you already have.');
+  const locked = toolBanner(ROWS.filter((p) => p.key === 'carta'));
+  assert.equal(locked.text, `Cap table connections are part of the Studio plan. ${FREE_KEEPS_TOOLS}`);
+});
+
+test('the first-party sign-ins and the registry\'s come back to Build when started there', async () => {
+  const calls = [];
+  const client = {
+    googleCalConnect: async (b) => { calls.push(['google', b]); return { redirect_url: 'https://g' }; },
+    microsoftCalConnect: async (b) => { calls.push(['microsoft', b]); return { auth_url: 'https://m' }; },
+    linkedinOAuthStart: async (b) => { calls.push(['linkedin', b]); return { authorize_url: 'https://l' }; },
+  };
+  assert.equal(await startFirstParty('google', 'build', client), 'https://g');
+  assert.equal(await startFirstParty('microsoft', 'build', client), 'https://m');
+  assert.equal(await startFirstParty('linkedin', 'build', client), 'https://l');
+  await startFirstParty('google', undefined, client);
+  await startFirstParty('google', 'evil', client);
+  assert.deepEqual(calls, [['google', { return_to: 'build' }], ['microsoft', { return_to: 'build' }], ['linkedin', { return_to: 'build' }], ['google', { return_to: 'integrations' }], ['google', { return_to: 'integrations' }]]);
+});
+
+test('Use as your <kind>: only one unmapped kind the Worker says fits, keeping its Used by', () => {
+  const hub = { key: 'hubspot', display_name: 'HubSpot' };
+  const read = (crm = {}) => ({ kinds: [
+    { kind: 'bank', label: 'Bank', mapped: false, used_by: null, choices: [] },
+    { kind: 'crm', label: 'CRM', mapped: false, used_by: 'Sales', choices: [{ uid: 'u-hub', provider_key: 'hubspot', display_name: 'HubSpot' }], ...crm },
+    { kind: 'workspace', label: 'Workspace', mapped: false, used_by: null, choices: [{ uid: null, provider_key: 'google_calendar', display_name: 'Google Calendar' }] },
+  ] });
+  assert.deepEqual(coreSystemOffer(read(), hub, { uid: 'u-hub' }), { kind: 'crm', label: 'CRM', body: { integration_uid: 'u-hub', used_by: 'Sales' } });
+  assert.equal(coreSystemOffer(read({ mapped: true }), hub, { uid: 'u-hub' }), null, 'already mapped: nothing offered');
+  assert.equal(coreSystemOffer(read({ mapped: undefined }), hub, { uid: 'u-hub' }), null, 'a read that does not say: nothing offered');
+  assert.equal(coreSystemOffer(read(), hub, { uid: 'u-other' }), null, 'a connection the choices do not hold');
+  assert.equal(coreSystemOffer(read(), hub, null), null);
+  const two = read(); two.kinds[0].choices = [{ uid: 'u-hub', provider_key: 'hubspot' }];
+  assert.equal(coreSystemOffer(two, hub, { uid: 'u-hub' }), null, 'two kinds fit: the founder chooses on Operating systems');
+  assert.deepEqual(coreSystemOffer(read(), { key: 'google', display_name: 'Google Calendar' }, { first_party: true }), { kind: 'workspace', label: 'Workspace', body: { provider_key: 'google_calendar', used_by: null } }, 'Google is the Workspace provider');
+  assert.equal(coreSystemOffer(null, hub, { uid: 'u-hub' }), null);
+  assert.deepEqual(systemOptions(CHOICES, 'bank', 7).note, { text: 'No connected Bank tool is enabled for this company.', href: '/build/connect?project_id=7' }, 'the no-choice note keeps the venture');
+  assert.equal(systemOptions(CHOICES, 'bank', 'x').note.href, '/build/connect');
+});
+
+test('Build\'s lightbox: a deep link opens its tool, Try again syncs for the project\'s company, a sign-in returns to Build with the venture kept', async () => {
+  const cat = buildCatalogue({
+    providers: [
+      { key: 'hubspot', display_name: 'HubSpot', category: 'CRM', status: 'live', auth_type: 'oauth2', has_implementation: true },
+      { key: 'salesforce', display_name: 'Salesforce', category: 'CRM', status: 'live', has_implementation: true },
+    ],
+    items: [{ uid: 'u-sf', provider_key: 'salesforce', status: 'error', last_error: 'HTTP 500 upstream', company_ids: [5], last_synced_at: ago(DAY) }],
+    firstParty: {},
+  });
+  const companies = [{ id: 5, company_name: 'Acme' }];
+  const saved = { sync: connectorsApi.sync, oauthStart: connectorsApi.oauthStart, teammate: connectorsApi.teammate };
+  const kept = globalThis.sessionStorage;
+  const store = new Map();
+  globalThis.sessionStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+  const calls = [];
+  connectorsApi.sync = async (uid, opts) => { calls.push(['sync', uid, opts ?? null]); return { ok: true }; };
+  connectorsApi.oauthStart = async (key, params, opts) => { calls.push(['oauthStart', key, params, opts ?? null]); return {}; };
+  connectorsApi.teammate = async () => ({ teammate: null });
+  const data = { status: 'ready', catalogue: cat, companies, reload() {} };
+  const m = await mount(h(MemoryRouter, null, h(ConnectToolView, { data, project: { id: 7, company_id: 5 }, projectId: 7, onClose() {} })));
+  try {
+    await m.click('tool-action-salesforce');
+    assert.deepEqual(calls[0], ['sync', 'u-sf', { companyId: 5 }], 'the project\'s company, not the sidebar\'s');
+    await m.unmount();
+    const linked = await mount(h(MemoryRouter, null, h(ConnectToolView, { data, project: { id: 7, company_id: 5 }, projectId: 7, onClose() {}, deepLink: '?tool=hubspot' })));
+    try {
+      assert.ok(linked.by('button-connect-continue'), '?tool=hubspot opens HubSpot\'s flow');
+      await linked.click('button-connect-continue');
+      assert.deepEqual(calls.at(-1), ['oauthStart', 'hubspot', { return_to: 'build' }, { companyId: 5 }], 'the sign-in returns to /build/connect');
+      assert.equal(store.get(BUILD_PROJECT_KEY), '7', 'and the venture is kept for it');
+    } finally { await linked.unmount(); }
+  } finally {
+    Object.assign(connectorsApi, saved);
+    if (kept === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = kept;
+  }
+});
+
+test('the success view: Use as your CRM writes the mapping, and Now fed by\'s Open links keep the venture and close the lightbox', async () => {
+  const cat = buildCatalogue({
+    providers: [{ key: 'hubspot', display_name: 'HubSpot', category: 'CRM', status: 'live', auth_type: 'oauth2', has_implementation: true }],
+    items: [{ uid: 'u-hub', provider_key: 'hubspot', status: 'active', company_ids: [5], last_synced_at: ago(60000) }],
+    firstParty: {},
+  });
+  const saved = { fed: connectorsApi.fed };
+  const savedW = { systemChoices: cyclesWrite.build.systemChoices, system: cyclesWrite.build.system };
+  const calls = [];
+  let closed = 0;
+  let answer = null;
+  connectorsApi.fed = async () => ({ modules: [{ module: 'capital_relationships', label: 'Capital relationships', linked: 3, href: '/raise/capital-relationships' }] });
+  cyclesWrite.build.systemChoices = async (projectId) => { calls.push(['choices', projectId]); return { kinds: [{ kind: 'crm', label: 'CRM', mapped: false, used_by: 'Sales', choices: [{ uid: 'u-hub', provider_key: 'hubspot' }] }] }; };
+  cyclesWrite.build.system = async (projectId, kind, body) => { calls.push(['system', projectId, kind, body]); if (answer) throw answer; return { ok: true }; };
+  const data = { status: 'ready', catalogue: cat, companies: [{ id: 5, company_name: 'Acme' }], reload() {} };
+  const m = await mount(h(MemoryRouter, null, h(ConnectToolView, { data, project: { id: 7, company_id: 5 }, projectId: 7, onClose() { closed += 1; }, deepLink: '?oauth=ok&provider=hubspot' })));
+  try {
+    assert.match(m.text(), /HubSpot is connected/);
+    assert.equal(m.pr(m.by('fed-open-capital_relationships')).href, '/raise/capital-relationships?project_id=7', 'the Open link keeps the venture');
+    await m.click('fed-open-capital_relationships');
+    assert.equal(closed, 1, 'and closes the lightbox');
+    assert.deepEqual(calls[0], ['choices', 7]);
+    answer = Object.assign(new Error('That connector is not a crm tool.'), { status: 400 });
+    await m.click('button-use-as-crm');
+    assert.match(m.text(), /That connector is not a crm tool\./, 'a refusal in the Worker\'s words');
+    answer = null;
+    await m.click('button-use-as-crm');
+    assert.deepEqual(calls.at(-1), ['system', 7, 'crm', { integration_uid: 'u-hub', used_by: 'Sales' }]);
+    assert.match(m.text(), /HubSpot is now your CRM\./);
+    assert.equal(m.by('button-use-as-crm'), undefined, 'done: no second write');
+    await m.click('button-connected-done');
+    assert.equal(closed, 2, 'Done closes the lightbox, not only the tool');
+  } finally {
+    Object.assign(connectorsApi, saved);
+    Object.assign(cyclesWrite.build, savedW);
+    await m.unmount();
+  }
+});
+
+import { useLocation } from 'react-router-dom';
+import { api } from '../src/lib/api.js';
+import ConnectToolSheet from '../src/pages/account/ConnectToolSheet.jsx';
+import { useProject } from '../src/pages/cycles/CycleRoute.jsx';
+
+/** Prints the address, so a test sees what the page wrote into it. */
+function Where() { const l = useLocation(); return h('i', { 'data-testid': 'where' }, `${l.pathname}${l.search}`); }
+
+test('back from a sign-in at /build/connect with no venture named, Build takes the kept one; a named one wins', async () => {
+  const saved = api.listProjects;
+  const lists = [];
+  api.listProjects = async () => { lists.push(1); return [{ id: 3 }]; };
+  function Probe({ kept }) { const r = useProject(0, { kept }); return h('b', { 'data-testid': 'probe' }, `${r.projectId}:${r.status}`); }
+  const run = async (entry, kept) => {
+    const m = await mount(h(MemoryRouter, { initialEntries: [entry] }, h(Probe, { kept }), h(Where)));
+    const out = [m.text(m.by('probe')), m.text(m.by('where'))];
+    await m.unmount();
+    return out;
+  };
+  try {
+    let takes = 0;
+    const take = () => { takes += 1; return 7; };
+    assert.deepEqual(await run('/build/connect?oauth=ok&provider=hubspot', take), ['7:ready', '/build/connect?oauth=ok&provider=hubspot&project_id=7'], 'the kept venture, written into the address');
+    assert.equal(lists.length, 0, 'no guess from the project list');
+    assert.equal(takes, 1, 'taken once');
+    assert.deepEqual(await run('/build/connect?project_id=9', take), ['9:ready', '/build/connect?project_id=9'], 'a named venture wins');
+    assert.equal(takes, 1, 'and the kept one is left alone');
+    assert.deepEqual(await run('/build/connect', () => null), ['3:ready', '/build/connect?project_id=3'], 'nothing kept: the first venture');
+    assert.deepEqual(await run('/build/connect', null), ['3:ready', '/build/connect?project_id=3']);
+  } finally { api.listProjects = saved; }
+});
+
+test('/build/connect?tool=<key> opens that tool once, and the key leaves the address while the venture stays', async () => {
+  const savedApi = { getProject: api.getProject, googleCalStatus: api.googleCalStatus, microsoftCalStatus: api.microsoftCalStatus, linkedinStatus: api.linkedinStatus, listMyCompanies: api.listMyCompanies };
+  const savedC = { available: connectorsApi.available, list: connectorsApi.list, waitlist: connectorsApi.waitlist, suggestions: connectorsApi.suggestions };
+  Object.assign(api, {
+    getProject: async () => ({ id: 7, company_id: 5 }), googleCalStatus: async () => ({ configured: false }), microsoftCalStatus: async () => ({ configured: false }),
+    linkedinStatus: async () => null, listMyCompanies: async () => [{ id: 5, company_name: 'Acme' }],
+  });
+  Object.assign(connectorsApi, {
+    available: async () => ({ providers: [{ key: 'stripe', display_name: 'Stripe', category: 'Payments', status: 'live', has_implementation: true }] }),
+    list: async () => ({ items: [{ uid: 'u-str', provider_key: 'stripe', status: 'active', company_ids: [5], last_synced_at: ago(60000) }] }),
+    waitlist: async () => ({ items: [] }), suggestions: async () => ({ suggestions: [] }),
+  });
+  const m = await mount(h(MemoryRouter, { initialEntries: ['/build/connect?tool=stripe&project_id=7'] }, h(ConnectToolSheet, { projectId: 7, onClose() {} }), h(Where)));
+  try {
+    await m.settle();
+    assert.ok(m.text().includes('On disconnect:'), 'Stripe\'s detail is open');
+    assert.equal(m.text(m.by('where')), '/build/connect?project_id=7', 'tool= is stripped, project_id stays');
+  } finally {
+    Object.assign(api, savedApi);
+    Object.assign(connectorsApi, savedC);
+    await m.unmount();
+  }
+});
+
+test('the frame: one lightbox; × and Done close it all; Escape steps back from a tool and closes from the list', async () => {
+  // The stub DOM gains what the Lightbox needs to join the Escape stack:
+  // `querySelector` on each node, and the document's keydown listeners.
+  const restore = installDocument();
+  if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+  const make = document.createElement.bind(document);
+  document.createElement = (tag) => Object.assign(make(tag), { querySelector: () => null, querySelectorAll: () => [], focus() {} });
+  document.body = document.createElement('body');
+  const keys = new Set();
+  document.addEventListener = (type, fn) => { if (type === 'keydown') keys.add(fn); };
+  document.removeEventListener = (type, fn) => { if (type === 'keydown') keys.delete(fn); };
+  const escape = () => act(async () => { const e = { key: 'Escape', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }; for (const fn of [...keys]) fn(e); });
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const settle = () => act(async () => { for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  const click = async (id) => { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); };
+  const saved = { fed: connectorsApi.fed };
+  connectorsApi.fed = async () => ({ modules: [] });
+  let closed = 0;
+  const data = { status: 'ready', catalogue: ROWS, reload() {} };
+  try {
+    await act(async () => { root.render(h(MemoryRouter, null, h(ConnectToolView, { data, onClose() { closed += 1; } }))); });
+    await settle();
+    const dialogs = () => walk(container).filter((n) => pr(n).role === 'dialog');
+    assert.equal(dialogs().length, 1, 'one dialog: the list');
+    assert.equal(pr(dialogs()[0])['data-testid'], 'connect-tool-lightbox');
+    assert.equal(pr(dialogs()[0])['aria-label'], 'Connect a tool');
+    assert.ok(by('connect-tool-sheet'), 'the list is the ActionSheet');
+    await click('tool-name-stripe');
+    assert.equal(dialogs().length, 1, 'a tool opens inside the same lightbox');
+    assert.equal(by('connect-tool-sheet'), undefined);
+    assert.equal(walk(container).filter((n) => pr(n)['data-layout'] === 'lightbox').length, 1, 'the panel draws only its header, body and footer');
+    await escape(); await settle();
+    assert.equal(closed, 0, 'Escape from a tool steps back');
+    assert.ok(by('connect-tool-sheet'), 'to the list');
+    await escape(); await settle();
+    assert.equal(closed, 1, 'Escape from the list closes');
+    await click('tool-name-stripe');
+    await click('sheet-close');
+    assert.equal(closed, 2, 'the tool\'s × closes the lightbox, not only the tool');
+  } finally {
+    connectorsApi.fed = saved.fed;
+    await act(async () => root.unmount());
+    restore();
+  }
+});
