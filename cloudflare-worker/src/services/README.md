@@ -120,7 +120,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - `callLabel`, derived on every read and never stored;
   - the ten languages both final models take, with Flux English-only;
   - the talking points, checked against the project, capped at 10 and snapshotted;
-  - `markInterviewHeld`, which moves the interview to `done` and fills its channel when a session stops or a text session's chat is in;
+  - `markInterviewHeld`, which moves the interview to `done` and fills its channel when a session stops, a text session's chat is in (pasted, or a channel chat's first text) or a call's transcript is imported;
   - `activeSessionOf`, the one-live-session-per-member check (assistant and channel sessions excluded).
 - `interviewProcessing.ts` (D685, #1584) runs a stopped recording to the review:
   - `finishSession` (`POST /sessions/:id/finish`) records the last sequence number and queues the `interview_process` job (a `JobType` that `queueWorker.ts`'s `handleJob` dispatches to `runInterviewProcessJob`); a chunk that arrives late is taken and the job picks it up;
@@ -147,7 +147,14 @@ D684 (#1575): `interviewIntake.ts` is the one way an outside channel writes
 into an interview. It reloads the member and re-checks the venture on every
 write, takes the interview only from an id already scoped to the member, and
 stores text where the paste-in Text chat stores it, so Structure and Ask work
-on a channel session unchanged. `channels/` holds the rest.
+on a channel session unchanged. Under D685 §5.1 (S1, #1583), `openSession`
+also stores `call_provider` (`zoom`, `google_meet`, `telegram`, `whatsapp`,
+each only on a channel `sessionSetup.ts` admits it for) and fills the
+interview's `channel` when it had none. An append that moves a chat to
+`transcribed` (from `draft`, or from `structured` when new text arrives) and an
+imported call transcript mark the interview held through `markInterviewHeld`,
+best-effort, after the write lands.
+`submitted_via` is unchanged. `channels/` holds the rest.
 `sessionAutoStructure.ts` runs D658's Structure without the button: when a
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps

@@ -20,6 +20,9 @@
 import type { Env, User } from '../types';
 import { canWrite, type ProjectRef } from '../routes/_founder_validate_helpers';
 import { loadSession, replaceWithFinal, type SessionRow, type StoredSegment } from './interviewSessions';
+// A static import is safe: nothing sessionSetup.ts loads reaches this file
+// (interviewSessions.ts already imports it the same way).
+import { CALL_PROVIDERS, markInterviewHeld } from './sessionSetup';
 import { PROVIDER_LABEL, type ChannelProvider, type ImportedSegment } from './channels/types';
 
 export class IntakeError extends Error {
@@ -109,20 +112,32 @@ export async function createInterview(
  * records the interviewee's consent when it is scheduled (`consent.method`,
  * one of CONSENT_METHODS): without it #1470's rule keeps the AI off the
  * transcript, as it does for a recording.
+ *
+ * D685 §5.1: the session also records how the call is held, in the setup
+ * modal's terms — `call_provider` is the provider's own key (zoom and
+ * google_meet on video, telegram and whatsapp on text), and only on a channel
+ * that admits it — and the interview takes its channel from this session if
+ * it had none. One batch: both land, or neither. `submitted_via` keeps its
+ * own meaning (imported from elsewhere).
  */
 export async function openSession(
   env: Env, scoped: ScopedInterview, provider: ChannelProvider, channel: 'text' | 'video',
   consent: { method: string } | null = null,
 ): Promise<SessionRow> {
   const uid = crypto.randomUUID();
-  const row = await env.DB.prepare(
-    `INSERT INTO interview_sessions
-       (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-        submitted_via, submitted_via_name)
-     VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END, ?, ?) RETURNING id`,
-  ).bind(uid, scoped.interview.id, scoped.project.id, scoped.member.id, channel,
-    consent ? 'given' : 'not_recorded', consent?.method ?? null, consent?.method ?? null, provider, PROVIDER_LABEL[provider])
-    .first<{ id: number }>();
+  const callProvider = (CALL_PROVIDERS[channel] ?? []).includes(provider) ? provider : null;
+  const [inserted] = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO interview_sessions
+         (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
+          submitted_via, submitted_via_name, call_provider)
+       VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END, ?, ?, ?) RETURNING id`,
+    ).bind(uid, scoped.interview.id, scoped.project.id, scoped.member.id, channel,
+      consent ? 'given' : 'not_recorded', consent?.method ?? null, consent?.method ?? null, provider, PROVIDER_LABEL[provider],
+      callProvider),
+    env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(channel, scoped.interview.id),
+  ]);
+  const row = (inserted?.results?.[0] ?? null) as { id: number } | null;
   const session = row ? await loadSession(env, Number(row.id)) : null;
   if (!session) throw new IntakeError(500, 'not_stored', 'The session could not be created.');
   return session;
@@ -160,6 +175,12 @@ export const TRANSCRIPT_MIRROR_MAX_BYTES = 1_000_000;
  * sees all of it or none. `alongside` joins that batch — the thread store
  * passes the deletion of the pending copies, so a message is never in both
  * places or neither.
+ *
+ * D685 §5.1.6: the batch that moves the session to `transcribed` means the
+ * conversation has happened, so the interview is marked held (stage `done`,
+ * its channel filled) once the batch has landed. That step is best-effort and
+ * idempotent: it never fails the append, and an interview already done is
+ * left alone.
  */
 export async function appendSegments(
   env: Env, userId: number, sessionId: number, segments: StoredSegment[], provider: ChannelProvider,
@@ -197,12 +218,24 @@ export async function appendSegments(
     ).bind(plain, TRANSCRIPT_MIRROR_MAX_BYTES, plain, plain, model, session.interview_id),
     ...alongside,
   ]);
+  if (session.status === 'draft' || session.status === 'structured') await markHeld(env, session, userId);
   return clean.length;
+}
+
+/** `markInterviewHeld`, guarded once more: nothing it does may fail the write that called it. */
+async function markHeld(env: Env, session: SessionRow, userId: number): Promise<void> {
+  try {
+    await markInterviewHeld(env, session, userId);
+  } catch (e) {
+    console.warn('[intake] marking the interview held failed', (e as Error)?.message);
+  }
 }
 
 /**
  * A meeting's whole transcript, imported once: it replaces the session's
  * segments (as an audio session's final transcript replaces its live draft).
+ * A transcript means the call took place, so the interview is then marked
+ * held, best-effort, as an append does (D685 §5.1.6).
  */
 export async function importTranscript(
   env: Env, userId: number, sessionId: number, segments: ImportedSegment[], provider: ChannelProvider,
@@ -219,5 +252,6 @@ export async function importTranscript(
     .filter((s) => s.text.length > 0);
   if (!stored.length) throw new IntakeError(422, 'transcript_empty', 'The meeting transcript had no text to import.');
   await replaceWithFinal(env, session, stored, `${provider}_transcript`, null, 'transcribed');
+  await markHeld(env, session, userId);
   return stored.length;
 }
