@@ -12,8 +12,8 @@
  *   verify     X-Telegram-Bot-Api-Secret-Token against TELEGRAM_CHANNEL_WEBHOOK_SECRET
  *   normalise  an Update into one InboundEvent
  *   link       `/start <code>` names the Telegram account redeeming the code,
- *              and that account's own `/confirm` (after the bot names the Axal
- *              account) joins the two; a `business_connection` is recorded
+ *              and that account's own `/confirm` plus the member's Confirm
+ *              in Axal (within the original ten minutes) joins the two; a `business_connection` is recorded
  *              against that account
  *   talk       sendMessage (business and private), getFile + download, setWebhook
  *
@@ -39,8 +39,8 @@ import type { Env } from '../../types';
 import { providerJson } from './providerHttp';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { IntakeError, activeMember } from '../interviewIntake';
-import { confirmLinkClaim, consumeLinkCode } from './linkCodes';
-import { forgetConnection } from './threads';
+import { claimDetails, confirmLinkClaim, consumeLinkCode, memberLinkClaim, type LinkClaim } from './linkCodes';
+
 import {
   CHANNEL_LIMITS, type InboundConnection, type InboundEvent, type InboundLink, type InboundLinkConfirm, type SendResult,
 } from './types';
@@ -139,7 +139,10 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
     if (!start || !tgUser || !chatId) return ignored('not_a_link');
     return {
       kind: 'link', provider: 'telegram', eventId, telegramUserId: tgUser, chatId,
-      displayName: displayName(from), code: start[1],
+      displayName: displayName(from),
+      accountName: [from.first_name, from.last_name].filter((s) => typeof s === 'string' && s.trim()).join(' ').trim().slice(0, CHANNEL_LIMITS.maxNameChars) || null,
+      username: typeof from.username === 'string' && /^[A-Za-z0-9_]{1,32}$/.test(from.username) ? '@' + from.username : null,
+      code: start[1],
     };
   }
 
@@ -276,7 +279,7 @@ export type ClaimOutcome =
 
 export type LinkOutcome =
   | { linked: true; userId: number; integrationId: number; businessConnected: boolean }
-  | { linked: false; reason: 'nothing_to_confirm' | 'member_inactive' | 'identity_taken' };
+  | { linked: false; reason: 'nothing_to_confirm' | 'member_inactive' | 'identity_taken' | 'waiting_axal' | 'waiting_telegram' };
 
 const hexUid = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -297,24 +300,16 @@ async function memberStanding(env: Env, userId: number): Promise<boolean> {
 }
 
 /**
- * `/start <code>`, step one of two. The code names the member and the update
- * names the Telegram account, but redeeming a code proves only that someone
- * held it — and a member can hand their code to anyone. So nothing is linked
- * here: the Telegram account is recorded on the spent code, and the bot asks
- * that account to confirm, naming the Axal account (masked) it would join.
- *
- * WHY THE CONFIRMATION IS ON THE TELEGRAM SIDE. The harm the review found was
- * a member sending their link to someone else's Telegram Business account:
- * one tap on Start used to hand that account's customer chats, and any
- * business connection it already had, to the member. A confirmation in Axal
- * would be pressed by that same member. Only the owner of the Telegram
- * account can protect it, so the owner is the one asked, and told which Axal
- * account is asking; only their own `/confirm` (Telegram sets `from.id`, and
- * the webhook is secret-verified) completes it. A stranger who merely sees a
- * member's code can redeem it but cannot confirm for anyone else's account.
+ * A code proves only possession: record its claimant, but activate nothing.
+ * Telegram's own /confirm protects the Telegram owner; the signed-in Axal
+ * member must separately approve the displayed identity, protecting their
+ * existing connection and conversations if a stranger obtained the code.
+ * Both confirmations are bound to this claim and its original ten-minute
+ * expiry, never an extension measured from redemption.
  */
 export async function claimTelegramLink(env: Env, link: InboundLink): Promise<ClaimOutcome> {
-  const userId = await consumeLinkCode(env, link.code, 'telegram', link.telegramUserId);
+  const userId = await consumeLinkCode(env, link.code, 'telegram', link.telegramUserId,
+    { display_name: link.accountName ?? link.displayName, username: link.username ?? null });
   if (!userId) return { claimed: false, reason: 'code_invalid' };
   if (!(await memberStanding(env, userId))) return { claimed: false, reason: 'member_inactive' };
   const holder = await linkedMember(env, link.telegramUserId);
@@ -324,61 +319,92 @@ export async function claimTelegramLink(env: Env, link: InboundLink): Promise<Cl
 }
 
 /**
- * `/confirm`, step two: the Telegram account that redeemed a code in the last
- * ten minutes agrees, and the two are joined. A Telegram account already
- * active on ANOTHER member is refused — the partial unique index on
- * `integrations` enforces it too, for the race — and nothing is stored. A
- * member re-linking a different Telegram account loses the old account's
- * conversations (as a disconnect would) and its business connections are
- * detached.
+ * Both owners must agree to the SAME claim within its original lifetime.
+ * Every destructive write and activation runs in ONE D1 batch. Its guard is
+ * rechecked inside the transaction: another confirmation, new code,
+ * disconnect, expiry, or a unique-index race cannot destroy the old chats.
  */
-export async function confirmTelegramLink(env: Env, link: InboundLinkConfirm): Promise<LinkOutcome> {
-  const userId = await confirmLinkClaim(env, 'telegram', link.telegramUserId);
-  if (!userId) return { linked: false, reason: 'nothing_to_confirm' };
+async function activateTelegramClaim(env: Env, claim: LinkClaim): Promise<LinkOutcome> {
+  const userId = Number(claim.user_id), telegramId = String(claim.telegram_user_id ?? '');
   if (!(await memberStanding(env, userId))) return { linked: false, reason: 'member_inactive' };
-  const holder = await linkedMember(env, link.telegramUserId);
+  if (!claim.confirmed_at) return { linked: false, reason: 'waiting_telegram' };
+  if (!claim.axal_confirmed_at) return { linked: false, reason: 'waiting_axal' };
+  const details = await claimDetails(env, claim);
+  if (!telegramId || !details) return { linked: false, reason: 'nothing_to_confirm' };
+  const holder = await linkedMember(env, telegramId);
   if (holder && holder !== userId) return { linked: false, reason: 'identity_taken' };
 
-  const name = (link.displayName ?? '').slice(0, CHANNEL_LIMITS.maxNameChars) || null;
-  const config = JSON.stringify({ connected_at: new Date().toISOString() });
-  const existing = await env.DB.prepare(
-    `SELECT id, external_account_id FROM integrations WHERE user_id = ? AND provider_key = 'telegram'`,
-  ).bind(userId).first<{ id: number; external_account_id: string | null }>();
-  let integrationId: number;
+  const now = new Date().toISOString();
+  const guard = `EXISTS (SELECT 1 FROM channel_link_codes c JOIN users u ON u.id = c.user_id
+    WHERE c.uid = ? AND c.user_id = ? AND c.telegram_user_id = ?
+      AND c.confirmed_at IS NOT NULL AND c.axal_confirmed_at IS NOT NULL
+      AND c.activated_at IS NULL AND c.cancelled_at IS NULL AND c.expires_at > ?
+      AND COALESCE(u.is_active, 1) != 0 AND u.deletion_requested_at IS NULL)`;
+  const guarded = (sql: string, values: unknown[]) => env.DB.prepare(sql).bind(...values, claim.uid, userId, telegramId, now);
+  const name = details.username || details.display_name;
   try {
-    if (existing) {
-      if (existing.external_account_id && String(existing.external_account_id) !== link.telegramUserId) {
-        await forgetConnection(env, Number(existing.id));
-        await env.DB.prepare(
-          `UPDATE telegram_business_connections SET user_id = NULL, updated_at = datetime('now') WHERE user_id = ? AND telegram_user_id != ?`,
-        ).bind(userId, link.telegramUserId).run();
-      }
-      await env.DB.prepare(
-        `UPDATE integrations SET status = 'active', auth_type = 'webhook', display_name = 'Telegram', credentials_enc = NULL,
-                external_account_id = ?, external_account_name = ?, config_json = ?, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?`,
-      ).bind(link.telegramUserId, name, config, existing.id).run();
-      integrationId = Number(existing.id);
-    } else {
-      const row = await env.DB.prepare(
-        `INSERT INTO integrations (uid, user_id, provider_key, display_name, status, auth_type, config_json, external_account_id, external_account_name)
-         VALUES (?, ?, 'telegram', 'Telegram', 'active', 'webhook', ?, ?, ?) RETURNING id`,
-      ).bind(hexUid(), userId, config, link.telegramUserId, name).first<{ id: number }>();
-      if (!row) throw new Error('telegram_link_not_stored');
-      integrationId = Number(row.id);
-    }
+    await env.DB.batch([
+      guarded(`DELETE FROM channel_threads WHERE integration_id IN
+        (SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'telegram' AND external_account_id != ?)
+        AND ${guard}`, [userId, telegramId]),
+      guarded(`UPDATE telegram_business_connections SET user_id = NULL, updated_at = datetime('now')
+        WHERE user_id = ? AND telegram_user_id != ? AND ${guard}`, [userId, telegramId]),
+      guarded(`INSERT INTO integrations (uid, user_id, provider_key, display_name, status, auth_type, config_json, external_account_id, external_account_name)
+        SELECT ?, ?, 'telegram', 'Telegram', 'active', 'webhook', ?, ?, ? WHERE ${guard}
+        ON CONFLICT(user_id, provider_key) DO UPDATE SET
+          status = 'active', auth_type = 'webhook', display_name = 'Telegram', credentials_enc = NULL,
+          external_account_id = excluded.external_account_id, external_account_name = excluded.external_account_name,
+          config_json = excluded.config_json, last_error = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP`,
+        [hexUid(), userId, JSON.stringify({ connected_at: now }), telegramId, name]),
+      guarded(`UPDATE telegram_business_connections SET user_id = ?, updated_at = datetime('now')
+        WHERE telegram_user_id = ? AND ${guard}`, [userId, telegramId]),
+      guarded(`UPDATE channel_link_codes SET activated_at = datetime('now'), updated_at = datetime('now')
+        WHERE uid = ? AND ${guard}`, [claim.uid]),
+    ]);
   } catch (err) {
-    // Another member linked the same account between the check and the write.
     if (/UNIQUE constraint failed/i.test(err instanceof Error ? err.message : '')) return { linked: false, reason: 'identity_taken' };
     throw err;
   }
-  await env.DB.prepare(
-    `UPDATE telegram_business_connections SET user_id = ?, updated_at = datetime('now') WHERE telegram_user_id = ?`,
-  ).bind(userId, link.telegramUserId).run();
-  const bc = await env.DB.prepare(
-    `SELECT 1 AS ok FROM telegram_business_connections WHERE telegram_user_id = ? AND is_enabled = 1 LIMIT 1`,
-  ).bind(link.telegramUserId).first<{ ok: number }>();
-  return { linked: true, userId, integrationId, businessConnected: !!bc };
+  const current = await memberLinkClaim(env, userId, claim.uid);
+  const integration = await env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'telegram' AND status = 'active' AND external_account_id = ?")
+    .bind(userId, telegramId).first<{ id: number }>();
+  if (!current?.activated_at || !integration) return { linked: false, reason: 'nothing_to_confirm' };
+  const bc = await env.DB.prepare("SELECT 1 AS ok FROM telegram_business_connections WHERE telegram_user_id = ? AND user_id = ? AND is_enabled = 1 LIMIT 1")
+    .bind(telegramId, userId).first();
+  return { linked: true, userId, integrationId: Number(integration.id), businessConnected: !!bc };
+}
+
+/** The private webhook proves consent only from the account that claimed it. */
+export async function confirmTelegramLink(env: Env, link: InboundLinkConfirm): Promise<LinkOutcome> {
+  const claim = await confirmLinkClaim(env, 'telegram', link.telegramUserId);
+  if (!claim) return { linked: false, reason: 'nothing_to_confirm' };
+  return activateTelegramClaim(env, claim);
+}
+
+/** The signed-in member approves the exact displayed claim, never a client-supplied identity. */
+export async function confirmAxalTelegramLink(env: Env, userId: number, uid: string): Promise<LinkOutcome> {
+  await activeMember(env, userId);
+  const claim = await memberLinkClaim(env, userId, uid);
+  if (!claim) throw new IntakeError(404, 'link_not_found', 'That Telegram link is not waiting on this Axal account.');
+  if (claim.cancelled_at) throw new IntakeError(409, 'link_cancelled', 'This link was replaced or cancelled. Request a new Telegram link.');
+  if (!claim.activated_at && claim.expires_at <= new Date().toISOString()) {
+    throw new IntakeError(410, 'link_expired', 'Both confirmations must arrive within ten minutes. Request a new Telegram link.');
+  }
+  if (!claim.telegram_user_id || !(await claimDetails(env, claim))) {
+    throw new IntakeError(409, 'link_not_claimed', 'Open the link in your Telegram account and check its name in Axal before confirming.');
+  }
+  const updated = await env.DB.prepare(`UPDATE channel_link_codes SET axal_confirmed_at = COALESCE(axal_confirmed_at, datetime('now')), updated_at = datetime('now')
+    WHERE uid = ? AND user_id = ? AND cancelled_at IS NULL AND expires_at > ? RETURNING *`)
+    .bind(uid, userId, new Date().toISOString()).first<LinkClaim>();
+  if (!updated) throw new IntakeError(410, 'link_expired', 'Both confirmations must arrive within ten minutes. Request a new Telegram link.');
+  // A repeated POST after activation must not run the destructive batch again.
+  if (updated.activated_at) {
+    const row = await env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'telegram' AND status = 'active' AND external_account_id = ?")
+      .bind(userId, updated.telegram_user_id).first<{ id: number }>();
+    if (!row) return { linked: false, reason: 'nothing_to_confirm' };
+    return { linked: true, userId, integrationId: Number(row.id), businessConnected: !!(await activeBusinessConnection(env, userId)) };
+  }
+  return activateTelegramClaim(env, updated);
 }
 
 /** What the bot says in the member's private chat. Plain sentences; never a code or a token. */
@@ -387,7 +413,9 @@ export const TELEGRAM_COPY = {
   confirm: (account: string | null) => `This link would connect your Telegram account to the Axal account ${account ?? 'that made it'}. `
     + 'Axal would then receive the customer chats you let this bot see in Telegram Business. '
     + 'If that is your Axal account and you asked for this, send /confirm here within 10 minutes. '
-    + 'If not, ignore this message: nothing is linked.',
+    + 'Also confirm the claimed Telegram account in Axal › Account › Connectors within the same ten minutes. If not, ignore this message: nothing is linked.',
+  waitingAxal: 'Telegram confirmed. In Axal, open Account › Connectors, check the claimed Telegram name and @username, and press Confirm before this ten-minute link expires. Nothing is linked until both owners confirm.',
+  waitingTelegram: 'Confirm in Telegram by sending /confirm to the Axal bot before this ten-minute link expires.',
   linked: 'Your Telegram account is now linked to Axal. Next, in Telegram open Settings › Telegram Business › Chatbots, add this bot, and choose the chats it can see.',
   linkedConnected: 'Your Telegram account is now linked to Axal. Conversations from the chats this bot can see will wait in Axal › Interviews until you assign them.',
   nothingToConfirm: 'There is no link waiting for you to confirm, or it is more than 10 minutes old. In Axal, open Account › Connectors and press Link Telegram for a new one.',

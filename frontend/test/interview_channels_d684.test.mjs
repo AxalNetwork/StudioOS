@@ -389,12 +389,12 @@ test('a repeat whose first attempt is still pending is never "Sent": in flight k
   assert.equal(inFlight.keepKey, true, 'the first attempt may still go: the next press only asks again');
   assert.match(inFlight.text, /^Sending… Telegram has not confirmed it yet\. Press Send again in a moment to check: it will not send twice\.$/);
   const unknown = replyOutcome('whatsapp', { ok: null, existing: true, pending: true, code: 'send_unknown', outbound: { status: 'pending' } });
-  assert.deepEqual([unknown.ok, unknown.keepKey], [null, false]);
-  assert.match(unknown.text, /^Not confirmed yet: check the chat in WhatsApp before sending again\./);
+  assert.deepEqual([unknown.ok, unknown.keepKey], [null, true]);
+  assert.match(unknown.text, /^Not confirmed yet: check the chat in WhatsApp\./);
   // A Worker without the explicit pending answer said ok: true for a pending row; that is not a provider's word either.
   const older = replyOutcome('telegram', { ok: true, existing: true, outbound: { status: 'pending' } });
   assert.notEqual(older.ok, true, 'a pending row is not Sent');
-  assert.equal(older.keepKey, false);
+  assert.equal(older.keepKey, true);
   for (const ambiguous of [{}, { ok: true }, { ok: true, outbound: {} }, null]) {
     assert.notEqual(replyOutcome('whatsapp', ambiguous).ok, true, `${JSON.stringify(ambiguous)} is not Sent`);
   }
@@ -592,4 +592,20 @@ test('the schedule form: local time to UTC, a future time, a duration; the refus
   assert.deepEqual(meetingItems({ meetings: [REF('scheduled')] }).map((m) => m.uid), ['r1']);
   assert.match(callWhen(REF('scheduled'), () => 'Tue 14 Oct, 11:00'), /^Tue 14 Oct, 11:00 · 30 min$/);
   assert.equal(callWhen({}), 'Time not recorded');
+});
+
+
+test('#1602 mutation: an unknown reply must retain the key and never invite another send', async () => {
+  const file = new URL('../src/pages/founder/channelThreads.js', import.meta.url);
+  const source = readFileSync(file, 'utf8');
+  const before = 'return { ok: null, keepKey: true, text: `Not confirmed yet:';
+  assert.ok(source.includes(before));
+  const mutated = source.replace(before, 'return { ok: null, keepKey: false, text: `Not confirmed yet:');
+  const resolveImports = (s) => s.replace(/(from\s*['"])([^'"]+)(['"])/g,
+    (_all, first, path, last) => first + (path.startsWith('.') ? new URL(path, file).href : import.meta.resolve(path)) + last);
+  const bad = await import('data:text/javascript;base64,' + Buffer.from(resolveImports(mutated)).toString('base64'));
+  const input = { ok: null, pending: true, code: 'send_unknown', outbound: { status: 'pending' } };
+  assert.equal(replyOutcome('telegram', input).keepKey, true);
+  assert.doesNotMatch(replyOutcome('telegram', input).text, /send it again|before sending again/);
+  assert.throws(() => assert.equal(bad.replyOutcome('telegram', input).keepKey, true), { name: 'AssertionError' });
 });
