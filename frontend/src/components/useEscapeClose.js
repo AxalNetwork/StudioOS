@@ -22,6 +22,14 @@ import { pushDialog, topmost } from '../ui/lightboxFocus.js';
  * MOUNT ORDER: a dialog pushes when it mounts. One mounted after a lightbox
  * opens sits above it, which is right for a dialog opened from inside the
  * lightbox. A modal mounted earlier and left open underneath sits below it.
+ *
+ * THE HAZARD: within one commit React runs a child's effects before its
+ * parent's. A lightbox and a nested dialog that mount in the same commit (the
+ * nested one already open on the lightbox's first render) therefore push
+ * child first, parent second: the lightbox lands on top, and the first Escape
+ * closes the lightbox, nested dialog and all. Open a nested dialog in a later
+ * commit (from a click or an effect, as every caller does today), or hold it
+ * `active: false` until the lightbox is up.
  */
 export function useEscapeClose(onClose, { active = true } = {}) {
   const id = useId();

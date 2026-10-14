@@ -17,7 +17,7 @@ canvas behind it still shows up here.
 | Headerless | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
 | Headerless | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
 | Headerless | Raise | `/raise` | Founder Workspaces Canvas |
-| Headerless | Grow | `/grow` | Founder Workspaces Canvas, Grow · Share an update, Pages · Founder Grow |
+| Headerless | Grow | `/grow` | Founder Workspaces Canvas, Pages · Founder Grow |
 | Headerless | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
 | Headerless | Research | `/research` | Founder Workspaces Canvas, Research · Main, Signals |
 
