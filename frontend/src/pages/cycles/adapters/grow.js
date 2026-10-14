@@ -201,6 +201,14 @@ function partnerNetwork(s) {
   return out;
 }
 
+/** "Spain · 2 replies from updates · latest Ana" — the market's update-ask replies, or the name alone. */
+export function marketWithReplies(name, replies) {
+  const rs = list(replies);
+  if (!rs.length) return String(name);
+  const latest = [...rs].sort((a, b) => String(b?.created_at ?? '').localeCompare(String(a?.created_at ?? '')))[0];
+  return `${name} · ${rs.length} ${rs.length === 1 ? 'reply' : 'replies'} from updates${latest?.name ? ` · latest ${latest.name}` : ''}`;
+}
+
 const MARKET_PARTS = [['Demand', 'v1'], ['Regulation', 'v2'], ['Partners', 'v3'], ['Cost to enter', 'grey']];
 
 function marketExpansion(s) {
@@ -380,7 +388,8 @@ export const RECORDS = {
   'market-expansion': {
     keys: ['market', 'state', 'readiness', 'weakest_part', 'decision'],
     row: (r, i) => ({ id: r.uid ?? `market-${i}`, cells: {
-      market: r.name ?? null,
+      // D686 §5.8: the replies an update's market ask brought in, read under their market.
+      market: r.name == null ? null : marketWithReplies(r.name, r.replies),
       state: word(MARKET_STATE, r.state),
       readiness: num(r.readiness) ? `${r.readiness} / 40` : reasonCell(r.readiness_reason),
       weakest_part: r.weakest_part ?? null,

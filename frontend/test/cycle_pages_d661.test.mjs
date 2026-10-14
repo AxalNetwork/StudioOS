@@ -164,7 +164,7 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
   // D686 §5.1: Share an update opens at /grow/update over the page; a sent
   // update replaces that address with its own page, so Back never reopens it.
   assert.match(route, /path: 'update',\s*Mount: GrowMount,\s*action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
-  assert.match(route, /return <ShareUpdateSheet projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>;/);
+  assert.match(route, /return <ShareUpdateLightbox projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>;/);
   // D686 §5.4: the mount also re-reads the cycle page after a change (Build's
   // Connect a tool), once the lightbox closes, so nothing reloads behind it.
   assert.match(route, /<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\} onDone=\{onDone\}\s*onChanged=\{\(\) => \{ dirty\.current = true; \}\} \/>/);

@@ -11,7 +11,7 @@ import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
 import useScrollToHash from '../../hooks/useScrollToHash';
-import ShareUpdateSheet from '../founder/ShareUpdateSheet';
+import ShareUpdateLightbox from '../founder/ShareUpdateLightbox';
 import ConnectToolSheet from '../account/ConnectToolSheet';
 import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
@@ -334,7 +334,7 @@ function RaiseMount({ projectId, onClose }) {
   return <RoundCallSheet projectId={projectId} onClose={onClose} />;
 }
 function GrowMount({ projectId, onClose, onDone }) {
-  return <ShareUpdateSheet projectId={projectId} onClose={onClose} onSent={onDone} />;
+  return <ShareUpdateLightbox projectId={projectId} onClose={onClose} onSent={onDone} />;
 }
 
 /**
