@@ -247,10 +247,13 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
 }
 
 /**
- * D685 §5.1.1 — one live session per member: the setup call refuses an audio
- * session while another is recording or paused, before anything is written,
- * as `/start` refuses it too. A text session records nothing. The
- * per-interview route keeps opening drafts; its `/start` is the gate.
+ * D685 §5.1.1 — one live session per member: both setup routes refuse an
+ * audio session while another is recording or paused, before anything is
+ * written, as `/start` refuses it too. A text session records nothing.
+ *
+ * The per-interview route refuses too (#1588): a row's "Record a session" or a
+ * draft's Start opened while recording would otherwise hand the recorder a
+ * second session, and the page could not offer the live one in its place.
  */
 async function liveRefusal(env: Env, userId: number, plan: OpenPlan): Promise<Response | null> {
   if (!plan.audio) return null;
@@ -266,6 +269,8 @@ sessions.post('/interviews/:id/sessions', async (c) => {
   if (plan instanceof Response) return plan;
   const again = await replayed(c.env, s.user.id, plan.clientKey);
   if (again) return json(await sessionBody(c.env, again), 200);
+  const busy = await liveRefusal(c.env, s.user.id, plan);
+  if (busy) return busy;
   const session = await openOn(c.env, s.user, s.interview, plan, body);
   return json(await sessionBody(c.env, session), 201);
 });

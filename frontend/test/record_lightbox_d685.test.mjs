@@ -339,6 +339,35 @@ test('409 session_active: the Worker\'s sentence, and a link back to the recordi
   } finally { await m.unmount(); }
 });
 
+test('#1588 while this tab still records, Start is refused before the microphone opens or a session is made, and offers that recording', async () => {
+  const s = spies();
+  const log = [];
+  const recorder = {
+    prepare() { log.push('prepare'); }, release() { log.push('release'); }, begin() { log.push('begin'); return 'recording'; },
+    isCapturing: () => true, getSnapshot: () => ({ session: { id: 88 }, phase: 'recording' }),
+  };
+  const m = await mount({ ...s.props, recorder });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.click('record-consents-verbal');
+    await m.click('record-start');
+    assert.match(m.text(), /You are already recording another session\. Stop it, or return to it, first\./);
+    assert.equal(m.pr(m.by('record-error-live')).href, '/validate/record/live?session=88');
+    assert.deepEqual(log, [], 'no microphone asked for, nothing handed over');
+    assert.deepEqual([s.calls.open.length, s.calls.create.length, s.calls.started.length], [0, 0, 0], 'no session made');
+  } finally { await m.unmount(); }
+  // A text chat records nothing: it is not refused.
+  const t = spies();
+  const m2 = await mount({ ...t.props, recorder });
+  try {
+    await m2.type('record-name', 'Dana');
+    await m2.click('record-mode-text');
+    await m2.type('record-conversation', 'Dana: Hi');
+    await m2.click('record-start');
+    assert.equal(t.calls.open.length, 1);
+  } finally { await m2.unmount(); }
+});
+
 test('a text chat is pasted: the conversation becomes messages, with no consent asked for', async () => {
   const s = spies();
   const m = await mount(s.props);

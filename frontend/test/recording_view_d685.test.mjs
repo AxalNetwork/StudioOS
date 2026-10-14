@@ -505,3 +505,68 @@ test('the session page hands its recording to the recorder and no longer owns a 
   assert.match(page, /recorder\.adopt\(\{ session, interview, callLabel: data\.call_label \?\? null, points: data\.points \|\| \[\], storedSeqs: chunks\.map\(\(c\) => c\.seq\) \}\)/, 'an interrupted recording resumes after the audio already saved, with its points');
   assert.match(page, /const interview = location\.state\?\.interview \|\| data\.interview \|\| null;/, 'after a reload the name comes from the session read');
 });
+
+/** The session page, mounted at /validate/session/7, with clicks; `path` follows navigation. */
+async function sessionPage(read) {
+  const restore = installDocument();
+  if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+  const where = { path: null };
+  function Probe() { const l = useLocation(); where.path = `${l.pathname}${l.search}`; return null; }
+  const api = { get: async () => read, receipt: async () => ({ items: [] }), models: async () => ({ live: [], final: [] }), placements: async () => ({ items: [] }) };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(h(MemoryRouter, { initialEntries: ['/validate/session/7'] }, h(Probe),
+      h(Routes, null, h(Route, { path: '/validate/session/:id', element: h(InterviewSessionPage, { api }) }), h(Route, { path: '/validate/record/live', element: h('p', null, 'live') }))));
+  });
+  await act(async () => { await new Promise((res) => setTimeout(res, 0)); });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join(' ') : n.textContent || '');
+  return {
+    where, by, pr, text: (id) => text(by(id)).replace(/\s+/g, ' ').trim(),
+    async click(id) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); },
+    async unmount() { await act(async () => root.unmount()); restore(); },
+  };
+}
+const sessionRead = (status) => ({
+  session: { id: 7, interview_id: 41, status, channel: 'in_person', consent_status: 'given', consent_method: 'verbal' },
+  interview: { id: 41, interviewee_name: 'Dana Ruiz' }, call_label: 'In person', processing: null, segments: [], marks: [], chunks: [],
+});
+
+test('#1588 Resume here, in a second tab: the recording is live there, so nothing is paused and the page says so', async () => {
+  const rec = stubRecorder({ phase: 'idle', session: null });
+  const adopted = [];
+  rec.adopt = async (arg) => { adopted.push(arg.session.id); return 'other_tab'; };
+  setRecorder(rec);
+  const p = await sessionPage(sessionRead('recording'));
+  try {
+    await p.click('button-adopt-recording');
+    assert.deepEqual(adopted, [7]);
+    assert.match(p.text('adopt-note'), /This recording is live in another tab\. Go back to that tab to pause, resume or stop it\./);
+    assert.equal(p.where.path, '/validate/session/7', 'it stays on the page');
+  } finally { await p.unmount(); }
+  // Free here: it opens the live view.
+  rec.adopt = async () => 'paused';
+  const q = await sessionPage(sessionRead('paused'));
+  try {
+    await q.click('button-adopt-recording');
+    assert.equal(q.where.path, '/validate/record/live?session=7');
+  } finally { await q.unmount(); }
+});
+
+test('#1588 a draft\'s Start while this tab records another session: refused before anything is asked for, with the way back', async () => {
+  const rec = stubRecorder({ phase: 'recording', session: { id: 88 } });
+  const begun = [];
+  rec.begin = async (arg) => { begun.push(arg.session.id); return 'recording'; };
+  setRecorder(rec);
+  const p = await sessionPage(sessionRead('draft'));
+  try {
+    await p.click('button-session-start');
+    assert.deepEqual(begun, [], 'begin is never called, so no microphone opens');
+    assert.match(p.text('start-error'), /You are already recording another session\. Stop it, or return to it, first\./);
+    assert.equal(p.pr(p.by('start-error-live')).href, '/validate/record/live?session=88');
+    assert.equal(p.where.path, '/validate/session/7');
+  } finally { await p.unmount(); }
+});

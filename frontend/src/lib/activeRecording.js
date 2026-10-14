@@ -80,6 +80,23 @@ export function startRefused(e) {
   };
 }
 
+/**
+ * A Start made while this tab is still taking (or saving) another recording's
+ * audio (#1588): refused before anything is posted or the microphone opened,
+ * in the words of the Worker's 409 `session_active`, naming the recording to
+ * return to. Null when nothing would be replaced: a video call still waiting
+ * at "Share the call's tab" has opened no microphone and posted no start.
+ */
+export function liveRefusal(st, capturing) {
+  if (!capturing || !st?.session || st.phase === 'share') return null;
+  return {
+    text: st.phase === 'stopping'
+      ? 'The last recording is still being saved. Wait for it to finish, or return to it.'
+      : 'You are already recording another session. Stop it, or return to it, first.',
+    sessionId: st.session.id,
+  };
+}
+
 /** The pill's variant, from the phase (D685 §5.6.4). Null when nothing is recording. */
 export function pillVariant(st) {
   if (!st?.session) return null;
@@ -345,13 +362,23 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      * for the second click, "Share the call's tab" (§5.8.1).
      */
     async begin({ session, interview = null, callLabel = null, points = [], video = false, storedSeqs = [], meetingUrl = null }) {
+      // Never over a live capture: replacing it would leave its microphone
+      // running with nothing to stop it (#1588). The caller offers it instead.
+      if (liveRefusal(state, api_.isCapturing())) { api_.release(); return 'busy'; }
       capture = null;
       set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, points, video, storedSeqs, phase: video ? 'share' : 'idle', meetingUrl: joinHref(meetingUrl) });
       if (video) { api_.release(); return 'share'; }
       return goLive();
     },
-    /** A session that already exists (its page, or after a reload): paused until resumed in a click. */
+    /**
+     * A session that already exists (its page, or after a reload): paused
+     * until resumed in a click. One another tab is capturing holds `rec-<id>`
+     * (§5.6.7): it is left alone, never paused from here, or a later Resume
+     * would start a second capture whose seqs collide with the first's.
+     */
     async adopt({ session, interview = null, callLabel = null, points = [], storedSeqs = [] }) {
+      if (liveRefusal(state, api_.isCapturing())) return 'busy';
+      if (session?.id != null && ['recording', 'paused'].includes(session.status) && !(await lockFree(session.id))) return 'other_tab';
       capture = null;
       let s = session;
       // A recording with no capture in this tab is paused, never left running (§5.6.7).

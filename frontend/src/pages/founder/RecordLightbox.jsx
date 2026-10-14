@@ -4,6 +4,7 @@ import Lightbox from '../../ui/Lightbox.jsx';
 import { api as defaultApi } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { channelsApi } from '../../lib/api/channels.js';
+import { liveRefusal } from '../../lib/activeRecording.js';
 import { cycleValidateApi } from '../../lib/api/cycleValidate.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
@@ -229,13 +230,18 @@ export default function RecordLightbox({
 
   const submit = async () => {
     if (!ready || sending.current) return;
+    const handsOver = !!recorder && m.audio;
+    // #1588: while this tab still records (or saves) another session, a second
+    // Start is refused before the microphone opens or a session is made, and
+    // offers that recording, as the Worker's 409 does.
+    const held = handsOver ? liveRefusal(recorder.getSnapshot?.(), recorder.isCapturing?.()) : null;
+    if (held) { setRefusal({ text: held.text, liveHref: `/validate/record/live?session=${encodeURIComponent(held.sessionId)}` }); return; }
     sending.current = true;
     setBusy(true); setRefusal(null); setAssigned(null);
     // In person and Audio call: the microphone and the AudioContext are asked
     // for inside this click, before anything is awaited, so iOS Safari does not
     // start the context suspended (D685 §5.6.5). A video call asks in its own
     // second click, "Share the call's tab" (§5.8.1).
-    const handsOver = !!recorder && m.audio;
     if (handsOver && mode !== 'video') recorder.prepare();
     const person = (r) => ({
       id: r?.id ?? who?.id,
