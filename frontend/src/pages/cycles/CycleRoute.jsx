@@ -352,7 +352,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   // D685 §5.4: while this tab records (or holds a paused recording), the setup
   // never opens over it: `/validate/record` is that recording's live view.
   const { state: recording } = useActiveRecording();
-  const toLive = record ? recordingHref(recording) : null;
+  const toLive = lightbox && cycle === 'validate' ? recordingHref(recording) : null;
   // Under the lightbox is the module page the founder was on, when it is one of
   // this cycle's modules; otherwise (a deep link, or the interview log) the overview.
   const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : routeSlug;

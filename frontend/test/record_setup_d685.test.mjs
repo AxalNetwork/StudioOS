@@ -209,7 +209,7 @@ test('/validate/record while this tab records: the live view, never the setup ov
   assert.equal(recordingHref(null), null);
   // Wired before the route's first early return, so it runs on every render of /validate/record.
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /const toLive = record \? recordingHref\(recording\) : null;/);
+  assert.match(route, /const toLive = lightbox && cycle === 'validate' \? recordingHref\(recording\) : null;/, 'Validate\'s lightbox only: Build, Raise and Grow open their own');
   assert.match(route, /if \(toLive\) return <Navigate to=\{toLive\} replace \/>;\n  if \(!def\) return null;/);
 });
 
