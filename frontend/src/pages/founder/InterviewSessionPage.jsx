@@ -155,7 +155,8 @@ export function makeReviewActions({ api, sessionId, set, onSpent }) {
     reload,
     async structure(model) {
       set((st) => ({ ...st, running: true, runError: null }));
-      try { await api.structure(sessionId, model); await reload(); } catch (e) { set((st) => ({ ...st, runError: e })); }
+      // Only a model id is sent; anything else (a click event, say) is no model, so the Worker picks its default (#1589).
+      try { await api.structure(sessionId, typeof model === 'string' && model ? model : undefined); await reload(); } catch (e) { set((st) => ({ ...st, runError: e })); }
       set((st) => ({ ...st, running: false }));
       onSpent?.();
     },

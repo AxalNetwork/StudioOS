@@ -112,3 +112,55 @@ test('the session page mounts the review step once transcribed, and the client c
   const client = readFileSync('frontend/src/lib/api/interviewSessions.js', 'utf8');
   for (const path of ['/placements`', '/structure`', '/ask`', '/accept`', '/discard`']) assert.ok(client.includes(path), path);
 });
+
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { installDocument } from './_contracts_dom.mjs';
+import { PlacementsPanel } from '../src/pages/founder/InterviewReview.jsx';
+
+test('#1589 "Structure the transcript", clicked, sends one POST /structure with {}: the click event is never the model', async () => {
+  const restore = installDocument();
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  const calls = [];
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ method: init.method || 'GET', path: String(url).replace(/^.*\/api/, ''), body: init.body });
+    return new Response(JSON.stringify(String(url).endsWith('/placements') ? F.PLACEMENTS_NONE : F.STRUCTURED), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const h = holder();
+  try {
+    const { interviewSessionsApi } = await import('../src/lib/api/interviewSessions.js');
+    const actions = makeReviewActions({ api: interviewSessionsApi, sessionId: 7, set: h.set });
+    await act(async () => { root.render(React.createElement(PlacementsPanel, { read: F.PLACEMENTS_NONE, onStructure: actions.structure })); });
+    const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+    const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+    const button = walk(container).find((n) => pr(n)['data-testid'] === 'button-structure');
+    assert.ok(button, 'the button is drawn with no placements');
+    // A click event, as React hands it: circular, so it cannot be JSON.
+    const click = { type: 'click', preventDefault() {} }; click.nativeEvent = { target: click };
+    await act(async () => { await pr(button).onClick(click); });
+    for (let i = 0; i < 5 && h.get().running; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    assert.equal(h.get().runError, null, 'no "Converting circular structure to JSON"');
+    const posts = calls.filter((c) => c.method === 'POST');
+    const seen = [];
+    await act(async () => { root.render(React.createElement(PlacementsPanel, { read: F.PLACEMENTS_NONE, onStructure: (...args) => { seen.push(args); } })); });
+    const again = walk(container).find((n) => pr(n)['data-testid'] === 'button-structure');
+    await act(async () => { await pr(again).onClick(click); });
+    assert.deepEqual(seen, [[]], 'the button calls its handler with nothing, whatever the handler does with it');
+    assert.deepEqual(posts.map((c) => [c.path, c.body]), [['/founder/validate/sessions/7/structure', '{}']], 'one POST, with no model');
+  } finally {
+    globalThis.fetch = orig;
+    await act(async () => root.unmount());
+    restore();
+  }
+});
+
+test('#1589 structure() sends only a string model; anything else is no model', async () => {
+  for (const [given, sent] of [['@cf/x', '@cf/x'], [undefined, undefined], [{ type: 'click' }, undefined], ['', undefined], [7, undefined]]) {
+    const { api, calls } = fakeApi();
+    await makeReviewActions({ api, sessionId: 7, set: holder().set }).structure(given);
+    assert.deepEqual(calls[0], ['structure', 7, sent], String(given));
+  }
+});
