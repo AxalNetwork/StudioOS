@@ -26,7 +26,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canWrite, type ProjectRef } from './_founder_validate_helpers';
-import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
+import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsHistory, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, setFileChecklistItem, setProspectNextStep,
 } from '../services/raiseWriters';
@@ -98,7 +98,8 @@ cycleRaise.get('/modules/:slug', async (c) => {
     console.warn('[cycle_raise] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
-  return c.json({ module: { slug: mod.slug, name: mod.name }, card, records });
+  return c.json({ module: { slug: mod.slug, name: mod.name }, card, records,
+    ...(slug === 'capital-relationships' ? {parts:{calls:await callsHistory(ctx)}} : {}) });
 });
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
@@ -10,8 +10,10 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
+import useScrollToHash from '../../hooks/useScrollToHash';
 import ShareUpdateSheet from '../founder/ShareUpdateSheet';
 import ConnectToolSheet from '../account/ConnectToolSheet';
+import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
 import { recordingHref } from '../founder/recordSetup';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
@@ -58,7 +60,10 @@ const CYCLE_DEFS = {
     // D685 §5.4: "Record a session" is the lightbox at /validate/record. A plain
     // click opens it over this page (`onOpen`); a new tab or a deep link follows
     // the href to the same place. The interview comes with it, or is made at Start.
-    action: (q, open, record) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: record }),
+    // D686: every cycle's action is `{ path, Mount }` on this one mechanism.
+    path: 'record',
+    Mount: ValidateMount,
+    action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
     tools: toFnMap({
       'problem-discovery': (q) => ({ label: 'Curate pain themes: merge, rename, judge severity', href: `/validate/pain-map${q}` }),
       'customer-research': (q) => ({ label: 'Open the interview log: notes, recordings, evidence', href: `/validate/interviews${q}` }),
@@ -66,7 +71,7 @@ const CYCLE_DEFS = {
       experiments: (q) => ({ label: 'Open the hypothesis board and the verdict', href: `/validate/hypotheses${q}` }),
     }),
     add: toFnMap({
-      'customer-research': (q, record) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: record }),
+      'customer-research': (q, open) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
     }),
     // The AI fill bands the Validate desk carried, on the module they fill.
     fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
@@ -84,9 +89,12 @@ const CYCLE_DEFS = {
    */
   raise: {
     modules: MODULES.raise,
-    // D653's Call for Capital, behind ROUND_CALLS_ENABLED; with the flag off
-    // the page says so in its own words.
-    action: () => ({ label: 'Call for Capital', href: '/round-calls' }),
+    // D686: Call for Capital opens at /raise/call over the page, the venture
+    // kept; behind ROUND_CALLS_ENABLED, its sheet says Coming soon in its own
+    // words. S03-A swaps this Mount for its tall Lightbox + ActionSheet frame.
+    path: 'call',
+    Mount: RaiseMount,
+    action: (q, open) => ({ label: 'Call for Capital', href: `/raise/call${q}`, onOpen: open }),
     tools: toFnMap({
       'investor-narrative': () => ({ label: 'Open the positioning workspace', href: '/raise/pitch/positioning' }),
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
@@ -150,8 +158,9 @@ const CYCLE_DEFS = {
    */
   grow: {
     modules: MODULES.grow,
-    action: (q, open) => ({ label: 'Share an update', onClick: open }),
-    sheet: ShareUpdateSheet,
+    path: 'update',
+    Mount: GrowMount,
+    action: (q, open) => ({ label: 'Share an update', href: `/grow/update${q}`, onOpen: open }),
     tools: toFnMap({
       'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
       'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
@@ -205,8 +214,9 @@ const CYCLE_DEFS = {
     // Build overview keeps it: `?new=1` opens the form, also when this page is
     // already mounted.
     creates: true,
-    action: (q, open) => ({ label: 'Connect a tool', onClick: open }),
-    sheet: ConnectToolSheet,
+    path: 'connect',
+    Mount: BuildMount,
+    action: (q, open) => ({ label: 'Connect a tool', href: `/build/connect${q}`, onOpen: open }),
     // D686 §5.4: Operating systems' Tools history, anchored at #tools.
     parts: toFnMap({
       'operating-systems': (data) => <ToolsHistory tools={data?.parts?.tools} />,
@@ -274,8 +284,8 @@ function useProject(reloadKey = 0) {
 }
 
 /** The module page under the lightbox: the founder's, when it is one of this cycle's modules; else the overview (null). */
-export function underModule(modules, path) {
-  const slug = underSlug(path);
+export function underModule(modules, path, cycle = 'validate', action = 'record') {
+  const slug = underSlug(path, cycle, action);
   return (modules || []).some((m) => m.slug === slug) ? slug : null;
 }
 
@@ -284,7 +294,7 @@ export function underModule(modules, path) {
  * row's "Record a session") read first so Who is pre-filled. An interview that
  * cannot be found opens the lightbox with Who empty rather than not at all.
  */
-function RecordMount({ projectId, interviewId, onClose, onStarted }) {
+export function RecordMount({ projectId, interviewId, onClose, onStarted }) {
   const { recorder } = useActiveRecording();
   const [interview, setInterview] = useState(interviewId ? undefined : null);
   useEffect(() => {
@@ -299,19 +309,42 @@ function RecordMount({ projectId, interviewId, onClose, onStarted }) {
   return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} />;
 }
 
-/** The module slug of a Validate path (`/validate/customer-research?…`), or null for the overview. */
-export function underSlug(path) {
-  const m = /^\/validate\/([a-z0-9-]+)(?:[/?#]|$)/.exec(String(path || ''));
-  return m && m[1] !== 'record' ? m[1] : null;
+/** The module slug of a cycle path (`/validate/customer-research?…`), or null for the overview and the cycle's own action path. */
+export function underSlug(path, cycle = 'validate', action = 'record') {
+  if (!/^[a-z]+$/.test(cycle)) return null;
+  const m = new RegExp(`^/${cycle}/([a-z0-9-]+)(?:[/?#]|$)`).exec(String(path || ''));
+  return m && m[1] !== action ? m[1] : null;
+}
+
+/*
+ * Each cycle's open lightbox (D686 §5.1). Build, Raise and Grow mount their
+ * existing self-framed sheets for now, with no frame of their own around them:
+ * two dialogs must never nest. S02-B, S03-A and S03-B each swap their cycle's
+ * Mount for a `<Lightbox size="tall">` with an `ActionSheet` body.
+ */
+function ValidateMount({ projectId, searchParams, onClose, onDone }) {
+  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} />;
+}
+// D686 §5.4 (#1597): the sheet connects for this project's company, and a
+// change re-reads the Build page once the lightbox closes.
+function BuildMount({ projectId, onClose, onChanged }) {
+  return <ConnectToolSheet projectId={projectId} onClose={onClose} onChanged={onChanged} />;
+}
+function RaiseMount({ projectId, onClose }) {
+  return <RoundCallSheet projectId={projectId} onClose={onClose} />;
+}
+function GrowMount({ projectId, onClose, onDone }) {
+  return <ShareUpdateSheet projectId={projectId} onClose={onClose} onSent={onDone} />;
 }
 
 /**
- * `record` is `/validate/record` (D685 §5.4): the Validate page with the Record
- * a session lightbox open over it. The page underneath is the one the founder
- * was on (`location.state.under`), the overview on a deep link. Closing goes
- * back to it; the lightbox makes no server call.
+ * `lightbox` is the cycle's action route (D685 §5.4, D686 §5.1):
+ * `/validate/record`, `/build/connect`, `/raise/call`, `/grow/update`, the
+ * cycle page with its lightbox open over it. The page underneath is the one the
+ * founder was on (`location.state.under`), the overview on a deep link. Closing
+ * goes back to it; the lightbox makes no server call.
  */
-export default function CycleRoute({ cycle, record = false }) {
+export default function CycleRoute({ cycle, lightbox = false }) {
   const { slug: routeSlug } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -322,7 +355,7 @@ export default function CycleRoute({ cycle, record = false }) {
   const toLive = record ? recordingHref(recording) : null;
   // Under the lightbox is the module page the founder was on, when it is one of
   // this cycle's modules; otherwise (a deep link, or the interview log) the overview.
-  const slug = record ? underModule(def?.modules, location.state?.under) : routeSlug;
+  const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : routeSlug;
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
   const { projectId, status: projectStatus } = useProject(projectsKey);
@@ -337,7 +370,9 @@ export default function CycleRoute({ cycle, record = false }) {
   const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // A lightbox that changed something (a tool connected) marks the page dirty;
+  // it reloads on close, not behind the lightbox, so nothing flashes.
+  const dirty = useRef(false);
   // The module's Add and Edit forms (`forms.js`), for a store with no page of
   // its own. `editing` is the row being edited.
   const form = slug && def ? formFor(cycle, slug) : null;
@@ -357,6 +392,8 @@ export default function CycleRoute({ cycle, record = false }) {
   const [overviewStatus, setOverviewStatus] = useState('loading');
   const [module, setModule] = useState(null);
   const [moduleStatus, setModuleStatus] = useState('loading');
+  // D686: a history address (`#tools`, `#calls`, `#updates`) scrolls once its section is drawn.
+  useScrollToHash(moduleStatus !== 'ready');
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
   const [reload, setReload] = useState(0);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
@@ -399,12 +436,23 @@ export default function CycleRoute({ cycle, record = false }) {
   if (!def) return null;
   if (!known) return <Navigate to={`/${cycle}${q}`} replace />;
 
-  const openRecord = cycle === 'validate' && projectId
-    ? () => navigate(`/validate/record${q}`, { state: { under: `${location.pathname}${location.search}` } })
+  const openAction = projectId && def.path
+    ? () => navigate(`/${cycle}/${def.path}${q}`, { state: { under: `${location.pathname}${location.search}` } })
     : undefined;
-  const closeRecord = () => (location.state?.under ? navigate(-1) : navigate(`/validate${q}`, { replace: true }));
-  const action = def.action(q, projectId && def.sheet ? () => setSheetOpen(true) : undefined, openRecord);
-  const Sheet = def.sheet || null;
+  const closeAction = () => {
+    if (dirty.current) { dirty.current = false; setReload((n) => n + 1); }
+    if (location.state?.under) navigate(-1);
+    else navigate(`/${cycle}${q}`, { replace: true });
+  };
+  // What finishing does: the recording view or the session replaces the action
+  // route, and a sent update opens its page, so Back never reopens the lightbox.
+  const onDone = cycle === 'validate'
+    ? (session, interview, where) => (where === 'live'
+      ? navigate(`/validate/record/live?session=${encodeURIComponent(session.id)}`, { replace: true })
+      : navigate(`/validate/session/${session.id}`, { state: { interview }, replace: true }))
+    : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
+  const action = def.action(q, openAction);
+  const Mount = def.Mount || null;
   const rail = (
     <WorkerRail
       workspace={name}
@@ -461,7 +509,7 @@ export default function CycleRoute({ cycle, record = false }) {
         query={query}
         onQuery={setQuery}
         action={action}
-        add={fnOf(def.add, slug)?.(q, openRecord) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
+        add={fnOf(def.add, slug)?.(q, openAction) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
         rowAction={edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
@@ -477,7 +525,7 @@ export default function CycleRoute({ cycle, record = false }) {
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
         )) : null}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) })}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction })}
       </CycleModulePage>
     );
   }
@@ -517,15 +565,9 @@ export default function CycleRoute({ cycle, record = false }) {
             onSaved={() => setReload((n) => n + 1)}
             onClose={() => setEditing(null)} />
         )}
-        {record && cycle === 'validate' && projectId && (
-          <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={closeRecord}
-            onStarted={(session, interview, where) => (where === 'live'
-              // D685 §5.6: the recording view replaces /record in history, so Back does not reopen the setup.
-              ? navigate(`/validate/record/live?session=${encodeURIComponent(session.id)}`, { replace: true })
-              : navigate(`/validate/session/${session.id}`, { state: { interview } }))} />
-        )}
-        {Sheet && sheetOpen && projectId && (
-          <Sheet projectId={projectId} onClose={() => setSheetOpen(false)} onSent={(uid) => navigate(`/updates/${encodeURIComponent(uid)}`)} onChanged={() => setReload((n) => n + 1)} />
+        {lightbox && Mount && projectId && (
+          <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
+            onChanged={() => { dirty.current = true; }} />
         )}
       </div>
     </RailFrame>

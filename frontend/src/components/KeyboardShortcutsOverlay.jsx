@@ -44,7 +44,7 @@ export default function KeyboardShortcutsOverlay() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  useEscapeClose(() => setOpen(false));
+  useEscapeClose(() => setOpen(false), { active: open });
 
   // Focus trap — move focus into the dialog on open, cycle Tab/Shift+Tab
   // among focusables inside the dialog, restore focus on close. WCAG 2.1.2.

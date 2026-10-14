@@ -59,6 +59,7 @@ import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/w
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 
 /** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
+const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
 const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -120,8 +121,10 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql']) db.exec(mig(m));
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D685: openSession stores the call (call_provider), as production's 452 lets it.
+    '452_record_session_setup.sql', '454_channel_voice_failures.sql',
+    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
       db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
@@ -253,7 +256,10 @@ const confirmUpdate = (tg = TG_ME) => ({
 /** Both steps of linking: the code, then the Telegram account's own /confirm. */
 async function linkTelegram(env: any, code: string, tg = TG_ME) {
   await tgHook(env, startUpdate(code, tg));
-  return tgHook(env, confirmUpdate(tg));
+  await tgHook(env, confirmUpdate(tg));
+  const owner = Number((await env.DB.prepare('SELECT user_id FROM channel_link_codes WHERE code_hash = ?').bind(refCode(code)).first<any>()).user_id);
+  const { claim } = (await call(env, owner, 'GET', '/telegram/link')).body;
+  return call(env, owner, 'POST', `/telegram/link/${claim.uid}/confirm`);
 }
 const connectionUpdate = (bc: string, tg: string, extra: Record<string, unknown> = { rights: { can_reply: true, can_read_messages: true } }, enabled = true) => ({
   update_id: ++updateId,
@@ -403,12 +409,15 @@ test('Telegram: /start <code> then the account’s own /confirm links it once; a
     assert.equal(f.calls.length, before, 'and does nothing');
 
     assert.equal((await tgHook(env, confirmUpdate(TG_NEW))).status, 200);
+    assert.equal(count(db, "SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'"), 0, 'Telegram consent alone cannot activate');
+    const { claim } = (await call(env, ME, 'GET', '/telegram/link')).body;
+    assert.equal((await call(env, ME, 'POST', `/telegram/link/${claim.uid}/confirm`)).body.linked, true);
     const row = db.prepare(`SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'telegram'`).get(ME);
     assert.deepEqual([row.status, row.auth_type, row.external_account_id, row.external_account_name, row.credentials_enc],
       ['active', 'webhook', TG_NEW, '@dana_biz', null]);
     assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-EARLY'`).get().user_id, ME);
     const reply = f.calls[f.calls.length - 1];
-    assert.match(reply.body.text, /now linked/i);
+    assert.match(reply.body.text, /Telegram confirmed/i);
     assert.equal(count(db, `SELECT COUNT(*) n FROM channel_events WHERE kind = 'link'`), 2);
 
     // A second /confirm finds nothing waiting.
@@ -463,7 +472,7 @@ test('Telegram: a member’s link code sent to someone else’s account links no
     assert.match(f.calls[1].body.text, /no link waiting/);
 
     // And the owner's own /confirm counts only within ten minutes.
-    db.exec(`UPDATE channel_link_codes SET used_at = datetime('now', '-11 minutes')`);
+    db.exec(`UPDATE channel_link_codes SET expires_at = '2000-01-01T00:00:00.000Z'`);
     await tgHook(env, confirmUpdate(TG_NEW));
     assert.equal(count(db, `SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'`), 0);
     assert.equal(db.prepare(`SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-VICTIM'`).get().user_id, null);
@@ -946,6 +955,9 @@ test('D686 #1592: Telegram linked again clears the stored failure and its time',
     assert.equal((await tgHook(env, startUpdate(code, TG_ME))).status, 200);
     assert.deepEqual(failureOf(db, 'telegram'), STALE_FAILURE, 'redeeming the code alone links nothing');
     assert.equal((await tgHook(env, confirmUpdate(TG_ME))).status, 200);
+    assert.deepEqual(failureOf(db, 'telegram'), STALE_FAILURE, 'Telegram consent alone keeps the old connection');
+    const { claim } = (await call(env, ME, 'GET', '/telegram/link')).body;
+    assert.equal((await call(env, ME, 'POST', `/telegram/link/${claim.uid}/confirm`)).body.linked, true);
     assert.deepEqual(failureOf(db, 'telegram'), { last_error: null, last_error_at: null });
   } finally { f.restore(); }
 });
@@ -1686,4 +1698,254 @@ test('#1602: lost networks and malformed acceptances are unknown; known refusals
       } finally { globalThis.fetch = originalFetch; console.error = originalError; }
     }
   }
+});
+
+
+// #1602: both owners approve the exact claim, and attempt counters can count.
+async function axalConfirm(env: any, owner = ME) {
+  const { claim } = (await call(env, owner, 'GET', '/telegram/link')).body;
+  return call(env, owner, 'POST', `/telegram/link/${claim.uid}/confirm`);
+}
+
+test('#1602 Telegram consent: Telegram alone preserves the old connection and encrypted chats; Axal activates once', async () => {
+  const { env, db } = await world({ seed: true });
+  const f = mockFetch(telegramApi);
+  try {
+    await tgHook(env, businessMessage('BC-ME'));
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(code, TG_NEW));
+    const claim = (await call(env, ME, 'GET', '/telegram/link')).body.claim;
+    assert.deepEqual([claim.display_name, claim.username, claim.telegram_confirmed, claim.axal_confirmed, claim.status],
+      ['Dana', '@dana_biz', false, false, 'waiting_telegram']);
+    assert.equal(JSON.stringify(claim).includes(TG_NEW), false);
+    const raw = db.prepare('SELECT claim_details_enc FROM channel_link_codes WHERE uid = ?').get(claim.uid).claim_details_enc;
+    assert.equal(raw.includes('Dana') || raw.includes('dana_biz'), false, 'pending names are encrypted');
+    assert.equal((await call(env, OTHER, 'GET', '/telegram/link')).body.claim, null);
+    assert.equal((await call(env, OTHER, 'POST', `/telegram/link/${claim.uid}/confirm`)).status, 404);
+
+    await tgHook(env, confirmUpdate(TG_NEW));
+    assert.deepEqual([db.prepare("SELECT external_account_id FROM integrations WHERE provider_key = 'telegram'").get().external_account_id,
+      count(db, 'SELECT COUNT(*) n FROM channel_thread_messages')], [TG_ME, 1], 'Telegram alone changes nothing active');
+    assert.equal((await call(env, ME, 'GET', '')).body.telegram_link.status, 'waiting_axal');
+    const activated = await axalConfirm(env);
+    assert.deepEqual([activated.status, activated.body.linked, activated.body.claim.status], [200, true, 'linked']);
+    assert.deepEqual([db.prepare("SELECT external_account_id FROM integrations WHERE provider_key = 'telegram'").get().external_account_id,
+      count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'),
+      db.prepare("SELECT user_id FROM telegram_business_connections WHERE business_connection_id = 'BC-ME'").get().user_id], [TG_NEW, 0, null]);
+    await tgHook(env, connectionUpdate('BC-NEW', TG_NEW));
+    await tgHook(env, businessMessage('BC-NEW'));
+    db.prepare("UPDATE channel_link_codes SET expires_at = '2000-01-01T00:00:00.000Z' WHERE uid = ?").run(claim.uid);
+    const again = await call(env, ME, 'POST', `/telegram/link/${claim.uid}/confirm`);
+    assert.deepEqual([again.status, again.body.linked, again.body.claim.uid, count(db, 'SELECT COUNT(*) n FROM channel_thread_messages')], [200, true, claim.uid, 1], 'a completed confirm remains idempotent past expiry and cannot purge new conversations');
+    await createLinkCode(env, ME, 'telegram');
+    const oldAgain = await call(env, ME, 'POST', `/telegram/link/${claim.uid}/confirm`);
+    assert.deepEqual([oldAgain.body.linked, oldAgain.body.claim.uid], [true, claim.uid], 'the response belongs to the exact claim, not a newer one');
+  } finally { f.restore(); }
+});
+
+test('#1602 Telegram consent: Axal first waits for Telegram, expiry is original, and a new code/disconnect cancels pending consent', async () => {
+  const f = mockFetch(telegramApi);
+  try {
+    const { env, db } = await world();
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(code));
+    const first = await axalConfirm(env);
+    assert.deepEqual([first.body.linked, first.body.claim.axal_confirmed, first.body.claim.status,
+      count(db, "SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'")], [false, true, 'waiting_telegram', 0]);
+    await tgHook(env, confirmUpdate(TG_OTHER));
+    assert.equal(count(db, "SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram'"), 0, 'another Telegram account cannot consent');
+    await tgHook(env, confirmUpdate());
+    assert.equal(count(db, "SELECT COUNT(*) n FROM integrations WHERE provider_key = 'telegram' AND status = 'active'"), 1);
+
+    const fresh = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(fresh.code, TG_NEW));
+    const pending = (await call(env, ME, 'GET', '/telegram/link')).body.claim;
+    db.prepare("UPDATE channel_link_codes SET expires_at = '2000-01-01T00:00:00.000Z', used_at = datetime('now') WHERE uid = ?").run(pending.uid);
+    await tgHook(env, confirmUpdate(TG_NEW));
+    assert.deepEqual([(await axalConfirm(env)).status,
+      (await call(env, ME, 'GET', '/telegram/link')).body.claim.status,
+      db.prepare("SELECT external_account_id FROM integrations WHERE provider_key = 'telegram'").get().external_account_id], [410, 'expired', TG_ME]);
+
+    const replaced = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(replaced.code, TG_NEW));
+    const old = (await call(env, ME, 'GET', '/telegram/link')).body.claim.uid;
+    await createLinkCode(env, ME, 'telegram');
+    assert.equal((await call(env, ME, 'POST', `/telegram/link/${old}/confirm`)).status, 409);
+    await tgHook(env, confirmUpdate(TG_NEW));
+    assert.equal(db.prepare("SELECT external_account_id FROM integrations WHERE provider_key = 'telegram'").get().external_account_id, TG_ME);
+
+    const unclaimed = (await call(env, ME, 'GET', '/telegram/link')).body.claim.uid;
+    assert.equal((await call(env, ME, 'POST', `/telegram/link/${unclaimed}/confirm`)).status, 409);
+    await call(env, ME, 'DELETE', '/telegram');
+    assert.equal((await call(env, ME, 'POST', `/telegram/link/${unclaimed}/confirm`)).status, 409);
+  } finally { f.restore(); }
+});
+
+test('#1602 Telegram consent: identity races roll back the whole activation, and parallel confirmations activate once', async () => {
+  const f = mockFetch(telegramApi);
+  try {
+    const { env, db } = await world({ seed: true });
+    await tgHook(env, businessMessage('BC-ME'));
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(code, TG_NEW));
+    await tgHook(env, confirmUpdate(TG_NEW));
+    const batch = env.DB.batch.bind(env.DB);
+    env.DB.batch = async (stmts: any[]) => {
+      // Another member takes the identity after the adapter's read and before
+      // D1 starts the activation transaction. The unique index is the arbiter.
+      db.prepare("INSERT INTO integrations(uid,user_id,provider_key,auth_type,external_account_id) VALUES('race-tg',?,'telegram','webhook',?)").run(OTHER, TG_NEW);
+      env.DB.batch = batch;
+      return batch(stmts);
+    };
+    const race = await axalConfirm(env);
+    assert.deepEqual([race.status, race.body.code, count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'),
+      db.prepare("SELECT external_account_id FROM integrations WHERE user_id = ? AND provider_key = 'telegram'").get(ME).external_account_id,
+      (await call(env, ME, 'GET', '/telegram/link')).body.claim.status], [409, 'identity_taken', 1, TG_ME, 'ready']);
+    db.prepare("DELETE FROM integrations WHERE uid = 'race-tg'").run();
+    const outcomes = await Promise.all([axalConfirm(env), axalConfirm(env)]);
+    assert.deepEqual(outcomes.map((r) => [r.status, r.body.linked]), [[200, true], [200, true]]);
+    assert.equal(count(db, "SELECT COUNT(*) n FROM integrations WHERE user_id = ? AND provider_key = 'telegram'", ME), 1);
+  } finally { f.restore(); }
+});
+
+test('#1602 link attempts: atomic D1 counting trips despite KV 429s; missing D1 fails closed; old windows purge', async () => {
+  const { env, db } = await world();
+  let kvCalls = 0;
+  env.RATE_LIMITS = { async get() { kvCalls++; return '0'; }, async put() { kvCalls++; throw new Error('KV 429'); } };
+  const issued = await Promise.all(Array.from({ length: 25 }, () => call(env, ME, 'POST', '/telegram/link')));
+  assert.deepEqual([issued.filter((r) => r.status === 200).length, issued.filter((r) => r.status === 429).length, kvCalls], [20, 5, 0]);
+  const { linkAttemptOverLimit } = await import('../src/services/channels/events.ts');
+  const checks = await Promise.all(Array.from({ length: 12 }, () => linkAttemptOverLimit(env, 'ip:203.0.113.17', 10, new Date('2026-10-14T12:05:00Z'))));
+  assert.deepEqual([checks.filter((over) => !over).length, checks.filter(Boolean).length], [10, 2], 'concurrent callers may finish in any order');
+  const rows = db.prepare('SELECT * FROM channel_link_attempts').all();
+  assert.equal(JSON.stringify(rows).includes('203.0.113.17') || JSON.stringify(rows).includes('unknown'), false, 'raw IP is not stored');
+  db.exec("UPDATE channel_link_attempts SET window_start = '2000-01-01T00:00:00.000Z'");
+  const { purgeExpired } = await import('../src/services/channels/threads.ts');
+  await purgeExpired(env);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_link_attempts'), 0);
+  db.exec('DROP TABLE channel_link_attempts');
+  const before = count(db, 'SELECT COUNT(*) n FROM channel_link_codes');
+  const refused = await call(env, ME, 'POST', '/telegram/link');
+  assert.deepEqual([refused.status, refused.body.code, count(db, 'SELECT COUNT(*) n FROM channel_link_codes')], [503, 'link_limit_unavailable', before]);
+});
+
+test('#1602 consent unreadable/inactive and webhook counter outage leave active connections untouched', async () => {
+  const { env, db } = await world({ seed: true });
+  const f = mockFetch(telegramApi);
+  try {
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(code, TG_NEW));
+    const uid = (await call(env, ME, 'GET', '/telegram/link')).body.claim.uid;
+    db.prepare("UPDATE channel_link_codes SET claim_details_enc = 'tampered' WHERE uid = ?").run(uid);
+    assert.deepEqual([(await call(env, ME, 'GET', '/telegram/link')).body.claim.status, (await axalConfirm(env)).status], ['unreadable', 409]);
+    const fresh = await createLinkCode(env, ME, 'telegram');
+    db.exec('DROP TABLE channel_link_attempts');
+    await tgHook(env, startUpdate(fresh.code, TG_NEW));
+    assert.deepEqual([db.prepare('SELECT used_at FROM channel_link_codes WHERE code_hash = ?').get(refCode(fresh.code)).used_at,
+      db.prepare("SELECT external_account_id FROM integrations WHERE user_id = ? AND provider_key = 'telegram'").get(ME).external_account_id], [null, TG_ME]);
+    assert.match(f.calls.at(-1).body.text, /cannot check link attempts/);
+  } finally { f.restore(); }
+});
+
+
+test('#1602 mutation tripwires: neither consent may be omitted, expiry/cancellation scope and counting matter', async () => {
+  const f = mockFetch(telegramApi);
+  try {
+    for (const side of ['axal', 'telegram'] as const) {
+      const check = async (adapter: any) => {
+        const { env, db } = await world({ seed: true });
+        const { code } = await createLinkCode(env, ME, 'telegram');
+        await tgHook(env, startUpdate(code, TG_NEW));
+        const uid = (await call(env, ME, 'GET', '/telegram/link')).body.claim.uid;
+        if (side === 'axal') await adapter.confirmTelegramLink(env, normaliseTelegramUpdate(confirmUpdate(TG_NEW)));
+        else await adapter.confirmAxalTelegramLink(env, ME, uid);
+        assert.equal(db.prepare("SELECT external_account_id FROM integrations WHERE user_id = ? AND provider_key = 'telegram'").get(ME).external_account_id, TG_ME);
+      };
+      const real = await import('../src/services/channels/telegram.ts');
+      await check(real);
+      const source = readFileSync(new URL('../src/services/channels/telegram.ts', import.meta.url), 'utf8');
+      const column = side === 'axal' ? 'axal_confirmed_at' : 'confirmed_at';
+      const refusal = side === 'axal' ? 'waiting_axal' : 'waiting_telegram';
+      const checkLine = `if (!claim.${column}) return { linked: false, reason: '${refusal}' };`;
+      // Remove the corresponding route-layer AND SQL-layer requirement.
+      const mutated = source.replace(checkLine, '').replace(`c.${column} IS NOT NULL`, '1 = 1');
+      const adapter = await deadlineMutant('../src/services/channels/telegram.ts', source, mutated);
+      await assert.rejects(() => check(adapter), { name: 'AssertionError' });
+    }
+
+    const codes = await deadlineMutant('../src/services/channels/linkCodes.ts', 'AND expires_at > ?', 'AND ? IS NOT NULL');
+    const { env, db } = await world();
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    db.exec("UPDATE channel_link_codes SET expires_at = '2000-01-01T00:00:00.000Z'");
+    assert.equal(await (await import('../src/services/channels/linkCodes.ts')).consumeLinkCode(env, code, 'telegram', TG_ME), null);
+    const bad = await codes.consumeLinkCode(env, code, 'telegram', TG_ME);
+    assert.throws(() => assert.equal(bad, null), { name: 'AssertionError' });
+
+    const counter = await deadlineMutant('../src/services/channels/events.ts', 'ON CONFLICT (subject_hash, window_start) DO UPDATE SET n = n + 1', 'ON CONFLICT (subject_hash, window_start) DO UPDATE SET n = n');
+    const { env: counterEnv } = await world();
+    const counts = await Promise.all(Array.from({ length: 11 }, () => counter.linkAttemptOverLimit(counterEnv, 'ip:fixture', 10)));
+    assert.throws(() => assert.deepEqual(counts, Array(10).fill(false).concat([true])), { name: 'AssertionError' });
+  } finally { f.restore(); }
+});
+
+
+test('#1602 mutation tripwires: claim ownership, cancellation, encrypted names and private counter keys', async () => {
+  const { env, db } = await world();
+  const first = await createLinkCode(env, ME, 'telegram');
+  const uid = db.prepare('SELECT uid FROM channel_link_codes WHERE code_hash = ?').get(refCode(first.code)).uid;
+  const store = await import('../src/services/channels/linkCodes.ts');
+  assert.equal(await store.memberLinkClaim(env, OTHER, uid), null);
+  const unscoped = await deadlineMutant('../src/services/channels/linkCodes.ts',
+    "SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = 'telegram' AND uid = ?",
+    "SELECT * FROM channel_link_codes WHERE ? IS NOT NULL AND provider = 'telegram' AND uid = ?");
+  const stolen = await unscoped.memberLinkClaim(env, OTHER, uid);
+  assert.throws(() => assert.equal(stolen, null), { name: 'AssertionError' });
+
+  const cancelled = await deadlineMutant('../src/services/channels/linkCodes.ts',
+    'activated_at IS NULL AND cancelled_at IS NULL', 'activated_at IS NOT NULL AND cancelled_at IS NULL');
+  const next = await cancelled.createLinkCode(env, ME, 'telegram');
+  const oldResult = await store.consumeLinkCode(env, first.code, 'telegram', TG_ME);
+  assert.throws(() => assert.equal(oldResult, null), { name: 'AssertionError' });
+
+  const plaintext = await deadlineMutant('../src/services/channels/linkCodes.ts',
+    "await encryptColumn(env, 'channel_link_codes', 'claim_details_enc', codeRow.uid, JSON.stringify(details))",
+    "JSON.stringify(details)");
+  await plaintext.consumeLinkCode(env, next.code, 'telegram', TG_NEW, { display_name: 'Dana', username: '@dana_biz' });
+  const stored = db.prepare('SELECT claim_details_enc FROM channel_link_codes WHERE code_hash = ?').get(refCode(next.code)).claim_details_enc;
+  assert.throws(() => assert.equal(stored.includes('Dana') || stored.includes('dana_biz'), false), { name: 'AssertionError' });
+
+  const counter = await deadlineMutant('../src/services/channels/events.ts',
+    "const hash = await indexHmac(env, 'channel_link_attempts', 'subject_hash', subject);", "const hash = subject;");
+  await counter.linkAttemptOverLimit(env, 'ip:203.0.113.17', 10);
+  assert.throws(() => assert.equal(JSON.stringify(db.prepare('SELECT * FROM channel_link_attempts').all()).includes('203.0.113.17'), false), { name: 'AssertionError' });
+});
+
+
+test('#1602 mutation: a completed claim is idempotent past expiry and the response keeps its own UID', async () => {
+  const { env, db } = await world({ seed: true });
+  const f = mockFetch(telegramApi);
+  try {
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(code, TG_ME));
+    await tgHook(env, confirmUpdate(TG_ME));
+    const completed = await axalConfirm(env);
+    const uid = completed.body.claim.uid;
+    db.prepare("UPDATE channel_link_codes SET expires_at = '2000-01-01T00:00:00.000Z' WHERE uid = ?").run(uid);
+    const adapter = await import('../src/services/channels/telegram.ts');
+    const check = async (candidate: any) => {
+      const out = await candidate.confirmAxalTelegramLink(env, ME, uid).catch(() => ({ linked: false }));
+      assert.equal(out.linked, true);
+    };
+    await check(adapter);
+    const bad = await deadlineMutant('../src/services/channels/telegram.ts', 'if (claim.activated_at) {', 'if (false && claim.activated_at) {');
+    await assert.rejects(() => check(bad), { name: 'AssertionError' });
+
+    await createLinkCode(env, ME, 'telegram');
+    const store = await import('../src/services/channels/linkCodes.ts');
+    assert.equal((await store.pendingLinkView(env, ME, uid)).uid, uid);
+    const latestInstead = await deadlineMutant('../src/services/channels/linkCodes.ts',
+      'const row = uid ? await memberLinkClaim', 'const row = false ? await memberLinkClaim');
+    const wrong = await latestInstead.pendingLinkView(env, ME, uid);
+    assert.throws(() => assert.equal(wrong.uid, uid), { name: 'AssertionError' });
+  } finally { f.restore(); }
 });

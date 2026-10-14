@@ -703,7 +703,7 @@ test('D685 §5.11: deleting an interview deletes its sessions the way DELETE /se
 // summarise → place findings, as a resumable job. The AI is mocked by model.
 // ===========================================================================
 
-import { runInterviewProcessJob, isStale } from '../src/services/interviewProcessing.ts';
+import { runInterviewProcessJob, isStale, recoverSession, NO_CONSENT_SENTENCE, RESTARTED_NOTE, STALLED_TWICE } from '../src/services/interviewProcessing.ts';
 import { checkSummary } from '../src/services/interviewStructuring.ts';
 
 /** A recorded, stopped session with `n` chunks, the queue captured. */
@@ -990,7 +990,7 @@ test('D685 §5.6: the sweeper deletes stale drafts (and the interview made for o
   const queuedBefore = sent.length;
 
   const r = await sweepInterviewSessions(f.env, new Date());
-  assert.deepEqual(r, { drafts: 3, paused: 1, resumed: 1 });
+  assert.deepEqual(r, { drafts: 3, paused: 1, resumed: 1, recovered: 0 });
   assert.ok(interviewRow(f, handId), 'an interview logged by hand stays, even with its only draft gone');
   const row = (id: number) => f.db.prepare('SELECT * FROM interview_sessions WHERE id = ?').get(id) as any;
   assert.equal(row(made.body.session.id), undefined);
@@ -1008,7 +1008,7 @@ test('D685 §5.6: the sweeper deletes stale drafts (and the interview made for o
   assert.equal(stuck.processing_error, 'Parts 2 and 4 of the recording never arrived, so the transcript goes on without them.');
   assert.equal(sent.length, queuedBefore + 1);
   // A second sweep does nothing more.
-  assert.deepEqual(await sweepInterviewSessions(f.env, new Date()), { drafts: 0, paused: 0, resumed: 0 });
+  assert.deepEqual(await sweepInterviewSessions(f.env, new Date()), { drafts: 0, paused: 0, resumed: 0, recovered: 0 });
   assert.equal(missingLine([0]), 'Part 1 of the recording never arrived, so the transcript goes on without it.');
 });
 
@@ -1020,6 +1020,128 @@ test('D685 §5.6: the missing-parts note survives the run to done', async () => 
   await sweepInterviewSessions(f.env, new Date());
   assert.equal(await job(f, sid), 'done');
   assert.equal(stage(f, sid).e, 'Part 2 of the recording never arrived, so the transcript goes on without it.');
+});
+
+test('D685 §5.9.3: the sweeper resumes runs that stopped moving, and fails the ones it cannot resume', async () => {
+  const f = fixture();
+  llmAi(f);
+  const backdate = (sid: number, set: string) => f.db.prepare(`UPDATE interview_sessions SET ${set} WHERE id = ?`).run(sid);
+  // Two runs through the routes; the rest put straight into a state on interview 1.
+  const tr = (await recordedForProcessing(f, 2)).sid;
+  await call(f.env, FOUNDER, 'POST', `/sessions/${tr}/finish`, { last_seq: 1 });
+  const pl = (await recordedForProcessing(f, 1)).sid;
+  await call(f.env, FOUNDER, 'POST', `/sessions/${pl}/finish`, { last_seq: 0 });
+  assert.equal(await job(f, pl), 'done');
+  const recorded = async (extra = '') => {
+    const id = await sessionIn(f, 'stopped', extra);
+    await putChunk(f, id, 0);
+    return id;
+  };
+  const [legacy, fresh, moving, uploading] = [await recorded(), await recorded(), await recorded(), await recorded()];
+  const noConsent = await recorded();
+  f.db.prepare("UPDATE interview_sessions SET consent_status = 'declined' WHERE id = ?").run(noConsent);
+  const noAudio = await sessionIn(f, 'stopped');
+  const noTime = await recorded();
+  const text = await sessionIn(f, 'stopped', ", channel = 'text'");
+  // Stale in transcribing: the job died partway. Manual mode, so its run ends after the transcript.
+  backdate(tr, "processing_stage = 'transcribing', processing_auto = 0, processing_updated_at = datetime('now', '-20 minutes')");
+  // Stale in placing, with the transcript in: it resumes at the summary.
+  backdate(pl, "processing_stage = 'placing', processing_updated_at = datetime('now', '-20 minutes')");
+  // Left in transcribing by the old synchronous route, an hour ago.
+  backdate(legacy, "status = 'transcribing', processing_stage = NULL, updated_at = datetime('now', '-1 hour')");
+  // Not stale: a legacy row touched a minute ago, a run that moved five minutes ago, an upload under its own 30 minutes.
+  backdate(fresh, "status = 'transcribing', processing_stage = NULL, updated_at = datetime('now', '-1 minute')");
+  backdate(moving, "expected_last_seq = 0, processing_stage = 'transcribing', processing_updated_at = datetime('now', '-5 minutes')");
+  backdate(uploading, "expected_last_seq = 1, processing_stage = 'uploading', processing_updated_at = datetime('now', '-20 minutes')");
+  // Stale, but nothing can resume it: consent withdrawn; no audio at all.
+  backdate(noConsent, "expected_last_seq = 0, processing_stage = 'summarising', processing_updated_at = datetime('now', '-20 minutes')");
+  backdate(noAudio, "status = 'transcribing', processing_stage = NULL, updated_at = datetime('now', '-1 hour')");
+  // A stage with no time on it is stale too (isStale reads it so).
+  backdate(noTime, "expected_last_seq = 0, processing_stage = 'transcribing', processing_updated_at = NULL");
+  // Only a recording channel ever reached `transcribing` through the old route: a text session is never touched.
+  backdate(text, "status = 'transcribing', processing_stage = NULL, updated_at = datetime('now', '-1 hour')");
+  const sent: any[] = [];
+  f.env.JOB_QUEUE = { async send(body: any) { sent.push(body); } };
+  const aiBefore = f.aiCalls.length;
+
+  assert.deepEqual(await sweepInterviewSessions(f.env, new Date()), { drafts: 0, paused: 0, resumed: 0, recovered: 4 });
+  const byId = (a: number, b: number) => a - b;
+  assert.deepEqual(sent.map((m) => m.payload?.session_id ?? m.session_id).sort(byId), [tr, pl, legacy, noTime].sort(byId), 'one run queued for each stale session, and none for the rest');
+  assert.equal(new Set(sent.map((m) => m.idempotency_key)).size, 4, 'each with a fresh key');
+  assert.equal(f.aiCalls.length, aiBefore, 'the sweep itself runs no AI');
+  assert.deepEqual([stage(f, tr).s, stage(f, tr).e], ['transcribing', RESTARTED_NOTE], 'a restarted run says so while it runs');
+  assert.equal(stage(f, pl).s, 'summarising', 'the transcript is in, so it resumes at the summary');
+  assert.deepEqual([stage(f, legacy).s, stage(f, legacy).status], ['transcribing', 'stopped']);
+  assert.deepEqual([stage(f, fresh).s, stage(f, fresh).status], [null, 'transcribing'], 'a legacy row still inside 15 minutes is left alone');
+  assert.equal(stage(f, moving).s, 'transcribing');
+  assert.equal(stage(f, uploading).s, 'uploading', 'an upload waits for its own 30 minutes');
+  assert.deepEqual([stage(f, noConsent).s, stage(f, noConsent).e], ['failed', NO_CONSENT_SENTENCE]);
+  assert.deepEqual([stage(f, noAudio).s, stage(f, noAudio).e, stage(f, noAudio).status], ['failed', 'This session has no recorded audio yet.', 'stopped']);
+  assert.equal(stage(f, noTime).s, 'transcribing');
+  assert.deepEqual([stage(f, text).s, stage(f, text).status], [null, 'transcribing'], 'a text session is left alone');
+  // The resumed runs finish, and the note goes with them: in Manual mode and in full.
+  assert.equal(await job(f, tr), 'done');
+  assert.deepEqual([stage(f, tr).e, stage(f, tr).status], [null, 'transcribed']);
+  assert.equal(await job(f, legacy), 'done');
+  assert.equal(stage(f, legacy).e, null);
+  // A second sweep finds nothing: every row it touched is fresh or settled.
+  assert.deepEqual(await sweepInterviewSessions(f.env, new Date()), { drafts: 0, paused: 0, resumed: 0, recovered: 0 });
+  assert.equal(sent.length, 4);
+  // A restarted run that stalls again is failed, not queued every 15 minutes for ever.
+  backdate(noTime, "processing_updated_at = datetime('now', '-20 minutes')");
+  assert.deepEqual(await sweepInterviewSessions(f.env, new Date()), { drafts: 0, paused: 0, resumed: 0, recovered: 0 });
+  assert.deepEqual([stage(f, noTime).s, stage(f, noTime).e], ['failed', STALLED_TWICE]);
+  assert.equal(sent.length, 4, 'no second run queued');
+  // The member's Retry starts it again, without the note, so the sweeper may restart it once more.
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${noTime}/process`)).status, 202);
+  assert.deepEqual([stage(f, noTime).s, stage(f, noTime).e], ['transcribing', null]);
+  assert.equal(sent.length, 5);
+});
+
+test('D685 §5.9.3: a row /process claims while the sweeper reads it is left to that run, not failed', async () => {
+  const f = fixture();
+  llmAi(f);
+  const { sid, sent } = await recordedForProcessing(f, 1);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 0 });
+  f.db.prepare("UPDATE interview_sessions SET processing_stage = 'transcribing', processing_updated_at = datetime('now', '-20 minutes') WHERE id = ?").run(sid);
+  // Between the sweeper's read and its resume, a /process press resumes the row first.
+  const db = f.env.DB;
+  f.env.DB = {
+    ...db,
+    prepare(sql: string) {
+      const st = db.prepare(sql);
+      if (!sql.includes("processing_stage IN ('transcribing', 'summarising', 'placing')")) return st;
+      return { bind: (...a: any[]) => { const b = st.bind(...a); return { ...b, all: async () => {
+        const out = await b.all();
+        assert.equal((await call({ ...f.env, DB: db }, FOUNDER, 'POST', `/sessions/${sid}/process`)).status, 202);
+        return out;
+      } }; } };
+    },
+  };
+  const before = sent.length;
+  assert.deepEqual(await sweepInterviewSessions(f.env, new Date()), { drafts: 0, paused: 0, resumed: 0, recovered: 0 });
+  f.env.DB = db;
+  assert.equal(sent.length, before + 1, 'one run: the press\'s');
+  assert.deepEqual([stage(f, sid).s, stage(f, sid).e], ['transcribing', null], 'the sweeper neither queues a second run nor fails the first');
+  assert.equal(await job(f, sid), 'done');
+});
+
+test('D685 §5.9.3: two recoveries of the same stale row queue one run', async () => {
+  const f = fixture();
+  llmAi(f);
+  const { sid, sent } = await recordedForProcessing(f, 1);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 0 });
+  f.db.prepare("UPDATE interview_sessions SET processing_stage = 'transcribing', processing_updated_at = datetime('now', '-20 minutes') WHERE id = ?").run(sid);
+  const seen = f.db.prepare('SELECT * FROM interview_sessions WHERE id = ?').get(sid) as any;
+  const before = sent.length;
+  // The sweeper and a /process press both read the stale row, then both resume it.
+  const one = await recoverSession(f.env, seen, FOUNDER);
+  const two = await recoverSession(f.env, seen, FOUNDER);
+  assert.deepEqual(one, { ok: true, stage: 'transcribing' });
+  assert.equal(two.ok, false);
+  assert.equal((two as any).detail, 'not_retryable');
+  assert.equal(sent.length, before + 1, 'only the first queues a run');
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/process`)).status, 409, 'and the route now sees a run that is moving');
 });
 
 test('D685 §5.7: a mark is taken while recording, paused or stopped; a client_key replay answers the stored mark; the offset is capped', async () => {

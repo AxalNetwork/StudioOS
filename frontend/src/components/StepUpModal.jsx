@@ -56,7 +56,7 @@ export default function StepUpModal() {
   }, []);
 
   const cancel = useCallback(() => { if (!busy) settle(false); }, [busy, settle]);
-  useEscapeClose(cancel);
+  useEscapeClose(cancel, { active: open });
 
   const submit = useCallback(async () => {
     if (code.length !== 6 || busy) return;

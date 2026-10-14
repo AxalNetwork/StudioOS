@@ -77,7 +77,7 @@ const checks={
   outcome(m){const text=renderedText(sheetHtml(m,{step:4,outcome:{recipients:4,notified:3,not_delivered:1}}));assert.match(text,/available to 4 verified recipients; 3 notified, 1 not delivered/);},
   reads(m){const read=(state)=>render(m.parts.CallReadState,{read:{...state,retry:on.retry},children:React.createElement('p',null,'No calls are recorded')});
     assert.deepEqual([renderedText(read({loading:true})),renderedText(read({error:{code:'round_calls_disabled'}})),renderedText(read({error:{code:'unavailable'}})),renderedText(read({loading:false,error:null}))],['Loading…','Coming soon. Round calls are not enabled.','Unreadable. Try again','No calls are recorded']);},
-  money(m){assert.deepEqual([m.parts.moneyCents(null),m.parts.moneyCents(0),m.parts.dollarsToCents('12.34'),m.parts.dollarsToCents('12.345'),m.parts.dollarsToCents('0'),m.parts.dollarsToCents('9007199254740992')],['Not recorded','US$0.00',1234,null,null,null]);},
+  money(m){assert.deepEqual([m.parts.moneyCents(null),m.parts.moneyCents(0),m.parts.dollarsToCents('12.34'),m.parts.dollarsToCents('12.345'),m.parts.dollarsToCents('0'),m.parts.dollarsToCents('9007199254740992')],['Not recorded','$0',1234,null,null,null]);},
   recipients(m){const recipients=[{origin:'match',opened_at:'2098-01-01',commitment_cents:null},{origin:'match',name:'Real responder',email:'real@example.test',commitment_cents:0}];
     const text=renderedText(pageHtml(m,{...founder,recipients}));
     assert.deepEqual([text.includes('identity private until a response'),text.includes('Real responder · real@example.test'),text.includes('No commitment recorded'),text.includes('No recipients are recorded yet')],[true,true,true,false]);},
@@ -117,7 +117,7 @@ const probes=[
   ['waiting','page',"['draft','awaiting_counsel'].includes(c.state)","c.state==='draft'"],
   ['changedDeck','page',"if(deck?.unreadable)return", "if(false)return"],
   ['steps','sheet',"'The round','Materials','Audience','Preview','Send'","'The round','Audience','Materials','Preview','Send'"],
-  ['footer','sheet',"Step {s.step+1} of 5","Step {s.step} of 5"],
+  ['footer','sheet',"`Step ${s.step+1} of 5`","`Step ${s.step} of 5`"],
   ['footer','sheet',"{s.step>0&&<button","{true&&<button"],
   ['rows','sheet',"{value??'Not recorded'}","{value??''}"],
   ['rows','sheet',"return ROUND_ROWS.find(row=>!row.show(fields))?.key??null;","return null;"],
@@ -140,7 +140,7 @@ const probes=[
   ['outcome','sheet',"{s.outcome.notified} notified","{s.outcome.recipients} notified"],
   ['reads','parts',"if(read.loading)return","if(false)return"],
   ['reads','parts',"read.error.code==='round_calls_disabled'","false"],
-  ['money','parts',"value==null?'Not recorded'","value==null?'US$0'"],
+  ['money','parts',"if(value==null)return 'Not recorded';","if(value==null)return '$0';"],
   ['money','parts',"cents>0","cents>=0"],
   ['recipients','page',"identity private until a response","identity shared"],
   ['closed','page',"!d.read_only&&<section className=\"space-y-3\"","true&&<section className=\"space-y-3\""],

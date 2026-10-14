@@ -33,6 +33,8 @@ export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 // D685 — the one lightbox shell: a centred dialog, a full-screen sheet on a phone. See Lightbox.jsx.
 export { default as Lightbox } from './Lightbox';
+// D686 — Cycle Action's lightbox body: header, step pills, banner, scrolling body, footer; shared button classes. See ActionSheet.jsx.
+export { default as ActionSheet, primary as actionPrimary, ghost as actionGhost, danger as actionDanger } from './ActionSheet';
 
 // The AI control rail — eight canvases, one component. Not navigation: see
 // documentation/architecture/DECISIONS.md T3. The gateway it reports on is services/aiRouter.ts and has

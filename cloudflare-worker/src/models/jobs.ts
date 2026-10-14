@@ -41,7 +41,10 @@ export type JobType =
   | 'meeting_import'
   // D684 — a session's transcript structured by the Worker AI as soon as it
   // arrives (services/sessionAutoStructure.ts); proposals still await review.
-  | 'session_structure';
+  | 'session_structure'
+  // D685 §5.9 — a stopped recording's upload → transcribe → summarise → place
+  // findings, as one resumable job (services/interviewProcessing.ts).
+  | 'interview_process';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

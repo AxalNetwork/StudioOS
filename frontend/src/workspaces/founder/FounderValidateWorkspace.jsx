@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { projectSearch } from '../../pages/cycles/founderToolNavigation';
 import { api } from '../../lib/api';
 import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
@@ -70,10 +71,16 @@ import { ClaimLinkList, InterviewEvidenceFields, VerdictPanel, earlierDecisions 
  * `zoneKey` below, and D67.
  */
 
+// The venture in the address first (`?project_id=`, or Validate's own
+// `?project=`), as CycleRoute's `useProject` reads it; the first venture only
+// when neither is set (D686). Before, every Validate tool showed `list[0]`.
 const useProjectId = () => {
-  const [projectId, setProjectId] = useState(null);
-  const [ready, setReady] = useState(false);
+  const [searchParams] = useSearchParams();
+  const asked = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
+  const [projectId, setProjectId] = useState(asked);
+  const [ready, setReady] = useState(Boolean(asked));
   useEffect(() => {
+    if (asked) { setProjectId(asked); setReady(true); return undefined; }
     let alive = true;
     api.listProjects?.()
       .then((rows) => {
@@ -84,7 +91,7 @@ const useProjectId = () => {
       .catch(() => { if (alive) setProjectId(null); })
       .finally(() => { if (alive) setReady(true); });
     return () => { alive = false; };
-  }, []);
+  }, [asked]);
   return { projectId, ready };
 };
 
@@ -465,6 +472,8 @@ function PainSeverity({ interviewId, pains, onChanged }) {
 }
 
 function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
+  // D686: these links keep the venture the page is showing.
+  const keep = projectSearch(useLocation().search);
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
   // `all`, `need`, `icp` or `recency` — the chip row is the only thing that sets
@@ -594,13 +603,13 @@ function PainMap({ projectId, ready, zoneFilters, zoneActions }) {
           description={view.icp_recorded
             ? 'ICP fit is on file for this venture, and none of the interviews that named a pain was recorded as a fit. The map has themes; none of them came from your customers.'
             : 'No interview carries a recorded ICP fit, so nothing here can be attributed to your customers or ruled out as not from them. That is a gap in the log, not a finding about the pains.'}
-          action={<Link to="/validate/interviews" className="text-axal-violet underline">Record fit on the interviews</Link>}
+          action={<Link to={`/validate/interviews${keep}`} className="text-axal-violet underline">Record fit on the interviews</Link>}
         />
       ) : groups.length === 0 && ungrouped.length === 0 ? (
         <EmptyState
           title="No pains logged yet"
           description="Pain themes are grouped from the pains recorded against interviews. Until one is logged this map has nothing to draw, and drawing it anyway would be inventing the finding."
-          action={<Link to="/validate/interviews" className="text-axal-violet underline">Back to interviews</Link>}
+          action={<Link to={`/validate/interviews${keep}`} className="text-axal-violet underline">Back to interviews</Link>}
         />
       ) : (
         <Card className="p-4">
