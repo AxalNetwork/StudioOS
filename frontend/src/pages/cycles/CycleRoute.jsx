@@ -24,6 +24,8 @@ import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
+import UpdatesHistory from './UpdatesHistory';
+import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RecordFormSheet from './RecordFormSheet';
 import { editFor, formFor } from './forms';
@@ -195,10 +197,15 @@ const CYCLE_DEFS = {
     ]),
     // A module's further parts, drawn under its table from the module read.
     parts: toFnMap({
-      'durable-company-building': (data, ctx) => (
+      // D686 §5.8: the Updates history (#updates) above the checklist.
+      'durable-company-building': (data, ctx) => (<>
+        <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction} />
         <DurabilityChecklist items={data?.parts?.checklist}
           onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
-      ),
+      </>),
+      // The replies customer and partner asks brought in, beside the rows.
+      distribution: (data) => <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />,
+      'partner-network': (data) => <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />,
     }),
   },
   /**

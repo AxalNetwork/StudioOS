@@ -30,7 +30,7 @@ export const CYCLES = {
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Call for Capital',
     history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships', hash: '#calls', live: true } },
   grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update',
-    history: { key: 'updates', name: 'Updates', path: '/grow/durable-company-building', hash: '#updates', live: false } },
+    history: { key: 'updates', name: 'Updates', path: '/grow/durable-company-building', hash: '#updates', live: true } },
 };
 
 export const CARD_STATES = ['ok', 'empty', 'too_little', 'not_recorded', 'unreadable'];

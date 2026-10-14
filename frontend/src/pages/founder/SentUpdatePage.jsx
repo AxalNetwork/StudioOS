@@ -55,10 +55,12 @@ export function sentSub(data) {
   const when = dayMon(data.sent_at);
   const s = data.sent_to;
   if (!s) return when ? `Sent ${when}` : 'Sent';
+  // The audiences chosen (`audience`, S19-B), else those it reached.
+  const chose = (key) => (data.audience ? data.audience[key] !== false : s[key] > 0);
   const parts = [];
-  if (s.investors > 0) parts.push(`${s.investors} investor${s.investors === 1 ? '' : 's'}`);
-  if (s.team > 0) parts.push(`${s.team} team member${s.team === 1 ? '' : 's'}`);
-  if (s.network > 0) parts.push(`the Axal network (asks only${data.network_includes_metrics ? ', with metrics' : ''})`);
+  if (chose('investors')) parts.push(`${s.investors} investor${s.investors === 1 ? '' : 's'}`);
+  if (chose('team')) parts.push(`${s.team} team member${s.team === 1 ? '' : 's'}`);
+  if (chose('network')) parts.push(`the Axal network (asks only${data.network_includes_metrics ? ', with metrics' : ''})`);
   return `Sent${when ? ` ${when}` : ''}${parts.length ? ` to ${listOf(parts)}` : ''}`;
 }
 
@@ -83,6 +85,12 @@ export function sentRows(data, { q = '', filter = 'all', page = 1 } = {}) {
   const shown = all.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE);
   return { total, page: p, pages, from: total ? (p - 1) * PAGE_SIZE + 1 : 0, to: (p - 1) * PAGE_SIZE + shown.length,
     replies: shown.filter((x) => x.type === 'reply'), recipients: shown.filter((x) => x.type === 'recipient').map((x) => x.recipient) };
+}
+
+/** The network as one row: "12 in the Axal network · 5 opened · 1 replied" (counted, never named). */
+export function networkRow(n) {
+  if (!n || !(n.sent > 0)) return null;
+  return `${n.sent} in the Axal network · ${n.opened ?? 0} opened · ${n.replied ?? 0} replied`;
 }
 
 /** A recipient's state: Not delivered (why), Replied, Opened d Mon, Not opened. */
@@ -212,7 +220,8 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null, initia
               <span>{r.label || `${r.audience} recipient`}</span>
               <span className="text-axal-muted">{recipientState(r)}</span>
             </li>
-          ))}</ul>
+          ))}
+          {networkRow(data.network) && !q.trim() && <li className={ROW} data-testid="sent-network"><span>{networkRow(data.network)}</span></li>}</ul>
         </Card>
       )}
       {author && (
