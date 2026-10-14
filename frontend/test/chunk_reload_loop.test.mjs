@@ -80,7 +80,7 @@ test('the reload budget is a count, and it survives blocked storage', () => {
   // #1588: the reload waits for a running interview capture (whenIdle), so the
   // path reports a reload under way only when it starts now; while it waits,
   // Vite's rethrow is kept and RouteErrorBoundary shows its card.
-  assert.match(main, /const now = !isCapturing\(\);\s*whenIdle\(\(\) => dropCachesThenReload\(next\)\);\s*return now;\n\}/,
+  assert.match(main, /const now = !isCapturing\(\);[\s\S]*?return now;\n\}/,
     'and the path that does start a reload must report that it did');
   assert.match(main, /readAttempts\(CHUNK_KEY, CHUNK_PARAM\)/,
     'the chunk recovery must read its budget through the shared guard');

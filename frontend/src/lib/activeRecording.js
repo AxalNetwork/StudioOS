@@ -110,8 +110,8 @@ export function pillVariant(st) {
   if (st.phase === 'paused') return 'paused';
   if (st.phase === 'share') return 'share';
   if (st.phase === 'denied') return st.refused ? 'refused' : 'blocked';
-  if (st.online === false || st.cap?.online === false) return 'offline';
-  if (st.phase === 'recording') return 'recording';
+  // Offline is said of a recording only: a Start still opening draws no pill (#1588).
+  if (st.phase === 'recording') return st.online === false || st.cap?.online === false ? 'offline' : 'recording';
   return null;
 }
 
@@ -185,7 +185,13 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
   let pre = null;
   let wakeLock = null;
   let userId = null;
-  let heldLock = null; // { id, release }
+  let heldLock = null; // { id, release, granted }
+  // A Start between its click and the Worker's answer (#1588): the mic is
+  // opening and `capture` is about to be its, so another Start is refused.
+  let opening = false;
+  // The AudioContext a Start click prepared and its capture never used (a
+  // denied mic returns before the context is made): closed, not leaked.
+  let unusedPrepared = () => {};
   const listeners = new Set();
   const set = (patch) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; listeners.forEach((l) => l(state)); };
   const q = () => queue || (queue = indexedDbQueue());
@@ -197,6 +203,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     let stream = pre?.stream || null;
     let ctx = pre?.ctx || null;
     pre = null;
+    unusedPrepared = () => { if (ctx) { try { ctx.close?.(); } catch { /* gone */ } ctx = null; } };
     capture = createCapture({
       deps: {
         getUserMedia: stream ? ((opts) => { if (!stream) return browser.getUserMedia(opts); const p = stream; stream = null; return p; }) : browser.getUserMedia,
@@ -228,10 +235,13 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     dropLock();
     let release;
     const held = new Promise((r) => { release = r; });
-    heldLock = { id, release };
-    locks.request(lockName(id), () => held).catch(() => {});
+    heldLock = { id, release, granted: false };
+    const mine = heldLock;
+    locks.request(lockName(id), () => { mine.granted = true; return held; }).catch(() => {});
   };
   const dropLock = () => { heldLock?.release?.(); heldLock = null; };
+  /** Does this tab hold `rec-<id>` already? Then a probe would only find itself. */
+  const holding = (id) => heldLock?.id === id && heldLock.granted;
   /** Is `rec-<id>` free here? Asked without waiting; with no Web Locks, every lock is free. */
   const lockFree = async (id) => {
     const locks = browser.locks;
@@ -240,12 +250,16 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
   };
 
   /** Open the microphone, then post start (or resume) only once it is granted (D685 §5.6.5). */
-  const goLive = async ({ display = false, resume = false } = {}) => {
+  const goLive = async (opts = {}) => {
+    opening = true;
+    try { return await openAndPost(opts); } finally { opening = false; }
+  };
+  const openAndPost = async ({ display = false, resume = false } = {}) => {
     const s = state.session;
     const queued = await q().list(s.id).catch(() => []);
     const c = makeCapture({ startSeq: nextSeq(state.storedSeqs || [], queued.map((r) => r.seq)) });
     const mic = await c.open({ display });
-    if (mic === 'denied') { set({ phase: 'denied' }); return 'denied'; }
+    if (mic === 'denied') { unusedPrepared(); set({ phase: 'denied' }); return 'denied'; }
     try {
       const r = await api.action(s.id, resume ? 'resume' : 'start');
       set({ session: r.session, phase: 'recording', error: null, refused: null });
@@ -255,10 +269,13 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       return 'recording';
     } catch (e) {
       await c.stop({ flush: false });
-      capture = null;
-      // The Worker said no (it answered with a status): its words, never the
-      // microphone's. 409 `session_active` names the recording already live.
-      const refused = !resume && e?.status ? startRefused(e) : null;
+      // Only this call's own capture: another Start's is not dropped (#1588).
+      if (capture === c) capture = null;
+      // The mic was granted, so whatever failed is the request: the Worker's
+      // words (409 `session_active` names the recording already live), or the
+      // request's own when it never answered (offline, a timeout), never the
+      // microphone's (#1588).
+      const refused = !resume ? startRefused(e) : null;
       set({ phase: resume ? 'paused' : 'denied', error: e?.message || 'The recording could not start.', refused });
       return 'refused';
     }
@@ -359,7 +376,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      * log out under it. Once `finish` is accepted and the chunks are stored,
      * the rest runs on the Worker, and a reload only re-reads it (§5.9.5).
      */
-    isCapturing: () => ['share', 'recording', 'paused'].includes(state.phase)
+    isCapturing: () => opening || ['share', 'recording', 'paused'].includes(state.phase)
       || (state.phase === 'stopping' && (state.stopStep !== 'finished' || state.processing?.stage === 'uploading')),
 
     /**
@@ -390,6 +407,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       // Never over a live capture: replacing it would leave its microphone
       // running with nothing to stop it (#1588). The caller offers it instead.
       if (liveRefusal(state, api_.isCapturing())) { api_.release(); return 'busy'; }
+      pollGen += 1; // the last session's processing poll ends here, never writes over this one
       capture = null;
       set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, points, video, storedSeqs, phase: video ? 'share' : 'idle', meetingUrl: joinHref(meetingUrl), attach });
       if (video) { api_.release(); return 'share'; }
@@ -403,12 +421,15 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      */
     async adopt({ session, interview = null, callLabel = null, points = [], storedSeqs = [] }) {
       if (liveRefusal(state, api_.isCapturing())) return 'busy';
-      if (session?.id != null && ['recording', 'paused'].includes(session.status) && !(await lockFree(session.id))) return 'other_tab';
+      if (session?.id != null && ['recording', 'paused'].includes(session.status) && !holding(session.id) && !(await lockFree(session.id))) return 'other_tab';
+      pollGen += 1;
       capture = null;
       let s = session;
       // A recording with no capture in this tab is paused, never left running (§5.6.7).
       if (s?.status === 'recording') { try { s = (await api.action(s.id, 'pause')).session; } catch { /* the Worker keeps its own state */ } }
       set({ ...blank(), session: s, interview, callLabel, channel: s?.channel || null, points, storedSeqs, phase: s?.status === 'draft' ? 'idle' : 'paused', video: s?.channel === 'video' });
+      // This tab has it now: another tab's recovery or Resume leaves it alone (§5.6.7, #1588).
+      if (state.phase === 'paused' && s?.id != null) holdLock(s.id);
       return state.phase;
     },
     /** Video, second click: share the call's tab, or record the microphone only. */
@@ -422,7 +443,15 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       set({ session: r.session, phase: 'paused' });
     },
     async resume() {
-      if (!capture) return goLive({ resume: true, display: false });
+      if (!capture) {
+        // A paused session this tab never captured: another tab may have taken it since (#1588).
+        const id = state.session?.id;
+        if (id != null && !holding(id) && !(await lockFree(id))) {
+          set({ error: 'This recording is live in another tab. Go back to that tab to pause, resume or stop it.' });
+          return 'other_tab';
+        }
+        return goLive({ resume: true, display: false });
+      }
       const r = await api.action(state.session.id, 'resume');
       capture.resume();
       set({ session: r.session, phase: 'recording' });
@@ -495,6 +524,9 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      * page: the view renders from the Worker's processing state (§5.9.5).
      */
     follow({ session, interview = null, processing = null, callLabel = null }) {
+      // Never over a live capture (#1588): the page shows that session's processing itself.
+      if (liveRefusal(state, api_.isCapturing())) return Promise.resolve('busy');
+      pollGen += 1;
       capture = null;
       const done = processing?.stage === 'done';
       set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, phase: done ? 'ready' : 'stopping', stopStep: 'finished' });

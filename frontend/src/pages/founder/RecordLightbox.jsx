@@ -275,6 +275,15 @@ export default function RecordLightbox({
           const interviewId = r.interview?.id ?? r.session?.interview_id ?? into.id;
           try { attach = attachOutcome(await channelsSource.attachMeeting(interviewId, { session_id: r.session.id, join_url: link.trim(), provider }), null); } catch (e) { attach = attachOutcome(null, e); }
         }
+        // begin()'s own check, read in the same tick it runs: a Start opened
+        // meanwhile (the mic still opening elsewhere) is refused here, in words.
+        const late = liveRefusal(recorder.getSnapshot?.(), recorder.isCapturing?.());
+        if (late) {
+          recorder.release?.();
+          setRefusal({ text: late.text, liveHref: `/validate/record/live?session=${encodeURIComponent(late.sessionId)}` });
+          setBusy(false); sending.current = false;
+          return;
+        }
         recorder.begin({
           attach,
           session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video',

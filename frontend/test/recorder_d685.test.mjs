@@ -686,7 +686,8 @@ test('#1588 recovery on load: what this member queued is flushed, and the record
   r.setUser(7);
   assert.equal(await r.recover(), 'restored');
   assert.deepEqual(w.calls.filter((c) => c[0] === 'chunk'), [['chunk', 3, 0]], 'member 9\'s chunk never flushes under member 7');
-  assert.ok(L.asked.length > 0 && L.asked.every(([n, how]) => n === 'rec-7' && how === 'ifAvailable'), 'asked, never held: a probe (recovery\'s, and adopt\'s own)');
+  assert.ok(L.asked.length > 1 && L.asked.slice(0, -1).every(([n, how]) => n === 'rec-7' && how === 'ifAvailable'), 'probed without waiting first (recovery\'s, and adopt\'s own)');
+  assert.deepEqual(L.asked.at(-1), ['rec-7', 'hold'], 'then, restored here, held by this tab (#1588)');
   assert.deepEqual(w.calls.filter((c) => c[0] === 'action'), [['action', 'pause']], 'a recording with no capture here is paused');
   const st = r.getSnapshot();
   assert.equal(st.phase, 'paused');
@@ -856,8 +857,13 @@ test('#1588 main.jsx\'s own stale-chunk reload waits for the capture, and keeps 
   const main = codeOnly(readFileSync('frontend/src/main.jsx', 'utf8'));
   assert.match(main, /import \{ isCapturing, whenIdle \} from '\.\/lib\/captureGuard';/);
   const fn = main.slice(main.indexOf('function reloadOnceForStaleChunk()'), main.indexOf('function dropCachesThenReload('));
-  assert.match(fn, /const now = !isCapturing\(\);\s*whenIdle\(\(\) => dropCachesThenReload\(next\)\);\s*return now;/,
-    'the reload runs through whenIdle, and reports a reload under way only when it starts now');
+  assert.match(fn, /const now = !isCapturing\(\);\s*if \(!chunkReloadQueued\) \{\s*chunkReloadQueued = true;\s*whenIdle\(\(\) => \{/,
+    'the reload is queued once, through whenIdle');
+  const deferred = fn.slice(fn.indexOf('whenIdle(() => {'));
+  assert.match(deferred, /const next = readAttempts\(CHUNK_KEY, CHUNK_PARAM\) \+ 1;\s*if \(next > MAX_CHUNK_RELOADS\) \{ chunkReloadQueued = false; return; \}\s*try \{ recordAttempt\(CHUNK_KEY, next\); \}[^\n]*\n\s*dropCachesThenReload\(next\);/,
+    'the attempt is read and charged when the reload runs (#1588), not on each chunk error');
+  assert.doesNotMatch(fn.slice(0, fn.indexOf('whenIdle(')), /recordAttempt/, 'nothing is charged before it runs');
+  assert.match(fn, /return now;\n\}/, 'and it reports a reload under way only when it starts now');
   assert.doesNotMatch(fn, /reloadCarryingCount|serviceWorker|caches/, 'nothing reloads or drops caches outside whenIdle');
   assert.match(main, /if \(reloadOnceForStaleChunk\(\)\) \{\s*try \{ e\.preventDefault\(\); \}/, 'the rethrow is suppressed only when a reload starts');
   assert.match(readFileSync('documentation/architecture/GOTCHAS.md', 'utf8'), /`main\.jsx`'s own stale-chunk reload on `vite:preloadError`/);
