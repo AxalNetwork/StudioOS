@@ -487,6 +487,23 @@ test('Connect panel with nothing connected: Telegram and WhatsApp are linked or 
   } finally { await m.unmount(); }
 });
 
+test('#1625 Connect panel: a Telegram link waiting on Axal is confirmed in place, as on the Connectors page', async () => {
+  // The steps say "press Confirm here": the interview's card must draw the claim and its Confirm too.
+  const calls = [];
+  const { api } = inboxApi({ overview: async () => ({ ...FRESH, telegram_link: CLAIMED }), threads: async () => ({ threads: [] }) });
+  api.confirmTelegram = async (uid) => { calls.push(['confirm', uid]); return { linked: false, status: 'ready' }; };
+  const m = await mount(h(ConnectPanel, { interview: { id: 7 }, api }));
+  try {
+    await m.flush();
+    assert.equal(m.text().includes('Dana Ruiz · @dana_biz'), true);
+    assert.ok(m.byTestId('button-telegram-confirm'));
+    assert.equal(m.byTestId('button-link-telegram'), undefined, 'the claim replaces Link Telegram while it is open');
+    await m.click('button-telegram-confirm');
+    assert.deepEqual(calls, [['confirm', 'lc1']]);
+  } finally { await m.unmount(); }
+  assert.match(readFileSync('frontend/src/pages/founder/InterviewChannels.jsx', 'utf8'), /<TelegramChannelCard card=\{channelCard\('telegram', overview\)\} claim=\{overview\.telegramLink \?\? null\}/);
+});
+
 test('Schedule a call: Zoom or Meet, the body the Worker reads, and a refusal that points at Connectors', async () => {
   const sent = [];
   const api = {

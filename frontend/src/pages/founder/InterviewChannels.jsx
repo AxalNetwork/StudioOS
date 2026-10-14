@@ -122,7 +122,7 @@ export function ConnectPanel({ interview, api = channelsApi, onAssigned, now }) 
         <div className="space-y-2" data-testid="connect-in-place">
           <p className="text-[12.5px] text-gray-700 dark:text-gray-300">Connect your business Telegram or WhatsApp first. You can also do this any time in Account › Connectors.</p>
           <div className="grid grid-cols-1 gap-2.5">
-            <TelegramChannelCard card={channelCard('telegram', overview)} api={api} onChanged={() => { reload(); load(); }} />
+            <TelegramChannelCard card={channelCard('telegram', overview)} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={() => { reload(); load(); }} />
             <WhatsAppChannelCard card={channelCard('whatsapp', overview)} overview={overview} api={api} onChanged={() => { reload(); load(); }} />
           </div>
         </div>
