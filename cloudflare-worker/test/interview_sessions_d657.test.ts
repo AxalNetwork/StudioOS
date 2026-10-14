@@ -593,6 +593,30 @@ test('D685: talking points — checked against the project, capped, snapshotted,
   assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(sid).n, 0);
 });
 
+test('D685 #1587: the setup call refuses a second audio session while one is live, before writing anything', async () => {
+  const f = fixture();
+  const consent = { status: 'given', method: 'verbal' };
+  const a = await setup(f, { channel: 'in_person', interviewee: { name: 'One' }, consent, client_key: 'ka' });
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/start`)).status, 200);
+  const count = () => f.db.prepare('SELECT COUNT(*) AS n FROM discovery_interviews').get().n;
+  const before = count();
+  const refused = await setup(f, { channel: 'phone', interviewee: { name: 'Two' }, consent });
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.error, 'session_active');
+  assert.equal(refused.body.session_id, a.body.session.id);
+  assert.match(refused.body.message, /already recording another session/);
+  assert.equal(count(), before, 'no interview is made for a refused Start');
+  // The same Start again (its client_key) still answers its own session.
+  assert.equal((await setup(f, { channel: 'in_person', interviewee: { name: 'One' }, consent, client_key: 'ka' })).status, 200);
+  // A text chat records nothing, so it is not refused.
+  assert.equal((await setup(f, { channel: 'text', call_provider: 'paste', interviewee: { name: 'Three' }, messages: [{ author: 'Three', text: 'Hi' }] })).status, 201);
+  // Paused still counts; stopped does not.
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/pause`);
+  assert.equal((await setup(f, { channel: 'video', interviewee: { name: 'Four' }, consent })).status, 409);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/stop`);
+  assert.equal((await setup(f, { channel: 'video', interviewee: { name: 'Four' }, consent })).status, 201);
+});
+
 test('D685: stopping moves the interview to done, through both stop paths; one live session per member', async () => {
   const f = fixture();
   const consent = { status: 'given', method: 'verbal' };

@@ -246,6 +246,18 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
   return (await loadSession(env, session.id))!;
 }
 
+/**
+ * D685 §5.1.1 — one live session per member: the setup call refuses an audio
+ * session while another is recording or paused, before anything is written,
+ * as `/start` refuses it too. A text session records nothing. The
+ * per-interview route keeps opening drafts; its `/start` is the gate.
+ */
+async function liveRefusal(env: Env, userId: number, plan: OpenPlan): Promise<Response | null> {
+  if (!plan.audio) return null;
+  const live = await activeSessionOf(env, userId);
+  return live ? json({ error: 'session_active', session_id: live.id, message: 'You are already recording another session. Stop it, or return to it, first.' }, 409) : null;
+}
+
 sessions.post('/interviews/:id/sessions', async (c) => {
   const s = await scopeInterview(c, Number(c.req.param('id')));
   if (s instanceof Response) return s;
@@ -277,9 +289,9 @@ sessions.post('/sessions', async (c) => {
   const again = await replayed(c.env, user.id, plan.clientKey);
   if (again) return json(await sessionBody(c.env, again), 200);
   // D685 §5.1.1 — one live session per member: the setup call refuses while
-  // the caller is recording or paused, as Start does.
-  const live = await activeSessionOf(c.env, user.id);
-  if (live) return json({ error: 'session_active', session_id: live.id, message: 'You are already recording another session. Stop it, or return to it, first.' }, 409);
+  // the caller is recording or paused, as Start does (audio only; see liveRefusal).
+  const busy = await liveRefusal(c.env, user.id, plan);
+  if (busy) return busy;
 
   let interview: { id: number | null; project_id: number };
   let create: D1PreparedStatement | null = null;

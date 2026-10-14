@@ -9,9 +9,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   CONSENTS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, callLabel, cents, chipStatus, connectionOf, consentNote, defaultProvider, estimate, isConnected,
   hasMeetingLink, meetingLinkProblem, money, parseConversation, sessionBody, startState, talkingPoints,
+  FLUX, STAGE_WORD, assignTarget, languageOptions, newStartKey, pipelineRows, recordingHref, setupBody, startRefusal, threadsFor,
 } from '../src/pages/founder/recordSetup.js';
 
 const MODELS = {
@@ -154,23 +156,92 @@ test('talking points: open claims only, the current sprint\'s first, the first t
   assert.deepEqual(talkingPoints([{ id: 1, lane: 'none', sort_order: 1 }, { id: 2, lane: 'none', sort_order: 1 }]).map((p) => p.id), [1, 2], 'ties break on id');
 });
 
-test('the body sent to today\'s route carries only what the Worker stores', () => {
-  assert.equal(SETUP_FIELDS.points, true, 'the talking points are stored since #1591');
-  assert.equal(SETUP_FIELDS.language, false);
+test('the session part of POST /sessions: every field is stored now, and a field turned off is never sent', () => {
+  assert.deepEqual({ ...SETUP_FIELDS }, { points: true, language: true, call_provider: true, meeting_url: true, channels: true }, 'POST /sessions stores them all (#1591)');
   assert.match(NOT_STORED, /^Not saved yet/);
-  const audio = { mode: 'video', consent: 'written', live: 'nova', final: 'whisper', provider: 'zoom', link: 'https://zoom.us/j/1', language: 'fr', points: [2, 7] };
-  assert.deepEqual(sessionBody(audio), { channel: 'video', consent: { status: 'given', method: 'written' }, live_model: 'nova', final_model: 'whisper', points: [2, 7] },
-    'the points, and no provider, link or language while the Worker takes none of them');
-  assert.equal('points' in sessionBody({ ...audio, points: [] }), false, 'no points picked sends none');
-  assert.deepEqual(sessionBody(audio, { ...SETUP_FIELDS, call_provider: true, meeting_url: true, language: true, points: true }), {
+  const audio = { mode: 'video', consent: 'written', live: 'nova', final: 'whisper', provider: 'zoom', link: ' https://zoom.us/j/1 ', language: 'fr', points: [2, 7] };
+  assert.deepEqual(sessionBody(audio), {
     channel: 'video', consent: { status: 'given', method: 'written' }, live_model: 'nova', final_model: 'whisper', language: 'fr', call_provider: 'zoom', meeting_url: 'https://zoom.us/j/1', points: [2, 7],
-  }, 'each is sent once its flag is on');
+  });
+  assert.deepEqual(sessionBody(audio, { points: false, language: false, call_provider: false, meeting_url: false }),
+    { channel: 'video', consent: { status: 'given', method: 'written' }, live_model: 'nova', final_model: 'whisper' }, 'a flag off sends nothing for it');
+  assert.equal('points' in sessionBody({ ...audio, points: [] }), false, 'no points picked sends none');
+  assert.equal('language' in sessionBody({ ...audio, language: '' }), false, 'Detect sends none');
   assert.equal(sessionBody({ ...audio, live: null }).live_model, null, 'Off is null, not a model');
-  assert.equal('meeting_url' in sessionBody({ ...audio, provider: 'whatsapp' }, { ...SETUP_FIELDS, meeting_url: true }), false, 'WhatsApp video has no link');
+  assert.equal('meeting_url' in sessionBody({ ...audio, provider: 'whatsapp' }), false, 'WhatsApp video has no link');
+  assert.equal('meeting_url' in sessionBody({ ...audio, link: '  ' }), false);
   const text = sessionBody({ mode: 'text', consent: '', conversation: 'Dana: hi\nwe log it', provider: 'paste' });
-  assert.deepEqual(text, { channel: 'text', messages: [{ author: 'Dana', text: 'hi' }, { author: 'Me', text: 'we log it' }] });
-  assert.equal('consent' in text, false, 'a text chat records no audio consent');
+  assert.deepEqual(text, { channel: 'text', messages: [{ author: 'Dana', text: 'hi' }, { author: 'Me', text: 'we log it' }], call_provider: 'paste' });
+  assert.equal('consent' in text, false, 'no pick, no quote consent');
+  assert.deepEqual(sessionBody({ mode: 'text', consent: 'written', conversation: 'Dana: hi', provider: 'paste' }).consent, { method: 'written' },
+    'a text chat\'s pick is quote consent (§5.1.4): the method alone, never an audio status');
+  assert.equal('consent' in sessionBody({ mode: 'text', consent: 'maybe', conversation: 'Dana: hi' }), false, 'only the Worker\'s methods');
   assert.deepEqual(parseConversation(''), []);
+});
+
+test('setupBody: the project, who (picked by id, or named), the session, and the Start\'s client_key', () => {
+  const s = { mode: 'in_person', consent: 'verbal', live: null, final: 'w', name: '  Dana ', company: ' ', points: [] };
+  assert.deepEqual(setupBody(s, { projectId: '3', clientKey: 'k1' }), {
+    project_id: 3, interviewee: { name: 'Dana', company: null }, channel: 'in_person', consent: { status: 'given', method: 'verbal' }, live_model: null, final_model: 'w', client_key: 'k1',
+  });
+  const picked = setupBody({ ...s, company: 'Acme' }, { projectId: 3, interview: { id: '9', interviewee_name: 'Old' }, clientKey: 'k2' });
+  assert.equal(picked.interview_id, 9);
+  assert.equal('interviewee' in picked, false, 'a picked interview is never made again');
+  assert.match(newStartKey(), /^record-.{8,}$/);
+  assert.notEqual(newStartKey(), newStartKey());
+});
+
+test('a refused Start: the Worker\'s words; 409 session_active points at that recording', () => {
+  assert.deepEqual(startRefusal(Object.assign(new Error('Name the person you are talking to.'), { status: 400, code: 'interviewee_name_required' })),
+    { text: 'Name the person you are talking to.', liveHref: null });
+  const active = Object.assign(new Error('You are already recording another session.'), { status: 409, code: 'session_active', data: { session_id: 88 } });
+  assert.deepEqual(startRefusal(active), { text: 'You are already recording another session.', liveHref: '/validate/record/live?session=88' });
+  assert.equal(startRefusal({ ...active, message: active.message, code: 'session_active', data: {} }).liveHref, null, 'no id, no link');
+  assert.equal(startRefusal({ message: 'x', code: 'other', data: { session_id: 88 } }).liveHref, null, 'only session_active points anywhere');
+  assert.equal(startRefusal({ message: '  ' }).text, 'The session could not be created.');
+});
+
+test('/validate/record while this tab records: the live view, never the setup over it', () => {
+  assert.equal(recordingHref({ phase: 'recording', session: { id: 5 } }), '/validate/record/live?session=5');
+  assert.equal(recordingHref({ phase: 'paused', session: { id: 5 } }), '/validate/record/live?session=5');
+  for (const phase of ['idle', 'share', 'denied', 'stopping', 'ready', 'discarded']) assert.equal(recordingHref({ phase, session: { id: 5 } }), null, phase);
+  assert.equal(recordingHref({ phase: 'recording', session: null }), null);
+  assert.equal(recordingHref(null), null);
+  // Wired before the route's first early return, so it runs on every render of /validate/record.
+  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  assert.match(route, /const toLive = lightbox && cycle === 'validate' \? recordingHref\(recording\) : null;/, 'Validate\'s lightbox only: Build, Raise and Grow open their own');
+  assert.match(route, /if \(toLive\) return <Navigate to=\{toLive\} replace \/>;\n  if \(!def\) return null;/);
+});
+
+test('the language: Detect, then the Worker\'s list; English only with Flux live', () => {
+  const models = { languages: [{ code: 'en', name: 'English' }, { code: 'fr', name: 'French' }, { code: '', name: 'Bad' }, null] };
+  assert.deepEqual(languageOptions(models, 'nova'), [{ code: '', name: 'Detect' }, { code: 'en', name: 'English' }, { code: 'fr', name: 'French' }]);
+  assert.equal(FLUX, '@cf/deepgram/flux');
+  assert.deepEqual(languageOptions(models, FLUX), [{ code: '', name: 'Detect' }, { code: 'en', name: 'English' }]);
+  assert.deepEqual(languageOptions(null, 'nova'), [{ code: '', name: 'Detect' }], 'an unreadable list leaves Detect');
+});
+
+test('the recruiting pipeline as Who\'s picks; the chats one Text chip imports; the assignment', () => {
+  const read = { records: { rows: [
+    { id: 4, interviewee: 'Booked Bo', company: 'Acme', stage: 'booked' },
+    { id: '5', interviewee: 'Lead Li', company: null, stage: 'lead' },
+    { id: 6, interviewee: 'Done Di', company: 'X', stage: 'done' },
+    { id: 'x', interviewee: 'No id', stage: 'invited' },
+  ] } };
+  assert.deepEqual(pipelineRows(read), [
+    { id: 4, interviewee_name: 'Booked Bo', interviewee_company: 'Acme', stage: 'booked' },
+    { id: 5, interviewee_name: 'Lead Li', interviewee_company: null, stage: 'lead' },
+  ], 'the Worker\'s order (booked first), held interviews and bad ids out');
+  assert.deepEqual(pipelineRows(null), []);
+  assert.deepEqual(STAGE_WORD, { lead: 'Lead', invited: 'Invited', booked: 'Booked' });
+  const threads = { items: [{ uid: 'a', provider: 'whatsapp' }, { uid: 'b', provider: 'telegram' }, { uid: '', provider: 'whatsapp' }] };
+  assert.deepEqual(threadsFor(threads, 'whatsapp').map((t) => t.uid), ['a']);
+  assert.deepEqual(threadsFor([{ uid: 'b', provider: 'telegram' }], 'telegram').map((t) => t.uid), ['b']);
+  assert.deepEqual(threadsFor(null, 'telegram'), []);
+  assert.deepEqual(assignTarget({ name: ' Dana ', company: ' Acme ', consent: '' }, { projectId: '3' }),
+    { create: { interviewee_name: 'Dana', interviewee_company: 'Acme', project_id: 3 } });
+  assert.deepEqual(assignTarget({ name: 'Dana', company: '', consent: 'in_app' }, { projectId: 3, interview: { id: '7' } }), { interview_id: 7, quote_consent: true });
+  assert.equal(assignTarget({ name: 'D', company: '', consent: '' }, { projectId: 3 }).create.interviewee_company, null);
 });
 
 // #1586: the Text chips read their real status from the Worker's own read.

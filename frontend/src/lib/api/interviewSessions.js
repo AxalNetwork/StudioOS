@@ -2,6 +2,8 @@
 // (routes/founder_validate_sessions.ts, migration 438), under
 // /api/founder/validate.
 //   sessionModels    GET    /sessions/models            live and final models, each priced
+//   open             POST   /sessions                   D685 §5.1's one setup call: the interview from Who
+//                                                       (or a picked one) and its session, once per client_key
 //   createSession    POST   /interviews/:id/sessions    channel, consent, models
 //   listSessions     GET    /interviews/:id/sessions
 //   getSession       GET    /sessions/:id               session, segments, marks, chunks
@@ -33,6 +35,7 @@ const ACTIONS = new Set(['start', 'pause', 'resume', 'stop']);
 
 export const interviewSessionsApi = {
   models: () => request(`${P}/sessions/models`),
+  open: (body) => request(`${P}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
   create: (interviewId, data) => request(`${P}/interviews/${enc(interviewId)}/sessions`, {
     method: 'POST', body: JSON.stringify(data),
   }),

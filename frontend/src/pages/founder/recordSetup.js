@@ -9,20 +9,20 @@
  * canvas's sample figures, and a model with no price makes the estimate "Not
  * priced", never $0.
  *
- * WHAT THE WORKER STORES TODAY. `SETUP_FIELDS` says, field by field, whether
- * the Worker accepts it yet. D685 §5.1 is S03's. The talking points are stored
- * since #1591 (S03-A, #1583), on the create route this lightbox posts to; the
- * language, the call provider and the meeting link wait on the lightbox moving
- * to `POST /sessions` (#1587). A control for a field the Worker does not
- * store is drawn, disabled, with that reason: it never takes a choice and drops
- * it. Flip a flag when the route that stores it merges.
+ * WHAT THE WORKER STORES. `SETUP_FIELDS` says, field by field, whether the
+ * Worker accepts it. Since D685 §5.1 (#1591) the one setup call, `POST
+ * /sessions`, stores all of them: the talking points, the language, the call
+ * provider and the meeting link. A control for a field turned off here is
+ * drawn, disabled, with that reason: it never takes a choice and drops it.
  */
+
+import { MEETING_PROVIDERS, safeJoinUrl } from './channelThreads.js';
 
 export const SETUP_FIELDS = Object.freeze({
   points: true, // §5.2: interview_session_points (migration 452, #1591)
-  language: false, // §5.1.3
-  call_provider: false, // §5.1.2
-  meeting_url: false, // §5.1.2
+  language: true, // §5.1.3: GET /sessions/models lists the languages; POST /sessions stores one
+  call_provider: true, // §5.1.2
+  meeting_url: true, // §5.1.2
   channels: true, // GET /api/channels (D684, #1581): the Text chips read their real status (#1586)
 });
 
@@ -146,7 +146,12 @@ export function consentNote(mode, method) {
   return method ? 'Consent recorded. Audio starts when you press Start.' : 'Audio starts only once consent is recorded.';
 }
 
-/** "Meeting link": https, and the host must match the provider (§5.1.2). Returns a sentence, or null when fine. */
+/**
+ * "Meeting link": https, and the host must match the provider (§5.1.2). Returns
+ * a sentence, or null when fine. Zoom and Google Meet are D684's own rule
+ * (`safeJoinUrl`, the one that draws a scheduled call's join link), so the two
+ * cannot disagree; Teams, which D684 does not schedule, is checked here.
+ */
 export function meetingLinkProblem(provider, raw) {
   const text = String(raw || '').trim();
   if (!text) return null; // optional: the link names the call, nothing more
@@ -154,15 +159,28 @@ export function meetingLinkProblem(provider, raw) {
   try { url = new URL(text); } catch { return 'That is not a link.'; }
   if (url.protocol !== 'https:') return 'The link must start with https://.';
   const host = url.hostname.toLowerCase();
-  const on = (h) => host === h || host.endsWith(`.${h}`);
-  if (provider === 'zoom' && !on('zoom.us')) return 'A Zoom link is on zoom.us.';
-  if (provider === 'google_meet' && host !== 'meet.google.com') return 'A Google Meet link is on meet.google.com.';
+  const scheduled = MEETING_PROVIDERS.find((p) => p.key === provider);
+  if (scheduled && !safeJoinUrl(text, provider)) return provider === 'zoom' ? 'A Zoom link is on zoom.us.' : `A ${scheduled.label} link is on meet.google.com.`;
   if (provider === 'teams' && !(host === 'teams.microsoft.com' || host === 'teams.live.com')) return 'A Teams link is on teams.microsoft.com or teams.live.com.';
   if (provider === 'whatsapp' || provider === 'telegram') return 'A WhatsApp or Telegram call has no meeting link.';
   return null;
 }
 /** The link field is drawn for video, on a provider that has links. */
 export const hasMeetingLink = (mode, provider) => mode === 'video' && ['zoom', 'google_meet', 'teams'].includes(provider);
+
+/** Flux, the live model the Worker transcribes in English only (D685 §5.1.3). */
+export const FLUX = '@cf/deepgram/flux';
+
+/**
+ * The Language choices: Detect, then the Worker's own list from `GET
+ * /sessions/models` (`languages`). With Flux live, English only, as the Worker
+ * refuses any other. An unreadable list leaves Detect alone.
+ */
+export function languageOptions(models, live) {
+  const list = (Array.isArray(models?.languages) ? models.languages : [])
+    .filter((l) => l && typeof l.code === 'string' && l.code && typeof l.name === 'string');
+  return [{ code: '', name: 'Detect' }, ...(live === FLUX ? list.filter((l) => l.code === 'en') : list)];
+}
 
 /** Dollars, to the cent, as the estimate prints them. `toFixed` prints $0.01 for 30 × $0.0005. */
 export const cents = (usd) => Math.round(usd * 100) / 100;
@@ -213,8 +231,12 @@ export function parseConversation(raw) {
 }
 
 /**
- * The body for today's `POST /interviews/:id/sessions`. Only what the Worker
- * stores is sent (`SETUP_FIELDS`); a choice it would drop is not in the body.
+ * The session's part of the setup call (`POST /sessions`, D685 §5.1). Only
+ * what the Worker stores is sent (`SETUP_FIELDS`); a choice it would drop is
+ * not in the body.
+ *
+ * A text chat's consent pick is consent to QUOTE it (§5.1.4): it is sent as
+ * the method alone, and the Worker sets the interview's `quote_consent`.
  */
 export function sessionBody(s, fields = SETUP_FIELDS) {
   const m = modeOf(s.mode);
@@ -227,9 +249,88 @@ export function sessionBody(s, fields = SETUP_FIELDS) {
   } else {
     body.messages = parseConversation(s.conversation);
     if (fields.call_provider) body.call_provider = 'paste';
+    if (CONSENTS.some(([k]) => k === s.consent)) body.consent = { method: s.consent };
   }
   if (fields.call_provider && m.audio && s.provider) body.call_provider = s.provider;
   if (fields.meeting_url && hasMeetingLink(s.mode, s.provider) && String(s.link || '').trim()) body.meeting_url = s.link.trim();
   if (fields.points && Array.isArray(s.points) && s.points.length) body.points = s.points;
   return body;
+}
+
+/**
+ * The whole setup call (`POST /sessions`, D685 §5.1): the project, who (a
+ * picked interview, or the name and company from Who), the session, and the
+ * Start's `client_key`, so a repeated Start answers the same pair.
+ */
+export function setupBody(s, { projectId, interview = null, clientKey }, fields = SETUP_FIELDS) {
+  const who = interview?.id != null
+    ? { interview_id: Number(interview.id) }
+    : { interviewee: { name: String(s.name || '').trim(), company: String(s.company || '').trim() || null } };
+  return { project_id: Number(projectId), ...who, ...sessionBody(s, fields), client_key: clientKey };
+}
+
+/** A Start key: one per lightbox, kept across a refused Start (nothing was stored under it). */
+export function newStartKey(rand = () => Math.random().toString(36).slice(2, 10)) {
+  const c = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : null;
+  return `record-${c || `${Date.now().toString(36)}-${rand()}`}`;
+}
+
+/**
+ * A refusal, in the Worker's words, and where it points. On 409
+ * `session_active` the founder is already recording: the lightbox offers that
+ * session's live view instead of a second recording.
+ */
+export function startRefusal(e) {
+  const text = (typeof e?.message === 'string' && e.message.trim()) || 'The session could not be created.';
+  const sid = e?.data?.session_id;
+  if (e?.code === 'session_active' && Number.isSafeInteger(Number(sid)) && Number(sid) > 0) {
+    return { text, liveHref: `/validate/record/live?session=${encodeURIComponent(Number(sid))}` };
+  }
+  return { text, liveHref: null };
+}
+
+/**
+ * `/validate/record` while this tab's recorder holds a recording or paused
+ * session: its live view, so the setup never opens over a recording.
+ */
+export function recordingHref(state) {
+  const sid = state?.session?.id;
+  if (sid == null || !['recording', 'paused'].includes(state?.phase)) return null;
+  return `/validate/record/live?session=${encodeURIComponent(sid)}`;
+}
+
+/** The recruiting pipeline's rows (`customer-research`, `stage:pipeline`, booked first) as Who's picks. */
+export function pipelineRows(read) {
+  const rows = Array.isArray(read?.records?.rows) ? read.records.rows : [];
+  return rows
+    .filter((r) => Number.isSafeInteger(Number(r?.id)) && ['lead', 'invited', 'booked'].includes(r?.stage))
+    .map((r) => ({
+      id: Number(r.id),
+      interviewee_name: typeof r.interviewee === 'string' ? r.interviewee : null,
+      interviewee_company: typeof r.company === 'string' && r.company ? r.company : null,
+      stage: r.stage,
+    }));
+}
+export const STAGE_WORD = { lead: 'Lead', invited: 'Invited', booked: 'Booked' };
+
+/**
+ * The chats waiting in the inbox that one Text chip can import: `GET
+ * /api/channels/threads?status=pending`, that app's only.
+ */
+export function threadsFor(read, provider) {
+  const items = Array.isArray(read?.items) ? read.items : Array.isArray(read) ? read : [];
+  return items.filter((t) => t && typeof t.uid === 'string' && t.uid && t.provider === provider);
+}
+
+/**
+ * The assignment for an imported chat (`POST /channels/threads/:uid/assign`):
+ * the interview Who names, or one made from Who. A consent pick is quote
+ * consent (§5.1.4), sent only as the literal true.
+ */
+export function assignTarget({ name, company, consent }, { projectId, interview = null }) {
+  const target = interview?.id != null
+    ? { interview_id: Number(interview.id) }
+    : { create: { interviewee_name: String(name || '').trim(), interviewee_company: String(company || '').trim() || null, project_id: Number(projectId) } };
+  if (CONSENTS.some(([k]) => k === consent)) target.quote_consent = true;
+  return target;
 }
