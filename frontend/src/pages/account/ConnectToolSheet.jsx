@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Pill, Unreadable } from '../../ui';
+import { BrandIcon, Pill, Unreadable } from '../../ui';
 import Lightbox from '../../ui/Lightbox.jsx';
 import ActionSheet from '../../ui/ActionSheet.jsx';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
@@ -189,7 +189,7 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
               : p.display_name;
             return (
               <div key={p.key} data-testid={`tool-row-${p.key}`}>
-                <Row a={name} b={row.detail} tone={row.state === 'failing' ? 'danger' : undefined} pill={<Pill tone={row.pill[1]}>{row.pill[0]}</Pill>} action={action(p, row)} />
+                <Row icon={<BrandIcon provider={p.key} name={p.display_name} size={24} />} a={name} b={row.detail} tone={row.state === 'failing' ? 'danger' : undefined} pill={<Pill tone={row.pill[1]}>{row.pill[0]}</Pill>} action={action(p, row)} />
                 {confirm === p.key && (
                   <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-800 dark:bg-gray-800" data-testid={`tool-confirm-${p.key}`}>
                     <span className="mr-auto text-[12px] text-axal-muted dark:text-gray-300">{`Disconnect ${p.display_name}? ${disconnectNote(p)}`}</span>

@@ -6,7 +6,7 @@ import { connectorsApi } from '../../lib/api/connectors';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import { safeWriteJSON } from '../../lib/storage';
 import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
-import { Pill, Unrecorded, Unreadable } from '../../ui';
+import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import GithubSyncSheet from './GithubSyncSheet';
@@ -100,7 +100,7 @@ export function useConnectors({ companyId = null } = {}) {
 export const SheetFrame = createContext(null);
 
 /** A side sheet, 480px from the right and the full width on a phone; inside a `SheetFrame`, the frame's content. */
-export function Sheet({ eyebrow, title, sub, onClose, children, footer, 'data-testid': testId }) {
+export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider = null, providerName = '', 'data-testid': testId }) {
   const frame = useContext(SheetFrame);
   // A dialog opened inside the sheet (a tool's settings) is a nested Lightbox
   // on the same Escape stack: one key press closes one layer.
@@ -109,7 +109,8 @@ export function Sheet({ eyebrow, title, sub, onClose, children, footer, 'data-te
     <div className="flex items-start justify-between gap-3 border-b border-axal-hairline px-5 py-4 dark:border-gray-800">
       <div className="min-w-0">
         {eyebrow && <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-violet-deep dark:text-violet-300">{eyebrow}</div>}
-        <h2 className="text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{title}</h2>
+        {/* D687: the service's mark before the title it names (24px, the canvas rail size). */}
+        <h2 className="flex items-center gap-2 text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{provider && <BrandIcon provider={provider} name={providerName} size={24} />}{title}</h2>
         {sub && <p className="mt-0.5 text-[12.5px] leading-snug text-axal-muted dark:text-gray-400">{sub}</p>}
       </div>
       <button type="button" onClick={frame ? frame.onDismiss : onClose} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>
@@ -158,12 +159,15 @@ export function Group({ label, children }) {
   );
 }
 
-export function Row({ a, b, pill, action, tone }) {
+export function Row({ a, b, pill, action, tone, icon = null }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2">
-      <div className="min-w-0">
-        <div className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{a}</div>
-        {b && <div className={`text-[12px] ${tone === 'danger' ? 'text-red-700 dark:text-red-300' : 'text-axal-muted dark:text-gray-400'}`}>{b}</div>}
+      <div className="flex min-w-0 items-center gap-2.5">
+        {icon}
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{a}</div>
+          {b && <div className={`text-[12px] ${tone === 'danger' ? 'text-red-700 dark:text-red-300' : 'text-axal-muted dark:text-gray-400'}`}>{b}</div>}
+        </div>
       </div>
       {(pill || action) && <div className="flex shrink-0 items-center gap-2">{pill}{action}</div>}
     </div>
@@ -749,7 +753,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   }
 
   return (
-    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
+    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={p.key} providerName={p.display_name} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
       {banner}
       {body}
       {tool === 'hubspot' && <HubspotConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { channelsApi } from '../../lib/api/channels.js';
-import { Pill, Unreadable } from '../../ui';
+import { BrandIcon, Pill, Unreadable } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   CARD_TITLE, CHANNELS_HREF, INBOX_HREF, MEETING_NOTES, PROVIDER_LABEL, TELEGRAM_LIMITS, WHATSAPP_CALLS, WHATSAPP_NOTES,
@@ -53,9 +53,13 @@ function CardFrame({ card, children }) {
   return (
     <article className={`${TONE} flex min-w-0 flex-col gap-2.5 p-4`} data-testid={`channel-card-${card.provider}`} data-state={card.state}>
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h4 className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{CARD_TITLE[card.provider]}</h4>
-          {card.account && <p className="truncate text-[12px] text-axal-muted dark:text-gray-400" data-testid={`channel-account-${card.provider}`}>{card.account}</p>}
+        <div className="flex min-w-0 items-center gap-2.5">
+          {/* D687: Google Meet draws its own mark, though it connects through the Google connection. */}
+          <BrandIcon provider={card.provider} name={CARD_TITLE[card.provider]} />
+          <div className="min-w-0">
+            <h4 className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{CARD_TITLE[card.provider]}</h4>
+            {card.account && <p className="truncate text-[12px] text-axal-muted dark:text-gray-400" data-testid={`channel-account-${card.provider}`}>{card.account}</p>}
+          </div>
         </div>
         <Pill tone={card.tone}>{card.label}</Pill>
       </div>

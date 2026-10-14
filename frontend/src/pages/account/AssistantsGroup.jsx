@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { assistantsApi } from '../../lib/api/assistants.js';
-import { Unreadable } from '../../ui';
+import { BrandIcon, Unreadable } from '../../ui';
 import { ASSISTANTS, MCP_SERVER_URL, grantRow, grantsAfterRevoke } from './assistantSetup.js';
 
 /**
@@ -28,9 +28,13 @@ export function CopyUrl({ url = MCP_SERVER_URL, copy = (t) => navigator.clipboar
 export function SetupCard({ a, copy }) {
   return (
     <article className={`${TONE} flex flex-col gap-2.5 p-4`} data-testid={`assistant-card-${a.key}`}>
-      <div>
-        <h4 className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{a.name}</h4>
-        <p className="text-[12px] text-axal-muted dark:text-gray-400">{a.by}</p>
+      {/* D687: Axal's own list (assistantSetup.js), so its key is ours; the grant rows below show self-declared names and draw no mark. */}
+      <div className="flex items-center gap-2.5">
+        <BrandIcon provider={a.key} name={a.name} />
+        <div>
+          <h4 className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{a.name}</h4>
+          <p className="text-[12px] text-axal-muted dark:text-gray-400">{a.by}</p>
+        </div>
       </div>
       <CopyUrl copy={copy} />
       <ol className="list-decimal space-y-1 pl-4 text-[12.5px] leading-relaxed text-axal-ink/90 dark:text-gray-300">

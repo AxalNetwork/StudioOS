@@ -75,6 +75,7 @@ import { safeReadJSON } from '../lib/storage';
 import { AlertTriangle, Download, Plus, RefreshCw, X } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
+import BrandIcon from '../ui/BrandIcon.jsx';
 import './calendarPage.css';
 
 /**
@@ -651,12 +652,12 @@ export default function CalendarPage() {
           <div className="cal-eb">Connected calendars</div>
           <div className="cal-providers">
             <ProviderCard
-              name="Google Calendar" state={gState} status={google} result={googleResult}
+              provider="google_calendar" name="Google Calendar" state={gState} status={google} result={googleResult}
               busy={syncBusy} envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
               onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle} onRetry={loadGoogle}
             />
             <ProviderCard
-              name="Microsoft Outlook" state={mState} status={microsoft} result={microsoftResult}
+              provider="microsoft_365" name="Microsoft Outlook" state={mState} status={microsoft} result={microsoftResult}
               busy={msSyncBusy} envVars="MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET"
               onConnect={connectMicrosoft} onSync={runMsSync} onDisconnect={disconnectMicrosoft} onRetry={loadMicrosoft}
             />
@@ -871,7 +872,7 @@ function providerState(status, result) {
   return 'connected';
 }
 
-function ProviderCard({ name, state, status, result, busy, envVars, onConnect, onSync, onDisconnect, onRetry }) {
+function ProviderCard({ provider, name, state, status, result, busy, envVars, onConnect, onSync, onDisconnect, onRetry }) {
   const last = status?.last_synced_at ? new Date(status.last_synced_at) : null;
   const lastText = last && !Number.isNaN(last.getTime()) ? last.toLocaleString() : null;
   const account = status?.google_email || status?.microsoft_email || null;
@@ -921,7 +922,7 @@ function ProviderCard({ name, state, status, result, busy, envVars, onConnect, o
   return (
     <div className="cal-card" data-testid={`calendar-provider-${state}`}>
       <div className="cal-prov-top">
-        <strong>{name}</strong>
+        <span className="flex items-center gap-2"><BrandIcon provider={provider} name={name} size={24} /><strong>{name}</strong></span>
         <span className={`cal-nr ${s.tone}`}>{s.pill}</span>
       </div>
       <div className="cal-prov-sync">

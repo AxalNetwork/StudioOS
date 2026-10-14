@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, X } from 'lucide-react';
 import { connectorsApi } from '../../lib/api/connectors';
 import Lightbox from '../../ui/Lightbox.jsx';
+import BrandIcon from '../../ui/BrandIcon.jsx';
 import { parseLinkedInCsv } from '../../lib/linkedinCsv';
 
 /**
@@ -11,17 +12,6 @@ import { parseLinkedInCsv } from '../../lib/linkedinCsv';
  * field mapping. Each writes through the same `/api/integrations` methods it
  * always did; the sheet only decides when to open it.
  */
-
-// lucide-react in this repo predates the `Linkedin` glyph, so we ship
-// a tiny inline SVG (same approach as the Twitter glyph in
-// ReferEarnPage.jsx). Sized + coloured via currentColor so it matches
-// the surrounding tile typography.
-export const Linkedin = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.024-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.602 0 4.268 2.37 4.268 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.778 13.019H3.555V9h3.56v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-  </svg>
-);
-
 
 // Task #70 — LinkedIn CSV import modal lives directly inside Settings →
 // Integrations so users can preview and import their Connections.csv in
@@ -68,7 +58,7 @@ export function LinkedInCsvImportModal({ onClose, onImported }) {
       <div className="min-h-0 overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2">
-            <Linkedin size={16} className="text-[#0a66c2]" />
+            <BrandIcon provider="linkedin" name="LinkedIn" size={16} variant="bare" />
             <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm">Import LinkedIn contacts</h3>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X size={16} /></button>
@@ -203,7 +193,7 @@ export function HubspotConfigModal({ integration, onClose, onSaved }) {
     <Lightbox label="HubSpot pipeline" onClose={onClose} width={512} testId="hubspot-config-modal">
       <div className="min-h-0 overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100">HubSpot pipeline</h3>
+          <h3 className="flex items-center gap-2 font-semibold text-gray-900 dark:text-gray-100"><BrandIcon provider="hubspot" name="HubSpot" size={24} />HubSpot pipeline</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
         </div>
         {loading ? (
@@ -335,7 +325,7 @@ export function SalesforceConfigModal({ integration, onClose, onSaved }) {
     <Lightbox label="Salesforce field mapping" onClose={onClose} width={672} testId="salesforce-config-modal">
       <div className="min-h-0 overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100">Salesforce field mapping</h3>
+          <h3 className="flex items-center gap-2 font-semibold text-gray-900 dark:text-gray-100"><BrandIcon provider="salesforce" name="Salesforce" size={24} />Salesforce field mapping</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
         </div>
         {loading ? (

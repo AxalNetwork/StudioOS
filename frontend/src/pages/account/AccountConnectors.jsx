@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
-import { Pill, Unrecorded, Unreadable } from '../../ui';
+import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, ConnectorPanel, Group, Sheet, openingView, useConnectors } from './ConnectorSheet';
 import { AssistantsSection } from './AssistantsGroup';
@@ -32,16 +32,6 @@ import {
 const TONE_CLS = 'rounded-axal-sm border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 // The house input without its full width, for the two selects beside the search.
 const SELECT = INPUT.replace('w-full ', 'w-auto ');
-
-function Initials({ name, size = 34 }) {
-  const ini = String(name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  return (
-    <span aria-hidden="true" style={{ width: size, height: size }}
-      className="grid shrink-0 place-items-center rounded-[9px] bg-axal-lavender text-[11px] font-bold text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300">
-      {ini}
-    </span>
-  );
-}
 
 function NR({ reason, children = 'Not recorded' }) {
   return <Unrecorded reason={reason}>{children}</Unrecorded>;
@@ -73,7 +63,7 @@ export function YoursTable({ rows, onOpen }) {
         <button key={p.key} type="button" onClick={() => onOpen(p)} data-testid={`connector-row-${p.key}`}
           className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-b border-axal-hairline px-4 py-2.5 text-left text-[13px] last:border-b-0 hover:bg-axal-ground/60 md:grid-cols-[minmax(0,1.5fr)_100px_80px_minmax(0,1.3fr)_80px_110px_140px] dark:border-gray-800 dark:hover:bg-gray-800/40 ${status.why ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
           <span className="flex min-w-0 items-center gap-2.5">
-            <Initials name={p.display_name} />
+            <BrandIcon provider={p.key} name={p.display_name} />
             <span className="flex min-w-0 flex-col">
               <span className="truncate font-bold text-axal-ink dark:text-gray-100">{p.display_name}</span>
               <span className="truncate text-[11.5px] text-axal-muted dark:text-gray-400">by {p.by}</span>
@@ -105,10 +95,10 @@ export function ConnectorCard({ p, onOpen, onNotify, onUnnotify, busy }) {
   if (act === 'unavailable') button = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
   return (
     <div className={`${TONE_CLS} relative flex flex-col gap-2 p-3.5`} data-testid={`connector-card-${p.key}`} data-action={act}>
-      <div className="flex items-start justify-between"><Initials name={p.display_name} />{button}</div>
+      <div className="flex items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{button}</div>
       <span className="flex items-center gap-1.5 text-sm font-bold text-axal-ink dark:text-gray-100">
         {p.display_name}
-        {p.verified && <span title="Built and verified by Axal" aria-label="Verified by Axal" className="grid h-3.5 w-3.5 place-items-center rounded-full bg-axal-violet text-[9px] text-white">✓</span>}
+        {p.verified && <span role="img" title="Built and verified by Axal" aria-label="Verified by Axal" className="grid h-3.5 w-3.5 place-items-center rounded-full bg-axal-violet text-[9px] text-white">✓</span>}
       </span>
       <span className="text-[12.5px] leading-snug text-axal-ink/80 dark:text-gray-300">{p.description}</span>
       <div className="mt-auto flex items-center justify-between gap-1.5">
@@ -140,7 +130,10 @@ function TelegramCard() {
   };
   return (
     <div className={`${TONE_CLS} flex flex-col gap-2 p-3.5`} data-testid="connector-card-telegram">
-      <span className="text-sm font-bold text-axal-ink dark:text-gray-100">Telegram · Axal VC channels</span>
+      <span className="flex items-center gap-2.5">
+        <BrandIcon provider="telegram" name="Telegram" />
+        <span className="text-sm font-bold text-axal-ink dark:text-gray-100">Telegram · Axal VC channels</span>
+      </span>
       <span className="text-[12.5px] leading-snug text-axal-ink/80 dark:text-gray-300">
         Ask for the invite link to your role&apos;s private channel{def ? <> (<b>{def.label}</b>)</> : ''}. An admin sends it to you.
       </span>

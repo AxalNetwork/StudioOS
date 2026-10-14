@@ -64,15 +64,15 @@ export const SITE_ACTIONS = {
   lpLabel: 'LP & Investor workspace',
 };
 
-/** The social accounts, as the live footer already links them. */
+/** The social accounts, as the live footer already links them. `key` is the BrandIcon key (D687): the footer looks up by it, never by label. */
 export const SOCIAL_LINKS = [
-  { label: 'Facebook', href: 'https://www.facebook.com/axalvc' },
-  { label: 'LinkedIn', href: 'https://www.linkedin.com/company/axalvc' },
-  { label: 'X', href: 'https://twitter.com/axalvc' },
-  { label: 'Instagram', href: 'https://www.instagram.com/axalvc' },
-  { label: 'YouTube', href: 'https://www.youtube.com/@axalvc' },
-  { label: 'Telegram', href: 'https://t.me/axalvc' },
-  { label: 'TikTok', href: 'https://www.tiktok.com/@axalvc' },
+  { key: 'facebook', label: 'Facebook', href: 'https://www.facebook.com/axalvc' },
+  { key: 'linkedin', label: 'LinkedIn', href: 'https://www.linkedin.com/company/axalvc' },
+  { key: 'x', label: 'X', href: 'https://twitter.com/axalvc' },
+  { key: 'instagram', label: 'Instagram', href: 'https://www.instagram.com/axalvc' },
+  { key: 'youtube', label: 'YouTube', href: 'https://www.youtube.com/@axalvc' },
+  { key: 'telegram', label: 'Telegram', href: 'https://t.me/axalvc' },
+  { key: 'tiktok', label: 'TikTok', href: 'https://www.tiktok.com/@axalvc' },
 ];
 
 /** Every internal path the shell links, for the route guard. */
