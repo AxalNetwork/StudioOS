@@ -27,10 +27,10 @@ import { shareUpdateApi } from '../../lib/api/shareUpdate.js';
  */
 
 /**
- * D686 §5.8 flags. `network_default_on` stays false until S19-B (#1595) ships
- * its `cleanAudience` change; the PR after it flips it, never before.
+ * D686 §5.8 flags. `network_default_on` is on since S19-B (#1595, #1637)
+ * made the Worker's `cleanAudience` default the network on.
  */
-export const SHARE_FIELDS = Object.freeze({ network_default_on: false });
+export const SHARE_FIELDS = Object.freeze({ network_default_on: true });
 
 export const SHARE_SHEET = Object.freeze({
   eyebrow: 'Grow', title: 'Share an update', titleId: 'share-update-title', testId: 'share-update-sheet',
@@ -88,6 +88,12 @@ export function periodTitle(start, end) {
 export function previewHeading(start, end) {
   const name = wholeMonth(start, end) ? utc(start).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' }) : periodRange(start, end);
   return `Preview · ${name} update`;
+}
+
+/** The preview's first row: "<Venture> · October", or the range for a part month. */
+export function ventureRow(name, start, end) {
+  const when = wholeMonth(start, end) ? utc(start).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' }) : periodRange(start, end);
+  return `${name} · ${when}`;
 }
 
 /** Why a custom range cannot be used, or null. */
@@ -300,6 +306,7 @@ export function ShareUpdateView({ s, on }) {
     body = (
       <ul data-testid="share-preview">
         <li><h3 className="mt-2 text-[11px] font-extrabold uppercase tracking-wide text-axal-faint">{previewHeading(s.period?.start, s.period?.end)}</h3></li>
+        {ctx?.project?.name && <li className={ROW}><div className="font-semibold">{ventureRow(ctx.project.name, s.period?.start, s.period?.end)}</div></li>}
         <li className={ROW}><div><div className="font-semibold">{s.title}</div><div className="text-axal-muted">{recorded.length ? recorded.map((m) => `${m.label} ${metricText(m).value}`).join(' · ') : 'Metrics left out: none is recorded'}</div></div></li>
         <li className={ROW}><div className="font-semibold">Highlights</div><div className="text-axal-muted">{s.highlights.length} · Lowlights {s.lowlights.length}</div></li>
         <li className={ROW}><div className="font-semibold">Asks</div><div className="text-axal-muted">{s.asks.length} · each with a reply button</div></li>

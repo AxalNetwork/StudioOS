@@ -22,7 +22,7 @@ const on = new Proxy({}, { get: () => () => {} });
 const base = {
   step: 0, period: null, context: { metrics: [MRR, RUNWAY], no_metrics: false, open_roles: [{ id: 3, title: 'Engineer' }], audience: { investors: 2, team: 1, network: 4 },
     ask_kinds: [{ kind: 'hire', module: 'Talent', lands: true }, { kind: 'customer', module: 'Customers', lands: true }, { kind: 'partner', module: 'Partnerships', lands: true }, { kind: 'market', module: 'Market expansion', lands: false, reason: 'Not recorded: there is no Market expansion store yet, so the reply stays on the ask' }] },
-  metrics: [MRR, RUNWAY], highlights: [], lowlights: [], asks: [], audience: { investors: true, team: true, network: false },
+  metrics: [MRR, RUNWAY], highlights: [], lowlights: [], asks: [], audience: { investors: true, team: true, network: true },
   includeMetrics: false, draftStatus: null, handWritten: false, busy: false, error: '', title: 'This month update', now: new Date('2026-10-09T00:00:00Z'),
 };
 const sheet = (s) => {
@@ -368,9 +368,9 @@ test('D686: the preview group is headed by its period', () => {
   assert.match(text, /Preview · October update/);
 });
 
-test('D686: SHARE_FIELDS exists, frozen, with the network default off until S19-B', () => {
+test('D686: SHARE_FIELDS exists, frozen, with the network default on since S19-B', () => {
   assert.ok(Object.isFrozen(SHARE_FIELDS));
-  assert.deepEqual(SHARE_FIELDS, { network_default_on: false });
+  assert.deepEqual(SHARE_FIELDS, { network_default_on: true });
   const src = readFileSync('frontend/src/pages/founder/ShareUpdateSheet.jsx', 'utf8');
   assert.match(src, /network: SHARE_FIELDS\.network_default_on/);
 });
@@ -382,4 +382,65 @@ test('D686: Market expansion rows draw the replies their update asks brought in'
   const row = GROW_RECORDS['market-expansion'].row({ uid: 'm1', name: 'Spain', replies: [{ name: 'Ana', created_at: '2026-11-02' }] }, 0);
   assert.equal(row.cells.market, 'Spain · 1 reply from updates · latest Ana');
   assert.equal(GROW_RECORDS['market-expansion'].row({ uid: 'm2', name: null }, 1).cells.market, null);
+});
+
+// ── D686 §5.8 (#1599), on S19-B's reads (#1595, #1637) ───────────────────────
+import UpdatesHistory, { updateTitle, updateLine } from '../src/pages/cycles/UpdatesHistory.jsx';
+import UpdateAskReplies from '../src/pages/cycles/UpdateAskReplies.jsx';
+import { networkRow } from '../src/pages/founder/SentUpdatePage.jsx';
+import { ventureRow } from '../src/pages/founder/ShareUpdateSheet.jsx';
+const ssr = (el) => renderToStaticMarkup(React.createElement(MemoryRouter, null, el));
+const SENT = { uid: 'u1', title: 'October 2026 update', period_start: '2026-10-01', period_end: '2026-10-31', sent_at: '2026-11-01T09:00:00Z', href: '/updates/u1',
+  sent_to: { investors: 3, team: 2, network: 0 }, delivered: 5, opened: 4, asks: 2, replies: 1, asks_to_ask_again: 1 };
+
+test('D686: the Updates history: rows, links only with href, the Ask again pill, a legacy row, Unreadable and empty', () => {
+  assert.equal(updateTitle(SENT), 'Update · October 2026');
+  assert.equal(updateLine(SENT), 'Sent 1 Nov · 3 investors, 2 team · opened 4 · 1 reply');
+  assert.equal(updateLine({ ...SENT, replies: 2, sent_to: { investors: 1, team: 0, network: 9 } }), 'Sent 1 Nov · 1 investor, 9 in the network · opened 4 · 2 replies');
+  const html = ssr(React.createElement(UpdatesHistory, { updates: [SENT,
+    { ...SENT, uid: 'u2', href: null, asks_to_ask_again: 0 },
+    { uid: 'u3', title: 'Q3', period: '2026-09', period_start: null, sent_at: null, href: null, label: "Submitted to the investors' inbox" }] }));
+  assert.match(html, /<section id="updates"/);
+  assert.match(html, /<h2[^>]*>Updates<\/h2>/);
+  assert.match(html, /<a [^>]*href="\/updates\/u1"[^>]*>Update · October 2026<\/a>/);
+  assert.equal((html.match(/href="\/updates\//g) || []).length, 1, 'only a row with href links');
+  assert.equal((html.match(/<a /g) || []).length, 1, 'rows without href draw no link at all');
+  assert.equal((html.match(/>Ask again</g) || []).length, 1);
+  assert.match(renderedText(html), /Update · 2026-09Submitted to the investors' inbox/);
+  const bad = ssr(React.createElement(UpdatesHistory, { updates: null }));
+  assert.match(bad, /Unreadable: Updates history could not be read/);
+  assert.doesNotMatch(bad, /No update shared yet/);
+  assert.match(ssr(React.createElement(UpdatesHistory, { updates: [], onShare: () => {} })), /No update shared yet[\s\S]*>Share an update</);
+  assert.equal(ssr(React.createElement(UpdatesHistory, {})), '');
+  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  assert.match(route, /<UpdatesHistory updates=\{data\?\.parts\?\.updates\} reason=\{data\?\.parts\?\.updates_reason\} onShare=\{ctx\.openAction\} \/>\s*<DurabilityChecklist/);
+});
+
+test('D686: Distribution and Partner network draw "From update asks" with a Lead or Partner pill', () => {
+  const replies = [{ uid: 'r1', name: 'Ana', message: 'Talk to Bo', created_at: '2026-11-03 10:00:00', ask_text: 'Intro to a bank' }];
+  const html = ssr(React.createElement(UpdateAskReplies, { replies, pill: 'Lead' }));
+  assert.match(html, /<h2[^>]*>From update asks<\/h2>/);
+  assert.match(renderedText(html), /Ana · 3 NovTalk to BoIn reply to: Intro to a bankLead/);
+  assert.equal(ssr(React.createElement(UpdateAskReplies, { replies: [], pill: 'Lead' })), '');
+  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  assert.match(route, /distribution: \(data\) => <UpdateAskReplies replies=\{data\?\.parts\?\.from_update_asks\} pill="Lead" \/>/);
+  assert.match(route, /'partner-network': \(data\) => <UpdateAskReplies replies=\{data\?\.parts\?\.from_update_asks\} pill="Partner" \/>/);
+});
+
+test('D686: the sent page names the chosen audiences, and counts the network in one row', () => {
+  const at = '2026-11-01T09:00:00Z';
+  assert.equal(sentSub({ sent_at: at, audience: { investors: true, team: false, network: true }, sent_to: { investors: 2, team: 3, network: 0 } }),
+    'Sent 1 Nov to 2 investors and the Axal network (asks only)', 'the audience, not the counts, decides');
+  assert.equal(networkRow({ sent: 12, opened: 5, replied: 1 }), '12 in the Axal network · 5 opened · 1 replied');
+  assert.equal(networkRow({ sent: 0, opened: 0, replied: 0 }), null);
+  const text = renderedText(page({ ...PAGE, network: { sent: 12, opened: 5, replied: 1 } }));
+  assert.match(text, /12 in the Axal network · 5 opened · 1 replied/);
+});
+
+test('D686: the preview opens with "<Venture> · October" once the context names the venture', () => {
+  assert.equal(ventureRow('Acme', '2026-10-01', '2026-10-31'), 'Acme · October');
+  assert.equal(ventureRow('Acme', '2026-10-01', '2026-10-15'), 'Acme · 1 Oct – 15 Oct');
+  const period = { key: 'this', start: '2026-10-01', end: '2026-10-31' };
+  assert.match(sheet({ step: 5, period, context: { ...base.context, project: { name: 'Acme' } } }).text, /Acme · October/);
+  assert.doesNotMatch(sheet({ step: 5, period }).text, / · October[^ ]/);
 });
