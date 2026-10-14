@@ -699,3 +699,24 @@ test('#1588 attach by link: a video Start on a connected Zoom also attaches the 
   const noLink = await run({ attachMeeting: async () => ({}), link: '' });
   assert.deepEqual([noLink.attached.length, noLink.begun[0].attach], [0, null]);
 });
+
+test('#1588 r2 a Start that becomes busy while its session is being made is refused at the hand-over, in words, and its mic let go', async () => {
+  const s = spies();
+  const log = [];
+  let calls = 0;
+  const recorder = {
+    prepare() { log.push('prepare'); }, release() { log.push('release'); }, begin() { log.push('begin'); return 'recording'; },
+    // Free when Start is pressed; another Start's mic is opening by the hand-over.
+    isCapturing: () => { calls += 1; return calls > 1; }, getSnapshot: () => ({ session: { id: 88 }, phase: 'idle' }),
+  };
+  const m = await mount({ ...s.props, recorder });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.click('record-consents-verbal');
+    await m.click('record-start');
+    assert.deepEqual(log, ['prepare', 'release'], 'begin is never called');
+    assert.match(m.text(), /You are already recording another session\./);
+    assert.equal(m.pr(m.by('record-error-live')).href, '/validate/record/live?session=88');
+    assert.equal(s.calls.started.length, 0, 'nothing opens');
+  } finally { await m.unmount(); }
+});

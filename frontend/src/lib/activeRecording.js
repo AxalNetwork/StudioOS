@@ -421,7 +421,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      */
     async adopt({ session, interview = null, callLabel = null, points = [], storedSeqs = [] }) {
       if (liveRefusal(state, api_.isCapturing())) return 'busy';
-      if (session?.id != null && ['recording', 'paused'].includes(session.status) && !holding(session.id) && !(await lockFree(session.id))) return 'other_tab';
+      if (session?.id != null && ['recording', 'paused'].includes(session.status) && !(await lockFree(session.id))) return 'other_tab';
       pollGen += 1;
       capture = null;
       let s = session;
