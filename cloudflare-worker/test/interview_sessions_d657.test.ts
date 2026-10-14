@@ -53,6 +53,9 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(readFileSync(new URL('../sql/migrations/452_record_session_setup.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8'));
+  // 449's call refs: every stop closes the ones attached to its session (#1583).
+  db.exec(readFileSync(new URL('../sql/migrations/449_interview_channels.sql', import.meta.url), 'utf8')
+    .split(';').filter((sql) => /interview_channel_refs/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
   // D658 (#1471): the receipt read also lists the structuring lines, which
   // live in `interview_structure_receipts`, beside 439's columns on 214/246's
   // `validate_proposals`, as they will in production.
@@ -628,6 +631,72 @@ test('D685: stopping moves the interview to done, through both stop paths; one l
   assert.equal(interviewRow(f, 9).channel, 'phone');
 });
 
+test('D685 (#1583): a stop closes the call refs attached to its session, on both stop paths', async () => {
+  const f = fixture();
+  const consent = { status: 'given', method: 'verbal' };
+  const ref = (session: number, interview: number, uid: string) => f.db.prepare(
+    "INSERT INTO interview_channel_refs (uid, provider, external_ref, session_id, interview_id, user_id, join_url) VALUES (?, 'zoom', ?, ?, ?, 2, 'https://zoom.us/j/1')",
+  ).run(uid, uid, session, interview);
+  const refRow = (uid: string) => f.db.prepare('SELECT * FROM interview_channel_refs WHERE uid = ?').get(uid) as any;
+  const a = await setup(f, { channel: 'video', call_provider: 'zoom', interviewee: { name: 'A' }, consent });
+  ref(a.body.session.id, a.body.interview.id, 'ra');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/start`);
+  assert.equal(refRow('ra').ends_at, null, 'still open while recording');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/stop`);
+  const stopped = f.db.prepare('SELECT started_at, stopped_at FROM interview_sessions WHERE id = ?').get(a.body.session.id) as any;
+  assert.equal(refRow('ra').ends_at, stopped.stopped_at);
+  assert.equal(refRow('ra').starts_at, stopped.started_at);
+  // Path 2: consent withdrawn while paused.
+  const b = await setup(f, { channel: 'video', call_provider: 'zoom', interviewee: { name: 'B' }, consent });
+  ref(b.body.session.id, b.body.interview.id, 'rb');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${b.body.session.id}/start`);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${b.body.session.id}/pause`);
+  await call(f.env, FOUNDER, 'PATCH', `/sessions/${b.body.session.id}/consent`, { status: 'declined' });
+  assert.ok(refRow('rb').ends_at, 'the consent-withdrawal stop closes it too');
+});
+
+test('D685 §5.1.1 (#1583): the setup call refuses with session_active while the caller records or is paused', async () => {
+  const f = fixture();
+  const consent = { status: 'given', method: 'verbal' };
+  const a = await setup(f, { channel: 'in_person', interviewee: { name: 'Live' }, consent });
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/start`);
+  const count = () => (f.db.prepare('SELECT COUNT(*) AS n FROM discovery_interviews').get() as any).n;
+  const before = count();
+  const recording = await setup(f, { channel: 'in_person', interviewee: { name: 'Next' }, consent });
+  assert.equal(recording.status, 409);
+  assert.equal(recording.body.error, 'session_active');
+  assert.equal(recording.body.session_id, a.body.session.id);
+  assert.equal(count(), before, 'no interview is made for a refused setup');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/pause`);
+  assert.equal((await setup(f, { channel: 'in_person', interviewee: { name: 'Next' }, consent })).body.error, 'session_active', 'paused counts as live');
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/stop`);
+  assert.equal((await setup(f, { channel: 'in_person', interviewee: { name: 'Next' }, consent })).status, 201);
+});
+
+test('D685 §5.1.1 (#1583): two Starts racing past the replay check make one interview, not two', async () => {
+  const f = fixture();
+  const body = { channel: 'in_person', interviewee: { name: 'Race' }, consent: { status: 'given', method: 'written' }, client_key: 'race' };
+  const first = await setup(f, body);
+  assert.equal(first.status, 201);
+  // The second request's replay read runs before the first one's write lands.
+  const real = f.env.DB.prepare.bind(f.env.DB);
+  let blind = 1;
+  f.env.DB.prepare = (sql: string) => {
+    const stmt = real(sql);
+    if (blind > 0 && /client_key = \?/.test(sql) && /^SELECT/.test(sql.trim())) {
+      blind--;
+      return { bind: (...args: unknown[]) => ({ ...stmt.bind(...args), first: async () => null }) };
+    }
+    return stmt;
+  };
+  const second = await setup(f, body);
+  f.env.DB.prepare = real;
+  assert.equal(blind, 0, 'the replay read was raced');
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(second.body.session.id, first.body.session.id);
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Race'").get() as any).n, 1);
+});
+
 test('D685: a text session records quote consent when a method is picked, and nothing when none is', async () => {
   const f = fixture();
   const with_ = await setup(f, { channel: 'text', interviewee: { name: 'T1' }, consent: { method: 'in_app' }, messages: [{ text: 'hi' }] });
@@ -638,8 +707,6 @@ test('D685: a text session records quote consent when a method is picked, and no
 
 test('D685: the meeting link falls back to a scheduled D684 call\'s join link', async () => {
   const f = fixture();
-  f.db.exec(readFileSync(new URL('../sql/migrations/449_interview_channels.sql', import.meta.url), 'utf8')
-    .split(';').filter((sql) => /interview_channel_refs/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
   const r = await setup(f, { channel: 'video', call_provider: 'zoom', interviewee: { name: 'Z' }, consent: { status: 'given', method: 'verbal' } });
   assert.equal(r.body.meeting_url, null);
   f.db.prepare("INSERT INTO interview_channel_refs (uid, provider, external_ref, session_id, interview_id, user_id, join_url) VALUES ('u', 'zoom', '123456', ?, ?, 2, 'https://zoom.us/j/123456')")
