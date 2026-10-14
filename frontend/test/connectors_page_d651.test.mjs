@@ -205,23 +205,24 @@ test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on Conne
     assert.equal(returnBase(extra), '/integrations', `${JSON.stringify(extra)} returns to /integrations`);
   }
   assert.equal(returnBase({ return_to: 'build' }), '/build/connect');
-  assert.match(integrations, /const destination = returnBase\(consumed\?\.extra\);/);
-  assert.match(integrations, /c\.redirect\(`\$\{destination\}\?oauth=ok&provider=\$\{encodeURIComponent\(provider\)\}`\)/);
+  // #1597: each redirect goes through returnQuery(consumed?.extra, …), which adds Build's venture from the same signed state.
+  assert.match(integrations, /c\.redirect\(returnQuery\(consumed\?\.extra, `oauth=ok&provider=\$\{encodeURIComponent\(provider\)\}`\)\)/);
+  assert.match(integrations, /return `\$\{returnBase\(extra\)\}\?\$\{outcome\}\$\{venture\}`;/);
   // Every callback redirect (ok, provider error, company not linked,
   // rolling out, scope overreach, a failed connect) goes through it.
   const redirects = integrations.match(/c\.redirect\([^\n]*/g) || [];
   assert.equal(redirects.length, 6, 'the six callback redirects');
-  for (const r of redirects) assert.match(r, /^c\.redirect\(`\$\{destination\}\?oauth=(ok|error|rolling_out)&provider=\$\{encodeURIComponent\(provider\)\}/, r);
+  for (const r of redirects) assert.match(r, /^c\.redirect\(returnQuery\(consumed\?\.extra, `oauth=(ok|error|rolling_out)&provider=\$\{encodeURIComponent\(provider\)\}/, r);
   for (const reason of ['company_not_linked', 'scope_overreach']) {
     assert.ok(redirects.some(r => r.includes(`&reason=${reason}\``)), `${reason} redirects through the destination`);
   }
-  assert.ok(redirects.some(r => r.includes('?oauth=rolling_out&')), 'rolling_out redirects through the destination');
+  assert.ok(redirects.some(r => r.includes('`oauth=rolling_out&')), 'rolling_out redirects through the destination');
   const calendar = read('cloudflare-worker/src/routes/calendar.ts');
   assert.match(calendar, /returnTo === 'integrations' \? `\$\{base\}\/integrations`/);
-  assert.match(calendar, /returnTo === 'build' \? `\$\{base\}\/build\/connect`/);
+  assert.match(calendar, /parseReturn\(returnTo\)\.kind === 'build' \? `\$\{base\}\/build\/connect`/);
   const linkedin = read('cloudflare-worker/src/routes/linkedin.ts');
   assert.match(linkedin, /returnTo === 'integrations' \? '\/integrations'/);
-  assert.match(linkedin, /returnTo === 'build' \? '\/build\/connect'/);
+  assert.match(linkedin, /kind === 'build' \? '\/build\/connect'/);
   for (const search of ['?oauth=ok&provider=stripe', '?google=connected', '?microsoft=connected', '?linkedin=connected']) {
     const to = connectorsRedirect({ search, hash: '#x' });
     assert.deepEqual(to, { pathname: '/account/connectors', search, hash: '#x' });

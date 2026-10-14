@@ -6,6 +6,7 @@ import Lightbox from '../../ui/Lightbox.jsx';
 import ActionSheet from '../../ui/ActionSheet.jsx';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { connectorsApi } from '../../lib/api/connectors';
+import { successBanner } from './githubSync';
 import { Banner, ConnectorPanel, Group, Row, SheetFrame, disconnect, openingView, useConnectors } from './ConnectorSheet';
 import {
   TOOL_FILTERS, companiesWith, companyBanner, disconnectNote, projectCompany, retryOutcome, servesCompany, toolBanner, toolDeepLink, toolGroups, toolRow,
@@ -97,7 +98,7 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
 
   const back = () => setPanel(null);
   const frame = (body) => (
-    <Lightbox label="Connect a tool" size="tall" width={600} onClose={onClose} onEscape={panelP ? back : onClose} testId="connect-tool-lightbox">
+    <Lightbox label="Connect a tool" size="tall" width={600} onClose={onClose} onEscape={panelP ? back : onClose} testId="connect-tool-lightbox" focusKey={panelP ? `${panel.key}:${panel.view}` : 'list'}>
       <SheetFrame.Provider value={{ onDismiss: onClose }}>{body}</SheetFrame.Provider>
     </Lightbox>
   );
@@ -118,6 +119,9 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
         projectId={projectId}
         companyId={scope?.state === 'ok' ? scope.companyId : null}
         companyName={scope?.state === 'ok' ? scope.name : null}
+        companyNote={companyNote}
+        companyState={scope?.state || null}
+        blocked={cannotConnect}
       />,
     );
   }
@@ -126,7 +130,13 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
     setBusy(p.key);
     let out;
     // The sync runs for the project's company, as the panel's Sync now does.
-    try { await connectorsApi.sync(p.connection.uid, scope?.state === 'ok' ? { companyId: scope.companyId } : undefined); out = retryOutcome(null); } catch (e) { out = retryOutcome(e); }
+    try {
+      const r = await connectorsApi.sync(p.connection.uid, scope?.state === 'ok' ? { companyId: scope.companyId } : undefined);
+      // The Worker's summary of what it synced, when it gives one (#1597).
+      out = retryOutcome(null);
+      const said = successBanner(p.key, r);
+      if (said) out = { ...out, text: said };
+    } catch (e) { out = retryOutcome(e); }
     setRowNote((n) => ({ ...n, [p.key]: out }));
     setBusy(null);
     if (out.tone === 'ok') data.reload();

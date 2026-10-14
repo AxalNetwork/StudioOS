@@ -37,7 +37,7 @@ import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, t
  *     `fixed inset-0` dialog inside it would be clipped to the box.
  */
 export default function Lightbox({
-  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox',
+  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey,
 }) {
   const id = useId();
   const dialog = useRef(null);
@@ -68,6 +68,19 @@ export default function Lightbox({
       if (opener && opener.isConnected !== false) opener.focus?.();
     };
   }, [id, initialFocus, returnFocusTo]);
+
+  // D686 §5.4 (#1597): the frame's content can swap (Build's list ⇄ a tool) under
+  // the same dialog. A swap that removed the focused control leaves focus on
+  // <body>; move it to the new view's first control instead.
+  const firstKey = useRef(focusKey);
+  useEffect(() => {
+    if (focusKey === firstKey.current) return;
+    firstKey.current = focusKey;
+    const el = dialog.current;
+    if (!el || typeof document === 'undefined' || typeof el.querySelector !== 'function') return;
+    if (typeof el.contains === 'function' && el.contains(document.activeElement)) return;
+    (el.querySelector(FOCUSABLE) || el).focus?.();
+  }, [focusKey]);
 
   const onTab = (e) => {
     if (e.key !== 'Tab') return;

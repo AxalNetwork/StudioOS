@@ -515,8 +515,13 @@ export function toolDeepLink(search, catalogue) {
   if (!p.has('tool')) return null;
   const tool = key ? list.find((x) => x.key === key) : null;
   if (!tool) return { panel: null, strip: ['tool'] };
-  const view = toolRow(tool).state === 'failing' ? 'pre' : tool.connection ? 'detail' : 'pre';
-  return { panel: { key: tool.key, view, ret: {} }, strip: ['tool'] };
+  // Where its row would open it (#1597): a failing tool's reconnect, a connected
+  // one's detail, a locked one's plan; a tool that is coming soon or not set up
+  // here has no step to open, so nothing opens.
+  const state = toolRow(tool).state;
+  const view = state === 'failing' ? 'pre' : tool.connection ? 'detail' : state === 'locked' ? 'pro'
+    : state === 'soon' || state === 'unavailable' ? null : 'pre';
+  return { panel: view ? { key: tool.key, view, ret: {} } : null, strip: ['tool'] };
 }
 
 /**

@@ -393,7 +393,8 @@ export function systemOptions(read, kind, projectId = null) {
     : c?.provider_key ? { value: `provider:${c.provider_key}`, label: c.display_name || c.provider_key } : null)).filter(Boolean);
   const label = entry?.label || SYSTEM_LABEL[kind] || kind;
   return {
-    options: [...choices, { value: UNMAP, label: '— None (unmap) —' }],
+    // Unmapping Workspace deletes its row (cycle_build.ts), Used by with it; the choice says so (#1597).
+    options: [...choices, { value: UNMAP, label: kind === 'workspace' ? '— None (removes Workspace, Used by included) —' : '— None (unmap) —' }],
     note: choices.length ? null : { text: `No connected ${label} tool is enabled for this company.`, href: connectHref(projectId) },
   };
 }

@@ -30,6 +30,7 @@ export { preflightOAuthSecrets };
 import { encryptString } from '../services/cryptoBox';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { parseReturn, returnFromNonce, returnTag } from '../util/oauthReturn';
 
 const calendar = new Hono<{ Bindings: Env }>();
 
@@ -551,19 +552,23 @@ function readReturnTo(c: any): string {
 function clearReturnToHeader(): string {
   return 'studioos_cal_return=; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=0';
 }
+function ventureQuery(returnTo: string): string {
+  const { kind, projectId } = parseReturn(returnTo);
+  return kind === 'build' && projectId ? `&project_id=${projectId}` : '';
+}
 function destFor(env: Env, returnTo: string): string {
   const base = env.APP_URL || '';
-  return returnTo === 'build' ? `${base}/build/connect`
+  return parseReturn(returnTo).kind === 'build' ? `${base}/build/connect`
     : returnTo === 'integrations' ? `${base}/integrations`
     : returnTo === 'record' ? `${base}/validate/record` : `${base}/calendar`;
 }
 function failureRedirect(env: Env, provider: string, reason: string | undefined, returnTo: string): Response {
-  const url = `${destFor(env, returnTo)}?${provider}=error${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`;
+  const url = `${destFor(env, returnTo)}?${provider}=error${reason ? `&reason=${encodeURIComponent(reason)}` : ''}${ventureQuery(returnTo)}`;
   return new Response(null, { status: 302, headers: { Location: url, 'Set-Cookie': clearReturnToHeader() } });
 }
 function successRedirect(env: Env, provider: string, returnTo: string, extra?: Record<string, string>): Response {
   const params = new URLSearchParams({ [provider]: 'connected', ...(extra || {}) });
-  const url = `${destFor(env, returnTo)}?${params.toString()}`;
+  const url = `${destFor(env, returnTo)}?${params.toString()}${ventureQuery(returnTo)}`;
   return new Response(null, { status: 302, headers: { Location: url, 'Set-Cookie': clearReturnToHeader() } });
 }
 
@@ -700,6 +705,7 @@ export async function buildGoogleOAuthStartResponse(
   userId: number,
   loginHint?: string,
   meetTranscripts = false,
+  tag = '',
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
@@ -714,7 +720,7 @@ export async function buildGoogleOAuthStartResponse(
       },
     };
   }
-  const nonce = `${meetTranscripts ? 'gm_' : ''}${crypto.randomUUID().replace(/-/g, '')}`;
+  const nonce = `${meetTranscripts ? 'gm_' : ''}${tag}${crypto.randomUUID().replace(/-/g, '')}`;
   try {
     await persistState(env, nonce, userId, 'google');
     const state = await makeState(env, nonce);
@@ -743,6 +749,7 @@ export async function buildGoogleOAuthStartResponse(
 export async function buildMicrosoftOAuthStartResponse(
   env: Env,
   userId: number,
+  tag = '',
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'microsoft');
   if (missing.length > 0) {
@@ -757,7 +764,7 @@ export async function buildMicrosoftOAuthStartResponse(
       },
     };
   }
-  const nonce = crypto.randomUUID().replace(/-/g, '');
+  const nonce = `${tag}${crypto.randomUUID().replace(/-/g, '')}`;
   try {
     await persistState(env, nonce, userId, 'microsoft');
     const state = await makeState(env, nonce);
@@ -784,10 +791,11 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   // account chooser pre-selects the matching row. Falls through as
   // undefined if the JWT somehow lacks an email (older sessions).
   const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
-  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, meetTranscripts);
   // Task #70 — let the Integrations page hand-off remember its origin
-  // across the Google round-trip via a short-lived, scoped cookie.
+  // across the Google round-trip via a short-lived, scoped cookie. Build's
+  // return also rides in the signed nonce, with its venture (#1597).
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
+  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, meetTranscripts, returnTag(returnTo, c.req.query('project_id')));
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build' || returnTo === 'record')) {
     c.header(
       'Set-Cookie',
@@ -951,15 +959,18 @@ export async function persistGoogleCallbackTokens(
 
 calendar.get('/google/callback', async (c) => {
   // Intentionally no requireAuth — the user_id comes from the state row.
-  const returnTo = readReturnTo(c);
+  let returnTo = readReturnTo(c);
   try {
     await ensureCalendarOAuthSchema(c.env);
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
     const error = url.searchParams.get('error');
+    // The signed nonce names Build's return when the cookie is on another host (#1597).
+    const signed = stateRaw ? await verifyState(c.env, stateRaw) : null;
+    returnTo = returnFromNonce(signed) || returnTo;
     if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
-    const nonce = await verifyState(c.env, stateRaw);
+    const nonce = signed;
     if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
     const meetTranscripts = nonce.startsWith('gm_');
     const userId = await consumeState(c.env, nonce, 'google');
@@ -1096,12 +1107,11 @@ calendar.get('/microsoft/status', safe('m_status', 'Could not load Microsoft sta
 
 async function startMicrosoftOAuth(c: any) {
   const user = await requireAuth(c);
-  const { status, body } = await buildMicrosoftOAuthStartResponse(c.env, user.id);
   // Parity with startGoogleOAuth — let the Integrations page hand-off
   // remember its origin across the Microsoft round-trip via the same
-  // short-lived, scoped cookie. The /microsoft/callback handler already
-  // calls readReturnTo() so this is the only wiring needed.
+  // short-lived, scoped cookie; Build's return rides in the signed nonce too (#1597).
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
+  const { status, body } = await buildMicrosoftOAuthStartResponse(c.env, user.id, returnTag(returnTo, c.req.query('project_id')));
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build')) {
     c.header(
       'Set-Cookie',
@@ -1118,12 +1128,13 @@ calendar.get('/outlook/start',      safe('o_start',   'Could not start Outlook O
 calendar.post('/outlook/start',     safe('o_start',   'Could not start Outlook OAuth',   startMicrosoftOAuth));
 
 calendar.get('/microsoft/callback', async (c) => {
-  const returnTo = readReturnTo(c);
+  let returnTo = readReturnTo(c);
   try {
     await ensureCalendarOAuthSchema(c.env);
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
+    returnTo = returnFromNonce(stateRaw ? await verifyState(c.env, stateRaw) : null) || returnTo;
     const error = url.searchParams.get('error');
     if (error || !code || !stateRaw) return failureRedirect(c.env, 'microsoft', error || 'invalid_state', returnTo);
     const nonce = await verifyState(c.env, stateRaw);

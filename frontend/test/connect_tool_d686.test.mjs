@@ -453,7 +453,7 @@ test('the Tools history on Operating systems: one row per connection with its Op
   const none = renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: { cols: tools.cols, rows: [], total: null, state: 'not_recorded', reason: 'This project has no company scope for connectors.' } })));
   assert.match(none, /data-testid="tools-not-recorded"[^>]*>This project has no company scope for connectors\./);
   assert.doesNotMatch(none, /tools<\/span>/, 'no count without a company');
-  assert.equal(renderToStaticMarkup(h(ToolsHistory, { tools: null })), '', 'no part, nothing drawn');
+  assert.equal(renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: null }))), '', 'no part, nothing drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.match(route, /'operating-systems': \(data\) => <ToolsHistory tools=\{data\?\.parts\?\.tools\} \/>/);
   assert.match(route, /loadOptions=\{edit\.loadOptions \? \(\) => edit\.loadOptions\(cyclesWrite, projectId, edit\.idOf\(editing\)\) : null\}/);
@@ -479,7 +479,14 @@ import { cyclesWrite } from '../src/lib/api/cycles.js';
 test('a deep link opens one tool where its row would; a sign-in\'s return opens its view; only catalogue keys open anything', () => {
   assert.deepEqual(toolDeepLink('?tool=stripe&project_id=7', ROWS), { panel: { key: 'stripe', view: 'detail', ret: {} }, strip: ['tool'] }, 'connected: its detail');
   assert.deepEqual(toolDeepLink('?tool=hubspot', ROWS).panel.view, 'pre', 'failing: the reconnect flow');
-  assert.deepEqual(toolDeepLink('?tool=figma', ROWS).panel, { key: 'figma', view: 'pre', ret: {} }, 'not connected: the flow');
+  assert.equal(toolDeepLink('?tool=figma', ROWS).panel, null, 'coming soon: its row offers nothing, so nothing opens (#1597)');
+  assert.deepEqual(toolDeepLink('?tool=figma', ROWS).strip, ['tool'], 'and the key still leaves the address');
+  assert.deepEqual(toolDeepLink('?tool=carta', ROWS).panel, { key: 'carta', view: 'pro', ret: {} }, 'locked: its plan, as Upgrade does');
+  assert.deepEqual(toolDeepLink('?tool=github', ROWS).panel, { key: 'github', view: 'pro', ret: {} });
+  const plain = buildCatalogue({ providers: [{ key: 'calendly', display_name: 'Calendly', category: 'Calendar', status: 'live', has_implementation: true }], items: [], firstParty: {} });
+  assert.deepEqual(toolDeepLink('?tool=calendly', plain).panel, { key: 'calendly', view: 'pre', ret: {} }, 'not connected and connectable: the flow');
+  const off = buildCatalogue({ providers: [{ key: 'calendly', display_name: 'Calendly', category: 'Calendar', status: 'live', has_implementation: false }], items: [], firstParty: {} });
+  assert.equal(toolDeepLink('?tool=calendly', off).panel, null, 'not set up here: nothing opens');
   assert.deepEqual(toolDeepLink('?tool=STRIPE', ROWS).panel.key, 'stripe');
   assert.deepEqual(toolDeepLink('?tool=nope', ROWS), { panel: null, strip: ['tool'] }, 'an unknown key opens nothing, and is still stripped');
   assert.deepEqual(toolDeepLink('?tool=constructor', ROWS).panel, null);
@@ -600,7 +607,7 @@ test('Build\'s lightbox: a deep link opens its tool, Try again syncs for the pro
     try {
       assert.ok(linked.by('button-connect-continue'), '?tool=hubspot opens HubSpot\'s flow');
       await linked.click('button-connect-continue');
-      assert.deepEqual(calls.at(-1), ['oauthStart', 'hubspot', { return_to: 'build' }, { companyId: 5 }], 'the sign-in returns to /build/connect');
+      assert.deepEqual(calls.at(-1), ['oauthStart', 'hubspot', { return_to: 'build', project_id: '7' }, { companyId: 5 }], 'the sign-in returns to /build/connect, naming the venture in its signed state (#1597)');
       assert.equal(store.get(BUILD_PROJECT_KEY), '7', 'and the venture is kept for it');
     } finally { await linked.unmount(); }
   } finally {

@@ -92,6 +92,9 @@ export default function GithubSyncSheet({ p, conn, projectId = null, companyId =
       }
     })();
     const out = await run;
+    // A sync that finished after the sheet closed (Escape or × while "Syncing…")
+    // still tells Build to re-read: the data changed whether or not anyone is looking (#1597).
+    if (out.ok) onChanged?.();
     if (!alive.current) return;
     if (!out.ok) {
       setError(syncRefusal(out.e));
@@ -100,7 +103,6 @@ export default function GithubSyncSheet({ p, conn, projectId = null, companyId =
     }
     setResult(out.r || null);
     setPhase('done');
-    onChanged?.();
   };
 
   const name = p?.display_name || 'GitHub';

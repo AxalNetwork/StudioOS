@@ -10,6 +10,7 @@ import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import GithubSyncSheet from './GithubSyncSheet';
+import { successBanner } from './githubSync';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
@@ -362,17 +363,20 @@ function whenLabel(iso) {
 }
 
 /** Google, Microsoft or LinkedIn's own sign-in; it returns to `returnTo` (Build's lightbox, or the Connectors page). */
-export async function startFirstParty(key, returnTo = 'integrations', client = api) {
+export async function startFirstParty(key, returnTo = 'integrations', client = api, projectId = null) {
   const return_to = returnTo === 'build' ? 'build' : 'integrations';
+  // From Build, the venture rides in the signed state, so the return names it on any host (#1597).
+  const id = Number(projectId);
+  const venture = return_to === 'build' && Number.isSafeInteger(id) && id > 0 ? { project_id: id } : {};
   if (key === 'google') {
-    const r = await client.googleCalConnect({ return_to });
+    const r = await client.googleCalConnect({ return_to, ...venture });
     return r?.redirect_url || r?.auth_url;
   }
   if (key === 'microsoft') {
-    const r = await client.microsoftCalConnect({ return_to });
+    const r = await client.microsoftCalConnect({ return_to, ...venture });
     return r?.redirect_url || r?.auth_url || r?.authorize_url;
   }
-  const r = await client.linkedinOAuthStart({ return_to });
+  const r = await client.linkedinOAuthStart({ return_to, ...venture });
   return r?.authorize_url;
 }
 
@@ -401,7 +405,7 @@ function keyLabel(p, updating) {
  * owns `view` so a return from a provider's sign-in can open the panel on
  * `connected` or `refused` directly.
  */
-export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back, projectId = null, companyId = null, companyName = null, returnTo = null }) {
+export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose, eyebrow = 'Connector', back, projectId = null, companyId = null, companyName = null, returnTo = null, companyNote = null, companyState = null, blocked = false }) {
   // In Build's lightbox, finishing (Done, an Open link, See plans, Report)
   // closes the whole lightbox; `onClose` steps back to the list (D686 §5.4).
   const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
@@ -427,7 +431,8 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   // (`GET /:key`): read once, when the flow starts on a registry connector.
   const [teammate, setTeammate] = useState(null);
   const [ownChosen, setOwnChosen] = useState(false);
-  const askTeammate = view === 'pre' && !conn && !p.first_party && !!p.key;
+  // From Build, a project whose company this member cannot connect for (D686 §5.4): no flow starts, whatever path opened the panel.
+  const askTeammate = !blocked && view === 'pre' && !conn && !p.first_party && !!p.key;
   useEffect(() => {
     if (!askTeammate) return undefined;
     let live = true;
@@ -469,6 +474,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const syncView = view === 'sync' && p.key === 'github' && !!conn?.uid;
 
   const startOauth = async () => {
+    if (blocked) return;
     setBusy(true); setMessage('');
     setView('signin');
     try {
@@ -476,9 +482,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       // From Build, the sign-in comes back to /build/connect: the venture is kept for it (D686 §5.4).
       if (returnTo === 'build') keepBuildProject(projectId);
       if (kind === 'first_party') {
-        url = await startFirstParty(p.key, returnTo || 'integrations');
+        url = await startFirstParty(p.key, returnTo || 'integrations', api, projectId);
       } else {
-        const params = returnTo === 'build' ? { return_to: 'build' } : {};
+        const params = returnTo === 'build' ? { return_to: 'build', ...(Number(projectId) > 0 ? { project_id: String(Number(projectId)) } : {}) } : {};
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
         // Always demo=0|1: a missing query makes the Worker default to demo.
         if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
@@ -496,6 +502,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 
   const submitKey = async (e) => {
     e?.preventDefault?.();
+    if (blocked) return;
     setMessage('');
     let config;
     if (configText.trim()) {
@@ -515,7 +522,8 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 
   const syncNow = async () => {
     setSyncing(true); setSyncNote('');
-    try { await connectorsApi.sync(conn.uid, opts); setSyncNote('Synced.'); onChanged?.(); }
+    // The Worker's own words for what the sync did, when it says (#1597).
+    try { const r = await connectorsApi.sync(conn.uid, opts); setSyncNote(successBanner(p.key, r) || 'Synced.'); onChanged?.(); }
     catch (e) { setSyncNote(e?.message || 'The sync failed.'); }
     finally { setSyncing(false); }
   };
@@ -752,8 +760,15 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     return <GithubSyncSheet p={p} conn={conn} projectId={projectId} companyId={companyId} eyebrow={eyebrow} onClose={onClose} onChanged={onChanged} back={() => go('detail')} />;
   }
 
+  // Build's company banner shows in every view of the frame; a blocked project offers no step that connects.
+  if (blocked && CONNECT_VIEWS.has(view)) {
+    footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose} data-testid="button-blocked-close">Close</button></>;
+  }
+  const note = companyNote ? <Banner tone="warn" data-testid={`connect-tool-company-${companyState || 'note'}`}>{companyNote}</Banner> : null;
+
   return (
     <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={p.key} providerName={p.display_name} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
+      {note}
       {banner}
       {body}
       {tool === 'hubspot' && <HubspotConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}
@@ -762,6 +777,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     </Sheet>
   );
 }
+
+/** The flow's views that connect something: none of them may act for a company the member cannot connect for. */
+const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'refused', 'overreach']);
 
 /** The view a click on a connector opens: its sheet when connected, the plan when locked, else the flow's first step. */
 export function openingView(p) {

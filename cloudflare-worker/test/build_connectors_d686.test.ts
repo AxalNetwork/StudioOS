@@ -98,7 +98,7 @@ async function mock<T>(fn:(url:string)=>Response,run:()=>Promise<T>){const old=g
  globalThis.fetch=((url:any)=>Promise.resolve(fn(String(url)))) as typeof fetch;try{return await run();}finally{globalThis.fetch=old;}}
 const res=(data:unknown)=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
 function calEnv(env:any){Object.assign(env,{GOOGLE_CLIENT_ID:'fixture',GOOGLE_CLIENT_SECRET:'fixture',MICROSOFT_CLIENT_ID:'fixture',MICROSOFT_CLIENT_SECRET:'fixture',APP_URL:'https://app.axal.vc',PUBLIC_BASE_URL:'https://app.axal.vc'});}
-type Check={name:string;module:keyof Mods;before:string;after:string;run:(m:Mods)=>Promise<void>};
+type Check={name:string;module:keyof Mods;before:string;after:string;secondBefore?:string;secondAfter?:string;run:(m:Mods)=>Promise<void>};
 const checks:Check[]=[
  {name:'Recorded feed counts include the same module doors',module:'fed',before:"href: moduleHref(m), count,",after:"href: null, count,",run:async m=>{
  const {db,env}=fixture();db.exec("CREATE TABLE connector_fed_items(integration_id INTEGER,module TEXT,local_id INTEGER); INSERT INTO connector_fed_items VALUES(11,'product_roadmap',7),(11,'product_roadmap',NULL)");
@@ -121,7 +121,7 @@ const checks:Check[]=[
  snap(got,[[200,'build'],[200,null],[200,null],[200,null]]);db.close();}},
  {name:'OAuth success uses verified destination',module:'route',before:"extra?.return_to === 'build'",after:"false",run:async m=>{
  snap([await redirect(m,'ok','build'),await redirect(m,'ok','/build/connect')],[[302,'/build/connect?oauth=ok&provider=slack'],[302,'/integrations?oauth=ok&provider=slack']]);}},
- {name:'Provider error consumes state before recovering destination',module:'route',before:"const destination = returnBase(consumed?.extra);",after:"const destination = returnBase(null);",run:async m=>{
+ {name:'Provider error consumes state before recovering destination',module:'route',before:"return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(/^",after:"return c.redirect(returnQuery(null, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(/^",run:async m=>{
  const {db,env}=fixture();fake();const state=await issueOauthState(env,1,'slack','fixture',{return_to:'build'});const a=appFor(m);
  const good=await req(a,env,'/api/connectors/oauth/slack/callback?error=access_denied&state='+encodeURIComponent(state));
  const bad=await req(a,env,'/api/connectors/oauth/slack/callback?error=access_denied&state=invalid');
@@ -176,14 +176,47 @@ const checks:Check[]=[
  const r=await req(a,env,'/api/calendar/google/callback?code=fixture&state='+encodeURIComponent(state!),'GET',undefined,1,'studioos_cal_return=build');
  const count:any=db.prepare('SELECT COUNT(*) n FROM google_oauth_tokens').get();
  snap([r.status,r.headers.get('location')?.includes('/build/connect?google=error')??false,count.n],[302,true,0]);});db.close();}},
- {name:'Calendar error callbacks return to Build',module:'cal',before:"returnTo === 'build' ?",after:"false ?",run:async m=>{
+ {name:'Calendar error callbacks return to Build',module:'cal',before:"parseReturn(returnTo).kind === 'build' ?",after:"false ?",run:async m=>{
  const {db,env}=fixture();calEnv(env);const r=await req(appFor(m),env,'/api/calendar/google/callback?error=access_denied','GET',undefined,1,'studioos_cal_return=build');
  snap([r.status,r.headers.get('location')],[302,'https://app.axal.vc/build/connect?google=error&reason=access_denied']);db.close();}},
- {name:'LinkedIn start and denied callback return to Build',module:'li',before:"returnTo === 'build' ?",after:"false ?",run:async m=>{
+ {name:'LinkedIn start and denied callback return to Build',module:'li',before:"kind === 'build' ? '/build/connect'",after:"false ? '/build/connect'",run:async m=>{
  const {db,env}=fixture();Object.assign(env,{LINKEDIN_CLIENT_ID:'fixture',LINKEDIN_CLIENT_SECRET:'fixture',APP_URL:'https://app.axal.vc'});
  const kv=new Map<string,string>();env.RATE_LIMITS={get:async(k:string)=>kv.get(k),put:async(k:string,v:string)=>{kv.set(k,v);},delete:async(k:string)=>{kv.delete(k);}};
  const a=appFor(m),start=await req(a,env,'/api/linkedin/oauth/start?return_to=build','POST',{}),back=await req(a,env,'/api/linkedin/oauth/callback?error=access_denied','GET',undefined,1,'studioos_li_return=build');
  snap([start.status,start.headers.get('set-cookie')?.includes('studioos_li_return=build')??false,back.status,back.headers.get('location')?.startsWith('https://app.axal.vc/build/connect?linkedin=error')??false],[200,true,302,true]);db.close();}},
+
+ // #1597: Build's venture rides in the signed state, so the return names it on the callback's host, where no cookie or sessionStorage is.
+ {name:'Registry return carries Build\'s venture from the signed state',module:'route',before:"? `&project_id=${id}` : ''",after:"? '' : ''",run:async m=>{
+ const {db,env}=fixture();fake();const a=appFor(m),got=[];
+ for(const q of ['return_to=build&project_id=7','return_to=build&project_id=abc','return_to=build&project_id=-3','project_id=7']){
+  const b:any=await (await req(a,env,'/api/connectors/oauth/slack/start?'+q)).json();
+  const r=await req(a,env,'/api/connectors/oauth/slack/callback?error=access_denied&state='+encodeURIComponent(b.state));got.push(r.headers.get('location'));}
+ snap(got,['/build/connect?oauth=error&provider=slack&reason=access_denied&project_id=7','/build/connect?oauth=error&provider=slack&reason=access_denied',
+  '/build/connect?oauth=error&provider=slack&reason=access_denied','/integrations?oauth=error&provider=slack&reason=access_denied']);db.close();}},
+ {name:'The venture is not handed to the provider\'s config',module:'route',before:"project_id: _projectId, ...providerExtra",after:"...providerExtra",run:async m=>{
+ const {db,env}=fixture();let config:any;fake('ok',v=>{config=v;});const state=await issueOauthState(env,1,'slack','fixture',{company_id:10,return_to:'build',project_id:7});
+ const r=await req(appFor(m),env,'/api/connectors/oauth/slack/callback?code=fixture&state='+encodeURIComponent(state));
+ snap([r.status,r.headers.get('location'),config.project_id??null],[302,'/build/connect?oauth=ok&provider=slack&project_id=7',null]);db.close();}},
+ {name:'Google and Microsoft return to Build with the venture and no cookie',module:'cal',before:"returnTo = returnFromNonce(signed) || returnTo;",after:"returnTo = returnTo;",
+  secondBefore:"returnTo = returnFromNonce(stateRaw ? await verifyState(c.env, stateRaw) : null) || returnTo;",secondAfter:"returnTo = returnTo;",run:async m=>{
+ const {db,env}=fixture();calEnv(env);const a=appFor(m),got=[];
+ for(const p of ['google','microsoft']){const start:any=await (await req(a,env,`/api/calendar/${p}/start?return_to=build&project_id=7`)).json();
+  const state=new URL(start.redirect_url).searchParams.get('state');
+  got.push((await req(a,env,`/api/calendar/${p}/callback?error=access_denied&state=${encodeURIComponent(state!)}`)).headers.get('location'));}
+ const plain:any=await (await req(a,env,'/api/calendar/google/start')).json();
+ got.push((await req(a,env,'/api/calendar/google/callback?error=access_denied&state='+encodeURIComponent(new URL(plain.redirect_url).searchParams.get('state')!))).headers.get('location'));
+ const forged=(await req(a,env,'/api/calendar/google/callback?error=access_denied&state=rb7_feedface.notasignature')).headers.get('location');
+ snap([...got,forged],['https://app.axal.vc/build/connect?google=error&reason=access_denied&project_id=7','https://app.axal.vc/build/connect?microsoft=error&reason=access_denied&project_id=7',
+  'https://app.axal.vc/calendar?google=error&reason=access_denied','https://app.axal.vc/calendar?google=error&reason=access_denied']);db.close();}},
+ {name:'LinkedIn returns to Build with the venture and no cookie; a forged state is not read',module:'li',before:"const returnTo = (await returnFromState(c.env, c.req.query('state'))) || readLinkedinReturnTo(c);",after:"const returnTo = readLinkedinReturnTo(c);",run:async m=>{
+ const {db,env}=fixture();Object.assign(env,{LINKEDIN_CLIENT_ID:'fixture',LINKEDIN_CLIENT_SECRET:'fixture',APP_URL:'https://app.axal.vc'});
+ const kv=new Map<string,string>();env.RATE_LIMITS={get:async(k:string)=>kv.get(k),put:async(k:string,v:string)=>{kv.set(k,v);},delete:async(k:string)=>{kv.delete(k);}};
+ const a=appFor(m),start:any=await (await req(a,env,'/api/linkedin/oauth/start','POST',{return_to:'build',project_id:7})).json();
+ const url=(v:any)=>{try{return new URL(String(v));}catch{return new URL('https://unparsed.invalid/');}};
+ const state=url(start.authorize_url).searchParams.get('state')||'';
+ const back=url((await req(a,env,'/api/linkedin/oauth/callback?error=access_denied&state='+encodeURIComponent(state))).headers.get('location'));
+ const forged=url((await req(a,env,'/api/linkedin/oauth/callback?error=access_denied&state=rb7_feedface.bad')).headers.get('location'));
+ snap([back.pathname,back.searchParams.get('project_id'),forged.pathname,forged.searchParams.get('project_id')],['/build/connect','7','/refer',null]);db.close();}},
 ];
 for(const [key,href] of Object.entries({product_roadmap:'/build/product-roadmap',prototype_mvp:'/build/prototype-mvp',founding_team:'/build/founding-team',company_creation:'/build/company-creation',operating_systems:'/build/operating-systems',capital_relationships:'/raise/capital-relationships',customer_research:'/validate/customer-research',market_intelligence:'/validate/market-intelligence',revenue_and_traction:'/grow/revenue-and-traction',customers:'/grow/customers',network:'/network'})){
  checks.push({name:'Module door: '+key,module:'labels',before:"'"+href+"'",after:"'/wrong-module'",run:async m=>snap(m.labels.moduleHref(key),href)});
@@ -199,4 +232,5 @@ async function mutant(check:Check):Promise<Mods>{
  const loaded=await import('data:text/javascript;base64,'+Buffer.from(source+'\n// mutant '+serial++).toString('base64'));
  return {...real,[check.module]:loaded};
 }
-for(const check of checks)test('Mutation and restoration: '+check.name,async()=>{await check.run(real);await assert.rejects(check.run(await mutant(check)),assert.AssertionError);await check.run(real);});
+for(const check of checks)test('Mutation and restoration: '+check.name,async()=>{await check.run(real);await assert.rejects(check.run(await mutant(check)),assert.AssertionError);await check.run(real);
+ if(check.secondBefore){await assert.rejects(check.run(await mutant({...check,before:check.secondBefore,after:check.secondAfter!})),assert.AssertionError);await check.run(real);}});
