@@ -10,6 +10,7 @@
 //   setConsent       PATCH  /sessions/:id/consent
 //   sessionAction    POST   /sessions/:id/{start,pause,resume,stop}
 //   uploadChunk      PUT    /sessions/:id/chunks/:seq   one audio chunk; a repeat is `duplicate`
+//   active           GET    /sessions/active            the caller's recordings in flight, for recovery on load (D685 §5.6)
 //   markMoment       POST   /sessions/:id/marks
 //   tickPoint        PUT    /sessions/:id/points/:pointId  { covered } → { points, points_covered } (D685 §5.2)
 //   liveSocketUrl    GET    /sessions/:id/live          WebSocket, linear16 at 16 kHz
@@ -35,6 +36,8 @@ const ACTIONS = new Set(['start', 'pause', 'resume', 'stop']);
 
 export const interviewSessionsApi = {
   models: () => request(`${P}/sessions/models`),
+  /** The caller's recordings in flight (D685 §5.6.1): restored on app load. */
+  active: () => request(`${P}/sessions/active`),
   open: (body) => request(`${P}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
   create: (interviewId, data) => request(`${P}/interviews/${enc(interviewId)}/sessions`, {
     method: 'POST', body: JSON.stringify(data),
@@ -56,8 +59,10 @@ export const interviewSessionsApi = {
       ...(Number.isSafeInteger(startMs) && startMs >= 0 ? { 'x-chunk-start-ms': String(startMs) } : {}),
     },
   }),
-  mark: (id, offsetMs, label) => request(`${P}/sessions/${enc(id)}/marks`, {
-    method: 'POST', body: JSON.stringify({ offset_ms: offsetMs, label }),
+  /** A replay with the same `client_key` is answered `duplicate`, never a second mark (§5.7). */
+  mark: (id, offsetMs, label, clientKey) => request(`${P}/sessions/${enc(id)}/marks`, {
+    method: 'POST',
+    body: JSON.stringify({ offset_ms: Math.max(0, Math.round(Number(offsetMs) || 0)), label, ...(clientKey ? { client_key: clientKey } : {}) }),
   }),
   tickPoint: (id, pointId, covered) => request(`${P}/sessions/${enc(id)}/points/${enc(pointId)}`, {
     method: 'PUT', body: JSON.stringify({ covered: !!covered }),
