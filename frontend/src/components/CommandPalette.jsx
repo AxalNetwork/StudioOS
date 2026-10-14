@@ -49,6 +49,14 @@ const QUICK_ACTIONS = [
     run: (nav) => nav('/build?new=1'),
   },
   {
+    // D686 §5.6 (#1598): the Raise cycle's action, its lightbox over /raise.
+    id: 'qa.call-for-capital',
+    label: 'Call for Capital',
+    hint: 'Open a call to verified investors',
+    roles: ['admin', 'founder'],
+    run: (nav) => nav('/raise/call'),
+  },
+  {
     id: 'qa.send-nda',
     label: 'Send NDA',
     hint: 'Open the legal docs surface',

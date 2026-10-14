@@ -117,7 +117,7 @@ const probes=[
   ['waiting','page',"['draft','awaiting_counsel'].includes(c.state)","c.state==='draft'"],
   ['changedDeck','page',"if(deck?.unreadable)return", "if(false)return"],
   ['steps','sheet',"'The round','Materials','Audience','Preview','Send'","'The round','Audience','Materials','Preview','Send'"],
-  ['footer','sheet',"Step {s.step+1} of 5","Step {s.step} of 5"],
+  ['footer','sheet',"`Step ${s.step+1} of 5`","`Step ${s.step} of 5`"],
   ['footer','sheet',"{s.step>0&&<button","{true&&<button"],
   ['rows','sheet',"{value??'Not recorded'}","{value??''}"],
   ['rows','sheet',"return ROUND_ROWS.find(row=>!row.show(fields))?.key??null;","return null;"],
