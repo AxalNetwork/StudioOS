@@ -29,5 +29,5 @@ export default function RingViz({ analyser = null, mode = 'speech', theme = 'lig
       flashAt: flash == null ? null : performance.now(),
     });
   }, [analyser, mode, theme, motion, progress, flash]);
-  return <canvas ref={ref} data-testid="ring-viz" data-mode={mode} role="img" aria-label={label || 'Microphone level'} className="block h-full w-full" />;
+  return <canvas ref={ref} data-testid="ring-viz" data-mode={mode} data-theme={theme} role="img" aria-label={label || 'Microphone level'} className="block h-full w-full" />;
 }

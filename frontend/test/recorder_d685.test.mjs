@@ -12,7 +12,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, pillLabel, pillVariant, processingProgress, stageIndex, startRefused } from '../src/lib/activeRecording.js';
+import { codeOnly } from './_codeOnly.mjs';
+import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, liveRefusal, pillLabel, recovering, pillVariant, processingProgress, stageIndex, startRefused } from '../src/lib/activeRecording.js';
 import { layers, ringMode } from '../src/pages/founder/RecordingView.jsx';
 import { BUDGET_CLOSE, LEVEL_MS, NO_SOUND_MS, createCapture, memoryQueue, nextSeq } from '../src/lib/interviewCapture.js';
 import { isCapturing, setCaptureProbe, whenIdle } from '../src/lib/captureGuard.js';
@@ -562,6 +563,14 @@ test('the pill\'s variants and accessible names, and the timer from the Worker\'
   assert.equal(pillVariant({ session: s, phase: 'stopping', cap: {} }), 'processing');
   assert.equal(pillVariant({ session: s, phase: 'ready', cap: {} }), 'ready');
   assert.equal(pillVariant({ session: null, phase: 'recording' }), null);
+  // #1588: nothing recording, never "recording".
+  assert.equal(pillVariant({ session: s, phase: 'share', cap: {} }), 'share');
+  assert.equal(pillVariant({ session: s, phase: 'denied', refused: null, cap: {} }), 'blocked');
+  assert.equal(pillVariant({ session: s, phase: 'denied', refused: { text: 'No.' }, cap: {} }), 'refused');
+  assert.equal(pillVariant({ session: s, phase: 'share', online: false, cap: {} }), 'share', 'offline says nothing about a tab not yet shared');
+  assert.equal(pillLabel('share', '00:00'), 'Not recording yet · share the call\'s tab · tap to expand');
+  assert.equal(pillLabel('blocked', '00:00'), 'Not recording · the microphone is blocked · tap to expand');
+  assert.equal(pillLabel('refused', '00:00'), 'Not recording · the recording did not start · tap to expand');
   assert.equal(pillLabel('recording', '00:01:30'), 'Recording · 00:01:30 · tap to expand');
   assert.equal(pillLabel('ready', ''), 'Ready to review · open the review');
 });
@@ -677,7 +686,7 @@ test('#1588 recovery on load: what this member queued is flushed, and the record
   r.setUser(7);
   assert.equal(await r.recover(), 'restored');
   assert.deepEqual(w.calls.filter((c) => c[0] === 'chunk'), [['chunk', 3, 0]], 'member 9\'s chunk never flushes under member 7');
-  assert.deepEqual(L.asked, [['rec-7', 'ifAvailable']], 'asked, never held: a probe');
+  assert.ok(L.asked.length > 0 && L.asked.every(([n, how]) => n === 'rec-7' && how === 'ifAvailable'), 'asked, never held: a probe (recovery\'s, and adopt\'s own)');
   assert.deepEqual(w.calls.filter((c) => c[0] === 'action'), [['action', 'pause']], 'a recording with no capture here is paused');
   const st = r.getSnapshot();
   assert.equal(st.phase, 'paused');
@@ -754,13 +763,135 @@ test('#1588 a meeting link the view may open is https only; the recorder knows w
   assert.equal(joinHref(null), null);
   const r = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
   assert.equal(r.canShareTab, true);
+  const phone = createRecorder({ api: fakeApi().api, browser: { ...fakeBrowser().browser, getDisplayMedia: undefined }, queue: memoryQueue() });
+  assert.equal(phone.canShareTab, false, 'a phone cannot share a tab');
   // The lightbox's link is kept for the share step; anything but https is not.
   const v = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
   return v.begin({ session: draft({ channel: 'video' }), video: true, meetingUrl: 'https://acme.zoom.us/j/1' }).then(async () => {
     assert.equal(v.getSnapshot().meetingUrl, 'https://acme.zoom.us/j/1');
     await v.begin({ session: draft({ channel: 'video' }), video: true, meetingUrl: 'http://acme.zoom.us/j/1' });
-    assert.equal(v.getSnapshot().meetingUrl, null);
+    assert.equal(v.getSnapshot().meetingUrl, null, 'a second Start at the share step replaces it: no microphone was open');
   });
-  const phone = createRecorder({ api: fakeApi().api, browser: { ...fakeBrowser().browser, getDisplayMedia: undefined }, queue: memoryQueue() });
-  assert.equal(phone.canShareTab, false);
+});
+
+test('#1588 a second Start while a capture is live is refused, and the live one keeps its microphone, its session and its capture', async () => {
+  const b = fakeBrowser();
+  const w = fakeApi();
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await r.begin({ session: draft() }), 'recording');
+  const live = r.capture;
+  // "Record a session" on another row, or another draft's Start: the click prepares its own mic, then hands over.
+  const second = track();
+  b.browser.getUserMedia = async () => stream([second]);
+  r.prepare();
+  await tick();
+  assert.equal(await r.begin({ session: draft({ id: 9 }) }), 'busy');
+  const st = r.getSnapshot();
+  assert.equal(st.session.id, 7, 'the live session stays');
+  assert.equal(st.phase, 'recording');
+  assert.equal(r.capture, live, 'and its capture, which can still be stopped');
+  assert.equal(b.mic.stopped, 0, 'its microphone runs on');
+  await tick();
+  assert.equal(second.stopped, 1, 'the microphone opened for the refused Start is let go');
+  assert.equal(r.isCapturing(), true, 'so the reload and logout guards keep holding off');
+  assert.deepEqual(w.calls, [['action', 'start']], 'nothing is posted for the second session');
+  assert.equal(await r.adopt({ session: { id: 9, status: 'recording' } }), 'busy', 'nor does Resume here replace it');
+  assert.deepEqual(w.calls, [['action', 'start']], 'and no pause is posted');
+  assert.deepEqual(liveRefusal(st, true), { text: 'You are already recording another session. Stop it, or return to it, first.', sessionId: 7 });
+  assert.match(liveRefusal({ ...st, phase: 'stopping' }, true).text, /still being saved/);
+  assert.equal(liveRefusal(st, false), null, 'nothing captured, nothing refused');
+  assert.equal(liveRefusal({ phase: 'idle', session: null }, true), null);
+  // Once stopped and handed to the Worker, a new Start is allowed again.
+  w.api.finish = async () => ({ processing: { stage: 'transcribing', done: 0, total: 1, error: null } });
+  w.api.get = async () => ({ session: { id: 7, status: 'transcribed' }, processing: { stage: 'done' } });
+  await r.confirmStop();
+  assert.equal(r.isCapturing(), false);
+  assert.equal(await r.begin({ session: draft({ id: 9 }) }), 'recording');
+  assert.equal(r.getSnapshot().session.id, 7, 'the Worker\'s answer (the fake says 7) replaces the draft');
+});
+
+test('#1588 Resume here never pauses a recording another tab is capturing: adopt probes rec-<id> first', async () => {
+  const L = fakeLocks(['rec-7']);
+  const w = fakeApi();
+  const r = createRecorder({ api: w.api, browser: { ...fakeBrowser().browser, locks: L.locks }, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  for (const status of ['recording', 'paused']) {
+    assert.equal(await r.adopt({ session: { id: 7, status, channel: 'in_person' } }), 'other_tab', status);
+    assert.deepEqual(w.calls, [], `${status}: no pause posted, so the other tab's capture is untouched`);
+    assert.equal(r.getSnapshot().session, null, 'and this tab takes nothing');
+  }
+  assert.deepEqual(L.asked.at(-1), ['rec-7', 'ifAvailable'], 'asked without waiting');
+  // Once the other tab lets it go, this tab adopts it, paused.
+  L.taken.delete('rec-7');
+  assert.equal(await r.adopt({ session: { id: 7, status: 'recording', channel: 'in_person' } }), 'paused');
+  assert.deepEqual(w.calls, [['action', 'pause']]);
+  // A draft has no capture anywhere: no probe needed, nothing refused.
+  const r2 = createRecorder({ api: fakeApi().api, browser: { ...fakeBrowser().browser, locks: fakeLocks(['rec-8']).locks }, queue: memoryQueue() });
+  assert.equal(await r2.adopt({ session: { id: 8, status: 'draft', channel: 'in_person' } }), 'idle');
+});
+
+test('#1588 every Start opens the mic inside its own click, not only the first: the prepared mic is used once, then forgotten', async () => {
+  const b = fakeBrowser();
+  const w = fakeApi({
+    finish: async () => ({ processing: { stage: 'transcribing', done: 0, total: 1, error: null } }),
+    get: async () => ({ session: { id: 7, status: 'transcribed' }, processing: { stage: 'done' } }),
+  });
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r.prepare();
+  await tick();
+  assert.equal(await r.begin({ session: draft() }), 'recording');
+  await r.confirmStop();
+  r.clear();
+  b.log.length = 0;
+  // The second Start, after a Stop: its click asks again, synchronously for the context.
+  r.prepare();
+  assert.deepEqual(b.log, ['AudioContext'], 'a fresh context in the second click');
+  await tick();
+  assert.deepEqual(b.log, ['AudioContext', 'getUserMedia'], 'and the mic, before anything is awaited');
+  assert.equal(await r.begin({ session: draft({ id: 9 }) }), 'recording');
+  assert.equal(b.log.filter((x) => x === 'getUserMedia').length, 1, 'the second click\'s mic is the one used, not asked for again after the POST');
+  assert.equal(b.log.filter((x) => x === 'AudioContext').length, 1);
+});
+
+test('#1588 main.jsx\'s own stale-chunk reload waits for the capture, and keeps the rethrow while it waits', () => {
+  const main = codeOnly(readFileSync('frontend/src/main.jsx', 'utf8'));
+  assert.match(main, /import \{ isCapturing, whenIdle \} from '\.\/lib\/captureGuard';/);
+  const fn = main.slice(main.indexOf('function reloadOnceForStaleChunk()'), main.indexOf('function dropCachesThenReload('));
+  assert.match(fn, /const now = !isCapturing\(\);\s*whenIdle\(\(\) => dropCachesThenReload\(next\)\);\s*return now;/,
+    'the reload runs through whenIdle, and reports a reload under way only when it starts now');
+  assert.doesNotMatch(fn, /reloadCarryingCount|serviceWorker|caches/, 'nothing reloads or drops caches outside whenIdle');
+  assert.match(main, /if \(reloadOnceForStaleChunk\(\)\) \{\s*try \{ e\.preventDefault\(\); \}/, 'the rethrow is suppressed only when a reload starts');
+  assert.match(readFileSync('documentation/architecture/GOTCHAS.md', 'utf8'), /`main\.jsx`'s own stale-chunk reload on `vite:preloadError`/);
+});
+
+test('#1588 recovery is pending from page load until the first recover finishes, and a clear or a sign-out does not reset it', async () => {
+  const w = fakeApi({ active: async () => ({ items: [] }) });
+  const r = createRecorder({ api: w.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(r.getSnapshot().recovery, 'pending');
+  assert.equal(recovering(r.getSnapshot()), true);
+  assert.equal(await r.recover(), 'skipped', 'no member yet');
+  assert.equal(recovering(r.getSnapshot()), true, 'still pending: the member is not known');
+  r.setUser(7);
+  const seen = [];
+  r.subscribe((st) => seen.push(st.recovery));
+  assert.equal(await r.recover(), 'none');
+  assert.equal(seen[0], 'running');
+  assert.equal(r.getSnapshot().recovery, 'done');
+  r.clear();
+  await r.signOut();
+  assert.equal(r.getSnapshot().recovery, 'done', 'kept through a clear and a sign-out');
+  assert.equal(recovering({}), false, 'a recorder that does not say has nothing to wait for');
+  // A failed read still finishes recovery: the route stops waiting.
+  const bad = createRecorder({ api: fakeApi({ active: async () => { throw new Error('offline'); } }).api, browser: fakeBrowser().browser, queue: memoryQueue() });
+  bad.setUser(7);
+  assert.equal(await bad.recover(), 'unread');
+  assert.equal(bad.getSnapshot().recovery, 'done');
+});
+
+test('#1588 begin keeps the attach outcome for the share step, and a new Start starts without the last one\'s', async () => {
+  const r = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
+  const attach = { tone: 'refused', text: 'This meeting link is already attached to an interview.' };
+  assert.equal(await r.begin({ session: draft({ channel: 'video' }), video: true, attach }), 'share');
+  assert.deepEqual(r.getSnapshot().attach, attach);
+  assert.equal(await r.begin({ session: draft({ channel: 'video', id: 9 }), video: true }), 'share');
+  assert.equal(r.getSnapshot().attach, null);
 });

@@ -18,6 +18,7 @@
 //   scheduleMeeting  POST   /founder/validate/interviews/:id/meetings  { provider, starts_at, duration_min, topic?, consent, auto_record? }
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
+//   attachMeeting    POST   /founder/validate/interviews/:id/meetings  { attach: { join_url }, session_id, provider } (D685 §5.3.2, #1588)
 //
 // Every path is written out in full (no shared prefix constant) so the drift
 // check (scripts/check-api-drift.mjs) reads each one against the Worker.
@@ -94,4 +95,11 @@ export const channelsApi = {
   importMeeting: (interviewId, refUid) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}/import`, {
     method: 'POST', body: JSON.stringify({}),
   }),
+  /** Attach the Zoom or Meet call a video session records, so its own transcript can be imported after it (D685 §5.8.7). */
+  attachMeeting: (interviewId, { session_id, join_url, provider: p }) => {
+    if (!MEETING_PROVIDERS.has(p)) throw new Error(`Unknown meeting provider: ${p}`);
+    return request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
+      method: 'POST', body: JSON.stringify({ attach: { join_url }, session_id: Number(session_id), provider: p }),
+    });
+  },
 };

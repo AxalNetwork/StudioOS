@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pause, Play, Square, Flag, ListChecks, X, Captions, CaptionsOff, MicOff, MonitorUp, Mic } from 'lucide-react';
 import RingViz from '../../components/discovery/RingViz';
 import { NO_SOUND_MS } from '../../lib/interviewCapture';
@@ -233,6 +233,19 @@ function TabVideo({ stream }) {
   return <video ref={v} autoPlay muted playsInline className="h-full w-full rounded-xl bg-black object-cover" data-testid="tile-video" />;
 }
 
+/** The page's theme, followed as the root's `dark` class changes: the ring draws its palette from it. */
+export function useDarkTheme() {
+  const read = () => typeof document !== 'undefined' && !!document.documentElement?.classList?.contains?.('dark');
+  const [dark, setDark] = useState(read);
+  useEffect(() => {
+    if (typeof MutationObserver === 'undefined') return undefined;
+    const o = new MutationObserver(() => setDark(read()));
+    o.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => o.disconnect();
+  }, []);
+  return dark ? 'dark' : 'light';
+}
+
 export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit, onOpen }) {
   const exitRef = useRef(null);
   const stopRef = useRef(null);
@@ -333,6 +346,10 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
                 className="inline-flex items-center gap-1.5 rounded-md border border-violet-300 px-3 py-2 text-[13px] font-bold text-violet-800 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-[#1c1230]">Start the call</a>
               <span className="mt-1 block text-[12px] text-gray-500 dark:text-gray-400">It opens the meeting link in a new tab. Then come back here.</span>
             </p>
+          )}
+          {st.attach?.text && (
+            <p role="status" data-testid="share-attach-note" data-tone={st.attach.tone}
+              className={`m-0 mb-3 text-[12.5px] font-semibold ${st.attach.tone === 'refused' ? 'text-amber-800 dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'}`}>{st.attach.text}</p>
           )}
           {actions.canShareTab === false ? (
             <>

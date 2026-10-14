@@ -8,6 +8,7 @@ import './index.css';
 import { registerServiceWorker } from './lib/pwa';
 import { isChunkLoadError } from './lib/chunkLoadError';
 import { readAttempts, recordAttempt, reloadCarryingCount } from './lib/reloadGuard';
+import { isCapturing, whenIdle } from './lib/captureGuard';
 import { reportError } from './lib/log';
 
 // Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
@@ -87,14 +88,27 @@ const CHUNK_KEY = 'axal:chunk-reload-attempts';
 const CHUNK_PARAM = '__chunk';
 const MAX_CHUNK_RELOADS = 2;
 
-// RETURNS WHETHER A RELOAD IS UNDER WAY, and that return value is load-bearing:
-// the `vite:preloadError` listener below may only suppress Vite's rethrow when
-// it is true. See the comment there for what a bare suppression costs.
+// RETURNS WHETHER A RELOAD IS STARTING NOW, and that return value is
+// load-bearing: the `vite:preloadError` listener below may only suppress Vite's
+// rethrow when it is true. See the comment there for what a bare suppression costs.
+//
+// NEVER UNDER A RUNNING CAPTURE (D685 §5.6.8, #1588). A recording lives in
+// memory, and a deploy mid-interview (four ran in 23 minutes on 2026-10-14)
+// would end it. The reload waits for the capture with `whenIdle`, as
+// RouteErrorBoundary's and pwa.js's do; meanwhile it returns false, so the
+// failure is rethrown and reaches RouteErrorBoundary instead of resolving the
+// import to undefined.
 function reloadOnceForStaleChunk() {
   const attempts = readAttempts(CHUNK_KEY, CHUNK_PARAM);
   if (attempts >= MAX_CHUNK_RELOADS) return false;
   const next = attempts + 1;
   try { recordAttempt(CHUNK_KEY, next); } catch { /* URL marker below carries it */ }
+  const now = !isCapturing();
+  whenIdle(() => dropCachesThenReload(next));
+  return now;
+}
+
+function dropCachesThenReload(next) {
   // Drop SW caches first so the next load isn't fed another stale chunk.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations()
@@ -112,7 +126,6 @@ function reloadOnceForStaleChunk() {
   } else {
     reloadCarryingCount(CHUNK_PARAM, next);
   }
-  return true;
 }
 
 function recoverFromStaleChunk(reason) {

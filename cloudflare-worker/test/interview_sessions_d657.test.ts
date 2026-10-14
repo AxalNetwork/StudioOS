@@ -394,6 +394,8 @@ test('the model list carries the router’s prices, tags, and what can be chosen
 test('live: "Live transcript off" opens no socket; a non-upgrade request is refused', async () => {
   const f = fixture();
   const s = await audioSession(f, { status: 'given', method: 'verbal' }, { live_model: null });
+  // Opened before the first starts: one live session per member (#1588).
+  const on = await audioSession(f, { status: 'given', method: 'verbal' });
   const id = s.body.session.id;
   await call(f.env, FOUNDER, 'POST', `/sessions/${id}/start`);
   const off = await call(f.env, FOUNDER, 'GET', `/sessions/${id}/live`, undefined, { upgrade: 'websocket' });
@@ -401,7 +403,6 @@ test('live: "Live transcript off" opens no socket; a non-upgrade request is refu
   assert.equal(off.body.detail, 'live_off');
   assert.equal(f.aiCalls.length, 0);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM ai_budget_reservations').get().n, 0, 'live off held budget');
-  const on = await audioSession(f, { status: 'given', method: 'verbal' });
   assert.equal((await call(f.env, FOUNDER, 'GET', `/sessions/${on.body.session.id}/live`)).status, 426);
 });
 
@@ -677,6 +678,28 @@ test('D685 (#1583): a stop closes the call refs attached to its session, on both
   await call(f.env, FOUNDER, 'POST', `/sessions/${b.body.session.id}/pause`);
   await call(f.env, FOUNDER, 'PATCH', `/sessions/${b.body.session.id}/consent`, { status: 'declined' });
   assert.ok(refRow('rb').ends_at, 'the consent-withdrawal stop closes it too');
+});
+
+test('D685 §5.1.1 (#1588): the per-interview route refuses an audio session while one is live, before writing; text still opens', async () => {
+  const f = fixture();
+  const consent = { status: 'given', method: 'verbal' };
+  const a = await setup(f, { channel: 'in_person', interviewee: { name: 'Live' }, consent });
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/start`);
+  const count = () => (f.db.prepare('SELECT COUNT(*) AS n FROM interview_sessions').get() as any).n;
+  const before = count();
+  const refused = await audioSession(f, consent);
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.error, 'session_active');
+  assert.equal(refused.body.session_id, a.body.session.id, 'it names the live session, so the page can offer it');
+  assert.match(refused.body.message, /already recording another session/);
+  assert.equal(count(), before, 'no draft is written for a refused setup');
+  // A text chat records nothing, so it still opens on the interview.
+  assert.equal((await call(f.env, FOUNDER, 'POST', '/interviews/1/sessions', { channel: 'text' })).status, 201);
+  // Paused still counts; stopped does not.
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/pause`);
+  assert.equal((await audioSession(f, consent)).status, 409);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${a.body.session.id}/stop`);
+  assert.equal((await audioSession(f, consent)).status, 201);
 });
 
 test('D685 §5.1.1 (#1583): the setup call refuses with session_active while the caller records or is paused', async () => {
@@ -987,7 +1010,13 @@ test('D685 §5.10: summary sentences keep only citations inside the transcript; 
 
 /** A session on interview 1 put straight into a state: one recording at a time and the free tier's interview cap are the routes' rules, not this test's. */
 async function sessionIn(f: any, status: string, extra = '', user = FOUNDER) {
+  // The setup call refuses while another session is live (#1588); this helper
+  // places sessions straight into states, so it hides the live ones from that
+  // check for its own call and puts them back.
+  const hidden = f.db.prepare("SELECT id FROM interview_sessions WHERE status IN ('recording', 'paused') AND submitted_via IS NULL").all().map((x: any) => x.id);
+  for (const h of hidden) f.db.prepare("UPDATE interview_sessions SET submitted_via = 'fixture' WHERE id = ?").run(h);
   const r = await audioSession(f, { status: 'given', method: 'verbal' }, {}, user);
+  for (const h of hidden) f.db.prepare('UPDATE interview_sessions SET submitted_via = NULL WHERE id = ?').run(h);
   const id = r.body.session.id;
   f.db.prepare(`UPDATE interview_sessions SET status = ?, recording_since = CASE WHEN ? = 'recording' THEN datetime('now') END ${extra} WHERE id = ?`).run(status, status, id);
   return id;

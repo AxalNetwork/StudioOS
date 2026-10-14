@@ -159,6 +159,8 @@ test('every request in the module is written as a literal path the drift check c
     'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /founder/validate/interviews/:p/meetings',
     'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign', 'POST /channels/threads/:p/ignore',
     'POST /channels/threads/:p/reply', 'POST /channels/whatsapp/connect', 'POST /founder/validate/interviews/:p/meetings',
+    // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
+    'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
   ], 'one per route of D684 §9, as the drift check will read them');
 });
