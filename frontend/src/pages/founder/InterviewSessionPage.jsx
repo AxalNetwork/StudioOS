@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
-import { liveRefusal } from '../../lib/activeRecording.js';
+import { STAGES, STAGE_KEYS, liveRefusal } from '../../lib/activeRecording.js';
 import { AssistantBadge } from './AssistantEntry';
 import { ChannelOriginBadge } from './ChannelOriginBadge.jsx';
 import { channelOf, openingStep } from './assistantSession.js';
@@ -234,7 +234,11 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   useEffect(() => { load(); loadReceipt(); api.models().then(setModels).catch(() => setModels(null)); }, [api, load, loadReceipt]);
   // §5.9.5: processing under way, or failed, and not followed in this tab: the live view shows it from the Worker's state.
   const followed = rec.session?.id != null && data?.session && String(rec.session.id) === String(data.session.id);
-  const handOver = !!data?.session && !followed && !!data?.processing?.stage && data.processing.stage !== 'done';
+  const inFlight = !!data?.session && !followed && !!data?.processing?.stage && data.processing.stage !== 'done';
+  // #1588: never handed over while this tab records another session, which
+  // would leave that one's microphone running; the page shows it itself.
+  const recordingOther = inFlight && !!liveRefusal(rec, recorder.isCapturing());
+  const handOver = inFlight && !recordingOther;
   useEffect(() => {
     if (!handOver) return;
     recorder.follow({ session: data.session, interview: location.state?.interview || data.interview || null, processing: data.processing, callLabel: data.call_label ?? null });
@@ -269,6 +273,10 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
     setStartError(null); setStartLive(null);
     // Refused before the microphone opens or anything is posted (#1588).
     if (refuseOverLive()) return;
+    // In this click, before anything is awaited (§5.6.5): the microphone and
+    // the AudioContext, so iOS Safari does not start the context suspended.
+    // A video call asks in its own click, "Share the call's tab".
+    if (AUDIO.has(session.channel) && session.channel !== 'video') recorder.prepare?.();
     setBusy(true);
     try {
       const r = await recorder.begin({ session, interview, callLabel: data.call_label ?? null, points: data.points || [], video: session.channel === 'video' });
@@ -276,6 +284,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
       if (r === 'refused') { setStartError(recorder.getSnapshot().error); return; }
       navigate(live);
     } catch (e) {
+      recorder.release?.();
       // The Worker's 409 `consent_not_recorded` — in its own words.
       setStartError(e?.message || 'The session could not start.');
     } finally { setBusy(false); }
@@ -343,6 +352,15 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
                 {adoptNote && <p role="status" className="mt-2 text-[13px] font-semibold text-amber-800 dark:text-amber-300" data-testid="adopt-note">{adoptNote}</p>}
               </>
             )}
+          </section>
+        )}
+        {recordingOther && (
+          <section role="status" className="rounded-2xl border border-axal-hairline p-4 text-[13px] dark:border-gray-800" data-testid="processing-here">
+            <p className="m-0 font-semibold">
+              {data.processing.stage === 'failed' ? 'Processing stopped' : `Processing · ${STAGES[STAGE_KEYS.indexOf(data.processing.stage)] || 'under way'}`}
+            </p>
+            {data.processing.error && <p className="m-0 mt-1 text-amber-800 dark:text-amber-300">{data.processing.error}</p>}
+            <p className="m-0 mt-1 text-axal-muted dark:text-gray-400">You are recording another session. Its processing view opens here once you stop that one.</p>
           </section>
         )}
         {session.status === 'transcribing' && <p className="text-[13px] text-axal-faint" data-testid="session-transcribing">Transcribing…</p>}

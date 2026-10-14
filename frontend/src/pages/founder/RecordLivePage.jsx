@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
-import { recovering, reviewPath } from '../../lib/activeRecording';
+import { pillVariant, recovering, reviewPath } from '../../lib/activeRecording';
 import { useAuth } from '../../hooks/useAuthSync';
 import useAssistMode from '../../hooks/useAssistMode';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
@@ -53,8 +53,9 @@ export default function RecordLivePage() {
 
   // Back to the page before the lightbox; with no history (a deep link), to Validate.
   const exit = () => {
-    // Focus goes to the pill that now holds the recording (§5.6.3).
-    focusPillOnShow();
+    // Focus goes to the pill that now holds the recording (§5.6.3), only when
+    // one is drawn: a flag left set would later take focus from another page.
+    if (pillVariant(state)) focusPillOnShow();
     const idx = typeof window !== 'undefined' ? window.history?.state?.idx : 0;
     if (location.key !== 'default' && idx > 0) navigate(-1); else navigate('/validate', { replace: true });
   };

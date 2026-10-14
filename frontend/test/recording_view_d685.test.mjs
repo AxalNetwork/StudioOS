@@ -683,3 +683,70 @@ test('#1588 the provider, mounted: recovery runs once per member, and a member s
     assert.deepEqual(log.slice(2), [['signOut'], ['setUser', 9], ['recover']], 'the old member\'s capture stops first');
   } finally { await act(async () => root.unmount()); restore(); }
 });
+
+// ── #1588, round two ─────────────────────────────────────────────────────────
+
+test('#1588 r2 mounted: open a failed session\'s page while recording another; it is not handed over, the recording keeps going, and the page shows the stage', async () => {
+  const rec = stubRecorder({ ...ST(), session: { ...SESSION, id: 88 }, phase: 'recording' });
+  const followed = [];
+  rec.follow = (arg) => { followed.push(arg.session.id); return Promise.resolve('done'); };
+  setRecorder(rec);
+  const read = { ...sessionRead('stopped'), processing: { stage: 'failed', done: null, total: null, error: 'Processing stopped unexpectedly. Nothing was lost; try again.' } };
+  const p = await sessionPage(read);
+  try {
+    assert.deepEqual(followed, [], 'follow is never called, so the live capture is never dropped');
+    assert.equal(p.where.path, '/validate/session/7', 'it stays on its page');
+    assert.equal(rec.getSnapshot().session.id, 88);
+    assert.equal(rec.getSnapshot().phase, 'recording');
+    assert.match(p.text('processing-here'), /Processing stopped/);
+    assert.match(p.text('processing-here'), /Nothing was lost; try again\./);
+    assert.match(p.text('processing-here'), /You are recording another session/);
+  } finally { await p.unmount(); }
+  // Recording nothing: it is handed over as before.
+  const idle = stubRecorder({ phase: 'idle', session: null });
+  idle.follow = (arg) => { followed.push(arg.session.id); return Promise.resolve('failed'); };
+  setRecorder(idle);
+  const q = await sessionPage(read);
+  try {
+    assert.deepEqual(followed, [7]);
+    assert.equal(q.where.path, '/validate/record/live?session=7');
+  } finally { await q.unmount(); }
+});
+
+test('#1588 r2 mounted: the session page\'s Start opens the mic inside its click, before begin awaits anything, and lets it go on a refusal', async () => {
+  const log = [];
+  const rec = stubRecorder({ phase: 'idle', session: null });
+  rec.prepare = () => { log.push('prepare'); };
+  rec.release = () => { log.push('release'); };
+  rec.begin = async () => { log.push('begin'); throw Object.assign(new Error('Record consent first.'), { status: 409 }); };
+  setRecorder(rec);
+  const p = await sessionPage(sessionRead('draft'));
+  try {
+    await p.click('button-session-start');
+    assert.deepEqual(log, ['prepare', 'begin', 'release'], 'prepared in the click, then handed over, then let go');
+    assert.match(p.text('start-error'), /Record consent first\./);
+  } finally { await p.unmount(); }
+  // A video call asks in its own click: nothing prepared here.
+  log.length = 0;
+  rec.begin = async () => { log.push('begin'); return 'share'; };
+  const v = await sessionPage({ ...sessionRead('draft'), session: { ...sessionRead('draft').session, channel: 'video' } });
+  try {
+    await v.click('button-session-start');
+    assert.deepEqual(log, ['begin']);
+  } finally { await v.unmount(); }
+});
+
+test('#1588 r2 Exit from a Start still opening sets no focus flag, so a later pill never takes focus from another page', async () => {
+  const rec = stubRecorder({ ...ST(), phase: 'idle' });
+  setRecorder(rec);
+  const app = await liveApp('/validate/record/live?session=7');
+  try {
+    await app.click('button-exit-full-screen');
+    assert.equal(app.where.path, '/validate');
+    const typing = { id: 'search-box' };
+    document.activeElement = typing;
+    await act(async () => { rec.set(ST({ phase: 'recording' })); });
+    assert.ok(app.by('recording-pill'), 'the pill is drawn later');
+    assert.equal(document.activeElement, typing, 'and leaves the founder\'s focus where it was');
+  } finally { await app.unmount(); }
+});

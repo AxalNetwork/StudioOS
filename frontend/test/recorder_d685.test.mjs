@@ -686,7 +686,8 @@ test('#1588 recovery on load: what this member queued is flushed, and the record
   r.setUser(7);
   assert.equal(await r.recover(), 'restored');
   assert.deepEqual(w.calls.filter((c) => c[0] === 'chunk'), [['chunk', 3, 0]], 'member 9\'s chunk never flushes under member 7');
-  assert.ok(L.asked.length > 0 && L.asked.every(([n, how]) => n === 'rec-7' && how === 'ifAvailable'), 'asked, never held: a probe (recovery\'s, and adopt\'s own)');
+  assert.ok(L.asked.length > 1 && L.asked.slice(0, -1).every(([n, how]) => n === 'rec-7' && how === 'ifAvailable'), 'probed without waiting first (recovery\'s, and adopt\'s own)');
+  assert.deepEqual(L.asked.at(-1), ['rec-7', 'hold'], 'then, restored here, held by this tab (#1588)');
   assert.deepEqual(w.calls.filter((c) => c[0] === 'action'), [['action', 'pause']], 'a recording with no capture here is paused');
   const st = r.getSnapshot();
   assert.equal(st.phase, 'paused');
@@ -856,8 +857,13 @@ test('#1588 main.jsx\'s own stale-chunk reload waits for the capture, and keeps 
   const main = codeOnly(readFileSync('frontend/src/main.jsx', 'utf8'));
   assert.match(main, /import \{ isCapturing, whenIdle \} from '\.\/lib\/captureGuard';/);
   const fn = main.slice(main.indexOf('function reloadOnceForStaleChunk()'), main.indexOf('function dropCachesThenReload('));
-  assert.match(fn, /const now = !isCapturing\(\);\s*whenIdle\(\(\) => dropCachesThenReload\(next\)\);\s*return now;/,
-    'the reload runs through whenIdle, and reports a reload under way only when it starts now');
+  assert.match(fn, /const now = !isCapturing\(\);\s*if \(!chunkReloadQueued\) \{\s*chunkReloadQueued = true;\s*whenIdle\(\(\) => \{/,
+    'the reload is queued once, through whenIdle');
+  const deferred = fn.slice(fn.indexOf('whenIdle(() => {'));
+  assert.match(deferred, /const next = readAttempts\(CHUNK_KEY, CHUNK_PARAM\) \+ 1;\s*if \(next > MAX_CHUNK_RELOADS\) \{ chunkReloadQueued = false; return; \}\s*try \{ recordAttempt\(CHUNK_KEY, next\); \}[^\n]*\n\s*dropCachesThenReload\(next\);/,
+    'the attempt is read and charged when the reload runs (#1588), not on each chunk error');
+  assert.doesNotMatch(fn.slice(0, fn.indexOf('whenIdle(')), /recordAttempt/, 'nothing is charged before it runs');
+  assert.match(fn, /return now;\n\}/, 'and it reports a reload under way only when it starts now');
   assert.doesNotMatch(fn, /reloadCarryingCount|serviceWorker|caches/, 'nothing reloads or drops caches outside whenIdle');
   assert.match(main, /if \(reloadOnceForStaleChunk\(\)\) \{\s*try \{ e\.preventDefault\(\); \}/, 'the rethrow is suppressed only when a reload starts');
   assert.match(readFileSync('documentation/architecture/GOTCHAS.md', 'utf8'), /`main\.jsx`'s own stale-chunk reload on `vite:preloadError`/);
@@ -894,4 +900,169 @@ test('#1588 begin keeps the attach outcome for the share step, and a new Start s
   assert.deepEqual(r.getSnapshot().attach, attach);
   assert.equal(await r.begin({ session: draft({ channel: 'video', id: 9 }), video: true }), 'share');
   assert.equal(r.getSnapshot().attach, null);
+});
+
+// ── #1588, round two (S1's review of 2026-10-14 11:02) ─────────────────────
+
+const deferred = () => { let resolve, reject; const p = new Promise((a, b) => { resolve = a; reject = b; }); return { p, resolve, reject }; };
+
+test('#1588 r2 opening a session still processing, or failed, while recording another: follow refuses, and the live one keeps its mic', async () => {
+  const b = fakeBrowser();
+  const w = fakeApi();
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await r.begin({ session: draft() }), 'recording');
+  const live = r.capture;
+  for (const stage of ['failed', 'transcribing']) {
+    assert.equal(await r.follow({ session: { id: 3, status: 'stopped' }, processing: { stage, error: 'No.' } }), 'busy', stage);
+    assert.equal(r.getSnapshot().session.id, 7, `${stage}: the live session stays`);
+    assert.equal(r.capture, live);
+    assert.equal(b.mic.stopped, 0);
+    assert.equal(r.isCapturing(), true);
+  }
+});
+
+test('#1588 r2 the last recording\'s processing poll never writes over the next one', async () => {
+  const b = fakeBrowser();
+  const gets = [];
+  const w = fakeApi({
+    finish: async () => ({ processing: { stage: 'transcribing', done: 0, total: 1, error: null } }),
+    get: async (id) => { const d = deferred(); gets.push({ id, d }); return d.p; },
+  });
+  const ticks = [];
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()), wait: () => { const d = deferred(); ticks.push(d); return d.p; } });
+  // A records, stops; finish is accepted and A's poll asks for A.
+  await r.begin({ session: draft() });
+  const stopped = r.confirmStop();
+  for (let i = 0; i < 20 && !gets.length; i++) await tick();
+  assert.equal(gets.length, 1, 'A\'s poll is waiting on its read');
+  assert.equal(r.isCapturing(), false, 'A is on the Worker now, so a new Start is allowed');
+  // B starts while A transcribes.
+  w.api.action = async (id, a) => { w.calls.push(['action', a]); return { session: { id: 9, status: 'recording', active_ms: 0, channel: 'in_person' } }; };
+  assert.equal(await r.begin({ session: draft({ id: 9 }) }), 'recording');
+  // A's read comes back, transcribing; then done.
+  gets[0].d.resolve({ session: { id: 7, status: 'transcribing' }, processing: { stage: 'transcribing', done: 0, total: 1 } });
+  assert.equal(await stopped, 'cancelled', 'A\'s poll ends without writing');
+  const st = r.getSnapshot();
+  assert.equal(st.session.id, 9, 'B is still the session here');
+  assert.equal(st.phase, 'recording');
+  assert.equal(st.processing, null, 'no processing state of A\'s on B');
+  assert.equal(r.isCapturing(), true);
+});
+
+/** Web Locks across tabs: one owner per name; a hold asked while another tab owns it waits. */
+function sharedLocks() {
+  const owners = new Map();
+  const tab = (name) => ({
+    asked: [],
+    request(lock, opts, cb) {
+      const fn = typeof opts === 'function' ? opts : cb;
+      if (typeof opts === 'object' && opts?.ifAvailable) { this.asked.push([lock, 'probe']); return Promise.resolve(fn(owners.has(lock) ? null : { name: lock })); }
+      this.asked.push([lock, 'hold']);
+      if (owners.has(lock)) return new Promise(() => {}); // queued behind the other tab
+      owners.set(lock, name);
+      return Promise.resolve(fn({ name: lock })).finally(() => { if (owners.get(lock) === name) owners.delete(lock); });
+    },
+  });
+  return { owners, tab };
+}
+
+test('#1588 r2 two tabs, one paused session: the tab that took it holds rec-<id>; the other can neither adopt nor Resume it', async () => {
+  const L = sharedLocks();
+  const paused = { id: 7, status: 'paused', active_ms: 1000, channel: 'in_person', final_model: 'whisper', live_model: null };
+  const one = fakeApi();
+  const two = fakeApi();
+  const tab1 = createRecorder({ api: one.api, browser: { ...fakeBrowser().browser, locks: L.tab('tab1') }, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  const tab2 = createRecorder({ api: two.api, browser: { ...fakeBrowser().browser, locks: L.tab('tab2') }, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await tab1.adopt({ session: paused }), 'paused');
+  await tick();
+  assert.equal(L.owners.get('rec-7'), 'tab1', 'held from the moment it was taken, not only once it records');
+  assert.equal(await tab2.adopt({ session: paused }), 'other_tab');
+  // A tab that took the paused session in the moment the lock was free, whose
+  // hold was then queued behind the other tab: its Resume probes first.
+  const tab3b = createRecorder({ api: two.api, browser: { ...fakeBrowser().browser, locks: { request: (n, o, cb) => (typeof o === 'object' && o?.ifAvailable ? Promise.resolve((cb)(L.owners.has(n) ? null : { name: n })) : new Promise(() => {})) } }, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  const held = L.owners.get('rec-7');
+  L.owners.delete('rec-7');
+  assert.equal(await tab3b.adopt({ session: paused }), 'paused', 'its hold is queued, never granted');
+  L.owners.set('rec-7', held);
+  assert.equal(await tab3b.resume(), 'other_tab');
+  assert.deepEqual(two.calls.filter((c) => c[1] === 'resume'), [], 'no resume posted, so no second capture whose seqs collide');
+  assert.match(tab3b.getSnapshot().error, /live in another tab/);
+  // The tab that holds it resumes without probing itself out.
+  assert.equal(await tab1.resume(), 'recording');
+  assert.deepEqual(one.calls.at(-1), ['action', 'resume']);
+});
+
+test('#1588 r2 a second Start while the first is still opening the mic is refused, and a refused share never drops the other\'s capture', async () => {
+  const b = fakeBrowser();
+  const gate = deferred();
+  const w = fakeApi();
+  b.browser.getUserMedia = async () => { b.log.push('getUserMedia'); await gate.p; return stream([b.mic]); };
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  const first = r.begin({ session: draft() });
+  for (let i = 0; i < 5; i++) await tick();
+  assert.equal(r.isCapturing(), true, 'a Start in flight counts as capturing');
+  assert.equal(await r.begin({ session: draft({ id: 9 }) }), 'busy');
+  gate.resolve();
+  assert.equal(await first, 'recording');
+  assert.equal(r.getSnapshot().session.id, 7);
+  // Two shares of one video call, the first refused after the second started: the second's capture stays.
+  const b2 = fakeBrowser();
+  const firstAction = deferred();
+  let n = 0;
+  const w2 = fakeApi({ action: async (id, a) => { n += 1; if (n === 1) return firstAction.p; return { session: { id: 7, status: 'recording', active_ms: 0, channel: 'video' } }; } });
+  const v = createRecorder({ api: w2.api, browser: b2.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  await v.begin({ session: draft({ channel: 'video' }), video: true });
+  const s1 = v.share({ micOnly: true });
+  for (let i = 0; i < 5; i++) await tick();
+  const s2 = v.share({ micOnly: true });
+  assert.equal(await s2, 'recording');
+  const kept = v.capture;
+  firstAction.reject(Object.assign(new Error('No.'), { status: 409 }));
+  await s1;
+  assert.equal(v.capture, kept, 'the refused share cleared only its own capture');
+});
+
+test('#1588 r2 a Start whose request never answered says so, not "Microphone blocked"; a Start still opening draws no pill', async () => {
+  const b = fakeBrowser();
+  const w = fakeApi({ action: async () => { throw Object.assign(new Error('The request timed out. Nothing was saved; try again.'), { name: 'TimeoutError' }); } });
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await r.begin({ session: draft() }), 'refused');
+  const st = r.getSnapshot();
+  assert.deepEqual(st.refused, { text: 'The request timed out. Nothing was saved; try again.', sessionId: null });
+  assert.equal(pillVariant(st), 'refused', 'never "Microphone blocked" for a mic that was granted');
+  assert.equal(pillVariant({ session: { id: 7 }, phase: 'idle', online: false, cap: {} }), null, 'opening, offline: no pill, no clock');
+  assert.equal(pillVariant({ session: { id: 7 }, phase: 'recording', online: false, cap: {} }), 'offline');
+});
+
+test('#1588 r2 a denied mic after a prepared Start closes the AudioContext the click made', async () => {
+  const b = fakeBrowser({ micDenied: true });
+  const r = createRecorder({ api: fakeApi().api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r.prepare();
+  await tick();
+  assert.equal(await r.begin({ session: draft() }), 'denied');
+  assert.ok(b.log.includes('ctx.close'), 'not leaked');
+});
+
+test('#1588 r2 following a finished session, or adopting a paused one, also ends the last recording\'s poll', async () => {
+  for (const next of ['follow', 'adopt']) {
+    const b = fakeBrowser();
+    const gets = [];
+    const w = fakeApi({
+      finish: async () => ({ processing: { stage: 'transcribing', done: 0, total: 1, error: null } }),
+      get: async (id) => { const d = deferred(); gets.push({ id, d }); return d.p; },
+    });
+    const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()), wait: () => new Promise(() => {}) });
+    await r.begin({ session: draft() });
+    const stopped = r.confirmStop();
+    for (let i = 0; i < 20 && !gets.length; i++) await tick();
+    assert.equal(gets.length, 1, `${next}: A's poll is waiting on its read`);
+    if (next === 'follow') {
+      assert.equal(await r.follow({ session: { id: 5, status: 'transcribed' }, processing: { stage: 'done' } }), 'done');
+    } else {
+      assert.equal(await r.adopt({ session: { id: 5, status: 'paused', channel: 'in_person' } }), 'paused');
+    }
+    gets[0].d.resolve({ session: { id: 7, status: 'transcribing' }, processing: { stage: 'transcribing', done: 0, total: 1 } });
+    assert.equal(await stopped, 'cancelled', `${next}: A's poll ends`);
+    assert.equal(r.getSnapshot().session.id, 5, `${next}: and never writes A over session 5`);
+  }
 });

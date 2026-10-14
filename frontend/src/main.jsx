@@ -98,13 +98,25 @@ const MAX_CHUNK_RELOADS = 2;
 // RouteErrorBoundary's and pwa.js's do; meanwhile it returns false, so the
 // failure is rethrown and reaches RouteErrorBoundary instead of resolving the
 // import to undefined.
+//
+// ONE QUEUED RELOAD, CHARGED WHEN IT RUNS (#1588). During an interview every
+// failing chunk lands here; charging each one would spend both attempts on one
+// recording and leave none for the reload that finally runs. So the reload is
+// queued once, and the attempt is read and recorded at the moment it runs.
+let chunkReloadQueued = false;
 function reloadOnceForStaleChunk() {
   const attempts = readAttempts(CHUNK_KEY, CHUNK_PARAM);
   if (attempts >= MAX_CHUNK_RELOADS) return false;
-  const next = attempts + 1;
-  try { recordAttempt(CHUNK_KEY, next); } catch { /* URL marker below carries it */ }
   const now = !isCapturing();
-  whenIdle(() => dropCachesThenReload(next));
+  if (!chunkReloadQueued) {
+    chunkReloadQueued = true;
+    whenIdle(() => {
+      const next = readAttempts(CHUNK_KEY, CHUNK_PARAM) + 1;
+      if (next > MAX_CHUNK_RELOADS) { chunkReloadQueued = false; return; }
+      try { recordAttempt(CHUNK_KEY, next); } catch { /* URL marker below carries it */ }
+      dropCachesThenReload(next);
+    });
+  }
   return now;
 }
 
