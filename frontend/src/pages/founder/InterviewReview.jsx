@@ -174,7 +174,8 @@ export function PlacementsPanel({ read, running, runError, errors = {}, busyId, 
       {groups.length === 0 ? (
         <div data-testid="placements-none" className="text-[13px] text-axal-faint">
           <p>No placements yet. Eadwyn has not structured this transcript, or found nothing it could cite.</p>
-          {onStructure && <button type="button" onClick={onStructure} className={`${BTN} mt-2 bg-violet-700 text-white`}>Structure the transcript</button>}
+          {/* Called with no argument: the click event is not a model (#1589). */}
+          {onStructure && <button type="button" data-testid="button-structure" onClick={() => onStructure()} className={`${BTN} mt-2 bg-violet-700 text-white`}>Structure the transcript</button>}
         </div>
       ) : groups.map((g) => (
         <div key={g.module} data-testid={`module-${g.module}`}>
