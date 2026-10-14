@@ -668,3 +668,34 @@ test('#1588 Video on a phone says it records the microphone only; Start hands th
     assert.equal(begun[0].callLabel, 'Video call · Zoom');
   } finally { await m.unmount(); }
 });
+
+test('#1588 attach by link: a video Start on a connected Zoom also attaches the call; the outcome goes to the share step in the Worker\'s words', async () => {
+  const run = async ({ attachMeeting, channels = CHANNELS, provider = null, link = 'https://acme.zoom.us/j/12345678' }) => {
+    const s = spies();
+    const begun = [];
+    const attached = [];
+    const recorder = { prepare() {}, release() {}, begin(arg) { begun.push(arg); return 'share'; }, isCapturing: () => false, getSnapshot: () => ({ session: null, phase: 'idle' }) };
+    s.props.channelsSource = { ...s.props.channelsSource, attachMeeting: async (...a) => { attached.push(a); return attachMeeting(...a); } };
+    const m = await mount({ ...s.props, recorder, initialMode: 'video', channels });
+    try {
+      await m.type('record-name', 'Dana');
+      await m.click('record-consents-verbal');
+      if (provider) await m.type('record-provider', provider);
+      await m.type('record-link', link);
+      await m.click('record-start');
+    } finally { await m.unmount(); }
+    return { begun, attached, s };
+  };
+  const ok = await run({ attachMeeting: async () => ({ notice: { code: 'hosted_transcript_only', message: 'Axal will import a transcript only if this connected account hosts the call.' } }) });
+  assert.deepEqual(ok.attached, [[41, { session_id: 501, join_url: 'https://acme.zoom.us/j/12345678', provider: 'zoom' }]], 'on the session just made, before the hand-over');
+  assert.deepEqual(ok.begun[0].attach, { tone: 'attached', text: 'Axal will import a transcript only if this connected account hosts the call.' });
+  assert.equal(ok.begun[0].video, true);
+  const no = await run({ attachMeeting: async () => { throw Object.assign(new Error('Axal can import only a call hosted by the account you connected. Record this call in-app instead.'), { status: 409, code: 'meeting_not_hosted' }); } });
+  assert.deepEqual(no.begun[0].attach, { tone: 'refused', text: 'Axal can import only a call hosted by the account you connected. Record this call in-app instead.' }, 'its words');
+  assert.equal(no.begun.length, 1, 'a refused attach never stops the recording');
+  // Not connected, or no link: nothing is attached.
+  const off = await run({ attachMeeting: async () => ({}), channels: { ...CHANNELS, connections: [{ provider: 'zoom', connected: false }] } });
+  assert.deepEqual([off.attached.length, off.begun[0].attach], [0, null]);
+  const noLink = await run({ attachMeeting: async () => ({}), link: '' });
+  assert.deepEqual([noLink.attached.length, noLink.begun[0].attach], [0, null]);
+});

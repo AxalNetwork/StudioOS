@@ -21,7 +21,8 @@ import RecordingPill from '../src/pages/founder/RecordingPill.jsx';
 import { liveRedirect } from '../src/pages/founder/RecordLivePage.jsx';
 import { reviewPath } from '../src/lib/activeRecording.js';
 import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
-import { setRecorder } from '../src/contexts/ActiveRecordingContext.jsx';
+import { ActiveRecordingProvider, setRecorder } from '../src/contexts/ActiveRecordingContext.jsx';
+import RecordLivePage from '../src/pages/founder/RecordLivePage.jsx';
 import InterviewSessionPage from '../src/pages/founder/InterviewSessionPage.jsx';
 
 const h = React.createElement;
@@ -594,4 +595,91 @@ test('#1588 the pill never says Recording when nothing records, and its ring fol
   try {
     assert.match(tag(html(h(RecordingPill), '/raise'), 'ring-viz'), /data-theme="dark"/, 'the dark pill draws the dark ring');
   } finally { globalThis.document = saved; }
+});
+
+test('#1588 the share step says what the attach did, in the Worker\'s words', () => {
+  const at = (attach) => renderToStaticMarkup(h(MemoryRouter, null, h(RecordingView, { st: ST({ phase: 'share', video: true, attach }), now: 0, theme: 'light', actions: { canShareTab: true } })));
+  const refused = at({ tone: 'refused', text: 'This meeting link is already attached to an interview.' });
+  assert.match(tag(refused, 'share-attach-note'), /data-tone="refused"/);
+  assert.match(tag(refused, 'share-attach-note'), /role="status"/);
+  assert.ok(renderedText(refused).includes('This meeting link is already attached to an interview.'));
+  assert.match(refused, /data-testid="share-attach-note"[^>]*class="[^"]*dark:text-amber-300/, 'a dark pair');
+  assert.match(tag(at({ tone: 'attached', text: 'Imported later.' }), 'share-attach-note'), /data-tone="attached"/);
+  assert.doesNotMatch(at(null), /share-attach-note/, 'nothing attached, nothing said');
+});
+
+
+/** The live route and the pill, mounted together, as App.jsx draws them; `where.path` follows navigation. */
+async function liveApp(url) {
+  const restore = installDocument();
+  const create = document.createElement.bind(document);
+  document.createElement = (tag) => { const n = create(tag); n.focus = function focus() { document.activeElement = this; }; return n; };
+  if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+  const where = { path: null };
+  function Probe() { const l = useLocation(); where.path = `${l.pathname}${l.search}`; return null; }
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(h(MemoryRouter, { initialEntries: [url] }, h(Probe), h(RecordingPill),
+      h(Routes, null,
+        h(Route, { path: '/validate/record/live', element: h(RecordLivePage) }),
+        h(Route, { path: '/validate/session/:id', element: h('p', null, 'session page') }),
+        h(Route, { path: '*', element: h('p', null, 'elsewhere') }))));
+  });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  return {
+    where, by,
+    async click(id) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); },
+    async unmount() { await act(async () => root.unmount()); restore(); },
+  };
+}
+
+test('#1588 the live route, mounted: a reload waits for recovery instead of leaving, then shows the recording; Exit keeps it and focuses the pill', async () => {
+  const rec = stubRecorder({ ...ST(), session: null, phase: 'idle', recovery: 'running' });
+  const ended = [];
+  for (const m of ['confirmStop', 'discard', 'signOut', 'pause']) rec[m] = () => { ended.push(m); };
+  setRecorder(rec);
+  const app = await liveApp('/validate/record/live?session=7');
+  try {
+    assert.ok(app.by('live-restoring'), 'restoring, not redirected');
+    assert.equal(app.where.path, '/validate/record/live?session=7');
+    // Recovery brings it back, paused.
+    await act(async () => { rec.set({ ...ST({ phase: 'paused', session: { ...SESSION, status: 'paused' } }), recovery: 'done' }); });
+    assert.ok(app.by('recording-view'), 'the recording, on its own address');
+    assert.equal(app.where.path, '/validate/record/live?session=7');
+    // Exit full screen: back out, the recording untouched, focus on the pill that holds it.
+    await app.click('button-exit-full-screen');
+    assert.equal(app.where.path, '/validate', 'a deep link has no history, so Validate');
+    assert.deepEqual(ended, [], 'nothing paused, stopped or discarded');
+    assert.equal(rec.getSnapshot().phase, 'paused');
+    const pill = app.by('recording-pill');
+    assert.ok(pill, 'the pill holds the recording');
+    assert.equal(document.activeElement, pill, 'and has the focus');
+  } finally { await app.unmount(); }
+  // Recovery finished and found nothing for that id: its own page.
+  setRecorder(stubRecorder({ ...ST(), session: null, phase: 'idle', recovery: 'done' }));
+  const gone = await liveApp('/validate/record/live?session=7');
+  try { assert.equal(gone.where.path, '/validate/session/7'); } finally { await gone.unmount(); }
+});
+
+test('#1588 the provider, mounted: recovery runs once per member, and a member switch signs the recorder out', async () => {
+  const restore = installDocument();
+  const log = [];
+  const rec = stubRecorder({ phase: 'idle', session: null });
+  Object.assign(rec, { setUser: (id) => log.push(['setUser', id]), recover: async () => { log.push(['recover']); return 'none'; }, signOut: () => { log.push(['signOut']); }, setOnline() {}, onVisible() {} });
+  setRecorder(rec);
+  if (!document.addEventListener) document.addEventListener = () => {};
+  if (!document.removeEventListener) document.removeEventListener = () => {};
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(h(ActiveRecordingProvider, { userId: 7 })); });
+    assert.deepEqual(log, [['setUser', 7], ['recover']]);
+    await act(async () => { root.render(h(ActiveRecordingProvider, { userId: 7 })); });
+    assert.equal(log.filter((x) => x[0] === 'recover').length, 1, 'once per member, not per render');
+    await act(async () => { root.render(h(ActiveRecordingProvider, { userId: 9 })); });
+    assert.deepEqual(log.slice(2), [['signOut'], ['setUser', 9], ['recover']], 'the old member\'s capture stops first');
+  } finally { await act(async () => root.unmount()); restore(); }
 });

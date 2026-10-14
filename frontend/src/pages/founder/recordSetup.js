@@ -170,6 +170,24 @@ export function meetingLinkProblem(provider, raw) {
   if (provider === 'whatsapp' || provider === 'telegram') return 'A WhatsApp or Telegram call has no meeting link.';
   return null;
 }
+/**
+ * Whether Start also attaches the call (D685 §5.8.7, #1588): a video session on
+ * Zoom or Google Meet, a valid link, and that provider connected. The Worker
+ * still decides whether the connected account hosts it.
+ */
+export function attachesCall(mode, provider, link, channels) {
+  if (mode !== 'video' || !['zoom', 'google_meet'].includes(provider)) return false;
+  if (!String(link || '').trim() || meetingLinkProblem(provider, link)) return false;
+  return isConnected(connectionOf(channels, provider), provider);
+}
+
+/** What the share step says about the attach: the Worker's notice, or its refusal in its words. */
+export function attachOutcome(result, error) {
+  if (error) return { tone: 'refused', text: (typeof error.message === 'string' && error.message.trim()) || 'The call could not be attached. The recording is not affected.' };
+  const text = result?.notice?.message;
+  return { tone: 'attached', text: typeof text === 'string' && text.trim() ? text.trim() : 'The call is attached. Its transcript is imported after the call, if the provider makes one.' };
+}
+
 /** The link field is drawn for video, on a provider that has links. */
 export const hasMeetingLink = (mode, provider) => mode === 'video' && ['zoom', 'google_meet', 'teams'].includes(provider);
 

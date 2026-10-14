@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { codeOnly } from './_codeOnly.mjs';
-import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, liveRefusal, pillLabel, pillVariant, processingProgress, stageIndex, startRefused } from '../src/lib/activeRecording.js';
+import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, liveRefusal, pillLabel, recovering, pillVariant, processingProgress, stageIndex, startRefused } from '../src/lib/activeRecording.js';
 import { layers, ringMode } from '../src/pages/founder/RecordingView.jsx';
 import { BUDGET_CLOSE, LEVEL_MS, NO_SOUND_MS, createCapture, memoryQueue, nextSeq } from '../src/lib/interviewCapture.js';
 import { isCapturing, setCaptureProbe, whenIdle } from '../src/lib/captureGuard.js';
@@ -861,4 +861,37 @@ test('#1588 main.jsx\'s own stale-chunk reload waits for the capture, and keeps 
   assert.doesNotMatch(fn, /reloadCarryingCount|serviceWorker|caches/, 'nothing reloads or drops caches outside whenIdle');
   assert.match(main, /if \(reloadOnceForStaleChunk\(\)\) \{\s*try \{ e\.preventDefault\(\); \}/, 'the rethrow is suppressed only when a reload starts');
   assert.match(readFileSync('documentation/architecture/GOTCHAS.md', 'utf8'), /`main\.jsx`'s own stale-chunk reload on `vite:preloadError`/);
+});
+
+test('#1588 recovery is pending from page load until the first recover finishes, and a clear or a sign-out does not reset it', async () => {
+  const w = fakeApi({ active: async () => ({ items: [] }) });
+  const r = createRecorder({ api: w.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(r.getSnapshot().recovery, 'pending');
+  assert.equal(recovering(r.getSnapshot()), true);
+  assert.equal(await r.recover(), 'skipped', 'no member yet');
+  assert.equal(recovering(r.getSnapshot()), true, 'still pending: the member is not known');
+  r.setUser(7);
+  const seen = [];
+  r.subscribe((st) => seen.push(st.recovery));
+  assert.equal(await r.recover(), 'none');
+  assert.equal(seen[0], 'running');
+  assert.equal(r.getSnapshot().recovery, 'done');
+  r.clear();
+  await r.signOut();
+  assert.equal(r.getSnapshot().recovery, 'done', 'kept through a clear and a sign-out');
+  assert.equal(recovering({}), false, 'a recorder that does not say has nothing to wait for');
+  // A failed read still finishes recovery: the route stops waiting.
+  const bad = createRecorder({ api: fakeApi({ active: async () => { throw new Error('offline'); } }).api, browser: fakeBrowser().browser, queue: memoryQueue() });
+  bad.setUser(7);
+  assert.equal(await bad.recover(), 'unread');
+  assert.equal(bad.getSnapshot().recovery, 'done');
+});
+
+test('#1588 begin keeps the attach outcome for the share step, and a new Start starts without the last one\'s', async () => {
+  const r = createRecorder({ api: fakeApi().api, browser: fakeBrowser().browser, queue: memoryQueue() });
+  const attach = { tone: 'refused', text: 'This meeting link is already attached to an interview.' };
+  assert.equal(await r.begin({ session: draft({ channel: 'video' }), video: true, attach }), 'share');
+  assert.deepEqual(r.getSnapshot().attach, attach);
+  assert.equal(await r.begin({ session: draft({ channel: 'video', id: 9 }), video: true }), 'share');
+  assert.equal(r.getSnapshot().attach, null);
 });

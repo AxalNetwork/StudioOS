@@ -12,7 +12,7 @@ import { SchedulePanel } from './InterviewChannels';
 import { assignedSentence, threadRow } from './channelThreads.js';
 import {
   CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callLabel, chipStatus, consentNote,
-  defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
+  attachesCall, attachOutcome, defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
   startRefusal, startState, talkingPoints, threadsFor, modeNote,
 } from './recordSetup.js';
 
@@ -267,7 +267,16 @@ export default function RecordLightbox({
         : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: startKey.current }, fields));
       const into = person(r.interview);
       if (handsOver) {
+        // A connected Zoom or Meet: the call is attached too, so its own
+        // transcript can be imported after it. A refusal never stops the
+        // recording; the share step says it in the Worker's words.
+        let attach = null;
+        if (mode === 'video' && typeof channelsSource?.attachMeeting === 'function' && attachesCall(mode, provider, link, channels)) {
+          const interviewId = r.interview?.id ?? r.session?.interview_id ?? into.id;
+          try { attach = attachOutcome(await channelsSource.attachMeeting(interviewId, { session_id: r.session.id, join_url: link.trim(), provider }), null); } catch (e) { attach = attachOutcome(null, e); }
+        }
         recorder.begin({
+          attach,
           session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video',
           // The Worker's link (a pasted one, or a scheduled call's): "Start the call" opens it (§5.8.1).
           meetingUrl: r.meeting_url ?? null,
