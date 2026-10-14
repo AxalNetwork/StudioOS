@@ -246,7 +246,8 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
   const lang = l.denied || l.refused ? null : languageName(s.language);
   const liveOn = st?.cap?.live ?? !!s.live_model;
   const liveAvailable = !!s.live_model && !l.budget;
-  const tiles = st?.video && !l.share;
+  // No tab to show on a phone (§5.8.6): the tiles are drawn only where a tab can be shared.
+  const tiles = st?.video && !l.share && actions.canShareTab !== false;
   // §5.9.2: a fraction only where the Worker counts; null draws an indeterminate arc.
   const progress = l.stopping ? processingProgress(st?.processing) : null;
   const pct = progress == null ? null : Math.round(progress * 100);
@@ -325,12 +326,32 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
 
       {l.share && (
         <div className="mx-4 mb-4 rounded-2xl border border-gray-200 bg-white p-4 text-center dark:border-[#2a2140] dark:bg-[#130b22]" data-testid="share-step">
-          <p className="m-0 text-[13.5px] font-semibold">Share the call’s tab, so its audio is recorded with your microphone.</p>
-          <p className="m-0 mt-1 text-[12px] text-gray-500 dark:text-gray-400">Pick the tab the call is in, and turn on “Share tab audio”. Nothing of its picture is recorded or stored.</p>
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            <button type="button" onClick={() => actions.share?.()} data-testid="button-share-tab" className="inline-flex items-center gap-1.5 rounded-md bg-violet-700 px-3 py-2 text-[13px] font-bold text-white hover:bg-violet-800"><MonitorUp size={15} /> Share the call’s tab</button>
-            <button type="button" onClick={() => actions.share?.({ micOnly: true })} data-testid="button-mic-only" className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-3 py-2 text-[13px] font-semibold hover:bg-gray-50 dark:border-[#2a2140] dark:hover:bg-[#1c1230]"><Mic size={15} /> Record without the call’s audio</button>
-          </div>
+          {/* Two clicks, in order (§5.8.1): opening the link uses up the click, and the share needs a click of its own. */}
+          {st.meetingUrl && (
+            <p className="m-0 mb-3">
+              <a href={st.meetingUrl} target="_blank" rel="noopener noreferrer" data-testid="button-start-call"
+                className="inline-flex items-center gap-1.5 rounded-md border border-violet-300 px-3 py-2 text-[13px] font-bold text-violet-800 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-[#1c1230]">Start the call</a>
+              <span className="mt-1 block text-[12px] text-gray-500 dark:text-gray-400">It opens the meeting link in a new tab. Then come back here.</span>
+            </p>
+          )}
+          {actions.canShareTab === false ? (
+            <>
+              <p className="m-0 text-[13.5px] font-semibold" data-testid="share-phone-note">On a phone it records this device’s microphone only.</p>
+              <p className="m-0 mt-1 text-[12px] text-gray-500 dark:text-gray-400">Put the call on speaker, so your microphone hears both of you.</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <button type="button" onClick={() => actions.share?.({ micOnly: true })} data-testid="button-mic-only" className="inline-flex items-center gap-1.5 rounded-md bg-violet-700 px-3 py-2 text-[13px] font-bold text-white hover:bg-violet-800"><Mic size={15} /> Record this device’s microphone</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="m-0 text-[13.5px] font-semibold">Share the call’s tab, so its audio is recorded with your microphone.</p>
+              <p className="m-0 mt-1 text-[12px] text-gray-500 dark:text-gray-400">Pick the tab the call is in, and turn on “Share tab audio”. Nothing of its picture is recorded or stored.</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <button type="button" onClick={() => actions.share?.()} data-testid="button-share-tab" className="inline-flex items-center gap-1.5 rounded-md bg-violet-700 px-3 py-2 text-[13px] font-bold text-white hover:bg-violet-800"><MonitorUp size={15} /> Share the call’s tab</button>
+                <button type="button" onClick={() => actions.share?.({ micOnly: true })} data-testid="button-mic-only" className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-3 py-2 text-[13px] font-semibold hover:bg-gray-50 dark:border-[#2a2140] dark:hover:bg-[#1c1230]"><Mic size={15} /> Record without the call’s audio</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

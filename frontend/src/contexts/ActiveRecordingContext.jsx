@@ -11,7 +11,8 @@ import { isCapturing as probeCapturing, setCaptureProbe } from '../lib/captureGu
  * `ActiveRecordingProvider` is mounted once, above `<Routes>` in `App.jsx`. It
  * listens for the browser going offline and back, and for the tab coming back
  * (the screen lock is asked for again), and stops the capture on sign-out or an
- * account switch, so queued chunks never flush under another member.
+ * account switch, so queued chunks never flush under another member. On sign-in
+ * (and so on every app load) it restores the recording in flight (`recover`).
  */
 
 function realBrowser() {
@@ -29,6 +30,7 @@ function realBrowser() {
     setInterval: (f, ms) => window.setInterval(f, ms),
     clearInterval: (t) => window.clearInterval(t),
     wakeLock: nav.wakeLock,
+    locks: nav.locks,
   };
 }
 
@@ -87,5 +89,12 @@ export function ActiveRecordingProvider({ userId = null, children }) {
     if (owner != null && userId !== owner) r.signOut();
     setOwner(userId);
   }, [userId, owner, r]);
+  // Recovery on app load (D685 §5.6.7): once per signed-in member, the recording
+  // in flight comes back paused, what is queued here is sent, processing is followed.
+  useEffect(() => {
+    if (userId == null) return;
+    r.setUser(userId);
+    r.recover().catch(() => { /* a failed read leaves the app as it was */ });
+  }, [userId, r]);
   return children ?? null;
 }

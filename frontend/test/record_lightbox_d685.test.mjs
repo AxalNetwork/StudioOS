@@ -620,3 +620,22 @@ test('"Schedule the call for later" for a new person adds them to the pipeline, 
     assert.equal(m2.by('interview-schedule'), undefined);
   } finally { await m2.unmount(); globalThis.fetch = prevFetch; }
 });
+
+test('#1588 Video on a phone says it records the microphone only; Start hands the Worker\'s meeting link to the recorder', async () => {
+  const phone = render({ initialMode: 'video', channels: CHANNELS, recorder: { canShareTab: false } });
+  assert.ok(renderedText(phone).includes('Paste the meeting link. It records the call’s audio. On a phone it records this device’s microphone only.'));
+  assert.doesNotMatch(renderedText(render({ initialMode: 'video', channels: CHANNELS, recorder: { canShareTab: true } })), /On a phone/);
+  assert.doesNotMatch(renderedText(render({ initialMode: 'in_person', recorder: { canShareTab: false } })), /On a phone/, 'Video only');
+  const begun = [];
+  const s = spies();
+  s.props.sessions.open = async (body) => { s.calls.open.push(body); return { session: { id: 501, channel: 'video' }, interview: { id: 41 }, meeting_url: 'https://acme.zoom.us/j/1', call_label: 'Video call · Zoom' }; };
+  const recorder = { canShareTab: true, prepare() {}, release() {}, begin: (a) => { begun.push(a); return Promise.resolve('share'); } };
+  const m = await mount({ ...s.props, recorder, initialMode: 'video', channels: CHANNELS });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.click('record-consents-verbal');
+    await m.click('record-start');
+    assert.equal(begun[0].meetingUrl, 'https://acme.zoom.us/j/1');
+    assert.equal(begun[0].callLabel, 'Video call · Zoom');
+  } finally { await m.unmount(); }
+});
