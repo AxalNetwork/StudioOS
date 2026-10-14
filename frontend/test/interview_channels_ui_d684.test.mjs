@@ -133,6 +133,8 @@ test('Link Telegram shows the t.me button, the expiry and the Telegram Business 
   const l = text(h(TelegramChannelCard, { card: channelCard('telegram', linked), onChanged() {} }));
   assert.match(l, /One step left/);
   assert.match(l, /Add the Axal bot in Telegram Business/);
+  assert.match(l, /In Telegram, open Settings › Telegram Business › Chatbots\./, 'what is left once linked');
+  assert.doesNotMatch(l, /Send \/confirm|press Start/, '#1625: a linked account is not asked to link again');
 });
 
 test('Link Telegram asks the Worker for a link on the click', async () => {

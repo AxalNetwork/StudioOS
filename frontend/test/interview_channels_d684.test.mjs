@@ -261,6 +261,7 @@ test('#1625 the overview keeps telegram_link; the claimed account is kept exactl
   assert.equal(telegramClaim({ ...CLAIM, status: 'made_up' }), null, 'only the Worker\'s states');
   assert.equal(telegramClaim({ ...CLAIM, uid: '' }), null);
   assert.equal(telegramClaim({ ...CLAIM, message: '' }).message, TELEGRAM_CLAIM_WORDS.waiting_axal, 'no sentence sent: ours');
+  assert.equal(telegramClaim({ ...CLAIM, message: 'The Worker words it its own way.' }).message, 'The Worker words it its own way.', 'the Worker\'s sentence first');
   assert.equal(telegramClaim({ ...CLAIM, telegram_confirmed: 'yes' }).telegramConfirmed, false, 'only true is true');
   assert.deepEqual(TELEGRAM_CLAIM_STATES, ['waiting_claim', 'waiting_telegram', 'waiting_axal', 'ready', 'linked', 'expired', 'cancelled', 'unreadable']);
   for (const st of TELEGRAM_CLAIM_STATES) assert.match(TELEGRAM_CLAIM_WORDS[st], /^[A-Z].+\.$/, `${st} is a sentence`);
