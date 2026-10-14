@@ -32,6 +32,12 @@ jobs:
           cache-dependency-path: cloudflare-worker/package-lock.json
       - name: Install Worker dependencies
         run: npm ci --prefix cloudflare-worker
+      - name: Install frontend test dependencies
+        run: |
+          npm ci
+          npm ci --prefix frontend
+      - name: Reply and UI contracts
+        run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/interview_channels_d684.test.mjs frontend/test/interview_channels_ui_d684.test.mjs
       - name: Foundation contracts
         run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/channels_foundation_d684.test.ts
       - name: Messaging and deadline contracts

@@ -11,6 +11,7 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/interview_channels_d684.test.mjs
  */
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 import {
@@ -601,7 +602,7 @@ test('#1602 mutation: an unknown reply must retain the key and never invite anot
   const before = 'return { ok: null, keepKey: true, text: `Not confirmed yet:';
   assert.ok(source.includes(before));
   const mutated = source.replace(before, 'return { ok: null, keepKey: false, text: `Not confirmed yet:');
-  const resolveImports = (s) => s.replace(/(from\s*['"])([^'"]+)(['"])/g,
+  const resolveImports = (s) => s.replace(/^(import\s+[^'";]+from\s*['"])([^'"]+)(['"])/gm,
     (_all, first, path, last) => first + (path.startsWith('.') ? new URL(path, file).href : import.meta.resolve(path)) + last);
   const bad = await import('data:text/javascript;base64,' + Buffer.from(resolveImports(mutated)).toString('base64'));
   const input = { ok: null, pending: true, code: 'send_unknown', outbound: { status: 'pending' } };
