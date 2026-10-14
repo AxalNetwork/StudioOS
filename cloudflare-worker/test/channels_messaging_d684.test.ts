@@ -1468,3 +1468,222 @@ test('#1586 Calling eligibility: Embedded Signup records the tier and region', a
   assert.deepEqual(calls.reasons.map((r: any) => r.code), ['not_built', 'tier_low', 'region']);
   assert.match(calls.sentence, /numbers in Egypt\.$/);
 });
+
+
+// ---------------------------------------------------------------------------
+// #1602: a missing provider response is an unknown send, never a retry invitation.
+// Fake only setTimeout: SQLite, WebCrypto and the request still run normally.
+// ---------------------------------------------------------------------------
+
+async function deadlineTurn() {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+/**
+ * Turn the event loop until `done()` holds or `ms` of real time have passed.
+ * A count of turns is no bound on the request: the route verifies a JWT,
+ * decrypts tokens and hashes refs with WebCrypto, which finishes on libuv's
+ * thread pool, so on a loaded runner (the full suite runs test files in
+ * parallel) eighty setImmediate turns all passed before the request reached
+ * the provider, and `calls` read 0. Only setTimeout is faked; setImmediate and
+ * performance.now() are real.
+ */
+async function deadlineUntil(done: () => boolean, ms = 10_000) {
+  const start = performance.now();
+  while (!done() && performance.now() - start < ms) await deadlineTurn();
+}
+
+let deadlineMutation = 0;
+let deadlineMutantUrl = '';
+/** Re-execute the production module with one regression, leaving dependencies real. */
+async function deadlineMutant(path: string, before: string, after: string, overrides: Record<string, string> = {}) {
+  const file = new URL(path, import.meta.url);
+  const original = readFileSync(file, 'utf8');
+  assert.ok(original.includes(before), 'mutation target must exist');
+  const { stripTypeScriptTypes } = await import('node:module');
+  let source = stripTypeScriptTypes(original.replace(before, after), { mode: 'strip' });
+  source = source.replace(/^((?:import\s+[^'";]+|export\s*\{[^}]*\})\s+from\s*['"])([^'"]+)(['"])/gm,
+    (_all, prefix, spec, quote) => prefix + (overrides[spec] ?? (spec.startsWith('.')
+      ? new URL(/\.[mc]?[jt]s$/.test(spec) ? spec : spec + '.ts', file).href
+      : import.meta.resolve(spec))) + quote);
+  deadlineMutantUrl = 'data:text/javascript;base64,' + Buffer.from(source + '\n// deadline mutant ' + ++deadlineMutation).toString('base64');
+  return import(deadlineMutantUrl);
+}
+
+async function checkReplyDeadline(t: any, provider: 'telegram' | 'whatsapp', phase: 'headers' | 'json', application: any = app) {
+  const { env, db } = await world({ seed: true });
+  if (provider === 'telegram') await tgHook(env, businessMessage('BC-ME', { chat: 8001 }));
+  else await waHook(env, waText(PNID, 'wamid.DEADLINE'));
+  const thread = db.prepare('SELECT uid FROM channel_threads LIMIT 1').get();
+  const token = await new SignJWT({ user_id: ME, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const key = 'deadline-' + provider + '-' + phase;
+  const request = () => new Request(`https://axal.vc/api/channels/threads/${thread.uid}/reply`, {
+    method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'Can we talk Thursday?', client_key: key }),
+  });
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  let calls = 0, signal: AbortSignal | null = null;
+  let late: (value: any) => void = () => {};
+  const accepted = provider === 'telegram'
+    ? { ok: true, result: { message_id: 99 } } : { messages: [{ id: 'wamid.LATE' }] };
+  globalThis.fetch = (async (input: any, init: RequestInit) => {
+    const url = new URL(typeof input === 'string' ? input : input.url);
+    if (!(url.pathname.endsWith('/sendMessage') || url.pathname.endsWith('/messages'))) throw new Error('unexpected provider URL');
+    calls++;
+    signal = init.signal as AbortSignal;
+    if (phase === 'headers') return new Promise<Response>((resolve) => { late = resolve; });
+    const res = new Response('{}', { status: 200 });
+    res.json = () => new Promise((resolve) => { late = resolve; });
+    return res;
+  }) as typeof fetch;
+  console.error = () => {};
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    let settled = false;
+    const first = application.fetch(request(), env).then(async (res: Response) => {
+      const body = await res.json();
+      settled = true;
+      return { status: res.status, body };
+    });
+    // The request must have reached the provider before advancing its deadline.
+    // A request that ends without calling the provider stops the wait too.
+    await deadlineUntil(() => calls > 0 || settled);
+    assert.equal(calls, 1, 'exactly one provider attempt');
+    await deadlineTurn(); // body read has begun for the JSON variant
+    t.mock.timers.tick(9_999);
+    await deadlineTurn();
+    assert.equal(settled, false, 'deadline must not expire early');
+    t.mock.timers.tick(1);
+    await deadlineUntil(() => settled);
+    assert.equal(settled, true, 'headers and body must both have a bounded wait');
+    const out = await first;
+    assert.deepEqual([out.status, out.body.ok, out.body.pending, out.body.code, out.body.outbound?.status],
+      [200, null, true, 'send_unknown', 'pending']);
+    assert.deepEqual({ ...db.prepare('SELECT status, error_code FROM channel_outbound WHERE client_key = ?').get(key) },
+      { status: 'pending', error_code: 'send_unknown' });
+    assert.equal(signal?.aborted, true, 'cancel remaining provider I/O');
+    const repeat = await application.fetch(request(), env);
+    const repeated: any = await repeat.json();
+    assert.deepEqual([repeat.status, repeated.ok, repeated.existing, repeated.code, repeated.outbound?.status, calls],
+      [200, null, true, 'send_unknown', 'pending', 1], 'a repeated key cannot send twice or report success');
+
+    // Even a provider that ignores abort and reports acceptance later cannot
+    // change the answered request or append an unconfirmed "Me" transcript.
+    late(phase === 'headers' ? new Response(JSON.stringify(accepted)) : accepted);
+    await deadlineTurn();
+    assert.deepEqual([db.prepare('SELECT status FROM channel_outbound WHERE client_key = ?').get(key).status,
+      count(db, "SELECT COUNT(*) n FROM channel_thread_messages"), calls], ['pending', 1, 1]);
+  } finally {
+    t.mock.timers.reset();
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+}
+
+for (const provider of ['telegram', 'whatsapp'] as const) {
+  for (const phase of ['headers', 'json'] as const) {
+    test(`#1602 ${provider}: a hung ${phase} returns unknown and retains its send claim`, async (t) => {
+      await checkReplyDeadline(t, provider, phase);
+    });
+  }
+}
+
+test('#1602 mutations: the outbound classification and reply branch cannot turn ambiguity into failure', async (t) => {
+  const outbound = await deadlineMutant('../src/services/channels/outbound.ts',
+    "result.code === 'send_unknown' ? 'pending' : 'failed'", "result.code === 'send_unknown' ? 'failed' : 'failed'");
+  const { env, db } = await world({ seed: true });
+  const { beginOutbound } = await import('../src/services/channels/outbound.ts');
+  const claim = await beginOutbound(env, 'telegram', ME, null, 'mutant-unknown');
+  await outbound.finishOutbound(env, claim.row.id, { ok: false, code: 'send_unknown', retryable: false });
+  // Same positive assertion fails against the single-line regression.
+  assert.throws(() => assert.deepEqual({ ...db.prepare('SELECT status, error_code FROM channel_outbound WHERE id = ?').get(claim.row.id) },
+    { status: 'pending', error_code: 'send_unknown' }), { name: 'AssertionError' });
+
+  const route = await deadlineMutant('../src/routes/channels.ts',
+    "if (!result.ok && result.code === 'send_unknown')", "if (false && !result.ok && result.code === 'send_unknown')");
+  const mutantApp = new Hono().route('/api/channels', route.default);
+  await assert.rejects(() => checkReplyDeadline(t, 'telegram', 'headers', mutantApp), { name: 'AssertionError' });
+});
+
+test('#1602 mutations: headers-only timeout leaves a hung JSON body unbounded', async (t) => {
+  const helper = await deadlineMutant('../src/services/channels/providerHttp.ts',
+    "return await withDeadline((async () => {", "return await ((work: Promise<any>) => work)((async () => {");
+  // The mutant ignores extra arguments, removing the actual deadline while
+  // keeping the real async fetch/body work and abort-finally behavior.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    const res = new Response('{}');
+    res.json = () => new Promise(() => {});
+    return res;
+  }) as typeof fetch;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    let settled = false;
+    helper.providerJson('https://api.telegram.org/unit-test').then(() => { settled = true; }, () => { settled = true; });
+    await deadlineTurn();
+    t.mock.timers.tick(10_000);
+    await deadlineTurn();
+    assert.throws(() => assert.equal(settled, true, 'body read must also expire'), { name: 'AssertionError' });
+  } finally { t.mock.timers.reset(); globalThis.fetch = originalFetch; }
+});
+
+test('#1602 mutations: adapter ambiguity, abort, early expiry and repeat copy are observable', async (t) => {
+  for (const provider of ['telegram', 'whatsapp'] as const) {
+    const before = provider === 'telegram'
+      ? "method === 'sendMessage' ? 'send_unknown' : 'network'"
+      : "what === 'send' ? 'send_unknown' : 'network'";
+    await deadlineMutant(`../src/services/channels/${provider}.ts`, before, "'network'");
+    const route = await deadlineMutant('../src/routes/channels.ts', 'const channels = new Hono', 'const channels = new Hono',
+      { [`../services/channels/${provider}`]: deadlineMutantUrl });
+    await assert.rejects(() => checkReplyDeadline(t, provider, 'headers', new Hono().route('/api/channels', route.default)), { name: 'AssertionError' });
+  }
+  for (const [before, after] of [
+    ['controller.abort();', 'void controller;'],
+    ['PROVIDER_CALL_MS = 10_000', 'PROVIDER_CALL_MS = 9_999'],
+  ]) {
+    await deadlineMutant('../src/services/channels/providerHttp.ts', before, after);
+    await deadlineMutant('../src/services/channels/telegram.ts', "import type { Env }", "import type { Env }",
+      { './providerHttp': deadlineMutantUrl });
+    const route = await deadlineMutant('../src/routes/channels.ts', 'const channels = new Hono', 'const channels = new Hono',
+      { '../services/channels/telegram': deadlineMutantUrl });
+    await assert.rejects(() => checkReplyDeadline(t, 'telegram', 'json', new Hono().route('/api/channels', route.default)), { name: 'AssertionError' });
+  }
+  const route = await deadlineMutant('../src/routes/channels.ts',
+    "claim.row.error_code === 'send_unknown' ? 'send_unknown'", "false ? 'send_unknown'");
+  await assert.rejects(() => checkReplyDeadline(t, 'whatsapp', 'headers', new Hono().route('/api/channels', route.default)), { name: 'AssertionError' });
+});
+
+test('#1602: lost networks and malformed acceptances are unknown; known refusals remain failures', async () => {
+  for (const provider of ['telegram', 'whatsapp'] as const) {
+    for (const outcome of ['network', 'malformed', 'missing_id', 'refused'] as const) {
+      const { env, db } = await world({ seed: true });
+      if (provider === 'telegram') await tgHook(env, businessMessage('BC-ME'));
+      else await waHook(env, waText(PNID, 'wamid.LOST'));
+      const [thread] = (await call(env, ME, 'GET', '/threads')).body.items;
+      let calls = 0;
+      const originalFetch = globalThis.fetch, originalError = console.error;
+      globalThis.fetch = (async () => {
+        calls++;
+        if (outcome === 'network') throw new TypeError('mocked lost response');
+        if (outcome === 'malformed') return new Response('unreadable', { status: 200 });
+        if (outcome === 'missing_id') return new Response(JSON.stringify(provider === 'telegram' ? { ok: true, result: {} } : {}));
+        return new Response(JSON.stringify(provider === 'telegram' ? { ok: false, error_code: 403 } : { error: { code: 10 } }), { status: 403 });
+      }) as typeof fetch;
+      console.error = () => {};
+      try {
+        const key = `${provider}-${outcome}`;
+        const reply = () => call(env, ME, 'POST', `/threads/${thread.uid}/reply`, { text: 'Are you free Thursday?', client_key: key });
+        const first = await reply(), repeat = await reply();
+        const row = db.prepare('SELECT status, error_code FROM channel_outbound WHERE client_key = ?').get(key);
+        if (outcome === 'refused') {
+          assert.deepEqual([first.status, first.body.code, row.status, repeat.body.ok, calls], [502, 'forbidden', 'failed', false, 1]);
+        } else {
+          assert.deepEqual([first.status, first.body.ok, first.body.code, row.status, row.error_code,
+            repeat.body.ok, repeat.body.code, calls], [200, null, 'send_unknown', 'pending', 'send_unknown', null, 'send_unknown', 1]);
+        }
+      } finally { globalThis.fetch = originalFetch; console.error = originalError; }
+    }
+  }
+});
