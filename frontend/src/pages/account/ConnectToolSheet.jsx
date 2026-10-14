@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../../lib/api';
 import { Pill, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
-import { Banner, ConnectorPanel, Group, Row, Sheet, openingView, useConnectors } from './ConnectorSheet';
-import { TIER_LABEL, TOOL_FILTERS, attentionReason, feedsLabel, lastSyncLabel, toolBanner, toolGroups, toolState } from './connectorsModel';
+import { connectorsApi } from '../../lib/api/connectors';
+import { Banner, ConnectorPanel, Group, Row, Sheet, disconnect, openingView, useConnectors } from './ConnectorSheet';
+import {
+  TOOL_FILTERS, companiesWith, companyBanner, disconnectNote, projectCompany, retryOutcome, servesCompany, toolBanner, toolGroups, toolRow,
+} from './connectorsModel';
 
 /**
  * D651 (#1463) — Build's "Connect a tool", drawn to `Cycle Action.dc.html`'s
@@ -12,33 +16,50 @@ import { TIER_LABEL, TOOL_FILTERS, attentionReason, feedsLabel, lastSyncLabel, t
  *
  * `refused` and `success` are the panel's own `refused` and `connected` views.
  * A provider's sign-in still returns to `/integrations`, which lands on the
- * Connectors page; the Worker's callback chooses that address (D651).
+ * Connectors page; the Worker's callback chooses that address (D651) until
+ * S18-A's `return_to=build` merges (D686 §5.2).
  *
- * The canvas's `sync` view (choosing GitHub repositories) is not built here
- * yet. Its routes (`/:uid/repositories`, D655) are on main; GitHub is listed
- * as the Worker reports it meanwhile.
+ * D686 §5.4 (#1597): the rows say what is true (`toolRow`), GitHub chooses
+ * its repositories in the `sync` view (`GithubSyncSheet.jsx`), and every
+ * connection is made for THIS project's company (`projectCompany`), which
+ * is sent as the header the Worker scopes it by.
  */
 
-const STATE = {
-  connected: ['Connected', 'ok'],
-  failing: ['Failing', 'danger'],
-  not_connected: ['Not connected', 'neutral'],
-  soon: ['Coming soon', 'neutral'],
-  unavailable: ['Not set up here', 'neutral'],
-};
-
-export default function ConnectToolSheet({ onClose }) {
-  const data = useConnectors();
-  return <ConnectToolView data={data} onClose={onClose} />;
+export default function ConnectToolSheet({ projectId = null, onClose, onChanged }) {
+  // The project's company: undefined while read, null when it could not be.
+  const [project, setProject] = useState(projectId ? undefined : null);
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let live = true;
+    api.getProject(projectId).then((r) => { if (live) setProject(r || null); }, () => { if (live) setProject(null); });
+    return () => { live = false; };
+  }, [projectId]);
+  const companyId = project?.company_id && Number.isSafeInteger(Number(project.company_id)) ? Number(project.company_id) : null;
+  const data = useConnectors({ companyId });
+  const reload = () => { data.reload(); onChanged?.(); };
+  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} />;
 }
 
-/** The sheet, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectToolView({ data, onClose }) {
+/**
+ * The sheet, drawn from one `useConnectors()` read; exported so a test can
+ * hand it each state. `project` is `GET /projects/:id` (undefined while read,
+ * null when unreadable, false when the sheet has no project).
+ */
+export function ConnectToolView({ data, onClose, project = false, projectId = null }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('All');
   const [panel, setPanel] = useState(null); // { key, view }
-  const { groups, total } = toolGroups(data.catalogue, { q, filter });
+  // Per row: an inline Disconnect confirm, and Try again's answer.
+  const [confirm, setConfirm] = useState(null);
+  const [rowNote, setRowNote] = useState({});
+  const [busy, setBusy] = useState(null);
+  const scope = project === false ? null : projectCompany(project, data.companies);
+  const cannotConnect = !!scope && (scope.state === 'outside' || scope.state === 'unreadable' || scope.state === 'loading');
+  const companyNote = scope ? companyBanner(scope) : null;
   const banner = toolBanner(data.catalogue);
+  // While the failed banner shows, the failing tool's group is drawn first.
+  const pin = banner?.view === 'failed' ? (data.catalogue.find((p) => p.key === banner.key)?.category || 'Other') : null;
+  const { groups, total } = toolGroups(data.catalogue, { q, filter, pin });
   const panelP = panel && data.catalogue.find((p) => p.key === panel.key);
 
   if (panelP) {
@@ -52,22 +73,55 @@ export function ConnectToolView({ data, onClose }) {
         onChanged={data.reload}
         onClose={() => setPanel(null)}
         back={() => setPanel(null)}
+        projectId={projectId}
+        companyId={scope?.state === 'ok' ? scope.companyId : null}
+        companyName={scope?.state === 'ok' ? scope.name : null}
       />
     );
   }
 
-  const action = (p) => {
-    const s = toolState(p);
-    if (p.locked && !p.connection && p.available) return <button type="button" className={BTN.primary} onClick={() => setPanel({ key: p.key, view: 'pro' })}>Upgrade</button>;
-    if (s === 'connected') return <button type="button" className={BTN.ghost} onClick={() => setPanel({ key: p.key, view: 'detail' })}>Manage</button>;
-    if (s === 'failing') return <button type="button" className={BTN.primary} onClick={() => setPanel({ key: p.key, view: 'pre' })}>Reconnect</button>;
-    if (s === 'not_connected') return <button type="button" className={BTN.primary} onClick={() => setPanel({ key: p.key, view: openingView(p) })}>Connect</button>;
+  const retry = async (p) => {
+    setBusy(p.key);
+    let out;
+    try { await connectorsApi.sync(p.connection.uid); out = retryOutcome(null); } catch (e) { out = retryOutcome(e); }
+    setRowNote((n) => ({ ...n, [p.key]: out }));
+    setBusy(null);
+    if (out.tone === 'ok') data.reload();
+  };
+  const doDisconnect = async (p) => {
+    setBusy(p.key);
+    try { await disconnect(p); setConfirm(null); data.reload(); }
+    catch (e) { setRowNote((n) => ({ ...n, [p.key]: { tone: 'danger', text: e?.message || 'The tool could not be disconnected.' } })); }
+    finally { setBusy(null); }
+  };
+
+  const enableHere = async (p) => {
+    setBusy(p.key);
+    try { await connectorsApi.setCompanies(p.connection.uid, companiesWith(p.connection, scope.companyId)); data.reload(); }
+    catch (e) { setRowNote((n) => ({ ...n, [p.key]: { tone: 'danger', text: e?.message || 'The company could not be turned on.' } })); }
+    finally { setBusy(null); }
+  };
+
+  const action = (p, row) => {
+    const testid = `tool-action-${p.key}`;
+    // Connecting or reconnecting is for a company the member is in (D686 §5.4).
+    if (cannotConnect && (row.action === 'connect' || row.action === 'reconnect' || row.action === 'upgrade')) return null;
+    // A connection that does not serve this project's company yet: add it, keeping the others (the PUT replaces the set).
+    if (scope?.state === 'ok' && servesCompany(p.connection, scope.companyId) === false) {
+      return <button type="button" className={BTN.primary} data-testid={testid} disabled={busy === p.key} onClick={() => enableHere(p)}>{`Use for ${scope.name || 'this company'}`}</button>;
+    }
+    if (rowNote[p.key]?.reconnect || row.action === 'reconnect') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: 'pre' })}>Reconnect</button>;
+    if (row.action === 'upgrade') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: 'pro' })}>{row.actionLabel}</button>;
+    if (row.action === 'retry') return <button type="button" className={BTN.primary} data-testid={testid} disabled={busy === p.key} onClick={() => retry(p)}>{busy === p.key ? 'Trying…' : row.actionLabel}</button>;
+    if (row.action === 'disconnect') return <button type="button" className={BTN.ghost} data-testid={testid} aria-expanded={confirm === p.key} onClick={() => setConfirm(confirm === p.key ? null : p.key)}>Disconnect</button>;
+    if (row.action === 'connect') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: openingView(p) })}>Connect</button>;
     return null;
   };
 
   return (
     <Sheet eyebrow="Build" title="Connect a tool" sub="Connected tools fill your modules with real data. Each one says what it feeds." onClose={onClose} data-testid="connect-tool-sheet">
       {data.status === 'unreadable' && <div className="mx-5 mt-4"><Unreadable what="The tools" claim="This is not a claim that none is connected." onRetry={data.reload} /></div>}
+      {companyNote && <Banner tone="warn" data-testid={`connect-tool-company-${scope.state}`}>{companyNote}</Banner>}
       {banner && <Banner tone={banner.tone} data-testid={`connect-tool-${banner.view}`}>{banner.text}</Banner>}
       <div className="mx-5 mt-4 flex flex-col gap-2">
         <input type="search" aria-label="Search tools" placeholder="Search tools…" className={INPUT} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -86,14 +140,25 @@ export function ConnectToolView({ data, onClose }) {
       {groups.map((g) => (
         <Group key={g.label} label={g.label}>
           {g.rows.map((p) => {
-            const s = toolState(p);
-            const [label, tone] = p.locked && !p.connection && p.available ? [TIER_LABEL[p.tier] || 'Paid plan', 'info']
-              : s === 'unavailable' && p.unreadable ? ['Status unreadable', 'neutral'] : STATE[s];
-            const feeds = feedsLabel(p);
-            const detail = s === 'failing'
-              ? `${attentionReason(p.connection)} · last good sync ${lastSyncLabel(p.connection)}`
-              : `${feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', ')}${p.connection ? (p.connection.last_synced_at ? ` · synced ${lastSyncLabel(p.connection)}` : ' · last sync not recorded') : ''}`;
-            return <Row key={p.key} a={p.display_name} b={detail} tone={s === 'failing' ? 'danger' : undefined} pill={<Pill tone={tone}>{label}</Pill>} action={action(p)} />;
+            const row = toolRow(p);
+            const note = rowNote[p.key];
+            // A connected tool's name opens its detail; Disconnect is the row's action (D686 §3.1 item 2).
+            const name = p.connection
+              ? <button type="button" className="text-left font-semibold text-axal-ink hover:underline dark:text-gray-100" data-testid={`tool-name-${p.key}`} onClick={() => setPanel({ key: p.key, view: 'detail' })}>{p.display_name}</button>
+              : p.display_name;
+            return (
+              <div key={p.key} data-testid={`tool-row-${p.key}`}>
+                <Row a={name} b={row.detail} tone={row.state === 'failing' ? 'danger' : undefined} pill={<Pill tone={row.pill[1]}>{row.pill[0]}</Pill>} action={action(p, row)} />
+                {confirm === p.key && (
+                  <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-800 dark:bg-gray-800" data-testid={`tool-confirm-${p.key}`}>
+                    <span className="mr-auto text-[12px] text-axal-muted dark:text-gray-300">{`Disconnect ${p.display_name}? ${disconnectNote(p)}`}</span>
+                    <button type="button" className={BTN.ghost} onClick={() => setConfirm(null)}>Keep it</button>
+                    <button type="button" className={BTN.dangerSolid} disabled={busy === p.key} onClick={() => doDisconnect(p)} data-testid={`tool-confirm-disconnect-${p.key}`}>{busy === p.key ? 'Disconnecting…' : 'Disconnect'}</button>
+                  </div>
+                )}
+                {note && <p role={note.tone === 'danger' ? 'alert' : 'status'} className={`px-3 pb-2 text-[12px] ${note.tone === 'danger' ? 'text-red-700 dark:text-red-300' : note.tone === 'warn' ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`} data-testid={`tool-note-${p.key}`}>{note.text}</p>}
+              </div>
+            );
           })}
         </Group>
       ))}

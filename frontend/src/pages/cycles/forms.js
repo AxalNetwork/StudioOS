@@ -372,6 +372,51 @@ const editFeature = {
 };
 
 /** The Edit forms, by cycle and module slug. A slug not here draws no Edit. */
+// D686 §5.4 (#1597): a core system's connector, on Operating systems' rows.
+// The row's id is its kind (`cycle_build.ts` records each system by kind).
+export const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'];
+const SYSTEM_LABEL = { bank: 'Bank', accounting: 'Accounting', payroll: 'Payroll', crm: 'CRM', workspace: 'Workspace' };
+export const UNMAP = 'none';
+
+/** The select's options for one kind, from `GET /systems/choices`, plus unmapping. */
+export function systemOptions(read, kind) {
+  const entry = (Array.isArray(read?.kinds) ? read.kinds : []).find((k) => k?.kind === kind);
+  const choices = (Array.isArray(entry?.choices) ? entry.choices : []).map((c) => (c?.uid
+    ? { value: `uid:${c.uid}`, label: c.display_name || c.provider_key || 'Connector' }
+    : c?.provider_key ? { value: `provider:${c.provider_key}`, label: c.display_name || c.provider_key } : null)).filter(Boolean);
+  const label = entry?.label || SYSTEM_LABEL[kind] || kind;
+  return {
+    options: [...choices, { value: UNMAP, label: '— None (unmap) —' }],
+    note: choices.length ? null : { text: `No connected ${label} tool is enabled for this company.`, href: '/build/connect' },
+  };
+}
+
+const editSystem = {
+  button: 'Choose connector',
+  title: 'Choose a connector',
+  lead: 'Which of your connected tools is this system, and who uses it. Only connections enabled for this project’s company are offered.',
+  fields: [
+    { name: 'choice', label: 'Connector', type: 'select', required: true, options: [], optionsFrom: 'systems' },
+    { name: 'used_by', label: 'Used by', type: 'text', max: 200 },
+  ],
+  idOf: (row) => (SYSTEM_KINDS.includes(String(row?.id)) ? String(row.id) : null),
+  valuesOf: (row) => { const u = row?.cells?.used_by; return { choice: '', used_by: typeof u === 'string' ? u : asText(u?.text) }; },
+  // Loaded before the form draws: the choices for this row's kind.
+  loadOptions: async (w, projectId, kind) => ({ choice: systemOptions(await w.build.systemChoices(projectId), kind) }),
+  toBody: (v, kind) => {
+    const usedBy = str(v.used_by);
+    const choice = String(v.choice || '');
+    const key = kind === 'workspace' ? 'provider_key' : 'integration_uid';
+    if (choice === UNMAP) return { [key]: null, used_by: usedBy };
+    if (choice.startsWith('uid:')) return { integration_uid: choice.slice(4), used_by: usedBy };
+    if (choice.startsWith('provider:')) return { provider_key: choice.slice(9), used_by: usedBy };
+    return { used_by: usedBy };
+  },
+  submit: (w, projectId, kind, v) => w.build.system(projectId, kind, editSystem.toBody(v, kind)),
+  // A project with no company has no systems to map: the card is not_recorded.
+  hiddenFor: (module) => module?.card?.state === 'not_recorded',
+};
+
 export const EDITS = {
   grow: {
     'product-improvement': editFeedback,
@@ -384,6 +429,7 @@ export const EDITS = {
     'solution-design': editFeature,
     'prototype-mvp': editMustHave,
     'company-creation': editFormationStep,
+    'operating-systems': editSystem,
   },
 };
 

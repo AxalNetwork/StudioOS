@@ -149,7 +149,7 @@ test('Yours: search, filter, sort, and a count with pages', () => {
 });
 
 test('Discover: the chips, the sections, and each card’s corner and pill', () => {
-  assert.deepEqual(discoverChips(CAT), ['All', 'Suggested for you', 'CRM', 'Payments', 'Calendar', 'Messaging', 'Cap table', 'Data']);
+  assert.deepEqual(discoverChips(CAT), ['All', 'Suggested for you', 'CRM', 'Payments', 'Calendar', 'Calendar and workspace', 'Messaging', 'Cap table', 'Data'], 'Google Calendar and Microsoft 365 sit in Calendar and workspace (D686 §3.1 item 6)');
   const all = discoverSections(CAT, 'All');
   assert.deepEqual(all.map((s) => s.title), ['Top connectors', 'Coming soon']);
   assert.deepEqual(all[1].cards.map((p) => p.key), ['salesforce', 'affinity']);
@@ -266,7 +266,9 @@ test('Build’s tools: grouped by category, filtered, with the failing banner be
   assert.equal(toolState(byKey('salesforce')), 'soon');
   assert.equal(toolState(byKey('microsoft')), 'unavailable');
   const all = toolGroups(CAT);
-  assert.deepEqual(all.groups.map((g) => g.label), ['CRM', 'Payments', 'Calendar', 'Messaging', 'Cap table', 'Data']);
+  assert.deepEqual(all.groups.map((g) => g.label), ['Payments', 'CRM', 'Calendar and workspace', 'Calendar', 'Messaging', 'Cap table', 'Data'], 'Build\'s order (D686 §5.4), not the Connectors chips\'');
+  assert.deepEqual(toolGroups(CAT, { pin: 'Cap table' }).groups.map((g) => g.label)[0], 'Cap table', 'the failing tool\'s group first');
+  assert.deepEqual(toolGroups(CAT, { pin: 'Nowhere' }).groups.map((g) => g.label), all.groups.map((g) => g.label), 'an absent pin changes nothing');
   assert.equal(all.total, CAT.length);
   assert.deepEqual(toolGroups(CAT, { filter: 'Failing' }).groups.map((g) => g.rows.map((p) => p.key)), [['hubspot']]);
   assert.deepEqual(toolGroups(CAT, { filter: 'Connected' }).groups.flatMap((g) => g.rows.map((p) => p.key)), ['stripe', 'google', 'slack']);
@@ -306,7 +308,7 @@ test('yoursEmpty, loading, unreadable, noresults and an unread connection list e
 test('discover and discoverCat: chips, sections, corners, the Notify-me state and the Coming-soon pill', () => {
   const out = html(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
   const t = text(out);
-  assert.match(t, /All Suggested for you CRM Payments Calendar Messaging Cap table Data/);
+  assert.match(t, /All Suggested for you CRM Payments Calendar Calendar and workspace Messaging Cap table Data/);
   assert.match(t, /Top connectors \d+[\s\S]*Coming soon 2/);
   assert.match(out, /data-testid="connector-card-calendly" data-action="add"/);
   assert.match(out, /data-testid="connector-card-stripe" data-action="connected"/);
@@ -414,11 +416,12 @@ test('Build’s "Connect a tool": list, failed, locked and loading', () => {
   assert.match(t, /CRM Affinity .*Coming soon HubSpot Sign-in expired · last good sync \d+ days? ago Failing Reconnect/);
   assert.match(t, /Microsoft 365 Calendar, Two-way sync Not set up here/);
   assert.match(t, /LinkedIn .* Status unreadable/);
-  assert.match(t, /Salesforce Salesforce cap one, Salesforce cap two Coming soon/);
-  assert.match(t, /Payments Stripe Stripe cap one, Stripe cap two · synced \d+ (min|h) ago Connected Manage|Payments Stripe .* Connected Manage/);
-  assert.match(t, /Cap table Carta Carta cap one, Carta cap two Studio Upgrade/);
+  assert.match(t, /Salesforce What it will feed is not recorded Coming soon/, 'D686 §5.4: a coming-soon row says what it will feed, or that it is not recorded');
+  assert.match(t, /Sorted by category · 1–\d+ of \d+ CRM /, 'the failing tool\'s group first while the failed banner shows');
+  assert.match(t, /Payments Stripe Stripe cap one, Stripe cap two · synced \d+ (min|h|days?) ago Connected Disconnect/, 'D686 §3.1 item 2: a connected row offers Disconnect');
+  assert.match(t, /Cap table Carta Carta cap one, Carta cap two Studio Upgrade to Studio/, 'the real tier, never "Pro"');
   assert.match(t, /Calendar Calendly .* Not connected Connect/);
-  assert.match(t, /Google Calendar Calendar, Gmail invites · last sync not recorded Connected Manage/);
+  assert.match(t, /Google Calendar Calendar, Gmail invites · last sync not recorded Connected Disconnect/);
   const locked = html(h(ConnectToolView, { data: ready(CAT.filter((p) => p.key !== 'hubspot')), onClose() {} }));
   assert.match(locked, /data-testid="connect-tool-locked"[^>]*>Cap table connections are part of the Studio plan\./);
   assert.match(text(html(h(ConnectToolView, { data: { status: 'loading', catalogue: [], reload() {} }, onClose() {} }))), /Loading tools…/);

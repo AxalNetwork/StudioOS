@@ -8,14 +8,32 @@
  * The registry carries the fields the canvas draws beside each row:
  * `category`, `verified`, `pulls`, `sends`, `feeds` and `permissions`; a
  * connection carries the `company_ids` it serves. The three first-party
- * connectors (Google, Microsoft, LinkedIn) are not in the registry, so a field
- * they do not carry still says "Not recorded" rather than inventing one. Their
- * category is the one field filled in here.
+ * connectors (Google, Microsoft, LinkedIn) connect through their own routes.
+ * Google Calendar and Microsoft 365 are also in the registry, as
+ * `google_calendar` and `microsoft_365` (D650 lists them in `/available`):
+ * those two entries are not drawn as rows of their own (`REGISTRY_ALIAS`,
+ * D686 §5.4), their description fields fill the first-party rows instead.
+ * A field none of them carries still says "Not recorded".
  */
 
 export const PAGE_SIZE = 10;
 
-export const CATEGORY_ORDER = ['CRM', 'Payments', 'Calendar', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
+export const CATEGORY_ORDER = ['CRM', 'Payments', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
+
+/**
+ * Build's own group order (D686 §5.4): the canvas's Code, Design, Payments,
+ * Accounting and banking, Payroll, CRM, Calendar and workspace, then the rest.
+ * The Connectors page keeps `CATEGORY_ORDER` for its chips.
+ */
+export const BUILD_CATEGORY_ORDER = ['Code', 'Design', 'Payments', 'Accounting and banking', 'Payroll', 'CRM', 'Calendar and workspace', 'Calendar', 'Messaging', 'Signing', 'Cap table', 'Data', 'Docs'];
+
+/**
+ * Registry entries that describe a first-party connector (D686 §5.4). The
+ * registry's entry is not listed; its description fields merge into the
+ * first-party row, which keeps its own key, name, status and connection.
+ */
+export const REGISTRY_ALIAS = Object.freeze({ google_calendar: 'google', microsoft_365: 'microsoft' });
+const ALIAS_FIELDS = ['category', 'verified', 'pulls', 'sends', 'feeds', 'feed_modules', 'permissions'];
 
 // The registry's `integration_type`, in the canvas's category words. Stripe is
 // a `data_feed` in the registry and Payments on the canvas; it is the one key
@@ -37,13 +55,13 @@ export function categoryOf(p) {
  */
 export const FIRST_PARTY = [
   {
-    key: 'google', display_name: 'Google Calendar', by: 'Google', category: 'Calendar',
+    key: 'google', display_name: 'Google Calendar', by: 'Google', category: 'Calendar and workspace',
     description: 'Your Google Calendar and Gmail invites, and "Continue with Google" sign-in.',
     capabilities: ['Calendar', 'Gmail invites', 'Sign in with Google'],
     status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
   },
   {
-    key: 'microsoft', display_name: 'Microsoft 365', by: 'Microsoft', category: 'Calendar',
+    key: 'microsoft', display_name: 'Microsoft 365', by: 'Microsoft', category: 'Calendar and workspace',
     description: 'Two-way sync with your Outlook calendar, so sessions land on your work calendar.',
     capabilities: ['Calendar', 'Two-way sync'],
     status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
@@ -104,8 +122,16 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
   const joined = new Set((waitlist || []).map((w) => w.provider_key));
   const out = [];
   const seen = new Set();
+  const aliased = {};
   for (const p of providers || []) {
     if (!p?.key || seen.has(p.key)) continue;
+    if (Object.hasOwn(REGISTRY_ALIAS, p.key)) {
+      // Described here, connected by its first-party row: one row each.
+      const into = REGISTRY_ALIAS[p.key];
+      aliased[into] = { ...(aliased[into] || {}) };
+      for (const f of ALIAS_FIELDS) if (p[f] !== undefined && p[f] !== null) aliased[into][f] = p[f];
+      continue;
+    }
     seen.add(p.key);
     out.push({
       ...p,
@@ -122,6 +148,7 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
     const status = firstParty[fp.key];
     out.push({
       ...fp,
+      ...(aliased[fp.key] || {}),
       connection: firstPartyConnection(fp.key, status),
       joined: false,
       locked: false,
@@ -175,10 +202,24 @@ function humanKey(k) {
   return s ? s[0].toUpperCase() + s.slice(1) : '';
 }
 
-/** The modules a connector fills, from the registry's `feeds`; null when it names none. */
+/**
+ * The modules a connector fills: the Worker's `feed_modules` labels when it
+ * sends them (D686 S18-A), else the registry's `feeds` keys made readable;
+ * null when it names none.
+ */
 export function feedsLabel(p) {
+  if (Array.isArray(p?.feed_modules) && p.feed_modules.length) {
+    const labels = p.feed_modules.map((m) => (typeof m === 'string' ? m : m?.label || humanKey(m?.key))).filter(Boolean);
+    if (labels.length) return labels.join(', ');
+  }
   if (!Array.isArray(p?.feeds) || !p.feeds.length) return null;
   return p.feeds.map((f) => (typeof f === 'string' ? humanKey(f) : f?.label || humanKey(f?.key))).filter(Boolean).join(', ') || null;
+}
+
+/** One module a connector fills, named as the Worker names it (`feed_modules`), else its key made readable. */
+export function moduleLabel(p, key) {
+  const hit = Array.isArray(p?.feed_modules) ? p.feed_modules.find((m) => m && typeof m === 'object' && m.key === key) : null;
+  return hit?.label || humanKey(key) || null;
 }
 
 /** "All", "2 of 3" or "None", from the connection's per-company scope; null when it is not known. */
@@ -367,8 +408,9 @@ const GOOGLE_ERRORS = {
  * reload does not replay it. null when the query carries no return.
  *
  *   ?oauth=ok&provider=hubspot            → hubspot, connected
+ *   ?oauth=ok&provider=github             → github, sync (choose the repositories)
  *   ?oauth=error&provider=…&reason=access_denied → cancelled
- *   ?oauth=error&provider=…&reason=overreach     → overreach (D650's scope check)
+ *   ?oauth=error&provider=…&reason=scope_overreach → overreach (D650's scope check; `overreach` too)
  *   ?oauth=error&provider=…&reason=…      → refused
  *   ?oauth=rolling_out&provider=…         → refused, "rolling out"
  *   ?google=connected | ?microsoft=connected | ?linkedin=connected → connected
@@ -389,10 +431,12 @@ export function oauthReturn(search) {
     const reason = codeWord(p.get('reason'));
     const strip = ['oauth', 'provider', 'reason'];
     if (!key) return null;
-    if (oauth === 'ok') return { key, view: 'connected', reason: '', banner: '', strip };
+    // GitHub reads nothing until its repositories are chosen: its sign-in lands on that choice (D686 §5.4).
+    if (oauth === 'ok') return { key, view: key === 'github' ? 'sync' : 'connected', reason: '', banner: '', strip };
     if (oauth === 'rolling_out') return { key, view: 'refused', reason: 'rolling_out', banner: 'rolling_out', strip };
     if (CANCELLED.has(reason)) return { key, view: 'cancelled', reason, banner: '', strip };
-    if (reason === 'overreach') return { key, view: 'overreach', reason, banner: '', strip };
+    // The Worker's word is `scope_overreach` (integrations.ts); `overreach` is kept for older links.
+    if (reason === 'overreach' || reason === 'scope_overreach') return { key, view: 'overreach', reason, banner: '', strip };
     return { key, view: 'refused', reason, banner: '', strip };
   }
   for (const key of ['google', 'microsoft']) {
@@ -500,8 +544,12 @@ export function toolState(p) {
   return 'not_connected';
 }
 
-/** Build's list: grouped by category in the canvas's order, searched and filtered. */
-export function toolGroups(catalogue, { q = '', filter = 'All' } = {}) {
+/**
+ * Build's list: grouped by category in Build's order, searched and filtered.
+ * `pin` names a category to draw first: the failing tool's, while the failed
+ * banner shows, so the tool the banner names is in view.
+ */
+export function toolGroups(catalogue, { q = '', filter = 'All', pin = null } = {}) {
   const keep = (p) => {
     const s = toolState(p);
     if (filter === 'Connected') return s === 'connected';
@@ -511,12 +559,102 @@ export function toolGroups(catalogue, { q = '', filter = 'All' } = {}) {
   };
   const list = (catalogue || []).filter((p) => matches(p, q) && keep(p));
   const groups = [];
-  for (const cat of [...CATEGORY_ORDER, null]) {
-    const rows = list.filter((p) => (cat === null ? !CATEGORY_ORDER.includes(p.category) : p.category === cat))
+  for (const cat of [...BUILD_CATEGORY_ORDER, null]) {
+    const rows = list.filter((p) => (cat === null ? !BUILD_CATEGORY_ORDER.includes(p.category) : p.category === cat))
       .sort((a, b) => a.display_name.localeCompare(b.display_name));
     if (rows.length) groups.push({ label: cat || 'Other', rows });
   }
+  if (pin) {
+    const at = groups.findIndex((g) => g.label === pin || (pin === 'Other' && g.label === 'Other'));
+    if (at > 0) groups.unshift(...groups.splice(at, 1));
+  }
   return { groups, total: list.length };
+}
+
+/**
+ * Whose company Build's connections serve (D686 §5.4): the project's own,
+ * not the sidebar's. `project` is `GET /projects/:id` (or null when it could
+ * not be read); `companies` the member's memberships (or null).
+ *   none      the project has no company: nothing a tool reads can feed it.
+ *   outside   the member is not in that company: they cannot connect for it.
+ *   unreadable the project or the memberships could not be read.
+ *   ok        connect, sign-in, teammate and suggestions send this company.
+ */
+export function projectCompany(project, companies) {
+  if (project === undefined) return { state: 'loading', companyId: null, name: null };
+  if (!project) return { state: 'unreadable', companyId: null, name: null };
+  const id = Number(project.company_id);
+  if (!Number.isSafeInteger(id) || id <= 0) return { state: 'none', companyId: null, name: null };
+  if (!Array.isArray(companies)) return { state: 'unreadable', companyId: id, name: null };
+  const mine = companies.find((c) => Number(c?.id) === id);
+  if (!mine) return { state: 'outside', companyId: id, name: null };
+  return { state: 'ok', companyId: id, name: mine.company_name || mine.name || null };
+}
+
+/** The sentence above Build's list for a company it cannot connect for; null when it can. */
+export function companyBanner(scope) {
+  if (scope.state === 'none') return 'This project has no company, so connected tools cannot feed it.';
+  if (scope.state === 'outside') return 'You are not a member of this project\u2019s company, so you cannot connect tools for it.';
+  if (scope.state === 'unreadable') return 'This project\u2019s company could not be read. Connected tools are listed, but connecting waits until it can be.';
+  return null;
+}
+
+/** Whether a registry connection already serves the project's company; null when it cannot be told. */
+export function servesCompany(conn, companyId) {
+  if (!conn || conn.first_party || !companyId || !Array.isArray(conn.company_ids)) return null;
+  return conn.company_ids.map(Number).includes(Number(companyId));
+}
+
+/** The company set `PUT /:uid/companies` takes to add the project's: the route replaces the set, so the enabled ones go too. */
+export function companiesWith(conn, companyId) {
+  const ids = (Array.isArray(conn?.company_ids) ? conn.company_ids : []).map(Number).filter(Number.isSafeInteger);
+  return [...new Set([...ids, Number(companyId)])];
+}
+
+/** The plan a locked tool needs, in the Worker's tier words; never the canvas's placeholder "Pro". */
+export const UPGRADE_TIER = Object.freeze({ growth: 'Growth', studio: 'Studio' });
+
+/**
+ * One row of Build's list (D686 §3.1 items 2 and 5): its line under the name,
+ * its pill, and the one action it offers.
+ *   failing   "Sign-in expired" → reconnect; "Last sync failed" → retry
+ *             (a sync); "Daily limit reached" → none: waiting is the fix.
+ *   connected → disconnect (with an inline confirm); the name opens its detail.
+ *   locked    → the real tier's pill and "Upgrade to Growth" / "to Studio".
+ *   soon      → "Will feed …", no action.
+ */
+export function toolRow(p) {
+  const s = toolState(p);
+  const feeds = feedsLabel(p);
+  const tier = UPGRADE_TIER[p.tier] || null;
+  if (p.locked && !p.connection && p.available) {
+    return { state: 'locked', pill: [tier || 'Paid plan', 'info'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '),
+      action: 'upgrade', actionLabel: tier ? `Upgrade to ${tier}` : 'See plans' };
+  }
+  if (s === 'failing') {
+    const why = attentionReason(p.connection);
+    const action = why === 'Sign-in expired' ? 'reconnect' : why === 'Last sync failed' ? 'retry' : null;
+    return { state: s, pill: ['Failing', 'danger'], detail: `${why} · last good sync ${lastSyncLabel(p.connection)}`,
+      action, actionLabel: action === 'reconnect' ? 'Reconnect' : action === 'retry' ? 'Try again' : null };
+  }
+  if (s === 'connected') {
+    const synced = p.connection.last_synced_at ? ` · synced ${lastSyncLabel(p.connection)}` : ' · last sync not recorded';
+    return { state: s, pill: ['Connected', 'ok'], detail: `${feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', ')}${synced}`, action: 'disconnect', actionLabel: 'Disconnect' };
+  }
+  if (s === 'soon') return { state: s, pill: ['Coming soon', 'neutral'], detail: feeds ? `Will feed ${feeds}` : 'What it will feed is not recorded', action: null, actionLabel: null };
+  if (s === 'unavailable') return { state: s, pill: [p.unreadable ? 'Status unreadable' : 'Not set up here', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: null, actionLabel: null };
+  return { state: s, pill: ['Not connected', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: 'connect', actionLabel: 'Connect' };
+}
+
+/**
+ * "Try again"'s answer, in words: the Worker's sentence for a refusal it can
+ * explain, Reconnect when the tool has no sync of its own (422).
+ */
+export function retryOutcome(e) {
+  if (!e) return { tone: 'ok', text: 'Synced.', reconnect: false };
+  const code = e?.code || e?.data?.error || e?.data?.detail || '';
+  if (e?.status === 422 || code === 'sync_not_supported') return { tone: 'warn', text: 'This tool has no sync of its own. Reconnect it instead.', reconnect: true };
+  return { tone: 'danger', text: e?.message || 'The sync failed.', reconnect: false };
 }
 
 /** The banner above Build's list: a failing tool first, then a locked one; null when neither. */
@@ -527,6 +665,7 @@ export function toolBanner(catalogue) {
     return {
       tone: 'danger',
       view: 'failed',
+      key: failing.key,
       text: `${failing.display_name}: ${attentionReason(failing.connection).toLowerCase()}. ${when ? `The last good sync was ${when}; ` : ''}what it feeds keeps the last good data.`,
     };
   }
