@@ -32,7 +32,7 @@ function fixture() {
     CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
     CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT);
+    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT, last_error_at TEXT);
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
@@ -95,7 +95,7 @@ test('only company-enabled connectors count; a failed system keeps the last good
   assert.equal(bank.cells.provider, null);
   const overview = await call(env, '/api/cycles/build/overview?project=101');
   assert.deepEqual(overview.body.figures[3].value, [1, 5]);
-  assert.match(overview.body.cards[5].next.text, /last good sync 2026-10-03/);
+  assert.equal(overview.body.cards[5].next.text, 'Reconnect Payroll');
   db.exec('DELETE FROM user_company_links WHERE user_id = 1 AND company_id = 10');
   const revoked = await call(env, '/api/cycles/build/modules/operating-systems?project=101');
   assert.equal(revoked.body.records.rows.find((row: any) => row.id === 'crm').cells.provider, null);
