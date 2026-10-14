@@ -170,7 +170,14 @@ ENVIRONMENT       = "production"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
-# Roll back by setting this flag to "false" and deploying through npm run deploy.
+# The lasting switch-off is one PR to main that sets this flag and production's
+# MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
+# cloudflare-worker/test/mcp_server_d666.test.ts to 'false'. A hand deploy with
+# --var lasts only until the next CI deploy: a push to main, a dispatched or
+# re-run deploy, or one already running or queued. So disable the deploy
+# workflow first, until that PR is ready, and let any run in progress or queued
+# finish before the hand deploy; re-enable it so the PR's merge deploys
+# (PRODUCTION.md, "MCP enablement").
 MCP_SERVER_ENABLED = "true"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
@@ -494,7 +501,14 @@ ENVIRONMENT       = "production"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
-# Roll back by setting this flag to "false" and deploying through npm run deploy.
+# The lasting switch-off is one PR to main that sets this flag and the top-level
+# MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
+# cloudflare-worker/test/mcp_server_d666.test.ts to 'false'. A hand deploy with
+# --var lasts only until the next CI deploy: a push to main, a dispatched or
+# re-run deploy, or one already running or queued. So disable the deploy
+# workflow first, until that PR is ready, and let any run in progress or queued
+# finish before the hand deploy; re-enable it so the PR's merge deploys
+# (PRODUCTION.md, "MCP enablement").
 MCP_SERVER_ENABLED = "true"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
@@ -641,6 +655,7 @@ crons = [
 #   npx wrangler d1 create studioos-db-preview
 #   npx wrangler kv namespace create TOKENS-PREVIEW
 #   npx wrangler kv namespace create RATE_LIMITS-PREVIEW
+#   npx wrangler kv namespace create OAUTH_KV-PREVIEW
 #
 # No CI job deploys this environment (the `CLOUDFLARE_PREVIEW_READY` gate
 # an earlier version of this comment described was never wired), and
@@ -659,7 +674,7 @@ APP_URL           = "https://studioos-preview.workers.dev"
 ENVIRONMENT       = "preview"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
-# D681 (#1555): preview is bound but stays off; only top-level/production are enabled.
+# D681 (#1555): MCP stays off in preview, whatever HQ's two flags say.
 MCP_SERVER_ENABLED = "false"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
@@ -684,11 +699,12 @@ id      = "REPLACE_WITH_PREVIEW_KV_TOKENS_ID"
 binding = "RATE_LIMITS"
 id      = "REPLACE_WITH_PREVIEW_KV_RATE_LIMITS_ID"
 
-# D681 (#1555): owner-provisioned OAuth storage for MCP clients, grants,
-# tokens and parked consent requests. Namespace ids are public configuration.
+# D681 (#1555): preview's own OAuth store, never HQ's. Grants are keyed by
+# numeric user id, and preview has its own D1, so sharing HQ's namespace would
+# let a preview "sign out everywhere" revoke an HQ member's assistant grants.
 [[env.preview.kv_namespaces]]
 binding = "OAUTH_KV"
-id      = "a536c75e7461447a89b1967d367c13ad"
+id      = "REPLACE_WITH_PREVIEW_KV_OAUTH_ID"
 
 [env.preview.ai]
 binding = "AI"

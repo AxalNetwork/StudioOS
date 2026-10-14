@@ -130,6 +130,7 @@ tables matter. `npm run deploy` uses `--env production`, which makes the
 | D1 `DB` | ✅ L371 | ✅ L855 | `studioos-db`, id `16a23acd-c82e-4ff1-a6c0-408e3eb014c8` |
 | KV `TOKENS` | ✅ L379 | ✅ L860 | `8dc26ed83d154d0ebbfcbc51f592d67c` |
 | KV `RATE_LIMITS` | ✅ L383 | ✅ L864 | `be811f14b6f342be961b8daa4513fb5b` |
+| KV `OAUTH_KV` | ✅ L240 | ✅ L550 | `a536c75e7461447a89b1967d367c13ad`, the MCP OAuth store (D681), live since 2026-10-14. HQ-only: generated branch configs omit it and keep MCP off (`scripts/lib/branchConfig.mjs`); `[env.preview]` binds its own placeholder, `REPLACE_WITH_PREVIEW_KV_OAUTH_ID`, never this id. (Lines at `9363e5eee` with the D681 review commit applied, 2026-10-14, not at `777610a9`.) |
 | KV `AI_SPEND` | ❌ commented out L397-406 | ❌ | Planned only. `services/aiRouter.ts` falls back to `TOKENS` with `ai_spend:` / `ai_cache:` / `ai_killswitch:` prefixes. |
 | Workers AI `AI` | ✅ L388 | ✅ L868 | — |
 | Queue producer `JOB_QUEUE` | ✅ L416 | ✅ L871 | `studioos-job-queue` |
@@ -234,9 +235,10 @@ assets binding serves; the `run_worker_first` paths get
 ### 2.6 `[env.preview]` (for completeness)
 
 `studioos-preview`, `workers_dev = true`. Mirrors D1/KV/AI/Queues/DOs/migrations
-/R2/Analytics/Browser/triggers, but **omits** Vectorize, the `PUBLICATIONS` and
-`BACKUPS` R2 buckets, `assets`, and `tail_consumers`. D1/KV ids are still
-`REPLACE_WITH_PREVIEW_*` placeholders, so `npm run deploy:preview` cannot
+/R2/Analytics/Browser/triggers, but **omits** Vectorize, the `BACKUPS` R2 bucket,
+`assets`, and `tail_consumers` (it has its own `PUBLICATIONS` bucket). D1/KV ids are still
+`REPLACE_WITH_PREVIEW_*` placeholders (`OAUTH_KV`'s too: preview must never
+bind HQ's OAuth namespace, D681), so `npm run deploy:preview` cannot
 succeed until they are provisioned; no CI job deploys this environment (the
 `CLOUDFLARE_PREVIEW_READY` gate once described here was never wired), and
 Workers preview URLs are unavailable to it regardless, because Cloudflare
