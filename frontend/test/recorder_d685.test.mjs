@@ -12,6 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { codeOnly } from './_codeOnly.mjs';
 import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, liveRefusal, pillLabel, pillVariant, processingProgress, stageIndex, startRefused } from '../src/lib/activeRecording.js';
 import { layers, ringMode } from '../src/pages/founder/RecordingView.jsx';
 import { BUDGET_CLOSE, LEVEL_MS, NO_SOUND_MS, createCapture, memoryQueue, nextSeq } from '../src/lib/interviewCapture.js';
@@ -562,6 +563,14 @@ test('the pill\'s variants and accessible names, and the timer from the Worker\'
   assert.equal(pillVariant({ session: s, phase: 'stopping', cap: {} }), 'processing');
   assert.equal(pillVariant({ session: s, phase: 'ready', cap: {} }), 'ready');
   assert.equal(pillVariant({ session: null, phase: 'recording' }), null);
+  // #1588: nothing recording, never "recording".
+  assert.equal(pillVariant({ session: s, phase: 'share', cap: {} }), 'share');
+  assert.equal(pillVariant({ session: s, phase: 'denied', refused: null, cap: {} }), 'blocked');
+  assert.equal(pillVariant({ session: s, phase: 'denied', refused: { text: 'No.' }, cap: {} }), 'refused');
+  assert.equal(pillVariant({ session: s, phase: 'share', online: false, cap: {} }), 'share', 'offline says nothing about a tab not yet shared');
+  assert.equal(pillLabel('share', '00:00'), 'Not recording yet · share the call\'s tab · tap to expand');
+  assert.equal(pillLabel('blocked', '00:00'), 'Not recording · the microphone is blocked · tap to expand');
+  assert.equal(pillLabel('refused', '00:00'), 'Not recording · the recording did not start · tap to expand');
   assert.equal(pillLabel('recording', '00:01:30'), 'Recording · 00:01:30 · tap to expand');
   assert.equal(pillLabel('ready', ''), 'Ready to review · open the review');
 });
@@ -818,4 +827,38 @@ test('#1588 Resume here never pauses a recording another tab is capturing: adopt
   // A draft has no capture anywhere: no probe needed, nothing refused.
   const r2 = createRecorder({ api: fakeApi().api, browser: { ...fakeBrowser().browser, locks: fakeLocks(['rec-8']).locks }, queue: memoryQueue() });
   assert.equal(await r2.adopt({ session: { id: 8, status: 'draft', channel: 'in_person' } }), 'idle');
+});
+
+test('#1588 every Start opens the mic inside its own click, not only the first: the prepared mic is used once, then forgotten', async () => {
+  const b = fakeBrowser();
+  const w = fakeApi({
+    finish: async () => ({ processing: { stage: 'transcribing', done: 0, total: 1, error: null } }),
+    get: async () => ({ session: { id: 7, status: 'transcribed' }, processing: { stage: 'done' } }),
+  });
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  r.prepare();
+  await tick();
+  assert.equal(await r.begin({ session: draft() }), 'recording');
+  await r.confirmStop();
+  r.clear();
+  b.log.length = 0;
+  // The second Start, after a Stop: its click asks again, synchronously for the context.
+  r.prepare();
+  assert.deepEqual(b.log, ['AudioContext'], 'a fresh context in the second click');
+  await tick();
+  assert.deepEqual(b.log, ['AudioContext', 'getUserMedia'], 'and the mic, before anything is awaited');
+  assert.equal(await r.begin({ session: draft({ id: 9 }) }), 'recording');
+  assert.equal(b.log.filter((x) => x === 'getUserMedia').length, 1, 'the second click\'s mic is the one used, not asked for again after the POST');
+  assert.equal(b.log.filter((x) => x === 'AudioContext').length, 1);
+});
+
+test('#1588 main.jsx\'s own stale-chunk reload waits for the capture, and keeps the rethrow while it waits', () => {
+  const main = codeOnly(readFileSync('frontend/src/main.jsx', 'utf8'));
+  assert.match(main, /import \{ isCapturing, whenIdle \} from '\.\/lib\/captureGuard';/);
+  const fn = main.slice(main.indexOf('function reloadOnceForStaleChunk()'), main.indexOf('function dropCachesThenReload('));
+  assert.match(fn, /const now = !isCapturing\(\);\s*whenIdle\(\(\) => dropCachesThenReload\(next\)\);\s*return now;/,
+    'the reload runs through whenIdle, and reports a reload under way only when it starts now');
+  assert.doesNotMatch(fn, /reloadCarryingCount|serviceWorker|caches/, 'nothing reloads or drops caches outside whenIdle');
+  assert.match(main, /if \(reloadOnceForStaleChunk\(\)\) \{\s*try \{ e\.preventDefault\(\); \}/, 'the rethrow is suppressed only when a reload starts');
+  assert.match(readFileSync('documentation/architecture/GOTCHAS.md', 'utf8'), /`main\.jsx`'s own stale-chunk reload on `vite:preloadError`/);
 });

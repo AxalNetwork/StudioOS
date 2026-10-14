@@ -570,3 +570,28 @@ test('#1588 a draft\'s Start while this tab records another session: refused bef
     assert.equal(p.where.path, '/validate/session/7');
   } finally { await p.unmount(); }
 });
+
+test('#1588 the pill never says Recording when nothing records, and its ring follows the dark pill', () => {
+  // A video call waiting for its tab, a blocked microphone, a Start the Worker refused.
+  for (const [patch, variant, words] of [
+    [{ phase: 'share' }, 'share', /Share the call's tab · tap to expand/],
+    [{ phase: 'denied', refused: null }, 'blocked', /Microphone blocked · tap to expand/],
+    [{ phase: 'denied', refused: { text: 'No.', sessionId: null } }, 'refused', /Did not start · tap to expand/],
+  ]) {
+    setRecorder(stubRecorder(ST(patch)));
+    const out = html(h(RecordingPill), '/raise');
+    assert.match(tag(out, 'recording-pill'), new RegExp(`data-variant="${variant}"`));
+    assert.match(renderedText(out), words);
+    assert.doesNotMatch(out, /aria-label="Recording/, `${variant}: never "Recording"`);
+    assert.doesNotMatch(out, /data-testid="recording-pill-clock"/, `${variant}: no clock runs`);
+    assert.match(tag(out, 'ring-viz'), /data-mode="paused"/, `${variant}: the ring is still`);
+  }
+  // Light by default; dark when the root is dark.
+  setRecorder(stubRecorder(ST()));
+  assert.match(tag(html(h(RecordingPill), '/raise'), 'ring-viz'), /data-theme="light"/);
+  const saved = globalThis.document;
+  globalThis.document = { documentElement: { classList: { contains: (c) => c === 'dark' } } };
+  try {
+    assert.match(tag(html(h(RecordingPill), '/raise'), 'ring-viz'), /data-theme="dark"/, 'the dark pill draws the dark ring');
+  } finally { globalThis.document = saved; }
+});

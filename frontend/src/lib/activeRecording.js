@@ -97,14 +97,21 @@ export function liveRefusal(st, capturing) {
   };
 }
 
-/** The pill's variant, from the phase (D685 §5.6.4). Null when nothing is recording. */
+/**
+ * The pill's variant, from the phase (D685 §5.6.4). Null when there is no
+ * session. It never says "Recording" when nothing records (#1588): a video
+ * call waiting for its tab is `share`, a blocked microphone `blocked`, and a
+ * Start the Worker refused `refused`.
+ */
 export function pillVariant(st) {
   if (!st?.session) return null;
   if (st.phase === 'ready') return 'ready';
   if (st.phase === 'stopping') return st.processing?.stage === 'failed' ? 'failed' : 'processing';
   if (st.phase === 'paused') return 'paused';
+  if (st.phase === 'share') return 'share';
+  if (st.phase === 'denied') return st.refused ? 'refused' : 'blocked';
   if (st.online === false || st.cap?.online === false) return 'offline';
-  if (st.phase === 'recording' || st.phase === 'share' || st.phase === 'denied') return 'recording';
+  if (st.phase === 'recording') return 'recording';
   return null;
 }
 
@@ -117,6 +124,9 @@ export function pillLabel(variant, clockText) {
     processing: 'Processing the session · tap to expand',
     failed: 'Processing stopped · tap to retry',
     ready: 'Ready to review · open the review',
+    share: 'Not recording yet · share the call\'s tab · tap to expand',
+    blocked: 'Not recording · the microphone is blocked · tap to expand',
+    refused: 'Not recording · the recording did not start · tap to expand',
   }[variant] || '';
 }
 
@@ -172,11 +182,16 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
 
   const makeCapture = ({ startSeq = 0 } = {}) => {
     const s = state.session;
+    // What the Start click prepared is this capture's, once; `pre` is cleared
+    // so the next Start prepares its own inside its click (§5.6.5, #1588).
+    let stream = pre?.stream || null;
+    let ctx = pre?.ctx || null;
+    pre = null;
     capture = createCapture({
       deps: {
-        getUserMedia: pre?.stream ? (() => { const p = pre.stream; pre = { ...pre, stream: null }; return p; }) : browser.getUserMedia,
+        getUserMedia: stream ? ((opts) => { if (!stream) return browser.getUserMedia(opts); const p = stream; stream = null; return p; }) : browser.getUserMedia,
         getDisplayMedia: browser.getDisplayMedia,
-        AudioContext: pre?.ctx ? function PreparedContext() { const c = pre.ctx; pre = { ...pre, ctx: null }; return c; } : browser.AudioContext,
+        AudioContext: ctx ? function PreparedContext(...a) { if (!ctx) return new browser.AudioContext(...a); const c = ctx; ctx = null; return c; } : browser.AudioContext,
         MediaStream: browser.MediaStream,
         MediaRecorder: browser.MediaRecorder, WebSocket: browser.WebSocket,
         now, setTimeout: st, clearTimeout: browser.clearTimeout, setInterval: browser.setInterval, clearInterval: browser.clearInterval,

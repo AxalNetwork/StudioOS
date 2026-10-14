@@ -31,8 +31,9 @@ export function liveRedirect(state, sessionParam) {
   return '/validate';
 }
 
-function useDarkTheme() {
-  const read = () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+/** The page's theme, followed as the root's `dark` class changes: the ring draws its palette from it. */
+export function useDarkTheme() {
+  const read = () => typeof document !== 'undefined' && !!document.documentElement?.classList?.contains?.('dark');
   const [dark, setDark] = useState(read);
   useEffect(() => {
     if (typeof MutationObserver === 'undefined') return undefined;
