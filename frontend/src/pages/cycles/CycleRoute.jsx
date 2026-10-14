@@ -392,6 +392,13 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
   const [reload, setReload] = useState(0);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
+  // The page re-reads once the lightbox is gone, however it went: ×, Escape and
+  // a finish navigate away from the action route, and so does the browser's
+  // Back, which never calls `closeAction`. The route keeps this component
+  // mounted across that change, so the dirty mark survives to be read here.
+  useEffect(() => {
+    if (!lightbox && dirty.current) { dirty.current = false; setReload((n) => n + 1); }
+  }, [lightbox]);
 
   // The table's query resets when the module changes.
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
@@ -434,7 +441,6 @@ export default function CycleRoute({ cycle, lightbox = false }) {
     ? () => navigate(`/${cycle}/${def.path}${q}`, { state: { under: `${location.pathname}${location.search}` } })
     : undefined;
   const closeAction = () => {
-    if (dirty.current) { dirty.current = false; setReload((n) => n + 1); }
     if (location.state?.under) navigate(-1);
     else navigate(`/${cycle}${q}`, { replace: true });
   };
