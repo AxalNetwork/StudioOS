@@ -433,11 +433,15 @@ export async function answerQuestion(env:Env,call:CallRow,actor:User,questionUid
   return {ok:true};
 }
 
+/** One sent, unexpired call for this venture; the same choice powers context and saved asks. */
+export async function openCallSummary(env: Env, projectId: number): Promise<{uid: string; name: string; target_close: string}|null> {
+  if(!roundCallsEnabled(env)) return null;
+  const row=await env.DB.prepare("SELECT uid,name,target_close FROM round_calls WHERE project_id=? AND state='sent' AND target_close>=? ORDER BY sent_at DESC,id DESC LIMIT 1").bind(projectId,today()).first<{uid:string;name:string;target_close:string}>();
+  return row ?? null;
+}
 /** D653/B1: only a currently open call belonging to this venture can be linked. */
 export async function openCallForUpdate(env: Env, projectId: number): Promise<string|null> {
-  if(!roundCallsEnabled(env)) return null;
-  const row=await env.DB.prepare("SELECT uid FROM round_calls WHERE project_id=? AND state='sent' AND target_close>=? ORDER BY sent_at DESC,id DESC LIMIT 1").bind(projectId,today()).first<{uid:string}>();
-  return row?.uid ?? null;
+  return (await openCallSummary(env,projectId))?.uid ?? null;
 }
 /** The update does not grant access. Network recipients receive capital text only. */
 export async function updateAskLinks(env:Env,asks:any[],user:User,author:boolean,audienceName?:string) {
