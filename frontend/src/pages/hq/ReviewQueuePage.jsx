@@ -11,6 +11,7 @@ import {
   decisionOutcome, decisionRefusal, hasQueueFilters, queueView, reasonHint, reasonReady, rewardNote,
   tabCount, tabFromSearch, taskReward,
 } from '../../lib/eadwynTickets';
+import CounselQueue from './CounselQueue';
 
 /**
  * D606 (#1107) — HQ · Review queue, the Eadwyn Tickets canvas's T1 and T1b
@@ -293,7 +294,9 @@ const LOADING = { status: 'loading' };
 export default function ReviewQueuePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const tab = tabFromSearch(location.search);
+  // D686 (#1598): `?tab=counsel` is the round-call counsel queue, beside D606's two tabs.
+  const counsel = new URLSearchParams(location.search || '').get('tab') === 'counsel';
+  const tab = counsel ? 'counsel' : tabFromSearch(location.search);
   const [reads, setReads] = useState({ features: LOADING, tasks: LOADING });
   const [rewards, setRewards] = useState(LOADING);
   const [filters, setFilters] = useState(NO_QUEUE_FILTERS);
@@ -320,7 +323,7 @@ export default function ReviewQueuePage() {
 
   const selectTab = (id) => {
     setPage(1);
-    navigate(id === 'tasks' ? '/hq/review?tab=tasks' : '/hq/review');
+    navigate(id === 'tasks' ? '/hq/review?tab=tasks' : id === 'counsel' ? '/hq/review?tab=counsel' : '/hq/review');
   };
   const setFilter = (k, v) => { setFilters((f) => ({ ...f, [k]: v })); setPage(1); };
 
@@ -406,7 +409,21 @@ export default function ReviewQueuePage() {
               </button>
             );
           })}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={counsel ? 'true' : 'false'}
+            onClick={() => selectTab('counsel')}
+            data-testid="review-tab-counsel"
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-semibold transition-colors ${counsel
+              ? 'border-axal-violet text-axal-violet-deep dark:text-violet-300'
+              : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
+          >
+            Counsel review
+          </button>
         </div>
+
+        {counsel ? <section className="mt-4" aria-live="polite"><CounselQueue /></section> : <>
 
         <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900">
           <input
@@ -453,6 +470,7 @@ export default function ReviewQueuePage() {
         <p className="mt-4 text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400">
           A decision is recorded once. A second decision on the same request is refused, never applied twice.
         </p>
+        </>}
       </div>
     </RailFrame>
   );

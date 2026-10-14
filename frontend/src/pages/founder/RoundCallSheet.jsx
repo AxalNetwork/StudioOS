@@ -20,10 +20,11 @@ import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsT
  */
 export const ROUND_CALL_STEPS=['The round','Materials','Audience','Preview','Send'];
 
-/** The fields S19-A stores. Each stays false until that PR merges; a read field renders when present. */
-export const CALL_FIELDS=Object.freeze({key_terms:false,counsel_request:false,counsel_queue:false,audience_reasons:false,committed_at:false});
+/** The fields S19-A stores (#1594, merged as #1626, migration 456). A read field renders when present. */
+export const CALL_FIELDS=Object.freeze({key_terms:true,counsel_request:true,counsel_queue:true,audience_reasons:true,committed_at:true});
 
 const INSTRUMENTS={safe:'SAFE',equity:'Equity',convertible_note:'Convertible note'};
+const TERM_LABELS={cap:'Valuation cap · USD',discount:'Discount · %',pre_money:'Pre-money valuation · USD'};
 const pill='rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] text-axal-muted';
 
 /** "$8M", "$250k", "$900": the way counsel reads a term. */
@@ -41,6 +42,34 @@ export function percent(value) {
   if(value==null||value===''||!Number.isFinite(n))return null;
   return String(Math.round((n<=1?n*100:n)*100)/100)+'%';
 }
+/** Which structured key terms an instrument takes (D578): a SAFE a cap, a note a cap and a discount, equity a pre-money. */
+export const TERM_KEYS={safe:['cap'],convertible_note:['cap','discount'],equity:['pre_money']};
+const dollars=cents=>cents==null?'':String(cents/100);
+const pct=bps=>bps==null?'':String(bps/100);
+/** The context's seeded terms for an instrument, as the inputs hold them (dollars, percent). */
+export function termSeed(context,instrument) {
+  const seed=context?.term_seeds?.[instrument]||{};
+  return {cap:dollars(seed.valuation_cap_cents),discount:pct(seed.discount_bps),pre_money:dollars(seed.pre_money_cents)};
+}
+/** "Cap $8M" · "Cap $8M · discount 20%" · "Pre-money $12M", from the inputs; '' when none is set. */
+export function keyTermsText(f) {
+  const keys=TERM_KEYS[f.instrument]||[];
+  return [keys.includes('cap')&&shortUsd(f.cap)&&'Cap '+shortUsd(f.cap),
+    keys.includes('discount')&&percent(f.discount==null||f.discount===''?null:Number(f.discount)/100)&&'discount '+percent(Number(f.discount)/100),
+    keys.includes('pre_money')&&shortUsd(f.pre_money)&&'Pre-money '+shortUsd(f.pre_money)].filter(Boolean).join(' · ');
+}
+/** The same line from a stored call's cents and basis points. */
+export function callTermsText(c) {
+  return keyTermsText({instrument:c.instrument,cap:dollars(c.valuation_cap_cents),discount:pct(c.discount_bps),pre_money:dollars(c.pre_money_cents)});
+}
+/** The structured terms the Worker takes: only the instrument's own, cents and basis points, else null. */
+export function termsBody(f) {
+  const keys=TERM_KEYS[f.instrument]||[];
+  const bps=f.discount===''||f.discount==null?null:Math.round(Number(f.discount)*100);
+  return {valuation_cap_cents:keys.includes('cap')?dollarsToCents(f.cap):null,
+    discount_bps:keys.includes('discount')&&Number.isSafeInteger(bps)&&bps>=1&&bps<=9000?bps:null,
+    pre_money_cents:keys.includes('pre_money')?dollarsToCents(f.pre_money):null};
+}
 export function recordedRoundFields(context,call=null) {
   let inputs={};try{inputs=JSON.parse(context.scenario?.inputs_json||'{}');}catch{/* Stored planner fields still seed independently. */}
   const priced=Array.isArray(inputs.rounds)?inputs.rounds.at(-1):null;
@@ -54,7 +83,8 @@ export function recordedRoundFields(context,call=null) {
   return {name:call?.name||round?.name||priced?.name||safe?.name||context.project.name+' round',
     amount:call?String(call.amount_cents/100):round?.target_amount!=null?String(round.target_amount):priced?.investment!=null?String(priced.investment):safe?.amount!=null?String(safe.amount):'',
     instrument:call?.instrument||inferred,terms:call?.terms||round?.notes||recordedTerms,minimum:call?String(call.minimum_cheque_cents/100):'',target:call?.target_close||round?.close_date||'',
-    deck_id:call?(call.deck_id!=null?String(call.deck_id):''):deck?String(deck.id):'',room:call?!!call.data_room_project_uid:!!context.data_room};
+    deck_id:call?(call.deck_id!=null?String(call.deck_id):''):deck?String(deck.id):'',room:call?!!call.data_room_project_uid:!!context.data_room,
+    ...(call?{cap:dollars(call.valuation_cap_cents),discount:pct(call.discount_bps),pre_money:dollars(call.pre_money_cents)}:termSeed(context,call?.instrument||inferred))};
 }
 
 /** "15 Jan", or null. */
@@ -67,7 +97,7 @@ const wholeDollars=value=>{const c=dollarsToCents(value);return c==null?null:new
 export const ROUND_ROWS=[
   {key:'amount',label:'Amount',show:f=>wholeDollars(f.amount)},
   {key:'instrument',label:'Instrument',show:f=>INSTRUMENTS[f.instrument]||null},
-  {key:'terms',label:'Key terms',show:f=>f.terms.trim()||null},
+  {key:'terms',label:'Key terms',show:f=>keyTermsText(f)||f.terms.trim()||null},
   {key:'minimum',label:'Minimum cheque',show:f=>wholeDollars(f.minimum)},
   {key:'target',label:'Target close',show:f=>shortDate(f.target)},
 ];
@@ -100,8 +130,8 @@ export function readinessTarget(key,projectId) {
   return null;
 }
 
-const initial={name:'',amount:'',instrument:'',terms:'',minimum:'',target:'',deck_id:'',room:false};
-const ROUND_KEYS=['name','amount','instrument','terms','minimum','target'];
+const initial={name:'',amount:'',instrument:'',terms:'',minimum:'',target:'',deck_id:'',room:false,cap:'',discount:'',pre_money:''};
+const ROUND_KEYS=['name','amount','instrument','terms','minimum','target','cap','discount','pre_money'];
 const same=(a,b,keys)=>keys.every(k=>a[k]===b[k]);
 
 export const CALL_SHEET=Object.freeze({eyebrow:'Raise',title:'Call for Capital',titleId:'round-call-title',
@@ -166,16 +196,21 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
       e=>{reportError('round-calls:matches',e);if(alive)setMatches({error:e});});
     return()=>{alive=false;};
   },[step,uid,chosen,matchRun]);
-  function change(key,value){setFields(current=>({...current,[key]:value}));}
+  function change(key,value){setFields(current=>{
+    const next={...current,[key]:value};
+    // A new instrument takes its own seeded terms where none is typed yet.
+    if(key==='instrument'){const seed=termSeed(context.data,value);for(const k of ['cap','discount','pre_money'])if(!next[k])next[k]=seed[k];}
+    return next;});}
   async function run(action){setBusy(true);setError('');try{await action();}catch(e){reportError('round-calls:action',e);setError(e.code==='counsel_approval_required'?'Counsel has not approved the terms yet.':
       e.code==='nda_required'?'A signed NDA is required first.':e.code==='round_calls_disabled'?'Coming soon. Round calls are not enabled.':
       e.status>=500||!e.status?'The action could not be confirmed. Check the call before retrying.':e.message||'The action was refused. Check the recorded fields.');}finally{setBusy(false);}}
   async function persist(keys){
     if(uid&&saved.current&&same(fields,saved.current,keys))return uid;
     const amount=dollarsToCents(fields.amount),minimum=dollarsToCents(fields.minimum);
-    if(amount==null||minimum==null||!fields.name.trim()||!fields.terms.trim()||!fields.instrument||!fields.target)throw Object.assign(new Error('Complete the round name, amounts, instrument, terms and target close.'),{status:400});
+    const terms=fields.terms.trim()||keyTermsText(fields);
+    if(amount==null||minimum==null||!fields.name.trim()||!terms||!fields.instrument||!fields.target)throw Object.assign(new Error('Complete the round name, amounts, instrument, terms and target close.'),{status:400});
     const deck=context.data.decks.find(d=>String(d.id)===fields.deck_id);
-    const body={project_id:projectId,name:fields.name,amount_cents:amount,instrument:fields.instrument,terms:fields.terms,
+    const body={project_id:projectId,name:fields.name,amount_cents:amount,instrument:fields.instrument,terms,...termsBody(fields),
       minimum_cheque_cents:minimum,target_close:fields.target,deck_id:deck?.id??null,deck_version:deck?.version??null,
       data_room_project_uid:fields.room?context.data.data_room?.project_uid??null:null};
     const result=uid?await roundCallsApi.save(uid,body):await roundCallsApi.create(body);
@@ -193,7 +228,8 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   const missing=page?.readiness?.filter(item=>!item.ready)||[];
   async function send(){await run(async()=>{setOutcome(await roundCallsApi.send(uid,{acknowledge_missing:missing.length>0}));});}
   const on={change,next,send,back:()=>setStep(n=>Math.max(0,n-1)),goto:n=>setStep(n),edit:setEditing,choosing:()=>setChoosing(v=>!v),
-    recheck:()=>run(async()=>setPage(await roundCallsApi.page(uid))),retryMatches:()=>setMatchRun(n=>n+1),
+    recheck:()=>run(async()=>setPage(await roundCallsApi.page(uid))),
+    requestCounsel:()=>run(async()=>{await roundCallsApi.requestCounsel(uid,page.call.revision);setPage(await roundCallsApi.page(uid));}),retryMatches:()=>setMatchRun(n=>n+1),
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
@@ -216,8 +252,11 @@ function RoundStep({s,on}) {
   const f=s.fields,toggle=key=>()=>on.edit(s.editing===key?null:key);
   const input={amount:<input className={callInput} inputMode="decimal" aria-label="Target amount · USD" value={f.amount} onChange={e=>on.change('amount',e.target.value)}/>,
     instrument:<select className={callInput} aria-label="Instrument" value={f.instrument} onChange={e=>on.change('instrument',e.target.value)}><option value="">Choose an instrument</option><option value="safe">SAFE</option><option value="equity">Equity</option><option value="convertible_note">Convertible note</option></select>,
-    terms:<><textarea className={callInput} aria-label="Key terms" maxLength={20000} value={f.terms} onChange={e=>on.change('terms',e.target.value)}/>
-      {!CALL_FIELDS.key_terms&&<p className="text-xs text-axal-muted">Cap, discount and pre-money as separate fields: {NOT_STORED}</p>}</>,
+    terms:<>{(TERM_KEYS[f.instrument]||[]).map(k=><input key={k} className={callInput} inputMode="decimal" aria-label={TERM_LABELS[k]} placeholder={TERM_LABELS[k]}
+        disabled={!CALL_FIELDS.key_terms} value={f[k]||''} onChange={e=>on.change(k,e.target.value)}/>)}
+      {!f.instrument&&<p className="text-xs text-axal-muted">Choose an instrument for its cap, discount or pre-money.</p>}
+      {!CALL_FIELDS.key_terms&&<p className="text-xs text-axal-muted">Cap, discount and pre-money as separate fields: {NOT_STORED}</p>}
+      <textarea className={callInput} aria-label="Other terms" placeholder="Other terms" maxLength={20000} value={f.terms} onChange={e=>on.change('terms',e.target.value)}/></>,
     minimum:<input className={callInput} inputMode="decimal" aria-label="Minimum cheque · USD" value={f.minimum} onChange={e=>on.change('minimum',e.target.value)}/>,
     target:<input type="date" className={callInput} aria-label="Target close" value={f.target} onChange={e=>on.change('target',e.target.value)}/>};
   return <>
@@ -244,6 +283,16 @@ function MaterialsStep({s,on}) {
   </>;
 }
 
+/** Why no match can be made, by the preview's reason code. */
+export const AUDIENCE_REASONS={sector_not_recorded:'Your venture has no recorded sector, so no match can be made.',stage_not_recorded:'Your venture has no recorded stage, so no match can be made.'};
+/** " · Thesis fits Fintech, stage Seed, cheque $25k–$250k", from what the preview returns. */
+export function matchLine(d) {
+  const parts=[d.sector&&'Thesis fits '+d.sector,d.stage&&'stage '+d.stage,
+    d.cheque_min_usd!=null&&d.cheque_max_usd!=null&&'cheque '+shortUsd(d.cheque_min_usd)+'–'+shortUsd(d.cheque_max_usd)].filter(Boolean);
+  if(parts.length)return ' · '+parts.join(', ');
+  return d.match_reasons?.length?' · '+d.match_reasons.join(', '):'';
+}
+
 function AudienceStep({s,on}) {
   const m=s.matches,data=m?.data;
   return <>
@@ -253,10 +302,10 @@ function AudienceStep({s,on}) {
     <div className="space-y-2 py-2" aria-live="polite">
       {!m||m.loading?<p role="status">Checking matches…</p>
         :m.error?<p role="alert">Matches are unreadable · <button type="button" className={callButton} onClick={on.retryMatches}>Try again</button></p>
-        :data.matched>0?<><p>{data.matched} verified investors match{data.match_reasons?.length?' · '+data.match_reasons.join(', '):''}. Names appear only once they respond.</p>
+        :data.matched>0?<><p>{data.matched} verified investors match{matchLine(data)}. Names appear only once they respond.</p>
           <span className={pill}>Verified only</span>
           <div><button type="button" className={primary} aria-pressed={s.includeMatches} onClick={()=>on.includeMatches(!s.includeMatches)}>{s.includeMatches?'Included':'Include'}</button></div></>
-        :<><p>No matching investors yet · No verified investor fits your stage, sector and cheque size. Widen the minimum cheque, or send to the investors you choose.</p><span className={pill}>None</span></>}
+        :<><p>No matching investors yet · {AUDIENCE_REASONS[data.reason]||'No verified investor fits your stage, sector and cheque size. Widen the minimum cheque, or send to the investors you choose.'}</p><span className={pill}>None</span></>}
     </div>
     <p className="text-xs text-axal-muted">Only investors verified on the platform can see the call.</p>
   </>;
@@ -267,11 +316,16 @@ function PreviewStep({s}) {
   return <>
     <p className="text-xs text-axal-muted">As an investor sees it</p>
     <p className="font-semibold">{s.context.project.name} · raising {moneyCents(c.amount_cents)}</p>
-    <p>{[INSTRUMENTS[c.instrument]||c.instrument,c.terms,'minimum '+moneyCents(c.minimum_cheque_cents),'closes '+(shortDate(c.target_close)||'Not recorded')].join(' · ')}</p>
+    <p>{[INSTRUMENTS[c.instrument]||c.instrument,callTermsText(c)||c.terms,'minimum '+moneyCents(c.minimum_cheque_cents),'closes '+(shortDate(c.target_close)||'Not recorded')].join(' · ')}</p>
     <p>{c.deck_version==null?'Pitch deck — Not recorded · no version linked':<>Pitch deck v{c.deck_version} — <Link className="underline" to="/raise/pitch">View</Link></>}</p>
     <p>{c.data_room_project_uid?'Data room — Request access · NDA first':'Data room — Not recorded · no room linked'}</p>
     <p>Ask a question — Answered by the founder in place</p>
   </>;
+}
+
+/** Counsel review was asked for these terms: a request whose hash is the current terms'. */
+export function counselRequested(c) {
+  return !!c?.counsel_requested_at&&(c.counsel_requested_hash==null||c.counsel_requested_hash===c.terms_hash);
 }
 
 function SendStep({s,on,missing,approved}) {
@@ -282,9 +336,9 @@ function SendStep({s,on,missing,approved}) {
     {approved?<p>Terms — Approved by counsel · {callDate(s.page.call.counsel_approved_at)}</p>:<>
       <p role="alert">Counsel has not approved the terms yet. Send unlocks once they do.</p>
       <div className="flex flex-wrap items-center gap-2"><span>Terms</span><span className={pill}>Awaiting counsel</span>
-        <button type="button" className={callButton} disabled>Request counsel review</button>
-        <button type="button" className={callButton} onClick={on.recheck}>Check again</button></div>
-      <p className="text-xs text-axal-muted">Not available yet: the Worker has no route for this.</p></>}
+        {counselRequested(s.page.call)?<span>Sent to Axal HQ for counsel review on {callDate(s.page.call.counsel_requested_at)}</span>
+          :<button type="button" className={callButton} disabled={s.busy||!CALL_FIELDS.counsel_request} onClick={on.requestCounsel}>Request counsel review</button>}
+        <button type="button" className={callButton} onClick={on.recheck}>Check again</button></div></>}
     <p>Readiness — {total-missing.length} of {total} items in place{!missing.length&&<> <span className={pill}>Ready</span></>}</p>
     {missing.length>0&&<section aria-label="Call readiness" className="space-y-2"><h4 className="font-semibold">Call readiness</h4>
       <p>{missing.length} of {total} call readiness items are missing. Send anyway, or finish them first.</p>
