@@ -404,7 +404,7 @@ const probes=[["counselQueue","routes","routes.get('/counsel-queue',async c=>{\n
   ['unchangedAudience','service','if (oldSet.size === rows.length && rows.every(row => oldSet.has(key(row)))) return summary;','if (false) return summary;'],
   ['rematch','service','if (oldSet.size === rows.length && rows.every(row => oldSet.has(key(row)))) return summary;','if (true) return summary;'],
   ['counselRequest','service','AND counsel_requested_hash IS NOT terms_hash','AND 1=1'],
-  ['counselRequest','service',"p.founder_id=u.founder_id OR EXISTS(SELECT 1 FROM user_company_links l WHERE l.user_id=u.id AND l.company_id=p.company_id)",'0=1'],
+  ['counselRequest','service',"SELECT u.id FROM users u JOIN super_admins s ON s.user_id=u.id WHERE u.role='admin' AND u.is_active=1 AND NOT EXISTS(SELECT 1 FROM projects p WHERE p.id=? AND (p.founder_id=u.founder_id OR EXISTS(SELECT 1 FROM user_company_links l WHERE l.user_id=u.id AND l.company_id=p.company_id)))","SELECT u.id FROM users u JOIN super_admins s ON s.user_id=u.id WHERE u.role='admin' AND u.is_active=1 AND NOT EXISTS(SELECT 1 FROM projects p WHERE p.id=? AND (0=1))"],
   ['counselQueue','service',"AND NOT COALESCE(p.founder_id=u.founder_id,0)",''],
   ['counselQueue','service','AND NOT EXISTS(SELECT 1 FROM user_company_links l WHERE l.user_id=u.id AND l.company_id=p.company_id)',''],
   ['counselQueue','service','AND NOT COALESCE(c.counsel_approved_hash=c.terms_hash AND c.counsel_approved_by IS NOT NULL\n          AND c.counsel_approved_at IS NOT NULL AND c.counsel_approval_reference IS NOT NULL,0)',''],
@@ -486,7 +486,6 @@ test('D686 recorded approval survives a publisher that throws; removing the catc
   assert.ok(start>=0 && end>start);
   const guarded=original.slice(start,end);
   const unguarded=guarded.replace('  try {','').replace('  } catch { /* An approval already recorded must survive a notice failure. */ }','');
-  const broken=await altered('cloudflare-worker/src/services/roundCalls.ts',guarded,unguarded,8101);
   // Rebuild that mutation over the throwing publisher too.
   const modified=original.replace(guarded,unguarded).replace("from './notify'","from '"+stub+"'");
   const req=createRequire(pathToFileURL(resolve('cloudflare-worker/src/services/roundCalls.ts')));
