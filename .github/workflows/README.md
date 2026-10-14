@@ -10,6 +10,7 @@ Task #48.
 |---|---|---|---|
 | `channel-worker-contracts.yml` | Focused D684 messaging, foundation and frontend reply contracts with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching channel Worker contracts | none (`contents: read`) |
 | `round-call-worker-contracts.yml` | Focused D653/D686 round-call policy, real request/mutation and Raise history contracts with local SQLite and in-app fixture notices; supplements root build and full drift | PR to `main` touching round-call Worker contracts | none (`contents: read`) |
+| `mcp-worker-contracts.yml` | Focused D666/D669 MCP OAuth, real local request/mutation and D681 deployment/branch-isolation contracts; supplements root build and full drift | PR to `main` touching MCP or deployment contracts | none (`contents: read`; local SQLite/KV fixtures) |
 | `ci.yml` | Frontend build, worker typecheck, API↔Worker drift, dev-backend import smoke, npm + pip audits | push/PR to `main` | none (uses `GITHUB_TOKEN` only) |
 | `meeting-worker-contracts.yml` | Mocked meeting reliability, mutation/restoration and hosted-attach contracts, alongside the full drift gate | PR to `main` touching meeting Worker code or tests | none (`contents: read`) |
 | `build-worker-contracts.yml` | Focused D686 connector, Workspace mapping and local Wrangler D1 tests with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching the Build Worker contracts | none (`contents: read`; local scratch D1 only) |

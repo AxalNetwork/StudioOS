@@ -1,0 +1,46 @@
+name: MCP Worker contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'wrangler.toml'
+      - 'cloudflare-worker/src/mcp/**'
+      - 'cloudflare-worker/src/routes/mcp_consent.ts'
+      - 'cloudflare-worker/src/services/topology.ts'
+      - 'cloudflare-worker/test/topology_d209.test.ts'
+      - 'cloudflare-worker/test/mcp_server_d666.test.ts'
+      - 'cloudflare-worker/test/mcp_authorization_d669.test.ts'
+      - 'scripts/lib/branchConfig.mjs'
+      - 'scripts/lib/branchConfig.test.mjs'
+      - 'scripts/check-wrangler-binding-parity.mjs'
+      - '.github/workflows/mcp-worker-contracts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-worker-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: MCP OAuth and deployment contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare-worker/package-lock.json
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+      - name: Binding parity and branch isolation
+        run: |
+          node scripts/check-wrangler-binding-parity.mjs
+          node scripts/check-branch-config.mjs
+          node --test scripts/lib/branchConfig.test.mjs
+      - name: Real OAuth and MCP contracts with isolated fixture stores
+        run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/mcp_server_d666.test.ts cloudflare-worker/test/mcp_authorization_d669.test.ts cloudflare-worker/test/topology_d209.test.ts

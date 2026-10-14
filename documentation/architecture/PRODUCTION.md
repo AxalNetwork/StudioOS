@@ -15,6 +15,7 @@ post-deploy checklist.
 | Database         | Cloudflare D1 (SQLite)     | Cloudflare (`studioos-db`)             | bound as `env.DB`                               |
 | WebSocket fan-out| Durable Objects            | Cloudflare Workers                     | `cloudflare-worker/src/durable-objects/`        |
 | Cache / sessions | KV                         | Cloudflare KV (`TOKENS`, `RATE_LIMITS`)| n/a                                             |
+| MCP OAuth        | OAuth 2.1 + KV             | Cloudflare KV (`OAUTH_KV`)              | `cloudflare-worker/src/mcp/oauth.ts`             |
 | Job queue        | Cloudflare Queues + cron   | Cloudflare                             | `cloudflare-worker/src/services/queueWorker.ts` |
 | File storage     | R2                         | Cloudflare R2 (`studioos-files`)       | bound as `env.FILES`                            |
 | Vector search    | Vectorize                  | Cloudflare (`axal-search`)             | bound as `env.VECTORIZE`                        |
@@ -68,7 +69,7 @@ of its schema.
 
 > ✅ **Verified 2026-05-06:** `--env production` IS the correct deploy command.
 > The `[env.production.*]` block in `wrangler.toml` redeclares
-> every binding (D1, KV `TOKENS`/`RATE_LIMITS`, R2 `studioos-files`, Queue
+> every binding (D1, KV `TOKENS`/`RATE_LIMITS`/`OAUTH_KV`, R2 `studioos-files`, Queue
 > `studioos-job-queue`, AI, Durable Objects), so the live worker has all bindings
 > intact — confirmed by `GET /accounts/.../workers/scripts/studioos/bindings`.
 > An earlier note in this file warned against `--env production` because the env
@@ -113,6 +114,16 @@ before it builds, so a tab opened before the deploy keeps its chunks
 
 `backend/` runs in the local Replit workflow `Backend API` for development.
 It's not part of the production deploy path.
+
+---
+
+### MCP enablement (D681, #1555)
+
+`OAUTH_KV` holds the MCP provider's clients, grants, tokens and parked consent requests. The owner created its namespace on 2026-10-13; its non-secret id is `a536c75e7461447a89b1967d367c13ad`. `wrangler.toml` binds it at the top level, in production and in preview. `MCP_SERVER_ENABLED = "true"` at the top level and in production; preview remains `"false"`. Both the enabled flag and a binding are required by `mcpEnabled`.
+
+This is a configuration switch, not a report of a live verification. The enablement PR stays draft until S1 reviews it and the owner reports the D669 MCP Inspector run on #1495: connect, read context, submit a consented test interview, and confirm a pending placement. The ordinary PR preview is an unbound SPA Worker and cannot perform this check; use an isolated Worker with its own test D1/KV and the appropriate `MCP_PUBLIC_ORIGIN`. Do not point an isolated preview at HQ's OAuth store.
+
+To switch MCP off, set `MCP_SERVER_ENABLED = "false"` in both the top-level and production vars and deploy with the normal `npm run deploy` flow. Leave the binding and namespace intact: disabling the routes does not delete grants or revoke tokens. Revoke grants through the existing signed-in controls when that is required. Branch configuration generation keeps MCP off and omits HQ's OAuth store; branch enablement requires separately provisioned branch storage.
 
 ---
 

@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseSections } from '../../scripts/check-wrangler-binding-parity.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -300,7 +301,47 @@ test('signing out everywhere ends every grant; a raised session floor refuses a 
 
 // ── wrangler.toml ──────────────────────────────────────────────────────────
 
-test('wrangler.toml: the two discovery paths run the Worker first, the flag is "false" everywhere, OAUTH_KV is pending in all three blocks, and no route was added', () => {
+/** D681 (#1555): pin the parsed scopes, not commented placeholders or table order. */
+function checkMcpDeployment(toml: string) {
+  const sections = parseSections(toml);
+  for (const [scope, flag] of [['', 'true'], ['env.production.', 'true'], ['env.preview.', 'false']]) {
+    const vars = sections.filter((s: any) => s.name === scope + 'vars');
+    assert.equal(vars.length, 1, 'exactly one vars table in ' + (scope || 'top-level'));
+    assert.equal(vars[0].kv.get('MCP_SERVER_ENABLED'), JSON.stringify(flag), 'MCP flag in ' + (scope || 'top-level'));
+    const bindings = sections.filter((s: any) => s.name === scope + 'kv_namespaces' && s.kv.get('binding') === '"OAUTH_KV"');
+    assert.equal(bindings.length, 1, 'exactly one live OAuth binding in ' + (scope || 'top-level'));
+    assert.equal(bindings[0].kv.get('id'), '"a536c75e7461447a89b1967d367c13ad"', 'owner-provisioned OAuth namespace');
+  }
+  assert.doesNotMatch(toml, /OAUTH_KV-PENDING|<owner-provided>/);
+}
+
+test('D681 wrangler.toml: MCP enabled at top level and production, preview off, owner OAuth namespace bound in all three scopes', () => {
+  checkMcpDeployment(readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8'));
+});
+
+test('D681 deployment mutations fail the same assertions; the shipped config restores them', () => {
+  const toml = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
+  for (const [scope, flag] of [['', 'true'], ['env.production.', 'true'], ['env.preview.', 'false']]) {
+    const header = '[' + scope + 'vars]';
+    const start = toml.indexOf(header), next = toml.indexOf('\n[', start + header.length);
+    const vars = toml.slice(start, next < 0 ? undefined : next);
+    const flipped = vars.replace('MCP_SERVER_ENABLED = "' + flag + '"', 'MCP_SERVER_ENABLED = "' + (flag === 'true' ? 'false' : 'true') + '"');
+    assert.notEqual(flipped, vars, 'live flag mutation target');
+    assert.throws(() => checkMcpDeployment(toml.replace(vars, flipped)), assert.AssertionError);
+    const block = '[[' + scope + 'kv_namespaces]]\nbinding = "OAUTH_KV"\nid      = "a536c75e7461447a89b1967d367c13ad"';
+    assert.ok(toml.includes(block), 'live namespace mutation target');
+    for (const replacement of [
+      '# ' + block.replaceAll('\n', '\n# '),
+      block.replace('a536c75e7461447a89b1967d367c13ad', '0'.repeat(32)),
+      block + '\n' + block,
+    ]) assert.throws(() => checkMcpDeployment(toml.replace(block, replacement)), assert.AssertionError);
+    checkMcpDeployment(toml);
+  }
+  assert.throws(() => checkMcpDeployment(toml + '\n# OAUTH_KV-PENDING'), assert.AssertionError);
+  checkMcpDeployment(toml);
+});
+
+test('wrangler.toml: both discovery paths run the Worker first, no MCP route was added and the Worker entry stays the same', () => {
   const toml = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
   const rwf = [...toml.matchAll(/^run_worker_first = (\[.*\])$/gm)].map((m) => JSON.parse(m[1]));
   assert.equal(rwf.length, 2, 'the top-level and production [assets] blocks ([env.preview] has none)');
@@ -309,11 +350,6 @@ test('wrangler.toml: the two discovery paths run the Worker first, the flag is "
     assert.ok(list.includes('/.well-known/oauth-protected-resource*'));
     assert.ok(list.includes('/api/*'));
   }
-  assert.deepEqual([...toml.matchAll(/^MCP_SERVER_ENABLED = "(.*)"$/gm)].map((m) => m[1]), ['false', 'false', 'false']);
-  for (const env of ['', 'env.production.', 'env.preview.']) {
-    assert.ok(toml.includes(`# [[${env}kv_namespaces]]\n# binding = "OAUTH_KV"`), `OAUTH_KV pending in ${env || 'top-level'}`);
-  }
-  assert.equal((toml.match(/OAUTH_KV-PENDING/g) || []).length, 3);
   assert.doesNotMatch(toml, /pattern\s*=\s*"[^"]*(\/api\/mcp|well-known|oauth)/, 'no route for the MCP paths');
   assert.match(toml, /^main = "cloudflare-worker\/src\/index\.ts"$/m);
 });

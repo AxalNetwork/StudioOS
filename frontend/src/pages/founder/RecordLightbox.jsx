@@ -12,7 +12,7 @@ import { assignedSentence, threadRow } from './channelThreads.js';
 import {
   CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callLabel, chipStatus, consentNote,
   defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
-  startRefusal, startState, talkingPoints, threadsFor,
+  startRefusal, startState, talkingPoints, threadsFor, modeNote,
 } from './recordSetup.js';
 
 /**
@@ -261,7 +261,11 @@ export default function RecordLightbox({
         : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: startKey.current }, fields));
       const into = person(r.interview);
       if (handsOver) {
-        recorder.begin({ session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video' });
+        recorder.begin({
+          session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video',
+          // The Worker's link (a pasted one, or a scheduled call's): "Start the call" opens it (§5.8.1).
+          meetingUrl: r.meeting_url ?? null,
+        });
         onStarted?.(r.session, into, 'live');
         return;
       }
@@ -339,7 +343,7 @@ export default function RecordLightbox({
         <Section title="How" testId="record-how">
           <Radios label="How" options={modeOptions} value={mode} onChange={pickMode} testId="record-mode"
             className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" style={tile} />
-          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{m.note}</p>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{modeNote(mode, recorder ? recorder.canShareTab !== false : true)}</p>
           {chips.length > 0 && (
             <Radios label="Provider" testId="record-provider" value={provider} onChange={setProvider}
               options={chips.map((c) => { const st = chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined }; })} />

@@ -33,7 +33,7 @@ worker ahead of its schema.
 | `models/` | Row types. |
 | `templates/` | Legal document and email templates. |
 | `durable-objects/` | Realtime coordination. |
-| `mcp/` | D666: StudioOS as a remote MCP server for AI assistants, its OAuth provider and its tools. Off behind `MCP_SERVER_ENABLED`. |
+| `mcp/` | D666: StudioOS as a remote MCP server for AI assistants, its OAuth provider and its tools. Controlled by `MCP_SERVER_ENABLED` and `OAUTH_KV` (D681). |
 | `rpc/` | The two `WorkerEntrypoint` classes HQ and a branch call each other through (D108), plus the plain modules that hold their logic. The classes are thin on purpose: `cloudflare:workers` does not exist under `node --test`, so anything inside them could only be verified by deploying. |
 | `data/` | Seed and reference data. |
 | `util/` | Small shared helpers. |

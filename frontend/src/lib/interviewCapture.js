@@ -65,7 +65,7 @@ export function memoryQueue() {
     put: async (r) => { rows.set(k(r), r); },
     list: async (sessionId) => [...rows.values()].filter((r) => r.sessionId === sessionId).sort((a, b) => a.seq - b.seq),
     remove: async (sessionId, seq) => { rows.delete(`${sessionId}:${seq}`); },
-    sessions: async () => [...new Set([...rows.values()].map((r) => r.sessionId))],
+    sessions: async (userId) => [...new Set([...rows.values()].filter((r) => userId == null || r.userId === userId).map((r) => r.sessionId))],
   };
 }
 
@@ -96,8 +96,13 @@ export function indexedDbQueue(idb = (typeof indexedDB !== 'undefined' ? indexed
       return (all || []).filter((r) => r.sessionId === sessionId).sort((a, b) => a.seq - b.seq);
     },
     remove: (sessionId, seq) => tx('readwrite', (s) => s.delete([sessionId, seq])),
-    /** Every session with a chunk still on this device, so app load can flush them all (D685 §5.6.7). */
-    sessions: async () => [...new Set(((await tx('readonly', (s) => s.getAll())) || []).map((r) => r.sessionId))],
+    /**
+     * Every session with a chunk still on this device, so app load can flush
+     * them all (D685 §5.6.7). Given a member, only the chunks tagged with
+     * that member: another member's never flush under this one.
+     */
+    sessions: async (userId) => [...new Set(((await tx('readonly', (s) => s.getAll())) || [])
+      .filter((r) => userId == null || r.userId === userId).map((r) => r.sessionId))],
   };
 }
 
@@ -185,7 +190,7 @@ export function readLiveEvent(ev) {
  * `baseOffsetMs` continue a session the Worker already holds audio for.
  * `api` carries the Worker: { uploadChunk(seq, blob, startMs) }.
  */
-export function createCapture({ deps, api, queue, sessionId, liveOn, onState, startSeq = 0, baseOffsetMs = 0 }) {
+export function createCapture({ deps, api, queue, sessionId, liveOn, onState, startSeq = 0, baseOffsetMs = 0, userId = null }) {
   const s = {
     stream: null, ctx: null, analyser: null, processor: null, recorder: null, socket: null,
     seq: Number.isFinite(startSeq) && startSeq > 0 ? startSeq : 0, startedAt: 0, pausedMs: 0, pausedAt: null, chunkTimer: null, lastSoundAt: 0,
@@ -232,7 +237,8 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState, st
     rec.onstop = async () => {
       if (!parts.length || s.discarded) return;
       const blob = new Blob(parts, { type: parts[0].type || 'audio/webm' });
-      await queue.put({ sessionId, seq, blob, startMs });
+      // Tagged with the member, so app load never flushes it under another one (D685 §5.6.6).
+      await queue.put({ sessionId, seq, blob, startMs, userId });
       s.lastSeq = Math.max(s.lastSeq ?? -1, seq);
       s.pending += 1;
       emit();
