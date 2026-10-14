@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import Lightbox from '../src/ui/Lightbox.jsx';
 import ActionSheet, { primary, ghost, danger } from '../src/ui/ActionSheet.jsx';
@@ -22,7 +22,7 @@ import { lockScroll, scrollLocks, tabbable } from '../src/ui/lightboxFocus.js';
 import { useEscapeClose } from '../src/components/useEscapeClose.js';
 import { CYCLES, cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
-import { underSlug, underModule } from '../src/pages/cycles/CycleRoute.jsx';
+import CycleRoute, { underSlug, underModule } from '../src/pages/cycles/CycleRoute.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
 
 const h = React.createElement;
@@ -73,7 +73,7 @@ async function mounted(element) {
     return e;
   };
   return {
-    render, escape, docKeys, winKeys,
+    render, escape, docKeys, winKeys, container,
     async unmount() { await act(async () => root.unmount()); [globalThis.addEventListener, globalThis.removeEventListener] = savedWin; restoreDoc(); },
   };
 }
@@ -251,7 +251,9 @@ test('one mechanism: each cycle names its path and Mount; opening pushes state.u
   assert.doesNotMatch(route, /sheetOpen|def\.sheet|onClick: open/);
   assert.equal((route.match(/<Mount projectId=\{projectId\}/g) || []).length, 1, 'one mount for every cycle');
   assert.match(route, /fnOf\(def\.parts, slug\)\?\.\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), openAction \}\)/);
-  assert.match(route, /if \(dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}/, 'a change reloads on close, not behind the lightbox');
+  assert.match(route, /if \(!lightbox && dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}/, 'a change reloads once the lightbox is gone, not behind it');
+  const close = route.slice(route.indexOf('const closeAction = () => {'), route.indexOf('};', route.indexOf('const closeAction = () => {')));
+  assert.doesNotMatch(close, /dirty|setReload/, 'one place re-reads: the effect on leaving the lightbox, which Back reaches too');
   assert.equal(underSlug('/raise/capital-relationships?project_id=7', 'raise', 'call'), 'capital-relationships');
   assert.equal(underSlug('/raise/call?project_id=7', 'raise', 'call'), null, 'the action route is not a module');
   assert.equal(underSlug('/grow/distribution', 'raise', 'call'), null, 'another cycle\'s path is not this one\'s');
@@ -273,10 +275,13 @@ const cards = (cycle) => MODULES[cycle].map((m) => ({ slug: m.slug, name: m.name
 test('history: Interviews second in Validate; a history that is not live is not drawn; none without module tabs', () => {
   assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Interviews', '/validate/interviews?project_id=7']]);
   assert.equal(cycleTabs('validate', cards('validate'), 'interviews').find((t) => t.key === 'interviews').active, true);
-  for (const c of ['raise', 'grow']) {
+  for (const c of ['grow']) {
     assert.equal(CYCLES[c].history.live, false, `${c} goes live when its section ships`);
     assert.equal(cycleTabs(c, cards(c)).some((t) => t.key === CYCLES[c].history.key), false, `${c} draws no history yet`);
   }
+  // #1598: Raise's Calls section shipped, so its history is live.
+  assert.equal(CYCLES.raise.history.live, true);
+  assert.equal(cycleTabs('raise', cards('raise')).some((t) => t.key === 'calls'), true);
   assert.deepEqual(cycleTabs('validate', []).map((t) => t.name), ['Overview'], 'no history tab without module tabs');
   assert.deepEqual(cycleTabs('validate', [{ slug: 'x', name: 'Interviews' }]).filter((t) => t.name === 'Interviews').length, 1, 'never twice');
 });
@@ -323,4 +328,75 @@ test('the Validate tools read the venture from the address, and their links keep
   assert.equal((ws.match(/to=\{`\/validate\/interviews\$\{keep\}`\}/g) || []).length, 2);
   assert.match(read('frontend/src/workspaces/ZoneNav.jsx'), /to=\{`\$\{zonePath\(bucket, zone\)\}\$\{projectSearch\(location\.search\)\}`\}/);
   assert.match(read('frontend/src/pages/cycles/founderToolNavigation.js'), /\{ path: '\/validate\/interviews', cycle: 'validate', module: 'customer-research' \}/);
+});
+
+// ── The re-read after a change, however the lightbox closes ──────────────────
+
+/** The first component in the rendered tree whose function has this name. */
+function fiberNamed(container, name) {
+  const key = Object.keys(container).find((k) => k.startsWith('__reactContainer$'));
+  const stack = [container[key]];
+  while (stack.length) {
+    const f = stack.pop();
+    if (!f) continue;
+    if (f.type?.name === name) return f;
+    stack.push(f.sibling, f.child);
+  }
+  return null;
+}
+
+test('a lightbox that changed something re-reads the page under it when it closes: by Back, by ×, and not at all without a change', async () => {
+  const reads = [];
+  const savedFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    reads.push(String(url));
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({}), text: async () => '{}' };
+  };
+  let nav;
+  const Grab = () => { nav = useNavigate(); return null; };
+  const under = '/build/operating-systems?project_id=7';
+  const connect = { pathname: '/build/connect', search: '?project_id=7', state: { under } };
+  // As App.jsx mounts them: the action route and the module route render the same page.
+  const m = await mounted(h(MemoryRouter, { initialEntries: [under, connect], initialIndex: 1 },
+    h(Grab),
+    h(Routes, null,
+      h(Route, { path: '/build/connect', element: h(CycleRoute, { cycle: 'build', lightbox: true }) }),
+      h(Route, { path: '/build/:slug', element: h(CycleRoute, { cycle: 'build' }) }))));
+  const moduleReads = () => reads.filter((u) => u.includes('/cycles/build/modules/operating-systems')).length;
+  const mount = () => fiberNamed(m.container, 'BuildMount');
+  try {
+    assert.ok(mount(), 'the lightbox is open over the module page');
+    const before = moduleReads();
+    assert.ok(before >= 1, 'the page under the lightbox was read');
+    // A tool connected: nothing reloads behind the lightbox.
+    await act(async () => { mount().memoizedProps.onChanged(); });
+    assert.equal(moduleReads(), before, 'no re-read while the lightbox is open');
+    // The browser's Back, which never calls closeAction.
+    await act(async () => { nav(-1); });
+    assert.equal(mount(), null, 'Back closed the lightbox');
+    assert.equal(moduleReads(), before + 1, 'Back re-read the page the change touched');
+    // × after a change re-reads too.
+    await act(async () => { nav('/build/connect?project_id=7', { state: { under } }); });
+    await act(async () => { mount().memoizedProps.onChanged(); });
+    await act(async () => { mount().memoizedProps.onClose(); });
+    assert.equal(mount(), null);
+    assert.equal(moduleReads(), before + 2, '× re-read it once');
+    // Open and closed with no change: no re-read.
+    await act(async () => { nav('/build/connect?project_id=7', { state: { under } }); });
+    await act(async () => { nav(-1); });
+    assert.equal(moduleReads(), before + 2, 'nothing changed, nothing re-read');
+  } finally {
+    await m.unmount();
+    globalThis.fetch = savedFetch;
+  }
+});
+
+test('the docs say what the code does: useEscapeClose names the mount-order hazard; the Grow row names /grow/update', () => {
+  const hook = read('frontend/src/components/useEscapeClose.js');
+  assert.match(hook, /THE HAZARD: within one commit React runs a child's effects before its\s+\* parent's\./);
+  assert.match(hook, /the first Escape\s+\* closes the lightbox, nested dialog and all/);
+  const row = read('documentation/architecture/ROUTE_MAP.md').split('\n').find((l) => l.startsWith('| Grow · Share an update |'));
+  assert.match(row, /\| `\/grow\/update` \(D686 S02-A, #1596\): the Grow page with the sheet open over it/);
+  assert.match(row, /`\/grow\/updates` redirects to `\/grow\/durable-company-building#updates`/);
+  assert.doesNotMatch(row, /`\/grow` \(the cycle overview's primary action\) → the sheet/);
 });

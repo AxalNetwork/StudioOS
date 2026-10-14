@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ActionSheet, { primary as PRIMARY, ghost as GHOST } from '../../ui/ActionSheet';
 import { shareUpdateApi } from '../../lib/api/shareUpdate.js';
 
 /**
@@ -19,7 +19,23 @@ import { shareUpdateApi } from '../../lib/api/shareUpdate.js';
  *
  * WHO GETS WHAT. Investors and the team receive the whole update. The Axal
  * network receives the asks only, unless the founder includes the metrics.
+ *
+ * THE FRAME (D686 §5.8, #1599). `ShareUpdateView` is the body of an
+ * `ActionSheet` (header, the steps as pills, one banner, a scrolling body, a
+ * pinned footer); `ShareUpdateLightbox.jsx` draws it in the tall cycle
+ * lightbox. Nothing here is fixed to the viewport.
  */
+
+/**
+ * D686 §5.8 flags. `network_default_on` stays false until S19-B (#1595) ships
+ * its `cleanAudience` change; the PR after it flips it, never before.
+ */
+export const SHARE_FIELDS = Object.freeze({ network_default_on: false });
+
+export const SHARE_SHEET = Object.freeze({
+  eyebrow: 'Grow', title: 'Share an update', titleId: 'share-update-title', testId: 'share-update-sheet',
+  sub: 'One update for investors, the team and the Axal network. Written once, sent everywhere it belongs.',
+});
 
 export const STEPS = ['Period', 'Metrics', 'Highlights', 'Asks', 'Audience', 'Preview'];
 
@@ -66,6 +82,12 @@ export function wholeMonth(start, end) {
 export function periodTitle(start, end) {
   if (wholeMonth(start, end)) return utc(start).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   return periodRange(start, end);
+}
+
+/** The preview group's heading: "Preview · October update", or the range for a part month. */
+export function previewHeading(start, end) {
+  const name = wholeMonth(start, end) ? utc(start).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' }) : periodRange(start, end);
+  return `Preview · ${name} update`;
 }
 
 /** Why a custom range cannot be used, or null. */
@@ -127,8 +149,6 @@ const ROW = 'flex items-start justify-between gap-3 border-b border-axal-hairlin
 const PILL = 'rounded-full border px-2 py-0.5 text-[10.5px] font-semibold';
 const NR = `${PILL} border-dashed border-gray-300 bg-gray-50 text-gray-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-400`;
 const LINK = 'text-[12.5px] font-bold text-violet-700 dark:text-violet-300';
-const PRIMARY = 'rounded-lg bg-violet-700 px-3 py-2 text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600';
-const GHOST = 'rounded-lg border border-axal-hairline px-3 py-2 text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100';
 
 // Rows are keyed by index, so which one is being edited lives in the sheet, never here.
 function Line({ line, editing, onEdit, onToggle, onRemove }) {
@@ -279,6 +299,7 @@ export function ShareUpdateView({ s, on }) {
     const recorded = s.metrics.filter((m) => m.value != null && !(s.removedMetrics || []).includes(m.key));
     body = (
       <ul data-testid="share-preview">
+        <li><h3 className="mt-2 text-[11px] font-extrabold uppercase tracking-wide text-axal-faint">{previewHeading(s.period?.start, s.period?.end)}</h3></li>
         <li className={ROW}><div><div className="font-semibold">{s.title}</div><div className="text-axal-muted">{recorded.length ? recorded.map((m) => `${m.label} ${metricText(m).value}`).join(' · ') : 'Metrics left out: none is recorded'}</div></div></li>
         <li className={ROW}><div className="font-semibold">Highlights</div><div className="text-axal-muted">{s.highlights.length} · Lowlights {s.lowlights.length}</div></li>
         <li className={ROW}><div className="font-semibold">Asks</div><div className="text-axal-muted">{s.asks.length} · each with a reply button</div></li>
@@ -286,32 +307,20 @@ export function ShareUpdateView({ s, on }) {
     );
   }
   const refusal = step === 5 ? audienceRefusal(s.audience, ctx?.audience || {}) : null;
+  const tone = step === 1 ? 'warn' : 'info';
+  const footer = <>
+    {refusal && <span className="text-[11.5px] text-axal-muted">{refusal}</span>}
+    {back && <button type="button" className={GHOST} onClick={on.back}>{back}</button>}
+    <button type="button" className={PRIMARY} disabled={s.busy || !!periodProblem || !!refusal} onClick={on.next}>{next}</button>
+  </>;
   return (
-    <aside role="dialog" aria-label="Share an update" data-testid="share-update-sheet" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[520px] flex-col border-l border-axal-hairline bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
-      <header className="border-b border-axal-hairline p-5 dark:border-gray-800">
-        <div className="flex items-start justify-between gap-3">
-          <div><div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-axal-faint">Grow</div>
-            <h2 className="text-[17px] font-extrabold">Share an update</h2>
-            <p className="text-[12.5px] text-axal-muted">One update for investors, the team and the Axal network. Written once, sent everywhere it belongs.</p></div>
-          <button type="button" aria-label="Close" onClick={on.close}><X size={18} /></button>
-        </div>
-        <ol className="mt-3 flex flex-wrap gap-1.5">{STEPS.map((t, i) => (
-          <li key={t} className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${i === step ? 'bg-violet-700 text-white dark:bg-violet-600' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>{i + 1} · {t}</li>
-        ))}</ol>
-      </header>
-      {banner && <p data-testid="share-banner" className="mx-5 mt-3 rounded-lg border border-axal-hairline bg-gray-50 p-3 text-[12.5px] dark:border-gray-800 dark:bg-gray-900">{banner}</p>}
-      {s.error && <p role="alert" className="mx-5 mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{s.error}</p>}
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">{s.busy ? <p className="py-4 text-[12.5px] text-axal-muted">Working…</p> : body}</div>
-      {step === 5 && <p className="px-5 text-[11.5px] text-axal-faint">It also appears in Raise › Capital relationships as an investor update sent.</p>}
-      <footer className="flex items-center justify-between gap-2 border-t border-axal-hairline p-4 dark:border-gray-800">
-        <span className="text-[11.5px] text-axal-faint">Step {step + 1} of 6</span>
-        <div className="flex items-center gap-2">
-          {refusal && <span className="text-[11.5px] text-axal-muted">{refusal}</span>}
-          {back && <button type="button" className={GHOST} onClick={on.back}>{back}</button>}
-          <button type="button" className={PRIMARY} disabled={s.busy || !!periodProblem || !!refusal} onClick={on.next}>{next}</button>
-        </div>
-      </footer>
-    </aside>
+    <ActionSheet {...SHARE_SHEET} onClose={on.close} steps={STEPS} step={step}
+      banner={s.error ? { tone: 'error', text: s.error } : banner ? { tone, text: banner } : null}
+      footNote={`Step ${step + 1} of 6`} footer={footer}>
+      {s.error && banner && <p data-testid="share-banner" className="mb-2 text-[12.5px] text-axal-muted">{banner}</p>}
+      {s.busy ? <p className="py-4 text-[12.5px] text-axal-muted">Working…</p> : body}
+      {step === 5 && <p className="mt-3 text-[11.5px] text-axal-faint">It also appears in Raise › Capital relationships as an investor update sent.</p>}
+    </ActionSheet>
   );
 }
 
@@ -326,7 +335,7 @@ export function shiftEditing(editing, field, i) {
 export default function ShareUpdateSheet({ projectId, onClose, onSent }) {
   const [s, setS] = useState({
     step: 0, period: periodChoices(new Date())[0], context: null, metrics: [], removedMetrics: [], highlights: [], lowlights: [], asks: [], editing: null, projectId,
-    audience: { investors: true, team: true, network: false }, includeMetrics: false,
+    audience: { investors: true, team: true, network: SHARE_FIELDS.network_default_on }, includeMetrics: false,
     draftStatus: null, handWritten: false, busy: false, error: '', uid: null, title: '', now: new Date(),
   });
   const set = (patch) => setS((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }));

@@ -124,7 +124,7 @@ const probes=[
   ['seed','sheet',"'Cap '+shortUsd(safe.cap)","'Valuation cap USD '+safe.cap"],
   ['seed','sheet',"'discount '+percent(safe.discount)","'discount '+safe.discount"],
   ['preselect','sheet',"decks.find(d=>d.is_current)||","null||"],
-  ['preselect','sheet',":!!context.data_room}",":false}"],
+  ['preselect','sheet',":!!context.data_room,",":false,"],
   ['audience','sheet',":data.matched>0?<>",":true?<>"],
   ['resume','sheet',"if(page.counsel_approved)return","if(false)return"],
   ['resume','sheet',"c.state==='awaiting_counsel'||","false||"],

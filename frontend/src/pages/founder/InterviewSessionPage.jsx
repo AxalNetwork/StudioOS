@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
+import { liveRefusal } from '../../lib/activeRecording.js';
 import { AssistantBadge } from './AssistantEntry';
 import { ChannelOriginBadge } from './ChannelOriginBadge.jsx';
 import { channelOf, openingStep } from './assistantSession.js';
@@ -33,7 +34,7 @@ export const SPEAKER_CHOICES = (name) => ['Me', (name || '').trim() || 'Intervie
 const usd = (micro) => `$${(Number(micro || 0) / 1e6).toFixed(4)}`;
 
 /** The start step: consent first, and the Worker's own words when it refuses. */
-export function StartPanel({ session, error, busy, onStart, onConsent }) {
+export function StartPanel({ session, error, liveHref = null, busy, onStart, onConsent }) {
   const audio = AUDIO.has(session.channel);
   const given = session.consent_status === 'given';
   return (
@@ -49,7 +50,12 @@ export function StartPanel({ session, error, busy, onStart, onConsent }) {
           </div>
         </div>
       )}
-      {error && <p role="alert" data-testid="start-error" className="mt-3 text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
+      {error && (
+        <p role="alert" data-testid="start-error" className="mt-3 text-[13px] font-semibold text-red-700 dark:text-red-400">
+          {error}
+          {liveHref && <>{' '}<Link to={liveHref} className="underline" data-testid="start-error-live">Return to that recording</Link></>}
+        </p>
+      )}
       <button type="button" data-testid="button-session-start" disabled={busy || (audio && !given)} onClick={onStart}
         className="mt-4 rounded-md bg-violet-700 px-4 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Start recording</button>
       {audio && !given && <p className="mt-2 text-[12px] text-axal-faint">Start unlocks once consent is recorded.</p>}
@@ -216,6 +222,9 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const [receipt, setReceipt] = useState(undefined);
   const [error, setError] = useState(null);
   const [startError, setStartError] = useState(null);
+  // #1588: a Start refused because this tab is still recording another session offers that one.
+  const [startLive, setStartLive] = useState(null);
+  const [adoptNote, setAdoptNote] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => api.get(id).then((r) => { setData(r); return r; }).catch((e) => { setError(e?.message || 'Unreadable'); setData(null); }), [api, id]);
@@ -248,10 +257,21 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const live = `/validate/record/live?session=${encodeURIComponent(session.id)}`;
 
   /** Start, in this click: the recorder opens the microphone, then posts start (§5.6.5). */
+  const refuseOverLive = () => {
+    const held = liveRefusal(recorder.getSnapshot(), recorder.isCapturing());
+    if (!held) return false;
+    setStartError(held.text);
+    setStartLive(`/validate/record/live?session=${encodeURIComponent(held.sessionId)}`);
+    return true;
+  };
   const start = async () => {
-    setBusy(true); setStartError(null);
+    setStartError(null); setStartLive(null);
+    // Refused before the microphone opens or anything is posted (#1588).
+    if (refuseOverLive()) return;
+    setBusy(true);
     try {
       const r = await recorder.begin({ session, interview, callLabel: data.call_label ?? null, points: data.points || [], video: session.channel === 'video' });
+      if (r === 'busy') { refuseOverLive(); return; }
       if (r === 'refused') { setStartError(recorder.getSnapshot().error); return; }
       navigate(live);
     } catch (e) {
@@ -266,9 +286,12 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
    * (§5.6.6, §5.6.7). #1584's active read makes this automatic on app load.
    */
   const adopt = async () => {
-    setBusy(true);
+    setBusy(true); setAdoptNote(null);
     try {
-      await recorder.adopt({ session, interview, callLabel: data.call_label ?? null, points: data.points || [], storedSeqs: chunks.map((c) => c.seq) });
+      const r = await recorder.adopt({ session, interview, callLabel: data.call_label ?? null, points: data.points || [], storedSeqs: chunks.map((c) => c.seq) });
+      // #1588: the tab that holds it keeps it; nothing here pauses it.
+      if (r === 'other_tab') { setAdoptNote('This recording is live in another tab. Go back to that tab to pause, resume or stop it.'); return; }
+      if (r === 'busy') { setAdoptNote(liveRefusal(recorder.getSnapshot(), true)?.text || 'You are already recording another session.'); return; }
       navigate(live);
     } finally { setBusy(false); }
   };
@@ -302,7 +325,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
         {error && <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
         {session.status === 'draft' && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
-          : <StartPanel session={session} error={startError} busy={busy} onStart={start} onConsent={consent} />)}
+          : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}
         {recording && (
           <section className="rounded-2xl border border-axal-hairline p-5 dark:border-gray-800" data-testid="session-recording">
             {mine ? (
@@ -316,6 +339,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
                 <h2 className="m-0 text-[16px] font-bold">This recording was interrupted</h2>
                 <p className="mt-1 text-[13px] text-axal-muted">It was {session.status === 'paused' ? 'paused' : 'recording'} in another tab or before the page reloaded. Resume it here: it carries on after the audio already saved.</p>
                 <button type="button" onClick={adopt} disabled={busy} className="mt-3 rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800 disabled:opacity-50" data-testid="button-adopt-recording">Resume here</button>
+                {adoptNote && <p role="status" className="mt-2 text-[13px] font-semibold text-amber-800 dark:text-amber-300" data-testid="adopt-note">{adoptNote}</p>}
               </>
             )}
           </section>

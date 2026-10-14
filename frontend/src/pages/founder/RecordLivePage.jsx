@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
-import { reviewPath } from '../../lib/activeRecording';
+import { recovering, reviewPath } from '../../lib/activeRecording';
 import { useAuth } from '../../hooks/useAuthSync';
 import useAssistMode from '../../hooks/useAssistMode';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
-import RecordingView from './RecordingView';
+import RecordingView, { useDarkTheme } from './RecordingView';
+import { focusPillOnShow } from './RecordingPill';
 
 /**
  * `/validate/record/live` (D685 §5.6.2, #1588): the Recording View full screen,
@@ -31,18 +32,6 @@ export function liveRedirect(state, sessionParam) {
   return '/validate';
 }
 
-function useDarkTheme() {
-  const read = () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
-  const [dark, setDark] = useState(read);
-  useEffect(() => {
-    if (typeof MutationObserver === 'undefined') return undefined;
-    const o = new MutationObserver(() => setDark(read()));
-    o.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => o.disconnect();
-  }, []);
-  return dark ? 'dark' : 'light';
-}
-
 export default function RecordLivePage() {
   const { state, recorder } = useActiveRecording();
   const [params] = useSearchParams();
@@ -54,12 +43,19 @@ export default function RecordLivePage() {
   // The rail's Manual mode (off by default) stops the Worker after Transcribing (§5.9, `auto: false`).
   const [auto] = useAssistMode('Validate');
   const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: () => recorder.confirmStop({ auto }) }), [recorder, auto]);
+  // A reload: the recording comes back once recovery has run (§5.6.7). Until
+  // then there is no session to show and none to leave for (#1588).
+  if (!state.session && params.get('session') && recovering(state)) {
+    return <p role="status" className="p-6 text-[13px] text-gray-500 dark:text-gray-400" data-testid="live-restoring">Restoring the recording…</p>;
+  }
   const to = liveRedirect(state, params.get('session'));
   if (to) return <Navigate to={to} replace state={state.phase === 'ready' ? { interview: state.interview } : undefined} />;
 
   // Back to the page before the lightbox; with no history (a deep link), to Validate.
   const exit = () => {
-    const idx = typeof window !== 'undefined' ? window.history.state?.idx : 0;
+    // Focus goes to the pill that now holds the recording (§5.6.3).
+    focusPillOnShow();
+    const idx = typeof window !== 'undefined' ? window.history?.state?.idx : 0;
     if (location.key !== 'default' && idx > 0) navigate(-1); else navigate('/validate', { replace: true });
   };
 

@@ -171,6 +171,65 @@ test('the overview: the question, four figures and seven cards in tab order; an 
   assert.equal((await overview(f, ADVISOR)).status, 200, 'an advisor reads');
 });
 
+test('a shipped feedback insert records its shipping date', async () => {
+  const f = await fixture();
+  const posted = await call(f, FOUNDER, 'POST', '/api/cycles/grow/feedback',
+    { project: PID, body: 'Make setup easier', source: 'customer', status: 'shipped', roadmap_item_label: 'Setup' });
+  assert.equal(posted.status, 201, JSON.stringify(posted.body));
+  const row = f.db.prepare('SELECT status, shipped_on FROM product_feedback WHERE uid = ?').get(posted.body.uid) as any;
+  assert.deepEqual([row.status, row.shipped_on], ['shipped', new Date().toISOString().slice(0, 10)]);
+});
+
+test('Distribution and Partner network expose update ask replies beside their own rows', async () => {
+  const f = await fixture();
+  f.db.exec(`INSERT INTO portfolio_updates (id,uid,project_id,author_user_id,title,status,sent_at) VALUES
+    (101,'u101',7,1,'September','submitted','2026-09-30');
+    INSERT INTO update_asks (id,uid,update_id,kind,text) VALUES
+    (201,'a201',101,'customer','Customer intro'),(202,'a202',101,'partner','Partner intro');
+    INSERT INTO update_ask_replies (uid,ask_id,name,message,landed_module,landed_reason) VALUES
+    ('r1',201,'Alex','An intro','contacts',NULL),('r2',202,'Blair','A lead',NULL,'No store accepted it');`);
+  const distribution = (await module_(f, 'distribution')).body;
+  const partners = (await module_(f, 'partner-network')).body;
+  assert.deepEqual(distribution.parts.from_update_asks.map((r: any) => [r.uid, r.landed_module, r.landed_reason]), [['r1', 'contacts', null]]);
+  assert.deepEqual(partners.parts.from_update_asks.map((r: any) => [r.uid, r.landed_module, r.landed_reason]), [['r2', null, 'No store accepted it']]);
+  assert.equal(distribution.records.rows.some((r: any) => r.uid === 'r1'), false);
+  assert.equal(partners.records.rows.some((r: any) => r.uid === 'r2'), false);
+});
+
+test('Updates history is newest first with grouped counts, author links, legacy nulls and unreadable failure', async () => {
+  const f = await fixture();
+  f.db.exec(`INSERT INTO portfolio_updates (id,uid,project_id,author_user_id,title,period,status,submitted_at,sent_at,period_start,period_end,updated_at) VALUES
+    (101,'older',7,1,'Old sent','2026-08','submitted','2026-09-02','2026-09-02','2026-08-01','2026-08-31','2026-09-02'),
+    (102,'legacy',7,1,'Legacy','2026-09','submitted','2026-09-15',NULL,NULL,NULL,'2026-09-15'),
+    (103,'newer',7,1,'New sent','2026-09','submitted','2026-09-30','2026-09-30','2026-09-01','2026-09-30','2026-09-30'),
+    (104,'draft',7,1,'Draft','2026-10','draft',NULL,NULL,NULL,NULL,'2026-10-10');
+    INSERT INTO update_recipients (update_id,audience,user_id,delivered_via,opened_at) VALUES
+    (103,'investor',2,'notification','2026-10-01'),(103,'investor',NULL,NULL,NULL),
+    (103,'team',1,'notification',NULL),(103,'network',3,'notification','2026-10-02');
+    INSERT INTO update_asks (id,uid,update_id,kind,text,asked_again_at) VALUES
+    (201,'ask1',103,'customer','Intro',NULL),(202,'ask2',103,'partner','Partner','2026-10-12'),
+    (203,'ask3',103,'hire','Role',NULL);
+    INSERT INTO update_ask_replies (uid,ask_id,name,message) VALUES ('reply1',203,'Alex','I know someone');`);
+  const before = (f.db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n;
+  const module = (await module_(f, 'durable-company-building')).body;
+  const rows = module.parts.updates;
+  assert.deepEqual(rows.map((u: any) => u.uid), ['newer', 'legacy', 'older']);
+  assert.deepEqual(rows[0].sent_to, { investors: 2, team: 1, network: 1 });
+  assert.deepEqual([rows[0].delivered, rows[0].opened, rows[0].asks, rows[0].replies, rows[0].asks_to_ask_again], [3, 2, 3, 1, 1]);
+  assert.equal(rows[0].href, '/updates/newer');
+  assert.deepEqual([rows[1].label, rows[1].period, rows[1].sent_to, rows[1].delivered, rows[1].asks_to_ask_again],
+    ["Submitted to the investors' inbox", '2026-09', null, null, null]);
+  assert.equal(rows[1].href, null, 'legacy submissions do not have a sent update page');
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n, before);
+  const advisor = await call(f, ADVISOR, 'GET', `/api/cycles/grow/modules/durable-company-building?project=${PID}`);
+  assert.equal(advisor.status, 200);
+  assert.equal(advisor.body.parts.updates[0].href, null);
+  f.db.exec('DROP TABLE update_recipients');
+  const unreadable = (await module_(f, 'durable-company-building')).body.parts;
+  assert.equal(unreadable.updates, null);
+  assert.match(unreadable.updates_reason, /^Unreadable:/);
+});
+
 test('one failing source makes only its card unreadable', async () => {
   const f = await fixture();
   f.db.exec('DROP TABLE growth_partners');

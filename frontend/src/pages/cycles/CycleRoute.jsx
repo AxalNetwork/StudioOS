@@ -11,7 +11,7 @@ import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
 import useScrollToHash from '../../hooks/useScrollToHash';
-import ShareUpdateSheet from '../founder/ShareUpdateSheet';
+import ShareUpdateLightbox from '../founder/ShareUpdateLightbox';
 import ConnectToolSheet from '../account/ConnectToolSheet';
 import { takeBuildProject } from '../account/connectorsModel';
 import RoundCallSheet from '../founder/RoundCallSheet';
@@ -24,6 +24,7 @@ import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
+import CallsHistory from './CallsHistory';
 import RecordFormSheet from './RecordFormSheet';
 import { editFor, formFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
@@ -91,11 +92,15 @@ const CYCLE_DEFS = {
   raise: {
     modules: MODULES.raise,
     // D686: Call for Capital opens at /raise/call over the page, the venture
-    // kept; behind ROUND_CALLS_ENABLED, its sheet says Coming soon in its own
-    // words. S03-A swaps this Mount for its tall Lightbox + ActionSheet frame.
+    // kept; behind ROUND_CALLS_ENABLED, its lightbox says Coming soon in its
+    // own words (the tall Lightbox + ActionSheet frame, #1598).
     path: 'call',
     Mount: RaiseMount,
     action: (q, open) => ({ label: 'Call for Capital', href: `/raise/call${q}`, onOpen: open }),
+    // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
+    parts: toFnMap({
+      'capital-relationships': (data) => <CallsHistory calls={data?.parts?.calls} />,
+    }),
     tools: toFnMap({
       'investor-narrative': () => ({ label: 'Open the positioning workspace', href: '/raise/pitch/positioning' }),
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
@@ -343,7 +348,7 @@ function RaiseMount({ projectId, onClose }) {
   return <RoundCallSheet projectId={projectId} onClose={onClose} />;
 }
 function GrowMount({ projectId, onClose, onDone }) {
-  return <ShareUpdateSheet projectId={projectId} onClose={onClose} onSent={onDone} />;
+  return <ShareUpdateLightbox projectId={projectId} onClose={onClose} onSent={onDone} />;
 }
 
 /**
@@ -406,6 +411,13 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
   const [reload, setReload] = useState(0);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
+  // The page re-reads once the lightbox is gone, however it went: ×, Escape and
+  // a finish navigate away from the action route, and so does the browser's
+  // Back, which never calls `closeAction`. The route keeps this component
+  // mounted across that change, so the dirty mark survives to be read here.
+  useEffect(() => {
+    if (!lightbox && dirty.current) { dirty.current = false; setReload((n) => n + 1); }
+  }, [lightbox]);
 
   // The table's query resets when the module changes.
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
@@ -449,7 +461,6 @@ export default function CycleRoute({ cycle, lightbox = false }) {
     ? () => navigate(`/${cycle}/${def.path}${q}`, { state: { under: `${location.pathname}${location.search}` } })
     : undefined;
   const closeAction = () => {
-    if (dirty.current) { dirty.current = false; setReload((n) => n + 1); }
     if (location.state?.under) navigate(-1);
     else navigate(`/${cycle}${q}`, { replace: true });
   };

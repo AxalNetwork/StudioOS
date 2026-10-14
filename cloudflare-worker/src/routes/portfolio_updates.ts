@@ -15,13 +15,15 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jl
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
+import { canAccessProject } from '../services/projectAccess';
+import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
   ASK_KINDS, ASK_MODULE, LineError, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
   draftLines, landReply, noMetrics, payloadFor, periodFacts,
-  type Audience, type AskKind, type Snapshot,
+  type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
 
-import { openCallForUpdate, updateAskLinks, replyToLinkedCall, RoundCallError } from '../services/roundCalls';
+import { openCallForUpdate, openCallSummary, updateAskLinks, replyToLinkedCall, RoundCallError } from '../services/roundCalls';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -69,6 +71,12 @@ async function projectFounderId(env: Env, projectId: number): Promise<number | n
   const p = await env.DB.prepare('SELECT founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ founder_id: number | null }>();
   return p ? (p.founder_id ?? null) : undefined as any;
 }
+
+async function canShareUpdate(env: Env, user: User, projectId: number, founderId: number | null): Promise<boolean> {
+  return isAdmin(user) || (user.role !== 'partner' && await canAccessProject(env, user, { id: projectId, founder_id: founderId }, { write: true }));
+}
+
+const shareDenied = { detail: 'You can read this venture but not share its updates.', code: 'share_not_allowed' };
 
 async function dto(env: Env, u: UpdateRow): Promise<any> {
   const proj = await env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE id = ? AND deleted_at IS NULL').bind(u.project_id).first<any>();
@@ -129,9 +137,7 @@ r.post('/', async (c) => {
     const founderId = await projectFounderId(c.env, projectId);
     if (founderId === undefined) return c.json({ detail: 'Project not found' }, 404);
     // Only the owning founder (or admin) may post an update for a project.
-    if (!isAdmin(user) && !(isFounder(user) && canAccessFounderResource(user, founderId))) {
-      return c.json({ detail: 'Forbidden' }, 403);
-    }
+    if (!(await canShareUpdate(c.env, user, projectId, founderId))) return c.json(shareDenied, 403);
     const submit = body.status === 'submitted';
     const uid = newUid();
     const ins = await c.env.DB.prepare(
@@ -235,18 +241,20 @@ async function ownedProject(c: any, user: User, projectId: number): Promise<numb
   if (!Number.isInteger(projectId)) return null;
   const founderId = await projectFounderId(c.env, projectId);
   if (founderId === undefined) return null;
-  if (!isAdmin(user) && !(isFounder(user) && canAccessFounderResource(user, founderId))) return null;
+  if (!(await canShareUpdate(c.env, user, projectId, founderId))) return null;
   return projectId;
 }
 
 /** The period's snapshots from Revenue and traction, and the ones before it. */
 async function periodSnapshots(env: Env, projectId: number, start: string, end: string) {
   try {
+    const [year, month] = start.slice(0, 7).split('-').map(Number);
+    const previousMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10);
     const [inPeriod, before] = await Promise.all([
       env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date <= ? ORDER BY snapshot_date`)
         .bind(projectId, start, end).all<Snapshot>(),
-      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date < ? ORDER BY snapshot_date DESC LIMIT 40`)
-        .bind(projectId, start).all<Snapshot>(),
+      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date < ? ORDER BY snapshot_date`)
+        .bind(projectId, previousMonth, start).all<Snapshot>(),
     ]);
     return { inPeriod: inPeriod.results || [], before: before.results || [] };
   } catch {
@@ -262,6 +270,40 @@ async function openRoles(env: Env, projectId: number) {
     ).bind(projectId).all<{ id: number; title: string; created_at: string | null }>();
     return r.results || [];
   } catch { return []; }
+}
+
+/** Stored roadmap transitions and feedback shipped during this update's period. */
+export async function shippedItems(env: Env, projectId: number, start: string, end: string): Promise<ShippedItem[]> {
+  const out: ShippedItem[] = [];
+  const emitted = new Set<string>();
+  try {
+    const moves = await env.DB.prepare(`SELECT m.okr_id, o.objective, MAX(m.moved_at) AS shipped_at FROM okr_column_moves m
+      JOIN roadmap_okrs o ON o.id = m.okr_id AND o.project_id = m.project_id
+      WHERE m.project_id = ? AND m.to_status = 'done' AND o.kanban_status = 'done'
+        AND substr(m.moved_at, 1, 10) BETWEEN ? AND ? GROUP BY m.okr_id ORDER BY shipped_at`)
+      .bind(projectId, start, end).all<{okr_id: number; objective: string; shipped_at: string}>();
+    for (const m of moves.results || []) {
+      emitted.add(String(m.okr_id));
+      out.push({ kind: 'roadmap', label: m.objective, shipped_on: m.shipped_at.slice(0, 10) });
+    }
+  } catch { /* roadmap store unavailable */ }
+  try {
+    const feedback = await env.DB.prepare(`SELECT roadmap_item_ref, roadmap_item_label, theme,
+      COALESCE(shipped_on, substr(updated_at, 1, 10)) AS shipped_on FROM product_feedback
+      WHERE project_id = ? AND status = 'shipped' AND COALESCE(shipped_on, substr(updated_at, 1, 10)) BETWEEN ? AND ?`)
+      .bind(projectId, start, end).all<{roadmap_item_ref: string|null;roadmap_item_label:string|null;theme:string|null;shipped_on:string}>();
+    const groups = new Map<string, {label: string; shipped_on: string; customers: number}>();
+    for (const f of feedback.results || []) {
+      if (f.roadmap_item_ref && emitted.has(f.roadmap_item_ref)) continue;
+      const label = f.roadmap_item_label || f.theme;
+      if (!label) continue;
+      const group = groups.get(label);
+      if (group) { group.customers += 1; if (f.shipped_on > group.shipped_on) group.shipped_on = f.shipped_on; }
+      else groups.set(label, { label, shipped_on: f.shipped_on, customers: 1 });
+    }
+    for (const g of groups.values()) out.push({ kind: 'feedback', ...g });
+  } catch { /* feedback store unavailable */ }
+  return out;
 }
 
 /** The company's markets (D664, migration 443); none on a database without them. */
@@ -290,6 +332,11 @@ async function audienceMembers(env: Env, projectId: number, authorId: number) {
     ).bind(projectId, authorId).all<{ user_id: number }>();
     for (const x of r.results || []) team.push(x.user_id);
   } catch { /* no members table */ }
+  try {
+    const owner = await env.DB.prepare('SELECT u.id FROM projects p JOIN users u ON u.founder_id = p.founder_id WHERE p.id = ? AND p.founder_id IS NOT NULL ORDER BY u.id LIMIT 1')
+      .bind(projectId).first<{id:number}>();
+    if (owner && owner.id !== authorId && !team.includes(owner.id)) team.push(owner.id);
+  } catch { /* no owner account */ }
   const network: number[] = [];
   try {
     await ensureFollowsSchema(env);
@@ -327,14 +374,18 @@ r.get('/share/context', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await ownedProject(c, user, Number(c.req.query('project_id')));
-    if (pid == null) return c.json({ detail: 'Forbidden' }, 403);
+    if (pid == null) return c.json(shareDenied, 403);
     const start = String(c.req.query('period_start') || '');
     const end = String(c.req.query('period_end') || '');
     if (!DAY.test(start) || !DAY.test(end) || start > end) return c.json({ detail: 'period_start and period_end are YYYY-MM-DD, start first', field: 'period' }, 400);
     const snaps = await periodSnapshots(c.env, pid, start, end);
-    const metrics = buildMetrics(snaps.inPeriod, snaps.before);
+    const metrics = buildMetrics(snaps.inPeriod, snaps.before, start);
     const members = await audienceMembers(c.env, pid, user.id);
+    const project = await c.env.DB.prepare('SELECT id, name FROM projects WHERE id = ? AND deleted_at IS NULL').bind(pid).first<{id:number;name:string}>();
+    const openCall = await openCallSummary(c.env, pid);
     return c.json({
+      project, open_call: openCall,
+      open_call_reason: openCall ? null : roundCallsEnabled(c.env) ? 'No open Call for Capital' : 'Coming soon. Round calls are not enabled.',
       metrics, no_metrics: noMetrics(metrics),
       open_roles: (await openRoles(c.env, pid)).map((x) => ({ id: x.id, title: x.title })),
       markets: await projectMarkets(c.env, pid),
@@ -351,11 +402,11 @@ r.post('/share/draft-lines', async (c) => {
     const user = await requireAuth(c);
     const body = await c.req.json().catch(() => ({} as any));
     const pid = await ownedProject(c, user, Number(body.project_id));
-    if (pid == null) return c.json({ detail: 'Forbidden' }, 403);
+    if (pid == null) return c.json(shareDenied, 403);
     const start = String(body.period_start || ''); const end = String(body.period_end || '');
     if (!DAY.test(start) || !DAY.test(end) || start > end) return c.json({ detail: 'period_start and period_end are YYYY-MM-DD, start first', field: 'period' }, 400);
     const snaps = await periodSnapshots(c.env, pid, start, end);
-    const metrics = buildMetrics(snaps.inPeriod, snaps.before);
+    const metrics = buildMetrics(snaps.inPeriod, snaps.before, start);
     const roles = (await openRoles(c.env, pid)).map((x) => ({ title: x.title, opened: x.created_at ? x.created_at.slice(0, 10) : null }));
     let contacts: number | null = null;
     try {
@@ -364,7 +415,7 @@ r.post('/share/draft-lines', async (c) => {
       ).bind(pid, start, end).first<{ n: number }>();
       contacts = Number(row?.n ?? 0);
     } catch { contacts = null; }
-    return c.json(await draftLines(c.env, user.id, periodFacts(metrics, roles, contacts)));
+    return c.json(await draftLines(c.env, user.id, periodFacts(metrics, roles, contacts, end, await shippedItems(c.env, pid, start, end))));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -439,6 +490,7 @@ r.post('/:uid/send', async (c) => {
     if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     if (u.sent_at) return c.json({ detail: 'This update was already sent' }, 409);
     const choice = cleanAudience(jload(u.audience_json, {}));
+    if (!choice.investors && !choice.team && !choice.network) return c.json({ detail: 'Choose who receives this update', field: 'audience' }, 400);
     const members = await audienceMembers(c.env, u.project_id, u.author_user_id);
     const proj = await c.env.DB.prepare('SELECT uid, name FROM projects WHERE id = ?').bind(u.project_id).first<{ uid: string; name: string }>();
     const seen = new Set<number>();
@@ -449,9 +501,16 @@ r.post('/:uid/send', async (c) => {
     }
     if (choice.team) for (const id of members.team) { if (!seen.has(id)) { seen.add(id); rows.push({ audience: 'team', user_id: id, email: null, label: null }); } }
     if (choice.network) for (const id of members.network) { if (!seen.has(id)) { seen.add(id); rows.push({ audience: 'network', user_id: id, email: null, label: null }); } }
+    if (rows.length === 0) return c.json({ detail: 'Nobody is in the audience you chose yet', field: 'audience' }, 400);
+    const recorded = await c.env.DB.prepare('SELECT user_id, email, delivered_via FROM update_recipients WHERE update_id = ?').bind(u.id)
+      .all<{user_id:number|null;email:string|null;delivered_via:string|null}>();
+    const identity = (id: number|null, email: string|null) => id == null ? `email:${(email || '').toLowerCase()}` : `user:${id}`;
+    const already = new Set((recorded.results || []).map((x) => identity(x.user_id, x.email)));
     const sentAt = nowIso();
-    let delivered = 0;
+    let delivered = (recorded.results || []).filter((x) => x.delivered_via != null).length;
     for (const rcp of rows) {
+      const key = identity(rcp.user_id, rcp.email);
+      if (already.has(key)) continue;
       let via: string | null = null; let reason: string | null = null;
       if (rcp.user_id != null) {
         const id = await notify(c.env, {
@@ -470,11 +529,12 @@ r.post('/:uid/send', async (c) => {
       await c.env.DB.prepare(
         `INSERT INTO update_recipients (update_id, audience, user_id, email, label, delivered_via, not_delivered_reason) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ).bind(u.id, rcp.audience, rcp.user_id, rcp.email, rcp.label, via, reason).run();
+      already.add(key);
     }
     await c.env.DB.prepare(
       `UPDATE portfolio_updates SET status = 'submitted', submitted_at = COALESCE(submitted_at, ?), sent_at = ?, updated_at = ? WHERE id = ?`,
     ).bind(sentAt, sentAt, sentAt, u.id).run();
-    return c.json({ uid: u.uid, sent_at: sentAt, recipients: rows.length, delivered, not_delivered: rows.length - delivered });
+    return c.json({ uid: u.uid, sent_at: sentAt, recipients: already.size, delivered, not_delivered: already.size - delivered });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -504,13 +564,22 @@ r.get('/:uid/page', async (c) => {
       `SELECT r.*, a.uid AS ask_uid FROM update_ask_replies r JOIN update_asks a ON a.id = r.ask_id WHERE a.update_id = ? ORDER BY r.id DESC`,
     ).bind(u.id).all<any>();
     const recipients = await c.env.DB.prepare(
-      'SELECT audience, user_id, label, delivered_via, not_delivered_reason, opened_at FROM update_recipients WHERE update_id = ? ORDER BY id',
+      `SELECT ur.audience, ur.user_id, ur.delivered_via, ur.not_delivered_reason, ur.opened_at,
+        COALESCE(ur.label, usr.name) AS label,
+        CASE WHEN ur.user_id IS NULL THEN 0 ELSE EXISTS(SELECT 1 FROM update_ask_replies rp
+          JOIN update_asks a ON a.id = rp.ask_id WHERE a.update_id = ur.update_id AND rp.replier_user_id = ur.user_id) END AS replied
+       FROM update_recipients ur LEFT JOIN users usr ON usr.id = ur.user_id
+       WHERE ur.update_id = ? AND ur.audience <> 'network' ORDER BY ur.id`,
     ).bind(u.id).all<any>();
+    const network = await c.env.DB.prepare(`SELECT COUNT(*) AS sent, COUNT(opened_at) AS opened,
+      SUM(CASE WHEN user_id IS NOT NULL AND EXISTS(SELECT 1 FROM update_ask_replies rp JOIN update_asks a ON a.id = rp.ask_id
+        WHERE a.update_id = update_recipients.update_id AND rp.replier_user_id = update_recipients.user_id) THEN 1 ELSE 0 END) AS replied
+      FROM update_recipients WHERE update_id = ? AND audience = 'network'`).bind(u.id).first<{sent:number;opened:number;replied:number}>();
     const byAsk = new Map<string, any[]>();
     for (const x of replies.results || []) byAsk.set(x.ask_uid, [...(byAsk.get(x.ask_uid) || []), x]);
     const count = (a: Audience) => (recipients.results || []).filter((x: any) => x.audience === a).length;
     return c.json({
-      uid: u.uid, sent_at: u.sent_at, ...shape,
+      uid: u.uid, project_id: u.project_id, audience: cleanAudience(jload(u.audience_json, {})), sent_at: u.sent_at, ...shape,
       highlights: shape.highlights, lowlights: shape.lowlights,
       asks: shape.asks.map((a) => {
         const rs = byAsk.get(a.uid) || [];
@@ -522,8 +591,9 @@ r.get('/:uid/page', async (c) => {
           can_ask_again: canAskAgain(u.sent_at, rs.length, raw?.asked_again_at ?? null),
         };
       }),
-      recipients: recipients.results || [],
-      sent_to: { investors: count('investor'), team: count('team'), network: count('network') },
+      recipients: (recipients.results || []).map((x) => ({ ...x, replied: !!x.replied })),
+      network: { sent: network?.sent ?? 0, opened: network?.opened ?? 0, replied: network?.replied ?? 0 },
+      sent_to: { investors: count('investor'), team: count('team'), network: network?.sent ?? 0 },
     });
   } catch (e) { return mapError(c, e); }
 });

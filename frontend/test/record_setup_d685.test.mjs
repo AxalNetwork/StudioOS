@@ -276,3 +276,36 @@ test('#1586 isConnected: the Worker shape, the older flag, and nothing else', ()
   assert.equal(isConnected({ connected: true }, 'zoom'), true);
   assert.equal(isConnected(null, 'whatsapp'), false);
 });
+
+test('#1588 attachesCall: video, Zoom or Meet, a valid link and that provider connected; attachOutcome keeps the Worker\'s words', async () => {
+  const { attachesCall, attachOutcome } = await import('../src/pages/founder/recordSetup.js');
+  const on = { connections: { zoom: { status: 'active' }, google_meet: { status: 'active' } } };
+  assert.equal(attachesCall('video', 'zoom', 'https://acme.zoom.us/j/12345678', on), true);
+  assert.equal(attachesCall('video', 'google_meet', 'https://meet.google.com/abc-defg-hij', on), true);
+  assert.equal(attachesCall('audio', 'zoom', 'https://acme.zoom.us/j/12345678', on), false, 'video only');
+  assert.equal(attachesCall('video', 'teams', 'https://teams.microsoft.com/l/x', on), false, 'Teams has no import');
+  assert.equal(attachesCall('video', 'zoom', '', on), false, 'no link');
+  assert.equal(attachesCall('video', 'zoom', 'https://evil.test/j/1', on), false, 'a link the field refuses');
+  assert.equal(attachesCall('video', 'zoom', 'https://acme.zoom.us/j/12345678', { connections: { zoom: { status: 'revoked' } } }), false, 'not connected');
+  assert.equal(attachesCall('video', 'zoom', 'https://acme.zoom.us/j/12345678', null), false, 'unreadable: not guessed');
+  assert.deepEqual(attachOutcome({ notice: { message: ' Imported later. ' } }, null), { tone: 'attached', text: 'Imported later.' });
+  assert.equal(attachOutcome({}, null).tone, 'attached');
+  assert.deepEqual(attachOutcome(null, new Error('This meeting link is already attached to an interview.')), { tone: 'refused', text: 'This meeting link is already attached to an interview.' });
+  assert.match(attachOutcome(null, {}).text, /The recording is not affected/);
+});
+
+test('#1588 the attach client posts { attach: { join_url }, session_id, provider } to the interview\'s meetings, and names only Zoom or Meet', async () => {
+  const { channelsApi } = await import('../src/lib/api/channels.js');
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  const seen = [];
+  const saved = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { seen.push([String(url), init?.method, JSON.parse(init?.body || 'null')]); return { ok: true, status: 201, headers: { get: () => 'application/json' }, json: async () => ({ ok: 1 }), text: async () => '{"ok":1}' }; };
+  try {
+    await channelsApi.attachMeeting(41, { session_id: '501', join_url: 'https://acme.zoom.us/j/12345678', provider: 'zoom' });
+  } finally { globalThis.fetch = saved; }
+  assert.equal(seen.length, 1);
+  assert.match(seen[0][0], /\/founder\/validate\/interviews\/41\/meetings$/);
+  assert.equal(seen[0][1], 'POST');
+  assert.deepEqual(seen[0][2], { attach: { join_url: 'https://acme.zoom.us/j/12345678' }, session_id: 501, provider: 'zoom' });
+  assert.throws(() => channelsApi.attachMeeting(41, { session_id: 1, join_url: 'x', provider: 'teams' }), /Unknown meeting provider/);
+});

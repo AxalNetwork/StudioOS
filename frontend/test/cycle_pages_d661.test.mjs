@@ -164,11 +164,13 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
   // D686 §5.1: Share an update opens at /grow/update over the page; a sent
   // update replaces that address with its own page, so Back never reopens it.
   assert.match(route, /path: 'update',\s*Mount: GrowMount,\s*action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
-  assert.match(route, /return <ShareUpdateSheet projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>;/);
+  assert.match(route, /return <ShareUpdateLightbox projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} \/>;/);
   // D686 §5.4: the mount also re-reads the cycle page after a change (Build's
   // Connect a tool), once the lightbox closes, so nothing reloads behind it.
   assert.match(route, /<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\} onDone=\{onDone\}\s*onChanged=\{\(\) => \{ dirty\.current = true; \}\} \/>/);
-  assert.match(route, /const closeAction = \(\) => \{\s*if \(dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}/);
+  // However it closes (×, Escape, a finish or the browser's Back): the re-read
+  // follows the route leaving the lightbox, not the × (cycle_lightbox_d686).
+  assert.match(route, /useEffect\(\(\) => \{\s*if \(!lightbox && dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}\s*\}, \[lightbox\]\);/);
   assert.match(route, /cycle === 'grow' \? \(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`, \{ replace: true \}\)/,
     'a sent update opens its page, as it did from the Grow desk');
 });

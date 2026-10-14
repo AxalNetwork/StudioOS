@@ -64,7 +64,7 @@ const blank = () => ({
   phase: 'idle', session: null, interview: null, callLabel: null, channel: null, points: [],
   cap: {}, confirm: false, drawer: false, toast: null, error: null, wake: null, refused: null,
   marksQueued: [], online: true, video: false, pointError: null, meetingUrl: null,
-  processing: null, stageAt: -1, stopStep: null, lastSeq: null,
+  processing: null, stageAt: -1, stopStep: null, lastSeq: null, attach: null,
 });
 
 /**
@@ -80,14 +80,38 @@ export function startRefused(e) {
   };
 }
 
-/** The pill's variant, from the phase (D685 §5.6.4). Null when nothing is recording. */
+/**
+ * A Start made while this tab is still taking (or saving) another recording's
+ * audio (#1588): refused before anything is posted or the microphone opened,
+ * in the words of the Worker's 409 `session_active`, naming the recording to
+ * return to. Null when nothing would be replaced: a video call still waiting
+ * at "Share the call's tab" has opened no microphone and posted no start.
+ */
+export function liveRefusal(st, capturing) {
+  if (!capturing || !st?.session || st.phase === 'share') return null;
+  return {
+    text: st.phase === 'stopping'
+      ? 'The last recording is still being saved. Wait for it to finish, or return to it.'
+      : 'You are already recording another session. Stop it, or return to it, first.',
+    sessionId: st.session.id,
+  };
+}
+
+/**
+ * The pill's variant, from the phase (D685 §5.6.4). Null when there is no
+ * session. It never says "Recording" when nothing records (#1588): a video
+ * call waiting for its tab is `share`, a blocked microphone `blocked`, and a
+ * Start the Worker refused `refused`.
+ */
 export function pillVariant(st) {
   if (!st?.session) return null;
   if (st.phase === 'ready') return 'ready';
   if (st.phase === 'stopping') return st.processing?.stage === 'failed' ? 'failed' : 'processing';
   if (st.phase === 'paused') return 'paused';
+  if (st.phase === 'share') return 'share';
+  if (st.phase === 'denied') return st.refused ? 'refused' : 'blocked';
   if (st.online === false || st.cap?.online === false) return 'offline';
-  if (st.phase === 'recording' || st.phase === 'share' || st.phase === 'denied') return 'recording';
+  if (st.phase === 'recording') return 'recording';
   return null;
 }
 
@@ -100,6 +124,9 @@ export function pillLabel(variant, clockText) {
     processing: 'Processing the session · tap to expand',
     failed: 'Processing stopped · tap to retry',
     ready: 'Ready to review · open the review',
+    share: 'Not recording yet · share the call\'s tab · tap to expand',
+    blocked: 'Not recording · the microphone is blocked · tap to expand',
+    refused: 'Not recording · the recording did not start · tap to expand',
   }[variant] || '';
 }
 
@@ -139,8 +166,18 @@ export function joinHref(url) {
   try { const u = new URL(String(url || '')); return u.protocol === 'https:' ? u.toString() : null; } catch { return null; }
 }
 
+/**
+ * Is the recovery on app load still to finish (§5.6.7, #1588)? Until it has,
+ * a reload of `/validate/record/live?session=` cannot tell a recording about
+ * to come back from one that is gone, so the route waits instead of leaving.
+ * A recorder that does not say (a test's stub) has nothing to wait for.
+ */
+export const recovering = (st) => st?.recovery === 'pending' || st?.recovery === 'running';
+
 export function createRecorder({ api, browser = {}, queue = null, now = () => Date.now(), setTimeout: st = (f, ms) => globalThis.setTimeout(f, ms), wait = null } = {}) {
-  let state = blank();
+  // `recovery` is not in `blank()`, so a clear or a sign-out leaves it as it is:
+  // 'pending' from page load until the first recovery has finished.
+  let state = { ...blank(), recovery: 'pending' };
   // One poll at a time: a new Stop, a sign-out or a clear ends the one before.
   let pollGen = 0;
   const pause = wait || ((ms) => new Promise((r) => st(r, ms)));
@@ -155,11 +192,16 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
 
   const makeCapture = ({ startSeq = 0 } = {}) => {
     const s = state.session;
+    // What the Start click prepared is this capture's, once; `pre` is cleared
+    // so the next Start prepares its own inside its click (§5.6.5, #1588).
+    let stream = pre?.stream || null;
+    let ctx = pre?.ctx || null;
+    pre = null;
     capture = createCapture({
       deps: {
-        getUserMedia: pre?.stream ? (() => { const p = pre.stream; pre = { ...pre, stream: null }; return p; }) : browser.getUserMedia,
+        getUserMedia: stream ? ((opts) => { if (!stream) return browser.getUserMedia(opts); const p = stream; stream = null; return p; }) : browser.getUserMedia,
         getDisplayMedia: browser.getDisplayMedia,
-        AudioContext: pre?.ctx ? function PreparedContext() { const c = pre.ctx; pre = { ...pre, ctx: null }; return c; } : browser.AudioContext,
+        AudioContext: ctx ? function PreparedContext(...a) { if (!ctx) return new browser.AudioContext(...a); const c = ctx; ctx = null; return c; } : browser.AudioContext,
         MediaStream: browser.MediaStream,
         MediaRecorder: browser.MediaRecorder, WebSocket: browser.WebSocket,
         now, setTimeout: st, clearTimeout: browser.clearTimeout, setInterval: browser.setInterval, clearInterval: browser.clearInterval,
@@ -344,14 +386,24 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      * The modal hands over its draft. Audio starts here; a video call waits
      * for the second click, "Share the call's tab" (§5.8.1).
      */
-    async begin({ session, interview = null, callLabel = null, points = [], video = false, storedSeqs = [], meetingUrl = null }) {
+    async begin({ session, interview = null, callLabel = null, points = [], video = false, storedSeqs = [], meetingUrl = null, attach = null }) {
+      // Never over a live capture: replacing it would leave its microphone
+      // running with nothing to stop it (#1588). The caller offers it instead.
+      if (liveRefusal(state, api_.isCapturing())) { api_.release(); return 'busy'; }
       capture = null;
-      set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, points, video, storedSeqs, phase: video ? 'share' : 'idle', meetingUrl: joinHref(meetingUrl) });
+      set({ ...blank(), session, interview, callLabel, channel: session?.channel || null, points, video, storedSeqs, phase: video ? 'share' : 'idle', meetingUrl: joinHref(meetingUrl), attach });
       if (video) { api_.release(); return 'share'; }
       return goLive();
     },
-    /** A session that already exists (its page, or after a reload): paused until resumed in a click. */
+    /**
+     * A session that already exists (its page, or after a reload): paused
+     * until resumed in a click. One another tab is capturing holds `rec-<id>`
+     * (§5.6.7): it is left alone, never paused from here, or a later Resume
+     * would start a second capture whose seqs collide with the first's.
+     */
     async adopt({ session, interview = null, callLabel = null, points = [], storedSeqs = [] }) {
+      if (liveRefusal(state, api_.isCapturing())) return 'busy';
+      if (session?.id != null && ['recording', 'paused'].includes(session.status) && !(await lockFree(session.id))) return 'other_tab';
       capture = null;
       let s = session;
       // A recording with no capture in this tab is paused, never left running (§5.6.7).
@@ -506,38 +558,44 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      * Nothing is done for a tab that already holds a session, or with no member.
      */
     async recover() {
-      if (state.session || userId == null) return 'skipped';
-      let items;
-      try { const r = await api.active(); items = Array.isArray(r?.items) ? r.items : []; } catch { return 'unread'; }
-      const ids = await q().sessions(userId).catch(() => []);
-      for (const id of ids) { try { await flushQueue(q(), id, upload(id)); } catch { /* the next load tries again */ } }
-      if (state.session) return 'skipped'; // a Start made while this ran wins
-      const live = items.find((x) => x.status === 'recording' || x.status === 'paused');
-      if (live) {
-        if (!(await lockFree(live.id))) return 'other_tab';
-        let full;
-        try { full = await api.get(live.id); } catch { return 'unread'; }
-        if (state.session) return 'skipped';
-        const who = full.interview || { id: live.interview_id, interviewee_name: live.interviewee_name ?? null, interviewee_company: live.interviewee_company ?? null };
-        await api_.adopt({
-          session: full.session, interview: who, callLabel: full.call_label ?? live.call_label ?? null, points: full.points || [],
-          storedSeqs: (full.chunks || []).map((c) => c.seq),
-        });
-        set({ meetingUrl: joinHref(full.meeting_url) });
-        return 'restored';
-      }
-      const busy = items.find((x) => x.processing && x.processing.stage && x.processing.stage !== 'done');
-      if (busy) {
-        api_.follow({
-          session: busy, interview: { id: busy.interview_id, interviewee_name: busy.interviewee_name ?? null, interviewee_company: busy.interviewee_company ?? null },
-          processing: busy.processing, callLabel: busy.call_label ?? null,
-        });
-        return 'following';
-      }
-      return 'none';
+      if (userId == null) return 'skipped';
+      if (state.session) { set({ recovery: 'done' }); return 'skipped'; }
+      set({ recovery: 'running' });
+      try { return await recoverNow(); } finally { set({ recovery: 'done' }); }
     },
     /** For tests and the route: the capture this recorder holds. */
     get capture() { return capture; },
   };
+
+  async function recoverNow() {
+    let items;
+    try { const r = await api.active(); items = Array.isArray(r?.items) ? r.items : []; } catch { return 'unread'; }
+    const ids = await q().sessions(userId).catch(() => []);
+    for (const id of ids) { try { await flushQueue(q(), id, upload(id)); } catch { /* the next load tries again */ } }
+    if (state.session) return 'skipped'; // a Start made while this ran wins
+    const live = items.find((x) => x.status === 'recording' || x.status === 'paused');
+    if (live) {
+      if (!(await lockFree(live.id))) return 'other_tab';
+      let full;
+      try { full = await api.get(live.id); } catch { return 'unread'; }
+      if (state.session) return 'skipped';
+      const who = full.interview || { id: live.interview_id, interviewee_name: live.interviewee_name ?? null, interviewee_company: live.interviewee_company ?? null };
+      await api_.adopt({
+        session: full.session, interview: who, callLabel: full.call_label ?? live.call_label ?? null, points: full.points || [],
+        storedSeqs: (full.chunks || []).map((c) => c.seq),
+      });
+      set({ meetingUrl: joinHref(full.meeting_url) });
+      return 'restored';
+    }
+    const busy = items.find((x) => x.processing && x.processing.stage && x.processing.stage !== 'done');
+    if (busy) {
+      api_.follow({
+        session: busy, interview: { id: busy.interview_id, interviewee_name: busy.interviewee_name ?? null, interviewee_company: busy.interviewee_company ?? null },
+        processing: busy.processing, callLabel: busy.call_label ?? null,
+      });
+      return 'following';
+    }
+    return 'none';
+  }
   return api_;
 }
