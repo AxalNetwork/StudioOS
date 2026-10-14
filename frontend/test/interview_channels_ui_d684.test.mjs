@@ -550,27 +550,27 @@ test('Cancel says "Cancelled" only when Zoom or Google confirmed it; otherwise t
   } finally { await ok.unmount(); }
 });
 
-test('Record a session keeps D684\'s two ways in: a picked interview offers the chat import and the call for later; a new person goes to the inbox', async () => {
+test('Record a session keeps D684\'s two ways in (#1587): the chat import is inline under the Text chips, and the call for later is offered to a new person too', async () => {
   const models = { live: [], final: [], defaults: { live: null, final: null } };
   // The panels read the real client here; every answer is an empty body.
   const prevFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const read = { providers: [{ provider: 'whatsapp', available: true }], connections: { whatsapp: { status: 'active' } } };
   const lightbox = (props) => h(ActiveCompanyContext.Provider, { value: { company: { company_name: 'Acme' } } },
-    h(RecordLightbox, { projectId: 3, initialModels: models, initialBoard: { hypotheses: [] }, onClose() {}, onStarted() {}, ...props }));
+    h(RecordLightbox, { projectId: 3, initialModels: models, initialBoard: { hypotheses: [] }, channels: read, onClose() {}, onStarted() {}, ...props }));
   const m = await mount(lightbox({ interview: { id: 1, interviewee_name: 'Ana' } }));
   try {
-    assert.equal(m.byTestId('interview-connect'), undefined);
-    await m.click('record-chat-link');
-    assert.ok(m.byTestId('interview-connect'));
-    assert.match(m.text(), /Choose a customer conversation waiting in your inbox\./);
+    assert.equal(m.byTestId('record-chat-link'), undefined, 'no separate panel: the Text chips import');
+    await m.click('record-mode-text');
+    assert.ok(m.byTestId('record-threads'), 'WhatsApp is connected, so its waiting chats are listed in place');
     await m.click('record-schedule-link');
     assert.ok(m.byTestId('interview-schedule'));
-  } finally { await m.unmount(); globalThis.fetch = prevFetch; }
+  } finally { await m.unmount(); }
   const fresh = await mount(lightbox({}));
   try {
-    assert.equal(fresh.byTestId('record-chat-link'), undefined, 'a chat needs an interview to land in');
-    assert.ok(fresh.byTestId('record-inbox-link'));
-  } finally { await fresh.unmount(); }
+    assert.ok(fresh.byTestId('record-schedule-link'), 'a new person can have a call planned too');
+    assert.equal(fresh.byTestId('record-inbox-link'), undefined);
+  } finally { await fresh.unmount(); globalThis.fetch = prevFetch; }
 });
 
 // ------------------------------------------------------------------ the session page
@@ -618,8 +618,8 @@ test('mounted: the inbox route, the Connectors group, the sheet’s two ways in;
   const conn = readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8');
   assert.match(conn, /<ChannelsSection catalogue=\{data\.catalogue\} onOpenConnector=/);
   const lightbox = readFileSync('frontend/src/pages/founder/RecordLightbox.jsx', 'utf8');
-  assert.match(lightbox, /<ConnectPanel interview=\{interview\}/);
-  assert.match(lightbox, /<SchedulePanel interview=\{interview\} \/>/);
+  assert.match(lightbox, /channelsSource\.assign\(thread, assignTarget\(/, 'the chat import is the lightbox\'s own, inline (#1587)');
+  assert.match(lightbox, /<SchedulePanel interview=\{who\} \/>/);
   assert.doesNotMatch(readFileSync('frontend/public/_headers', 'utf8').replace(/^#.*$/gm, ''), /Content-Security-Policy/i, 'the SDK is blocked by nothing on the shell');
   assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /http-equiv="Content-Security-Policy"/i);
   // The SDK is never a static script on the page: only the click adds it.

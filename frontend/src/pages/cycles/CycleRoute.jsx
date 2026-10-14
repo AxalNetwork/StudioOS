@@ -13,6 +13,7 @@ import useAiSpend from '../../hooks/useAiSpend';
 import ShareUpdateSheet from '../founder/ShareUpdateSheet';
 import ConnectToolSheet from '../account/ConnectToolSheet';
 import RecordLightbox from '../founder/RecordLightbox';
+import { recordingHref } from '../founder/recordSetup';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
@@ -315,6 +316,10 @@ export default function CycleRoute({ cycle, record = false }) {
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
+  // D685 §5.4: while this tab records (or holds a paused recording), the setup
+  // never opens over it: `/validate/record` is that recording's live view.
+  const { state: recording } = useActiveRecording();
+  const toLive = record ? recordingHref(recording) : null;
   // Under the lightbox is the module page the founder was on, when it is one of
   // this cycle's modules; otherwise (a deep link, or the interview log) the overview.
   const slug = record ? underModule(def?.modules, location.state?.under) : routeSlug;
@@ -390,6 +395,7 @@ export default function CycleRoute({ cycle, record = false }) {
 
   const tabs = useMemo(() => (def?.modules || []).map((m) => ({ slug: m.slug, name: m.name })), [def]);
 
+  if (toLive) return <Navigate to={toLive} replace />;
   if (!def) return null;
   if (!known) return <Navigate to={`/${cycle}${q}`} replace />;
 

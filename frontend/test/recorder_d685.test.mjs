@@ -12,7 +12,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, pillLabel, pillVariant, processingProgress, stageIndex } from '../src/lib/activeRecording.js';
+import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, pillLabel, pillVariant, processingProgress, stageIndex, startRefused } from '../src/lib/activeRecording.js';
+import { layers, ringMode } from '../src/pages/founder/RecordingView.jsx';
 import { BUDGET_CLOSE, LEVEL_MS, NO_SOUND_MS, createCapture, memoryQueue, nextSeq } from '../src/lib/interviewCapture.js';
 import { isCapturing, setCaptureProbe, whenIdle } from '../src/lib/captureGuard.js';
 import { FLASH_MS, INDETERMINATE_SWEEP, flashLevel, runRing, stoppingArc } from '../src/lib/ringViz.js';
@@ -115,6 +116,36 @@ test('a denied mic keeps the session a draft and shows the denied card; Try agai
   b.browser.getUserMedia = async () => { b.log.push('getUserMedia'); return stream([track()]); };
   assert.equal(await r.retryMic(), 'recording');
   assert.deepEqual(w.calls, [['action', 'start']]);
+});
+
+test('#1587 a Start the Worker refuses is said in its words, never as a denied microphone; 409 session_active names the live recording', async () => {
+  const b = fakeBrowser();
+  const refusal = Object.assign(new Error('You are already recording another session. Stop it, or return to it, first.'), { status: 409, code: 'session_active', data: { error: 'session_active', session_id: 88 } });
+  const w = fakeApi({ action: async (id, a) => { w.calls.push(['action', a]); throw refusal; } });
+  const r = createRecorder({ api: w.api, browser: b.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await r.begin({ session: draft() }), 'refused');
+  const st = r.getSnapshot();
+  assert.deepEqual(st.refused, { text: 'You are already recording another session. Stop it, or return to it, first.', sessionId: 88 });
+  assert.deepEqual(layers(st), { ...layers(st), refused: true, denied: false }, 'the refused card, not the microphone\'s');
+  assert.equal(ringMode(layers(st)), 'paused');
+  // Another refusal: its words, and no recording to return to.
+  assert.deepEqual(startRefused(Object.assign(new Error('Record consent first.'), { status: 409, code: 'consent_required' })), { text: 'Record consent first.', sessionId: null });
+  assert.deepEqual(startRefused({}), { text: 'The recording could not start.', sessionId: null });
+  // A refused microphone is still the microphone's card.
+  const b2 = fakeBrowser({ micDenied: true });
+  const r2 = createRecorder({ api: fakeApi().api, browser: b2.browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  await r2.begin({ session: draft() });
+  assert.equal(r2.getSnapshot().refused, null);
+  assert.equal(layers(r2.getSnapshot()).denied, true);
+  // Started after all: the refusal is cleared.
+  const w3 = fakeApi();
+  let first = true;
+  const action = w3.api.action;
+  w3.api.action = async (id, a) => { if (first) { first = false; throw refusal; } return action(id, a); };
+  const r3 = createRecorder({ api: w3.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()) });
+  await r3.begin({ session: draft() });
+  assert.equal(await r3.retryMic(), 'recording');
+  assert.equal(r3.getSnapshot().refused, null);
 });
 
 test('a video call: Start waits for the second click; sharing asks for the tab first, then the mic; the recorder takes the audio mix only', async () => {

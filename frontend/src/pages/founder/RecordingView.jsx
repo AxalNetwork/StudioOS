@@ -33,7 +33,9 @@ export function layers(st, { reduced = false } = {}) {
     // Start was pressed; the microphone has not answered yet.
     opening: st?.phase === 'idle' && !!st?.session,
     share: st?.phase === 'share',
-    denied: st?.phase === 'denied' || cap.mic === 'denied',
+    // The Worker refused the Start (its words): not the microphone.
+    refused: st?.phase === 'denied' && !!st?.refused,
+    denied: !(st?.phase === 'denied' && st?.refused) && (st?.phase === 'denied' || cap.mic === 'denied'),
     micLost: live && (cap.mic === 'ended' || cap.mic === 'muted'),
     paused: st?.phase === 'paused',
     offline: st?.online === false || cap.online === false,
@@ -55,7 +57,7 @@ export function layers(st, { reduced = false } = {}) {
 export function ringMode(l) {
   if (l.stopping) return 'stopping';
   if (l.denied) return 'denied';
-  if (l.paused || l.share) return 'paused';
+  if (l.paused || l.share || l.refused) return 'paused';
   if (l.silence || l.nosound) return 'silence';
   return 'speech';
 }
@@ -231,7 +233,7 @@ function TabVideo({ stream }) {
   return <video ref={v} autoPlay muted playsInline className="h-full w-full rounded-xl bg-black object-cover" data-testid="tile-video" />;
 }
 
-export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit }) {
+export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit, onOpen }) {
   const exitRef = useRef(null);
   const stopRef = useRef(null);
   const drawerBtn = useRef(null);
@@ -241,7 +243,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
   const name = String(st?.interview?.interviewee_name || '').trim() || 'Name not recorded';
   const company = String(st?.interview?.interviewee_company || '').trim() || 'Not recorded';
   const elapsed = elapsedMs(s, now);
-  const lang = l.denied ? null : languageName(s.language);
+  const lang = l.denied || l.refused ? null : languageName(s.language);
   const liveOn = st?.cap?.live ?? !!s.live_model;
   const liveAvailable = !!s.live_model && !l.budget;
   const tiles = st?.video && !l.share;
@@ -314,7 +316,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         {st?.wake === 'unsupported' && (l.paused || st?.phase === 'recording') && <p className="text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="recording-wake">This browser cannot keep the screen on. Keep it awake so the recording continues.</p>}
         {l.stopping && <ProcessingStages processing={st?.processing} stageAt={stageAt} onRetry={() => actions.retry?.()} />}
         {st?.error && <p role="alert" className="font-semibold text-red-700 dark:text-red-300" data-testid="recording-error">{st.error}</p>}
-        {!l.share && !l.denied && !l.stopping && !l.offline && !l.opening && (
+        {!l.share && !l.denied && !l.refused && !l.stopping && !l.offline && !l.opening && (
           liveOn && liveAvailable
             ? <p className="text-gray-700 dark:text-gray-300" data-testid="live-caption">{st?.cap?.caption || '…'}</p>
             : !l.budget && <p className="text-gray-500 dark:text-gray-400" data-testid="live-off-note">Live transcript off. The transcript appears when you stop.</p>
@@ -340,7 +342,20 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         </div>
       )}
 
-      {!l.stopping && !l.share && !l.denied && !l.opening && (
+      {l.refused && (
+        <div role="alert" className="mx-4 mb-4 rounded-2xl border border-gray-200 bg-white p-4 text-center dark:border-[#2a2140] dark:bg-[#130b22]" data-testid="refused-card">
+          <p className="m-0 font-bold">{st.refused.text}</p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {st.refused.sessionId != null && onOpen && (
+              <button type="button" onClick={() => onOpen(`/validate/record/live?session=${encodeURIComponent(st.refused.sessionId)}`)} data-testid="button-refused-live"
+                className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800">Return to that recording</button>
+            )}
+            {onExit && <button type="button" onClick={onExit} data-testid="button-refused-exit" className="rounded-md border border-gray-200 px-3 py-1.5 text-[12.5px] font-semibold hover:bg-gray-50 dark:border-[#2a2140] dark:hover:bg-[#1c1230]">Back</button>}
+          </div>
+        </div>
+      )}
+
+      {!l.stopping && !l.share && !l.denied && !l.refused && !l.opening && (
         <footer className="flex items-center justify-center gap-3 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 sm:gap-4">
           {l.paused
             ? <button type="button" data-testid="button-resume" className={ROUND_PLAIN} onClick={() => actions.resume?.()} aria-label="Resume"><Play size={20} />Resume</button>
