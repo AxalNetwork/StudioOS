@@ -338,10 +338,12 @@ export function underSlug(path, cycle = 'validate', action = 'record') {
 }
 
 /*
- * Each cycle's open lightbox (D686 §5.1). Build, Raise and Grow mount their
- * existing self-framed sheets for now, with no frame of their own around them:
- * two dialogs must never nest. S02-B, S03-A and S03-B each swap their cycle's
- * Mount for a `<Lightbox size="tall">` with an `ActionSheet` body.
+ * Each cycle's open lightbox (D686 §5.1). Build, Raise and Grow each mount a
+ * sheet that draws its own `<Lightbox size="tall">` with an `ActionSheet`
+ * body: Build's `ConnectToolSheet` (S02-B, #1597), Raise's `RoundCallSheet`
+ * in its `CallLightbox` (S03-A) and Grow's `ShareUpdateLightbox` (S03-B).
+ * Validate's `RecordMount` draws `RecordLightbox`. This route draws no frame
+ * around any of them: two dialogs must never nest.
  */
 function ValidateMount({ projectId, searchParams, onClose, onDone }) {
   return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} />;

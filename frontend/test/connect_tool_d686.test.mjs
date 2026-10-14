@@ -753,3 +753,71 @@ test('the frame: one lightbox; × and Done close it all; Escape steps back from 
     restore();
   }
 });
+
+test('the frame and a tool\'s settings dialog: one Escape closes one layer (LinkedIn CSV, HubSpot, Salesforce)', async () => {
+  // #1633's mount-order rule (`useEscapeClose.js`): a nested dialog opened in
+  // a later commit than the lightbox sits above it on the one stack. Each
+  // tool dialog opens from a click, so the first Escape closes it alone, the
+  // second steps back from the tool, the third closes the frame.
+  const restore = installDocument();
+  if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+  const make = document.createElement.bind(document);
+  document.createElement = (tag) => Object.assign(make(tag), { querySelector: () => null, querySelectorAll: () => [], focus() {} });
+  document.body = document.createElement('body');
+  const keys = new Set();
+  document.addEventListener = (type, fn) => { if (type === 'keydown') keys.add(fn); };
+  document.removeEventListener = (type, fn) => { if (type === 'keydown') keys.delete(fn); };
+  const escape = () => act(async () => { const e = { key: 'Escape', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }; for (const fn of [...keys]) fn(e); });
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const settle = () => act(async () => { for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  const txt = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(txt).join('') : n.textContent || '');
+  const press = async (n) => { await act(async () => { await pr(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); };
+  const click = async (id) => { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await press(n); };
+  const button = (label) => walk(container).find((n) => String(n.tagName || '').toLowerCase() === 'button' && txt(n).trim() === label);
+  const dialogs = () => walk(container).filter((n) => pr(n).role === 'dialog').map((n) => pr(n)['data-testid']);
+  const saved = { fed: connectorsApi.fed, action: connectorsApi.action, logs: connectorsApi.logs };
+  connectorsApi.fed = async () => ({ modules: [] });
+  connectorsApi.action = async () => ({ result: {} });
+  connectorsApi.logs = async () => ({ items: [] });
+  const catalogue = buildCatalogue({
+    providers: [
+      { key: 'hubspot', display_name: 'HubSpot', category: 'CRM', status: 'live', has_implementation: true },
+      { key: 'salesforce', display_name: 'Salesforce', category: 'CRM', status: 'live', has_implementation: true },
+    ],
+    items: [
+      { uid: 'u-hub', provider_key: 'hubspot', status: 'active', config: {}, last_synced_at: ago(3600000) },
+      { uid: 'u-sf', provider_key: 'salesforce', status: 'active', config: {}, last_synced_at: ago(3600000) },
+    ],
+    firstParty: { linkedin: { configured: true, connected: true } },
+  });
+  let closed = 0;
+  try {
+    await act(async () => { root.render(h(MemoryRouter, null, h(ConnectToolView, { data: { status: 'ready', catalogue, reload() {} }, onClose() { closed += 1; } }))); });
+    await settle();
+    for (const [key, label, nested] of [['linkedin', 'Import', 'linkedin-csv-modal'], ['hubspot', 'Change', 'hubspot-config-modal'], ['salesforce', 'Change', 'salesforce-config-modal']]) {
+      await click(`tool-name-${key}`);
+      assert.deepEqual(dialogs(), ['connect-tool-lightbox'], `${key}: its panel draws in the frame`);
+      const open = button(label);
+      assert.ok(open, `${key}: the settings row's ${label}`);
+      await press(open);
+      assert.deepEqual(dialogs(), ['connect-tool-lightbox', nested], `${key}: the settings dialog is a second, nested dialog`);
+      await escape(); await settle();
+      assert.deepEqual(dialogs(), ['connect-tool-lightbox'], `${key}: the first Escape closes the settings dialog alone`);
+      assert.equal(walk(container).filter((n) => pr(n)['data-layout'] === 'lightbox').length, 1, `${key}: the tool stays open`);
+      assert.equal(closed, 0, `${key}: the frame stays open`);
+      await escape(); await settle();
+      assert.ok(by('connect-tool-sheet'), `${key}: the second Escape steps back to the list`);
+      assert.equal(closed, 0);
+    }
+    await escape(); await settle();
+    assert.equal(closed, 1, 'the third Escape, from the list, closes the frame');
+  } finally {
+    Object.assign(connectorsApi, saved);
+    await act(async () => root.unmount());
+    restore();
+  }
+});

@@ -234,27 +234,52 @@ test('D264: a null do_jurisdiction renders no var — never "none" — even when
   assert.deepEqual(checkRendered(hqWithVar, e, leaked), []);
 });
 
+/**
+ * D681: wrangler.toml with HQ's production MCP flag forced to "true", whatever
+ * the live value. A branch must render with MCP off even while HQ's is on, so
+ * the renderer's forced "false" is probed against this fixture rather than the
+ * live flag, which a switch-off PR sets to "false" (PRODUCTION.md, "MCP
+ * enablement"). Everything else is the real file.
+ */
+function withHqMcpOn(src) {
+  const header = '\n[env.production.vars]\n';
+  const start = src.indexOf(header);
+  assert.ok(start >= 0, 'HQ\'s [env.production.vars] table');
+  const end = src.indexOf('\n[', start + header.length);
+  const vars = src.slice(start, end < 0 ? undefined : end);
+  const flags = vars.match(/^MCP_SERVER_ENABLED = "(?:true|false)"$/gm) ?? [];
+  assert.equal(flags.length, 1, 'exactly one MCP flag in HQ\'s production vars');
+  const out = src.slice(0, start) + vars.replace(flags[0], 'MCP_SERVER_ENABLED = "true"') + (end < 0 ? '' : src.slice(end));
+  const prodVars = parseToml(out).sections.filter((s) => s.name === 'env.production.vars');
+  assert.equal(prodVars.length, 1);
+  assert.equal(prodVars[0].kv.get('MCP_SERVER_ENABLED'), '"true"', 'the fixture forces HQ\'s production flag on');
+  return out;
+}
+const MCP_ON_TOML = withHqMcpOn(TOML);
+
 /** D681: adding HQ's OAuth namespace must not break existing branch registries or share grants. */
-async function checkMcpBranch(api) {
+async function checkMcpBranch(api, toml) {
   const e = entry();
-  const src = api.renderBranchConfig(TOML, e);
+  const src = api.renderBranchConfig(toml, e);
   const secs = parseToml(src).sections;
   const vars = secs.find((s) => s.name === 'vars');
   assert.equal(vars.kv.get('MCP_SERVER_ENABLED'), '"false"');
   assert.equal(secs.some((s) => s.name === 'kv_namespaces' && s.kv.get('binding') === '"OAUTH_KV"'), false);
-  assert.deepEqual(api.checkRendered(TOML, e, src), []);
+  assert.deepEqual(api.checkRendered(toml, e, src), []);
   const enabled = src.replace('MCP_SERVER_ENABLED = "false"', 'MCP_SERVER_ENABLED = "true"');
-  assert.ok(api.checkRendered(TOML, e, enabled).some((p) => p.includes('MCP_SERVER_ENABLED must be false')));
+  assert.notEqual(enabled, src, 'branch flag mutation target');
+  assert.ok(api.checkRendered(toml, e, enabled).some((p) => p.includes('MCP_SERVER_ENABLED must be false')));
   // An extra fake namespace still fails the expected binding set, independently of the HQ-id guard.
   const oauth = '\n[[kv_namespaces]]\nbinding = "OAUTH_KV"\nid = "' + 'c'.repeat(32) + '"\n';
-  assert.ok(api.checkRendered(TOML, e, src + oauth).some((p) => p.includes('table kv_namespaces')));
-  const hq = parseToml(TOML).sections.find((s) => s.name === 'env.production.kv_namespaces' && s.kv.get('binding') === '"OAUTH_KV"');
-  assert.ok(api.checkRendered(TOML, e, src + oauth.replace('c'.repeat(32), JSON.parse(hq.kv.get('id')))).some((p) => p.includes("HQ's id")));
+  assert.ok(api.checkRendered(toml, e, src + oauth).some((p) => p.includes('table kv_namespaces')));
+  const hq = parseToml(toml).sections.find((s) => s.name === 'env.production.kv_namespaces' && s.kv.get('binding') === '"OAUTH_KV"');
+  assert.ok(api.checkRendered(toml, e, src + oauth.replace('c'.repeat(32), JSON.parse(hq.kv.get('id')))).some((p) => p.includes("HQ's id")));
 }
 
 test('D681: HQ OAuth enablement preserves branch registries, keeps MCP off and rejects an inherited OAuth store', async () => {
   const real = await import('./branchConfig.mjs');
-  await checkMcpBranch(real);
+  await checkMcpBranch(real, TOML);
+  await checkMcpBranch(real, MCP_ON_TOML);
 });
 
 test('D681 branch isolation mutation/restoration: flag, namespace omission and the explicit binding exception', async () => {
@@ -269,7 +294,9 @@ test('D681 branch isolation mutation/restoration: flag, namespace omission and t
   for (const [i, [before, after]] of cases.entries()) {
     assert.ok(source.includes(before), 'live branch isolation mutation target');
     const bad = await import('data:text/javascript;base64,' + Buffer.from(source.replace(before, after) + '\n// D681 ' + i).toString('base64'));
-    await assert.rejects(() => checkMcpBranch(bad), assert.AssertionError);
-    await checkMcpBranch(real);
+    // Against HQ's flag forced on, so each mutation is caught whatever the live flag is.
+    await assert.rejects(() => checkMcpBranch(bad, MCP_ON_TOML), assert.AssertionError);
+    await checkMcpBranch(real, MCP_ON_TOML);
+    await checkMcpBranch(real, TOML);
   }
 });

@@ -18,9 +18,13 @@ import {
  * same panel, so a tool connected here is a connector there.
  *
  * `refused` and `success` are the panel's own `refused` and `connected` views.
- * A provider's sign-in still returns to `/integrations`, which lands on the
- * Connectors page; the Worker's callback chooses that address (D651) until
- * S18-A's `return_to=build` merges (D686 §5.2).
+ * A provider's sign-in started here returns to Build (D686 §5.2): the panel
+ * sends `return_to=build` for registry tools, Google, Microsoft and LinkedIn,
+ * and the Worker's callback sends the browser to `/build/connect`. A registry
+ * tool returns `?oauth=…&provider=…`, Google `?google=…`, Microsoft
+ * `?microsoft=…` and LinkedIn `?linkedin=…`; `oauthReturn` reads all four
+ * and reopens that tool's view. One started on the Connectors page still
+ * returns to `/integrations` (D651).
  *
  * ONE FRAME (D686 §5.4). The list and every panel view swap inside one
  * `<Lightbox size="tall">`, so a swap never remounts it or pulls focus back to

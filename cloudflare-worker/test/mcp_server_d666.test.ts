@@ -9,9 +9,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { parseSections } from '../../scripts/check-wrangler-binding-parity.mjs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { experimental_readRawConfig, unstable_readConfig } from 'wrangler';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -301,43 +302,326 @@ test('signing out everywhere ends every grant; a raised session floor refuses a 
 
 // ── wrangler.toml ──────────────────────────────────────────────────────────
 
-/** D681 (#1555): pin the parsed scopes, not commented placeholders or table order. */
+/**
+ * The MCP flag HQ ships at the top level and in [env.production] (D681). The
+ * lasting switch-off is one PR to main that sets MCP_SERVER_ENABLED to "false"
+ * in wrangler.toml's top-level [vars] and [env.production.vars] and sets this
+ * constant to 'false' (PRODUCTION.md, "MCP enablement"). Preview's flag stays
+ * 'false' whatever this says.
+ */
+const HQ_MCP_FLAG = 'true';
+/** HQ's OAuth namespace (D681), and the placeholder [env.preview] binds until preview has its own. */
+const HQ_MCP_STORE_ID = 'a536c75e7461447a89b1967d367c13ad';
+const PREVIEW_MCP_STORE_PLACEHOLDER = 'REPLACE_WITH_PREVIEW_KV_OAUTH_ID';
+/**
+ * The three scopes the guard requires, each with its table prefix, the
+ * wrangler environment it is (none for the top level), its expected flag and
+ * its OAuth namespace, shared by checkMcpDeployment and its mutation probes.
+ * Every other environment wrangler.toml declares is read too, and held to
+ * preview's rule (checkMcpDeployment).
+ */
+const MCP_SCOPES = [
+  ['', undefined, HQ_MCP_FLAG, HQ_MCP_STORE_ID],
+  ['env.production.', 'production', HQ_MCP_FLAG, HQ_MCP_STORE_ID],
+  ['env.preview.', 'preview', 'false', PREVIEW_MCP_STORE_PLACEHOLDER],
+] as const;
+/** HQ's two scopes. Any D1 or KV id either binds is HQ's store. */
+const HQ_SCOPES: readonly string[] = ['', 'env.production.'];
+const scopeName = (scope: string) => (scope ? '[' + scope.slice(0, -1) + ']' : 'top level');
+
+/**
+ * wrangler.toml as the installed wrangler resolves it for the top level and
+ * for every environment its `env` table declares, each read by
+ * `unstable_readConfig`, the reader `wrangler deploy` uses, beside the raw
+ * table wrangler parsed for it (`experimental_readRawConfig`, the same TOML
+ * parser). The raw `env` table names the environments, so one added later
+ * (`[env.inspector]`) is read as surely as production and preview, which
+ * must be there. A line-based parser misses spellings TOML allows and
+ * wrangler reads: spaces or a quoted segment inside a header's brackets
+ * (`[[ env.preview.kv_namespaces ]]`, `[[env."preview".kv_namespaces]]`), a
+ * quoted key, a literal or escaped string. An HQ id written that way would
+ * reach a scope unseen. wrangler reads a file, so `toml` goes to a temporary
+ * directory first. CLOUDFLARE_ENV is cleared for the read: wrangler takes it
+ * as the environment when none is named, and the top level would then read
+ * as another scope. A config or environment wrangler cannot read fails as an
+ * assertion, so no spelling passes unread.
+ */
+function wranglerScopes(toml: string): Map<string, { raw: any; config: any }> {
+  const dir = mkdtempSync(join(tmpdir(), 'd681-wrangler-'));
+  const config = join(dir, 'wrangler.toml');
+  const cloudflareEnv = process.env.CLOUDFLARE_ENV;
+  delete process.env.CLOUDFLARE_ENV;
+  try {
+    writeFileSync(config, toml);
+    let raw: any;
+    try {
+      raw = experimental_readRawConfig({ config }).rawConfig;
+    } catch (e) {
+      return assert.fail('wrangler cannot read wrangler.toml: ' + (e as Error).message);
+    }
+    const envs = raw.env ?? {};
+    assert.ok(envs && typeof envs === 'object' && !Array.isArray(envs), 'wrangler.toml\'s env is a table');
+    const names = [...new Set(['production', 'preview', ...Object.keys(envs)])];
+    return new Map([undefined, ...names].map((env) => {
+      const scope = env === undefined ? '' : 'env.' + env + '.';
+      let c: any;
+      try {
+        c = unstable_readConfig({ config, env }, { hideWarnings: true });
+      } catch (e) {
+        return assert.fail('wrangler cannot read the ' + scopeName(scope) + ': ' + (e as Error).message);
+      }
+      assert.equal(c.targetEnvironment, env, 'wrangler read the ' + scopeName(scope));
+      const own = env === undefined ? raw : envs[env];
+      assert.ok(own && typeof own === 'object' && !Array.isArray(own), 'the ' + scopeName(scope) + ' is a table');
+      return [scope, { raw: own, config: c }];
+    }));
+  } finally {
+    if (cloudflareEnv !== undefined) process.env.CLOUDFLARE_ENV = cloudflareEnv;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Every store id a resolved scope's D1 and KV bindings name, `wrangler dev`'s preview ids included. */
+function storeIds(c: any): [string, string, unknown][] {
+  const named = (b: any, keys: string[]) => keys.map((k) => [b.binding, k, b[k]] as [string, string, unknown]);
+  return [
+    ...(c.kv_namespaces ?? []).flatMap((b: any) => named(b, ['id', 'preview_id'])),
+    ...(c.d1_databases ?? []).flatMap((b: any) => named(b, ['database_id', 'preview_database_id'])),
+  ].filter(([, , v]) => v !== undefined);
+}
+
+/** A store id as wrangler read it (quotes stripped, escapes decoded), lower-cased so a hex id matches in any case. */
+function storeKey(binding: string, key: string, v: unknown): string {
+  assert.equal(typeof v, 'string', binding + ' ' + key + ' is a string');
+  return (v as string).toLowerCase();
+}
+
+/** D681 (#1555): pin each scope as wrangler resolves it, not commented placeholders, table order or spelling. */
 function checkMcpDeployment(toml: string) {
-  const sections = parseSections(toml);
-  for (const [scope, flag] of [['', 'true'], ['env.production.', 'true'], ['env.preview.', 'false']]) {
-    const vars = sections.filter((s: any) => s.name === scope + 'vars');
-    assert.equal(vars.length, 1, 'exactly one vars table in ' + (scope || 'top-level'));
-    assert.equal(vars[0].kv.get('MCP_SERVER_ENABLED'), JSON.stringify(flag), 'MCP flag in ' + (scope || 'top-level'));
-    const bindings = sections.filter((s: any) => s.name === scope + 'kv_namespaces' && s.kv.get('binding') === '"OAUTH_KV"');
-    assert.equal(bindings.length, 1, 'exactly one live OAuth binding in ' + (scope || 'top-level'));
-    assert.equal(bindings[0].kv.get('id'), '"a536c75e7461447a89b1967d367c13ad"', 'owner-provisioned OAuth namespace');
+  const scopes = wranglerScopes(toml);
+  // No scope declares an `unsafe` key, and wrangler.toml has none. Its
+  // bindings (`unsafe.bindings`, `unsafe.metadata.bindings`) can name a D1
+  // database or KV namespace by id where the store check below never reads.
+  // wrangler never carries `unsafe` from the top level into an environment,
+  // so each scope's own table is the place to look.
+  for (const [scope, { raw }] of scopes) {
+    assert.equal(Object.hasOwn(raw, 'unsafe'), false, scopeName(scope) + ' declares `unsafe`, whose bindings the store check cannot read');
+  }
+  // Every D1 and KV id HQ binds, at the top level and in production. Preview has
+  // its own D1 and grants are keyed by numeric user id, so any store preview
+  // shares with HQ crosses deployments.
+  const hqIds = new Set(HQ_SCOPES.flatMap((s) => storeIds(scopes.get(s)!.config).map(([b, k, v]) => storeKey(b, k, v))));
+  const preview = scopes.get('env.preview.')!.config;
+  assert.ok((preview.d1_databases ?? []).length > 0, 'preview declares its D1');
+  assert.ok((preview.kv_namespaces ?? []).length > 0, 'preview declares its KV namespaces');
+  for (const b of preview.d1_databases) assert.ok(b.database_id, 'preview\'s D1 ' + b.binding + ' names its database_id');
+  for (const b of preview.kv_namespaces) assert.ok(b.id, 'preview\'s KV ' + b.binding + ' names its id');
+  // A D1 binding with no database_id is looked up by database_name at deploy,
+  // so HQ's database names count as HQ's stores too.
+  const hqD1Names = new Set(HQ_SCOPES.flatMap((s) => (scopes.get(s)!.config.d1_databases ?? []).map((b: any) => String(b.database_name ?? '').toLowerCase())).filter(Boolean));
+  // Preview's rule, for preview and every other environment but production:
+  // every store named by its own id, no store HQ binds, and MCP off.
+  for (const [scope, { config: c }] of scopes) {
+    if (HQ_SCOPES.includes(scope)) continue;
+    for (const b of c.d1_databases ?? []) {
+      assert.ok(typeof b.database_id === 'string' && b.database_id !== '', scopeName(scope) + '\'s D1 ' + b.binding + ' names its database_id');
+      assert.equal(hqD1Names.has(String(b.database_name ?? '').toLowerCase()), false, scopeName(scope) + '\'s D1 ' + b.binding + ' uses HQ\'s database_name ' + b.database_name);
+    }
+    for (const b of c.kv_namespaces ?? []) {
+      assert.ok(typeof b.id === 'string' && b.id !== '', scopeName(scope) + '\'s KV ' + b.binding + ' names its id');
+    }
+    for (const [binding, key, v] of storeIds(c)) {
+      assert.equal(hqIds.has(storeKey(binding, key, v)), false, scopeName(scope) + '\'s ' + binding + ' ' + key + ' is one of HQ\'s D1 or KV ids: ' + v);
+    }
+    assert.equal(c.vars?.MCP_SERVER_ENABLED, 'false', 'MCP flag in ' + scopeName(scope));
+  }
+  for (const [scope, , flag, store] of MCP_SCOPES) {
+    const c = scopes.get(scope)!.config;
+    assert.equal(c.vars?.MCP_SERVER_ENABLED, flag, 'MCP flag in ' + scopeName(scope));
+    const bindings = (c.kv_namespaces ?? []).filter((b: any) => b.binding === 'OAUTH_KV');
+    assert.equal(bindings.length, 1, 'exactly one live OAuth binding in ' + scopeName(scope));
+    const id = bindings[0].id;
+    if (scope === 'env.preview.') {
+      assert.notEqual(storeKey('OAUTH_KV', 'id', id), HQ_MCP_STORE_ID, 'preview never binds HQ\'s OAuth namespace');
+    } else {
+      assert.equal(id, store, 'owner-provisioned OAuth namespace');
+    }
   }
   assert.doesNotMatch(toml, /OAUTH_KV-PENDING|<owner-provided>/);
 }
 
-test('D681 wrangler.toml: MCP enabled at top level and production, preview off, owner OAuth namespace bound in all three scopes', () => {
+test('D681 wrangler.toml, as wrangler resolves it: HQ\'s MCP flag at top level and production on HQ\'s OAuth namespace; preview off, on stores HQ never binds', () => {
   checkMcpDeployment(readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8'));
 });
 
+/** The id HQ's top level binds for a KV or D1 `binding`, as wrangler reads it. */
+function hqStoreId(toml: string, table: 'kv_namespaces' | 'd1_databases', binding: string, key: string): string {
+  const b = wranglerScopes(toml).get('')!.config[table].find((x: any) => x.binding === binding);
+  assert.equal(typeof b?.[key], 'string', 'HQ\'s ' + binding + ' ' + key);
+  return b[key];
+}
+
 test('D681 deployment mutations fail the same assertions; the shipped config restores them', () => {
   const toml = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
-  for (const [scope, flag] of [['', 'true'], ['env.production.', 'true'], ['env.preview.', 'false']]) {
-    const header = '[' + scope + 'vars]';
+  const hqTokensId = hqStoreId(toml, 'kv_namespaces', 'TOKENS', 'id');
+  for (const [scope, , flag, id] of MCP_SCOPES) {
+    // The table header on its own line, never a mention of it in a comment.
+    const header = '\n[' + scope + 'vars]\n';
     const start = toml.indexOf(header), next = toml.indexOf('\n[', start + header.length);
+    assert.ok(start >= 0, 'live ' + header.trim() + ' table');
     const vars = toml.slice(start, next < 0 ? undefined : next);
     const flipped = vars.replace('MCP_SERVER_ENABLED = "' + flag + '"', 'MCP_SERVER_ENABLED = "' + (flag === 'true' ? 'false' : 'true') + '"');
     assert.notEqual(flipped, vars, 'live flag mutation target');
     assert.throws(() => checkMcpDeployment(toml.replace(vars, flipped)), assert.AssertionError);
-    const block = '[[' + scope + 'kv_namespaces]]\nbinding = "OAUTH_KV"\nid      = "a536c75e7461447a89b1967d367c13ad"';
+    const block = '[[' + scope + 'kv_namespaces]]\nbinding = "OAUTH_KV"\nid      = "' + id + '"';
     assert.ok(toml.includes(block), 'live namespace mutation target');
-    for (const replacement of [
-      '# ' + block.replaceAll('\n', '\n# '),
-      block.replace('a536c75e7461447a89b1967d367c13ad', '0'.repeat(32)),
-      block + '\n' + block,
-    ]) assert.throws(() => checkMcpDeployment(toml.replace(block, replacement)), assert.AssertionError);
+    const bad = ['# ' + block.replaceAll('\n', '\n# '), block + '\n' + block];
+    if (scope === 'env.preview.') {
+      // Preview back on HQ's OAuth store, or on any other HQ namespace.
+      bad.push(block.replace(id, HQ_MCP_STORE_ID), block.replace(id, hqTokensId));
+    } else {
+      bad.push(block.replace(id, '0'.repeat(32)));
+    }
+    for (const replacement of bad) assert.throws(() => checkMcpDeployment(toml.replace(block, replacement)), assert.AssertionError);
     checkMcpDeployment(toml);
   }
+  // Preview's own namespace, once provisioned, passes as the placeholder does.
+  const preview = '[[env.preview.kv_namespaces]]\nbinding = "OAUTH_KV"\nid      = "' + PREVIEW_MCP_STORE_PLACEHOLDER + '"';
+  checkMcpDeployment(toml.replace(preview, preview.replace(PREVIEW_MCP_STORE_PLACEHOLDER, 'f'.repeat(32))));
   assert.throws(() => checkMcpDeployment(toml + '\n# OAUTH_KV-PENDING'), assert.AssertionError);
+  // A CLOUDFLARE_ENV in the test's environment never makes the top level read as another scope.
+  const cloudflareEnv = process.env.CLOUDFLARE_ENV;
+  try {
+    for (const env of ['preview', 'production']) {
+      process.env.CLOUDFLARE_ENV = env;
+      checkMcpDeployment(toml);
+      assert.equal(process.env.CLOUDFLARE_ENV, env, 'the read restores CLOUDFLARE_ENV');
+    }
+  } finally {
+    if (cloudflareEnv === undefined) delete process.env.CLOUDFLARE_ENV;
+    else process.env.CLOUDFLARE_ENV = cloudflareEnv;
+  }
+  checkMcpDeployment(toml);
+});
+
+test('D681 preview isolation: no [env.preview] D1 or KV store may name an id HQ binds, in any TOML spelling wrangler reads; its own ids pass', () => {
+  const toml = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
+  const hqTokensId = hqStoreId(toml, 'kv_namespaces', 'TOKENS', 'id');
+  const hqD1Id = hqStoreId(toml, 'd1_databases', 'DB', 'database_id');
+  const stores = [
+    ['[[env.preview.kv_namespaces]]\nbinding = "OAUTH_KV"\nid      = ', PREVIEW_MCP_STORE_PLACEHOLDER, [HQ_MCP_STORE_ID, hqTokensId]],
+    ['[[env.preview.kv_namespaces]]\nbinding = "TOKENS"\nid      = ', 'REPLACE_WITH_PREVIEW_KV_TOKENS_ID', [hqTokensId, HQ_MCP_STORE_ID]],
+    ['[[env.preview.d1_databases]]\nbinding       = "DB"\ndatabase_name = "studioos-db-preview"\ndatabase_id   = ', 'REPLACE_WITH_PREVIEW_D1_ID', [hqD1Id]],
+  ] as const;
+  // Refused as HQ's store, not merely as unreadable.
+  const refusesHqStore = (e: any) => e instanceof assert.AssertionError && /HQ's/.test(e.message);
+  const refusesUnreadable = (e: any) => e instanceof assert.AssertionError && /wrangler cannot read/.test(e.message);
+  // Table and key spellings TOML allows and a line-based parser skips: the
+  // same table and key to wrangler, so the probe below must still refuse them.
+  const tableSpellings: [string, (head: string) => string][] = [
+    ['spaces inside the brackets', (h) => h.replace(/^\[\[env\.preview\.(\w+)\]\]/, '[[ env.preview.$1 ]]')],
+    ['a quoted header segment', (h) => h.replace(/^\[\[env\.preview\./, '[[env."preview".')],
+    ['a quoted key', (h) => h.replace(/\n(id|database_id)( *)= $/, '\n"$1"$2= ')],
+  ];
+  for (const [head, placeholder, hqIds] of stores) {
+    const block = head + '"' + placeholder + '"';
+    assert.ok(toml.includes(block), 'live preview store mutation target: ' + placeholder);
+    const at = (value: string, h: string = head) => toml.replace(block, h + value);
+    for (const hq of hqIds) {
+      for (const spelling of [
+        '"' + hq + '"', // basic string
+        "'" + hq + "'", // literal string
+        '"""' + hq + '"""', // multi-line basic string, on one line
+        "'''" + hq + "'''", // multi-line literal string, on one line
+        '"' + hq.toUpperCase() + '"', // the same id in capitals
+        '"\\u' + hq.charCodeAt(0).toString(16).padStart(4, '0') + hq.slice(1) + '"', // its first character escaped
+        '"' + hq + '"   # with a trailing comment',
+      ]) {
+        assert.throws(() => checkMcpDeployment(at(spelling)), refusesHqStore, placeholder + ' = ' + spelling);
+      }
+    }
+    const own = 'e'.repeat(32);
+    for (const [name, spell] of tableSpellings) {
+      const h = spell(head);
+      assert.notEqual(h, head, name + ' mutation target: ' + placeholder);
+      for (const hq of hqIds) assert.throws(() => checkMcpDeployment(at('"' + hq + '"', h)), refusesHqStore, placeholder + ', ' + name + ', = ' + hq);
+      checkMcpDeployment(at('"' + own + '"', h));
+    }
+    // An id that is not a TOML string fails closed rather than passing unread.
+    for (const bare of [hqIds[0], own]) assert.throws(() => checkMcpDeployment(at(bare)), refusesUnreadable, placeholder + ' = ' + bare);
+    // The store's own id passes, in each quoting.
+    for (const spelling of ['"' + own + '"', "'" + own + "'", '"""' + own + '"""', "'''" + own + "'''"]) checkMcpDeployment(at(spelling));
+  }
+  // `wrangler dev`'s preview_id names a store too, and so does D1's
+  // preview_database_id, under a bare or a quoted key.
+  const tokens = stores[1][0] + '"' + stores[1][1] + '"';
+  assert.throws(() => checkMcpDeployment(toml.replace(tokens, tokens + "\npreview_id = '" + hqTokensId + "'")), refusesHqStore);
+  const d1 = stores[2][0] + '"' + stores[2][1] + '"';
+  for (const key of ['preview_database_id', '"preview_database_id"']) {
+    assert.throws(() => checkMcpDeployment(toml.replace(d1, d1 + '\n' + key + " = '" + hqD1Id + "'")), refusesHqStore, 'a ' + key);
+    checkMcpDeployment(toml.replace(d1, d1 + '\n' + key + ' = "' + 'e'.repeat(32) + '"'));
+  }
+  // A store only wrangler sees, carrying one of HQ's ids, is refused too. A
+  // line-based parser files these keys under the table above them, here
+  // [env.preview.ai], and drops a quoted key, so it would read no store at all.
+  const ai = '\n[env.preview.ai]\nbinding = "AI"\n';
+  assert.ok(toml.includes(ai), 'live [env.preview.ai] mutation target');
+  for (const [hidden, hq] of [
+    ['[[ env.preview.kv_namespaces ]]\nbinding = "EXTRA"\nid      = ', hqTokensId],
+    ['[[env."preview".kv_namespaces]]\nbinding = "EXTRA"\nid      = ', hqTokensId],
+    ['[[ env.preview.d1_databases ]]\nbinding       = "EXTRA_DB"\ndatabase_name = "extra"\ndatabase_id   = ', hqD1Id],
+  ]) {
+    assert.throws(() => checkMcpDeployment(toml.replace(ai, ai + '\n' + hidden + '"' + hq + '"\n')), refusesHqStore, hidden);
+    checkMcpDeployment(toml.replace(ai, ai + '\n' + hidden + '"' + 'e'.repeat(32) + '"\n'));
+  }
+  assert.throws(() => checkMcpDeployment(toml.replace(tokens, tokens + '\n"preview_id" = "' + hqTokensId + '"')), refusesHqStore, 'a quoted preview_id');
+  // A store HQ binds in only one of its two scopes is still HQ's.
+  const extra = 'd'.repeat(32);
+  for (const scope of ['', 'env.production.']) {
+    const hqOnly = toml.replace('[[' + scope + 'kv_namespaces]]', '[[' + scope + 'kv_namespaces]]\nbinding = "EXTRA"\nid      = "' + extra + '"\n\n[[' + scope + 'kv_namespaces]]');
+    assert.notEqual(hqOnly, toml, 'live ' + (scope || 'top-level') + ' KV mutation target');
+    checkMcpDeployment(hqOnly);
+    assert.throws(() => checkMcpDeployment(hqOnly.replace(tokens, stores[1][0] + '"' + extra + '"')), refusesHqStore);
+  }
+  checkMcpDeployment(toml);
+});
+
+test('D681 every scope wrangler resolves: none declares `unsafe`, and an environment added beside production and preview keeps preview\'s rule', () => {
+  const toml = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
+  const hqD1Id = hqStoreId(toml, 'd1_databases', 'DB', 'database_id');
+  const refusesUnsafe = (e: any) => e instanceof assert.AssertionError && /declares `unsafe`/.test(e.message);
+  const refusesHqStore = (e: any) => e instanceof assert.AssertionError && /HQ's/.test(e.message);
+  const refusesUnreadable = (e: any) => e instanceof assert.AssertionError && /wrangler cannot read/.test(e.message);
+  const own = 'e'.repeat(32);
+  // unsafe metadata bindings inline in [env.preview], naming HQ's D1 and OAuth namespace.
+  const head = '\n[env.preview]\nname = "studioos-preview"\n';
+  assert.ok(toml.includes(head), 'live [env.preview] mutation target');
+  const inline = 'unsafe = { metadata = { bindings = [{ type = "d1", name = "HQ_DB", id = "' + hqD1Id + '" }, '
+    + '{ type = "kv_namespace", name = "HQ_OAUTH", namespace_id = "' + HQ_MCP_STORE_ID + '" }] } }\n';
+  assert.throws(() => checkMcpDeployment(toml.replace(head, head + inline)), refusesUnsafe, 'inline unsafe.metadata.bindings');
+  // The [env.preview.unsafe] table form, with unsafe.bindings.
+  const ai = '\n[env.preview.ai]\nbinding = "AI"\n';
+  assert.ok(toml.includes(ai), 'live [env.preview.ai] mutation target');
+  const table = '\n[env.preview.unsafe]\nbindings = [{ name = "HQ_OAUTH", type = "kv_namespace", namespace_id = "' + HQ_MCP_STORE_ID + '" }]\n';
+  assert.throws(() => checkMcpDeployment(toml.replace(ai, ai + table)), refusesUnsafe, '[env.preview.unsafe]');
+  // An environment the guard did not name before, on HQ's OAuth namespace.
+  const inspector = (flag: string, id: string) => toml + '\n[env.inspector]\nname = "studioos-inspector"\n\n[env.inspector.vars]\n'
+    + 'MCP_SERVER_ENABLED = "' + flag + '"\n\n[[env.inspector.kv_namespaces]]\nbinding = "OAUTH_KV"\nid      = "' + id + '"\n';
+  for (const flag of ['true', 'false']) {
+    assert.throws(() => checkMcpDeployment(inspector(flag, HQ_MCP_STORE_ID)), refusesHqStore, '[env.inspector] on HQ\'s OAuth namespace, MCP ' + flag);
+  }
+  assert.throws(() => checkMcpDeployment(inspector('true', own)), /MCP flag in \[env\.inspector\]/);
+  checkMcpDeployment(inspector('false', own));
+  // A D1 binding named only by database_name resolves to HQ's database at deploy.
+  const inspectorD1 = (lines: string) => toml + '\n[env.inspector]\nname = "studioos-inspector"\n\n[env.inspector.vars]\n'
+    + 'MCP_SERVER_ENABLED = "false"\n\n[[env.inspector.d1_databases]]\nbinding = "DB"\n' + lines;
+  assert.throws(() => checkMcpDeployment(inspectorD1('database_name = "studioos-db"\n')), /names its database_id/, '[env.inspector] D1 by HQ\'s name, no id');
+  assert.throws(() => checkMcpDeployment(inspectorD1('database_name = "inspector-db"\ndatabase_id = ""\n')), /names its database_id/, '[env.inspector] D1 with an empty id');
+  assert.throws(() => checkMcpDeployment(inspectorD1('database_name = "studioos-db"\ndatabase_id = "' + own + '"\n')), /HQ's database_name/, '[env.inspector] D1 under HQ\'s name');
+  assert.throws(() => checkMcpDeployment(toml + '\n[env.inspector]\nname = "studioos-inspector"\n\n[env.inspector.vars]\nMCP_SERVER_ENABLED = "false"\n\n[[env.inspector.kv_namespaces]]\nbinding = "OAUTH_KV"\n'), /names its id/, '[env.inspector] KV with no id');
+  checkMcpDeployment(inspectorD1('database_name = "inspector-db"\ndatabase_id = "' + own + '"\n'));
+  // An environment wrangler cannot read fails rather than passing unread.
+  assert.throws(() => checkMcpDeployment(toml + '\n[env.inspector]\nname = 5\n'), refusesUnreadable);
   checkMcpDeployment(toml);
 });
 
