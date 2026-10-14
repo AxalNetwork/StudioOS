@@ -31,8 +31,10 @@
  *     registered none fails loudly;
  *   · D685 §5.1: a channel session stores its call provider, the interview
  *     takes its channel only when it had none, and a chat's first text or an
- *     imported call transcript marks the interview held, once and never at
- *     the cost of the write that triggered it.
+ *     imported call transcript marks the interview held: once (two first
+ *     messages at once included), only after the write lands, never at its
+ *     cost, never again over a stage the member set, never re-dating an
+ *     interview with no stage, and never on another venture's interview.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/channels_foundation_d684.test.ts
@@ -678,8 +680,11 @@ test('the quiet-chat sweep re-structures a chat with new text once it is quiet, 
 // interview lands in Interviews once the conversation has happened.
 // ===========================================================================
 
-const interviewRow = (db: any) =>
-  ({ ...db.prepare('SELECT stage, done_at, channel FROM discovery_interviews WHERE id = ?').get(INTERVIEW) });
+const interviewRow = (db: any, id = INTERVIEW) =>
+  ({ ...db.prepare('SELECT stage, done_at, channel FROM discovery_interviews WHERE id = ?').get(id) });
+/** Another venture's interview (seeded with no stage and no channel) is never written by this member's sessions. */
+const theirsUntouched = (db: any) =>
+  assert.deepEqual(interviewRow(db, THEIR_INTERVIEW), { stage: null, done_at: null, channel: null }, 'another venture\'s interview is untouched');
 const heldRows = (db: any) => count(db, "SELECT COUNT(*) n FROM activity_logs WHERE action = 'interview_stage_set'");
 const chatSeg = (text: string) => ({ start_ms: null, end_ms: null, speaker_raw: null, speaker_label: 'Dana Ruiz', text });
 const callLine = [{ speaker: 'Dana Ruiz', text: 'We lose a day a month.', startMs: 0, endMs: 1000 }];
@@ -696,6 +701,7 @@ test('D685 §5.1.2: a channel session stores its call provider; the interview ta
     assert.equal(callRefusal(channel, provider, null), null, `${provider} is a provider the Worker accepts on ${channel}`);
   }
   assert.equal(interviewRow(db).channel, 'video', 'the first session gave the interview its channel; later ones left it');
+  theirsUntouched(db);
 
   db.prepare('UPDATE discovery_interviews SET channel = NULL WHERE id = ?').run(INTERVIEW);
   await openSession(env, scoped, 'telegram', 'text');
@@ -705,6 +711,7 @@ test('D685 §5.1.2: a channel session stores its call provider; the interview ta
   assert.equal(interviewRow(db).channel, 'in_person', 'an interview with a channel keeps it');
   assert.equal(interviewRow(db).stage, null, 'opening a session does not hold the interview');
   assert.equal(heldRows(db), 0);
+  theirsUntouched(db);
 });
 
 test('D685 §5.1.6: a chat\'s first text marks the interview held, once', async () => {
@@ -724,12 +731,99 @@ test('D685 §5.1.6: a chat\'s first text marks the interview held, once', async 
 
   assert.equal(await appendSegments(env, ME, s.id, [chatSeg('Every Friday.')], 'telegram'), 1);
   assert.equal(heldRows(db), 1, 'a second append writes no second activity row');
-  // Only the move to transcribed holds it: once the member sets the stage
-  // themselves, a later message on the same chat leaves it.
+  // Only the first move to transcribed holds it: once the member sets the
+  // stage themselves, a later message on the same chat leaves it.
   db.prepare("UPDATE discovery_interviews SET stage = 'booked' WHERE id = ?").run(INTERVIEW);
   assert.equal(await appendSegments(env, ME, s.id, [chatSeg('About four hours.')], 'telegram'), 1);
   assert.equal(interviewRow(db).stage, 'booked');
   assert.equal(heldRows(db), 1);
+  theirsUntouched(db);
+});
+
+test('D685 §5.1.6: new text on a structured chat does not hold the interview again over the member\'s stage', async () => {
+  const { env, db } = world();
+  db.prepare("UPDATE discovery_interviews SET stage = 'booked' WHERE id = ?").run(INTERVIEW);
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const s = await openSession(env, scoped, 'telegram', 'text');
+  await appendSegments(env, ME, s.id, [chatSeg('Can we talk on Tuesday?')], 'telegram');
+  assert.equal(interviewRow(db).stage, 'done');
+  assert.equal(heldRows(db), 1);
+  // The chat was only arranging the call: the member moves it back.
+  db.prepare("UPDATE discovery_interviews SET stage = 'booked' WHERE id = ?").run(INTERVIEW);
+  // The quiet-chat sweep structures it on its own (sessionAutoStructure.ts).
+  db.prepare("UPDATE interview_sessions SET status = 'structured' WHERE id = ? AND status = 'transcribed'").run(s.id);
+  assert.equal(await appendSegments(env, ME, s.id, [chatSeg('See you Tuesday.')], 'telegram'), 1);
+  assert.equal(db.prepare('SELECT status FROM interview_sessions WHERE id = ?').get(s.id).status, 'transcribed',
+    'new text still offers Structure on what is new');
+  assert.equal(interviewRow(db).stage, 'booked', 'the member\'s stage stays');
+  assert.equal(heldRows(db), 1, 'no second activity row');
+});
+
+test('D685 §5.1.6: two first messages delivered at once hold the interview once', async () => {
+  const { env, db } = world();
+  db.prepare("UPDATE discovery_interviews SET stage = 'booked' WHERE id = ?").run(INTERVIEW);
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const s = await openSession(env, scoped, 'telegram', 'text');
+  // Both read the session as a draft before either batch lands.
+  const counts = await Promise.all([
+    appendSegments(env, ME, s.id, [chatSeg('Hi, it is Dana.')], 'telegram'),
+    appendSegments(env, ME, s.id, [chatSeg('About the invoices.')], 'telegram'),
+  ]);
+  assert.deepEqual(counts, [1, 1]);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM interview_transcript_segments WHERE session_id = ?', s.id), 2);
+  assert.equal(interviewRow(db).stage, 'done');
+  assert.equal(heldRows(db), 1, 'one activity row, not one per message');
+});
+
+test('D685 §5.1.6: an interview with no stage keeps the date it was held on', async () => {
+  // A hand-logged interview, or one made by "Create interview from this chat",
+  // has no stage; every reader counts it as held on its interview_date.
+  const { env, db } = world();
+  db.prepare("UPDATE discovery_interviews SET interview_date = '2026-08-01' WHERE id = ?").run(INTERVIEW);
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const chat = await openSession(env, scoped, 'telegram', 'text');
+  db.prepare('UPDATE discovery_interviews SET channel = NULL WHERE id = ?').run(INTERVIEW);
+  assert.equal(await appendSegments(env, ME, chat.id, [chatSeg('We reconcile invoices by hand.')], 'telegram'), 1);
+  assert.deepEqual(interviewRow(db), { stage: null, done_at: null, channel: 'text' }, 'no stage, no done_at; the channel is filled');
+  const call = await openSession(env, scoped, 'zoom', 'video', { method: 'verbal' });
+  assert.equal(await importTranscript(env, ME, call.id, callLine, 'zoom'), 1);
+  assert.deepEqual(interviewRow(db), { stage: null, done_at: null, channel: 'text' });
+  assert.equal(db.prepare('SELECT interview_date FROM discovery_interviews WHERE id = ?').get(INTERVIEW).interview_date, '2026-08-01');
+  assert.equal(heldRows(db), 0);
+  theirsUntouched(db);
+});
+
+test('D685 §5.1.6: the interview is held only after the write lands — a failed append or import holds nothing', async () => {
+  const { env, db } = world();
+  db.prepare("UPDATE discovery_interviews SET stage = 'booked' WHERE id = ?").run(INTERVIEW);
+  const scoped = await writableInterview(env, ME, INTERVIEW);
+  const chat = await openSession(env, scoped, 'telegram', 'text');
+  // A statement in the batch that D1 refuses (a duplicate primary key) rolls the whole batch back.
+  const clash = env.DB.prepare('INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (?, ?, ?)')
+    .bind(INTERVIEW, PROJECT, 'Duplicate');
+  await assert.rejects(appendSegments(env, ME, chat.id, [chatSeg('Lost with the batch.')], 'telegram', [clash]));
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM interview_transcript_segments WHERE session_id = ?', chat.id), 0);
+  assert.equal(db.prepare('SELECT status FROM interview_sessions WHERE id = ?').get(chat.id).status, 'draft');
+  assert.equal(interviewRow(db).stage, 'booked', 'a failed append holds nothing');
+  assert.equal(heldRows(db), 0);
+
+  const call = await openSession(env, scoped, 'zoom', 'video', { method: 'verbal' });
+  const batch = env.DB.batch.bind(env.DB);
+  env.DB.batch = async () => { throw new Error('D1 refused the batch'); };
+  try {
+    await assert.rejects(importTranscript(env, ME, call.id, callLine, 'zoom'), /D1 refused the batch/);
+  } finally {
+    env.DB.batch = batch;
+  }
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM interview_transcript_segments WHERE session_id = ?', call.id), 0);
+  assert.equal(interviewRow(db).stage, 'booked', 'a failed import holds nothing');
+  assert.equal(heldRows(db), 0);
+
+  // The same writes, landing, do hold it.
+  assert.equal(await appendSegments(env, ME, chat.id, [chatSeg('Stored this time.')], 'telegram'), 1);
+  assert.equal(interviewRow(db).stage, 'done');
+  assert.equal(heldRows(db), 1);
+  theirsUntouched(db);
 });
 
 test('D685 §5.1.6: an imported call transcript marks the interview held', async () => {
@@ -747,6 +841,13 @@ test('D685 §5.1.6: an imported call transcript marks the interview held', async
   assert.ok(held.done_at);
   assert.equal(held.channel, 'video');
   assert.equal(heldRows(db), 1);
+  // Only the first import holds it: importing again over the transcript
+  // leaves a stage the member has since set.
+  db.prepare("UPDATE discovery_interviews SET stage = 'booked' WHERE id = ?").run(INTERVIEW);
+  assert.equal(await importTranscript(env, ME, s.id, callLine, 'zoom'), 1);
+  assert.equal(interviewRow(db).stage, 'booked');
+  assert.equal(heldRows(db), 1);
+  theirsUntouched(db);
 });
 
 test('D685 §5.1.6: a failure while marking the interview held never fails the append or the import', async () => {

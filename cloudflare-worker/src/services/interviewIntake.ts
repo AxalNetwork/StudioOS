@@ -176,11 +176,15 @@ export const TRANSCRIPT_MIRROR_MAX_BYTES = 1_000_000;
  * passes the deletion of the pending copies, so a message is never in both
  * places or neither.
  *
- * D685 §5.1.6: the batch that moves the session to `transcribed` means the
- * conversation has happened, so the interview is marked held (stage `done`,
- * its channel filled) once the batch has landed. That step is best-effort and
- * idempotent: it never fails the append, and an interview already done is
- * left alone.
+ * D685 §5.1.6: the batch that FIRST moves the session to `transcribed` (from
+ * `draft`) means the conversation has happened, so the interview is then
+ * marked held (stage `done`, its channel filled) — see `markHeld`. The move is
+ * decided inside the batch, by a statement that changes a row only while the
+ * session is still `draft`, so of two first messages delivered at once only
+ * one marks it. A chat that was `structured` (the quiet-chat sweep does that
+ * on its own) and gets new text goes back to `transcribed` without a mark, so
+ * a stage the member set by hand stays. The mark is best-effort: it never
+ * fails the append.
  */
 export async function appendSegments(
   env: Env, userId: number, sessionId: number, segments: StoredSegment[], provider: ChannelProvider,
@@ -196,11 +200,16 @@ export async function appendSegments(
   }
   const model = intakeModel(provider);
   const plain = clean.map((s) => s.text).join('\n');
-  await env.DB.batch([
+  const results = await env.DB.batch([
     ...clean.map((s) => env.DB.prepare(
       `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model)
        VALUES (?, 'final', ?, ?, ?, ?, ?, ?)`,
     ).bind(session.id, s.start_ms, s.end_ms, s.speaker_label, s.speaker_raw, s.text, model)),
+    // The first move to transcribed, claimed inside the write: it changes a
+    // row only for the one batch that finds the session still a draft.
+    env.DB.prepare(
+      `UPDATE interview_sessions SET status = 'transcribed' WHERE id = ? AND status = 'draft'`,
+    ).bind(session.id),
     env.DB.prepare(
       `UPDATE interview_sessions
           SET status = CASE WHEN status IN ('draft', 'structured') THEN 'transcribed' ELSE status END,
@@ -218,14 +227,31 @@ export async function appendSegments(
     ).bind(plain, TRANSCRIPT_MIRROR_MAX_BYTES, plain, plain, model, session.interview_id),
     ...alongside,
   ]);
-  if (session.status === 'draft' || session.status === 'structured') await markHeld(env, session, userId);
+  if (Number(results[clean.length]?.meta?.changes ?? 0) > 0) await markHeld(env, session, userId);
   return clean.length;
 }
 
-/** `markInterviewHeld`, guarded once more: nothing it does may fail the write that called it. */
+/**
+ * The interview marked held through `markInterviewHeld`, which skips one
+ * already `done`. An interview with no stage at all is left as it is (its
+ * channel still filled): a hand-logged interview, or one made by "Create
+ * interview from this chat", has none, and every reader already counts it as
+ * held on its `interview_date` (`cycleValidate.ts`'s `interviewsFigure` and
+ * `weeklyHeld`, `pipelineOf`). Moving it to `done` would stamp `done_at` today
+ * and move it out of the month it was held in. Guarded once more: nothing
+ * here may fail the write that called it.
+ */
 async function markHeld(env: Env, session: SessionRow, userId: number): Promise<void> {
   try {
-    await markInterviewHeld(env, session, userId);
+    const row = await env.DB.prepare('SELECT stage FROM discovery_interviews WHERE id = ?')
+      .bind(session.interview_id).first<{ stage: string | null }>();
+    if (!row) return;
+    if (row.stage != null) {
+      await markInterviewHeld(env, session, userId);
+      return;
+    }
+    await env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?')
+      .bind(session.channel, session.interview_id).run();
   } catch (e) {
     console.warn('[intake] marking the interview held failed', (e as Error)?.message);
   }
@@ -234,8 +260,11 @@ async function markHeld(env: Env, session: SessionRow, userId: number): Promise<
 /**
  * A meeting's whole transcript, imported once: it replaces the session's
  * segments (as an audio session's final transcript replaces its live draft).
- * A transcript means the call took place, so the interview is then marked
- * held, best-effort, as an append does (D685 §5.1.6).
+ * A transcript means the call took place, so once it is stored the interview
+ * is marked held, best-effort, as an append does (D685 §5.1.6) — only when
+ * this import is the session's first move to `transcribed`. Importing again
+ * over a session already transcribed or structured leaves the stage, so a
+ * stage the member set by hand stays.
  */
 export async function importTranscript(
   env: Env, userId: number, sessionId: number, segments: ImportedSegment[], provider: ChannelProvider,
@@ -251,7 +280,8 @@ export async function importTranscript(
     }))
     .filter((s) => s.text.length > 0);
   if (!stored.length) throw new IntakeError(422, 'transcript_empty', 'The meeting transcript had no text to import.');
+  const first = session.status !== 'transcribed' && session.status !== 'structured';
   await replaceWithFinal(env, session, stored, `${provider}_transcript`, null, 'transcribed');
-  await markHeld(env, session, userId);
+  if (first) await markHeld(env, session, userId);
   return stored.length;
 }

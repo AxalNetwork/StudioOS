@@ -634,13 +634,15 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
 // `message.retry({ delaySeconds: 60 })`, and Cloudflare counts an explicit
 // retry against the consumer's `max_retries` (3 in wrangler.toml). A message
 // deferred on four deliveries goes to the dead-letter queue, and nothing
-// replays it. The cap counts messages across the whole platform, five a
-// minute, and a recording sends one message for every 20 chunks (five minutes
-// of audio at 15-second chunks), so a few long recordings processed at once
-// would fill it. A dropped message strands its session in `uploading` (the
-// sweeper resumes it after 30 minutes) or `transcribing` (only the member's
-// Retry resumes it). Each AI call the job makes already reserves and settles
-// the member's own D640 budget.
+// replays it automatically: only an admin's manual DLQ retry
+// (`POST /api/infra/dlq/:id/retry` in routes/infra.ts) re-enqueues it. The cap
+// counts messages across the whole platform, five a minute, and a recording
+// sends one message for every 20 chunks (five minutes of audio at 15-second
+// chunks), so a few long recordings processed at once would fill it. Until
+// someone replays it, a dead-lettered message leaves its session in
+// `uploading` (the sweeper resumes it after 30 minutes) or `transcribing`
+// (only the member's Retry resumes it). Each AI call the job makes already
+// reserves and settles the member's own D640 budget.
 export const AI_JOB_TYPES = new Set(['ai_scoring', 'traction_review', 'liquidity_valuation', 'liquidity_matching', 'lpa_generation']);
 const MAX_AI_PER_DRAIN = 5;
 
