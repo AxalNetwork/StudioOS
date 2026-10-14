@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { reportError } from '../../lib/log';
-import { useEscapeClose } from '../../components/useEscapeClose';
 export const callButton='rounded-lg border border-axal-hairline px-3 py-2 text-xs font-semibold disabled:opacity-40';
 export const callInput='w-full rounded-lg border border-axal-hairline bg-white dark:bg-gray-900 px-3 py-2 text-sm';
 export function useCallRead(load,dependencies=[]) {
@@ -33,9 +32,4 @@ export function dollarsToCents(value) {
   return Number.isSafeInteger(cents)&&cents>0?cents:null;
 }
 export function callDate(value) {if(!value)return 'Not recorded';const d=new Date(value.length===10?value+'T12:00:00Z':value.replace(' ','T')+(value.includes('T')?'':'Z'));return Number.isNaN(d.valueOf())?'Not recorded':d.toLocaleDateString('en-GB',{timeZone:'Europe/Zurich'});}
-export function CallSheetFrame({onClose,children}) {
-  useEscapeClose(onClose);
-  return <div className="fixed inset-0 z-50 bg-black/30" onClick={onClose}><section role="dialog" aria-modal="true" aria-label="Call for Capital" className="absolute right-0 top-0 flex h-full w-full max-w-[480px] flex-col bg-white dark:bg-gray-900 shadow-xl" onClick={e=>e.stopPropagation()}>
-    <header className="flex items-center justify-between border-b border-axal-hairline p-4"><div><p className="text-xs text-axal-muted">Raise</p><h2 className="text-lg font-bold">Call for Capital</h2><p className="text-xs text-axal-muted">Only investors verified on Axal can see a call. It is never public.</p></div><button type="button" className={callButton} onClick={onClose}>Close</button></header>
-    <div className="overflow-y-auto p-4 space-y-4">{children}</div></section></div>;
-}
+

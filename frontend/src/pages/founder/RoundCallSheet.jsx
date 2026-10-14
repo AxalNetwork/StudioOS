@@ -3,12 +3,20 @@ import { Link } from 'react-router-dom';
 import { roundCallsApi } from '../../lib/api/roundCalls';
 import { reportError } from '../../lib/log';
 import { NOT_STORED } from './recordSetup';
-import { useCallRead, CallReadState, CallSheetFrame, callButton, callInput, moneyCents, dollarsToCents, callDate } from './roundCallParts';
+import Lightbox from '../../ui/Lightbox';
+import ActionSheet, { primary, ghost } from '../../ui/ActionSheet';
+import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsToCents, callDate } from './roundCallParts';
 
 /**
  * D686 §5.6 (#1598) — Raise's Call for Capital: five steps, a draft resumed
- * instead of duplicated, and Send anyway as the acknowledgement. The frame is
- * still `CallSheetFrame` until S02-A's Lightbox options and ActionSheet land.
+ * instead of duplicated, and Send anyway as the acknowledgement. It is drawn
+ * in the cycle lightbox (`<Lightbox size="tall">` around an `ActionSheet`,
+ * D686 §5.1, #1596), wherever it opens: `/raise/call`, Continue draft on a
+ * call, and Open a new call on the Raise call page.
+ *
+ * AVAILABILITY FIRST: the sheet reads `/round-calls/availability` before
+ * anything else. While round calls are not enabled it says so and makes no
+ * other call.
  */
 export const ROUND_CALL_STEPS=['The round','Materials','Audience','Preview','Send'];
 
@@ -16,7 +24,6 @@ export const ROUND_CALL_STEPS=['The round','Materials','Audience','Preview','Sen
 export const CALL_FIELDS=Object.freeze({key_terms:false,counsel_request:false,counsel_queue:false,audience_reasons:false,committed_at:false});
 
 const INSTRUMENTS={safe:'SAFE',equity:'Equity',convertible_note:'Convertible note'};
-const primary='rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 dark:bg-violet-500';
 const pill='rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] text-axal-muted';
 
 /** "$8M", "$250k", "$900": the way counsel reads a term. */
@@ -97,7 +104,30 @@ const initial={name:'',amount:'',instrument:'',terms:'',minimum:'',target:'',dec
 const ROUND_KEYS=['name','amount','instrument','terms','minimum','target'];
 const same=(a,b,keys)=>keys.every(k=>a[k]===b[k]);
 
+export const CALL_SHEET=Object.freeze({eyebrow:'Raise',title:'Call for Capital',titleId:'round-call-title',
+  sub:'Only investors verified on Axal can see a call. It is never public.',testId:'round-call-sheet'});
+
+/** The cycle lightbox the sheet is drawn in. */
+export function CallLightbox({onClose,children}) {
+  return <Lightbox label={CALL_SHEET.title} size="tall" width={640} onClose={onClose} testId="round-call-lightbox">{children}</Lightbox>;
+}
+
+/** Availability's answer: `on`, `off` (not enabled, or the flag's 503), or the read's own state. */
+export function availabilityOf(read) {
+  if(read.loading)return 'loading';
+  if(read.error)return read.error.code==='round_calls_disabled'?'off':'unreadable';
+  return read.data?.enabled===true?'on':'off';
+}
+
 export default function RoundCallSheet({projectId,onClose,initialCall=null}) {
+  const availability=useCallRead(()=>roundCallsApi.availability(),[]);
+  const state=availabilityOf(availability);
+  return <CallLightbox onClose={onClose}>{state==='on'
+    ?<RoundCallFlow projectId={projectId} onClose={onClose} initialCall={initialCall}/>
+    :<ActionSheet {...CALL_SHEET} onClose={onClose}>{state==='off'?<p role="status">Coming soon. Round calls are not enabled.</p>:<CallReadState read={availability}>{null}</CallReadState>}</ActionSheet>}</CallLightbox>;
+}
+
+function RoundCallFlow({projectId,onClose,initialCall}) {
   const context=useCallRead(()=>roundCallsApi.context(projectId),[projectId]);
   // Resume, never duplicate: only a sheet opened without a call looks for one.
   // "Continue draft" reads the call's page too, so its counsel approval and
@@ -167,9 +197,8 @@ export default function RoundCallSheet({projectId,onClose,initialCall=null}) {
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
-  return <CallSheetFrame onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&(resume.data.open
-    ?<OpenCallNotice call={resume.data.open}/>
-    :<RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId}} on={on}/>)}</CallReadState></CallReadState></CallSheetFrame>;
+  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId}} on={on} onClose={onClose}/>;
+  return <ActionSheet {...CALL_SHEET} onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&<OpenCallNotice call={resume.data.open}/>}</CallReadState></CallReadState></ActionSheet>;
 }
 
 export function OpenCallNotice({call}) {
@@ -265,12 +294,13 @@ function SendStep({s,on,missing,approved}) {
   </>;
 }
 
-export function RoundCallSheetView({state:s,on}) {
+export function RoundCallSheetView({state:s,on,onClose}) {
   const missing=s.page?.readiness?.filter(item=>!item.ready)||[];
   const approved=!!s.page?.counsel_approved;
-  return <div className="space-y-4">
-    <ol aria-label="Round call steps" className="flex flex-wrap gap-2 text-xs">{ROUND_CALL_STEPS.map((label,index)=><li key={label} aria-current={index===s.step?'step':undefined}
-      className={'rounded-full border px-3 py-1 '+(index===s.step?'border-violet-700 font-bold text-violet-700 dark:border-violet-300 dark:text-violet-300':'border-axal-hairline text-axal-muted')}>{label}</li>)}</ol>
+  const footer=s.outcome?null:<>{s.step>0&&<button type="button" className={ghost} disabled={s.busy} onClick={on.back}>{s.step===4&&missing.length?'Finish them first':'Back'}</button>}
+    {s.step<4?<button type="button" className={primary} disabled={s.busy} onClick={on.next}>Next</button>:<button type="button" className={primary} disabled={s.busy||!approved} onClick={on.send}>{missing.length?'Send anyway':'Send the call'}</button>}</>;
+  return <ActionSheet {...CALL_SHEET} onClose={onClose} steps={ROUND_CALL_STEPS} step={s.step}
+    banner={s.error?{tone:'error',text:s.error}:null} footNote={s.outcome?null:`Step ${s.step+1} of 5`} footer={footer}>
     <fieldset disabled={s.busy||!!s.outcome} className="space-y-3">
       {s.step===0&&<RoundStep s={s} on={on}/>}
       {s.step===1&&<MaterialsStep s={s} on={on}/>}
@@ -278,10 +308,6 @@ export function RoundCallSheetView({state:s,on}) {
       {s.step===3&&s.page&&<PreviewStep s={s}/>}
       {s.step===4&&s.page&&<SendStep s={s} on={on} missing={missing} approved={approved}/>}
     </fieldset>
-    {s.error&&<p role="alert" className="text-red-700 dark:text-red-300">{s.error}</p>}
-    {s.outcome?<p role="status">The call is available to {s.outcome.recipients} verified recipients; {s.outcome.notified} notified, {s.outcome.not_delivered} not delivered. <Link className="underline" to={'/raise/calls/'+s.uid}>Open the call</Link></p>:
-      <div className="flex items-center justify-between gap-2 border-t border-axal-hairline pt-3"><span className="text-xs text-axal-muted">Step {s.step+1} of 5</span>
-        <div className="flex gap-2">{s.step>0&&<button type="button" className={callButton} disabled={s.busy} onClick={on.back}>{s.step===4&&missing.length?'Finish them first':'Back'}</button>}
-        {s.step<4?<button type="button" className={primary} disabled={s.busy} onClick={on.next}>Next</button>:<button type="button" className={primary} disabled={s.busy||!approved} onClick={on.send}>{missing.length?'Send anyway':'Send the call'}</button>}</div></div>}
-  </div>;
+    {s.outcome&&<p role="status" className="mt-4">The call is available to {s.outcome.recipients} verified recipients; {s.outcome.notified} notified, {s.outcome.not_delivered} not delivered. <Link className="underline" to={'/raise/calls/'+s.uid}>Open the call</Link></p>}
+  </ActionSheet>;
 }
