@@ -28,7 +28,7 @@ export const CYCLES = {
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
     history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: false } },
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Call for Capital',
-    history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships', hash: '#calls', live: false } },
+    history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships', hash: '#calls', live: true } },
   grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update',
     history: { key: 'updates', name: 'Updates', path: '/grow/durable-company-building', hash: '#updates', live: false } },
 };

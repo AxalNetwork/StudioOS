@@ -13,5 +13,7 @@ export const roundCallsApi = {
   respond: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}/responses`, {method:'POST',body:JSON.stringify(body)}),
   manage: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}/manage`, {method:'POST',body:JSON.stringify(body)}),
   answer: (uid,questionUid,answer) => request(`/round-calls/${encodeURIComponent(uid)}/questions/${encodeURIComponent(questionUid)}`, {method:'PUT',body:JSON.stringify({answer})}),
+  requestCounsel: (uid,revision) => request(`/round-calls/${encodeURIComponent(uid)}/counsel-request`, {method:'POST',body:JSON.stringify({revision})}),
+  counselQueue: () => request('/round-calls/counsel-queue'),
   counsel: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}/counsel-approval`, {method:'POST',body:JSON.stringify(body)}),
 };

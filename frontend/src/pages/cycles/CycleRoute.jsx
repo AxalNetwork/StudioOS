@@ -23,6 +23,7 @@ import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
+import CallsHistory from './CallsHistory';
 import RecordFormSheet from './RecordFormSheet';
 import { editFor, formFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
@@ -90,11 +91,15 @@ const CYCLE_DEFS = {
   raise: {
     modules: MODULES.raise,
     // D686: Call for Capital opens at /raise/call over the page, the venture
-    // kept; behind ROUND_CALLS_ENABLED, its sheet says Coming soon in its own
-    // words. S03-A swaps this Mount for its tall Lightbox + ActionSheet frame.
+    // kept; behind ROUND_CALLS_ENABLED, its lightbox says Coming soon in its
+    // own words (the tall Lightbox + ActionSheet frame, #1598).
     path: 'call',
     Mount: RaiseMount,
     action: (q, open) => ({ label: 'Call for Capital', href: `/raise/call${q}`, onOpen: open }),
+    // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
+    parts: toFnMap({
+      'capital-relationships': (data) => <CallsHistory calls={data?.parts?.calls} />,
+    }),
     tools: toFnMap({
       'investor-narrative': () => ({ label: 'Open the positioning workspace', href: '/raise/pitch/positioning' }),
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),

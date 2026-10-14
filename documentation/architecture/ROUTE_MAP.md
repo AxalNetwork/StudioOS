@@ -814,7 +814,15 @@ the Raise shell at `/raise/calls/:uid` (`RaiseCallPage`: responses with search,
 filters and paging, the closed and paused banners, Extend the date and Close
 the call); a founder opening `/round-calls/:uid` is sent there, while
 investors and counsel keep `/round-calls/:uid`, and drafts stay on it for
-"Continue draft". `/round-calls?project_id=…` lists owned calls.
+"Continue draft". `/round-calls?project_id=…` lists owned calls. With S19-A
+(#1594, migration 456): The round takes the instrument's own structured terms
+(a SAFE's cap, a note's cap and discount, equity's pre-money), seeded from the
+context's `term_seeds`; the audience preview names sector, stage and cheque
+range, or why no match can be made; Send's "Request counsel review" posts
+`/round-calls/:uid/counsel-request` and then reads "Sent to Axal HQ for counsel
+review on <date>"; HQ's `/hq/review?tab=counsel` lists `GET
+/round-calls/counsel-queue`; and Capital relationships carries the Calls for
+Capital history (`#calls`, `parts.calls`), Raise's live history tab.
 Extensions pause responses until renewed approval; deck-content hashes cover mutable slides.
 The Worker `round_calls.ts` mounts `/api/round-calls`: availability/context/list,
 draft create/update, audience preview/update, send, responses, questions, manage

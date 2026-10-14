@@ -273,10 +273,13 @@ const cards = (cycle) => MODULES[cycle].map((m) => ({ slug: m.slug, name: m.name
 test('history: Interviews second in Validate; a history that is not live is not drawn; none without module tabs', () => {
   assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Interviews', '/validate/interviews?project_id=7']]);
   assert.equal(cycleTabs('validate', cards('validate'), 'interviews').find((t) => t.key === 'interviews').active, true);
-  for (const c of ['build', 'raise', 'grow']) {
+  for (const c of ['build', 'grow']) {
     assert.equal(CYCLES[c].history.live, false, `${c} goes live when its section ships`);
     assert.equal(cycleTabs(c, cards(c)).some((t) => t.key === CYCLES[c].history.key), false, `${c} draws no history yet`);
   }
+  // #1598: Raise's Calls section shipped, so its history is live.
+  assert.equal(CYCLES.raise.history.live, true);
+  assert.equal(cycleTabs('raise', cards('raise')).some((t) => t.key === 'calls'), true);
   assert.deepEqual(cycleTabs('validate', []).map((t) => t.name), ['Overview'], 'no history tab without module tabs');
   assert.deepEqual(cycleTabs('validate', [{ slug: 'x', name: 'Interviews' }]).filter((t) => t.name === 'Interviews').length, 1, 'never twice');
 });
