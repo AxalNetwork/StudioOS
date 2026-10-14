@@ -1917,3 +1917,33 @@ test('#1602 mutation tripwires: claim ownership, cancellation, encrypted names a
   await counter.linkAttemptOverLimit(env, 'ip:203.0.113.17', 10);
   assert.throws(() => assert.equal(JSON.stringify(db.prepare('SELECT * FROM channel_link_attempts').all()).includes('203.0.113.17'), false), { name: 'AssertionError' });
 });
+
+
+test('#1602 mutation: a completed claim is idempotent past expiry and the response keeps its own UID', async () => {
+  const { env, db } = await world({ seed: true });
+  const f = mockFetch(telegramApi);
+  try {
+    const { code } = await createLinkCode(env, ME, 'telegram');
+    await tgHook(env, startUpdate(code, TG_ME));
+    await tgHook(env, confirmUpdate(TG_ME));
+    const completed = await axalConfirm(env);
+    const uid = completed.body.claim.uid;
+    db.prepare("UPDATE channel_link_codes SET expires_at = '2000-01-01T00:00:00.000Z' WHERE uid = ?").run(uid);
+    const adapter = await import('../src/services/channels/telegram.ts');
+    const check = async (candidate: any) => {
+      const out = await candidate.confirmAxalTelegramLink(env, ME, uid).catch(() => ({ linked: false }));
+      assert.equal(out.linked, true);
+    };
+    await check(adapter);
+    const bad = await deadlineMutant('../src/services/channels/telegram.ts', 'if (claim.activated_at) {', 'if (false && claim.activated_at) {');
+    await assert.rejects(() => check(bad), { name: 'AssertionError' });
+
+    await createLinkCode(env, ME, 'telegram');
+    const store = await import('../src/services/channels/linkCodes.ts');
+    assert.equal((await store.pendingLinkView(env, ME, uid)).uid, uid);
+    const latestInstead = await deadlineMutant('../src/services/channels/linkCodes.ts',
+      'const row = uid ? await memberLinkClaim', 'const row = false ? await memberLinkClaim');
+    const wrong = await latestInstead.pendingLinkView(env, ME, uid);
+    assert.throws(() => assert.equal(wrong.uid, uid), { name: 'AssertionError' });
+  } finally { f.restore(); }
+});
