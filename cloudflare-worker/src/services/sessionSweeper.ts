@@ -17,15 +17,25 @@
  *                          its time counted up to the last chunk's arrival;
  *                        · processing stuck in `uploading` for 30 minutes goes
  *                          on with the chunks that arrived, and names the ones
- *                          that did not.
+ *                          that did not;
+ *                        · a run that stopped moving (§5.9.3): transcribing,
+ *                          summarising or placing untouched for 15 minutes, or
+ *                          a recording the old synchronous route left in
+ *                          `transcribing`, is resumed through `recoverSession`
+ *                          from the stage it reached, once: a run it already
+ *                          restarted that stalls again, or one it cannot resume
+ *                          (no consent, no audio), is failed with a sentence,
+ *                          so it leaves the stale set and the member can act.
  *
  * Every value is bound. Every rule works on a bounded batch, so one minute's
  * sweep stays small however many sessions are waiting.
  */
 import type { Env } from '../types';
 import { callLabel } from './sessionSetup';
-import { deleteSession, type SessionRow } from './interviewSessions';
-import { enqueueProcess, processingOf } from './interviewProcessing';
+import { AUDIO_CHANNELS, consentBlocks, deleteSession, type SessionRow } from './interviewSessions';
+import {
+  enqueueProcess, failProcessing, NO_CONSENT_SENTENCE, processingOf, recoverSession, RESTARTED_NOTE, STALE_MINUTES, STALLED_TWICE,
+} from './interviewProcessing';
 
 export const DRAFT_HOURS = 24;
 export const SILENT_MINUTES = 10;
@@ -74,11 +84,11 @@ export function missingLine(seqs: number[]): string {
   return `${seqs.length === 1 ? 'Part' : 'Parts'} ${list} of the recording never arrived, so the transcript goes on without ${seqs.length === 1 ? 'it' : 'them'}.`;
 }
 
-export interface SweepResult { drafts: number; paused: number; resumed: number }
+export interface SweepResult { drafts: number; paused: number; resumed: number; recovered: number }
 
 export async function sweepInterviewSessions(env: Env, now = new Date()): Promise<SweepResult> {
   const at = (ms: number) => new Date(now.getTime() - ms).toISOString().slice(0, 19).replace('T', ' ');
-  const result: SweepResult = { drafts: 0, paused: 0, resumed: 0 };
+  const result: SweepResult = { drafts: 0, paused: 0, resumed: 0, recovered: 0 };
 
   // 1. Drafts never started. The interview goes too, but only when it was
   // made for this session (same moment, nothing recorded on it, no other
@@ -146,6 +156,37 @@ export async function sweepInterviewSessions(env: Env, now = new Date()): Promis
     if (Number(r.meta?.changes || 0) !== 1) continue;
     await enqueueProcess(env, s.id, s.created_by_user_id, `interview_process:${s.id}:swept`);
     result.resumed++;
+  }
+
+  // 4. Runs that stopped moving. Uploading has its own, longer wait (rule 3).
+  // A legacy row has no stage; its own time is `updated_at`, as DELETE reads
+  // it, and only a recording channel ever reached `transcribing` that way.
+  const staleAt = at(STALE_MINUTES * 60_000);
+  const audio = [...AUDIO_CHANNELS];
+  const stale = await env.DB.prepare(
+    `SELECT * FROM interview_sessions
+      WHERE (processing_stage IN ('transcribing', 'summarising', 'placing')
+             AND (processing_updated_at IS NULL OR processing_updated_at < ?))
+         OR (processing_stage IS NULL AND status = 'transcribing' AND updated_at < ?
+             AND channel IN (SELECT value FROM json_each(?)))
+      ORDER BY id LIMIT ?`,
+  ).bind(staleAt, staleAt, JSON.stringify(audio), BATCH).all<SessionRow>();
+  for (const s of stale.results || []) {
+    if (consentBlocks(s.channel, s.consent_status)) {
+      await failProcessing(env, s, NO_CONSENT_SENTENCE);
+      continue;
+    }
+    // Restarted once, until the run finishes or the member retries: a run
+    // that dies every time (a chunk that outlasts a Worker, or a job type the
+    // consumer does not know yet) is not queued every 15 minutes for ever.
+    if (s.processing_error === RESTARTED_NOTE) {
+      await failProcessing(env, s, STALLED_TWICE);
+      continue;
+    }
+    const out = await recoverSession(env, s, s.created_by_user_id, now.getTime(), RESTARTED_NOTE);
+    if (out.ok) result.recovered++;
+    // Lost to a `/process` press or another sweep: that one is running it.
+    else if (out.detail !== 'not_retryable') await failProcessing(env, s, out.message);
   }
   return result;
 }
