@@ -1875,7 +1875,7 @@ test('#1602 mutation tripwires: neither consent may be omitted, expiry/cancellat
     const bad = await codes.consumeLinkCode(env, code, 'telegram', TG_ME);
     assert.throws(() => assert.equal(bad, null), { name: 'AssertionError' });
 
-    const counter = await deadlineMutant('../src/services/channels/events.ts', 'DO UPDATE SET n = n + 1', 'DO UPDATE SET n = n');
+    const counter = await deadlineMutant('../src/services/channels/events.ts', 'ON CONFLICT (subject_hash, window_start) DO UPDATE SET n = n + 1', 'ON CONFLICT (subject_hash, window_start) DO UPDATE SET n = n');
     const { env: counterEnv } = await world();
     const counts = await Promise.all(Array.from({ length: 11 }, () => counter.linkAttemptOverLimit(counterEnv, 'ip:fixture', 10)));
     assert.throws(() => assert.deepEqual(counts, Array(10).fill(false).concat([true])), { name: 'AssertionError' });

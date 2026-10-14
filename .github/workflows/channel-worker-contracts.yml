@@ -9,6 +9,9 @@ on:
       - 'cloudflare-worker/src/util/deadline.ts'
       - 'cloudflare-worker/sql/migrations/*channel*'
       - 'cloudflare-worker/test/channels_messaging_d684.test.ts'
+      - 'cloudflare-worker/test/channels_foundation_d684.test.ts'
+      - 'frontend/src/pages/founder/channelThreads.js'
+      - 'frontend/test/interview_channels*_d684.test.mjs'
       - '.github/workflows/channel-worker-contracts.yml'
 
 permissions:
