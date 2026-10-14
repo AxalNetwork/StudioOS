@@ -233,3 +233,43 @@ test('D264: a null do_jurisdiction renders no var — never "none" — even when
   assert.doesNotMatch(leaked, /BRANCH_DO_JURISDICTION/, 'HQ\'s value leaked into a branch whose jurisdiction is null');
   assert.deepEqual(checkRendered(hqWithVar, e, leaked), []);
 });
+
+/** D681: adding HQ's OAuth namespace must not break existing branch registries or share grants. */
+async function checkMcpBranch(api) {
+  const e = entry();
+  const src = api.renderBranchConfig(TOML, e);
+  const secs = parseToml(src).sections;
+  const vars = secs.find((s) => s.name === 'vars');
+  assert.equal(vars.kv.get('MCP_SERVER_ENABLED'), '"false"');
+  assert.equal(secs.some((s) => s.name === 'kv_namespaces' && s.kv.get('binding') === '"OAUTH_KV"'), false);
+  assert.deepEqual(api.checkRendered(TOML, e, src), []);
+  const enabled = src.replace('MCP_SERVER_ENABLED = "false"', 'MCP_SERVER_ENABLED = "true"');
+  assert.ok(api.checkRendered(TOML, e, enabled).some((p) => p.includes('MCP_SERVER_ENABLED must be false')));
+  // An extra fake namespace still fails the expected binding set, independently of the HQ-id guard.
+  const oauth = '\n[[kv_namespaces]]\nbinding = "OAUTH_KV"\nid = "' + 'c'.repeat(32) + '"\n';
+  assert.ok(api.checkRendered(TOML, e, src + oauth).some((p) => p.includes('table kv_namespaces')));
+  const hq = parseToml(TOML).sections.find((s) => s.name === 'env.production.kv_namespaces' && s.kv.get('binding') === '"OAUTH_KV"');
+  assert.ok(api.checkRendered(TOML, e, src + oauth.replace('c'.repeat(32), JSON.parse(hq.kv.get('id')))).some((p) => p.includes("HQ's id")));
+}
+
+test('D681: HQ OAuth enablement preserves branch registries, keeps MCP off and rejects an inherited OAuth store', async () => {
+  const real = await import('./branchConfig.mjs');
+  await checkMcpBranch(real);
+});
+
+test('D681 branch isolation mutation/restoration: flag, namespace omission and the explicit binding exception', async () => {
+  const source = readFileSync(resolve(ROOT, 'scripts/lib/branchConfig.mjs'), 'utf8');
+  const real = await import('./branchConfig.mjs');
+  const cases = [
+    ["if (kv.has('MCP_SERVER_ENABLED')) kv.set('MCP_SERVER_ENABLED', q('false'));", ''],
+    ["if (binding === 'OAUTH_KV') continue;", "if (binding === 'OAUTH_KV') { push(table, s.double, kv); continue; }"],
+    ["declared.filter((s) => s.kv.get('binding') !== q('OAUTH_KV'))", 'declared'],
+    ["if (prodTables.get('vars')?.[0]?.kv.has('MCP_SERVER_ENABLED') && v('MCP_SERVER_ENABLED') !== 'false')", 'if (false)'],
+  ];
+  for (const [i, [before, after]] of cases.entries()) {
+    assert.ok(source.includes(before), 'live branch isolation mutation target');
+    const bad = await import('data:text/javascript;base64,' + Buffer.from(source.replace(before, after) + '\n// D681 ' + i).toString('base64'));
+    await assert.rejects(() => checkMcpBranch(bad), assert.AssertionError);
+    await checkMcpBranch(real);
+  }
+});

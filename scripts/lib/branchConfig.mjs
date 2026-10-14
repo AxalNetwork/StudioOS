@@ -13,6 +13,8 @@
  * stops covering one.
  *
  * WHAT IS NOT DERIVED, and why each is deliberate:
+ *   · OAUTH_KV — HQ's MCP OAuth namespace is not branch storage (D681).
+ *     Branch MCP stays off until a separate branch-local namespace is provisioned.
  *   · `[[routes]]` — exactly one, the branch host. Rendering HQ's would bind
  *     `axal.vc` and `app.axal.vc` to the BRANCH Worker: a custom domain
  *     belongs to one Worker, so the apex would move. That is the single most
@@ -299,6 +301,8 @@ export function renderBranchConfig(tomlSrc, entry) {
         // binding a branch gets is pushed below, and none of these is it.
         continue;
       case 'vars': {
+        // D681: HQ's MCP enablement must not expose a branch without its own OAuth store.
+        if (kv.has('MCP_SERVER_ENABLED')) kv.set('MCP_SERVER_ENABLED', q('false'));
         for (const key of ['APP_URL', 'PUBLIC_BASE_URL', 'OAUTH_CALLBACK_BASE_URL', 'PUBLIC_MARKETING_URL']) {
           if (kv.has(key)) kv.set(key, q(`https://${n.hostname}`));
         }
@@ -327,6 +331,8 @@ export function renderBranchConfig(tomlSrc, entry) {
         break;
       case 'kv_namespaces': {
         const binding = JSON.parse(kv.get('binding'));
+        // D681: this namespace belongs to HQ; branches retain MCP off until separately provisioned.
+        if (binding === 'OAUTH_KV') continue;
         const key = KV_ID_KEY[binding];
         if (!key) throw new Error(`no registry id for KV binding ${binding} — add it to KV_ID_KEY`);
         kv.set('id', q(entry.ids[key]));
@@ -441,7 +447,11 @@ export function checkRendered(tomlSrc, entry, rendered) {
     prodTables.get(t).push(s);
   }
   const renamedQueue = (v) => (v.endsWith('-dlq') ? q(n.dlq) : q(n.queue));
-  for (const [table, list] of prodTables) {
+  for (const [table, declared] of prodTables) {
+    // D681: the one HQ-only OAuth binding is intentionally absent on branches.
+    const list = table === 'kv_namespaces'
+      ? declared.filter((s) => s.kv.get('binding') !== q('OAUTH_KV'))
+      : declared;
     // `services` is checked on its own below, and must never be matched
     // against HQ's: HQ's service bindings are its lines to branches, so a
     // branch config carrying the same set is exactly the defect (D207).
@@ -504,6 +514,9 @@ export function checkRendered(tomlSrc, entry, rendered) {
       bad.push(`BRANCH_DO_JURISDICTION must be ${doJur === undefined ? 'absent (do_jurisdiction is null)' : doJur}`);
     }
     if (v('CF_WORKER_SCRIPT_NAME') !== n.worker) bad.push(`CF_WORKER_SCRIPT_NAME must be ${n.worker}`);
+    if (prodTables.get('vars')?.[0]?.kv.has('MCP_SERVER_ENABLED') && v('MCP_SERVER_ENABLED') !== 'false') {
+      bad.push('MCP_SERVER_ENABLED must be false on a branch without its own OAuth namespace');
+    }
     for (const key of ['APP_URL', 'PUBLIC_BASE_URL', 'OAUTH_CALLBACK_BASE_URL', 'PUBLIC_MARKETING_URL']) {
       if (v(key) !== `https://${n.hostname}`) bad.push(`${key} must be https://${n.hostname} — every email link and OAuth callback reads one of these`);
     }
