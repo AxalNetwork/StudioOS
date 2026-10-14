@@ -64,9 +64,11 @@ const ALL_BOUND = Object.fromEntries(BINDINGS.map((b) => [b.name, {}]));
 const AE_CREDS = { CLOUDFLARE_ACCOUNT_ID: 'acct', CLOUDFLARE_AE_API_TOKEN: 'ae' };
 
 const HQ = describeTopology({ ...ALL_BOUND });
-const BRANCH = describeTopology({ ...ALL_BOUND, BRANCH_CODE: 'fr', HQ: {} });
+const BRANCH_BOUND = Object.fromEntries(BINDINGS.filter((b) => !b.hqOnly).map((b) => [b.name, {}]));
+const BRANCH = describeTopology({ ...BRANCH_BOUND, BRANCH_CODE: 'fr', HQ: {} });
 
 const OWN = BINDINGS.filter((b) => !b.shared);
+const BRANCH_OWN = OWN.filter((b) => !b.hqOnly);
 const OFF_VOICE = /\badvi[cs]\w*|\brecommend\w*|\bfiduciar\w*/i;
 
 /** Every `data-testid="rpc-method-*"` chip, in document order, with whether it is dashed. */
@@ -224,7 +226,7 @@ test('HQ\'s card: its own bindings and which are missing, both sides of the RPC 
   // A binding that is declared and not present is drawn as such, by name.
   const partial = describeTopology({ DB: {}, ANALYTICS: {} });
   const note = renderedText(html(HqWorkerCard, { topo: partial }));
-  assert.match(note, /Declared and not present on this Worker: TOKENS, RATE_LIMITS, FILES/);
+  assert.match(note, /Declared and not present on this Worker: TOKENS, RATE_LIMITS, OAUTH_KV, FILES/);
   assert.doesNotMatch(note, /Declared and not present on this Worker:[^.]*\bDB\b/);
 });
 
@@ -344,11 +346,11 @@ test('S14 names this Worker, its own resources, its one link and both sides of t
   const markup = html(DeploymentZone, { dep: BRANCH });
   assert.equal(byTestId(markup, 's14-identity'), 'fr.axal.vc · studioos-fr');
   const own = byTestId(markup, 's14-own');
-  for (const b of OWN) {
+  for (const b of BRANCH_OWN) {
     const r = b.branch('fr');
     assert.ok(own.includes(r ? `${b.name} · ${r}` : b.name), `${b.name} names the branch's own resource`);
   }
-  startsWithText(byTestId(markup, 's14-own-note'), `All ${OWN.length} are present on this Worker`);
+  startsWithText(byTestId(markup, 's14-own-note'), `All ${BRANCH_OWN.length} are present on this Worker`);
   assert.equal(byTestId(markup, 's14-hq-link'), 'Bound to HQ\'s studioos Worker, through BranchEntrypoint.');
   assert.match(markup, /data-testid="rpc-side-HqEntrypoint"/);
   assert.match(markup, /data-testid="rpc-side-BranchEntrypoint"/);

@@ -60,6 +60,10 @@ a route that is HQ's own host, a database id that is HQ's, a missing Durable
 Object migration tag. That check runs in `npm run test:guards`, so a bad entry
 fails the build rather than a deploy.
 
+## MCP isolation (D681)
+
+HQ's `OAUTH_KV` is deliberately omitted from generated branch configs, and `MCP_SERVER_ENABLED` stays `"false"` there. The current branch registry contains only its session and rate-limit KV ids. A branch must receive its own OAuth namespace before MCP is enabled; it must never reuse HQ's grants/tokens. This does not change the other derived bindings or the registry shape.
+
 ## Read-only verification
 
 From the repository root, run `node scripts/check-branch-live.mjs --plan` to
