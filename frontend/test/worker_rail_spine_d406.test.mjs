@@ -26,7 +26,7 @@ const SPEND = { recorded: true, month: { spend_usd: 14.2, cap_usd: 40, calls: 9 
 test('the dot is green and says so when the advisor is on, grey and says Manual when it is not', () => {
   const on = html({ aiOn: true, spendState: spineSpend({ spend: SPEND }) });
   assert.match(on, /class="fwr-spine-dot" data-state="on"/);
-  assert.match(on, /aria-label="AI on"/);
+  assert.match(on, /aria-label="Eadwyn on"/);
   const off = html({ aiOn: false, spendState: spineSpend({ spend: SPEND }) });
   assert.match(off, /class="fwr-spine-dot" data-state="off"/);
   assert.match(off, /aria-label="Manual"/);

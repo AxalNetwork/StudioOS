@@ -227,11 +227,16 @@ test('intelligence: the reasons two claims were dropped still hold in the code',
   for (const f of ['cloudflare-worker/src/routes/founder_validate.ts', 'cloudflare-worker/src/routes/research.ts', 'cloudflare-worker/src/routes/founder_validate_structure.ts']) {
     assert.doesNotMatch(read(f), /classifyInput\(/, `${f} now screens its runs: revisit the dropped "safety-screen" claim`);
   }
-  // The model pick: only Validate's jobs carry `pick: true`.
+  // The model pick: only fill bands carry `pick: true` — Validate's two, and
+  // since D698 Grow's Product improvement, whose fill band (D691) sends the
+  // rail's pick once its task is in the router. "Pick the model behind each
+  // feature page" stays false: any other pick means revisiting the claim.
   const rail = read('frontend/src/ui/railModels.js');
   const validate = rail.slice(rail.indexOf('Validate: ['), rail.indexOf('Research: ['));
-  const elsewhere = rail.slice(rail.indexOf('Research: ['));
+  const grow = rail.slice(rail.indexOf("'Product improvement': ["), rail.indexOf('];', rail.indexOf("'Product improvement': [")));
+  const elsewhere = rail.slice(rail.indexOf('Research: [')).replace(grow, '');
   assert.match(validate, /pick: true/);
+  assert.match(grow, /task: 'grow_theme_feedback',\s*pick: true/);
   assert.doesNotMatch(elsewhere, /pick: true/, 'a pick on another section: revisit the dropped "model-pick" claim');
 });
 

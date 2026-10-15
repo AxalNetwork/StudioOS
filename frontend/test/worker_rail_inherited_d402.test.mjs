@@ -25,20 +25,14 @@ const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 
 // ── The rail ────────────────────────────────────────────────────────────
 
-/** The models list itself: the cards and the compact rows. */
-function modelsList() {
-  const src = codeOnly(read(RAIL));
-  const from = src.indexOf('<div className="fwr-models">');
-  return src.slice(from, src.indexOf('</div>\n            <p className="fwr-models-note"', from));
-}
-
 test('a zone and its root read one stored pick, so the card and the run agree', () => {
   const src = codeOnly(read(RAIL));
   // The cards are built from the same per-section, per-task picks the bands
   // send (`railModelChoice.js`), on a zone as on the root (D402, kept by D698).
-  assert.match(src, /chosen: \(task\) => readRailModel\(workspace, task\)/,
+  assert.match(src, /picks\[job\.task\] = readRailModel\(workspace, job\.task\)/,
     'the cards are not the stored picks');
-  assert.match(modelsList(), /\{view\.cards\.map\(\(card\) => \(/, 'a zone does not draw the cards in use');
+  assert.match(src, /railSuggestions\(\{ section, module, pricing, picks \}\)/, 'the cards ignore the stored picks');
+  assert.match(src, /\{sug\.cards\.map\(\(card\) => \{/, 'a zone does not draw the cards in use');
   assert.match(codeOnly(read('frontend/src/workspaces/FillProposals.jsx')), /readRailModel\(workspace, task\)/,
     'the band reads a different store, so the card and the run can disagree');
 });

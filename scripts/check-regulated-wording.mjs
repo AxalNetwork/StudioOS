@@ -55,6 +55,8 @@ export const SURFACES = [
   // callers means scanning two dozen page files for four prop values, which is
   // a scanner change rather than a list entry.
   ['copy', 'frontend/src/ui/WorkerRail.jsx', 'the workspace AI rail — headings, guardrail, usage meter'],
+  // D698 — the rail's phone panel and the page's own Eadwyn button.
+  ['copy', 'frontend/src/ui/EadwynPanel.jsx', 'the Eadwyn AI panel on a phone, and the button that opens it'],
   ['copy', 'frontend/src/components/advisor/PersonalAdvisor.jsx', 'the chatbot UI — header, placeholder, empty states'],
   ['copy', 'frontend/src/components/advisor/AdvisorFilledBanner.jsx', 'tells the user the model filled their fields'],
   ['copy', 'frontend/src/components/advisor/AdvisorProgressWidget.jsx', 'the chatbot progress rail'],

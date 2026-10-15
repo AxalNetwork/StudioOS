@@ -476,6 +476,8 @@ shown what it cost.
 
 ### D16. The run estimate is measured, not modelled
 
+**Superseded on the rail by D698 (2026-10-15):** the Eadwyn AI rail draws no estimate or average; `/account/usage` keeps the measured figures; see `decisions/D698.md`.
+
 Every rail canvas carried invented token counts — `tin: 1800, tout: 600` and
 similar — with no source. There is no honest source: nothing knows how many
 tokens a deck review takes before it takes them.
@@ -36696,6 +36698,8 @@ one.
 
 ## D401
 
+**Superseded on the rail by D698 (2026-10-15):** the receipt left the rail for `/account/usage`; see `decisions/D698.md`.
+
 **The rail keeps a lasting "Last run" receipt: model, tokens in and out, and
 cost, labelled as the account's (Session 12, item 2).** No migration, no new
 route, no `api.js` method. There is one additive change to the Worker's
@@ -37005,6 +37009,8 @@ attention" for any role. It stays unbuilt rather than lit from a guess.
 
 ## D404
 
+**Superseded on the rail by D698 (2026-10-15):** this page's month left the rail for `/account/usage`, and the rail sends no `?surface=` read; see `decisions/D698.md`.
+
 **The rail shows what this page has cost this month. `ai_usage_logs` gains a
 nullable `surface` column (migration 319), the router records it, and older
 rows read "no page" (Session 12, item 5).** No new route and no new `api.js`
@@ -37105,6 +37111,8 @@ here computes or draws a margin.
   - the Unreadable hidden
 
 ## D405
+
+**Superseded in part by D698 (2026-10-15):** a founder on a founder page opens the Eadwyn panel (`ui/EadwynPanel.jsx`) instead of the sheet; every other viewer keeps this sheet, titled "Eadwyn AI"; see `decisions/D698.md`.
 
 **The Worker AI rail on a phone: a floating button and a bottom sheet (canvas
 M5, issue #993).** No migration.

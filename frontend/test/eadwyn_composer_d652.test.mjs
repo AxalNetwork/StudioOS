@@ -175,7 +175,7 @@ test('the Worker AI rail carries no chat: the composer is not mounted, and the A
   const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
   assert.doesNotMatch(rail, /EadwynComposer/, 'the rail imports or mounts the composer again');
   assert.doesNotMatch(rail, /Ask Eadwyn/);
-  const canvas = read('design/incoming/AIRail.dc.html');
+  const canvas = read('design/canvases/integrated/AIRail.dc.html');
   assert.doesNotMatch(canvas, /Ask Eadwyn|EadwynComposer/, 'the AIRail canvas now draws a chat; revisit this guard');
   const research = codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx'));
   assert.doesNotMatch(research, /composer answers/, 'a rail note promises a composer the rail does not have');

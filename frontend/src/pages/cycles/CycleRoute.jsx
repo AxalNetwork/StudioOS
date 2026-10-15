@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { WorkerRail } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
+import { RailCrumbsProvider } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -574,10 +575,16 @@ export default function CycleRoute({ cycle, lightbox = false }) {
     );
   }
 
+  // D698 — where the rail is: the cycle, and on a module route the module, so
+  // it reads "Validate › Customer research". A record view below adds its
+  // title through `useSetRailCrumbs` (#1658). The provider draws no element.
+  const moduleName = slug ? (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
+
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
   return (
+    <RailCrumbsProvider section={name} module={moduleName}>
     <RailFrame rail={rail} data-testid={`cycle-route-${cycle}`}>
       {/* The route is full-bleed (`p-0`), so the inset is this page's own,
           the same `p-5` WorkspaceShell gives every other workspace page. */}
@@ -615,5 +622,6 @@ export default function CycleRoute({ cycle, lightbox = false }) {
         )}
       </div>
     </RailFrame>
+    </RailCrumbsProvider>
   );
 }

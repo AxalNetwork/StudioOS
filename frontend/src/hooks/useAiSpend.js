@@ -131,69 +131,6 @@ export function priceOfModel(pricing, id) {
   return null;
 }
 
-/**
- * The AIRail canvas's "Model · this page" block, from a section's jobs
- * (`ui/railModels.js`, `SECTION_JOBS`) and the router's own tables.
- *
- * ONE CARD PER MODEL IN USE. Each job runs one model: the founder's stored
- * pick when the job takes one and the router still offers it, else the
- * router's own default. Jobs on the same model share a card, so Validate's
- * tagging and drafting read as one 70B card unless the founder moves one.
- *
- * THE ALTERNATES are the models some pickable job offers and no job is
- * using, each with the tasks that would take it. A job that does not take a
- * pick (`pick: false`) offers none: its model is named, not chosen.
- *
- * A job whose router model has no price draws no card, and an alternate with
- * no price is dropped: an unpriced run is unknown, not free.
- */
-export function railCards(pricing, jobs, { copy = {}, chosen = () => null } = {}) {
-  const live = [];
-  for (const job of jobs || []) {
-    const route = pricing?.routes?.[job.task];
-    if (!route?.model || !priceOfModel(pricing, route.model)) continue;
-    const offered = job.pick
-      ? (Array.isArray(route.alternates) ? route.alternates : []).filter((id) => priceOfModel(pricing, id))
-      : [];
-    const stored = job.pick ? chosen(job.task) : null;
-    const model = stored && offered.includes(stored) ? stored : route.model;
-    live.push({ ...job, model, routerDefault: route.model, offered });
-  }
-  const named = (id) => copy[id]?.name || id.split('/').pop();
-  const cards = [];
-  for (const j of live) {
-    let card = cards.find((c) => c.id === j.model);
-    if (!card) {
-      card = { id: j.model, name: named(j.model), price: priceOfModel(pricing, j.model), jobs: [], isDefault: true };
-      cards.push(card);
-    }
-    card.jobs.push(j);
-    // DEFAULT is a fact about the router (D400): every job on the card runs
-    // the router's own model for its task.
-    if (j.model !== j.routerDefault) card.isDefault = false;
-  }
-  // A card is also a choice: picking it moves every job that offers its model
-  // onto it, which is how a job moved to the 3B comes back to the 70B.
-  for (const card of cards) {
-    card.tasks = live.filter((x) => x.offered.includes(card.id) && x.model !== card.id).map((x) => x.task);
-  }
-  const inUse = new Set(cards.map((c) => c.id));
-  const alternates = [];
-  for (const j of live) {
-    for (const id of j.offered) {
-      if (inUse.has(id) || alternates.some((a) => a.id === id)) continue;
-      alternates.push({
-        id,
-        name: named(id),
-        why: copy[id]?.why || '',
-        price: priceOfModel(pricing, id),
-        tasks: live.filter((x) => x.offered.includes(id)).map((x) => x.task),
-      });
-    }
-  }
-  return { cards, alternates, pickable: live.some((j) => j.offered.length > 1) };
-}
-
 export function modelsForTask(pricing, task, { copy = {} } = {}) {
   const route = pricing?.routes?.[task];
   if (!route || !Array.isArray(route.alternates)) return [];

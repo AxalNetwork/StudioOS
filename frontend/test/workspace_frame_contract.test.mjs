@@ -103,11 +103,12 @@ test('the rail names a model only for a surface that really runs one', () => {
   `${task} must be a real entry in the router's ROUTE table, not a name`);
   assert.match(read('cloudflare-worker/src/routes/ai.ts'), new RegExp(`task: '${task}'`),
     `a worker route must run ${task}, or the card describes a call nothing makes`);
-  // Since the AIRail canvas rebuild (owner, 2026-10-10) the cards are built by
-  // `railCards` over each section's router tasks; the same order holds for
-  // each of them (founder_shell.test.mjs checks every task is a ROUTE entry).
-  assert.match(rail, /railCards\(pricing, jobsFor\(workspace\)/,
-    'the model and its rate are the router\'s, derived — never typed here');
+  // Since the AIRail canvas rebuild (owner, 2026-10-10; D698) the cards are
+  // built by `railSuggestions` over each page's router tasks; the same order
+  // holds for each of them (founder_shell.test.mjs checks every task is a
+  // ROUTE entry).
+  assert.match(rail, /railSuggestions\(\{ section, module, pricing, picks \}\)/,
+    'the model is the router\'s, derived — never typed here');
 
   // This used to ban the display name "Llama 3.3 70B Fast" alongside the two
   // figures, because at the time naming a model and typing its card were the

@@ -20,19 +20,18 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 
 // The line this file used to pin, `pageSpendLine` over `by_surface`, is gone:
-// D552 step 3 reads the page's month directly (`?surface=`) and its sentence
-// is drawn by `RailPageUsage`, pinned with the rest of the per-page states in
-// `worker_rail_page_spend_d552.test.mjs`, the unattributed caveat included.
+// D552 step 3 read the page's month directly (`?surface=`), and D698 took
+// the page's month off the rail; `/account/usage` draws spend by page.
 
 // ── The rail ────────────────────────────────────────────────────────────
 
-test('the rail reads the page it sits on, in the shape the router stores', () => {
-  // The rail no longer runs a model (owner, 2026-10-10), so it sends no page;
-  // it still READS this page's spend, keyed the way normaliseSurface stores it.
+test('the rail reads no page spend (D698); the read-back route keeps the page', () => {
+  // D698: "This page this month" and its last run left the rail for
+  // `/account/usage`, and so did the `?surface=` read behind them. The rail
+  // calls the hook without a page.
   const src = codeOnly(read(RAIL));
-  assert.match(src, /const pagePath = String\(pathname \|\| ''\)\.replace\(\/\\\/\+\$\/, ''\)/,
-    'the page is not normalised the way normaliseSurface stores it');
-  assert.match(src, /useAiSpend\(\{ page: pagePath \}\)/, 'the rail does not read this page\'s spend');
+  assert.match(src, /= useAiSpend\(\);/, 'the rail reads a page spend again');
+  assert.doesNotMatch(src, /useAiSpend\(\{ page/, 'the rail reads a page spend again');
   // The read-back route keeps the page for any caller.
   const api = codeOnly(read('frontend/src/lib/api.js'));
   const method = api.slice(api.indexOf('aiWorkspaceExplain:'), api.indexOf('aiWorkspaceExplain:') + 400);

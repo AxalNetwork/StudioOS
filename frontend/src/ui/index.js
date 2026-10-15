@@ -57,6 +57,12 @@ export { default as WorkerRail } from './WorkerRail';
 // D556 — the one frame every host that does not draw the founder desks' own
 // panel puts its rail in. See RailFrame.jsx.
 export { default as RailFrame, RailStripSlot } from './RailFrame';
+// D698 — the rail's phone panel and the page's own button that opens it
+// (EadwynPanel.jsx, over the eadwynPanel.js store), and the crumbs a page
+// passes the rail (railCrumbs.js).
+export { EadwynPanel, EadwynButton } from './EadwynPanel.jsx';
+export { openEadwynPanel, closeEadwynPanel, useEadwynPanel, useEadwynTrigger } from './eadwynPanel.js';
+export { RailCrumbsProvider, useRailCrumbs, useSetRailCrumbs } from './railCrumbs.js';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 

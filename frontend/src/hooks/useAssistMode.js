@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
+import { railPrefsApi } from '../lib/api/railPrefs.js';
 
 /**
  * Whether "AI fills the blanks" is on, for one workspace.
@@ -30,9 +31,18 @@ import { safeReadJSON, safeWriteJSON } from '../lib/storage';
  * hosts to carry one boolean. `useSyncExternalStore` over a small module store
  * is the same result without the provider, and it is React's own answer for
  * exactly this.
+ *
+ * ON THE WORKER TOO (D698). The rail's "Eadwyn | Manual" switch writes this
+ * store, and the choice follows the founder across devices: the setter also
+ * PUTs it to `ai_rail_preferences` (migration 465), and `syncRailPrefs`
+ * (`ui/railModelChoice.js`) seeds this store from the Worker once per page
+ * load through `seedAssistModes`. A failed write leaves the local value, which
+ * is what the page acts on.
  */
-const KEY_PREFIX = 'assist_mode:';
-const keyFor = (workspace) => `${KEY_PREFIX}${String(workspace || '').toLowerCase().trim()}`;
+export const ASSIST_MODE_PREFIX = 'assist_mode:';
+const KEY_PREFIX = ASSIST_MODE_PREFIX;
+const sectionOf = (workspace) => String(workspace || '').toLowerCase().trim();
+const keyFor = (workspace) => `${KEY_PREFIX}${sectionOf(workspace)}`;
 
 /** key → boolean. Seeded from storage on first read, then authoritative. */
 const cache = new Map();
@@ -47,6 +57,23 @@ function writeMode(key, next) {
   cache.set(key, next === true);
   safeWriteJSON(key, next === true);
   for (const l of listeners) l();
+}
+
+/**
+ * The Worker's modes, seeded into this store (D698): `map` is section →
+ * boolean. Every listener hears it once, so a switch drawn before the read
+ * answered moves to the founder's stored choice.
+ */
+export function seedAssistModes(map) {
+  let changed = false;
+  for (const [workspace, value] of Object.entries(map || {})) {
+    if (typeof value !== 'boolean') continue;
+    const key = keyFor(workspace);
+    if (cache.get(key) !== value) changed = true;
+    cache.set(key, value);
+    safeWriteJSON(key, value);
+  }
+  if (changed) for (const l of listeners) l();
 }
 
 function subscribe(listener) {
@@ -69,7 +96,12 @@ export default function useAssistMode(workspace) {
     () => readMode(key),
     () => false,
   );
-  const setOn = useCallback((next) => writeMode(key, next), [key]);
+  const setOn = useCallback((next) => {
+    writeMode(key, next);
+    Promise.resolve()
+      .then(() => railPrefsApi.setMode(sectionOf(workspace), next === true ? 'eadwyn' : 'manual'))
+      .catch(() => {});
+  }, [key, workspace]);
   return [on, setOn];
 }
 

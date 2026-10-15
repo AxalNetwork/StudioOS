@@ -10,8 +10,9 @@
  *
  * The line the whole file defends:
  *
- *   FACTS ARE DERIVED — the id, the rate, and which models exist at all come
- *   from `GET /api/ai/pricing`, which reads the router's own tables.
+ *   FACTS ARE DERIVED — which models exist at all, and which one a task runs
+ *   by default, come from `GET /api/ai/pricing`, which reads the router's own
+ *   tables. Since D698 the rail draws neither an id nor a rate.
  *   COPY IS TYPED — the display name and the sentence are editorial, with
  *   nothing to derive them from, and they live in `ui/railModels.js` and
  *   nowhere else. Which model is the DEFAULT is a fact, and derived (D400).
@@ -54,6 +55,19 @@ function alternatesByTask() {
   return out;
 }
 
+/** Every model id ROUTE can send work to: primaries, fallbacks and alternates. */
+function routeModelIds() {
+  const src = read(ROUTER);
+  const consts = new Map(
+    [...src.matchAll(/const (SMALL_LLAMA|MID_LLAMA)\s*=\s*'(@cf\/[^']+)'/g)].map((m) => [m[1], m[2]]),
+  );
+  const body = src.slice(src.indexOf('export const ROUTE'));
+  const table = body.slice(0, body.indexOf('\n};\n'));
+  const ids = new Set([...table.matchAll(/'(@cf\/[^']+)'/g)].map((m) => m[1]));
+  for (const name of consts.keys()) if (new RegExp(`\\b${name}\\b`).test(table)) ids.add(consts.get(name));
+  return ids;
+}
+
 /** Model ids used as keys in `MODEL_COPY`. */
 const copiedIds = () => [...read(COPY).matchAll(/'(@cf\/[^']+)':\s*\{/g)].map((m) => m[1]);
 
@@ -78,17 +92,19 @@ test('the copy table prices nothing', () => {
   }
 });
 
-test('every model the copy table describes is one the router offers', () => {
-  // Copy for a model no task offers is dead weight that reads as a promise:
-  // someone maintaining the file would reasonably assume the menu shows it.
-  const alts = alternatesByTask();
-  const offered = new Set([...alts.values()].flat());
-  assert.ok(offered.size >= 3, 'no alternates parsed — the matcher is not matching');
+test('every model the copy table names is one the router can run, and every such model has a name', () => {
+  // Copy for a model the router never runs is dead weight that reads as a
+  // promise. And since D698 the catalogue chips are every ROUTE model, so a
+  // ROUTE model with no name would draw nothing at all (no chip shows an id).
+  const route = routeModelIds();
+  assert.ok(route.size >= 8, `the ROUTE models did not parse — got ${[...route].join(', ')}`);
   const ids = copiedIds();
   assert.ok(ids.length >= 3, 'the copy table describes fewer models than the menu shows');
   for (const id of ids) {
-    assert.ok(offered.has(id),
-      `railModels.js describes ${id}, which no ROUTE entry offers — the menu will never show it`);
+    assert.ok(route.has(id), `railModels.js describes ${id}, which no ROUTE entry runs — the rail will never show it`);
+  }
+  for (const id of route) {
+    assert.ok(ids.includes(id), `${id} is a ROUTE model with no name in railModels.js`);
   }
 });
 
@@ -131,103 +147,36 @@ test('modelsForTask marks the router\'s primary as Default, and only it', async 
     [['a/big', false], ['a/small', true], ['a/tiny', false]]);
 });
 
-test('the rail types no rate and no model name', () => {
+test('the rail types no rate and no model name, and draws no rate at all (D698)', () => {
   const src = codeOnly(read(RAIL));
   assert.doesNotMatch(src, /\$\d|\$\{?\s*\d/, 'a rate was typed into the rail');
   assert.doesNotMatch(src, /Llama|DeepSeek|Whisper|Qwen|Mistral|GPT-OSS|Gemma/i,
     'a model NAME was typed into the rail; names live in railModels.js');
   assert.doesNotMatch(src, /@cf\//, 'a model id was typed into the rail');
-  // Both sides of every rate go through the one formatter, so what is shown is
-  // what the price list says rather than a rounding of it.
-  assert.match(src, /formatRate\(price\.pin\)/);
-  assert.match(src, /formatRate\(price\.pout\)/);
-  assert.match(src, /formatRate\(price\.perMinute\)/);
+  // Ids and rates left the rail (D698 decision 10): no formatter for them.
+  assert.doesNotMatch(src, /formatRate\(|priceOfModel\(|rateLine|inlineRate/, 'the rail draws a rate again');
   assert.doesNotMatch(src, /\.toFixed\(/, 'the rail is formatting a figure by hand');
 });
 
-// ── The AIRail canvas's cards (owner, 2026-10-10) ───────────────────────
-
-const L70 = 'm/seventy', L8 = 'm/eight', L3 = 'm/three', WH = 'm/whisper';
-const PRICING = {
-  prices: { [L70]: { in: 0.293, out: 2.253 }, [L8]: { in: 0.152, out: 0.287 }, [L3]: { in: 0.051, out: 0.335 } },
-  audio_prices: { [WH]: 0.0005, 'm/nova': 0.0052 },
-  routes: {
-    transcribe: { model: WH, alternates: [WH, 'm/nova', 'm/unpriced'] },
-    tag: { model: L70, alternates: [L70, L8, L3] },
-    draft: { model: L70, alternates: [L70, L8] },
-    ask: { model: L70, alternates: [] },
-  },
-};
-const JOBS = [
-  { task: 'transcribe', pick: false, why: 'T.', tags: ['Best for: transcription'] },
-  { task: 'tag', pick: true, why: 'Tag.', tags: ['Best for: tagging'] },
-  { task: 'draft', pick: true, why: 'Draft.', tags: ['Best for: drafting'] },
-];
-
-test('railCards: one card per model in use, jobs on one model share it, DEFAULT from the router', async () => {
-  const { railCards } = await import('../src/hooks/useAiSpend.js');
-  const v = railCards(PRICING, JOBS, { copy: { [L70]: { name: 'Seventy' } } });
-  assert.deepEqual(v.cards.map((c) => [c.id, c.isDefault, c.jobs.map((j) => j.task)]),
-    [[WH, true, ['transcribe']], [L70, true, ['tag', 'draft']]]);
-  assert.equal(v.cards[1].name, 'Seventy');
-  assert.equal(v.cards[0].name, 'whisper', 'a model with no copy renders on its id, never blank');
-  assert.deepEqual(v.cards[0].price, { kind: 'audio', perMinute: 0.0005 });
-  // A job that takes no pick offers no alternates: Whisper's unpriced and
-  // priced siblings never appear, whatever the router lists.
-  assert.deepEqual(v.alternates.map((a) => [a.id, a.tasks]), [[L8, ['tag', 'draft']], [L3, ['tag']]]);
-  assert.equal(v.pickable, true);
-});
-
-test('railCards: a pick moves only the jobs that offer it, and is not the default', async () => {
-  const { railCards } = await import('../src/hooks/useAiSpend.js');
-  const v = railCards(PRICING, JOBS, { chosen: (t) => (t === 'tag' ? L3 : null) });
-  assert.deepEqual(v.cards.map((c) => [c.id, c.isDefault, c.jobs.map((j) => j.task)]),
-    [[WH, true, ['transcribe']], [L3, false, ['tag']], [L70, true, ['draft']]]);
-  // The 70B card is a choice for tagging again; the 3B card is no choice for
-  // drafting, which does not offer it.
-  assert.deepEqual(v.cards.find((c) => c.id === L70).tasks, ['tag']);
-  assert.deepEqual(v.cards.find((c) => c.id === L3).tasks, []);
-  assert.deepEqual(v.alternates.map((a) => a.id), [L8]);
-});
-
-test('railCards: a stale or unoffered pick is not a selection, and an unpriced model draws nothing', async () => {
-  const { railCards } = await import('../src/hooks/useAiSpend.js');
-  const stale = railCards(PRICING, JOBS, { chosen: () => 'm/gone' });
-  assert.deepEqual(stale.cards.map((c) => c.id), [WH, L70], 'a pick the router stopped offering stranded a job');
-  // A job that takes no pick ignores a stored one.
-  const ignored = railCards(PRICING, [{ ...JOBS[0] }], { chosen: () => 'm/nova' });
-  assert.deepEqual(ignored.cards.map((c) => c.id), [WH], 'a job that takes no pick ran a stored one');
-  assert.deepEqual(ignored.alternates, [], 'a job that takes no pick offered its router siblings');
-  // An unpriced router model draws no card: unknown, not free.
-  const unpriced = railCards({ ...PRICING, routes: { x: { model: 'm/unpriced', alternates: [] } } }, [{ task: 'x', pick: true }]);
-  assert.deepEqual(unpriced.cards, []);
-  assert.equal(railCards(null, JOBS).cards.length, 0, 'no pricing read draws no card');
-});
-
-test('the cards are drawn the canvas way: full card in use, compact rows for the rest', () => {
-  const src = codeOnly(read(RAIL));
-  const card = src.slice(src.indexOf('export function RailModelCard('), src.indexOf('export function RailAllowance('));
-  assert.match(card, /\{card\.isDefault && <i className="fwr-badge">DEFAULT<\/i>\}/, 'the default card lost its badge');
-  assert.match(card, /<span className="fwr-model-id">\{card\.id\}<\/span>/);
-  assert.match(card, /<span className="fwr-model-rate">\{rateLine\(card\.price\)\}<\/span>/);
-  assert.match(src, /<i className="fwr-model-inline">\{inlineRate\(alt\.price\)\}<\/i>/, 'a compact row lost its inline rate');
-  assert.match(src, /railCards\(pricing, jobsFor\(workspace\), \{\s*copy: MODEL_COPY,/);
-});
+// ── The AIRail canvas's cards (D698) ────────────────────────────────────
+// `railSuggestions` is pinned page by page in `airail_d698.test.mjs`.
 
 test('the badge says Default, and the rail never says "recommend" (D400)', () => {
   const src = codeOnly(read(RAIL));
   assert.deepEqual([...new Set([...src.matchAll(/\brecommend\w*\b/gi)].map((m) => m[0]))], [],
     'a form of "recommend" is back in the rail');
-  const hook = codeOnly(read('frontend/src/hooks/useAiSpend.js'));
-  assert.match(hook, /if \(j\.model !== j\.routerDefault\) card\.isDefault = false;/,
-    'DEFAULT is no longer derived from the router\'s own model');
+  const copy = codeOnly(read(COPY));
+  assert.match(copy, /const primary = routes\[job\.task\]\.model === id;/,
+    'Default is no longer derived from the router\'s own model');
+  assert.match(copy, /s\.role === 'Default' && !primary \? null : s\.role/,
+    'a canvas "Default" on a model that is not the router\'s primary is drawn');
 });
 
-test('the estimate is measured, per job, and never modelled (D16)', () => {
+test('the rail draws no estimate and no average (D16, D698)', () => {
+  // D16's averages were measured and never modelled; D698 moved them, with
+  // the receipts, to `/account/usage`. The rail draws neither.
   const src = codeOnly(read(RAIL));
-  assert.match(src, /const observed = observedRunCost\(spend, j\.task\);/);
-  assert.match(read(RAIL), /No runs yet, so no average to show\./,
-    'with no history the rail must say so rather than print a zero');
+  assert.doesNotMatch(src, /observedRunCost|≈|No runs yet/, 'an average is drawn on the rail again');
   assert.doesNotMatch(src, /tin:|tout:/, 'a modelled token count reached the rail (D16)');
 });
 
@@ -245,11 +194,16 @@ test('each section names only work its pages run, on router tasks', () => {
   const copy = codeOnly(read(COPY));
   const alts = alternatesByTask();
   for (const task of [...copy.matchAll(/task: '([a-z_]+)'/g)].map((m) => m[1])) {
+    // D698: Grow's Product improvement names D691's task before the router
+    // carries it; `railSuggestions` skips a job the pricing read does not list
+    // (airail_d698.test.mjs, test 13). No other task may be ahead of the router.
+    if (task === 'grow_theme_feedback' && !alts.has(task)) continue;
     assert.ok(alts.has(task), `railModels.js names ${task}, which is not a ROUTE entry`);
   }
   // A job that takes a pick must offer one; a pick with nowhere to go is the
   // dead control D17 refused.
   for (const m of copy.matchAll(/task: '([a-z_]+)',\s*pick: true/g)) {
+    if (m[1] === 'grow_theme_feedback' && !alts.has(m[1])) continue;
     assert.ok((alts.get(m[1]) || []).length > 1, `${m[1]} takes a pick and the router offers none`);
   }
 });
