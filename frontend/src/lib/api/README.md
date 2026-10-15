@@ -77,3 +77,9 @@ Meet). Every path is written out in full so the drift check reads each one.
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,
 `{ feature, model, name, provider }`, with no session.
+
+D698 (#1660): `railPrefs.js` reads and writes the Eadwyn AI rail's preferences
+on the Worker (`/api/ai/rail-preferences`, migration 465): the assist mode per
+rail section and the model picked per section and router task, for the caller
+only. A null clears a row. localStorage stays the cache, so a mode or a pick
+set on a laptop is in place on a phone after a reload.

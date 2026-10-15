@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useId, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, Sparkles, X } from 'lucide-react';
-import { Link, UNSAFE_LocationContext, useInRouterContext } from 'react-router-dom';
+import { UNSAFE_LocationContext } from 'react-router-dom';
 import useAiBudget from '../hooks/useAiBudget';
 import { allowanceMonth, microMoney } from './AiBudgetUsage';
 import useAiSpend, { railCards } from '../hooks/useAiSpend';
@@ -13,7 +13,6 @@ import { ASSIST_SURFACES, observedRunCost } from './eadwynConfig';
 import { MODEL_COPY, jobsFor } from './railModels';
 import { readRailModel, writeRailModel } from './railModelChoice';
 import { Unreadable } from './Honesty';
-import { railInheritance } from './railInheritance';
 import { ACCENT } from '../workspaces/shellConfig';
 import './workerRail.css';
 
@@ -126,12 +125,6 @@ function useRailPathname() {
   const ctx = useContext(UNSAFE_LocationContext);
   if (ctx?.location?.pathname != null) return ctx.location.pathname;
   return typeof window !== 'undefined' ? window.location?.pathname || '' : '';
-}
-
-/** A link to the workspace root, as a router Link inside the app and a plain anchor outside one. */
-function RootLink({ to, children, ...rest }) {
-  const inRouter = useInRouterContext();
-  return inRouter ? <Link to={to} {...rest}>{children}</Link> : <a href={to} {...rest}>{children}</a>;
 }
 
 /**
@@ -622,11 +615,9 @@ export default function WorkerRail({
     setPicks((n) => n + 1);
   }, [workspace]);
 
-  // ZONE OR ROOT (D402). On a zone below a workspace the model is the
-  // workspace's — the same stored keys — and the rail shows it read-only with
-  // a link back to where it is chosen, rather than a menu whose every click
-  // silently changes the whole workspace.
-  const inherited = railInheritance(role, pathname);
+  // D402's inherited card is gone (D698): a card and its alternates are
+  // offered on every page, and the note below says how far a pick reaches —
+  // a pick on a zone is the workspace's pick for that job, under the same key.
 
   // Shared with the page, which decides whether to offer proposals, through a
   // module store rather than a provider — see hooks/useAssistMode.js.
@@ -766,27 +757,16 @@ export default function WorkerRail({
         {view.cards.length > 0 && (
           <section className="fwr-block" data-testid="worker-rail-models">
             <span>Model · this page</span>
-            {inherited && view.pickable && (
-              <div className="fwr-inherited" data-testid="worker-rail-inherited">
-                <i className="fwr-badge fwr-badge-inherited">INHERITED</i>
-                <p>
-                  {`Inherited from ${workspace}. The model is chosen on the workspace, not re-picked here. Change it there and this page follows.`}
-                </p>
-                <RootLink to={inherited.to} className="fwr-inherited-link" data-testid="link-worker-rail-inherited">
-                  {`Change it on ${workspace}`}
-                </RootLink>
-              </div>
-            )}
             <div className="fwr-models">
               {view.cards.map((card) => (
                 <RailModelCard
                   key={card.id}
                   card={card}
                   spend={spend}
-                  onPick={!inherited && card.tasks.length ? () => pick(card.id, card.tasks) : null}
+                  onPick={card.tasks.length ? () => pick(card.id, card.tasks) : null}
                 />
               ))}
-              {!inherited && view.alternates.map((alt) => (
+              {view.alternates.map((alt) => (
                 <button
                   key={alt.id}
                   type="button"
