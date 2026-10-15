@@ -35,6 +35,7 @@ import {
 import { fillsForRow, filledColumns } from '../services/fills/provenance';
 import { refuse } from '../util/refusal';
 import { bindingKey } from '../util/schemaBootstrap';
+import { findableBy, keepFindable } from '../services/investorFindable';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -381,8 +382,11 @@ async function listProjectsHandler(c: any) {
   await sql.end();
   if (user.role === 'investor') {
     const { maskFounderForInvestor } = await import('../services/trust');
+    // D702 — a venture whose founder chose "through introductions only" is
+    // left out for an investor who has no introduction to it.
+    const findable = await keepFindable(c.env, user, rows as any[], (p: any) => p.id);
     const masked = await Promise.all(
-      (rows as any[]).map((p) => maskFounderForInvestor(c.env, p, { viewerRole: 'investor', viewerUserId: user.id })),
+      findable.map((p) => maskFounderForInvestor(c.env, p, { viewerRole: 'investor', viewerUserId: user.id })),
     );
     return c.json(masked);
   }
@@ -392,18 +396,26 @@ async function listProjectsHandler(c: any) {
 projects.get('/', listProjectsHandler);
 projects.get('', listProjectsHandler);
 
-projects.get('/:id', async (c) => {
-  const user = await requireAuth(c);
-  const id = parseInt(c.req.param('id'));
+/**
+ * D702 — `GET /api/projects/:id`, as a function, so the preview on
+ * `/api/profile/preview` runs the same read an investor, a founder or a partner
+ * does instead of keeping a masking rule of its own. Answers exactly what the
+ * route answers. The one change D702 makes here is the investor arm: a venture
+ * whose founder turned "Let investors find my venture" off answers the same
+ * 404 as a missing id to an investor without an introduction.
+ */
+export async function projectReadFor(
+  env: Env, user: User, id: number,
+): Promise<{ status: 200 | 403 | 404; body: Record<string, unknown> }> {
   // Task #2 — make sure the columns exist before SELECT * so older D1s
   // don't omit them from the projection.
-  await ensureProjectDataRoomColumns(c.env);
-  await ensureProjectRevenueProofColumns(c.env);
-  await ensureProjectProductDemoColumns(c.env);
-  await ensureFounderCompanyColumn(c.env);
-  const sql = getSQL(c.env);
+  await ensureProjectDataRoomColumns(env);
+  await ensureProjectRevenueProofColumns(env);
+  await ensureProjectProductDemoColumns(env);
+  await ensureFounderCompanyColumn(env);
+  const sql = getSQL(env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
-  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  if (rows.length === 0) { await sql.end(); return { status: 404, body: { error: 'Project not found' } }; }
   const project = rows[0];
   // IDOR guard: a founder can only read their own project; admins/partners read
   // all. Investors are intentionally allowed PAST this gate so they reach the
@@ -415,11 +427,16 @@ projects.get('/:id', async (c) => {
   // read. Investors are deliberately let PAST to the fail-closed masked branch
   // below (NDA-gated); they never receive membership access.
   if (user.role !== 'investor') {
-    const allowed = await canAccessProject(c.env, user, project, { write: false });
+    const allowed = await canAccessProject(env, user, project, { write: false });
     if (!allowed) {
       await sql.end();
-      return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+      return { status: 403, body: { detail: 'Forbidden: you do not own this project' } };
     }
+  } else if (!(await findableBy(env, user, Number(project.id)))) {
+    // D702 — the founder chose "through introductions only", and this investor
+    // has none: the same answer as a venture that does not exist, never 403.
+    await sql.end();
+    return { status: 404, body: { error: 'Project not found' } };
   }
   let founder = null;
   let founderUserId: number | null = null;
@@ -440,13 +457,20 @@ projects.get('/:id', async (c) => {
   if (user.role === 'investor') {
     const { maskFounderForInvestor } = await import('../services/trust');
     const masked = await maskFounderForInvestor(
-      c.env,
+      env,
       { ...project, founder, founder_user_id: founderUserId },
       { viewerRole: 'investor', viewerUserId: user.id },
     );
-    return c.json(masked);
+    return { status: 200, body: masked as Record<string, unknown> };
   }
-  return c.json({ ...project, founder });
+  return { status: 200, body: { ...project, founder } };
+}
+
+projects.get('/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  const out = await projectReadFor(c.env, user, id);
+  return c.json(out.body, out.status);
 });
 
 /**

@@ -95,8 +95,12 @@ privateData.get('/portfolio/metrics', async (c) => {
     let portfolio: any[] = portfolioRaw as any[];
     if (user.role === 'investor') {
       const { maskFounderForInvestor } = await import('../services/trust');
+      const { keepFindable } = await import('../services/investorFindable');
+      // D702 — left out, and out of the count below, when its founder chose
+      // "through introductions only" and this investor has no introduction.
+      const findable = await keepFindable(c.env, user, portfolioRaw as any[], (p: any) => p.id);
       portfolio = await Promise.all(
-        portfolioRaw.map((p: any) => maskFounderForInvestor(c.env, p, { viewerRole: 'investor', viewerUserId: user.id })),
+        findable.map((p: any) => maskFounderForInvestor(c.env, p, { viewerRole: 'investor', viewerUserId: user.id })),
       );
     }
     // (re-open inside metrics calc below — `portfolio` is the masked list)

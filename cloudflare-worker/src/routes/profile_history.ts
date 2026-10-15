@@ -94,6 +94,68 @@ export const PUBLISHED_MEMBERS_MAX_SLUGS = 10;
 export const PUBLISHED_MEMBERS_LIMIT = 50;
 
 /**
+ * D702 — the members query of `/published-members`, as a function, so the
+ * preview on `/api/profile/preview` asks it the same question a member does
+ * (as a viewer who matches no row, id 0) rather than guessing who is listed.
+ * The caller's own plan lock (`archetypeAccess`) stays in the route: it is the
+ * VIEWER's plan, not the listed member's choice.
+ */
+export async function publishedMembersFor(
+  env: Env, viewer: { id: number; role: string | null | undefined }, slugs: string[],
+) {
+  const rows = await env.DB.prepare(
+    `SELECT s.user_id, u.name, u.role, s.persona, s.displayed_slug
+       FROM profile_snapshots s
+       JOIN (SELECT user_id, persona, MAX(id) AS id FROM profile_snapshots GROUP BY user_id, persona) latest
+         ON latest.id = s.id
+       JOIN profile_archetype_publish p ON p.user_id = s.user_id AND p.published = 1
+       JOIN users u ON u.id = s.user_id AND COALESCE(u.is_active, 1) = 1
+      WHERE s.displayed_slug IN (SELECT value FROM json_each(?))
+        AND s.user_id <> ?
+      ORDER BY s.displayed_slug, u.name COLLATE NOCASE, s.user_id
+      LIMIT ?`,
+  ).bind(JSON.stringify(slugs), viewer.id, PUBLISHED_MEMBERS_LIMIT + 1).all<{
+    user_id: number; name: string | null; role: string | null; persona: string; displayed_slug: string;
+  }>();
+  const all = rows.results || [];
+  const listed = all.slice(0, PUBLISHED_MEMBERS_LIMIT);
+  const callerPublished = await isArchetypePublished(env, viewer.id);
+  let fits: Map<number, { band: string | null; compared: number }> | null = null;
+  if (callerPublished && listed.length) {
+    const ids = [viewer.id, ...new Set(listed.map((m) => Number(m.user_id)))];
+    const idList = JSON.stringify(ids);
+    // Two reads for the whole list (the caller and every member), never one per row.
+    const [axal, values] = await Promise.all([
+      env.DB.prepare(
+        `SELECT user_id, value_key, score, confidence FROM axal_values
+          WHERE user_id IN (SELECT value FROM json_each(?))`,
+      ).bind(idList).all(),
+      env.DB.prepare(
+        `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+           FROM user_values uv JOIN value_dimensions vd ON vd.id = uv.dimension_id
+          WHERE uv.user_id IN (SELECT value FROM json_each(?))`,
+      ).bind(idList).all(),
+    ]);
+    const profiles = profilesFrom(ids,
+      (axal.results || []) as Array<{ user_id: number; value_key: string; score: number; confidence: number }>,
+      (values.results || []) as Array<{ user_id: number; slug: string; score: number; confidence: number }>);
+    const me = { side: sideOf(viewer.role), profile: profiles.get(viewer.id)! };
+    fits = new Map(listed.map((m, i) => [i, valuesFit(me, { side: sideOf(m.persona), profile: profiles.get(Number(m.user_id))! })]));
+  }
+  return {
+    locked: false,
+    archetypes: slugs,
+    items: listed.map((m, i) => ({
+      user_id: m.user_id, name: m.name, role: m.role, persona: m.persona,
+      slug: m.displayed_slug, label: ARCHETYPE_LABEL.get(m.displayed_slug) ?? null,
+      values_fit: fits?.get(i) ?? null,
+    })),
+    values_fit_reason: callerPublished ? null : 'Publish your own archetype to see how your values compare.',
+    more: all.length > PUBLISHED_MEMBERS_LIMIT,
+  };
+}
+
+/**
  * D602 — the card page's published-member matches (decision c). A member is
  * listed only when their `profile_archetype_publish` row says published, their
  * account is active, and the archetype their LATEST snapshot displays (per
@@ -125,56 +187,7 @@ r.get('/published-members', async (c) => {
   const access = await archetypeAccess(c.env, user);
   if (access.locked) return c.json({ locked: true, archetype_access: access });
   try {
-    const rows = await c.env.DB.prepare(
-      `SELECT s.user_id, u.name, u.role, s.persona, s.displayed_slug
-         FROM profile_snapshots s
-         JOIN (SELECT user_id, persona, MAX(id) AS id FROM profile_snapshots GROUP BY user_id, persona) latest
-           ON latest.id = s.id
-         JOIN profile_archetype_publish p ON p.user_id = s.user_id AND p.published = 1
-         JOIN users u ON u.id = s.user_id AND COALESCE(u.is_active, 1) = 1
-        WHERE s.displayed_slug IN (SELECT value FROM json_each(?))
-          AND s.user_id <> ?
-        ORDER BY s.displayed_slug, u.name COLLATE NOCASE, s.user_id
-        LIMIT ?`,
-    ).bind(JSON.stringify(slugs), user.id, PUBLISHED_MEMBERS_LIMIT + 1).all<{
-      user_id: number; name: string | null; role: string | null; persona: string; displayed_slug: string;
-    }>();
-    const all = rows.results || [];
-    const listed = all.slice(0, PUBLISHED_MEMBERS_LIMIT);
-    const callerPublished = await isArchetypePublished(c.env, user.id);
-    let fits: Map<number, { band: string | null; compared: number }> | null = null;
-    if (callerPublished && listed.length) {
-      const ids = [user.id, ...new Set(listed.map((m) => Number(m.user_id)))];
-      const idList = JSON.stringify(ids);
-      // Two reads for the whole list (the caller and every member), never one per row.
-      const [axal, values] = await Promise.all([
-        c.env.DB.prepare(
-          `SELECT user_id, value_key, score, confidence FROM axal_values
-            WHERE user_id IN (SELECT value FROM json_each(?))`,
-        ).bind(idList).all(),
-        c.env.DB.prepare(
-          `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
-             FROM user_values uv JOIN value_dimensions vd ON vd.id = uv.dimension_id
-            WHERE uv.user_id IN (SELECT value FROM json_each(?))`,
-        ).bind(idList).all(),
-      ]);
-      const profiles = profilesFrom(ids,
-        (axal.results || []) as Array<{ user_id: number; value_key: string; score: number; confidence: number }>,
-        (values.results || []) as Array<{ user_id: number; slug: string; score: number; confidence: number }>);
-      const me = { side: sideOf(user.role), profile: profiles.get(user.id)! };
-      fits = new Map(listed.map((m, i) => [i, valuesFit(me, { side: sideOf(m.persona), profile: profiles.get(Number(m.user_id))! })]));
-    }
-    return c.json({
-      locked: false,
-      archetypes: slugs,
-      items: listed.map((m, i) => ({
-        user_id: m.user_id, name: m.name, role: m.role, persona: m.persona,
-        slug: m.displayed_slug, label: ARCHETYPE_LABEL.get(m.displayed_slug) ?? null,
-        values_fit: fits?.get(i) ?? null,
-      })),
-      values_fit_reason: callerPublished ? null : 'Publish your own archetype to see how your values compare.',
-      more: all.length > PUBLISHED_MEMBERS_LIMIT,
-    });
+    return c.json(await publishedMembersFor(c.env, { id: Number(user.id), role: user.role }, slugs));
   } catch (e) {
     return refuse(c, 503, { code: 'published_members_unreadable', message: 'The members who published these archetypes could not be read. Try again in a moment.', raw: e });
   }

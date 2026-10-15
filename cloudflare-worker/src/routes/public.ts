@@ -11,7 +11,8 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, getCurrentUser } from '../auth';
+import { effectiveVisibilityFor, visibleToViewer } from '../services/userSettings';
 import { ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
@@ -252,17 +253,34 @@ async function followerCountFor(env: Env, type: 'user' | 'project', id: number):
   } catch { return 0; }
 }
 
-// Rich public person profile — Task #66. Role-tailored + privacy-gated.
-publicRoutes.get('/u/:handle', async (c) => {
-  const handle = String(c.req.param('handle') || '').trim().toLowerCase();
-  if (!handle) return c.json({ detail: 'handle required' }, 400);
-  await ensureProfileExpansionSchema(c.env);
+/**
+ * D702 — who is reading a public card. `null` is a caller who is not signed in;
+ * otherwise the signed-in member's id and role. The preview on
+ * `/api/profile/preview` passes a member who matches no row (id 0), so it reads
+ * exactly what an unrelated signed-in member of that role would.
+ */
+export type PublicViewer = { id: number; role?: string | null } | null;
+
+/** A card read's answer: the body the route sends, or the 404 it sends. */
+export type CardResult = { status: 200; body: Record<string, unknown> } | { status: 404; body: { detail: string } };
+const NOT_FOUND: CardResult = { status: 404, body: { detail: 'Not found' } };
+
+/**
+ * Rich public person profile — Task #66. Role-tailored + privacy-gated.
+ *
+ * D702 — and gated on the member's EFFECTIVE profile visibility
+ * (services/userSettings.ts `effectiveVisibility`): Hidden is served only to
+ * the member themself, Members only only to a signed-in caller, and Public to
+ * anyone. Every other caller gets the same 404 as a missing handle.
+ */
+export async function publicPersonCard(env: Env, handle: string, viewer: PublicViewer): Promise<CardResult> {
+  await ensureProfileExpansionSchema(env);
 
   // Broad select with a minimal fallback for older/dev DBs missing the
   // lazily-added identity columns (bio/socials/headshot_r2_key/privacy_prefs).
   let row: any = null;
   try {
-    row = await c.env.DB.prepare(
+    row = await env.DB.prepare(
       `SELECT u.id, u.uid, u.name, u.role, u.display_name, u.headline, u.bio, u.socials,
               u.headshot_r2_key, u.privacy_prefs, e.experience, e.education,
               e.certifications, e.website, u.founder_id, u.investor_id, u.partner_id,
@@ -272,12 +290,14 @@ publicRoutes.get('/u/:handle', async (c) => {
         WHERE lower(u.uid) = ? AND u.is_active = 1`,
     ).bind(handle).first<any>();
   } catch {
-    row = await c.env.DB.prepare(
+    row = await env.DB.prepare(
       `SELECT id, uid, name, role, founder_id, investor_id, partner_id, created_at
          FROM users WHERE lower(uid) = ? AND is_active = 1`,
     ).bind(handle).first<any>();
   }
-  if (!row) return c.json({ detail: 'Not found' }, 404);
+  if (!row) return NOT_FOUND;
+  const vis = (await effectiveVisibilityFor(env, [Number(row.id)])).get(Number(row.id)) ?? 'public';
+  if (!visibleToViewer(vis, Number(row.id), viewer ? viewer.id : null)) return NOT_FOUND;
 
   const role = String(row.role || '').toLowerCase();
   const flags = effectiveFlags(row.privacy_prefs, role);
@@ -298,7 +318,7 @@ publicRoutes.get('/u/:handle', async (c) => {
       ? Object.fromEntries(Object.entries(socials).filter(([, v]) => typeof v === 'string' && v))
       : {},
     website: flags.background ? (row.website || socials.website || null) : null,
-    followers: await followerCountFor(c.env, 'user', row.id),
+    followers: await followerCountFor(env, 'user', row.id),
     visible_fields: flags,
   };
 
@@ -311,7 +331,7 @@ publicRoutes.get('/u/:handle', async (c) => {
 
   // Founder → cross-linkable startups.
   if (role === 'founder' && row.founder_id && (flags.projects || flags.traction)) {
-    const pr = await c.env.DB.prepare(
+    const pr = await env.DB.prepare(
       `SELECT uid, name, sector, stage, status FROM projects
          WHERE founder_id = ? AND deleted_at IS NULL`,
     ).bind(row.founder_id).all<any>();
@@ -330,7 +350,7 @@ publicRoutes.get('/u/:handle', async (c) => {
 
   // Investor → thesis.
   if (role === 'investor' && row.investor_id && flags.thesis) {
-    const inv = await c.env.DB.prepare(
+    const inv = await env.DB.prepare(
       `SELECT investor_type, sector_focus, stage_focus, check_size_min, check_size_max, accreditation_status
          FROM investors WHERE id = ?`,
     ).bind(row.investor_id).first<any>();
@@ -348,7 +368,7 @@ publicRoutes.get('/u/:handle', async (c) => {
 
   // Partner → services summary.
   if (role === 'partner' && row.partner_id && flags.services) {
-    const p = await c.env.DB.prepare(
+    const p = await env.DB.prepare(
       `SELECT specialization, company FROM partners WHERE id = ?`,
     ).bind(row.partner_id).first<any>();
     if (p) {
@@ -359,40 +379,55 @@ publicRoutes.get('/u/:handle', async (c) => {
     }
   }
 
-  return c.json(payload);
-});
+  return { status: 200, body: payload };
+}
 
-// Task #66 — Public, shareable startup profile. Handle is the project uid.
-// Returns only fields safe for anonymous sharing (no data-room links, no
-// financial internals beyond headline traction), founder cards for
-// cross-linking, recent SUBMITTED updates, and the published landing URL.
-// Projects that are archived/rejected/intake or soft-deleted are not
-// addressable in public (mirrors the founder-block visibility rule).
-publicRoutes.get('/startup/:handle', async (c) => {
+publicRoutes.get('/u/:handle', async (c) => {
   const handle = String(c.req.param('handle') || '').trim().toLowerCase();
   if (!handle) return c.json({ detail: 'handle required' }, 400);
+  const viewer = await getCurrentUser(c);
+  const out = await publicPersonCard(c.env, handle, viewer ? { id: Number(viewer.id), role: viewer.role } : null);
+  return c.json(out.body, out.status);
+});
 
-  const proj = await c.env.DB.prepare(
+/** The statuses that keep a venture off the public startup page. */
+export const STARTUP_NOT_PUBLIC_STATUSES = ['archived', 'rejected', 'intake'];
+
+/**
+ * Task #66 — Public, shareable startup profile. Handle is the project uid.
+ * Returns only fields safe for anonymous sharing (no data-room links, no
+ * financial internals beyond headline traction), founder cards for
+ * cross-linking, recent SUBMITTED updates, and the published landing URL.
+ * Projects that are archived/rejected/intake or soft-deleted are not
+ * addressable in public (mirrors the founder-block visibility rule).
+ *
+ * D702 — a founder card is drawn only when that founder's effective profile
+ * visibility serves `viewer` (Hidden: only the founder; Members only: any
+ * signed-in member), the same rule `publicPersonCard` applies.
+ */
+export async function publicStartupCard(env: Env, handle: string, viewer: PublicViewer): Promise<CardResult> {
+  const proj = await env.DB.prepare(
     `SELECT id, uid, name, sector, stage, status, description, problem_statement,
             solution, why_now, users_count, revenue, funding_needed, founded_year,
             hq, website, founder_id, created_at
        FROM projects WHERE lower(uid) = ? AND deleted_at IS NULL`,
   ).bind(handle).first<any>();
-  if (!proj) return c.json({ detail: 'Not found' }, 404);
+  if (!proj) return NOT_FOUND;
   const status = String(proj.status || '').toLowerCase();
-  if (['archived', 'rejected', 'intake'].includes(status)) {
-    return c.json({ detail: 'Not found' }, 404);
-  }
+  if (STARTUP_NOT_PUBLIC_STATUSES.includes(status)) return NOT_FOUND;
 
   // Founder card(s) — the primary founder user, safe fields only.
   const founders: any[] = [];
   if (proj.founder_id) {
     try {
-      const fr = await c.env.DB.prepare(
-        `SELECT uid, name, display_name, headline, role, headshot_r2_key
+      const fr = await env.DB.prepare(
+        `SELECT id, uid, name, display_name, headline, role, headshot_r2_key
            FROM users WHERE founder_id = ? AND is_active = 1`,
       ).bind(proj.founder_id).all<any>();
-      for (const u of fr.results || []) {
+      const people = fr.results || [];
+      const vis = await effectiveVisibilityFor(env, people.map((u: any) => Number(u.id)));
+      for (const u of people) {
+        if (!visibleToViewer(vis.get(Number(u.id)) ?? 'public', Number(u.id), viewer ? viewer.id : null)) continue;
         founders.push({
           handle: u.uid,
           name: u.display_name || u.name || null,
@@ -407,7 +442,7 @@ publicRoutes.get('/startup/:handle', async (c) => {
   // Recent submitted updates (news feed).
   let updates: any[] = [];
   try {
-    const ur = await c.env.DB.prepare(
+    const ur = await env.DB.prepare(
       `SELECT uid, period, title, submitted_at FROM portfolio_updates
          WHERE project_id = ? AND status = 'submitted'
          ORDER BY COALESCE(submitted_at, updated_at) DESC LIMIT 6`,
@@ -423,37 +458,48 @@ publicRoutes.get('/startup/:handle', async (c) => {
   if (!website) {
     try {
       // Multi-page sites: the oldest published page is the site's public face.
-      const lp = await c.env.DB.prepare(
+      const lp = await env.DB.prepare(
         `SELECT slug, published FROM landing_pages WHERE project_id = ? AND published = 1 ORDER BY id LIMIT 1`,
       ).bind(proj.id).first<any>();
       if (lp && lp.published) website = `https://axal.vc/landing/${lp.slug}`;
     } catch { /* landing_pages may not exist */ }
   }
 
-  return c.json({
-    id: proj.id,
-    handle: proj.uid,
-    name: proj.name,
-    sector: proj.sector || null,
-    stage: proj.stage || null,
-    status,
-    description: proj.description || null,
-    problem_statement: proj.problem_statement || null,
-    solution: proj.solution || null,
-    why_now: proj.why_now || null,
-    founded_year: proj.founded_year || null,
-    hq: proj.hq || null,
-    traction: {
-      users: proj.users_count || null,
-      revenue: proj.revenue || null,
-      funding_needed: proj.funding_needed || null,
+  return {
+    status: 200,
+    body: {
+      id: proj.id,
+      handle: proj.uid,
+      name: proj.name,
+      sector: proj.sector || null,
+      stage: proj.stage || null,
+      status,
+      description: proj.description || null,
+      problem_statement: proj.problem_statement || null,
+      solution: proj.solution || null,
+      why_now: proj.why_now || null,
+      founded_year: proj.founded_year || null,
+      hq: proj.hq || null,
+      traction: {
+        users: proj.users_count || null,
+        revenue: proj.revenue || null,
+        funding_needed: proj.funding_needed || null,
+      },
+      founders,
+      updates,
+      website,
+      followers: await followerCountFor(env, 'project', proj.id),
+      joined_at: proj.created_at || null,
     },
-    founders,
-    updates,
-    website,
-    followers: await followerCountFor(c.env, 'project', proj.id),
-    joined_at: proj.created_at || null,
-  });
+  };
+}
+
+publicRoutes.get('/startup/:handle', async (c) => {
+  const handle = String(c.req.param('handle') || '').trim().toLowerCase();
+  if (!handle) return c.json({ detail: 'handle required' }, 400);
+  const viewer = await getCurrentUser(c);
+  const out = await publicStartupCard(c.env, handle, viewer ? { id: Number(viewer.id), role: viewer.role } : null);
+  return c.json(out.body, out.status);
 });
 
 // PublicDirectoryPage (`/directory`) — list endpoint for anonymous

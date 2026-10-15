@@ -13,6 +13,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { findableBy } from '../services/investorFindable';
 import {
   isAdmin, isInvestor, isPartner, mapError, nowIso, newUid, jload,
   trimOrNull, normaliseTags,
@@ -133,6 +134,12 @@ async function resolveTargets(env: Env, user: User, body: any): Promise<Targets>
     const d = await env.DB.prepare('SELECT id FROM deals WHERE uid = ?').bind(dealUid).first<{ id: number }>();
     if (!d) return { error: { detail: 'Deal not found', status: 404 } };
     dealId = d.id;
+  }
+
+  // D702 — an entry's response names its venture, so an investor may not point
+  // one at a venture its founder keeps to introductions; it answers as missing.
+  if (projectId != null && !(await findableBy(env, user, projectId))) {
+    return { error: { detail: 'Project not found', status: 404 } };
   }
 
   return { projectId, watchlistItemId, dealId };

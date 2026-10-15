@@ -19,6 +19,7 @@ import { requireAuth, requireAdmin } from '../auth';
 // ALL_ENTITY_TYPES is deliberately NOT imported here any more — see VALID_TYPES
 // below. Importing it again is how the two lists would quietly re-converge.
 import { searchSemantic, type EntityType, type SearchHit } from '../services/vectorize';
+import { keepFindable } from '../services/investorFindable';
 import { Jobs } from '../models/jobs';
 
 const search = new Hono<{ Bindings: Env }>();
@@ -146,6 +147,9 @@ search.get('/', async (c) => {
     if (!grouped) hits = hits.slice(0, limit);
   }
   hits = hits.map(scrubSnippet);
+  // D702 — an investor does not get a project hit for a venture whose founder
+  // chose "through introductions only" unless they have an introduction to it.
+  hits = await keepFindable(c.env, user, hits, (h) => (h.type === 'project' ? h.entity_id : null));
 
   if (grouped || !requestedType) {
     const groups: Record<string, SearchHit[]> = {};

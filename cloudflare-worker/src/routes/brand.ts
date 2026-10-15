@@ -17,6 +17,7 @@
  *   POST /api/brand/landing/:slug/view              public analytics ping
  */
 import { Hono } from 'hono';
+import { findableBy } from '../services/investorFindable';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
 import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent, LANDING_CONTENT_SCHEMA, HONEYPOT_FIELD } from '../services/landingTemplates';
@@ -332,6 +333,9 @@ async function projectOwned(
   ).bind(projectId).first<any>();
   if (!row) throw new Error('NotFound');
   const role = String(user?.role || '').toLowerCase();
+  // D702 — an investor opening a venture its founder keeps to introductions,
+  // without one, finds nothing, exactly as for a venture that does not exist.
+  if (role === 'investor' && !(await findableBy(c.env, user, row.id))) throw new Error('NotFound');
   if (role === 'admin' || role === 'partner' || role === 'investor') return row;
   if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) {
     if (!projectInActiveCompany(await activeCompanyFor(c, user), row)) throw new Error('NotFound');

@@ -26,6 +26,12 @@ export interface UserSettingsRow {
   archetype_sex: string | null;
   profile_slug: string | null;
   visibility: Visibility;
+  /**
+   * D702 (migration 467) — when the member last chose a visibility. NULL means
+   * they never chose, so a stored 'network' (the default) still reads as Public.
+   * Absent on a DB without 467 and on a member with no row: read as NULL.
+   */
+  visibility_chosen_at?: string | null;
   show_in_directory: number;
   discoverable: number;
   // Task #19 — explicit "Include me in matching" consent. Defaults OFF; a user
@@ -53,6 +59,7 @@ const DEFAULT_ROW = {
   archetype_sex: null as string | null,
   profile_slug: null as string | null,
   visibility: 'network' as Visibility,
+  visibility_chosen_at: null as string | null,
   show_in_directory: 1,
   discoverable: 1,
   matching_opt_in: 0,
@@ -82,6 +89,7 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         archetype_sex TEXT,
         profile_slug TEXT UNIQUE,
         visibility TEXT DEFAULT 'network' CHECK (visibility IN ('public','network','private')),
+        visibility_chosen_at TEXT,
         show_in_directory INTEGER DEFAULT 1,
         discoverable INTEGER DEFAULT 1,
         matching_opt_in INTEGER DEFAULT 0,
@@ -121,6 +129,13 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         `ALTER TABLE user_settings ADD COLUMN archetype_sex TEXT`,
       ).run();
     } catch {}
+    // D702 — migration 467's column, declared here too so a DB this function
+    // created carries the same shape (check-schema-pair-drift).
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN visibility_chosen_at TEXT`,
+      ).run();
+    } catch {}
     MIGRATED.set(bindingKey(env), true);
   } catch (e) {
     console.error('[user_settings] migration failed', e);
@@ -137,6 +152,64 @@ export async function getUserSettings(env: Env, userId: number): Promise<UserSet
     ...DEFAULT_ROW,
     updated_at: new Date().toISOString(),
   };
+}
+
+/**
+ * D702 — what the profile visibility MEANS, from what is stored.
+ *
+ *   private, any            → private  (served only to the member themself)
+ *   network, chosen         → network  (signed-in members only)
+ *   network, never chosen   → public   (as every profile was served before D702)
+ *   public,  any            → public
+ *
+ * A member who picked "Network only" before D702 cannot be told apart from the
+ * default, so they read Public until they choose again.
+ */
+export type EffectiveVisibility = 'public' | 'network' | 'private';
+export function effectiveVisibility(
+  stored: string | null | undefined, chosenAt: string | null | undefined,
+): EffectiveVisibility {
+  const v = String(stored || 'network');
+  if (v === 'private') return 'private';
+  if (v === 'public') return 'public';
+  return chosenAt ? 'network' : 'public';
+}
+
+/** True when a member with this effective visibility is served to `viewerId` (null = signed out). */
+export function visibleToViewer(
+  vis: EffectiveVisibility, ownerUserId: number, viewerId: number | null | undefined,
+): boolean {
+  if (vis === 'public') return true;
+  if (vis === 'network') return viewerId != null;
+  return viewerId != null && Number(viewerId) === Number(ownerUserId);
+}
+
+/**
+ * The effective visibility of many members in one read. A member with no row,
+ * or a DB without migration 467, reads as never chosen.
+ */
+export async function effectiveVisibilityFor(
+  env: Env, userIds: number[],
+): Promise<Map<number, EffectiveVisibility>> {
+  const out = new Map<number, EffectiveVisibility>();
+  const ids = [...new Set(userIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  for (const id of ids) out.set(id, 'public');
+  if (ids.length === 0) return out;
+  await ensureUserSettings(env);
+  let rows: Array<{ user_id: number; visibility: string | null; visibility_chosen_at?: string | null }> = [];
+  try {
+    rows = (await env.DB.prepare(
+      `SELECT user_id, visibility, visibility_chosen_at FROM user_settings
+        WHERE user_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(ids)).all<any>()).results || [];
+  } catch (e) {
+    if (!/no such column/i.test(String((e as Error)?.message || e))) throw e;
+    rows = (await env.DB.prepare(
+      `SELECT user_id, visibility FROM user_settings WHERE user_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(ids)).all<any>()).results || [];
+  }
+  for (const r of rows) out.set(Number(r.user_id), effectiveVisibility(r.visibility, r.visibility_chosen_at ?? null));
+  return out;
 }
 
 export interface UserSettingsPatch {
@@ -275,6 +348,9 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
       throw new SettingsValidationError('visibility must be public|network|private', 400, 'visibility');
     }
     push('visibility', patch.visibility);
+    // D702 — any write of `visibility` is a choice, from /account or from the
+    // Visibility page, so the effective value stops defaulting to Public.
+    push('visibility_chosen_at', new Date().toISOString().replace('T', ' ').slice(0, 19));
   }
   if (patch.show_in_directory !== undefined) push('show_in_directory', asInt(patch.show_in_directory));
   if (patch.discoverable !== undefined) push('discoverable', asInt(patch.discoverable));

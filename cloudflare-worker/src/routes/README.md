@@ -62,6 +62,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts
+/api/profile       → profile_history.ts, founder_profile.ts  (D702: the founder's /me, /venture and /preview after the archetype history reads)
 /api/dashboard     → dashboard.ts
 /api/matches       → matches.ts         (Best-Fit's /summary only; the AI Matching Engine was removed)
 /api/research      → research.ts        (the Research bucket's own stores)
