@@ -10,7 +10,7 @@ import { clock, useDarkTheme } from './RecordingView';
  * "Recording · tap to expand", on every signed-in route while a session is
  * recording, paused or processing. A real button: click, Enter or Space opens
  * `/validate/record/live`. Processing that finishes while minimised never
- * moves the founder: the pill turns "Ready to review", which links there.
+ * moves the founder: the ready pill links to Customer research (D694).
  *
  * Placed bottom-right, 300px in from the right at 1024px and wider so the
  * Worker AI rail stays readable; below that, full width above the phone tab bar
@@ -60,9 +60,9 @@ export default function RecordingPill() {
   );
   if (variant === 'ready') {
     return (
-      <Link ref={self} to={reviewPath(state.session)} state={{ interview: state.interview }} onClick={() => recorder.clear()} aria-label={label} data-testid="recording-pill" data-variant={variant} className={box}>
+      <Link ref={self} to={reviewPath(state.session)} onClick={() => recorder.clear()} aria-label={label} data-testid="recording-pill" data-variant={variant} className={box}>
         {ring}
-        <span className="flex flex-col"><span className="inline-flex items-center gap-1.5 text-[13px] font-bold"><span className={`h-2 w-2 rounded-full ${DOT.ready}`} />Ready to review</span><span className="text-[12px] text-gray-500 dark:text-gray-400">Open the review</span></span>
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold"><span className={`h-2 w-2 rounded-full ${DOT.ready}`} />Ready · see it in Interviews</span>
       </Link>
     );
   }

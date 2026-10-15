@@ -272,16 +272,15 @@ test('the CTA says it opens a dialog only when it does', () => {
 
 const cards = (cycle) => MODULES[cycle].map((m) => ({ slug: m.slug, name: m.name }));
 
-test('history: Interviews second in Validate; a history that is not live is not drawn; none without module tabs', () => {
-  assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Interviews', '/validate/interviews?project_id=7']]);
-  assert.equal(cycleTabs('validate', cards('validate'), 'interviews').find((t) => t.key === 'interviews').active, true);
+test('history: Validate has none; other histories require module tabs and appear once', () => {
+  assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Problem discovery', '/validate/problem-discovery?project_id=7']]);
   // #1598 and #1599: Raise's Calls and Grow's Updates sections shipped, so their histories are live.
   for (const [c, key] of [['raise', 'calls'], ['grow', 'updates']]) {
     assert.equal(CYCLES[c].history.live, true, `${c} is live`);
     assert.equal(cycleTabs(c, cards(c)).some((t) => t.key === key), true, `${c} draws its history`);
   }
-  assert.deepEqual(cycleTabs('validate', []).map((t) => t.name), ['Overview'], 'no history tab without module tabs');
-  assert.deepEqual(cycleTabs('validate', [{ slug: 'x', name: 'Interviews' }]).filter((t) => t.name === 'Interviews').length, 1, 'never twice');
+  assert.deepEqual(cycleTabs('build', []).map((t) => t.name), ['Overview'], 'no history tab without module tabs');
+  assert.deepEqual(cycleTabs('build', [{ slug: 'x', name: 'Tools' }]).filter((t) => t.name === 'Tools').length, 1, 'never twice');
 });
 
 test('Build\'s Tools is live now its section ships (#1597): second, on Operating systems\' #tools, keeping the venture', () => {

@@ -1,8 +1,8 @@
 /**
  * D685 (#1587) §5.4 — the routes and entry points of Record a session: the
  * deep-linkable `/validate/record`, the plain-click-in-place / new-tab-follows
- * link, the retired `?new=record`, the Interviews tab second in Validate's
- * tabs, and the Interviews list's Channel filter, words and title.
+ * link, the retired `?new=record`, Validate's direct module tabs (D694),
+ * and the Interviews list's Channel filter, words and title.
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_routes_d685.test.mjs
@@ -29,14 +29,13 @@ const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
 const CARDS = [{ slug: 'problem-discovery', name: 'Problem discovery' }, { slug: 'customer-research', name: 'Customer research' }];
 
-test('Interviews is Validate\'s second tab, opens /validate/interviews, and keeps the chosen venture', () => {
+test('Validate tabs lead directly to modules and keep the chosen venture', () => {
   const tabs = cycleTabs('validate', CARDS, null, '?project_id=7');
-  assert.deepEqual(tabs.map((t) => t.name), ['Overview', 'Interviews', 'Problem discovery', 'Customer research']);
-  assert.equal(tabs[1].href, '/validate/interviews?project_id=7');
+  assert.deepEqual(tabs.map((t) => t.name), ['Overview', 'Problem discovery', 'Customer research']);
+  assert.equal(tabs[1].href, '/validate/problem-discovery?project_id=7');
   assert.equal(tabs[1].active, false);
-  assert.equal(cycleTabs('validate', CARDS, 'interviews')[1].active, true);
   assert.equal(cycleTabs('validate', CARDS, 'customer-research')[1].active, false);
-  assert.equal(cycleTabs('validate', CARDS)[1].href, '/validate/interviews', 'a bad or empty search adds nothing');
+  assert.equal(cycleTabs('validate', CARDS)[1].href, '/validate/problem-discovery', 'a bad or empty search adds nothing');
   for (const other of ['grow', 'build', 'raise']) {
     assert.equal(cycleTabs(other, CARDS).some((t) => t.name === 'Interviews'), false, `${other} has no Interviews tab`);
   }
@@ -44,12 +43,11 @@ test('Interviews is Validate\'s second tab, opens /validate/interviews, and keep
 
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 
-test('the header draws the tab, and the phone select lists it too', () => {
+test('the header and phone select list Validate modules directly', () => {
   const out = html(h(CycleHeader, { cycle: 'validate', cards: CARDS, search: '?project_id=7', action: { label: 'Record a session', href: '/validate/record?project_id=7' } }));
   const nav = /data-testid="cycle-tabs"[\s\S]*?<\/nav>/.exec(out)[0];
-  assert.deepEqual([...nav.matchAll(/>([^<>]+)<\/a>/g)].map((m) => m[1]), ['Overview', 'Interviews', 'Problem discovery', 'Customer research']);
-  assert.match(nav, /href="\/validate\/interviews\?project_id=7"/);
-  assert.match(out, /<option value="interviews">Interviews<\/option>/, 'the phone select is keyed by tab (D686), so two tabs on one path never collide');
+  assert.deepEqual([...nav.matchAll(/>([^<>]+)<\/a>/g)].map((m) => m[1]), ['Overview', 'Problem discovery', 'Customer research']);
+  assert.doesNotMatch(out, /<option value="interviews">/);
 });
 
 test('a left click with no modifier opens in place; a modified click or a middle click follows the href', () => {
