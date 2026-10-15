@@ -572,7 +572,7 @@ test('the pill\'s variants and accessible names, and the timer from the Worker\'
   assert.equal(pillLabel('blocked', '00:00'), 'Not recording · the microphone is blocked · tap to expand');
   assert.equal(pillLabel('refused', '00:00'), 'Not recording · the recording did not start · tap to expand');
   assert.equal(pillLabel('recording', '00:01:30'), 'Recording · 00:01:30 · tap to expand');
-  assert.equal(pillLabel('ready', ''), 'Ready to review · open the review');
+  assert.equal(pillLabel('ready', ''), 'Ready · see it in Interviews');
 });
 
 test('the mark flash: fades over its length, and never under reduced motion; a paused ring keeps drawing until it fades', () => {

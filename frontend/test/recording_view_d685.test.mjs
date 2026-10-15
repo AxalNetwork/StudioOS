@@ -226,7 +226,7 @@ test('processing: a percentage and aria-valuenow only where the Worker counts; t
   assert.match(tag(tr, 'stage-3'), /data-tone="rest"/);
   assert.doesNotMatch(tag(tr, 'stage-3'), /bg-/, 'the rest outlined');
   assert.match(tag(tr, 'stage-0'), /data-tone="done"/);
-  assert.ok(renderedText(tr).includes('Then the review screen.'));
+  assert.ok(renderedText(tr).includes('Then it lands in Interviews.'));
   assert.doesNotMatch(tr, /Not recorded/, 'no stage is marked as missing now that the Worker reports each');
   assert.doesNotMatch(tr, /data-testid="processing-failed"/);
 
@@ -235,7 +235,7 @@ test('processing: a percentage and aria-valuenow only where the Worker counts; t
   assert.ok(renderedText(failed).includes('The recording could not be read. Nothing was transcribed.'));
   assert.match(failed, /data-testid="button-retry-processing"/);
   assert.match(tag(failed, 'stage-1'), /data-tone="rest"/, 'nothing is drawn as running after a failure');
-  assert.doesNotMatch(renderedText(failed), /Then the review screen/);
+  assert.doesNotMatch(renderedText(failed), /Then it lands in Interviews/);
   assert.doesNotMatch(failed, /data-testid="button-stop"/, 'no recording controls while processing');
 });
 
@@ -363,9 +363,11 @@ test('the pill shows on a route outside Validate, never on the live view, and st
   assert.match(html(h(RecordingPill), '/build'), /aria-label="Processing the session · tap to expand"/);
   setRecorder(stubRecorder(ST({ phase: 'ready' })));
   const ready = html(h(RecordingPill), '/build');
-  assert.match(ready, /<a [^>]*href="\/validate\/session\/7"/, '"Ready to review" links to the review');
-  setRecorder(stubRecorder(ST({ phase: 'ready', session: { ...SESSION, interview_id: 41 } })));
-  assert.match(html(h(RecordingPill), '/build'), /<a [^>]*href="\/validate\/interviews\/41\?session=7"/, 'the interview\'s review, on this session');
+  assert.match(ready, /<a [^>]*href="\/validate\/customer-research"/, 'the ready pill links to Customer research');
+  assert.match(ready, /aria-label="Ready · see it in Interviews"/);
+  assert.match(ready, />Ready · see it in Interviews<\/span>/);
+  setRecorder(stubRecorder(ST({ phase: 'ready', session: { ...SESSION, project_id: 3, interview_id: 41 } })));
+  assert.match(html(h(RecordingPill), '/build'), /<a [^>]*href="\/validate\/customer-research\?project_id=3"/, 'the recording keeps its venture');
   setRecorder(stubRecorder(ST({ phase: 'stopping', processing: { stage: 'failed', error: 'No.' } })));
   assert.match(html(h(RecordingPill), '/build'), /aria-label="Processing stopped · tap to retry"/);
   setRecorder(stubRecorder({ ...ST(), session: null, phase: 'idle' }));
@@ -433,7 +435,7 @@ test('after a reload the session page hands a run under way to the recorder and 
   assert.equal(followed.length, 2);
 });
 
-test('the live route: bound to the recording; another session\'s address goes to its page; a finished one lands on its review', () => {
+test('the live route: bound to the recording; another session\'s address goes to its page; a finished one lands on Customer research', () => {
   const st = ST();
   assert.equal(liveRedirect(st, null), null);
   assert.equal(liveRedirect(st, '7'), null);
@@ -441,10 +443,10 @@ test('the live route: bound to the recording; another session\'s address goes to
   assert.equal(liveRedirect({ session: null }, '9'), '/validate/session/9');
   assert.equal(liveRedirect({ session: null }, 'abc'), '/validate', 'a malformed id goes nowhere odd');
   assert.equal(liveRedirect({ session: null }, null), '/validate');
-  assert.equal(liveRedirect({ ...st, phase: 'ready', session: { ...SESSION, interview_id: 41 } }, '7'), '/validate/interviews/41?session=7', 'done: the interview\'s review, on this session');
-  assert.equal(reviewPath({ id: 7 }), '/validate/session/7', 'no interview id: the session\'s own page');
-  assert.equal(reviewPath(null), '/validate/interviews');
-  assert.equal(liveRedirect({ phase: 'discarded', session: null }, '7'), '/validate/interviews');
+  assert.equal(liveRedirect({ ...st, phase: 'ready', session: { ...SESSION, project_id: 3, interview_id: 41 } }, '7'), '/validate/customer-research?project_id=3', 'done: Customer research in the same venture');
+  assert.equal(reviewPath({ id: 7 }), '/validate/customer-research', 'no venture: the list still opens');
+  assert.equal(reviewPath(null), '/validate/customer-research');
+  assert.equal(liveRedirect({ phase: 'discarded', session: null }, '7'), '/validate/customer-research');
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /<Route path="\/validate\/record\/live" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <RecordLivePage \/>\)\} \/>/);
   assert.match(app, /<ActiveRecordingProvider userId=\{user\?\.id \?\? null\} \/>/, 'mounted once, above the pages');

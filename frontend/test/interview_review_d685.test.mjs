@@ -136,7 +136,7 @@ async function mount(f, url = '/validate/interviews/41') {
     root.render(h(MemoryRouter, { initialEntries: [url] }, h(Probe),
       h(Routes, null,
         h(Route, { path: '/validate/interviews/:id', element: h(InterviewReviewPage, { sessions: f.sessions, api: f.api }) }),
-        h(Route, { path: '/validate/interviews', element: h('p', null, 'log') }))));
+        h(Route, { path: '/validate/customer-research', element: h('p', null, 'log') }))));
   });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -266,7 +266,7 @@ test('Delete confirms what goes with it, Cancel keeps it, and Delete the intervi
     await m.click('button-delete-interview');
     await m.click('button-confirm-delete');
     assert.deepEqual(f.calls.filter((c) => c[0] === 'deleteInterview'), [['deleteInterview', 41]]);
-    assert.equal(m.path(), '/validate/interviews');
+    assert.equal(m.path(), '/validate/customer-research?project_id=3');
   } finally { await m.unmount(); }
   const f2 = fakes();
   f2.api.deleteInterview = async () => { throw new Error('Project not found'); };

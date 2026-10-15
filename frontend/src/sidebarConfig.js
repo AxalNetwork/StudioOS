@@ -629,6 +629,8 @@ function workspaceRoutes(role) {
  * height". One list makes that omission impossible rather than fixed once;
  * `frontend/test/founder_shell.test.mjs` asserts every founder desk and
  * section route is in it.
+ * `isCyclePath` in App.jsx matches cycle module, action, record and add paths,
+ * so they are not listed here.
  */
 export const FOUNDER_FULL_BLEED = [
   ...workspaceRoutes('founder'),
