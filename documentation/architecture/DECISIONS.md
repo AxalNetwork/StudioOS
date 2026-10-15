@@ -36803,6 +36803,9 @@ it takes no prop.
 
 ## D402
 
+**Superseded in part by D698 (2026-10-15):** the inherited card and `ui/railInheritance.js`
+are gone; the rail offers a card and its alternates on every page; see `decisions/D698.md`.
+
 **On a zone below a workspace, the rail shows the workspace's model as
 inherited and read-only, with a link back to where it is chosen (Session
 12, item 3).** No migration, no route, no `api.js` method. Frontend only.
@@ -38821,6 +38824,8 @@ real SQLite rows through `recordFill`, the accept path's own writer.
 described above.
 
 ## D425
+
+**Superseded in part 2026-10-15 (D699, #1661):** a founder's phone tabs are Validate, Build, Raise and Grow; Studio is the band's glyph; and More is the `/more` page, not a sheet. Other licences keep this decision; see `decisions/D699.md`.
 
 **The phone gets a tab bar, founder first: four tabs and a More sheet, built
 from the sidebar's own rows, with the page tag and the body made safe-area
@@ -42211,6 +42216,8 @@ empty list, a missing description, and a bad second entry after a good first.
 actionlint, with shellcheck, reports nothing.
 
 ## D504
+
+**Amended 2026-10-15 (D699, #1661):** below 1024px a founder gets D699's 52px band in place of this 56px header, never both; the header tag is unchanged and the root keeps its single top inset; see `decisions/D699.md`.
 
 **The phone's tab bar is mounted by the shell, the shell clears the status
 bar, and the `FOUNDER_FULL_BLEED` comment stops calling three redirects

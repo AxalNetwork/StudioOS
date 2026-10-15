@@ -13,7 +13,16 @@ import { PhoneRows } from '../src/ui/phone/PhoneRows.jsx';
 import { PhoneBar, backFallback } from '../src/ui/phone/PhoneBar.jsx';
 import { usePhoneWidth } from '../src/ui/phone/usePhoneWidth.js';
 import { companyRowDescription } from '../src/ui/phone/CompanySheet.jsx';
-import { CompanySheet } from '../src/ui/phone/CompanySheet.jsx';
+import { CompanySheet, CompanyVisits, visitToRecord } from '../src/ui/phone/CompanySheet.jsx';
+import { PhoneHeader, HeaderForWidth, BAND_BACKGROUND } from '../src/ui/phone/PhoneHeader.jsx';
+import { setReadState } from '../src/ui/CompanySwitcher.jsx';
+import NotificationBell from '../src/components/NotificationBell.jsx';
+import MobileTabBar from '../src/components/MobileTabBar.jsx';
+import { FOUNDER_BAND_PATHS, mobilePlan } from '../src/lib/mobileTabs.js';
+import { PERSONAS } from '../src/lib/personas.js';
+import { companySheetApi } from '../src/lib/api/companySheet.js';
+import { KEY as SUPPORT_KEY } from '../src/lib/supportSession.js';
+import { existsSync } from 'node:fs';
 import { AccountSheet } from '../src/ui/phone/AccountSheet.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { moreGroups } from '../src/pages/MorePage.jsx';
@@ -193,4 +202,161 @@ test('D699 phone primitives pair light backgrounds and text with dark colours', 
       assert.match(line, /dark:/, `${file}: ${line.trim()}`);
     }
   }
+});
+
+// ── PR 2: the visit recorder, the band, the tabs and the census ─────────────
+
+test('D699 a cycle page is a visit, sent once an hour per company and cycle (test 15)', () => {
+  const now = Date.parse('2026-10-15T12:00:00Z');
+  assert.deepEqual(visitToRecord('/raise/data-room', 3, null, now), { companyId: 3, cycle: 'raise' });
+  const last = { companyId: 3, cycle: 'raise', at: now };
+  assert.equal(visitToRecord('/raise/data-room', 3, last, now + 59 * 60_000), null, 'the same pair inside the hour');
+  assert.deepEqual(visitToRecord('/raise/data-room', 3, last, now + 60 * 60_000), { companyId: 3, cycle: 'raise' });
+  assert.deepEqual(visitToRecord('/raise', 4, last, now), { companyId: 4, cycle: 'raise' }, 'another company is a new pair');
+  assert.deepEqual(visitToRecord('/grow', 3, last, now), { companyId: 3, cycle: 'grow' });
+  assert.deepEqual(visitToRecord('/validate/problem-discovery/12', 3, null, now), { companyId: 3, cycle: 'validate' });
+  for (const path of ['/network', '/studio', '/more', '/validate/interviews', '/raise/cap-table/variants']) {
+    assert.equal(visitToRecord(path, 3, null, now), null, path);
+  }
+  for (const id of [null, undefined, 0, -1, '3']) assert.equal(visitToRecord('/grow', id, null, now), null, String(id));
+});
+
+async function visitsSent(props, { path = '/raise/data-room', support = false } = {}) {
+  const original = companySheetApi.recordVisit;
+  const sent = [];
+  companySheetApi.recordVisit = async (companyId, cycle) => { sent.push([companyId, cycle]); return {}; };
+  // Written during render, so it is in place before the recorder's effect runs.
+  const Support = () => {
+    if (support) localStorage.setItem(SUPPORT_KEY, JSON.stringify({ expires_at: new Date(Date.now() + 3_600_000).toISOString() }));
+    return null;
+  };
+  let mounted;
+  try {
+    mounted = await mountContracts(h(ActiveCompanyContext.Provider, { value: { company: { id: 3, company_name: 'Tidewater' } } },
+      h(Support), h(CompanyVisits, props)), path);
+    await mounted.flush();
+  } finally {
+    if (mounted) await mounted.unmount();
+    companySheetApi.recordVisit = original;
+  }
+  return sent;
+}
+
+test('D699 the recorder sends a founder\'s visit, and never an operator\'s (test 15)', async () => {
+  assert.deepEqual(await visitsSent({ role: 'founder', record: true }), [[3, 'raise']]);
+  assert.deepEqual(await visitsSent({ role: 'founder', record: true }, { path: '/network' }), []);
+  assert.deepEqual(await visitsSent({ role: 'founder', record: false }), [], 'impersonating or viewing as a founder');
+  assert.deepEqual(await visitsSent({ role: 'founder', record: true }, { support: true }), [], 'an HQ support session');
+  assert.deepEqual(await visitsSent({ role: 'investor', record: true }), [], 'not a founder');
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /<MobileTabBar role=\{shellRole\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
+});
+
+const ada = { id: 7, name: 'Ada Quill', email: 'ada@example.test' };
+const band = (company, readState = { loading: false, failed: false }) => {
+  setReadState(readState);
+  try {
+    return render(h(ActiveCompanyContext.Provider, { value: { company } }, h(PhoneHeader, { user: ada, onLogout() {} })), '/validate');
+  } finally { setReadState({ loading: true, failed: false }); }
+};
+
+test('D699 the band: image, pill, Studio, bell and initials, all 44px targets (test 17)', () => {
+  const html = band({ id: 1, company_name: 'Juniper Labs' });
+  assert.match(html, /<header data-testid="phone-header" class="[^"]*\bh-\[52px\][^"]*\blg:hidden\b/);
+  for (const part of ['rgba(20,12,38,.22) 0%', 'rgba(20,12,38,.55) 100%', 'url(/site/lab-band.webp) center 18% / cover', 'rgb(20,12,38)']) {
+    assert.ok(BAND_BACKGROUND.includes(part), part);
+  }
+  assert.match(html, /style="background:linear-gradient\(180deg/);
+  assert.ok(existsSync(resolve('frontend/public/site/lab-band.webp')), 'the band image is not committed');
+  assert.match(html, />Axal VC</);
+  assert.match(html, /aria-haspopup="dialog" aria-expanded="false" data-company-switcher="" data-testid="phone-company-pill"/);
+  assert.match(html, /max-w-\[118px\][^>]*><span class="truncate">Juniper Labs<\/span>/);
+  assert.match(html, /<a aria-label="Studio"[^>]*href="\/studio"/);
+  assert.match(html, /<a aria-label="Studio" class="[^"]*\bh-11\b/);
+  assert.match(html, /aria-label="Account"[^>]*>.*?>AQ<\/span>/);
+  for (const [, cls] of html.matchAll(/<(?:a|button)\b[^>]*class="([^"]*)"/g)) assert.match(cls, /\bh-11\b/, `a band control is under 44px: ${cls}`);
+  assert.doesNotMatch(html, /Open menu/);
+  assert.match(read('frontend/src/ui/phone/PhoneHeader.jsx'), /<NotificationBell userId=\{user\?\.id\} tone="band" \/>/);
+  const bell = render(h(NotificationBell, { userId: 7, tone: 'band' }));
+  assert.match(bell, /aria-label="Notifications" class="relative inline-flex h-11 w-11 [^"]*text-white/);
+  assert.match(render(h(NotificationBell, { userId: 7 })), /aria-label="Notifications" class="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600"/, 'the desktop bell changed');
+});
+
+test('D699 the pill keeps the switcher\'s honesty rules (test 17)', () => {
+  assert.match(band(null), /<span class="truncate">No company<\/span>/);
+  assert.match(band(null, { loading: true, failed: false }), /<span class="truncate">…<\/span>/);
+  assert.match(band(null, { loading: false, failed: true }), /<span class="truncate">Unavailable<\/span>/);
+});
+
+test('D699 one header is mounted: the band for a founder on a phone, today\'s otherwise (test 17)', () => {
+  const today = h('header', { 'data-testid': 'today' });
+  const at = (founder, phone) => render(h(ActiveCompanyContext.Provider, { value: { company: null } },
+    h(HeaderForWidth, { founder, phone, user: ada }, today)));
+  assert.match(at(true, true), /phone-header/);
+  assert.doesNotMatch(at(true, true), /data-testid="today"/);
+  for (const [founder, phone] of [[true, false], [false, true], [false, false]]) {
+    const html = at(founder, phone);
+    assert.match(html, /data-testid="today"/);
+    assert.doesNotMatch(html, /phone-header/);
+  }
+  const app = read('frontend/src/App.jsx');
+  const wrap = app.indexOf("<HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>");
+  const header = app.indexOf('<header className="z-40 h-14 ');
+  const close = app.indexOf('</HeaderForWidth>');
+  assert.ok(wrap > 0 && wrap < header && header < close, 'today\'s header is not inside HeaderForWidth');
+  assert.match(app.slice(header, close), /<\/header>\s*$/, 'HeaderForWidth wraps more than the header');
+  assert.equal(app.split('aria-label="Open menu"').length - 1, 1, 'the hamburger lives in today\'s header only');
+});
+
+test('D699 the founder tabs are the four cycles, and More is the /more page (test 18)', () => {
+  const plan = mobilePlan('founder');
+  assert.deepEqual(plan.tabs.map(row => row.to), ['/validate', '/build', '/raise', '/grow']);
+  assert.ok(!plan.more.some(row => FOUNDER_BAND_PATHS.includes(row.to)), '/studio is in More');
+  const bar = path => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, h(MobileTabBar, { role: 'founder' })));
+  assert.match(bar('/more'), /aria-current="page"[^>]*data-testid="link-mobile-tab-more" href="\/more"/);
+  assert.match(bar('/network/relationships'), /data-active="true" data-testid="link-mobile-tab-more"/);
+  assert.doesNotMatch(bar('/studio'), /aria-current="page"|data-active="true"/, 'something is lit on /studio');
+  assert.doesNotMatch(bar('/validate'), /aria-haspopup/);
+  for (const role of ['investor', 'advisor', 'partner', 'admin', 'exploring']) assert.equal(mobilePlan(role), null, role);
+});
+
+test('D699 census: every destination a founder\'s phone had keeps a phone home (test 19)', () => {
+  const app = read('frontend/src/App.jsx');
+  const dropdown = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  const header = app.slice(app.indexOf('<header className="z-40 h-14 '), app.indexOf('</header>'));
+  const wanted = new Map();
+  const want = (to, from) => wanted.set(to, from);
+  for (const row of SIDEBAR_GROUPS.founder.flatMap(group => group.items)) want(row.to, 'sidebar');
+  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /to="\/company-settings"/);
+  want('/company-settings', 'drawer');
+  const dropdownLinks = [...dropdown.matchAll(/to="([^"]+)"/g)].map(match => match[1]);
+  assert.ok(dropdownLinks.length >= 10, 'the census no longer reads UserDropdown');
+  for (const to of dropdownLinks) want(to, 'UserDropdown');
+  for (const to of ['/messages', '/referrals']) { assert.match(header, new RegExp(`to="${to}"`)); want(to, 'header'); }
+  assert.match(read('frontend/src/components/FounderWellbeingMenu.jsx'), /to="\/wellbeing"/);
+  want('/wellbeing', 'FounderWellbeingMenu');
+
+  const offered = new Set(['/studio', ...mobilePlan('founder').tabs.map(row => row.to)]);
+  for (const group of moreGroups()) for (const row of group.rows) offered.add(row.to);
+  const sheets = read('frontend/src/ui/phone/CompanySheet.jsx') + read('frontend/src/ui/phone/AccountSheet.jsx');
+  for (const [, to] of sheets.matchAll(/'(\/[a-z][a-z/-]*)'/g)) offered.add(to);
+  for (const [, to] of sheets.matchAll(/to="(\/[a-z][a-z/-]*)"/g)) offered.add(to);
+  for (const [to, from] of wanted) assert.ok(offered.has(to), `${to} (${from}) has no phone home`);
+
+  // Each founder persona's extras reach /more; a persona of another alignment adds none, as in the sidebar.
+  for (const persona of PERSONAS.filter(p => p.role_alignment === 'founder')) {
+    const rows = new Set(moreGroups(undefined, persona.id).flatMap(group => group.rows.map(row => row.to)));
+    for (const extra of persona.nav_extras) assert.ok(rows.has(extra.to) || offered.has(extra.to), `${persona.id}: ${extra.to}`);
+  }
+  const partner = PERSONAS.find(p => p.role_alignment === 'partner' && p.nav_extras.length);
+  const base = moreGroups().flatMap(group => group.rows.map(row => row.to));
+  assert.deepEqual(moreGroups(undefined, partner.id).flatMap(group => group.rows.map(row => row.to)), base, `${partner.id} adds partner rows to a founder's More`);
+
+  // The switch and the create go through the one switch path.
+  const companySheet = read('frontend/src/ui/phone/CompanySheet.jsx');
+  assert.match(companySheet, /switchTo\(co\)/);
+  assert.match(companySheet, /await create\(name\.trim\(\)\)/);
+  // The one control with no phone home: the sidebar search filters drawer
+  // rows, and the drawer is not reachable on a founder's phone (D699.md).
+  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /search/i);
 });

@@ -54,6 +54,12 @@ preview/send, provider, counted picker, recorded agreement/stat, history and
 signed-PDF endpoints. Binary PDFs are returned as authenticated JSON/base64
 through the shared request client; callers create and revoke temporary blob URLs.
 
+D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
+and the connectors in them. D701 (#1663) adds `conversationsMine`
+(`GET /api/eadwyn/conversations/mine`): the caller's rail conversations and
+their one profiling conversation, for the Conversations list on Studio's phone
+page.
+
 D699: `companySheet.js` records the signed-in member's last opened company cycle through `PUT /api/company/visits`.
 
 D659 (#1472): `cycleValidate.js` calls `/api/cycles/validate`: the overview,
@@ -77,3 +83,9 @@ Meet). Every path is written out in full so the drift check reads each one.
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,
 `{ feature, model, name, provider }`, with no session.
+
+D698 (#1660): `railPrefs.js` reads and writes the Eadwyn AI rail's preferences
+on the Worker (`/api/ai/rail-preferences`, migration 465): the assist mode per
+rail section and the model picked per section and router task, for the caller
+only. A null clears a row. localStorage stays the cache, so a mode or a pick
+set on a laptop is in place on a phone after a reload.

@@ -53,6 +53,8 @@ import BranchNotDeployedBar from './components/BranchNotDeployedBar';
 // backdrop. It takes the shell role AS RESOLVED, never the sidebar's
 // `|| 'founder'` default: a viewer with no role gets no bar.
 import MobileTabBar from './components/MobileTabBar';
+import { HeaderForWidth } from './ui/phone/PhoneHeader';
+import { CompanyVisits } from './ui/phone/CompanySheet';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import { LensProvider, useLensLocation } from './workspaces/lens';
@@ -1209,7 +1211,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             everyone else, and nothing once the branch is live. */}
         <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
 
+        {/* D699 — below 1024px a founder gets the phone band instead
+            (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
+            and up, gets the header below unchanged. One is mounted, never both. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
+        <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1342,6 +1348,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <UserDropdown user={user} onLogout={onLogout} />
           </div>
         </header>
+        </HeaderForWidth>
 
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
@@ -1363,6 +1370,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
           <MobileTabBar role={shellRole} />
+          {/* D699 — the founder's last opened cycle per company, for the
+              company sheet. Never while an operator acts as someone else. */}
+          <CompanyVisits role={shellRole} record={!isImpersonating && !(isAdmin && activeRole !== 'admin')} />
           {/* D685 §5.6: the recording outlives every route; its pill sits in the corner. */}
           <ActiveRecordingProvider userId={user?.id ?? null} />
           <SafeMount name="RecordingPill"><RecordingPill /></SafeMount>
@@ -2477,6 +2487,7 @@ function AppInner() {
       {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
           values profile in Studio too — the lab Profiling page reads from it. */}
       <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard activeRole={effectiveRole} authUser={user} />)} />
+      <Route path="/studio/tickets/new" element={guard(['founder'], <Dashboard activeRole={effectiveRole} authUser={user} />)} />
       <Route path="/studio/archetype" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ArchetypeCardPage activeRole={effectiveRole} />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />

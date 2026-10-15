@@ -1,18 +1,19 @@
 # pages/account — the Account center's sections
 
 `../SettingsPage.jsx` is `/account` and `/account/:section`. It holds the
-section list and mounts one section at a time. The sections drawn from the
+section list and mounts one section at a time. Below 1024px a bare `/account`
+is the A1m index instead, and each section is its own page (D700). The sections drawn from the
 Account canvas (`ac-*` and `us-*` in `design/canvases/integrated/Ops Page.dc.html`)
 live here, one file each:
 
 | File | What it holds |
 | --- | --- |
-| `AccountCenter.jsx` | The shared kit: the section list (`AccountSectionNav`), `PanelCard`, `FieldRow`, `Switch`, `Chips`, `Outcome`, `LoadingRows`, and `useAccountRead`, which keeps loading, read and unreadable apart (D568) |
+| `AccountCenter.jsx` | The shared kit: the section list (`AccountSectionNav`, the `lg` column), `PanelCard`, `FieldRow`, `Switch`, `Chips`, `Outcome`, `LoadingRows`, and `useAccountRead`, which keeps loading, read and unreadable apart (D568). D700: `AccountPhoneIndex`, the A1m index rows, and `AccountPhoneFrame`, a phone's `/account`: the index at bare `/account`, and each section as its own page under a ‹ Back bar |
 | `AccountProfile.jsx` | Profile and identity |
 | `AccountDevices.jsx` | The devices registered for push, under Notifications |
 | `AccountBilling.jsx` | Billing and orders: the plan line and the orders list |
-| `AccountUsage.jsx` | Usage (D642): the AI allowance, the last 30 days, where it went, models and rates, the last run, and storage (U1–U6) |
-| `AccountConnectors.jsx` | Connectors (D651): Yours, Discover, the Add menu, the request form and the page states; reads a provider's sign-in return from the address |
+| `AccountUsage.jsx` | Usage (D642): the AI allowance, the last 30 days, where it went, models and rates, the last run, and storage (U1–U6). On a phone, `UsagePhoneView` (A2m, D700) |
+| `AccountConnectors.jsx` | Connectors (D651): Yours, Discover, the Add menu, the request form and the page states; reads a provider's sign-in return from the address. On a phone, `ConnectorsPhoneView` (A3m, D700) |
 | `ConnectorSheet.jsx` | The connector sheet and the connect flow, and `useConnectors`, the catalogue read every connectors surface shares |
 | `ConnectToolSheet.jsx` | Build's "Connect a tool" lightbox (D651, D686 §5.1), at `/build/connect` over the Build page, the cycle overview's primary action in `../cycles/CycleRoute.jsx`. `?tool=<key>` opens one tool where its row would; a sign-in returns to `/build/connect` with `?oauth=` and the venture, and reopens that tool's view. D686 §5.4 (#1597): its rows say what is true, and every path connects for the project's company |
 | `GithubSyncSheet.jsx`, `githubSync.js` | GitHub's `sync` view (D686 §5.4): choose the repositories, sync them with the Worker's progress, then the success banner; `githubSync.js` holds its rules (refusals, progress, the banner) |
@@ -20,6 +21,7 @@ live here, one file each:
 | `AccountFollowing.jsx` | Following |
 | `AccountDeveloper.jsx` | Developer, for the one role its routes answer |
 | `accountCenterModel.js` | The pure helpers the D568 sections share |
+| `accountPhone.js` | D700: the phone's pure rules. `ACCOUNT_PHONE_PAGES` (each board's title, sub and section titles, from `Account Mobile Page.dc.html`), the A1m rows with their plan and Following lines, `PATH_TO_SECTION`, and the address rules `accountViewFor` and `accountPathFor` |
 | `usageModel.js` | The Usage section's pure arithmetic and words: amounts, token counts, bytes, and every "Not recorded" rule |
 | `connectorsModel.js` | The Connectors rules: categories, status words, search and pages, Discover's sections, the redirect, a sign-in's return, the connect flow's states and Build's groups |
 | `AssistantsGroup.jsx` | D668: Connectors' "AI assistants" group, with a setup card per assistant around the one StudioOS server URL, and the grants list with Revoke. `AssistantsSection` mounts it on Connectors over `../../lib/api/assistants.js` |
@@ -41,3 +43,6 @@ live here, one file each:
 - **A connector belongs to the member.** No read in the connectors files takes
   a company. A field only D650's `/api/connectors` carries reads "Not recorded"
   until it arrives; `frontend/test/connectors_page_d651.test.mjs` holds both.
+- **A phone view is handed its reads.** Each section's phone view takes the
+  same reads its desktop makes, as props, and adds no company or venture to
+  any of them. `frontend/test/account_phone_d700.test.mjs` holds that.

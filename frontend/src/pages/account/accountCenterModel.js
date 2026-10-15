@@ -20,6 +20,7 @@
  */
 import { toUtcInstant } from '../../lib/notices';
 import { archetypeMeta, archetypeAudienceFromRole, humanize } from '../../lib/assessmentMeta';
+import { TIER_PLANS } from '../../components/PaywallModal';
 
 // ---------------------------------------------------------------------------
 // Dates and money
@@ -391,7 +392,9 @@ export function filterOrders(rows, { query = '', status = 'all', year = 'all', s
 // Billing
 // ---------------------------------------------------------------------------
 
-const FOUNDER_TIERS = { free: 'Free', growth: 'Growth', studio: 'Studio' };
+// D700 — the founder tiers read by D683's names, from the paywall's own table,
+// so the Billing pane and the phone index (`accountPhone.js`) say one name.
+const FOUNDER_TIERS = { free: 'Free', growth: TIER_PLANS.growth.label, studio: TIER_PLANS.studio.label };
 const INVESTOR_TIERS = { free: 'Free', professional: 'Professional', institutional: 'Institutional' };
 const PLAN_GROUPS = { partner: 'Partner', advisor: 'Advisor' };
 /** PersonaBillingPanel's own rule for "subscribed". */

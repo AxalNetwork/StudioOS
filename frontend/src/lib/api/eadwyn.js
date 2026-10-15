@@ -11,6 +11,9 @@ export const eadwynApi = {
   // The "Connectors ›" list: each connection with the reason it cannot be used.
   connectors: () => request('/eadwyn/connectors'),
   conversations: (workspace) => request(`/eadwyn/conversations?workspace=${enc(workspace)}`),
+  // D701 (#1663): every conversation the caller has, both stores, for the
+  // Conversations list on Studio's phone page. Takes no id and no parameter.
+  conversationsMine: () => request('/eadwyn/conversations/mine'),
   start: (workspace) => request('/eadwyn/conversations', { method: 'POST', body: body({ workspace }) }),
   conversation: (uid) => request(`/eadwyn/conversations/${enc(uid)}`),
   remove: (uid) => request(`/eadwyn/conversations/${enc(uid)}`, { method: 'DELETE' }),

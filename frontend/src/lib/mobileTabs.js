@@ -1,30 +1,43 @@
-import { Building2, Mail, ShieldCheck } from 'lucide-react';
+import { Briefcase, Check, DollarSign, Mail, TrendingUp } from 'lucide-react';
 import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
 
 /**
- * The phone's navigation plan: four tabs and a More sheet, per licence (D425).
+ * The phone's navigation plan: four tabs and More, per licence (D425, D699).
  *
- * The Mobile canvas (M1) keeps four rows as tabs by STANDING INTENTION: rows
- * opened by habit several times a session earn a tab, rows opened with intent
- * but less often go one tap deeper into More. "Nothing is renamed and nothing
- * is dropped." Both halves of that sentence are properties of this module:
+ * "Nothing is renamed and nothing is dropped" (M1) is a property of this
+ * module:
  *
  *   - NOTHING IS RENAMED. Every tab and every More row that is a sidebar row
- *     is built FROM the sidebar row: its `to`, `label`, `icon` and `match`
- *     come from `SIDEBAR_GROUPS`, never retyped here. The canvas's "Home" tab
- *     is the founder's first row, which the sidebar calls "Studio", so the tab
- *     says "Studio".
+ *     is built FROM the sidebar row: its `to`, `label` and `match` come from
+ *     `SIDEBAR_GROUPS`, never retyped here, so a tab lights for exactly the
+ *     pages its row lights for. Only a tab's icon is the canvas's own (D699).
  *   - NOTHING IS DROPPED. Every row the founder sidebar holds lands in exactly
- *     one place, tabs or More, in the sidebar's own order. A row Session 5 adds
- *     to the sidebar appears in More without an edit here.
+ *     one place: a tab, the band, or More, in the sidebar's own order. A row
+ *     Session 5 adds to the sidebar appears in More without an edit here.
  *
- * FOUNDER FIRST. The other three licences have allocations on the canvas and
- * are the next step; until each is built, `mobilePlan` returns null for it and
- * the bar draws nothing, rather than a founder bar on an investor's phone.
+ * D699 (Cycle Overview canvas, CO:219) supersedes D425's founder allocation:
+ * the tabs are the four cycles, Validate, Build, Raise and Grow; Studio moves
+ * to the band's glyph (`ui/phone/PhoneHeader.jsx`), so no tab and not More is
+ * lit on `/studio` (CO:218); and More is a page, `/more`, not a sheet.
+ *
+ * FOUNDER FIRST. The other licences keep D425: `mobilePlan` returns null for
+ * them and the bar draws nothing, rather than a founder bar on an investor's
+ * phone.
  */
 
-/** M1's founder tabs, in the canvas's order: Home, Build, Raise, Grow. */
-export const FOUNDER_TAB_PATHS = ['/studio', '/build', '/raise', '/grow'];
+/** The canvas's founder tabs, in its order (CO:219). */
+export const FOUNDER_TAB_PATHS = ['/validate', '/build', '/raise', '/grow'];
+
+/** The canvas's tab icons (CO:593): a check, a briefcase, a dollar, a trend line. */
+export const TAB_ICONS = {
+  '/validate': Check,
+  '/build': Briefcase,
+  '/raise': DollarSign,
+  '/grow': TrendingUp,
+};
+
+/** Sidebar rows the phone band carries, so More leaves them out (D699). */
+export const FOUNDER_BAND_PATHS = ['/studio'];
 
 /**
  * Doors that are not sidebar rows, carried in More because a phone has no
@@ -32,16 +45,16 @@ export const FOUNDER_TAB_PATHS = ['/studio', '/build', '/raise', '/grow'];
  *
  * - Messages left the sidebar for the top bar (D284), and the top bar hides
  *   it below 640px, so a phone had no Messages door at all.
- * - Trust and Company Settings are the canvas's own More rows; on desktop they
- *   sit in the account menu.
  *
- * Each is a route the founder guard already admits (`/messages`, `/trust`,
- * `/company-settings` in App.jsx), and `mobile_tab_bar_d425` holds that.
+ * Trust and Company Settings were D425's More rows. Since D699 the account
+ * sheet carries Trust Center and the company sheet carries Company Settings,
+ * both opened from the band.
+ *
+ * Each is a route the founder guard already admits (`/messages` in App.jsx),
+ * and `mobile_tab_bar_d425` holds that.
  */
 export const FOUNDER_MORE_DOORS = [
   { to: '/messages', label: 'Messages', icon: Mail },
-  { to: '/trust', label: 'Trust', icon: ShieldCheck },
-  { to: '/company-settings', label: 'Company Settings', icon: Building2 },
 ];
 
 /** Every row of a licence's sidebar, flattened in display order. */
@@ -58,9 +71,12 @@ function sidebarRows(groups, role) {
 export function mobilePlan(role, groups = SIDEBAR_GROUPS) {
   if (role !== 'founder') return null;
   const rows = sidebarRows(groups, 'founder');
-  const tabs = FOUNDER_TAB_PATHS.map((to) => rows.find((r) => r.to === to)).filter(Boolean);
-  const onTab = new Set(tabs.map((r) => r.to));
-  const more = [...rows.filter((r) => !onTab.has(r.to)), ...FOUNDER_MORE_DOORS];
+  const tabs = FOUNDER_TAB_PATHS
+    .map((to) => rows.find((r) => r.to === to))
+    .filter(Boolean)
+    .map((row) => ({ ...row, icon: TAB_ICONS[row.to] }));
+  const elsewhere = new Set([...tabs.map((r) => r.to), ...FOUNDER_BAND_PATHS]);
+  const more = [...rows.filter((r) => !elsewhere.has(r.to)), ...FOUNDER_MORE_DOORS];
   return { tabs, more };
 }
 

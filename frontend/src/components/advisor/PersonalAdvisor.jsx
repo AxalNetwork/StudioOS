@@ -62,6 +62,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
 import MyBugReports from '../tickets/MyBugReports';
 import { PanelTabs, TasksPanel, TicketsPanel } from './EadwynPanels';
+import { useIsDesktop } from './eadwynPhone';
 import { startPrompt } from '../../lib/eadwynTickets';
 import { TICKET_TYPES } from '../../lib/ticketScreens';
 
@@ -82,16 +83,6 @@ function authHeaders() {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
   };
-}
-
-function useIsDesktop() {
-  const [desktop, setDesktop] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
-  useEffect(() => {
-    const onResize = () => setDesktop(window.innerWidth >= 768);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return desktop;
 }
 
 // Tracks the on-screen (visual) viewport so the fullscreen advisor dialog can
@@ -133,7 +124,13 @@ function useVisualViewportStyle() {
 //   onAvailabilityChange(available: bool) — fired when we learn whether
 //     /api/advisor exists in this environment, so a host page can swap in
 //     a fallback surface instead of the card silently rendering null.
-export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange, initialTicketOpen = false } = {}) {
+//   tab, onTab, ticket, onTicketOpen, onTicketClose — D701 (#1663), passed by
+//     the founder's Studio only. `tab` is the panel tab and every change goes
+//     through `onTab`, which writes `?tab=`. `ticket` ({ type }) is
+//     `/studio/tickets/new`: the form is open on `?type=`'s preset, and its ×,
+//     Cancel and a filed ticket call `onTicketClose`. Suggest a task calls
+//     `onTicketOpen('task')`. With none of them the chat keeps its own state.
+export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange, initialTicketOpen = false, tab, onTab, ticket, onTicketOpen, onTicketClose } = {}) {
   const { user } = useAuth();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, {}) || {}, []);
   // viewMode: 'normal' (embedded card) | 'fullscreen' (viewport takeover).
@@ -168,8 +165,15 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // D606 (#1108) — the Eadwyn Tickets canvas's panel: Conversation, Tasks and
   // My tickets. "Suggest a task" opens the ticket form with Type set to Task;
   // every other way in opens it with no type chosen (D544).
-  const [panelTab, setPanelTab] = useState('conversation');
-  const [ticketPreset, setTicketPreset] = useState(null);
+  const [ownPanelTab, setOwnPanelTab] = useState('conversation');
+  const [ownTicketPreset, setTicketPreset] = useState(null);
+  // D701 — on a founder's Studio the tab is the URL's and the form is a route.
+  // The header's own Open a ticket keeps its local toggle.
+  const panelTab = tab ?? ownPanelTab;
+  const setPanelTab = onTab ?? setOwnPanelTab;
+  const routedTicket = Boolean(ticket);
+  const ticketShown = routedTicket || ticketOpen;
+  const ticketPreset = routedTicket ? ticket.type : ownTicketPreset;
 
   // Task #2 (AR) — server-driven per-page / per-section progress
   // and Spin-Out week banner state. Refreshed after every answer
@@ -783,12 +787,23 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // "help me with" line in the composer, which opens an explanation when
   // sent; nothing is sent until the member sends it.
   const toggleTicket = useCallback(() => { setTicketPreset(null); setTicketOpen((v) => !v); }, []);
-  const closeTicket = useCallback(() => { setTicketOpen(false); setTicketPreset(null); }, []);
+  const closeTicket = useCallback(() => {
+    setTicketOpen(false);
+    setTicketPreset(null);
+    if (routedTicket) onTicketClose?.();
+  }, [routedTicket, onTicketClose]);
+  const ticketFiled = useCallback((t) => {
+    handleTicketFiled(t);
+    if (routedTicket) onTicketClose?.();
+  }, [handleTicketFiled, routedTicket, onTicketClose]);
   const suggestTask = useCallback(() => { setTicketPreset('task'); setTicketOpen(true); }, []);
+  // D701 — on a founder's Studio, Suggest a task is `/studio/tickets/new?type=task`.
+  const suggest = useCallback(() => (onTicketOpen ? onTicketOpen('task') : suggestTask()), [onTicketOpen, suggestTask]);
+  const headerTicket = routedTicket ? closeTicket : toggleTicket;
   const startTask = useCallback((task) => {
     setInput(startPrompt(task));
     if (!isDesktop) setPanelTab('conversation');
-  }, [isDesktop]);
+  }, [isDesktop, setPanelTab]);
 
   // ---------- Render ------------------------------------------------------
   if (!user) return null; // anonymous: nothing to advise on yet
@@ -830,14 +845,14 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         labState={labState}
         progressBumpToken={progressBumpToken}
         onPickQuestion={handlePickQuestion}
-        ticketOpen={ticketOpen}
+        ticketOpen={ticketShown}
         ticketPreset={ticketPreset}
-        onToggleTicket={toggleTicket}
-        onTicketFiled={handleTicketFiled}
+        onToggleTicket={headerTicket}
+        onTicketFiled={ticketFiled}
         onCloseTicket={closeTicket}
         panelTab={panelTab}
         onPanelTab={setPanelTab}
-        onSuggestTask={suggestTask}
+        onSuggestTask={suggest}
         onStartTask={startTask}
       />
     );
@@ -856,12 +871,12 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         persona={persona}
         progress={progress}
         onMaximize={() => setViewMode('fullscreen')}
-        onOpenTicket={toggleTicket}
-        ticketOpen={ticketOpen}
+        onOpenTicket={headerTicket}
+        ticketOpen={ticketShown}
       />
       {weekBanner && <WeekBanner week={weekBanner.week} />}
-      {ticketOpen && (
-        <AdvisorTicketPanel key={ticketPreset || 'any'} initialType={ticketPreset} onFiled={handleTicketFiled} onClose={closeTicket} />
+      {ticketShown && (
+        <AdvisorTicketPanel key={ticketPreset || 'any'} initialType={ticketPreset} onFiled={ticketFiled} onClose={closeTicket} />
       )}
       {/* D606 — on a phone the panel's tabs sit above the card's body, and
           Conversation is the chat itself (the canvas hides the chat column
@@ -930,12 +945,12 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
                 />
               </div>
             ) : panelTab === 'tasks'
-              ? <TasksPanel onSuggest={suggestTask} onStart={startTask} />
+              ? <TasksPanel onSuggest={suggest} onStart={startTask} />
               : <TicketsPanel />}
           </aside>
         ) : panelTab !== 'conversation' && (
           <div className="max-h-[60vh] overflow-y-auto" data-testid="eadwyn-panel">
-            {panelTab === 'tasks' ? <TasksPanel onSuggest={suggestTask} onStart={startTask} /> : <TicketsPanel />}
+            {panelTab === 'tasks' ? <TasksPanel onSuggest={suggest} onStart={startTask} /> : <TicketsPanel />}
           </div>
         )}
       </div>
