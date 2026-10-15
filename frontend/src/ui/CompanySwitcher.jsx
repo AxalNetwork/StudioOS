@@ -78,11 +78,11 @@ import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
  * is actually scoped — the rows a person owns — and the shared half is named
  * beside it, so neither sentence can be read as the other's bug.
  */
-const SHARED_NOTICE = 'Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.';
+export const SHARED_NOTICE = 'Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.';
 const ADVISOR_NOTICE = 'Practice and Expertise are not yet separated by company.';
 
 /** A date a person can compare, or nothing. Never an invented placeholder. */
-function createdOn(value) {
+export function createdOn(value) {
   if (!value) return 'date not recorded';
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
@@ -96,8 +96,25 @@ function createdOn(value) {
  *              limitation applies — telling a founder that Practice is
  *              unseparated would name two rows their sidebar does not have.
  */
+export function useCompanySwitch() {
+  const { company, setCompany, companies, setCompanies } = _useActiveCompany();
+  function switchTo(next) {
+    setActiveCompanyId(next.id);
+    setCompany(next);
+  }
+  async function create(name) {
+    const created = await api.createCompany({ company_name: name });
+    setCompanies([...companies, created]);
+    setActiveCompanyId(created.id);
+    setCompany(created);
+    return created;
+  }
+  return { company, companies, switchTo, create };
+}
+
 function CompanySwitcher({ collapsed, role }) {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
+  const { switchTo, create } = useCompanySwitch();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -116,10 +133,7 @@ function CompanySwitcher({ collapsed, role }) {
     setSaving(true);
     setError('');
     try {
-      const created = await api.createCompany({ company_name: name });
-      setCompanies([...companies, created]);
-      setActiveCompanyId(created.id);
-      setCompany(created);
+      await create(name);
       setNewName('');
       setAdding(false);
       setOpen(false);
@@ -203,7 +217,7 @@ function CompanySwitcher({ collapsed, role }) {
           <button
             key={co.uid ?? co.id}
             type="button"
-            onClick={() => { setActiveCompanyId(co.id); setCompany(co); setOpen(false); }}
+            onClick={() => { switchTo(co); setOpen(false); }}
             className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors ${
               isActive
                 ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50 dark:bg-violet-900/30'

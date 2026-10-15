@@ -3,7 +3,7 @@ import { ChevronRight, Heart, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
-function CheckInStatus({ status, submittedToday }) {
+export function CheckInStatus({ status, submittedToday }) {
   if (status === 'loading') {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">

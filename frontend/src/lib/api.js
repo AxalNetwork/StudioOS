@@ -15,6 +15,7 @@ export * from './api/assistants.js';
 export * from './api/channels.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
+export * from './api/companySheet.js';
 export * from './api/connectors.js';
 export * from './api/contracts.js';
 export * from './api/creditRules.js';

@@ -11,6 +11,7 @@ write a bordered white box with a title, it already exists here.
 | `SectionLabel.jsx` | The small uppercase section heading. |
 | `SidebarNav.jsx` | The app sidebar, lifted out of `App.jsx`. |
 | `CompanySwitcher.jsx` | **The only place active-company context changes.** |
+| `phone/` | D699 phone bars, rows, sheets and one width hook; see its README. |
 | `AssistRail.jsx` | The older per-feature AI rail, still on the Spin-Out Lab pages and a few founder tools (Advisory, Brand builder, Deck reviewer). New pages mount `WorkerRail`. |
 | `AssistLayout.jsx` | Page shell that hosts the rail. |
 | `WorkerRail.jsx` | The Worker AI rail every licence shares — founder, investor, advisor, partner and both admin tiers, mounted on about ninety pages. It draws the AIRail canvas (`design/incoming/AIRail.dc.html`) and nothing else (owner, 2026-10-10): the mode cards, "Model · this page", the Usage card and the safety row. `role` picks the accent from `workspaces/shellConfig`'s `ACCENT`. |
