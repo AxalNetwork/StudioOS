@@ -15,7 +15,7 @@ function fitLines(b, value, width, count, options) {
   let rest = String(value ?? '');
   const result = [];
   for (let row = 0; rest && row < count; row += 1) {
-    if (b.width(rest, options) <= width) { result.push(rest); rest = ''; break; }
+    if (b.width(rest, options) <= width) { result.push(rest); break; }
     const suffix = row === count - 1 ? '…' : '';
     let low = 0; let high = rest.length;
     while (low < high) {
