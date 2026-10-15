@@ -54,6 +54,8 @@ preview/send, provider, counted picker, recorded agreement/stat, history and
 signed-PDF endpoints. Binary PDFs are returned as authenticated JSON/base64
 through the shared request client; callers create and revoke temporary blob URLs.
 
+D699: `companySheet.js` records the signed-in member's last opened company cycle through `PUT /api/company/visits`.
+
 D659 (#1472): `cycleValidate.js` calls `/api/cycles/validate`: the overview,
 one module's card and records, the Lab market page's three stored checks, and
 the manual writes for migration 440's records. Every call names the project

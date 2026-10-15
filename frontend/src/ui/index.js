@@ -65,6 +65,12 @@ export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from
 // switcher that rides above it — the single writer of active-company context.
 export { default as SidebarNav } from './SidebarNav';
 export { default as CompanySwitcher } from './CompanySwitcher';
+export { PhoneSheet, SheetRow } from './phone/PhoneSheet';
+export { PhoneRows } from './phone/PhoneRows';
+export { PhoneBar, backFallback } from './phone/PhoneBar';
+export { CompanySheet } from './phone/CompanySheet';
+export { AccountSheet } from './phone/AccountSheet';
+export { usePhoneWidth } from './phone/usePhoneWidth';
 
 // The two ways a page says it does not know something. One pair, because
 // four copies had already drifted apart in their wording — see Honesty.jsx.
