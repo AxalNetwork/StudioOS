@@ -314,7 +314,7 @@ test('desktop keeps focus trap, inert, scroll lock, top-only Escape and focus re
     ['const restore = inertOutside(el, document.body);', 'const restore = () => {};'],
     ['|| !topmost(id)', ''],
     ['e.preventDefault();\n    (to === -1', '(to === -1'],
-    ['opener.focus?.();', ''],
+    ['opener.focus?.();', 'void opener;'],
     ['px-5 py-[18px]', 'px-5 py-4'],
   ]);
 });

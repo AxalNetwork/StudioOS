@@ -15,6 +15,13 @@ const walk = (node) => [node, ...(node.childNodes || []).flatMap(walk)];
 
 export async function mountForm(element, { phone = false, modal = false } = {}) {
   const restore = installDocument();
+  // React updates an existing text node through nodeValue, as a browser does.
+  const makeText = document.createTextNode.bind(document);
+  document.createTextNode = (value) => {
+    const node = makeText(value);
+    Object.defineProperty(node, 'nodeValue', { get: () => node.textContent, set: (text) => { node.textContent = String(text); } });
+    return node;
+  };
   const previousMedia = globalThis.matchMedia;
   const mediaListeners = new Set();
   const media = { matches: phone, media: '(max-width: 1023px)', addEventListener: (_type, fn) => mediaListeners.add(fn), removeEventListener: (_type, fn) => mediaListeners.delete(fn) };
