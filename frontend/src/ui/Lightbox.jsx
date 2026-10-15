@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
+import { usePhoneWidth } from './phone/usePhoneWidth.js';
 import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, topmost } from './lightboxFocus.js';
 
 /**
@@ -24,6 +25,9 @@ import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, t
  * `onClose` is the caller's, and it decides what closing means (a route
  * change, a state flip); the shell makes no server call of its own.
  *
+ * D695 (#1656): pageBelow="lg" opts into a normal-flow form page below
+ * 1024px, with no modal effects. A supplied bar replaces its default back bar.
+ *
  * D686 (#1596):
  *   · `size`: `'fit'` (the default) grows with its content; `'tall'` is a
  *     fixed height (820px, or the viewport less 40px) and its body does not
@@ -37,7 +41,7 @@ import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, t
  *     `fixed inset-0` dialog inside it would be clipped to the box.
  */
 export default function Lightbox({
-  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey,
+  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar,
 }) {
   const id = useId();
   const dialog = useRef(null);
@@ -46,8 +50,11 @@ export default function Lightbox({
   const escape = useRef(onEscape);
   escape.current = onEscape;
   const tall = size === 'tall';
+  const phone = usePhoneWidth();
+  const page = pageBelow === 'lg' && phone;
 
   useEffect(() => {
+    if (page) return undefined;
     const el = dialog.current;
     if (!el || typeof document === 'undefined' || typeof el.querySelector !== 'function') return undefined; // no DOM to manage (a server render, a stub)
     const opener = returnFocusTo?.current || document.activeElement;
@@ -67,20 +74,20 @@ export default function Lightbox({
       pop(); restore(); release();
       if (opener && opener.isConnected !== false) opener.focus?.();
     };
-  }, [id, initialFocus, returnFocusTo]);
+  }, [id, initialFocus, returnFocusTo, page]);
 
   // D686 §5.4 (#1597): the frame's content can swap (Build's list ⇄ a tool) under
   // the same dialog. A swap that removed the focused control leaves focus on
   // <body>; move it to the new view's first control instead.
   const firstKey = useRef(focusKey);
   useEffect(() => {
-    if (focusKey === firstKey.current) return;
+    if (page || focusKey === firstKey.current) return;
     firstKey.current = focusKey;
     const el = dialog.current;
     if (!el || typeof document === 'undefined' || typeof el.querySelector !== 'function') return;
     if (typeof el.contains === 'function' && el.contains(document.activeElement)) return;
     (el.querySelector(FOCUSABLE) || el).focus?.();
-  }, [focusKey]);
+  }, [focusKey, page]);
 
   const onTab = (e) => {
     if (e.key !== 'Tab') return;
@@ -91,6 +98,20 @@ export default function Lightbox({
     e.preventDefault();
     (to === -1 ? el : list[to]).focus();
   };
+
+  // D695: an opt-in page has no modal effects or fixed/scrolling frame.
+  if (page) {
+    const back = typeof eyebrow === 'string' ? eyebrow.split(' · ').at(-1) : title || label;
+    return <section data-testid={testId + '-page'} className="min-w-0 bg-white text-axal-ink dark:bg-gray-950 dark:text-gray-100">
+      {bar || <header className="px-5 pb-4">
+        <button type="button" onClick={() => close.current?.()} data-testid={testId + '-back'} className="flex h-11 items-center text-[13px] font-bold text-axal-violet dark:text-violet-300">‹ {back}</button>
+        {title && <h1 className="m-0 text-[19px] font-extrabold text-axal-ink dark:text-gray-100">{title}</h1>}
+        {sub && <p className="m-0 mt-1 text-[11.5px] text-axal-muted dark:text-gray-400">{sub}</p>}
+      </header>}
+      <div data-testid={testId + '-body'}>{children}</div>
+      {footer && <footer className="border-t border-axal-hairline px-5 py-3.5 dark:border-gray-800">{footer}</footer>}
+    </section>;
+  }
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-5 max-sm:p-0" data-testid={`${testId}-layer`} data-size={tall ? 'tall' : 'fit'}>
@@ -112,7 +133,7 @@ export default function Lightbox({
         className={`relative flex w-full flex-col overflow-hidden rounded-2xl border border-axal-hairline bg-white shadow-[0_24px_64px_rgba(24,24,27,.24)] outline-none dark:border-gray-800 dark:bg-gray-950 max-sm:h-full max-sm:max-h-none max-sm:!max-w-none max-sm:rounded-none max-sm:border-0 ${tall ? 'h-[min(820px,calc(100dvh-40px))]' : 'max-h-[min(92vh,820px)]'}`}
       >
         {(title || eyebrow) && (
-          <header className="flex items-start justify-between gap-3 border-b border-axal-hairline px-5 py-4 dark:border-gray-800">
+          <header className="flex items-start justify-between gap-3 border-b border-axal-hairline px-5 py-[18px] dark:border-gray-800">
             <div className="min-w-0">
               {eyebrow && <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-violet dark:text-violet-300">{eyebrow}</div>}
               {title && <h2 className="m-0 text-[18px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{title}</h2>}
@@ -123,7 +144,7 @@ export default function Lightbox({
           </header>
         )}
         <div className={tall ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'} data-testid={`${testId}-body`}>{children}</div>
-        {footer && <footer className="border-t border-axal-hairline px-5 py-3 dark:border-gray-800">{footer}</footer>}
+        {footer && <footer className="border-t border-axal-hairline px-5 py-3.5 dark:border-gray-800">{footer}</footer>}
       </div>
     </div>
   );

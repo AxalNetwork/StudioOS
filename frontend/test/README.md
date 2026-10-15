@@ -45,3 +45,9 @@ parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mj
 Each behavioral assertion group runs against the original source, against
 changes it must reject, and again against the restored source; no checkout
 file is changed by a mutation. No live API or personal data is used.
+
+D695's independent form UI is exercised by `add_lightbox_d695.test.mjs`.
+`_form_d695.mjs` supplies a small React DOM/effect harness and isolated source
+mutations. The tests drive real inputs, payloads, loaded choices, refusals,
+done views, responsive page transitions and modal focus/Escape behavior.
+Registry and routing integration cases follow when their dependencies merge.
