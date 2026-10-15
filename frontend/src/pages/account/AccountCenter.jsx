@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Card, SectionLabel, Skeleton } from '../../ui';
+import { Card, PhoneBar, PhoneRows, SectionLabel, Skeleton } from '../../ui';
+import { ACCOUNT_PHONE_PAGES, accountIndexGroups } from './accountPhone';
 import { accentChipClass } from '../../workspaces/shellConfig';
 
 /**
@@ -173,22 +174,18 @@ export function Chips({ items, label }) {
 /**
  * The section list on the left of the content — the canvas's `acNav`.
  *
- * TWO SHAPES, which is the canvas's own phone rule (D607, the 2026-10-06
- * export: `.op-secnav{display:none}.op-secdrop{display:flex}`). From `lg` it
- * is a column beside the content. Below `lg` it is one row, "Section", the
- * open section's name and ▾, and the list opens from it. The six canvas
- * sections come first in the canvas's order; the four the old page had and
- * the canvas does not draw follow under "More", kept rather than dropped.
+ * ONE SHAPE, a column beside the content from `lg`. The six canvas sections
+ * come first in the canvas's order; the three the old page had and the canvas
+ * does not draw follow under "More", kept rather than dropped.
  *
- * The phone row is a native select under the canvas's drawing, so the phone
- * opens its own picker, and the keyboard and a screen reader get a real
- * control. D568 drew a row of chips that scrolled sideways here, after the
- * export it was built from; the newer export replaced that row.
+ * Below `lg` there is no list here. D700 (#1662) made a phone's `/account` the
+ * A1m index (`AccountPhoneIndex`, below), whose rows open each section as its
+ * own page, so D607's "Section ▾" select, which stood in for this column on a
+ * phone, is gone.
  */
 export function AccountSectionNav({ sections, active, onSelect }) {
   const main = sections.filter((s) => s.group !== 'more');
   const more = sections.filter((s) => s.group === 'more');
-  const current = sections.find((s) => s.id === active) || main[0] || sections[0];
 
   const item = (s) => {
     const on = s.id === active;
@@ -210,8 +207,6 @@ export function AccountSectionNav({ sections, active, onSelect }) {
     );
   };
 
-  const option = (s) => <option key={s.id} value={s.id}>{s.label}</option>;
-
   return (
     <nav aria-label="Account sections" data-testid="account-section-nav" className="min-w-0 lg:sticky lg:top-4 lg:self-start">
       <Card padding="none" className="hidden p-1.5 lg:block">
@@ -225,27 +220,62 @@ export function AccountSectionNav({ sections, active, onSelect }) {
           )}
         </div>
       </Card>
-      <div
-        data-testid="account-section-menu"
-        className="relative flex min-h-[44px] items-center justify-between gap-2.5 rounded-axal-lg border border-axal-hairline bg-white px-3.5 focus-within:ring-2 focus-within:ring-axal-violet/40 dark:border-gray-800 dark:bg-gray-900 lg:hidden"
-      >
-        <span aria-hidden="true" className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-axal-muted dark:text-gray-400">Section</span>
-          <span className="truncate text-sm font-semibold text-axal-ink dark:text-gray-100">{current?.label}</span>
-        </span>
-        <span aria-hidden="true" className="shrink-0 text-axal-muted dark:text-gray-400">▾</span>
-        <select
-          aria-label="Account section"
-          value={current?.id ?? ''}
-          onChange={(e) => onSelect(e.target.value)}
-          data-testid="account-section-select"
-          className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
-        >
-          {main.map(option)}
-          {more.length > 0 && <optgroup label="More">{more.map(option)}</optgroup>}
-        </select>
-      </div>
     </nav>
+  );
+}
+
+/**
+ * D700 — A1m, a phone's `/account`: the account's sections as rows, each
+ * opening its section as its own page. The reads are handed in (the Following
+ * list and the role's plan status), so a test can draw each state; the rows
+ * and their words are `accountIndexGroups` in `accountPhone.js`.
+ */
+export function AccountPhoneIndex({ role, follows, billing }) {
+  return (
+    <div data-testid="account-phone-index">
+      <PhoneRows groups={accountIndexGroups({ role, follows, billing })} />
+    </div>
+  );
+}
+
+// The shell pads the page (`p-4 md:p-6`, App.jsx); the phone view takes that
+// back so the bar spans the width, and its body takes AMP's 22px gutter.
+const PHONE_PAGE = '-m-4 md:-m-6 lg:m-0 min-h-screen bg-white dark:bg-gray-950';
+
+/**
+ * D700 — the phone's `/account`. `view` is `accountViewFor`'s answer and
+ * `sections` the role's sections (`SECTIONS` in `SettingsPage.jsx`, filtered).
+ *   · At `'index'` it is A1m: the bar, then `top` (the trust strip and the
+ *     completeness banner), then `index`, the index rows. No pane.
+ *   · At a section it is that section's page: a bar with the section's label
+ *     and no sub, then `renderPane(id)`, the section's cards as they stack
+ *     today. Usage and Connectors draw their own A2m and A3m bars.
+ * The page hands in its own pane and index, so this frame reads nothing.
+ *
+ * Every bar names itself to Eadwyn (`eadwynLabel`), for the bar's Eadwyn
+ * button once `PhoneBar` draws one (D698, #1660).
+ */
+export function AccountPhoneFrame({ view, sections, top = null, toast = null, index = null, renderPane }) {
+  const section = sections.find((s) => s.id === view);
+  if (!section) {
+    const page = ACCOUNT_PHONE_PAGES.account;
+    return (
+      <div className={PHONE_PAGE} data-testid="account-phone" data-view="index">
+        <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
+        {(toast || top) && <div className="px-[22px] pt-4">{toast}{top}</div>}
+        <div className="pt-[18px]">{index}</div>
+      </div>
+    );
+  }
+  const ownBar = section.id === 'usage' || section.id === 'connectors';
+  return (
+    <div className={PHONE_PAGE} data-testid="account-phone" data-view={section.id}>
+      {!ownBar && <PhoneBar back={{ label: 'Back' }} title={section.label} eadwynLabel={section.label} />}
+      <div className={`px-[22px] pb-[18px] ${ownBar ? '' : 'pt-4'}`}>
+        {!ownBar && toast}
+        {renderPane(section.id)}
+      </div>
+    </div>
   );
 }
 

@@ -48,6 +48,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { codeOnly } from './_codeOnly.mjs';
+import { accountPathFor, accountViewFor } from '../src/pages/account/accountPhone.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const settings = read('frontend/src/pages/SettingsPage.jsx');
@@ -273,8 +274,12 @@ test('Company Settings still owns the company half of the split', () => {
 // only other way to catch them is to render.
 // ===========================================================================
 
+// D700 (#1662) — the rules moved to `account/accountPhone.js` as two pure
+// functions, `accountViewFor` (what the address opens) and `accountPathFor`
+// (the canonical path), and the effect writes the URL with the second. So the
+// rules are asserted by calling them, and the effect by its source.
 const syncEffect = () => {
-  const i = settings.indexOf('const bare = active ===');
+  const i = settings.indexOf('const want = accountPathFor({ section: active, phone });');
   assert.ok(i > 0, 'the URL-sync effect must still exist — nothing else keeps the URL honest');
   return settings.slice(i, i + 500);
 };
@@ -283,15 +288,16 @@ test('the landing pane has no segment of its own', () => {
   // Before the rename the landing pane's section id produced /settings/account,
   // which read fine. After it that is /account/account, which reads like a
   // mistake — and is what the page actually navigated to until this was fixed.
-  const e = syncEffect();
-  assert.match(e, /active === 'profile' \|\| active === 'account'/,
-    "both the sentinel and the real landing section must map to the bare /account");
-  // The whole line, not its halves: `doesNotMatch(/`\/account\/${active}`;/)`
-  // was the first attempt and it cannot tell a conditional template from an
-  // unconditional one — the conditional ends in exactly that string too, so it
-  // failed against the code it was written to accept.
-  assert.match(e, /const want = bare \? '\/account' : `\/account\/\$\{active\}`;/,
-    'the segment must be conditional on `bare`, or the landing pane lands at /account/account');
+  // On desktop both the sentinel and the real landing section map to bare
+  // /account; on a phone bare /account is the index, so the pane is
+  // /account/profile (D700).
+  assert.equal(accountPathFor({ section: 'account', phone: false }), '/account');
+  assert.equal(accountPathFor({ section: 'profile', phone: false }), '/account');
+  assert.notEqual(accountPathFor({ section: 'account', phone: false }), '/account/account');
+  assert.equal(accountPathFor({ section: 'account', phone: true }), '/account/profile');
+  assert.equal(accountPathFor({ section: 'billing', phone: false }), '/account/billing');
+  assert.equal(accountViewFor({ pathname: '/account/account' }), 'account', 'the old segment still opens the pane, and the effect tidies it');
+  assert.match(syncEffect(), /^const want = accountPathFor\(\{ section: active, phone \}\);/);
 });
 
 test('the canonicalising rewrite keeps the query and the anchor', () => {
@@ -306,8 +312,9 @@ test('the canonicalising rewrite keeps the query and the anchor', () => {
 });
 
 test('both prefixes resolve a section, because /settings/* still renders this page for one hop', () => {
-  assert.match(settings, /match\(\/\^\\\/\(\?:account\|settings\)\\\/\(\[\^\/\]\+\)\/\)/,
+  assert.equal(accountViewFor({ pathname: '/settings/notifications' }), 'notifications',
     'a deep link arriving on the old prefix must resolve its section on that render');
+  assert.equal(accountViewFor({ pathname: '/settings/security', phone: true }), 'security-privacy');
   assert.match(settings, /\/\^\\\/\(\?:account\|settings\)\\b\//,
     'the sync guard must recognise the old prefix or the rewrite never fires');
 });
