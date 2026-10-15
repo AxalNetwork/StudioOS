@@ -1,6 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api.js';
+import { companySheetApi } from '../../lib/api/companySheet.js';
+import { activeSupportSession } from '../../lib/supportSession.js';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
+import { isCyclePath } from '../../pages/cycles/cyclePaths.js';
 import { SHARED_NOTICE, createdOn, useCompanySwitch } from '../CompanySwitcher.jsx';
 import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
 
@@ -78,4 +82,46 @@ export function CompanySheet({ onClose, opener }) {
       <p className="py-3 text-[11.5px] text-gray-600 dark:text-gray-400">{SHARED_NOTICE}</p>
     </div>
   </PhoneSheet>;
+}
+
+/** A visit is sent again for the same (company, cycle) only after an hour. */
+export const VISIT_RESEND_MS = 60 * 60 * 1000;
+
+/**
+ * D699 decision 7: the visit to send for this route, or null.
+ *
+ * A cycle page is any path `isCyclePath` matches (D694), and its cycle is the
+ * path's first segment. `last` is the last visit this tab sent,
+ * `{ companyId, cycle, at }`. The same pair is not sent again within the hour.
+ */
+export function visitToRecord(pathname, companyId, last, now = Date.now()) {
+  if (!Number.isInteger(companyId) || companyId <= 0 || !isCyclePath(pathname)) return null;
+  const cycle = String(pathname).split('/')[1];
+  if (!CYCLES.includes(cycle)) return null;
+  if (last && last.companyId === companyId && last.cycle === cycle && now - last.at < VISIT_RESEND_MS) return null;
+  return { companyId, cycle };
+}
+
+/**
+ * Records the founder's last opened cycle in the active company, for the
+ * company sheet. It renders nothing. The shell passes `record={false}` while
+ * an operator impersonates or an admin views as a founder, and nothing is sent
+ * during an HQ support session: an operator must never move a founder's
+ * "last opened". A failed send is dropped, because "last opened" is a hint;
+ * the next cycle change sends again.
+ */
+export function CompanyVisits({ role, record = true }) {
+  const { pathname } = useLocation();
+  const { company } = useActiveCompany();
+  const last = useRef(null);
+  const companyId = company?.id;
+  useEffect(() => {
+    if (role !== 'founder' || !record || activeSupportSession()) return;
+    const now = Date.now();
+    const visit = visitToRecord(pathname, companyId, last.current, now);
+    if (!visit) return;
+    last.current = { ...visit, at: now };
+    companySheetApi.recordVisit(visit.companyId, visit.cycle).catch(() => {});
+  }, [role, record, pathname, companyId]);
+  return null;
 }

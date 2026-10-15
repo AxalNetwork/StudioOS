@@ -93,7 +93,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // the Interview Session page and the Recording View.
   // 143 on 2026-10-11 (D673, #1546): the public website's export brought two
   // imported canvases, `Eadwyn Intelligence Page` and `Spin-Out Lab Page`.
-  assert.equal(recs.length, 143);
+  // 144 on 2026-10-15 (D699, #1661): `More (founder phone)`, the `/more` page
+  // the Cycle Overview canvas draws (CO:244-247), now a route of its own.
+  assert.equal(recs.length, 144);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

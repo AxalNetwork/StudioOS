@@ -16,7 +16,16 @@ import {
 // Real-time push rides the existing pipeline overview WebSocket via the
 // `notification` event-type filtered by user_id.
 
-export default function NotificationBell({ userId }) {
+/**
+ * `tone="band"` is the founder's phone band (D699): a white glyph and a 44px
+ * target on the band's photo. Every other caller keeps today's button.
+ */
+const BELL_TONES = {
+  band: 'relative inline-flex h-11 w-11 items-center justify-center rounded-lg text-white hover:bg-white/10',
+};
+const BELL_DEFAULT = 'relative p-2 rounded-lg hover:bg-gray-100 text-gray-600';
+
+export default function NotificationBell({ userId, tone }) {
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
@@ -164,7 +173,7 @@ export default function NotificationBell({ userId }) {
       <button
         onClick={toggle}
         aria-label="Notifications"
-        className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+        className={BELL_TONES[tone] || BELL_DEFAULT}
       >
         <Bell size={18} />
         {count > 0 && (
