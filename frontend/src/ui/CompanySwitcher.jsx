@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
@@ -91,6 +91,32 @@ export function createdOn(value) {
 }
 
 /**
+ * D699 — the membership read's state, shared with the phone band's company
+ * pill. The switcher stays the one reader and the one writer: the band only
+ * reads this, so its pill keeps the switcher's honesty rules ("…" while the
+ * read runs, "Unavailable" when it failed, "No company" when there is none)
+ * without a second request.
+ */
+let readState = { loading: true, failed: false };
+const readListeners = new Set();
+export function setReadState(next) {
+  readState = next;
+  readListeners.forEach((listen) => listen());
+}
+const subscribeReadState = (listen) => { readListeners.add(listen); return () => readListeners.delete(listen); };
+const currentReadState = () => readState;
+export function useCompanyReadState() {
+  return useSyncExternalStore(subscribeReadState, currentReadState, currentReadState);
+}
+
+/** The name the switcher and the phone pill show. Never an invented company. */
+export function companyLabel(company, { loading = false, failed = false } = {}) {
+  if (company?.company_name) return company.company_name;
+  if (loading) return '…';
+  return failed ? 'Unavailable' : 'No company';
+}
+
+/**
  * @param role  the caller's role, passed straight through from SidebarNav,
  *              which already has it. Used only to decide whether the advisor
  *              limitation applies — telling a founder that Practice is
@@ -150,6 +176,7 @@ function CompanySwitcher({ collapsed, role }) {
   // Fetch all companies the current user is a member of.
   useEffect(() => {
     const savedId = initActiveCompanyId();
+    setReadState({ loading: true, failed: false });
     api.listMyCompanies()
       .then(list => {
         const arr = Array.isArray(list) ? list : [];
@@ -159,11 +186,15 @@ function CompanySwitcher({ collapsed, role }) {
         const restored = savedId ? arr.find((co) => co.id === savedId) : null;
         const next = restored || arr[0] || null;
         if (next) { setActiveCompanyId(next.id); setCompany(next); }
+        setReadState({ loading: false, failed: false });
       })
       // A failed read used to be swallowed here, which rendered exactly like an
       // account with no companies — the one state a user reports as "I created
       // one and nothing appeared". Keep the reason.
-      .catch((err) => setLoadError(err?.message || "Could not load your companies."))
+      .catch((err) => {
+        setLoadError(err?.message || "Could not load your companies.");
+        setReadState({ loading: false, failed: true });
+      })
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -179,7 +210,7 @@ function CompanySwitcher({ collapsed, role }) {
   // No fallback company name. "My Company" here read as a real company that the
   // dropdown then contradicted with "No company yet." — the button and the list
   // must agree about whether anything exists.
-  const displayName = loading ? '…' : (company?.company_name || (loadError ? 'Unavailable' : 'No company'));
+  const displayName = companyLabel(company, { loading, failed: !!loadError });
   const abbr = (displayName === '…' ? '…' :
     displayName.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
 

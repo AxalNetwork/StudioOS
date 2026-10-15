@@ -38822,6 +38822,8 @@ described above.
 
 ## D425
 
+**Superseded in part 2026-10-15 (D699, #1661):** a founder's phone tabs are Validate, Build, Raise and Grow; Studio is the band's glyph; and More is the `/more` page, not a sheet. Other licences keep this decision; see `decisions/D699.md`.
+
 **The phone gets a tab bar, founder first: four tabs and a More sheet, built
 from the sidebar's own rows, with the page tag and the body made safe-area
 aware.** Wave 8, Session 14, item 6 (Mobile canvas M1, with M5's 44pt and
@@ -42211,6 +42213,8 @@ empty list, a missing description, and a bad second entry after a good first.
 actionlint, with shellcheck, reports nothing.
 
 ## D504
+
+**Amended 2026-10-15 (D699, #1661):** below 1024px a founder gets D699's 52px band in place of this 56px header, never both; the header tag is unchanged and the root keeps its single top inset; see `decisions/D699.md`.
 
 **The phone's tab bar is mounted by the shell, the shell clears the status
 bar, and the `FOUNDER_FULL_BLEED` comment stops calling three redirects

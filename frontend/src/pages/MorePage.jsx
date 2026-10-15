@@ -14,7 +14,11 @@ export function moreGroups(groups, primaryPersonaId) {
       : 'Ask, markets, geographies, companies, funds, library',
   }));
   const other = rows.filter(row => row.to !== '/network' && row.to !== '/research').map(row => ({ ...row, title: row.label }));
-  const extras = PERSONA_BY_ID[primaryPersonaId]?.nav_extras || [];
+  // The sidebar's rule (App.jsx, getSidebarGroups): a persona's extras show
+  // only when the persona is aligned with the founder role.
+  const persona = Object.hasOwn(PERSONA_BY_ID, primaryPersonaId || '') ? PERSONA_BY_ID[primaryPersonaId] : null;
+  const aligned = !persona?.role_alignment || persona.role_alignment === 'founder';
+  const extras = aligned ? persona?.nav_extras || [] : [];
   for (const row of extras) if (!rows.some(existing => existing.to === row.to)) other.push({ ...row, title: row.label });
   return [{ label: 'Around the cycles', rows: around }, { rows: other }];
 }

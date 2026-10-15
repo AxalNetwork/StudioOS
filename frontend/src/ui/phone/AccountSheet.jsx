@@ -11,6 +11,12 @@ const ACCOUNT_ROWS = [
   ['Help Center', '/help'], ['Plans & Pricing', '/plans-and-pricing'],
 ];
 
+/** The first letters of the first two words of the name, or the email's first letter. */
+export function initialsOf(user) {
+  const words = (user?.name || '').trim().split(/\s+/).filter(Boolean);
+  return (words.length ? words.slice(0, 2).map(word => word[0]).join('') : (user?.email || '?')[0]).toUpperCase();
+}
+
 export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
   const { company } = useActiveCompany();
   const [check, setCheck] = useState({ status: 'loading', submittedToday: false });
@@ -20,8 +26,7 @@ export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
       .catch(() => { if (alive) setCheck({ status: 'unreadable', submittedToday: false }); });
     return () => { alive = false; };
   }, []);
-  const words = (user?.name || '').trim().split(/\s+/).filter(Boolean);
-  const initials = (words.length ? words.slice(0, 2).map(word => word[0]).join('') : (user?.email || '?')[0]).toUpperCase();
+  const initials = initialsOf(user);
   return <PhoneSheet label="Account" onClose={onClose} opener={opener}>
     <div className="flex min-h-[72px] items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-3">
       <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40 font-bold text-violet-700 dark:text-violet-300">{initials}</span>
