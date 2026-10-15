@@ -36803,6 +36803,9 @@ it takes no prop.
 
 ## D402
 
+**Superseded in part by D698 (2026-10-15):** the inherited card and `ui/railInheritance.js`
+are gone; the rail offers a card and its alternates on every page; see `decisions/D698.md`.
+
 **On a zone below a workspace, the rail shows the workspace's model as
 inherited and read-only, with a link back to where it is chosen (Session
 12, item 3).** No migration, no route, no `api.js` method. Frontend only.
