@@ -17,7 +17,9 @@
  * `?tab=` and the ticket form at `/studio/tickets/new`. The collapsed row
  * stands for the conversation, so it is drawn only on Conversation with no
  * ticket form open; Tasks, My tickets and the form are the chat's. The other
- * four homes pass none of them and keep the row as it was.
+ * four homes pass none of them and keep the row as it was. On a phone it also
+ * passes `phone`, `venture` and `belowThread` (the Conversations list), which
+ * stays under the collapsed row too, so the list follows the interview.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import PersonalAdvisor from './PersonalAdvisor';
@@ -26,7 +28,7 @@ import { reportError } from '../../lib/log';
 import { pageLabel, predictTarget } from '../../lib/advisor/router';
 import { InterviewCompleteRow, STUDIO_CHAT_ANCHOR, interviewSummary, topProposals } from './interviewCompleteRow';
 
-export default function StudioInterview({ persona, disablePersistedFullscreen = false, onAvailabilityChange, tab, onTab, ticket, onTicketOpen, onTicketClose }) {
+export default function StudioInterview({ persona, disablePersistedFullscreen = false, onAvailabilityChange, tab, onTab, ticket, onTicketOpen, onTicketClose, phone = false, venture = null, belowThread = null }) {
   const [summary, setSummary] = useState(null);
   const [proposals, setProposals] = useState({ state: 'loading', items: [] });
   // null = the chat is collapsed if complete; 'chat' or 'ticket' = reopened.
@@ -63,14 +65,17 @@ export default function StudioInterview({ persona, disablePersistedFullscreen = 
   return (
     <div id={STUDIO_CHAT_ANCHOR} data-testid="studio-interview">
       {rowShown ? (
-        <InterviewCompleteRow
-          persona={persona}
-          summary={summary}
-          proposals={proposals}
-          onResume={() => setReopened('chat')}
-          onOpenTicket={onTicketOpen ? openTicketRoute : () => setReopened('ticket')}
-          onRetryProposals={readProposals}
-        />
+        <>
+          <InterviewCompleteRow
+            persona={persona}
+            summary={summary}
+            proposals={proposals}
+            onResume={() => setReopened('chat')}
+            onOpenTicket={onTicketOpen ? openTicketRoute : () => setReopened('ticket')}
+            onRetryProposals={readProposals}
+          />
+          {belowThread}
+        </>
       ) : (
         <PersonalAdvisor
           disablePersistedFullscreen={disablePersistedFullscreen}
@@ -81,6 +86,9 @@ export default function StudioInterview({ persona, disablePersistedFullscreen = 
           ticket={ticket}
           onTicketOpen={onTicketOpen}
           onTicketClose={onTicketClose}
+          phone={phone}
+          venture={venture}
+          belowThread={belowThread}
         />
       )}
     </div>

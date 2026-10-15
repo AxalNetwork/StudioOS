@@ -81,6 +81,8 @@ export const SURFACES = [
   // URL model (tab, ticket type, project_id).
   ['copy', 'frontend/src/components/advisor/eadwynPhone.jsx', 'the Eadwyn chat\'s phone pieces (D701)'],
   ['copy', 'frontend/src/pages/founder/studioPhoneModel.js', 'the founder Studio\'s tab, ticket route and venture in the URL (D701)'],
+  ['copy', 'frontend/src/pages/founder/StudioPhone.jsx', 'the founder Studio on a phone: the Eadwyn bar and the Conversations list (D701)'],
+  ['copy', 'frontend/src/pages/founder/EadwynMenu.jsx', 'the Eadwyn menu drawer (D701)'],
   ['prompt', 'cloudflare-worker/src/services/advisor/guardrails.ts', 'ADVISOR_SYSTEM_PROMPT — the model being told who it is'],
   ['prompt', 'cloudflare-worker/src/services/decks/autofill.ts', 'the deck autofill system message'],
   ['prompt', 'cloudflare-worker/src/services/publications.ts', 'buildSystemPrompt for drafted publications'],

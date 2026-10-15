@@ -18,6 +18,10 @@
  * parameter; `/studio/tickets/new` opens the ticket form, on Task with
  * `?type=task`, and leaving it replaces the URL. Every link written here keeps
  * the page's `project_id`, so a founder keeps the venture they are on.
+ *
+ * D701 — BELOW 1024px THE PAGE IS `StudioPhone`, the Studio Mobile Page
+ * canvas, in place of `FounderStudioBody`: no zone, tile or header. The one
+ * `StudioInterview` element is built here and handed to whichever is drawn.
  */
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -27,6 +31,8 @@ import { api, spinoutLab } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { failedRead } from './founderStudioModel';
 import FounderStudioBody from './FounderStudioBody';
+import StudioPhone, { StudioConversations } from './StudioPhone';
+import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 import { STUDIO_PATH, STUDIO_TICKET_PATH, searchWithTab, studioTabOf, ticketTypeOf, withProjectId } from './studioPhoneModel';
 import './founderStudioHome.css';
 
@@ -68,6 +74,7 @@ export default function FounderStudioHome({ user }) {
   const navigate = useNavigate();
   const tab = studioTabOf(search);
   const ticket = pathname === STUDIO_TICKET_PATH ? { type: ticketTypeOf(search) } : null;
+  const phone = usePhoneWidth();
   const [reads, setReads] = useState({});
   const [advisorAvailable, setAdvisorAvailable] = useState(null);
   const [retry, setRetry] = useState(0);
@@ -84,15 +91,26 @@ export default function FounderStudioHome({ user }) {
   const onTab = (next) => navigate({ pathname, search: searchWithTab(search, next) }, { replace: true });
   const onTicketOpen = (type) => navigate(withProjectId(type === 'task' ? `${STUDIO_TICKET_PATH}?type=task` : STUDIO_TICKET_PATH, search));
   const onTicketClose = () => navigate(withProjectId(ticket?.type === 'task' ? `${STUDIO_PATH}?tab=tasks` : STUDIO_PATH, search), { replace: true });
+  // The venture the page reads names the thread ("Today · <venture>").
+  const venture = reads.project && !reads.project.failed ? reads.project.name : null;
+  const chat = (
+    <StudioInterview persona="founder" disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable}
+      tab={tab}
+      onTab={onTab}
+      ticket={ticket}
+      onTicketOpen={onTicketOpen}
+      onTicketClose={onTicketClose}
+      phone={phone}
+      venture={venture}
+      belowThread={phone ? <StudioConversations /> : null}
+    />
+  );
+  if (phone) {
+    return <StudioPhone tab={tab} ticketOpen={Boolean(ticket)} advisorAvailable={advisorAvailable}>{chat}</StudioPhone>;
+  }
   return (
     <FounderStudioBody user={user} reads={reads} onRetry={again} advisorAvailable={advisorAvailable} profileCard={<ProfileFitSection compact />}>
-      <StudioInterview persona="founder" disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable}
-        tab={tab}
-        onTab={onTab}
-        ticket={ticket}
-        onTicketOpen={onTicketOpen}
-        onTicketClose={onTicketClose}
-      />
+      {chat}
     </FounderStudioBody>
   );
 }

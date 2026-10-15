@@ -62,7 +62,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
 import MyBugReports from '../tickets/MyBugReports';
 import { PanelTabs, TasksPanel, TicketsPanel } from './EadwynPanels';
-import { useIsDesktop } from './eadwynPhone';
+import { PhoneFocus, PhoneTicketCard, threadLabel, useIsDesktop } from './eadwynPhone';
 import { startPrompt } from '../../lib/eadwynTickets';
 import { TICKET_TYPES } from '../../lib/ticketScreens';
 
@@ -130,7 +130,12 @@ function useVisualViewportStyle() {
 //     `/studio/tickets/new`: the form is open on `?type=`'s preset, and its ×,
 //     Cancel and a filed ticket call `onTicketClose`. Suggest a task calls
 //     `onTicketOpen('task')`. With none of them the chat keeps its own state.
-export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange, initialTicketOpen = false, tab, onTab, ticket, onTicketOpen, onTicketClose } = {}) {
+//   phone, belowThread, venture — D701, the founder's Studio below 1024px. The
+//     `phone` frame has no header and no panel tabs (the page's bar and drawer
+//     hold them): the thread under its label ("Today · <venture>"), then
+//     `belowThread` (the Conversations list) in one scroll, and the composer
+//     pinned above the tab bar; or Tasks, or My tickets, drawn the canvas's way.
+export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange, initialTicketOpen = false, tab, onTab, ticket, onTicketOpen, onTicketClose, phone = false, belowThread = null, venture = null } = {}) {
   const { user } = useAuth();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, {}) || {}, []);
   // viewMode: 'normal' (embedded card) | 'fullscreen' (viewport takeover).
@@ -255,10 +260,13 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       if (cid) {
         try {
           const hist = await api.advisor.conversation(cid);
+          // D701 — `created_at` dates the phone thread's label; the rest of
+          // the chat ignores it. A message added in this tab has none.
           const msgs = (hist?.messages || []).map((m) => ({
             role: m.role,
             content: m.content,
             question_id: m.question_id || null,
+            created_at: m.created_at || null,
           }));
           setMessages(msgs);
           setAnsweredIds((hist?.answers || []).filter((a) => a.saved_status === 'saved').map((a) => a.question_id));
@@ -812,6 +820,10 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // tile to the user.
   if (unavailable) return null;
 
+  const ticketPanel = ticketShown && (
+    <AdvisorTicketPanel key={ticketPreset || 'any'} initialType={ticketPreset} onFiled={ticketFiled} onClose={closeTicket} />
+  );
+
   // Fullscreen takeover. Rendered INSTEAD of the embedded card (the
   // overlay is fixed inset-0). All chat / progress hooks live on this
   // component, so the same conversation state drives whichever view is
@@ -858,6 +870,74 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     );
   }
 
+  // D701 — the founder's Studio on a phone (S1m–S4m). The page's bar and
+  // drawer stand in for the header and the panel tabs, so neither is drawn.
+  if (phone) {
+    const last = messages[messages.length - 1];
+    return (
+      <div data-card data-testid="eadwyn-phone" className="flex flex-col">
+        {weekBanner && <WeekBanner week={weekBanner.week} />}
+        {ticketPanel}
+        {panelTab === 'conversation' ? (
+          <>
+            <div id="studio-thread" className="scroll-mt-4 px-[22px] pt-[18px] text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7d7889] dark:text-gray-400" data-testid="eadwyn-thread-label">
+              {threadLabel({ at: last?.created_at, venture })}
+            </div>
+            <Transcript
+              ref={scrollerRef}
+              messages={messages}
+              tutor={tutor}
+              onCloseTutor={closeTutor}
+              loadError={loadError}
+              complete={progress.complete && !question}
+              onCtaClick={handleCtaClick}
+              phone
+            />
+            {belowThread}
+            <div className="sticky bottom-[var(--mobile-tabbar-h,0px)] z-10 bg-white dark:bg-gray-950" data-testid="eadwyn-phone-composer">
+              {question && (
+                <CurrentQuestion
+                  q={question}
+                  onExplain={() => openTutor(question.prompt || question.id)}
+                />
+              )}
+              <Composer
+                input={input}
+                setInput={setInput}
+                onSend={handleSend}
+                onSkip={skip}
+                busy={busy}
+                disabled={false}
+                skipAllowed={question?.skip_allowed !== false}
+                inputKind={question?.input_kind}
+                options={question?.options}
+                onPickOption={(opt) => submit(opt)}
+              />
+            </div>
+          </>
+        ) : panelTab === 'tasks' ? (
+          <div className="px-[22px]" data-testid="eadwyn-panel">
+            <PhoneFocus sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
+            <AdvisorProgressWidget
+              variant="phone"
+              focusSection={focusSection}
+              pendingEvidence={pendingEvidence}
+              currentQuestion={question}
+              labState={labState}
+              progressBumpToken={progressBumpToken}
+              onPickQuestion={handlePickQuestion}
+            />
+            <TasksPanel onSuggest={suggest} onStart={startTask} variant="phone" />
+          </div>
+        ) : (
+          <div className="px-[22px]" data-testid="eadwyn-panel">
+            <TicketsPanel variant="phone" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Mobile no longer takes over the viewport. The advisor renders as an
   // inline, height-capped card so the rest of the dashboard (Quick Stats,
   // Performance Analytics, etc.) stays scrollable around it. The header's
@@ -875,9 +955,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         ticketOpen={ticketShown}
       />
       {weekBanner && <WeekBanner week={weekBanner.week} />}
-      {ticketShown && (
-        <AdvisorTicketPanel key={ticketPreset || 'any'} initialType={ticketPreset} onFiled={ticketFiled} onClose={closeTicket} />
-      )}
+      {ticketPanel}
       {/* D606 — on a phone the panel's tabs sit above the card's body, and
           Conversation is the chat itself (the canvas hides the chat column
           below 760px and shows the panel). */}
@@ -1166,9 +1244,10 @@ function FocusChips({ sectionStats, focusSection, pickFocus }) {
   );
 }
 
-const Transcript = React.forwardRef(function Transcript({ messages, tutor, onCloseTutor, loadError, complete, onCtaClick, minHClass = 'min-h-[260px]' }, ref) {
+const Transcript = React.forwardRef(function Transcript({ messages, tutor, onCloseTutor, loadError, complete, onCtaClick, minHClass = 'min-h-[260px]', phone = false }, ref) {
+  // D701 — on the phone frame the thread is part of the page's one scroll.
   return (
-    <div ref={ref} className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 ${minHClass}`}>
+    <div ref={ref} className={phone ? 'px-[22px] py-2 space-y-2.5' : `flex-1 overflow-y-auto px-4 py-3 space-y-3 ${minHClass}`}>
       {loadError && (
         <div className="text-xs text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-300 border border-red-200 dark:border-red-900 rounded p-2">
           {loadError}
@@ -1332,6 +1411,7 @@ function AdvisorTicketPanel({ onFiled, onClose, initialType = null }) {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const desktop = useIsDesktop();
 
   const submit = async () => {
     const trimmed = title.trim();
@@ -1360,6 +1440,9 @@ function AdvisorTicketPanel({ onFiled, onClose, initialType = null }) {
       setSubmitting(false);
     }
   };
+
+  // D701 — on a phone the form is S4m's card; the desktop form below is as it was.
+  if (!desktop) return <PhoneTicketCard initialType={initialType} onFiled={onFiled} onClose={onClose} />;
 
   const inputClass =
     'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500';
@@ -1682,7 +1765,7 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKey}
           rows={inputKind === 'long' ? 3 : 1}
-          placeholder={disabled ? 'All caught up — nothing more to ask.' : 'Type your answer, or "explain ..."'}
+          placeholder={disabled ? 'All caught up — nothing more to ask.' : 'Type your answer, or "explain …"'}
           disabled={busy || disabled}
           data-density-target
           className="flex-1 resize-none rounded-lg border border-gray-200 dark:border-gray-700 bg-[var(--app-input-bg,#fff)] dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
