@@ -54,6 +54,12 @@ preview/send, provider, counted picker, recorded agreement/stat, history and
 signed-PDF endpoints. Binary PDFs are returned as authenticated JSON/base64
 through the shared request client; callers create and revoke temporary blob URLs.
 
+D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
+and the connectors in them. D701 (#1663) adds `conversationsMine`
+(`GET /api/eadwyn/conversations/mine`): the caller's rail conversations and
+their one profiling conversation, for the Conversations list on Studio's phone
+page.
+
 D699: `companySheet.js` records the signed-in member's last opened company cycle through `PUT /api/company/visits`.
 
 D659 (#1472): `cycleValidate.js` calls `/api/cycles/validate`: the overview,

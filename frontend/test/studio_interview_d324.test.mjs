@@ -124,7 +124,9 @@ test('StudioInterview reads progress and the queue, collapses only on a complete
   assert.match(src, /api\.advisor\.progress\(\)/);
   assert.match(src, /api\.advisor\.queue\(\)/);
   assert.match(src, /const collapsed = summary\?\.complete === true && !reopened;/);
-  assert.match(src, /onOpenTicket=\{\(\) => setReopened\('ticket'\)\}/);
+  // D701: the founder's row opens /studio/tickets/new; the other homes reopen to the ticket.
+  assert.match(src, /onOpenTicket=\{onTicketOpen \? openTicketRoute : \(\) => setReopened\('ticket'\)\}/);
+  assert.match(src, /const openTicketRoute = \(\) => \{ setReopened\('chat'\); onTicketOpen\(\); \};/);
   assert.match(src, /initialTicketOpen=\{reopened === 'ticket'\}/);
   assert.match(src, /<div id=\{STUDIO_CHAT_ANCHOR\}/);
   assert.match(src, /items \? \{ state: 'ready', items \} : \{ state: 'unreadable', items: \[\] \}/, 'a malformed queue is unreadable, not empty');

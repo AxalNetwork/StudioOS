@@ -177,6 +177,15 @@ D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set
 - `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.
 - `GET /sessions/:id/receipt` returns each job's cost and the budget left. `DELETE /sessions/:id` deletes the session, its R2 audio, and writes an audit row.
 
+### Studio on a phone (D701, #1663)
+
+The founder's `/studio` carries Eadwyn's panel tab in `?tab=` (`tasks`, `tickets`; anything else is Conversation) at every width, and Open a ticket is a route, `/studio/tickets/new` (`?type=task` opens it on Task). Both keep the page's `project_id`. One read lists the caller's conversations across the rail's store and the profiling store, for the phone page's Conversations list. The phone page itself (boards S1m–S5m, below 1024px) is #1663's second PR; until it lands `/studio` draws D564's page at every width. See `decisions/D701.md`.
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| `Studio · Mobile.dc.html` S1m–S3m, `Studio Mobile Page.dc.html` (tabs) | `/studio`, `/studio?tab=tasks`, `/studio?tab=tickets` · founder | `pages/founder/FounderStudioHome.jsx` (`studioPhoneModel.js`) → `StudioInterview` → `PersonalAdvisor` (`tab`, `onTab`); `GET /api/eadwyn/conversations/mine` (`eadwyn.ts`: the caller's 20 newest rail conversations and one profiling conversation, the active one or else the newest, each half named in `unreadable` when it cannot be read; registered before `/conversations/:uid`; writes nothing) | UPGRADE |
+| `Studio · Mobile.dc.html` S4m, `Studio Mobile Page.dc.html` (`/studio/tickets/new`) | `/studio/tickets/new` · founder (`guard(['founder'])`; anyone else goes to their default page) | `Dashboard` → `FounderStudioHome` (`ticket`, `onTicketOpen`, `onTicketClose`) → `PersonalAdvisor`'s `AdvisorTicketPanel`; `POST /api/tickets`, as today | NEW |
+
 ## Founder / admin / advisor / partner — part 1 (29 canvases)
 
 | Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |
