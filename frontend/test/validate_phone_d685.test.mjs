@@ -1,7 +1,7 @@
 /**
  * D685 §5.12 (#1589) — Validate's phone focus, below md, from the reads that
  * exist: the focus card's rules, the interviews meter with and without a
- * target, and the seven index rows, each from the raw overview, a missing
+ * target, and the six index rows, each from the raw overview, a missing
  * value "Not recorded", never 0.
  *
  * Run with:
@@ -78,10 +78,10 @@ test('the meter: the count held this month, "No target set" until one is stored,
   assert.match(html({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }], cards: RAW.cards }), />Unreadable</);
 });
 
-test('the index: the canvas\'s seven rows, each linking to its page, each from the overview, a missing value "Not recorded"', () => {
+test('the index: the canvas\'s six module rows, each linking to its page, each from the overview, a missing value "Not recorded"', () => {
   const rows = phoneIndex(RAW, '?project_id=3');
-  assert.deepEqual(rows.map((r) => r.title), ['Interviews', 'Problem discovery', 'Customer research', 'Ideal customer profile', 'Market intelligence', 'Demand and urgency signals', 'Experiments and evidence']);
-  assert.deepEqual(rows.map((r) => r.href), ['/validate/interviews?project_id=3', '/validate/problem-discovery?project_id=3', '/validate/customer-research?project_id=3', '/validate/ideal-customer-profile?project_id=3', '/validate/market-intelligence?project_id=3', '/validate/demand-signals?project_id=3', '/validate/experiments?project_id=3']);
+  assert.deepEqual(rows.map((r) => r.title), ['Problem discovery', 'Customer research', 'Ideal customer profile', 'Market intelligence', 'Demand and urgency signals', 'Experiments and evidence']);
+  assert.deepEqual(rows.map((r) => r.href), ['/validate/problem-discovery?project_id=3', '/validate/customer-research?project_id=3', '/validate/ideal-customer-profile?project_id=3', '/validate/market-intelligence?project_id=3', '/validate/demand-signals?project_id=3', '/validate/experiments?project_id=3']);
   const by = Object.fromEntries(rows.map((r) => [r.key, r]));
   assert.equal(by['problem-discovery'].detail, '9 pain themes · 2 new');
   assert.equal(by['customer-research'].detail, 'Recruiting · 3 booked', 'booked only: booked − done, not the cumulative funnel');
@@ -89,19 +89,17 @@ test('the index: the canvas\'s seven rows, each linking to its page, each from t
   assert.equal(by['market-intelligence'].value, '$610M');
   assert.equal(by['demand-signals'].detail, 'Waitlist against the bar of 40');
   assert.equal(by.experiments.value, '3 of 7');
-  assert.equal(by.interviews.value, null, 'the log\'s count is the Worker\'s index, not on the overview yet');
   const empty = Object.fromEntries(phoneIndex({ figures: [], cards: [] }).map((r) => [r.key, r]));
   for (const r of Object.values(empty)) assert.equal(r.value, null, `${r.key}: Not recorded`);
   assert.equal(empty['problem-discovery'].detail, 'Pain themes');
   assert.equal(empty['customer-research'].detail, 'Recruiting');
-  assert.equal(phoneIndex({ ...RAW, figures: [{ key: 'pain_themes', value: 4, delta_30d: -1 }] })[1].detail, '4 pain themes', 'a drop is not "new"');
-  // #1609's index: { interviews_total, booked }, the Worker's counts over the derived ones.
+  assert.equal(phoneIndex({ ...RAW, figures: [{ key: 'pain_themes', value: 4, delta_30d: -1 }] })[0].detail, '4 pain themes', 'a drop is not "new"');
+  // #1609's booked count wins over the derived one.
   const counted = phoneIndex({ ...RAW, index: { interviews_total: 22, booked: 4 } });
-  assert.equal(counted[0].value, 22, 'every interview, every stage');
-  assert.equal(counted[2].detail, 'Recruiting · 4 booked');
-  assert.equal(phoneIndex({ ...RAW, index: { interviews_total: 0, booked: 0 } })[0].value, 0, 'a counted zero is shown');
+  assert.equal(counted[1].detail, 'Recruiting · 4 booked');
+  assert.equal(phoneIndex({ ...RAW, index: { interviews_total: 0, booked: 0 } })[1].detail, 'Recruiting · 0 booked', 'a counted zero is shown');
   const out = html({ figures: [], cards: [] });
-  assert.equal((out.match(/>Not recorded</g) || []).length >= 7, true);
+  assert.equal((out.match(/>Not recorded</g) || []).length >= 6, true);
   assert.doesNotMatch(renderedText(out), /\b0 (pain themes|segments|booked)\b/, 'never a zero for a missing value');
 });
 

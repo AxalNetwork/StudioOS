@@ -167,7 +167,7 @@ export function PointsDrawer({ points = [], onTick, error = null, onClose, retur
 
 /**
  * The stage chips (§5.9.3): the current one filled violet, the next tinted,
- * the rest outlined; then "Then the review screen.". A failure prints the
+ * the rest outlined; then "Then it lands in Interviews.". A failure prints the
  * Worker's sentence with Retry (§5.9.7).
  */
 export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
@@ -186,7 +186,7 @@ export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
           return <li key={x} data-testid={`stage-${i}`} data-tone={tone} aria-current={tone === 'current' ? 'step' : undefined} className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${cls}`}>{x}</li>;
         })}
       </ol>
-      {!failed && <p className="m-0 text-[12.5px] text-gray-500 dark:text-gray-400">Then the review screen.</p>}
+      {!failed && <p className="m-0 text-[12.5px] text-gray-500 dark:text-gray-400">Then it lands in Interviews.</p>}
       {failed && (
         <div role="alert" data-testid="processing-failed" className="mx-auto max-w-[360px] space-y-2">
           <p className="m-0 text-[13.5px] font-semibold text-red-700 dark:text-red-300">{processing?.error || 'Processing stopped. Nothing was lost; try again.'}</p>

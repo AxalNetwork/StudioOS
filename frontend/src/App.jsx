@@ -42,6 +42,7 @@ import {
   Gift, Mail, Globe
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { isCyclePath } from './pages/cycles/cyclePaths';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -1044,7 +1045,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     // This is where `/spinout-lab/` is tested, and the only place: it used to
     // be typed on the width flag below AND on the padding flag under it, which
     // is two tests of one fact that could be changed apart.
-    || SHARED_FULL_BLEED_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
+    || SHARED_FULL_BLEED_PREFIXES.some((prefix) => location.pathname.startsWith(prefix))
+    // Every licence uses the cycle's own gutter for its module and action pages.
+    || isCyclePath(location.pathname);
   const fullWidthSurface = fullBleedSurface
     // Advisor's blanket clause stays, and only this clause is still blanket:
     // it also covers the advisor pages OUTSIDE any workspace, which have been

@@ -278,7 +278,7 @@ export default function ChannelsInboxPage({ api = channelsApi, source = appApi, 
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6" data-testid="channels-inbox">
-      <nav className="text-[12px]"><Link to="/validate/interviews" className="text-axal-muted underline">Interviews</Link></nav>
+      <nav className="text-[12px]"><Link to="/validate/customer-research" className="text-axal-muted underline dark:text-gray-400">Customer research</Link></nav>
       <header>
         <h1 className="text-[22px] font-extrabold tracking-axal-heading text-gray-900 dark:text-gray-100">Conversations</h1>
         <p className="mt-1 max-w-3xl text-[13px] text-axal-muted dark:text-gray-400">Customer chats from your business Telegram and WhatsApp wait here until you put each one in an interview. Nothing reaches an interview until you assign it. Waiting chats are deleted after 30 days.</p>

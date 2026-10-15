@@ -60,7 +60,7 @@ export function phoneMeter(raw) {
   };
 }
 
-/** "Everything else in Validate": the canvas's seven rows, each from what the overview returns. */
+/** "Everything else in Validate": the canvas's six rows, each from what the overview returns. */
 export function phoneIndex(raw, search = '') {
   const at = (slug) => `/validate/${slug}${search}`;
   const themes = figure(raw, 'pain_themes');
@@ -75,9 +75,7 @@ export function phoneIndex(raw, search = '') {
   const segments = Array.isArray(icp?.series?.segments) ? icp.series.segments.length : null;
   const sam = market?.series?.sam?.value;
   const bar = demand?.series?.bar;
-  const total = num(raw?.index?.interviews_total) ? raw.index.interviews_total : null;
   return [
-    { key: 'interviews', title: 'Interviews', detail: 'Every interview, newest first', value: total, href: `/validate/interviews${search}` },
     { key: 'problem-discovery', title: 'Problem discovery',
       detail: num(themes?.value) ? `${plural(themes.value, 'pain theme', 'pain themes')}${num(themes.delta_30d) && themes.delta_30d > 0 ? ` · ${themes.delta_30d} new` : ''}` : 'Pain themes',
       value: num(themes?.value) ? '' : null, href: at('problem-discovery') },
