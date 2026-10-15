@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
-import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
+import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, ConnectorPanel, Group, Sheet, openingView, useConnectors } from './ConnectorSheet';
 import { AssistantsSection } from './AssistantsGroup';
@@ -11,7 +11,9 @@ import { ChannelsSection } from './ChannelsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, discoverChips,
   discoverSections, doesLabel, feedsLabel, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursRows,
+  SUGGESTED,
 } from './connectorsModel';
+import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 
 /**
  * D651 (#1463) — the Account center's Connectors section, `/account/connectors`,
@@ -221,11 +223,102 @@ export function AddMenu({ onBrowse, onRequest, initialOpen = false }) {
 
 export default function ConnectorsSection() {
   const data = useConnectors();
-  return <ConnectorsView data={data} />;
+  const phone = usePhoneWidth();
+  return <ConnectorsView data={data} phone={phone} />;
+}
+
+// ---------------------------------------------------------------------------
+// D700 (#1662) — A3m, the section on a phone
+// ---------------------------------------------------------------------------
+
+/** What a suggestion's row shows when its card carries no pill: the card's corner action, as a word. */
+function actionPill(p, act) {
+  if (act === 'add') return { label: '+', tone: 'info' };
+  if (act === 'connected') return { label: 'Connected', tone: 'ok' };
+  if (act === 'notify') return { label: 'Notify me', tone: 'info' };
+  if (act === 'joined') return { label: "We'll tell you", tone: 'neutral' };
+  return { label: p.unreadable ? 'Status unreadable' : 'Not set up here', tone: 'neutral' };
+}
+
+/** The catalogue's state, said once, where a section cannot draw rows. */
+function catalogueNote(data) {
+  if (data.status === 'loading' && !data.catalogue.length) return <span data-testid="connectors-loading">Loading connectors…</span>;
+  if (data.status === 'forbidden') return <span data-testid="connectors-forbidden">{data.message || 'Your role cannot manage connectors.'}</span>;
+  if (data.status === 'unreadable') return <Unreadable what="The catalogue" claim="This is not a claim that you have no connectors." onRetry={data.reload} />;
+  return null;
+}
+
+/**
+ * A3m's Yours: one row per connection, led by its brand mark. The description
+ * is what it feeds and its last sync, with the reason first when it needs
+ * attention; the pill is its status; the section's action is the count line.
+ */
+export function yoursGroup({ data, rows, paged, setPage = () => {}, onOpen, label = ACCOUNT_PHONE_PAGES.connectors.sections[0], now = Date.now() }) {
+  const group = { label, rows: [], testid: 'connectors-phone-yours' };
+  const pending = catalogueNote(data);
+  if (pending) return { ...group, note: pending };
+  if (data.itemsFailed) return { ...group, note: <Unreadable what="Your connections" claim="This is not a claim that you have none." onRetry={data.reload} /> };
+  if (!data.catalogue.some((p) => p.connection)) {
+    return { ...group, note: <span data-testid="connectors-yours-empty">No connectors yet. Connect Stripe to see your revenue, or your calendar to book interviews.</span> };
+  }
+  if (!rows.length) return { ...group, note: 'None of your connectors matches this search.' };
+  group.rows = paged.rows.map(({ p, status }) => ({
+    key: p.key,
+    icon: <BrandIcon provider={p.key} name={p.display_name} />,
+    title: p.display_name,
+    description: [status.why, feedsLabel(p), lastSyncLabel(p.connection, now)].filter(Boolean).join(' · '),
+    pill: { label: status.label, tone: status.tone },
+    onClick: () => onOpen(p),
+    testid: `connector-row-${p.key}`,
+  }));
+  group.action = (
+    <span className="flex items-center gap-2" data-testid="connectors-count">
+      {paged.pages > 1 && <button type="button" aria-label="Previous page" disabled={paged.page <= 1} onClick={() => setPage(paged.page - 1)} className="disabled:opacity-40">‹</button>}
+      {paged.count}
+      {paged.pages > 1 && <button type="button" aria-label="Next page" disabled={paged.page >= paged.pages} onClick={() => setPage(paged.page + 1)} className="disabled:opacity-40">›</button>}
+    </span>
+  );
+  return group;
+}
+
+/**
+ * A3m's Suggested for you: the active company's suggestions, as Discover
+ * builds them, each with its card's pill or corner action. The read is the
+ * active company's, made without a company parameter, as on desktop.
+ */
+export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.connectors.sections[1], onOpen, onNotify, onBrowse }) {
+  const group = { label, rows: [], testid: 'connectors-phone-suggested' };
+  const pending = catalogueNote(data);
+  if (pending) return { ...group, note: data.status === 'loading' ? 'Loading suggestions…' : null };
+  group.cta = { label: ACCOUNT_PHONE_COPY.browseConnectors, onClick: onBrowse, testid: 'connectors-phone-browse' };
+  const [section] = discoverSections(data.catalogue, SUGGESTED, { q, suggestions: data.suggestions ?? null });
+  if (section.cards === null) {
+    const why = data.suggestionsNote || 'Suggestions could not be read.';
+    return { ...group, note: <span data-testid="connectors-suggestions-none"><NR reason={why} /> · {why}</span> };
+  }
+  if (!section.cards.length) return { ...group, note: 'Nothing to suggest: every module a connector could feed already has data.' };
+  group.rows = section.cards.map((p) => {
+    const act = cardAction(p);
+    return {
+      key: p.key,
+      icon: <BrandIcon provider={p.key} name={p.display_name} />,
+      title: p.display_name,
+      description: p.why || p.description,
+      pill: cardPill(p) || actionPill(p, act),
+      onClick: act === 'notify' ? () => onNotify(p, true) : act === 'joined' ? () => onNotify(p, false) : () => onOpen(p),
+      testid: `connector-suggested-${p.key}`,
+    };
+  });
+  return group;
+}
+
+/** A3m — Connectors on a phone, given the `useConnectors()` read. */
+export function ConnectorsPhoneView(props) {
+  return <ConnectorsView {...props} phone />;
 }
 
 /** The section, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All', initialQuery = '' }) {
+export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All', initialQuery = '', phone = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const moved = useMovedNotice(location);
@@ -271,6 +364,43 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
     } catch (e) { setWaitError(e?.message || 'That could not be saved.'); }
     finally { setWaitBusy(false); }
   };
+
+  // Discover: the desktop's second tab, and on a phone the list kept below A3m's sections.
+  const discover = (
+    <>
+      <div className="flex gap-1.5 overflow-x-auto pb-1 md:flex-wrap" role="tablist" aria-label="Categories" data-testid="connectors-chips">
+        {chips.map((c) => (
+          <button key={c} type="button" role="tab" aria-selected={c === chip} onClick={() => setChip(c)}
+            className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-[12px] font-semibold ${c === chip ? 'border-axal-violet/30 bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white text-axal-ink/80 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
+            {c}
+          </button>
+        ))}
+      </div>
+      {waitError && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{waitError}</p>}
+      {sections.map((s) => (
+        <section key={s.title} className="flex flex-col gap-2.5" data-testid={`connectors-section-${s.title}`}>
+          <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">{s.title} {Array.isArray(s.cards) && <span className="font-mono text-[12px] font-medium text-axal-muted dark:text-gray-400">{s.cards.length}</span>}</h3>
+          {s.cards === null && (
+            <div className={`${TONE_CLS} p-4 text-[13px]`} data-testid="connectors-suggestions-none">
+              <NR reason={data.suggestionsNote || 'Suggestions could not be read.'} /> <span className="text-axal-muted dark:text-gray-400">· {data.suggestionsNote || 'Suggestions could not be read.'}</span>
+            </div>
+          )}
+          {Array.isArray(s.cards) && !s.cards.length && <p className="text-[13px] text-axal-muted dark:text-gray-400">{s.title === 'Suggested for you' ? 'Nothing to suggest: every module a connector could feed already has data.' : 'No connector here yet.'}</p>}
+          {Array.isArray(s.cards) && s.cards.length > 0 && (
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+              {s.cards.map((p) => <ConnectorCard key={p.key} p={p} onOpen={open} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} />)}
+            </div>
+          )}
+        </section>
+      ))}
+      {chip === 'All' && (
+        <section className="flex flex-col gap-2.5">
+          <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Community</h3>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3"><TelegramCard /></div>
+        </section>
+      )}
+    </>
+  );
 
   let content;
   if (data.status === 'loading' && !data.catalogue.length) {
@@ -319,40 +449,80 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
       );
     }
   } else {
-    content = (
-      <>
-        <div className="flex gap-1.5 overflow-x-auto pb-1 md:flex-wrap" role="tablist" aria-label="Categories" data-testid="connectors-chips">
-          {chips.map((c) => (
-            <button key={c} type="button" role="tab" aria-selected={c === chip} onClick={() => setChip(c)}
-              className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-[12px] font-semibold ${c === chip ? 'border-axal-violet/30 bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white text-axal-ink/80 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
-              {c}
-            </button>
-          ))}
+    content = discover;
+  }
+
+  const movedNote = moved && <div className="rounded-[10px] border border-axal-violet/25 bg-axal-lavender px-3.5 py-2.5 text-[13px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="connectors-moved">Integrations are now Connectors.</div>;
+  // On a phone Discover is not a tab: it is kept below A3m's sections, and
+  // "Browse connectors" scrolls to it in place.
+  const browse = phone
+    ? () => { setChip('All'); document.getElementById('connectors-discover')?.scrollIntoView?.({ block: 'start' }); }
+    : () => { setTab('discover'); setChip('All'); };
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <input type="search" aria-label="Search connectors" placeholder="Search connectors…" className={`${INPUT} min-w-[200px] flex-1`} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} data-testid="input-connectors-search" />
+      {tab === 'yours' && (
+        <>
+          <select aria-label="Filter" className={SELECT} value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
+            {YOURS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+          <select aria-label="Sort" className={SELECT} value={sort} onChange={(e) => setSort(e.target.value)}>
+            {YOURS_SORTS.map((s) => <option key={s.id} value={s.id}>Sort: {s.label}</option>)}
+          </select>
+        </>
+      )}
+      <AddMenu onBrowse={browse} onRequest={() => setRequesting('')} />
+    </div>
+  );
+  const extras = (
+    <>
+      {/* D684 (#1578): business Telegram and WhatsApp, Zoom and Google Meet, on
+          both tabs. Zoom and Google connect through this page's own sheet. */}
+      <ChannelsSection catalogue={data.catalogue} onOpenConnector={(key) => { const p = data.catalogue.find((x) => x.key === key); if (p) open(p); }} />
+
+      {/* D668 (#1498): AI assistants that use StudioOS (D665), on both tabs. */}
+      <AssistantsSection />
+
+      {sheet && sheetP && (
+        <ConnectorPanel
+          key={`${sheet.key}:${sheetP.connection ? 'c' : 'n'}`}
+          p={sheetP}
+          view={sheet.view}
+          ret={sheet.ret || {}}
+          setView={(view) => setSheet((s) => ({ ...s, view, ret: {} }))}
+          onChanged={data.reload}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {requesting !== null && <RequestSheet tool={requesting} onClose={() => setRequesting(null)} />}
+    </>
+  );
+
+  if (phone) {
+    const page = ACCOUNT_PHONE_PAGES.connectors;
+    return (
+      <div className="flex min-w-0 flex-col gap-3.5" data-testid="connectors-section" data-phone="true">
+        <div className="-mx-[22px]">
+          <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
+          <div className="pt-[18px]">
+            <PhoneRows groups={[
+              yoursGroup({ data, rows, paged, setPage, onOpen: open, label: page.sections[0] }),
+              suggestedGroup({ data, q, label: page.sections[1], onOpen: open, onNotify: notify, onBrowse: browse }),
+            ]} />
+          </div>
         </div>
-        {waitError && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{waitError}</p>}
-        {sections.map((s) => (
-          <section key={s.title} className="flex flex-col gap-2.5" data-testid={`connectors-section-${s.title}`}>
-            <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">{s.title} {Array.isArray(s.cards) && <span className="font-mono text-[12px] font-medium text-axal-muted dark:text-gray-400">{s.cards.length}</span>}</h3>
-            {s.cards === null && (
-              <div className={`${TONE_CLS} p-4 text-[13px]`} data-testid="connectors-suggestions-none">
-                <NR reason={data.suggestionsNote || 'Suggestions could not be read.'} /> <span className="text-axal-muted dark:text-gray-400">· {data.suggestionsNote || 'Suggestions could not be read.'}</span>
+        {movedNote}
+        <section id="connectors-discover" className="flex scroll-mt-24 flex-col gap-2.5" data-testid="connectors-phone-discover">
+          <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Discover</h2>
+          {toolbar}
+          {(data.status === 'ready' || data.catalogue.length > 0) && (q.trim() && !data.catalogue.some((p) => matchesQuery(p, q))
+            ? <div className={`${TONE_CLS} p-5 text-[13px] text-axal-ink dark:text-gray-200`} data-testid="connectors-noresults">
+                No connector called &lsquo;{q.trim()}&rsquo;. <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(q.trim())}>Request it.</button>
               </div>
-            )}
-            {Array.isArray(s.cards) && !s.cards.length && <p className="text-[13px] text-axal-muted dark:text-gray-400">{s.title === 'Suggested for you' ? 'Nothing to suggest: every module a connector could feed already has data.' : 'No connector here yet.'}</p>}
-            {Array.isArray(s.cards) && s.cards.length > 0 && (
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                {s.cards.map((p) => <ConnectorCard key={p.key} p={p} onOpen={open} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} />)}
-              </div>
-            )}
-          </section>
-        ))}
-        {chip === 'All' && (
-          <section className="flex flex-col gap-2.5">
-            <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Community</h3>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3"><TelegramCard /></div>
-          </section>
-        )}
-      </>
+            : discover)}
+        </section>
+        {extras}
+      </div>
     );
   }
 
@@ -373,44 +543,13 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
         </div>
       </div>
 
-      {moved && <div className="rounded-[10px] border border-axal-violet/25 bg-axal-lavender px-3.5 py-2.5 text-[13px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="connectors-moved">Integrations are now Connectors.</div>}
+      {movedNote}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input type="search" aria-label="Search connectors" placeholder="Search connectors…" className={`${INPUT} min-w-[200px] flex-1`} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} data-testid="input-connectors-search" />
-        {tab === 'yours' && (
-          <>
-            <select aria-label="Filter" className={SELECT} value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
-              {YOURS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-            </select>
-            <select aria-label="Sort" className={SELECT} value={sort} onChange={(e) => setSort(e.target.value)}>
-              {YOURS_SORTS.map((s) => <option key={s.id} value={s.id}>Sort: {s.label}</option>)}
-            </select>
-          </>
-        )}
-        <AddMenu onBrowse={() => { setTab('discover'); setChip('All'); }} onRequest={() => setRequesting('')} />
-      </div>
+      {toolbar}
 
       {content}
 
-      {/* D684 (#1578): business Telegram and WhatsApp, Zoom and Google Meet, on
-          both tabs. Zoom and Google connect through this page's own sheet. */}
-      <ChannelsSection catalogue={data.catalogue} onOpenConnector={(key) => { const p = data.catalogue.find((x) => x.key === key); if (p) open(p); }} />
-
-      {/* D668 (#1498): AI assistants that use StudioOS (D665), on both tabs. */}
-      <AssistantsSection />
-
-      {sheet && sheetP && (
-        <ConnectorPanel
-          key={`${sheet.key}:${sheetP.connection ? 'c' : 'n'}`}
-          p={sheetP}
-          view={sheet.view}
-          ret={sheet.ret || {}}
-          setView={(view) => setSheet((s) => ({ ...s, view, ret: {} }))}
-          onChanged={data.reload}
-          onClose={() => setSheet(null)}
-        />
-      )}
-      {requesting !== null && <RequestSheet tool={requesting} onClose={() => setRequesting(null)} />}
+      {extras}
     </div>
   );
 }

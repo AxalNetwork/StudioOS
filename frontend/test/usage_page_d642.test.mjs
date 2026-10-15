@@ -457,7 +457,8 @@ test('U7: held runs list member, when, held and cost, each with Charge and Refun
 test('the doors: the Account section, the user menu, the rail card, the HQ route, strip and Platform link', () => {
   const settings = read('frontend/src/pages/SettingsPage.jsx');
   assert.match(settings, /\{ id: 'billing', label: 'Billing and orders' \},\n[^\n]*\n  \{ id: 'usage', label: 'Usage' \},/, 'Usage, after Billing and orders');
-  assert.match(settings, /\n  usage: 'usage',/, '/account/usage opens the section');
+  // D700 — the deep-link map moved to account/accountPhone.js, unchanged.
+  assert.match(read('frontend/src/pages/account/accountPhone.js'), /\n  usage: 'usage',/, '/account/usage opens the section');
   assert.match(settings, /\{safeActive === 'usage' && <UsageSection role=\{role\} \/>\}/);
   const app = read('frontend/src/App.jsx');
   const menu = app.slice(app.indexOf('function UserDropdown('), app.indexOf('Log Out', app.indexOf('function UserDropdown(')));

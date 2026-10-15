@@ -3,12 +3,13 @@ import { useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { usageApi } from '../../lib/api/usage';
-import { EmptyState, Pill, Unrecorded, Unreadable } from '../../ui';
+import { EmptyState, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN, Chips, INPUT, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import {
   NOT_COUNTED, allowanceView, dayAxis, dayBars, filterPages, modelRows, pageOf, pageRows,
-  rateRows, receiptView, storageView, taskRows, topUpState,
+  rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState,
 } from './usageModel';
+import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 
 /**
  * D642 (#1435) — the Account center's Usage section, `/account/usage`, built
@@ -311,38 +312,45 @@ export function ModelsCard({ spend, rates }) {
                 </div>
               )}
       </PanelCard>
-      <PanelCard title="Rates" data-testid="usage-card-rates" footer={rateList ? 'Your allowance and top-up balance are charged at these rates.' : null}>
-        {rates.status === 'loading' ? <LoadingRows lines={3} />
-          : !rateList ? <Unreadable what="The rates" claim="Your charges are unaffected." onRetry={rates.reload} />
-            : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[480px] text-[13px]">
-                  <thead>
-                    <tr className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-axal-muted dark:text-gray-400">
-                      <th className="pb-2 text-left font-semibold">Model</th>
-                      <th className="pb-2 text-right font-semibold">In</th>
-                      <th className="pb-2 text-right font-semibold">Out</th>
-                      <th className="pb-2 pl-3 text-left font-semibold">Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rateList.map((r) => (
-                      <tr key={r.id} className="border-t border-axal-ground dark:border-gray-800" data-testid="usage-rate-row">
-                        <td className="py-2.5 pr-2">
-                          <div className="flex items-center gap-2 font-semibold">{r.name}{r.retired && <Pill tone="neutral" data-testid="usage-rate-retired">Retired</Pill>}</div>
-                          <div className="max-w-[300px] truncate font-mono text-[11px] text-axal-muted dark:text-gray-400">{r.id}</div>
-                        </td>
-                        <td className={`${MONO} text-right`}>{r.pin}</td>
-                        <td className={`${MONO} text-right`}>{r.pout ?? '—'}</td>
-                        <td className="pl-3 text-xs text-axal-muted dark:text-gray-400">{r.unit}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-      </PanelCard>
+      <RatesCard rates={rates} rateList={rateList} />
     </div>
+  );
+}
+
+/** U4's second card, the rate card. Kept apart so the phone view can draw it below its sections. */
+export function RatesCard({ rates, rateList = rates.status === 'ready' ? rateRows(rates.data) : null }) {
+  return (
+    <PanelCard title="Rates" data-testid="usage-card-rates" footer={rateList ? 'Your allowance and top-up balance are charged at these rates.' : null}>
+      {rates.status === 'loading' ? <LoadingRows lines={3} />
+        : !rateList ? <Unreadable what="The rates" claim="Your charges are unaffected." onRetry={rates.reload} />
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[480px] text-[13px]">
+                <thead>
+                  <tr className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-axal-muted dark:text-gray-400">
+                    <th className="pb-2 text-left font-semibold">Model</th>
+                    <th className="pb-2 text-right font-semibold">In</th>
+                    <th className="pb-2 text-right font-semibold">Out</th>
+                    <th className="pb-2 pl-3 text-left font-semibold">Unit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rateList.map((r) => (
+                    <tr key={r.id} className="border-t border-axal-ground dark:border-gray-800" data-testid="usage-rate-row">
+                      <td className="py-2.5 pr-2">
+                        <div className="flex items-center gap-2 font-semibold">{r.name}{r.retired && <Pill tone="neutral" data-testid="usage-rate-retired">Retired</Pill>}</div>
+                        <div className="max-w-[300px] truncate font-mono text-[11px] text-axal-muted dark:text-gray-400">{r.id}</div>
+                      </td>
+                      <td className={`${MONO} text-right`}>{r.pin}</td>
+                      <td className={`${MONO} text-right`}>{r.pout ?? '—'}</td>
+                      <td className="pl-3 text-xs text-axal-muted dark:text-gray-400">{r.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+    </PanelCard>
   );
 }
 
@@ -406,6 +414,103 @@ export function StorageCard({ storage, role }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// D700 (#1662) — A2m, the section on a phone
+// ---------------------------------------------------------------------------
+
+const phonePending = (status, what, claim, reload) => (status === 'loading'
+  ? <LoadingRows lines={2} />
+  : <Unreadable what={what} claim={claim} onRetry={reload} />);
+
+/** A2m's AI allowance rows: the state lines first, then the periods, holds and balance. */
+export function allowanceGroup({ budget, product, now = new Date() }) {
+  const v = budget.status === 'ready' ? allowanceView(budget.data, now) : null;
+  const group = { label: ACCOUNT_PHONE_PAGES.usage.sections[0], rows: [], testid: 'usage-phone-allowance' };
+  if (!v) return { ...group, note: phonePending(budget.status, 'Your allowance', 'The other sections still load.', budget.reload) };
+  const topUp = product.status === 'ready' ? topUpState(product.data) : product.status === 'loading' ? 'loading' : 'unreadable';
+  // A paused or used-up allowance still says so, above the figures.
+  for (const k of v.states) {
+    const c = STATE_COPY[k];
+    group.rows.push({ key: k, title: c.t, description: c.d(v), testid: `usage-state-${k}`, pill: k === 'paused' ? { label: 'Paused', tone: 'danger' } : null });
+  }
+  if (!v.noAllowance) {
+    const period = (title, p, reason) => (p
+      ? { title, description: p.reset, value: `${p.used} of ${p.of}`, bar: p.pct }
+      : { title, description: reason, notRecorded: true, notRecordedReason: reason });
+    group.rows.push(period('Today', v.today, 'The plan sets no daily allowance. Runs use your top-up balance.'));
+    group.rows.push(period('This month', v.month, 'The plan sets no monthly allowance. Runs use your top-up balance.'));
+  }
+  group.rows.push({ title: ACCOUNT_PHONE_COPY.heldTitle, description: ACCOUNT_PHONE_COPY.heldDescription, value: v.held });
+  group.rows.push({ title: ACCOUNT_PHONE_COPY.topUpTitle, description: ACCOUNT_PHONE_COPY.topUpDescription, value: v.balance });
+  if (topUp === 'available') group.cta = { label: ACCOUNT_PHONE_COPY.addTokens, href: '/checkout?ai_topup=1', testid: 'usage-add-tokens' };
+  else if (topUp === 'unavailable') group.note = <span data-testid="usage-topup-unavailable">Top-ups are not available yet. Runs use your included allowance only.</span>;
+  else if (topUp === 'unreadable') group.note = <Unreadable what="The top-up option" claim="Your balance above is unaffected." onRetry={product.reload} />;
+  return group;
+}
+
+/** A2m's Models rows: runs and tokens from the run log, and the estimated cost. */
+export function modelsGroup({ spend, rates }) {
+  const group = { label: ACCOUNT_PHONE_PAGES.usage.sections[1], rows: [], testid: 'usage-phone-models' };
+  const st = spendFor(spend, 'by_model_recorded');
+  if (st !== 'ready') return { ...group, note: phonePending(st, 'Models', 'This is not a claim that you ran nothing.', spend.reload) };
+  const rows = modelRows(spend.data.by_model, rates.status === 'ready' ? rates.data : null);
+  if (!rows || !rows.length) return { ...group, note: 'No AI runs yet this month.' };
+  // A direction the log did not count says so, never 0.
+  const tok = (t) => (t ? t.short : NOT_COUNTED);
+  group.rows = rows.map((m) => ({
+    key: m.id,
+    title: m.name,
+    description: `${m.runs} ${m.runs === 1 ? 'run' : 'runs'} · ${tok(m.tin)} in · ${tok(m.tout)} out`,
+    value: m.cost,
+    testid: 'usage-phone-model',
+  }));
+  group.note = ACCOUNT_PHONE_COPY.modelsNote;
+  return group;
+}
+
+/** A2m's Storage rows: every counted file, and those with no size recorded. */
+export function storageGroup({ storage }) {
+  const group = { label: ACCOUNT_PHONE_PAGES.usage.sections[2], rows: [], testid: 'usage-phone-storage' };
+  const v = storage.status === 'ready' ? storageView(storage.data) : null;
+  if (!v) return { ...group, note: phonePending(storage.status, 'Storage', 'This is not a claim that you stored nothing.', storage.reload) };
+  const reason = v.anyUnreadable ? 'A place where files are kept could not be read.' : 'Some files were stored before sizes were recorded.';
+  const total = v.total != null && v.files != null;
+  group.rows.push({
+    title: ACCOUNT_PHONE_COPY.allFiles,
+    description: STORAGE_AREAS.map(([, label]) => label).join(', '),
+    ...(total ? { value: `${v.total} · ${v.files}` } : { notRecorded: true, notRecordedReason: reason }),
+    testid: 'usage-phone-all-files',
+  });
+  if (v.noSize > 0) {
+    group.rows.push({ title: ACCOUNT_PHONE_COPY.noSizeFiles, value: `${v.noSize} ${v.noSize === 1 ? 'file' : 'files'}`, testid: 'usage-phone-nosize' });
+  }
+  group.note = 'Other files you keep on StudioOS are not counted yet. No plan sets a storage limit.';
+  return group;
+}
+
+/**
+ * A2m — Usage on a phone, given the section's five reads. The board's three
+ * sections come first; the cards it does not draw follow as they stack today
+ * (D700 decision 9). No read takes a company.
+ */
+export function UsagePhoneView({ budget, product, spend, rates, storage, now = new Date() }) {
+  const page = ACCOUNT_PHONE_PAGES.usage;
+  return (
+    <div className="flex flex-col gap-3" data-testid="usage-section" data-phone="true">
+      <div className="-mx-[22px]">
+        <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
+        <div className="pt-[18px]">
+          <PhoneRows groups={[allowanceGroup({ budget, product, now }), modelsGroup({ spend, rates }), storageGroup({ storage })]} />
+        </div>
+      </div>
+      <DaysCard spend={spend} />
+      <WhereCard spend={spend} />
+      <RatesCard rates={rates} />
+      <LastRunCard spend={spend} rates={rates} />
+    </div>
+  );
+}
+
 /** The section: the five reads, and the six cards in the canvas's order. */
 export default function UsageSection({ role }) {
   const budget = useAccountRead(() => aiBudgetApi.mine());
@@ -420,6 +525,8 @@ export default function UsageSection({ role }) {
     const id = hash ? decodeURIComponent(hash.slice(1)) : '';
     if (id) document.getElementById(id)?.scrollIntoView?.({ block: 'start' });
   }, [hash]);
+  const phone = usePhoneWidth();
+  if (phone) return <UsagePhoneView budget={budget} product={product} spend={spend} rates={rates} storage={storage} />;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section">
       <div>
