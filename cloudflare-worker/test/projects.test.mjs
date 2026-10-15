@@ -217,13 +217,29 @@ async function loadGetByIdHandler() {
   }
   assert.notEqual(close, -1, 'failed to balance /:id handler braces');
   const body = src.slice(bodyOpen + 1, close); // contains TS annotations → must transpile
+  // D702 — the handler's body moved into `projectReadFor(env, user, id)`, which
+  // the preview also calls, and the handler now only calls it. Slice that
+  // function's body the same way, so the contract is still the real code.
+  const fnMarker = 'export async function projectReadFor(';
+  const f = src.indexOf(fnMarker);
+  assert.notEqual(f, -1, 'projectReadFor not found in projects.ts');
+  const fnOpen = src.indexOf('}> {\n', f) + 3; // past the return type's own braces
+  let fnDepth = 0, fnClose = -1;
+  for (let j = fnOpen; j < src.length; j++) {
+    const ch = src[j];
+    if (ch === '{') fnDepth++;
+    else if (ch === '}') { fnDepth--; if (fnDepth === 0) { fnClose = j; break; } }
+  }
+  assert.notEqual(fnClose, -1, 'failed to balance projectReadFor braces');
+  const fnBody = src.slice(fnOpen + 1, fnClose);
   const wrapped = `const __run = async (c, __deps) => {
     // Every helper the handler source calls must be destructured here: the
     // handler is string-extracted and Function-evaluated, so anything missing
     // is a ReferenceError at call time rather than a compile error. When the
     // route gains a call, add it here AND to the PROJECT_DEPS object below.
     // (No backticks in this comment — it lives inside a template literal.)
-    const { requireAuth, getSQL, ensureProjectDataRoomColumns, ensureProjectRevenueProofColumns, ensureProjectProductDemoColumns, ensureFounderCompanyColumn, canAccessFounderResource, canAccessProject } = __deps;
+    const { requireAuth, getSQL, ensureProjectDataRoomColumns, ensureProjectRevenueProofColumns, ensureProjectProductDemoColumns, ensureFounderCompanyColumn, canAccessFounderResource, canAccessProject, findableBy } = __deps;
+    const projectReadFor = async (env, user, id) => { ${fnBody} };
     ${body}
   };`;
   const outputText = transpileTs(wrapped);
@@ -243,6 +259,7 @@ const PROJECT_DEPS = {
   ensureFounderCompanyColumn: async () => {},
   canAccessFounderResource: () => true,
   canAccessProject: async () => true,
+  findableBy: async () => true,
 };
 
 test('GET /:id: missing project → 404 (not 500) under auth', async () => {

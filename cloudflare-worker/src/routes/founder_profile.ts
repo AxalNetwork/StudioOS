@@ -16,7 +16,9 @@
  *
  * GATES. `/me` is the caller and nobody else; it takes no id. The venture
  * routes and the preview need `canWrite` on the named venture (its founder or
- * an admin); everyone else gets 403, and a missing or deleted venture 404.
+ * an admin); everyone else gets 403, and a missing or deleted venture 404. A
+ * founder's venture outside their active company answers 404 too, as every
+ * company-scoped venture read does.
  *
  * NOTHING HERE MASKS. The preview calls `publicPersonCard`, `publicStartupCard`,
  * `projectReadFor` and `publishedMembersFor`, the functions the routes those
@@ -31,6 +33,8 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { canWrite } from './_founder_validate_helpers';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { publicPersonCard, publicStartupCard, STARTUP_NOT_PUBLIC_STATUSES, type CardResult } from './public';
 import { projectReadFor } from './projects';
@@ -138,7 +142,7 @@ r.get('/me', async (c) => {
 // ---------------------------------------------------------------------------
 
 type VentureRow = {
-  id: number; uid: string | null; name: string | null; founder_id: number | null; status: string | null;
+  id: number; uid: string | null; name: string | null; founder_id: number | null; company_id?: number | null; status: string | null;
   description: string | null; sector: string | null; problem_statement: string | null;
   founded_year: number | null; hq: string | null; employee_count: string | null; website: string | null;
 };
@@ -152,13 +156,20 @@ async function ventureFor(
     return { refusal: refuse(c, 400, { code: 'invalid_project', message: 'project is your venture’s id.' }) };
   }
   const row = await c.env.DB.prepare(
-    `SELECT id, uid, name, founder_id, status, description, sector, problem_statement,
+    `SELECT id, uid, name, founder_id, company_id, status, description, sector, problem_statement,
             founded_year, hq, employee_count, website
        FROM projects WHERE id = ? AND deleted_at IS NULL`,
   ).bind(id).first<VentureRow>();
   if (!row) return { refusal: refuse(c, 404, { code: 'project_not_found', message: 'Project not found' }) };
   if (!canWrite({ id: row.id, founder_id: row.founder_id }, user)) {
     return { refusal: refuse(c, 403, { code: 'not_your_venture', message: 'Only the venture’s founder can see this page.' }) };
+  }
+  // The founder's own venture outside the company they have selected is not
+  // in this workspace, so it answers as missing, as progress.ts `loadProject`
+  // does. Admins are exempt: `company_id` is the founder's company, never theirs.
+  if (String(user.role || '').toLowerCase() !== 'admin'
+      && !projectInActiveCompany(await activeCompanyFor(c, user), row)) {
+    return { refusal: refuse(c, 404, { code: 'project_not_found', message: 'Project not found' }) };
   }
   return { venture: row };
 }

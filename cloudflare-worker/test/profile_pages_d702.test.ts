@@ -198,8 +198,8 @@ const searchEnv = {
   },
 };
 
-async function call(db: InstanceType<typeof DatabaseSync>, as: number | null, method: string, path: string, payload?: unknown) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+async function call(db: InstanceType<typeof DatabaseSync>, as: number | null, method: string, path: string, payload?: unknown, extra: Record<string, string> = {}) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
   if (as != null) {
     const token = await new SignJWT({ user_id: as, role: ROLE[as] })
       .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
@@ -402,6 +402,23 @@ test('5b. the privacy route naming another founder\'s venture is 403 on GET and 
   assert.equal(own.body.investor_findable, false);
   assert.equal((db.prepare(`SELECT investor_findable FROM projects WHERE id = ?`).get(V) as any).investor_findable, 0);
   assert.equal((await get(db, FAY, `/api/settings/privacy?project=${V}`)).body.investor_findable, false);
+});
+
+test('5d. a founder\'s venture outside the company they have selected answers 404 on the venture, the preview and the privacy route', async () => {
+  const db = freshDb();
+  for (const id of [900, 901]) db.prepare(`INSERT INTO user_company_links (uid, company_id, user_id) VALUES (?, ?, ?)`).run(`link-${id}`, id, FAY);
+  db.prepare(`UPDATE projects SET company_id = 900 WHERE id = ?`).run(V);
+  const paths = [`/api/profile/venture?project=${V}`, `/api/profile/preview?project=${V}&audience=investors`, `/api/settings/privacy?project=${V}`];
+  for (const path of paths) {
+    assert.equal((await call(db, FAY, 'GET', path, undefined, { 'X-Company-Id': '900' })).status, 200, `${path} in its own company`);
+    assert.equal((await call(db, FAY, 'GET', path)).status, 200, `${path} with no company selected`);
+    assert.equal((await call(db, FAY, 'GET', path, undefined, { 'X-Company-Id': '901' })).status, 404, `${path} from the other company`);
+    assert.equal((await call(db, ADA, 'GET', path, undefined, { 'X-Company-Id': '901' })).status, 200, `${path} as an admin`);
+  }
+  const before = db.prepare(`SELECT hq, investor_findable FROM projects WHERE id = ?`).get(V) as any;
+  assert.equal((await call(db, FAY, 'PATCH', `/api/profile/venture?project=${V}`, { hq: 'Elsewhere' }, { 'X-Company-Id': '901' })).status, 404);
+  assert.equal((await call(db, FAY, 'PUT', `/api/settings/privacy?project=${V}`, { investor_findable: false }, { 'X-Company-Id': '901' })).status, 404);
+  assert.deepEqual({ ...(db.prepare(`SELECT hq, investor_findable FROM projects WHERE id = ?`).get(V) as any) }, { ...before });
 });
 
 test('5c. GET privacy with a venture reads a never-chosen flag as findable', async () => {

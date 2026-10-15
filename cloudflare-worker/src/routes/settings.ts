@@ -25,6 +25,7 @@ import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { hasTotpConfigured, loadTotp, loadTotpPairedAt, persistNewTotpEnrolment, replaceRecoveryHashes } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
@@ -1783,8 +1784,9 @@ settings.post('/explainer-restore', async (c) => {
 // (`projects.investor_findable`, migration 467) to the read and the write. The
 // caller must be able to write the venture (`canWrite`: its founder or an
 // admin); a venture they cannot write answers 403 and NOTHING is written, a
-// missing or deleted one 404. NULL (never chosen) reads as true.
-type PrivacyProject = { id: number; founder_id: number | null; investor_findable: number | null };
+// missing or deleted one 404, and so does one outside the founder's active
+// company. NULL (never chosen) reads as true.
+type PrivacyProject = { id: number; founder_id: number | null; company_id: number | null; investor_findable: number | null };
 async function privacyProject(
   c: Context<{ Bindings: Env }>, user: any,
 ): Promise<{ project: PrivacyProject | null } | { refusal: Response }> {
@@ -1795,11 +1797,17 @@ async function privacyProject(
     return { refusal: c.json({ error: 'project is a venture id.', field: 'project' }, 400) };
   }
   const row = await c.env.DB.prepare(
-    'SELECT id, founder_id, investor_findable FROM projects WHERE id = ? AND deleted_at IS NULL',
+    'SELECT id, founder_id, company_id, investor_findable FROM projects WHERE id = ? AND deleted_at IS NULL',
   ).bind(id).first<PrivacyProject>();
   if (!row) return { refusal: c.json({ error: 'Project not found' }, 404) };
   if (!canWrite({ id: row.id, founder_id: row.founder_id }, user)) {
     return { refusal: c.json({ error: 'Only the venture\'s founder can change who finds it.' }, 403) };
+  }
+  // Outside the founder's active company the venture is not in this workspace
+  // (routes/founder_profile.ts `ventureFor` answers the same). Admins are exempt.
+  if (String(user?.role || '').toLowerCase() !== 'admin'
+      && !projectInActiveCompany(await activeCompanyFor(c, user), row)) {
+    return { refusal: c.json({ error: 'Project not found' }, 404) };
   }
   return { project: row };
 }
