@@ -123,7 +123,7 @@ export function pillLabel(variant, clockText) {
     offline: `Recording offline · ${clockText} · saved on this device · tap to expand`,
     processing: 'Processing the session · tap to expand',
     failed: 'Processing stopped · tap to retry',
-    ready: 'Ready to review · open the review',
+    ready: 'Ready · see it in Interviews',
     share: 'Not recording yet · share the call\'s tab · tap to expand',
     blocked: 'Not recording · the microphone is blocked · tap to expand',
     refused: 'Not recording · the recording did not start · tap to expand',
@@ -141,13 +141,12 @@ export function elapsedMs(session, now) {
   return session.status === 'recording' && Number.isFinite(since) ? base + Math.max(0, now - since) : base;
 }
 
-/** The interview review for a session (§5.11): the session chosen in it. */
+/** Return to Customer research, keeping the recording's venture when known (D694). */
 export function reviewPath(session) {
-  if (!session) return '/validate/interviews';
-  const sid = encodeURIComponent(session.id);
-  return session.interview_id != null
-    ? `/validate/interviews/${encodeURIComponent(session.interview_id)}?session=${sid}`
-    : `/validate/session/${sid}`;
+  const projectId = session?.project_id;
+  return Number.isSafeInteger(projectId) && projectId > 0
+    ? `/validate/customer-research?project_id=${projectId}`
+    : '/validate/customer-research';
 }
 
 /**

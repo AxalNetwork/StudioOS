@@ -16,9 +16,8 @@ import { focusPillOnShow } from './RecordingPill';
  *
  * × "Exit full screen" goes back to where the founder was and leaves the
  * recording running: the pill keeps it in the corner (`RecordingPill.jsx`).
- * When processing finishes here, the founder lands on the interview's review
- * (`/validate/interviews/:id`, D685 §5.9.6); minimised, the pill says "Ready
- * to review" instead and nobody is moved.
+ * When processing finishes here, the founder lands on Customer research
+ * (D694); minimised, the ready pill offers the same destination.
  */
 
 
@@ -26,7 +25,7 @@ import { focusPillOnShow } from './RecordingPill';
 export function liveRedirect(state, sessionParam) {
   const sid = state?.session?.id;
   const asked = sessionParam ? String(sessionParam) : null;
-  if (state?.phase === 'discarded') return '/validate/interviews';
+  if (state?.phase === 'discarded') return reviewPath(state?.session);
   if (sid != null && (!asked || asked === String(sid))) return state.phase === 'ready' ? reviewPath(state.session) : null;
   if (asked && /^\d+$/.test(asked)) return `/validate/session/${asked}`;
   return '/validate';
