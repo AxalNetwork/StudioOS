@@ -342,6 +342,7 @@ test('12 · Customer research draws Whisper, Nova-3 and the 70B, in that order, 
     ['Deepgram Nova-3', 'Speakers', false],
     ['Llama 3.3 70B Fast', 'Structure', false],
   ]);
+  assert.deepEqual(v.cards.map((c) => c.id), [WHISPER, NOVA, L70]);
   assert.equal(v.pickable, false);
   assert.equal(v.fallback, false);
   assert.ok(!v.cards.some((c) => /Flux/.test(c.name)));
