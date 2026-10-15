@@ -187,7 +187,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
       {!done && <button type="submit" form={id} disabled={busy || !loaded} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : base.cta || base.button || 'Save'}</button>}
     </div>
   </div>;
-  return <Lightbox pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} testId="cycle-form" bar={bar}>
+  return <Lightbox pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} focusKey={done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
     <form id={id} onSubmit={save} noValidate className="flex flex-col gap-3.5 px-5 py-4">
       {refusal && <p role="alert" data-testid="cycle-form-refusal" className="m-0 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{refusal}</p>}
       {done ? <div data-testid="cycle-form-done" className="space-y-3 text-[13px] text-axal-ink dark:text-gray-200">

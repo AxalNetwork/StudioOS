@@ -189,11 +189,14 @@ test('query defaults, field/plan refusals, busy state and success callbacks are 
 async function assertDone(m) {
   let closed = 0; let saved = 0; let payload;
   const f = { title: 'Add founder', fields: [], cta: 'Add founder', done: () => ({ text: 'Founder saved.', href: '/raise/legal-engine/founders', copy: 'synthetic-share-link' }) };
-  const mount = await mountForm(h(m.default, { ...props, form: f, onSubmit: async (v) => { payload = v; return { ok: true }; }, onSaved: () => { saved++; }, onClose: () => { closed++; } }));
+  const mount = await mountForm(h(m.default, { ...props, form: f, onSubmit: async (v) => { payload = v; return { ok: true }; }, onSaved: () => { saved++; }, onClose: () => { closed++; } }), { modal: true });
   try {
-    assert.ok(mount.by('cycle-form-save')); await mount.submit();
+    assert.ok(mount.by('cycle-form-save'));
+    mount.doc.activeElement = mount.by('cycle-form-save');
+    await mount.submit();
     assert.deepEqual(payload, {}); assert.equal(saved, 1); assert.equal(closed, 0);
     assert.ok(mount.by('cycle-form-done')); assert.ok(mount.text().includes('Founder saved.'));
+    assert.ok(mount.by('cycle-form').contains(mount.doc.activeElement), 'focus moves off the removed Save button into the done view');
     assert.ok(mount.text().includes('synthetic-share-link')); assert.ok(!mount.by('cycle-form-save'));
     const link = mount.nodes().find((n) => n.tagName === 'A');
     assert.equal(mount.props(link).href, '/raise/legal-engine/founders');
@@ -206,6 +209,7 @@ test('fieldless forms submit and a done view remains open with the returned link
     ['if (completion) setDone(completion);', 'if (false) setDone(completion);'],
     ['if (!completion) onClose?.();', 'onClose?.();'],
     ['linkOf(done.href) &&', 'false &&'],
+    ["focusKey={done ? 'done' : 'form'} ", ''],
   ]);
 });
 
