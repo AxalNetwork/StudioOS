@@ -73,8 +73,8 @@ function assertDispatch(m) {
   assert.equal(m.rowAction({ key: 'open-minutes', body, kind: 'link' }, map).kind, 'write');
   assert.equal(m.rowAction('undeclared', map), null);
   assert.equal(m.rowAction({ key: 'undeclared', kind: 'write' }, map), null);
-  assert.equal(m.rowAction('attach', map).kind, 'form');
-  assert.equal(m.rowAction('add-theme', map).kind, 'form');
+  assert.equal(m.rowAction('attach', map)?.kind, 'form');
+  assert.equal(m.rowAction('add-theme', map)?.kind, 'form');
 }
 test('only declared actions dispatch, using the declaration and the row body', async () => {
   assertDispatch(rules);
@@ -118,11 +118,26 @@ test('canvas layout, real activity, missing facts, omissions and empty states re
   ], true);
 });
 
-test('unknown tones stay plain and main versus side rows keep three versus two cells', () => {
+async function assertCells(module) {
   const r = { ...fixture(), main: [{ key: 'plain', title: 'Plain', rows: [{ a: 'Left', b: 'Middle', c: 'Unknown status', tone: 'unrecognized' }] }], side: [{ key: 'side', title: 'Side', rows: [{ a: 'Side key', b: 'Side value' }] }] };
-  const out = markup(RecordView, r);
+  const out = markup(module.default, r);
   assert.match(out, /<span>Unknown status<\/span>/);
   assert.match(out, /Side key/); assert.match(out, /Side value/);
+  const m = await mountContracts(h(module.default, { record: r, ...context }));
+  try {
+    const main = m.nodes().find((n) => m.props(n)?.className?.includes('grid-cols-[minmax(0,1.6fr)'));
+    assert.equal(main?.childNodes.length, 3);
+    const side = m.nodes().filter((n) => m.props(n)?.className?.includes('py-[9px]'));
+    assert.equal(side.length, 2, 'side row and actual activity row');
+    assert.ok(side.every((n) => n.childNodes.length === 2));
+  } finally { await m.unmount(); }
+}
+test('unknown tones stay plain and main versus side rows keep three versus two cells', async () => {
+  await assertCells({ default: RecordView });
+  await mutationCheck(viewSource, 'pages/cycles/RecordView.jsx', assertCells, [
+    ['const style = PILL[toneOf(tone)];', 'const style = PILL.v1;'],
+    ['{!side && <div className="flex items-center gap-2">', '{true && <div className="flex items-center gap-2">'],
+  ], true);
 });
 
 async function assertClicks(module) {

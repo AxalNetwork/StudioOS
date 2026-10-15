@@ -80,6 +80,7 @@ function assertRendering(m) {
   const doc = createPdfStub(); const r = fixture();
   m.renderPersona(doc, personaModel(r, { generatedAt: stamp }));
   const out = textOf(doc);
+  assert.equal(doc.calls.find((c) => c.op === 'text' && c.size === 19.5)?.text, r.title, 'the segment title is the heading, not merely repeated in a fact');
   for (const value of [r.title, r.sub, 'Interviews', '0', 'Not recorded', r.facts[2].reason, 'Five steps', 'Pain themes', 'Scheduling', 'Lost hours', ...r.main[1].rows.flatMap((row) => [row.a, row.b])]) assert.ok(out.includes(value), value);
   assert.ok(!out.includes('Mira Sampleton')); assert.ok(!out.includes('mira@example.invalid'));
   for (const record of [longest(), { title: 'Empty' }]) {
