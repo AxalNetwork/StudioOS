@@ -7,6 +7,8 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 | File | What it holds |
 | --- | --- |
+| `recordModel.js` | D696 PR 1's pure record rules: safe record links, Worker id checks, row/tone mapping, section anchors, declared-action dispatch and the client export registry. Routing and reads wait for PR 2 dependencies. |
+| `RecordView.jsx` | D696's unmounted record body: pills/actions, four facts, main/side sections and real activity. Exports `RecordActions`, `RecordFacts`, `RecordSection` and `RecordActivity`; the caller supplies cycle/module names and callbacks, and owns reads and every dialog. |
 | `cycleModel.js` | The pure rules: the four cycles, the five card states, which chart specs can be drawn, figure values and changes, the module query, the records count and pages, cells, and the in-app link check |
 | `CycleCharts.jsx` | One SVG component per chart kind in the canvas (`hbar`, `vbars`, `vstack`, `funnel`, `stack`, `line`, `timeline`, `tiles`, `dots`, `rows`, `progress`, `big`, `heat`, `bands`), the legend and the sparkline. No chart library, and no HTML strings |
 | `CycleOverview.jsx` | The overview: the header with its tabs and primary action, four figures, and one card per module in its five states |

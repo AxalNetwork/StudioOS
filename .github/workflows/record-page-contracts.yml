@@ -1,0 +1,51 @@
+name: Record page contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/pages/cycles/RecordView.jsx'
+      - 'frontend/src/pages/cycles/recordModel.js'
+      - 'frontend/src/lib/persona*.js'
+      - 'frontend/test/*d696*'
+      - '.github/workflows/record-page-contracts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: record-page-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: D696 record and persona contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix frontend --no-audit --no-fund
+          npm ci --prefix cloudflare-worker --no-audit --no-fund
+      - name: Record and persona contracts with mutation restoration
+        run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_page_d696.test.mjs frontend/test/persona_pdf_d696.test.mjs
+      - name: Folder, decision and dark-mode guards
+        run: |
+          node scripts/check-folder-docs.mjs
+          node scripts/check-decision-ids.mjs
+          node scripts/check-dark-mode.mjs
+      - name: Build the root SPA
+        run: npm run build
+      - name: Full drift suite after build
+        run: |
+          set +e
+          npm run test:drift > drift.log 2>&1
+          drift_exit=$?
+          echo "EXIT=$drift_exit"
+          if [ "$drift_exit" -ne 0 ]; then tail -n 160 drift.log; fi
+          exit "$drift_exit"
