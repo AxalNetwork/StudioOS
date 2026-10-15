@@ -1211,10 +1211,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             everyone else, and nothing once the branch is live. */}
         <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
 
-        {/* ── Carta-style global top header ─────────────────────────────── */}
         {/* D699 — below 1024px a founder gets the phone band instead
             (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
-            and up, gets this header unchanged. One is mounted, never both. */}
+            and up, gets the header below unchanged. One is mounted, never both. */}
+        {/* ── Carta-style global top header ─────────────────────────────── */}
         <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">

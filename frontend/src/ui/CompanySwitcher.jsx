@@ -101,10 +101,13 @@ let readState = { loading: true, failed: false };
 const readListeners = new Set();
 export function setReadState(next) {
   readState = next;
-  readListeners.forEach((listen) => listen());
+  for (const listen of readListeners) listen();
 }
-const subscribeReadState = (listen) => { readListeners.add(listen); return () => readListeners.delete(listen); };
-const currentReadState = () => readState;
+function subscribeReadState(listen) {
+  readListeners.add(listen);
+  return () => readListeners.delete(listen);
+}
+function currentReadState() { return readState; }
 export function useCompanyReadState() {
   return useSyncExternalStore(subscribeReadState, currentReadState, currentReadState);
 }
