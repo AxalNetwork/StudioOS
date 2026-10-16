@@ -197,8 +197,8 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
     if (items.length === 0) {
       return {
         state: 'empty', series: null,
-        next: { text: 'Score fundraising readiness', href: href(ctx, 'fundraising-readiness') },
-        reason: 'No readiness item scored yet.',
+        next: { text: 'Score readiness', href: `${href(ctx, 'fundraising-readiness')}&add=1` },
+        reason: 'No readiness score yet. Readiness by evidence appears here.',
       };
     }
     const latest = latestScores(scores);
@@ -398,7 +398,7 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('investor-narrative', 'All versions', 'Saved narrative versions by investor type, and what the consistency check found in the newest.', 'Narrative versions'), async (): Promise<CardBody> => {
     const versions = await loadVersions(ctx);
     if (versions.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Save your first narrative version', href: href(ctx, 'investor-narrative') }, reason: 'No narrative version saved yet.' };
+      return { state: 'empty', series: null, next: { text: 'New version', href: `${href(ctx, 'investor-narrative')}&add=1` }, reason: 'No narrative saved yet. Each version appears here.' };
     }
     const byType = new Map<string, number>();
     for (const v of versions) {
@@ -448,7 +448,6 @@ async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     {
       filters: [{ key: 'investor_type', label: 'Investor type', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
       sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
-      add: { text: 'Save a version', href: href(ctx, 'investor-narrative') },
     },
   );
 }
@@ -478,6 +477,8 @@ async function weeklyViews(ctx: Ctx, n: number): Promise<number[]> {
 
 export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('pitch-deck', 'Last 8 weeks', 'Share-link views per week, and the seconds investors spent on each slide.', 'Deck share views'), async (): Promise<CardBody> => {
+    const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
+    if (!deck) return { state: 'empty', series: null, next: { text: 'Build your deck', href: TOOL_HREF.pitch }, reason: 'No deck yet. Views per week appear here.' };
     const total = await ctx.env.DB.prepare(
       'SELECT COUNT(*) AS n FROM deck_share_views v JOIN pitch_decks d ON d.id = v.deck_id WHERE d.project_id = ?',
     ).bind(ctx.projectId).first<{ n: number }>();
@@ -574,7 +575,7 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
       'SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?',
     ).bind(ctx.projectId).first<{ n: number }>();
     if (Number(files?.n ?? 0) === 0) {
-      return { state: 'empty', series: null, next: { text: 'Upload the first data-room file', href: TOOL_HREF.dataRoom }, reason: 'The data room holds no file yet.' };
+      return { state: 'empty', series: null, next: { text: 'Upload', href: TOOL_HREF.dataRoom }, reason: 'No files yet. Coverage of the diligence checklist appears here.' };
     }
     const mapped = await ctx.env.DB.prepare(
       'SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL',
@@ -684,7 +685,7 @@ export async function capTableCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('cap-table', 'Planned round', 'Ownership by holder group, before and after the planned round.', 'Cap table'), async (): Promise<CardBody> => {
     const cap = await loadCap(ctx);
     if (!cap.exists) {
-      return { state: 'empty', series: null, next: { text: 'Set up the cap table', href: TOOL_HREF.capTable }, reason: 'No cap table is set up yet.' };
+      return { state: 'empty', series: null, next: { text: 'Add holder', href: TOOL_HREF.capTable }, reason: 'No holders yet. Ownership before and after the round appears here.' };
     }
     if (!cap.computed) {
       return { state: 'not_recorded', series: null, next: { text: 'Compute the cap table', href: TOOL_HREF.capTable }, reason: 'The cap table has not been computed yet.' };
@@ -771,7 +772,7 @@ export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('use-of-funds', 'Next 18 months', 'The planned split of the raise, and cash over the next 18 months with and without it.', 'Use of funds'), async (): Promise<CardBody> => {
     const f = await loadFunds(ctx);
     if (!f.alloc) {
-      return { state: 'empty', series: null, next: { text: 'Set the use of funds', href: TOOL_HREF.model }, reason: 'No allocation is set yet.' };
+      return { state: 'empty', series: null, next: { text: 'Edit split', href: TOOL_HREF.model }, reason: 'No split yet. The planned split and runway appear here.' };
     }
     const series: unknown[] = [{
       kind: 'stack', bare: true, rows: [{ label: 'Planned split', parts: f.alloc }], tones: FUND_TONES,
@@ -892,7 +893,7 @@ export async function capitalCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('capital-relationships', 'Current round', 'Investors by the furthest pipeline stage they reached, and the follow-ups due.', 'Raise pipeline'), async (): Promise<CardBody> => {
     const prospects = await loadProspects(ctx.env, ctx.projectId);
     if (prospects.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Add the first investor to the pipeline', href: TOOL_HREF.pipeline }, reason: 'No investor is in the pipeline yet.' };
+      return { state: 'empty', series: null, next: { text: 'Add investor', href: TOOL_HREF.pipeline }, reason: 'No investors yet. The pipeline by stage appears here.' };
     }
     const fu = followUps(prospects, ctx.today);
     const series = [

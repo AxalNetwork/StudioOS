@@ -59,8 +59,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
   const filters = Array.isArray(records?.filters) ? records.filters : [];
   const sorts = Array.isArray(records?.sorts) ? records.sorts : [];
   const count = recordsCount(records);
-  const addBtn = add || records?.add;
-  const addHref = safeHref(addBtn?.href);
+  const addButtons = Array.isArray(add) ? add : [add || records?.add].filter(Boolean);
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const acts = typeof rowAction === 'function';
   const tracks = cols.map((_, i) => (i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)'));
@@ -72,9 +71,13 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
       <div className="flex flex-col gap-2.5 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{title}</h2>
-          {addBtn?.text && (addBtn.onClick
-            ? <button type="button" onClick={addBtn.onClick} className="whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep">{addBtn.text}</button>
-            : addHref ? <Link to={addHref} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className="whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep">{addBtn.text}</Link> : null)}
+          <div className="flex flex-wrap gap-2">{addButtons.map((addBtn) => {
+            const addHref = safeHref(addBtn?.href);
+            const className = 'whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
+            return addBtn?.text && (addBtn.onClick
+              ? <button key={addBtn.text} type="button" onClick={addBtn.onClick} className={className}>{addBtn.text}</button>
+              : addHref ? <Link key={addBtn.text} to={addHref} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
+          })}</div>
         </div>
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}

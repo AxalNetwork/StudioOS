@@ -204,26 +204,60 @@ const mustHave = {
   },
 };
 
+const feature = {
+  button: 'Add feature', title: 'Add a feature',
+  lead: 'A feature of the solution. It can be linked to a pain theme later.',
+  fields: mustHave.fields.slice(0, 3),
+  toBody: (v) => ({ title: str(v.title), added_value: v.added_value || 'High', effort: v.effort || 'M', delivery_status: 'Backlog' }),
+  submit: (w, projectId, v) => w.build.mvpFeature(projectId, feature.toBody(v)),
+};
+
+const readiness = {
+  button: 'Score readiness', title: 'Score readiness',
+  lead: 'Check the deck, use of funds, cap table, traction, data room and narrative against their recorded evidence.',
+  fields: [], submit: (w, projectId) => w.raise.rescore(projectId),
+};
+
+const narrative = {
+  button: 'New version', title: 'New narrative version',
+  lead: 'Save the current narrative for an investor type and check it against recorded metrics.',
+  fields: [{ name: 'investor_type', label: 'Investor type', type: 'select', required: true, options: opts([
+    ['angel', 'Angel'], ['pre_seed_fund', 'Pre-seed fund'], ['seed_fund', 'Seed fund'],
+    ['series_a_fund', 'Series A fund'], ['strategic', 'Strategic'], ['grant', 'Grant'], ['other', 'Other'],
+  ]) }],
+  toBody: (v) => ({ investor_type: v.investor_type || null }),
+  submit: (w, projectId, v) => w.raise.narrativeVersion(projectId, narrative.toBody(v)),
+};
+
 /** The forms, by cycle and module slug. A slug not here has no Add form. */
 export const FORMS = {
+  raise: {
+    'fundraising-readiness': [readiness],
+    'investor-narrative': [narrative],
+  },
   grow: {
-    'product-improvement': feedback,
-    distribution: channel,
-    'partner-network': partner,
-    'market-expansion': market,
-    'durable-company-building': obligation,
+    'product-improvement': [feedback],
+    distribution: [channel],
+    'partner-network': [partner],
+    'market-expansion': [market],
+    'durable-company-building': [obligation],
   },
   build: {
-    'solution-design': risk,
-    'prototype-mvp': mustHave,
-    'company-creation': formationStep,
+    'solution-design': [feature, risk],
+    'prototype-mvp': [mustHave],
+    'company-creation': [formationStep],
   },
 };
 
+/** All Add forms for a module, in button order. */
+export function formsFor(cycle, slug) {
+  const byCycle = Object.prototype.hasOwnProperty.call(FORMS, cycle) ? FORMS[cycle] : null;
+  return byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : [];
+}
+
 /** The form for a cycle's module, or null. Own entries only: a slug never reaches Object.prototype. */
 export function formFor(cycle, slug) {
-  const byCycle = Object.prototype.hasOwnProperty.call(FORMS, cycle) ? FORMS[cycle] : null;
-  return byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : null;
+  return formsFor(cycle, slug)[0] || null;
 }
 
 // ---------- Edit a row -------------------------------------------------------

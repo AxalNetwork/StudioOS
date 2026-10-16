@@ -29,8 +29,8 @@ function card(slug: Slug, state: Card['state'], series: ChartSpec[], range = 'No
   const spec = MODULES.find(m => m[0] === slug)!;
   return { slug, name: spec[1], caption: spec[3], state, series, range, reason, next };
 }
-function next(slug: Slug, text: string | null): Card['next'] {
-  return text ? { text, href: `/build/${slug}` } : null;
+function next(p: Project, slug: Slug, text: string | null, add = false): Card['next'] {
+  return text ? { text, href: `/build/${slug}?project=${p.id}${add ? '&add=1' : ''}` } : null;
 }
 function figure(key: string, label: string, value: BuildFigure['value'], unit: string, source: string, state: BuildFigure['state'], reason: string | null = null): BuildFigure {
   return { key, label, value, unit, delta_30d: null, spark: [], source, as_of: null, state, reason };
@@ -78,7 +78,7 @@ async function solution(env: Env, p: Project): Promise<ModuleRead> {
   if (features.length) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
   if (risks.length) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
   const featureRows = features.map(f => record(f.id, { feature: f.title, pain_theme: f.pain_theme, hypothesis: f.hypothesis, impact: f.added_value, effort: f.effort }));
-  return { card: card('solution-design', features.length || risks.length ? 'ok' : 'empty', series, 'Now', features.length || risks.length ? null : 'No features or founder risks recorded yet.', next('solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null)),
+  return { card: card('solution-design', features.length || risks.length ? 'ok' : 'empty', series, 'Now', features.length || risks.length ? null : 'No features yet. Linked and unlinked features appear here.', features.length || risks.length ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null) : next(p, 'solution-design', 'Add feature', true)),
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows, facts: { features: features.length, risks } };
 }
 
@@ -106,7 +106,7 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
     ...(mark >= 0 ? { mark, mark_label: `Ship ${p.mvp_target_date}` } : {}) }] : [];
   const state = must.length === 0 ? 'empty' : points.length < 3 ? 'too_little' : 'ok';
   const missing = must.find(f => f.delivery_status !== 'Done');
-  return { card: card('prototype-mvp', state, series, 'Since first completion', state === 'too_little' ? 'Fewer than three completion dates are recorded.' : state === 'empty' ? 'Mark features as must-have to start the MVP timeline.' : null, next('prototype-mvp', missing ? `Complete ${missing.title}` : null)),
+  return { card: card('prototype-mvp', state, series, 'Since first completion', state === 'too_little' ? 'Fewer than three completion dates are recorded.' : state === 'empty' ? 'No must-haves yet. The burn-up toward the ship date appears here.' : null, state === 'empty' ? next(p, 'prototype-mvp', 'Add must-have', true) : next(p, 'prototype-mvp', missing ? `Complete ${missing.title}` : null)),
     cols: [['must_have', 'Must-have'], ['tests', 'Tests'], ['state', 'State'], ['owner', 'Owner'], ['due', 'Due']].map(([key, label]) => ({ key, label })),
     rows: must.map(f => record(f.id, { must_have: f.title, tests: f.test_hypothesis, state: f.delivery_status, owner: f.owner, due: f.due_date })),
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date } };
@@ -135,10 +135,10 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
   const series: ChartSpec[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
   if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, ids]) => ids.size), labels: trend.map(([month], at) => ({ at, label: month })) });
   const thisMonth = new Date().toISOString().slice(0, 7);
-  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items recorded yet.', next('product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null)),
+  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : { text: 'Add item', href: `/build/roadmap?project_id=${p.id}` }),
     cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves (KPI)'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
     rows: items.map(i => record(i.id, { item: i.objective, column: i.kanban_status, moves: i.kpi_key, owner: i.owner, date: i.target_date })),
-    facts: { shipped_this_month: months.get(thisMonth)?.size ?? 0 } };
+    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 } };
 }
 
 async function founding(env: Env, p: Project): Promise<ModuleRead> {
@@ -164,7 +164,7 @@ async function founding(env: Env, p: Project): Promise<ModuleRead> {
   if (withVesting.length) series.push({ kind: 'progress', items: withVesting.map(h => ({ label: `${h.name} · ${h.cliff_months ?? 'unknown'}m cliff`, pct: h.shares && h.vested_shares != null ? Math.min(100, Math.round(100 * number(h.vested_shares) / number(h.shares))) : null })) });
   const equityTotal = equityKnown ? founderRows.reduce((sum, h) => sum + number(h.ownership_pct), 0) : 0;
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
-  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founder roles have been recorded on the cap table.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, next('founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
+  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: '/raise/capital/cap-table' } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: founderRows.map(h => record(h.id, { founder: h.name, role: h.founder_role, equity: h.ownership_pct, vesting: h.start_date ? `${h.start_date} · ${h.total_months} months · ${h.cliff_months ?? 'unknown'} month cliff` : null, agreement: h.agreement_status })),
     facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null,
@@ -201,7 +201,7 @@ async function company(env: Env, p: Project): Promise<ModuleRead> {
     ...steps.map(s => record(`step-${s.id}`, { filing: s.title, jurisdiction: null, due: s.due_date, state: s.state, proof: s.proof_file_key ? 'Key recorded' : null })),
     ...obligations.map(o => record(`obligation-${o.id}`, { filing: o.title, jurisdiction: o.jurisdiction, due: o.due_date, state: o.status, proof: o.proof_file_key ? 'Key recorded' : null })),
   ];
-  return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No formation steps or entity filings recorded yet.', next('company-creation', steps.find(s => s.state !== 'done')?.title ? `Complete ${steps.find(s => s.state !== 'done')!.title}` : null)),
+  return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', steps.find(s => s.state !== 'done')?.title ? `Complete ${steps.find(s => s.state !== 'done')!.title}` : null) : next(p, 'company-creation', 'Add filing', true)),
     cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: combined,
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null } };
 }
@@ -222,6 +222,9 @@ async function workspaceConnected(env: Env, userId: number, providerKey: string)
 async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   // The company's enabled mapping is the only source. A member's personal
   // connector list would include tools withheld from this company.
+  const mapped = p.company_id == null ? 0 : number((await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM project_core_systems WHERE project_id = ?',
+  ).bind(p.id).first<{ n: number }>())?.n);
   const connectors = p.company_id == null ? [] : rows(await env.DB.prepare(
     `SELECT s.kind, s.used_by, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at
        FROM project_core_systems s
@@ -280,10 +283,11 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
   const failedSystem = failing ? byKind.get(failing) : null;
   const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
-  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : 'ok', p.company_id == null ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : null, failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!]) : toolNext),
+  const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && tools.length === 0;
+  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k); return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: !c ? 'Not connected' : c.status === 'error' ? 'Failing' : c.status === 'active' ? 'Connected' : 'Not connected', last_sync: c?.last_synced_at ?? null, used_by: c?.used_by ?? null }); }),
-    facts: { connected, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
+    facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
       tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
     parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
@@ -343,11 +347,17 @@ app.get('/overview', async c => {
   const mvp = pBad ? unreadableFigure('days_to_mvp', 'Days to the MVP date', 'projects')
     : figure('days_to_mvp', 'Days to the MVP date', days, 'days', 'projects.mvp_target_date', days == null ? 'not_recorded' : 'ok', days == null ? 'No MVP target date has been recorded.' : null);
   const shipped = rBad ? unreadableFigure('roadmap_shipped', 'Roadmap shipped this month', 'okr_column_moves')
-    : figure('roadmap_shipped', 'Roadmap shipped this month', number(rFacts?.shipped_this_month), 'items', 'okr_column_moves', 'ok');
+    : number(rFacts?.items) === 0 ? figure('roadmap_shipped', 'Roadmap shipped this month', null, 'items', 'okr_column_moves', 'not_recorded', 'No roadmap items recorded yet.')
+      : figure('roadmap_shipped', 'Roadmap shipped this month', number(rFacts?.shipped_this_month), 'items', 'okr_column_moves', 'ok');
   const connected = sBad ? unreadableFigure('systems_connected', 'Systems connected', 'integration_companies')
     : project.company_id == null ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'The project has no company scope.')
-      : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
-  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards: results.map(r => r.card) });
+      : number(sFacts?.mapped) === 0 ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'No systems mapped yet.')
+        : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
+  const cards = results.map(r => r.card);
+  const focus = cards.every((entry, index) => entry.state === 'empty' || (index === 5 && project.company_id == null && entry.state === 'not_recorded' && number(sFacts?.reviews) === 0))
+    ? { rule: 'first_feature', eyebrow: 'Build · Next', headline: 'Add the first feature.', why: 'Nothing in Build is recorded yet. Each chart fills as you add to its module.', cta: { label: 'Add feature', href: cards[0].next?.href }, then: null }
+    : null;
+  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards, focus });
 });
 
 app.get('/modules/:slug', async c => {
