@@ -20,11 +20,13 @@ can be read to find out what a rule actually is.
 | `migrationImmutability.mjs` | Which changes may land under `cloudflare-worker/sql/migrations/`: an addition, and nothing that alters a file already on the base. It parses `git diff --name-status -z`, refuses a status letter it does not know, and resolves the base — a pull request's base branch, or on a push to main the commit main pointed at before it — refusing any branch name or commit id git could read as something else. Owned by `../migration-immutability-gate.mjs` (D269). |
 | `apiModules.mjs` | Which files hold the SPA's client calls — `frontend/src/lib/api.js` and every module under `frontend/src/lib/api/` — whether `api.js`'s re-export block names exactly those modules in alphabetical order, and whether each `request()` call has a Worker route (D527). Owned by `../check-api-drift.mjs`. |
 | `secEdgarCompanies.mjs` | What a SEC EDGAR company row carries and how a migration is written from EDGAR's company_tickers_exchange.json: one row per CIK, the first listing as its ticker, nothing EDGAR does not record, every row citing its source and licence, `INSERT OR IGNORE` in batches of 100. The header number is the leading digits of `--out` (404 created the table; 412 holds the rows). Owned by `../import-sec-edgar.mjs` (D595). |
+| `claudeReview.mjs` | The advisory Claude review's rules: its settings and their bounds, which pull requests may be reviewed (never a fork or Dependabot), the diff parse, which files are sent and in what order, the prompt with its nonce-fenced untrusted data, the output schema and the validation of every finding against the diff, the cost estimate and the per-review and monthly caps, the artifact-name ledger, and the escaped summary and annotations. Owned by `../claude-review/review.mjs`. |
+| `claudeReviewRun.mjs` | The whole review run with git, the GitHub API and the Anthropic client handed in, so a missing secret, a fork, an empty or oversized diff, a repeat, a budget refusal, an API failure, a refusal and a malformed answer are all tested with fakes. |
 
 ## Tests
 
-`npm run test:retention` runs every `*.test.mjs` in this folder. Eleven of the
-twelve modules are covered here; `migrationPlan.mjs` is the exception, and
+`npm run test:retention` runs every `*.test.mjs` in this folder. Thirteen of the
+fourteen modules are covered here; `migrationPlan.mjs` is the exception, and
 deliberately so — its behaviour is pinned against a real SQLite database by
 `cloudflare-worker/test/migrate_d1_plan.test.ts` and
 `cloudflare-worker/test/migrations_fresh_build.test.ts`, which run the actual
