@@ -321,6 +321,14 @@ test('a member who cannot edit is told why, not just disabled', () => {
     `${branches} fields branch on canEdit but only ${readOnly} render a read-only value`);
 });
 
+test('a successful company edit refreshes the shared profile and dropdown from the saved response', () => {
+  const s = read(PAGE);
+  const card = s.slice(s.indexOf('function CompanyProfileCard'), s.indexOf('function ViewOnlyNotice'));
+  assert.match(card, /const updateCompanyDetails = useUpdateCompanyDetails\(\)/);
+  assert.match(card, /const updated = await api\.updateCompany\(uid, \{ \[key\]: value \}\);\s*setRow\(updated\);[\s\S]*?updateCompanyDetails\(updated\);/);
+  assert.doesNotMatch(card, /setCompany\(/);
+});
+
 test('saving acknowledges the field, and names the field it refused', () => {
   const s = read(PAGE);
   assert.match(s, /function FieldStatus/);

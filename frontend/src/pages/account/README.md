@@ -9,7 +9,7 @@ live here, one file each:
 | File | What it holds |
 | --- | --- |
 | `AccountCenter.jsx` | The shared kit: the section list (`AccountSectionNav`, the `lg` column), `PanelCard`, `FieldRow`, `Switch`, `Chips`, `Outcome`, `LoadingRows`, and `useAccountRead`, which keeps loading, read and unreadable apart (D568). D700: `AccountPhoneIndex`, the A1m index rows, and `AccountPhoneFrame`, a phone's `/account`: the index at bare `/account`, and each section as its own page under a ‹ Back bar |
-| `AccountProfile.jsx` | Profile and identity |
+| `AccountProfile.jsx` | Profile and identity; Company profile reads the sidebar’s selected company and links its Company Settings editor. Signing entity keeps the account’s separate contract details |
 | `AccountDevices.jsx` | The devices registered for push, under Notifications |
 | `AccountBilling.jsx` | Billing and orders: the plan line and the orders list |
 | `AccountUsage.jsx` | Usage (D642): the AI allowance, the last 30 days, where it went, models and rates, the last run, and storage (U1–U6). On a phone, `UsagePhoneView` (A2m, D700) |
