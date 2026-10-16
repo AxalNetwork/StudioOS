@@ -16,7 +16,7 @@ export default {
         'Privacy — visibility (public / network / private), Public Directory opt-in, advisor discoverability.',
         'Integrations — connected accounts (LinkedIn, Google, Microsoft, Slack, HubSpot, Salesforce, DocuSign) with disconnect controls.',
         'Billing — current plan, payment method, and invoices.',
-        'Appearance — theme (light / dark / system), density, and sidebar default state.',
+        'Appearance — choose a light or dark theme.',
         'Developer — feature flags, search index re-sync, raw user object (admins only).',
       ],
       tips: [
