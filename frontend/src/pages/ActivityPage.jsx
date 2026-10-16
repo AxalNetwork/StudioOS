@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { safeReadJSON } from '../lib/storage';
-import { Activity, GitBranch, CheckCircle, AlertCircle, Loader2, Lock, Hash } from 'lucide-react';
+import { Activity, Lock, Hash } from 'lucide-react';
 import { api } from '../lib/api';
 import VirtualList from '../components/VirtualList';
 import EmptyState from '../components/EmptyState';
@@ -74,8 +74,6 @@ export default function ActivityPage() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState(null);
 
   const me = (() => {
     try { return safeReadJSON('user', {}); }
@@ -98,34 +96,9 @@ export default function ActivityPage() {
 
   useEffect(() => { load(); }, []);
 
-  const handleSyncGithub = async () => {
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      const result = await api.activitySyncGithub();
-      setSyncResult(result);
-      // Refresh so the new github_synced event appears.
-      load();
-    } catch (e) {
-      setSyncResult({ status: 'failed', message: e?.message || 'Sync request failed' });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Activity Log</h1>
-        <button
-          onClick={handleSyncGithub}
-          disabled={syncing}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors dark:text-gray-300 dark:bg-gray-900 dark:border-gray-700"
-        >
-          {syncing ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
-          {syncing ? 'Syncing...' : 'Sync to GitHub'}
-        </button>
-      </div>
+      <h1 className="mb-1 text-2xl font-bold text-gray-900 dark:text-gray-100">Activity Log</h1>
 
       <div className="flex flex-wrap items-center gap-3 mb-4 text-sm">
         <span className="flex items-center gap-1.5 text-gray-600">
@@ -148,31 +121,6 @@ export default function ActivityPage() {
             onRetry={load}
             supportTopic="activity"
           />
-        </div>
-      )}
-
-      {syncResult && (
-        <div className={`mb-4 p-3 rounded-lg border text-sm flex items-center gap-2 ${
-          syncResult.status === 'synced'
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            : 'bg-red-50 border-red-200 text-red-800'
-        }`}>
-          {syncResult.status === 'synced' ? (
-            <>
-              <CheckCircle size={14} />
-              <span>Synced {syncResult.entries} entries to GitHub.</span>
-              {syncResult.github_url && (
-                <a href={syncResult.github_url} target="_blank" rel="noopener noreferrer" className="underline ml-1">
-                  View on GitHub
-                </a>
-              )}
-            </>
-          ) : (
-            <>
-              <AlertCircle size={14} />
-              <span>{syncResult.message}</span>
-            </>
-          )}
         </div>
       )}
 
