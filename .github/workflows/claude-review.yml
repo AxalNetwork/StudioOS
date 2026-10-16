@@ -116,15 +116,31 @@ jobs:
           # job's read-only token.
           persist-credentials: true
 
+      # The reviewer runs from the base commit, so the pull request that first
+      # adds it (or a base from before it) has nothing to run: say so and stop
+      # cleanly rather than fail.
+      - name: Is the reviewer on the base commit?
+        id: present
+        run: |
+          if [ -f reviewer/scripts/claude-review/review.mjs ] && [ -f reviewer/scripts/lib/claudeReviewRun.mjs ]; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "yes=false" >> "$GITHUB_OUTPUT"
+            printf '## Claude review (advisory)\n\n**Outcome:** skipped — the base commit has no reviewer yet. Reviews start once it is on `main`. Nothing was spent.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        if: steps.present.outputs.yes == 'true'
         with:
           node-version: '22'
 
       - name: Install the pinned SDK
+        if: steps.present.outputs.yes == 'true'
         run: npm ci --prefix reviewer/scripts/claude-review --ignore-scripts --no-audit --no-fund
 
       - name: Review
         id: review
+        if: steps.present.outputs.yes == 'true'
         env:
           # Federation (preferred): identifiers, not secrets, so variables.
           ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
