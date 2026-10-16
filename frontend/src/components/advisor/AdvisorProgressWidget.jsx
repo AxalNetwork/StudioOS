@@ -25,6 +25,11 @@
  * Realtime: the host page passes a `progressBumpToken` that bumps any
  * time the OnboardingChat WS emits an `advisor-progress` frame; the
  * widget re-fetches its queue + sources on each bump.
+ *
+ * D701 (#1663) — `variant="phone"` computes the same buckets and draws them
+ * through `PhoneBuckets` (`eadwynPhone.jsx`), board S2m's buckets and cards.
+ * Each card links its own page ("Open <page> →"), never the canvas's
+ * "Open Admin →", and Completed shows its three newest and "Show all <n>".
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -35,6 +40,8 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { predictTarget, pageLabel } from '../../lib/advisor/router';
+import { PhoneBuckets } from './eadwynPhone';
+import { fullDayText, storedDate } from '../../pages/founder/studioPhoneModel.js';
 
 // FLIP animation: items leaving one bucket and arriving in another get
 // a < 500ms inverse-translate transition so the move reads as motion
@@ -294,6 +301,30 @@ function ItemCard({
   );
 }
 
+/**
+ * A bucket item as `PhoneBuckets`' plain card: the label, its page and its
+ * docs anchor worked out here, where the router may be read.
+ */
+function phoneCard(item, { pct, completedAt, onClick, locked, lockTier, upgrade } = {}) {
+  const qid = item.id || item.question_id;
+  const predicted = predictTarget(qid);
+  const target = item.page_target || (predicted?.page_target ?? null);
+  const done = completedAt ? storedDate(completedAt) : null;
+  return {
+    key: `${qid}:${completedAt || ''}`,
+    title: item.prompt || (predicted?.label ?? item.question_id) || 'Question',
+    importance: item.importance || 'normal',
+    pct: typeof pct === 'number' ? pct : undefined,
+    when: done ? `Completed ${fullDayText(done)}` : null,
+    learn: predicted?.doc_anchor ? `/help#${predicted.doc_anchor}` : null,
+    link: target ? { to: target, label: `Open ${pageLabel(target)}` } : null,
+    locked: !!locked,
+    lockTier,
+    upgrade,
+    onClick,
+  };
+}
+
 function formatRelative(iso) {
   if (!iso) return '';
   const t = Date.parse(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
@@ -359,6 +390,7 @@ export default function AdvisorProgressWidget({
   labState,
   progressBumpToken,
   onPickQuestion,
+  variant,
 }) {
   const navigate = useNavigate();
   const [queue, setQueue] = useState({ next_question: null, queue: [], paywall_ctas: [], complete: false });
@@ -494,6 +526,45 @@ export default function AdvisorProgressWidget({
     if (sample?.page_target) return { to: sample.page_target, label: pageLabel(sample.page_target) };
     return null;
   }, [focusSection, proposedItems, pendingItems]);
+
+  if (variant === 'phone') {
+    return (
+      <div ref={rootRef} data-testid="advisor-progress-phone">
+        {lab && <SpinoutWeekStrip week={Math.max(1, Math.min(4, Number(lab.week) || 1))} completedKeys={completedKeys} />}
+        <PhoneBuckets
+          loading={loading}
+          buckets={[
+            {
+              id: 'proposed',
+              label: 'Proposed',
+              count: proposedItems.length + lockedCtas.length,
+              cards: [
+                ...proposedItems.map((q) => phoneCard(q, { onClick: () => handleClickQuestion(q) })),
+                ...lockedCtas.map((c) => phoneCard({ ...c, id: c.question_id }, {
+                  locked: true, lockTier: c.tier_required || 'studio', upgrade: c.upgrade_link,
+                })),
+              ],
+            },
+            {
+              id: 'pending',
+              label: 'Pending',
+              count: pendingItems.length,
+              cards: pendingItems.map((q) => phoneCard(q, { pct: q.completion, onClick: () => handleClickQuestion(q) })),
+            },
+            {
+              id: 'completed',
+              label: 'Completed',
+              count: completedItems.length,
+              cards: completedItems.map((q) => phoneCard(q, {
+                completedAt: q.completed_at,
+                onClick: () => { if (q.page_target) navigate(q.page_target); },
+              })),
+            },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" ref={rootRef}>

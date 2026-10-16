@@ -349,6 +349,10 @@ test('the chat carries the panel\'s three tabs, and "Suggest a task" opens the f
   assert.match(pa, /setInput\(startPrompt\(task\)\);/);
   assert.match(pa, /<AdvisorTicketPanel key=\{ticketPreset \|\| 'any'\} initialType=\{ticketPreset\}/);
   assert.match(pa, /\{!isDesktop && <PanelTabs tab=\{panelTab\} onTab=\{setPanelTab\} \/>\}/, 'the phone has no tabs');
+  // D701: the founder's phone Studio draws its own frame, with the tabs in its drawer, not above the card.
+  const phoneFrame = pa.slice(pa.indexOf('if (phone) {'), pa.indexOf('const containerClass ='));
+  assert.ok(phoneFrame.length > 0 && pa.indexOf('if (phone) {') < pa.indexOf('{!isDesktop && <PanelTabs'), 'the founder\'s phone frame comes first');
+  assert.doesNotMatch(phoneFrame, /<PanelTabs\b/, 'the founder\'s phone Studio has no panel tabs');
   assert.ok((pa.match(/<TasksPanel onSuggest=/g) || []).length >= 3, 'a view lost its Tasks panel');
   assert.match(pa, /<option value="" disabled>Choose a type<\/option>/);
 });
