@@ -152,6 +152,11 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ${{ steps.review.outputs.record_name }}
-          path: ${{ runner.temp }}/claude-review/record.json
+          # record.json: tokens, cost, outcome. review.json (after a successful
+          # review only): the validated findings, for a person or an agent
+          # fixing them, since a job summary cannot be read through the API.
+          path: |
+            ${{ runner.temp }}/claude-review/record.json
+            ${{ runner.temp }}/claude-review/review.json
           retention-days: 90
           if-no-files-found: ignore

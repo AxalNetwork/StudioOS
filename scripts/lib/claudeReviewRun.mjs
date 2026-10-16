@@ -20,9 +20,10 @@
  *   anthropic.countTokens(params)    { input_tokens }
  *   anthropic.create(params)         the Message; errors carry `kind` (see review.mjs)
  *
- * Returns { outcome, exitCode, summary, annotations, record }. `record` is the
- * artifact to upload (name and JSON body) when tokens were spent or a review
- * succeeded, and null otherwise. Nothing the model wrote reaches stdout.
+ * Returns { outcome, exitCode, summary, annotations, record, findingsFile }.
+ * `record` is the artifact to upload (name and JSON body) when tokens were
+ * spent or a review succeeded, and null otherwise; `findingsFile` is the
+ * validated findings (JSON) uploaded beside it after a successful review. Nothing the model wrote reaches stdout.
  */
 import {
   REVIEW_OUTPUT_SCHEMA, SYSTEM_PROMPT, annotations, budgetDecision, buildExcerpts, buildUserMessage,
@@ -66,6 +67,7 @@ function finish(state, outcome, reason, extra = {}) {
     summary: renderSummary(result),
     annotations: extra.annotations || [],
     record: extra.record || null,
+    findingsFile: extra.findingsFile || null,
   };
 }
 
@@ -208,9 +210,19 @@ export async function runReview(deps) {
   }
 
   const shown = reportable(checked.review.findings, config.minConfidence);
+  // The validated findings, for whoever fixes them: a person, or an agent that
+  // downloads this run's artifact (a job summary cannot be read through the
+  // API). Untrusted model text, already checked against the diff.
+  const findingsFile = JSON.stringify({
+    schema_version: checked.review.schema_version,
+    pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, model,
+    status: checked.review.status, summary: checked.review.summary,
+    min_confidence: config.minConfidence, findings: shown, limitations: checked.review.limitations,
+  }, null, 2);
   return finish(state, 'reviewed', '', {
     review: checked.review,
     usage,
+    findingsFile,
     annotations: config.annotations ? annotations(shown) : [],
     record: record('ok', usage.usd, {
       outcome: 'reviewed',

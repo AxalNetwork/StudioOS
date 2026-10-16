@@ -16,7 +16,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropicClient, classifyError, main, safePath } from './review.mjs';
+import { anthropicClient, classifyError, githubClient, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -34,16 +34,21 @@ test('each SDK error class maps to the kind the runner explains', () => {
   assert.equal(classifyError(gen(401)).requestId, 'req_test');
 });
 
-test('the client is built on first use, so a missing key is the runner\'s error to report, not a crash', async () => {
-  const saved = process.env.ANTHROPIC_API_KEY;
-  delete process.env.ANTHROPIC_API_KEY;
-  try {
-    const client = anthropicClient({ apiKey: undefined, maxRetries: 0, timeoutSeconds: 30 });
-    assert.equal(typeof client.create, 'function');
-    await assert.rejects(client.create({ model: 'm', max_tokens: 1, messages: [] }), (e) => typeof e.kind === 'string');
-  } finally {
-    if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+test('the client is built on first use, so a run that never calls the API never constructs it', async () => {
+  let built = 0;
+  class CountingSdk {
+    constructor() {
+      built += 1;
+      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { create: async () => ({}) } };
+    }
   }
+  Object.assign(CountingSdk, Anthropic);
+  const client = anthropicClient({ apiKey: undefined, maxRetries: 0, timeoutSeconds: 30, sdk: CountingSdk });
+  assert.equal(built, 0, 'a disabled or unconfigured run builds no client');
+  await client.countTokens({ model: 'm', system: 's', messages: [] });
+  await client.create({ model: 'm' });
+  assert.equal(built, 1, 'built once, then reused');
 });
 
 test('a request carrying betas goes to the beta endpoint, any other to the standard one', async () => {
@@ -97,4 +102,31 @@ test('main: an enabled review with no key is a configuration error, never a cras
   const k = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_API_KEY: 'sk-ant-should-not-appear', CLAUDE_REVIEW_FAIL_ON_ERROR: 'true' });
   assert.equal(await main(k.env), 1, 'with fail-on-error a configuration error fails the step');
   assert.doesNotMatch(k.read().summary, /sk-ant-should-not-appear/);
+});
+
+test('the ledger reads every page whatever order the API lists in, and says when the cap cut it off', async () => {
+  const saved = globalThis.fetch;
+  const rec = (month, n) => ({ name: `claude-review_v1_${month}_pr${n}_${'a'.repeat(16)}_ok_1000`, created_at: `${month}-0${(n % 9) + 1}T00:00:00Z`, expired: false });
+  const pages = [
+    [...Array.from({ length: 99 }, () => ({ name: 'other', created_at: '2026-08-01T00:00:00Z' })), rec('2026-09', 1)],
+    [rec('2026-10', 2), rec('2026-10', 3)],
+  ];
+  const seen = [];
+  globalThis.fetch = async (url) => {
+    const page = Number(new URL(url).searchParams.get('page'));
+    seen.push(page);
+    return new Response(JSON.stringify({ artifacts: pages[page - 1] || [] }), { status: 200 });
+  };
+  try {
+    const gh = githubClient({ apiUrl: 'https://api.example', token: 't', repository: 'o/r' });
+    const listing = await gh.listArtifacts('2026-10-01T00:00:00Z');
+    assert.deepEqual(seen, [1, 2], 'an older-first first page does not stop the listing');
+    assert.equal(listing.complete, true);
+    assert.deepEqual(listing.artifacts.map((a) => a.name.slice(17, 24)), ['2026-10', '2026-10']);
+    seen.length = 0;
+    globalThis.fetch = async () => new Response(JSON.stringify({ artifacts: Array.from({ length: 100 }, () => rec('2026-10', 4)) }), { status: 200 });
+    assert.equal((await gh.listArtifacts('2026-10-01T00:00:00Z')).complete, false, 'stopped by the page cap is incomplete');
+  } finally {
+    globalThis.fetch = saved;
+  }
 });

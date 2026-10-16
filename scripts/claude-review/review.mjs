@@ -87,6 +87,37 @@ async function gh(apiUrl, token, path) {
   return res.json();
 }
 
+/** The two GitHub REST reads: the merge base, and this repository's review records. */
+export function githubClient({ apiUrl, token, repository }) {
+  return {
+    async mergeBase(base, head) {
+      if (!SHA.test(base) || !SHA.test(head)) throw new Error('base or head is not a commit id');
+      const cmp = await gh(apiUrl, token, `/repos/${repository}/compare/${base}...${head}?per_page=1`);
+      const sha = cmp?.merge_base_commit?.sha;
+      if (!SHA.test(sha || '')) throw new Error('GitHub returned no merge base');
+      return sha;
+    },
+    // Every page, up to a cap, rather than stopping at the month's start:
+    // the ledger must not depend on the order the API lists artifacts in. A
+    // listing cut off by the cap is incomplete, and with a monthly budget set
+    // the runner then refuses rather than under-count the spend.
+    async listArtifacts(sinceIso) {
+      const artifacts = [];
+      for (let page = 1; page <= 30; page += 1) {
+        const data = await gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`);
+        const list = Array.isArray(data?.artifacts) ? data.artifacts : [];
+        for (const a of list) {
+          if (String(a.name || '').startsWith(RECORD_PREFIX) && String(a.created_at || '') >= sinceIso) {
+            artifacts.push({ name: a.name, created_at: a.created_at, expired: !!a.expired });
+          }
+        }
+        if (list.length < 100) return { artifacts, complete: true };
+      }
+      return { artifacts, complete: false };
+    },
+  };
+}
+
 export async function main(env = process.env) {
   const prDir = resolve(env.CLAUDE_REVIEW_PR_DIR || '.');
   const outDir = resolve(env.CLAUDE_REVIEW_OUT_DIR || join(prDir, '..', 'claude-review-out'));
@@ -104,26 +135,7 @@ export async function main(env = process.env) {
     rates,
     now: () => new Date(),
     nonce: () => randomBytes(8).toString('hex'),
-    github: {
-      async mergeBase(base, head) {
-        if (!SHA.test(base) || !SHA.test(head)) throw new Error('base or head is not a commit id');
-        const cmp = await gh(apiUrl, token, `/repos/${repository}/compare/${base}...${head}?per_page=1`);
-        const sha = cmp?.merge_base_commit?.sha;
-        if (!SHA.test(sha || '')) throw new Error('GitHub returned no merge base');
-        return sha;
-      },
-      async listArtifacts(sinceIso) {
-        const artifacts = [];
-        for (let page = 1; page <= 20; page += 1) {
-          const data = await gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`);
-          const list = Array.isArray(data?.artifacts) ? data.artifacts : [];
-          for (const a of list) if (String(a.name || '').startsWith(RECORD_PREFIX)) artifacts.push({ name: a.name, created_at: a.created_at, expired: !!a.expired });
-          const oldest = list.length ? list[list.length - 1].created_at : null;
-          if (list.length < 100 || (oldest && oldest < sinceIso)) return { artifacts, complete: true };
-        }
-        return { artifacts, complete: false };
-      },
-    },
+    github: githubClient({ apiUrl, token, repository }),
     git: {
       async fetch(sha) {
         if (!SHA.test(sha)) throw new Error('not a commit id');
@@ -173,6 +185,7 @@ export async function main(env = process.env) {
   if (result.record) {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'record.json'), `${result.record.body}\n`);
+    if (result.findingsFile) writeFileSync(join(outDir, 'review.json'), `${result.findingsFile}\n`);
   }
   if (env.GITHUB_OUTPUT) {
     appendFileSync(env.GITHUB_OUTPUT, `outcome=${result.outcome}\nrecord_name=${result.record ? result.record.name : ''}\n`);
