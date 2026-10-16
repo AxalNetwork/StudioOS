@@ -12,10 +12,13 @@ name: Claude review
 # required check, it never approves, merges, pushes or fixes anything, and a
 # finding never fails it.
 #
-# OFF until an administrator sets the repository variable
-# CLAUDE_REVIEW_ENABLED=true, the variable ANTHROPIC_MODEL, and the secret
-# ANTHROPIC_API_KEY (an API key from the Anthropic Console, billed to API
-# credits; a Claude Max subscription login is never used here). While it is
+# OFF until an administrator sets the repository variables
+# CLAUDE_REVIEW_ENABLED=true and ANTHROPIC_MODEL, and a credential:
+# preferably workload identity federation (the variables
+# ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID,
+# ANTHROPIC_SERVICE_ACCOUNT_ID, ANTHROPIC_WORKSPACE_ID), else the secret
+# ANTHROPIC_API_KEY. Either bills the Anthropic Console organization's API
+# credits; a Claude Max subscription login is never used here. While it is
 # off, the `review` job shows as skipped and nothing is spent.
 #
 # Security:
@@ -28,8 +31,8 @@ name: Claude review
 #     `selftest` job tests a pull request's own changes to the reviewer, with
 #     no secrets.
 #   - Read-only token: contents, pull-requests and actions (the last to list
-#     this month's review records). No job can write to the repository, the
-#     pull request or a check.
+#     this month's review records), plus id-token for federation. No job can
+#     write to the repository, the pull request or a check.
 #   - Third-party code is the pinned Anthropic SDK, installed with
 #     --ignore-scripts from a committed lockfile.
 
@@ -84,6 +87,11 @@ jobs:
       contents: read
       pull-requests: read
       actions: read
+      # Workload identity federation: GitHub's OIDC token (audience
+      # https://api.anthropic.com) is exchanged for a short-lived Anthropic
+      # token, so no long-lived key has to sit in the repository. Harmless
+      # when only the API key is configured.
+      id-token: write
     steps:
       - name: Check out the reviewer (base commit)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -118,6 +126,12 @@ jobs:
       - name: Review
         id: review
         env:
+          # Federation (preferred): identifiers, not secrets, so variables.
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          # Fallback when no federation rule is set.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
           ANTHROPIC_MODEL_HIGH_RISK: ${{ vars.ANTHROPIC_MODEL_HIGH_RISK }}

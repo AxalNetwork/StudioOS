@@ -16,7 +16,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropicClient, classifyError, githubClient, main, safePath } from './review.mjs';
+import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
+import { GithubIdentityError, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, githubClient, githubIdentityToken, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -130,3 +131,103 @@ test('the ledger reads every page whatever order the API lists in, and says when
     globalThis.fetch = saved;
   }
 });
+
+test('a federation failure, from GitHub or from the exchange, is classified as such wherever it is wrapped', () => {
+  const ex = new WorkloadIdentityError('Token exchange failed with status 401', 401, null, 'req_fed');
+  assert.deepEqual([classifyError(ex).kind, classifyError(ex).status, classifyError(ex).requestId], ['federation', 401, 'req_fed']);
+  const wrapped = new Anthropic.APIConnectionError({ message: 'auth', cause: ex });
+  assert.equal(classifyError(wrapped).kind, 'federation', 'the SDK may wrap the exchange error');
+  assert.equal(classifyError(new GithubIdentityError('no token')).kind, 'federation');
+});
+
+test('GitHub\'s identity token is fetched fresh, for the Anthropic audience, and a job without id-token cannot get one', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push([String(url), init.headers.Authorization]);
+    return new Response(JSON.stringify({ value: `jwt-${seen.length}` }), { status: 200 });
+  };
+  const get = githubIdentityToken({ ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.example/req?api-version=2.0', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'rt' }, fetchImpl);
+  assert.equal(await get(), 'jwt-1');
+  assert.equal(await get(), 'jwt-2', 'a new token per exchange, never cached here');
+  const u = new URL(seen[0][0]);
+  assert.equal(u.searchParams.get('audience'), OIDC_AUDIENCE);
+  assert.equal(u.searchParams.get('api-version'), '2.0');
+  assert.equal(seen[0][1], 'bearer rt');
+  await assert.rejects(githubIdentityToken({}, fetchImpl)(), (e) => e instanceof GithubIdentityError && /id-token: write/.test(e.message));
+  const denied = githubIdentityToken({ ACTIONS_ID_TOKEN_REQUEST_URL: 'https://t.example/', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'rt' }, async () => new Response('no', { status: 403 }));
+  await assert.rejects(denied(), (e) => e instanceof GithubIdentityError && /HTTP 403/.test(e.message));
+});
+
+test('under federation the client gets the exchange as its credentials and no API key, even with one in the environment', async () => {
+  const made = [];
+  class RecordingSdk {
+    constructor(opts) {
+      made.push(opts);
+      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { create: async () => ({}) } };
+    }
+  }
+  Object.assign(RecordingSdk, Anthropic);
+  const providers = [];
+  const makeProvider = (cfg) => { providers.push(cfg); return async () => ({ token: 't', expiresAt: null }); };
+  const identityToken = async () => 'jwt';
+  const federation = { ruleId: 'fdrl_x', organizationId: 'org', serviceAccountId: 'svac_x', workspaceId: 'wrkspc_x' };
+  const client = anthropicClient({ apiKey: 'sk-ant-in-env', federation, identityToken, maxRetries: 1, timeoutSeconds: 60, sdk: RecordingSdk, makeProvider });
+  await client.create({ model: 'm' });
+  assert.equal(made.length, 1);
+  assert.equal(made[0].apiKey, null, 'an API key would outrank the federation credentials');
+  assert.equal(made[0].authToken, null);
+  assert.equal(typeof made[0].credentials, 'function');
+  assert.deepEqual({ ...providers[0], fetch: undefined }, {
+    identityTokenProvider: identityToken, federationRuleId: 'fdrl_x', organizationId: 'org', serviceAccountId: 'svac_x', workspaceId: 'wrkspc_x',
+    baseURL: 'https://api.anthropic.com', fetch: undefined,
+  });
+  const keyed = anthropicClient({ apiKey: 'k', federation: null, maxRetries: 1, timeoutSeconds: 60, sdk: RecordingSdk, makeProvider });
+  await keyed.create({ model: 'm' });
+  assert.equal(made[1].apiKey, 'k');
+  assert.equal(made[1].credentials, undefined);
+  assert.equal(providers.length, 1, 'no exchange is set up for an API-key client');
+});
+
+
+test('the real SDK exchange sends the request the Console documents, with the GitHub token as the assertion', async () => {
+  const { oidcFederationProvider } = await import('@anthropic-ai/sdk/lib/credentials/oidc-federation');
+  const sent = [];
+  const fetchImpl = async (url, init) => {
+    sent.push({ url: String(url), body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ access_token: 'at', token_type: 'Bearer', expires_in: 600 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const provider = oidcFederationProvider({
+    identityTokenProvider: async () => 'github-jwt',
+    federationRuleId: 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp', organizationId: 'a984f1f6-6fd8-48ed-80d0-5d6d62f99ae4',
+    serviceAccountId: 'svac_015m8nLD3vLGGRKzXxDZ3NTg', workspaceId: 'wrkspc_016CY9bjf724orWVvJzkJzde',
+    baseURL: 'https://api.anthropic.com', fetch: fetchImpl,
+  });
+  await provider();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, 'https://api.anthropic.com/v1/oauth/token');
+  assert.equal(sent[0].body.grant_type, 'urn:ietf:params:oauth:grant-type:jwt-bearer');
+  assert.equal(sent[0].body.assertion, 'github-jwt');
+  assert.equal(sent[0].body.federation_rule_id, 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp');
+  assert.equal(sent[0].body.organization_id, 'a984f1f6-6fd8-48ed-80d0-5d6d62f99ae4');
+  assert.equal(sent[0].body.service_account_id, 'svac_015m8nLD3vLGGRKzXxDZ3NTg');
+  assert.equal(sent[0].body.workspace_id, 'wrkspc_016CY9bjf724orWVvJzkJzde');
+});
+
+test('the run\'s client follows the repository variables: federation when its rule is set, else the key', async () => {
+  const made = [];
+  class RecordingSdk {
+    constructor(opts) { made.push(opts); this.messages = { create: async () => ({}) }; this.beta = { messages: { create: async () => ({}) } }; }
+  }
+  Object.assign(RecordingSdk, Anthropic);
+  const makeProvider = (cfg) => Object.assign(async () => ({ token: 't' }), { cfg });
+  const fed = { ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp', ANTHROPIC_ORGANIZATION_ID: 'a984f1f6-6fd8-48ed-80d0-5d6d62f99ae4', ANTHROPIC_API_KEY: 'sk-ant-also-set', CLAUDE_REVIEW_MAX_RETRIES: '1' };
+  await clientFor(fed, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
+  assert.equal(made[0].apiKey, null);
+  assert.equal(made[0].credentials.cfg.federationRuleId, 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp');
+  assert.equal(made[0].maxRetries, 1);
+  await clientFor({ ANTHROPIC_API_KEY: 'k' }, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
+  assert.equal(made[1].apiKey, 'k');
+  assert.equal(made[1].credentials, undefined);
+});
+

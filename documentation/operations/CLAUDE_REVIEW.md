@@ -49,7 +49,7 @@ pull_request (opened / reopened / synchronize / ready_for_review)
 
 | File | Role |
 |---|---|
-| `.github/workflows/claude-review.yml` | The workflow. Least privilege: `contents`, `pull-requests` and `actions`, all read-only. |
+| `.github/workflows/claude-review.yml` | The workflow. Least privilege: `contents`, `pull-requests` and `actions`, all read-only, plus `id-token: write` for federation. |
 | `scripts/claude-review/review.mjs` | The effects: git, the GitHub REST API and the official SDK (`@anthropic-ai/sdk`, pinned exactly in its own `package.json` and lockfile). |
 | `scripts/claude-review/rates.json` | Dollars per million tokens, dated. Used to estimate and to bound the cost. |
 | `scripts/lib/claudeReview.mjs` | Every rule: config, event gate, diff parse, selection, prompt, schema, validation, cost, budget, ledger, reporting. |
@@ -69,7 +69,8 @@ Set these under *Settings → Secrets and variables → Actions*.
 
 | Name | Kind | Default | Meaning |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | secret | — | Console API key. Already exists for `claude-code.yml`; a dedicated key in its own workspace is better (§6). |
+| `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_SERVICE_ACCOUNT_ID`, `ANTHROPIC_WORKSPACE_ID` | variables | unset | **Preferred credential: workload identity federation.** These are identifiers, not secrets. The job's GitHub OIDC token (audience `https://api.anthropic.com`) is exchanged for a short-lived Anthropic token, so no long-lived key is stored. With a rule set, federation is used even if the key secret also exists. A rule without the organization ID, or an ID of the wrong shape, is a configuration error. Setup: §4a. |
+| `ANTHROPIC_API_KEY` | secret | — | The fallback credential: a Console API key. Already exists for `claude-code.yml`; a dedicated key in its own workspace is better (§6). |
 | `CLAUDE_REVIEW_ENABLED` | variable | off | `true` runs the review. |
 | `ANTHROPIC_MODEL` | variable | — (required) | Routine model ID. Suggested: `claude-sonnet-5-5`. |
 | `ANTHROPIC_MODEL_HIGH_RISK` | variable | unset | Model for diffs touching migrations, SQL, workflows, `wrangler*.toml`, Worker auth, billing or middleware, or adding secret-like lines. Suggested: `claude-opus-5-5`. |
@@ -89,7 +90,7 @@ Set these under *Settings → Secrets and variables → Actions*.
 ## 4. Enable, disable, roll back
 
 1. Merge the PR that adds the workflow. The key holder runs the base commit's code, so a review can only run once the reviewer is on `main`.
-2. Create a dedicated Console workspace and an API key in it. Set a **workspace spend limit** in the Console; that is the hard, server-side cap (§6). Store the key as `ANTHROPIC_API_KEY`, or as a new secret and change the workflow's one reference.
+2. Create a dedicated Console workspace and set a **workspace spend limit** on it; that is the hard, server-side cap (§6). Then give the workflow a credential: federation (§4a, preferred), or an API key from that workspace stored as `ANTHROPIC_API_KEY`.
 3. Set `ANTHROPIC_MODEL` and, if wanted, `ANTHROPIC_MODEL_HIGH_RISK`, then set `CLAUDE_REVIEW_ENABLED=true`.
 4. **Shadow period, about two weeks.** Leave Code Quality on. For each PR, compare the two:
    - Claude's summary against Code Quality's findings: actionable, false positive, missed;
@@ -99,6 +100,29 @@ Set these under *Settings → Secrets and variables → Actions*.
    - **all of Code Quality's AI and its licence:** disable Code Quality for the repository. `codeql.yml` keeps the deterministic quality queries.
 6. **Disable** at any time with `CLAUDE_REVIEW_ENABLED=false`. The job then shows as skipped.
 7. **Roll back** by re-enabling Code Quality (or AI findings) in settings, and by reverting the PR that added the workflow. Nothing else depends on it.
+
+### 4a. Workload identity federation
+
+Configure it in the Console, under the organization's federation settings.
+
+1. **Issuer:** GitHub Actions, `https://token.actions.githubusercontent.com`.
+2. **Service account:** a new, dedicated one (for example `github-claude-review`). Give it the lowest organization role and membership of the review workspace only, with the developer role. Never use an admin account: the rule's tokens can do whatever the account can.
+3. **Rule** (for example `studioos-claude-review`):
+   - GitHub organization `AxalNetwork`;
+   - organization numeric ID `124802540`, which pins trust to the org if the name is ever released;
+   - repository `StudioOS`;
+   - **branch/ref blank**: a pull-request run's ref is `refs/pull/<n>/merge`, so `refs/heads/main` would refuse every review;
+   - allowed events `pull_request` only;
+   - enabled in the review workspace only;
+   - scope `workspace:developer`;
+   - token lifetime 10 minutes.
+4. **Repository variables:** `ANTHROPIC_FEDERATION_RULE_ID` (`fdrl_…`), `ANTHROPIC_ORGANIZATION_ID` (a UUID), `ANTHROPIC_SERVICE_ACCOUNT_ID` (`svac_…`) and `ANTHROPIC_WORKSPACE_ID` (`wrkspc_…`), as the Console shows them.
+
+The review job already has `id-token: write`. Its reviewer fetches a fresh GitHub token for each exchange and never logs it or writes it to disk.
+
+**What the rule allows.** Any workflow in this repository that runs on `pull_request` with `id-token: write` matches it. That includes one added on a branch of this repository, the same exposure a repository secret has. A fork's pull request never matches: GitHub gives it no OIDC token.
+
+**`claude-code.yml`.** The `@claude` workflow runs on comments, not pull requests, so this rule does not cover it. It keeps `ANTHROPIC_API_KEY` until it is migrated separately.
 
 It is **not** a required check. Making it one is a separate, explicit decision, taken after the shadow comparison.
 
@@ -121,7 +145,7 @@ Volume drives the total. Every push to an open PR starts a review of the new hea
 
 - **Credit balance:** Console → *Settings → Billing*. This shows prepaid API credits and any auto-reload setting; leave auto-reload off unless the owner decides otherwise. Max subscriptions do not appear here as API credit.
 - **Usage and cost:** Console → *Usage* and *Cost*, filterable by workspace and API key. The Admin API's usage and cost reports give the same figures programmatically, with an Admin key.
-- **Hard cap:** a workspace spend limit in the Console on the workspace holding this key. The Console stops requests past it, whatever this repository does.
+- **Hard cap:** a workspace spend limit in the Console on the review workspace, the one holding the key or named by the federation rule. The Console stops requests past it, whatever this repository does.
 - **Per run:** each review's summary shows its input, output and cache tokens, the model, the duration, the request id and the estimated cost. The `claude-review_v1_<month>_pr<N>_<key>_<status>_<micro-USD>` artifact keeps the same figures for 90 days in `record.json`. After a successful review it also holds `review.json`, the validated findings: the machine-readable copy for whoever fixes them (§8).
 
 ## 7. Limitations

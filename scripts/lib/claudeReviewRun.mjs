@@ -34,7 +34,8 @@ import {
 const ERROR_OUTCOMES = new Set(['configuration_error', 'api_error', 'malformed_response', 'refused', 'truncated', 'diff_error']);
 
 const API_ERROR_TEXT = {
-  authentication: 'the API key was rejected (401). Check the ANTHROPIC_API_KEY repository secret.',
+  authentication: 'the credential was rejected (401). With an API key, check the ANTHROPIC_API_KEY secret; with federation, check the rule and its service account.',
+  federation: 'GitHub\'s identity token could not be exchanged for an Anthropic token. Check that the job has `id-token: write`, that the federation rule matches this repository (organization AxalNetwork, repository StudioOS, event pull_request, no branch restriction), and that its service account belongs to the rule\'s workspace.',
   permission: 'the API key may not use this model or workspace (403).',
   not_found: 'the model was not found (404). Check that ANTHROPIC_MODEL names a current model.',
   bad_request: 'the request was rejected (400).',
@@ -105,7 +106,7 @@ export async function runReview(deps) {
   if (!selection.included.length) return finish(state, 'empty_diff', files.length ? 'every changed file is excluded or over the limits, so there was nothing to send' : 'the pull request changes nothing against its merge base');
 
   const { model, tier } = pickModel(config, selection.highRisk);
-  Object.assign(state.facts, { model, tier, effort: config.effort ?? 'default' });
+  Object.assign(state.facts, { model, tier, effort: config.effort ?? 'default', credential: config.auth === 'federation' ? 'workload identity federation' : 'API key' });
 
   const key = reviewKey({ mergeBase, headSha: pr.head.sha, model, config });
   const month = monthOf(started);

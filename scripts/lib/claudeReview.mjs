@@ -127,6 +127,41 @@ function money(raw, key, errors) {
   return n;
 }
 
+const FEDERATION_IDS = {
+  ANTHROPIC_FEDERATION_RULE_ID: /^fdrl_[A-Za-z0-9]{8,64}$/,
+  ANTHROPIC_ORGANIZATION_ID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  ANTHROPIC_SERVICE_ACCOUNT_ID: /^svac_[A-Za-z0-9]{8,64}$/,
+  ANTHROPIC_WORKSPACE_ID: /^wrkspc_[A-Za-z0-9]{8,64}$/,
+};
+
+/**
+ * The workload-identity-federation settings, or null when no rule is set.
+ * These are identifiers, not secrets: they live in repository variables. A
+ * rule without its organization, or an identifier of the wrong shape, is a
+ * configuration error rather than a silent fall back to the API key.
+ */
+export function readFederation(env, errors = []) {
+  const read = (k) => String(env[k] ?? '').trim();
+  const ruleId = read('ANTHROPIC_FEDERATION_RULE_ID');
+  if (!ruleId) return null;
+  let ok = true;
+  for (const [k, re] of Object.entries(FEDERATION_IDS)) {
+    const v = read(k);
+    if (!v) {
+      if (k === 'ANTHROPIC_ORGANIZATION_ID') { errors.push('ANTHROPIC_FEDERATION_RULE_ID is set but ANTHROPIC_ORGANIZATION_ID is not'); ok = false; }
+      continue;
+    }
+    if (!re.test(v)) { errors.push(`${k} does not look like an Anthropic ${k.replace('ANTHROPIC_', '').toLowerCase().replace(/_/g, ' ')}`); ok = false; }
+  }
+  if (!ok) return null;
+  return {
+    ruleId,
+    organizationId: read('ANTHROPIC_ORGANIZATION_ID'),
+    serviceAccountId: read('ANTHROPIC_SERVICE_ACCOUNT_ID') || null,
+    workspaceId: read('ANTHROPIC_WORKSPACE_ID') || null,
+  };
+}
+
 /**
  * Read the review's settings from the environment the workflow builds out of
  * repository variables. Returns `{ config, errors }`; a non-empty `errors`
@@ -142,7 +177,13 @@ export function readConfig(env = {}) {
   if (model && !MODEL_ID.test(model)) errors.push('ANTHROPIC_MODEL is not a model ID');
   if (highRiskModel && !MODEL_ID.test(highRiskModel)) errors.push('ANTHROPIC_MODEL_HIGH_RISK is not a model ID');
   const hasApiKey = String(env.ANTHROPIC_API_KEY ?? '').trim().length > 0;
-  if (enabled && !hasApiKey) errors.push('ANTHROPIC_API_KEY is not set: add it as a repository secret (an API key from the Anthropic Console, never a Claude subscription login)');
+  const federation = readFederation(env, errors);
+  // Workload identity federation wins when it is configured: no long-lived
+  // secret, a short-lived token per run. The API key is the fallback.
+  const auth = federation ? 'federation' : hasApiKey ? 'api_key' : null;
+  if (enabled && !auth) {
+    errors.push('no Anthropic credential: set the federation variables ANTHROPIC_FEDERATION_RULE_ID and ANTHROPIC_ORGANIZATION_ID (preferred), or the ANTHROPIC_API_KEY repository secret (an API key from the Anthropic Console, never a Claude subscription login)');
+  }
 
   const effortRaw = String(env.CLAUDE_REVIEW_EFFORT ?? '').trim().toLowerCase();
   let effort = DEFAULTS.effort;
@@ -178,6 +219,8 @@ export function readConfig(env = {}) {
     model: model || null,
     highRiskModel: highRiskModel || null,
     hasApiKey,
+    auth,
+    federation,
     effort,
     maxOutputTokens: boundedInt(env.CLAUDE_REVIEW_MAX_OUTPUT_TOKENS, 'maxOutputTokens', errors),
     maxDiffBytes: boundedInt(env.CLAUDE_REVIEW_MAX_DIFF_BYTES, 'maxDiffBytes', errors),

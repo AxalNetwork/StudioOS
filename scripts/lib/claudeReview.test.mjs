@@ -37,7 +37,7 @@ test('the review is off until CLAUDE_REVIEW_ENABLED is true, and an enabled revi
   assert.deepEqual(readConfig({}).errors, []);
   const { errors } = readConfig({ CLAUDE_REVIEW_ENABLED: 'true' });
   assert.ok(errors.some((e) => /ANTHROPIC_MODEL is not set/.test(e)));
-  assert.ok(errors.some((e) => /ANTHROPIC_API_KEY is not set/.test(e)));
+  assert.ok(errors.some((e) => /no Anthropic credential: set the federation variables .* or the ANTHROPIC_API_KEY repository secret/.test(e)));
   const ok = readConfig({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'k' });
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.config.hasApiKey, true);
@@ -59,6 +59,29 @@ test('every limit is bounded, and a bad value is an error rather than a silent d
   assert.equal(c.annotations, false, 'annotations are opt-in');
   assert.equal(c.failOnError, false, 'advisory by default');
   assert.equal(c.reviewDrafts, true, 'agents open drafts, so drafts are reviewed unless turned off');
+});
+
+const FED = {
+  ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp',
+  ANTHROPIC_ORGANIZATION_ID: 'a984f1f6-6fd8-48ed-80d0-5d6d62f99ae4',
+  ANTHROPIC_SERVICE_ACCOUNT_ID: 'svac_015m8nLD3vLGGRKzXxDZ3NTg',
+  ANTHROPIC_WORKSPACE_ID: 'wrkspc_016CY9bjf724orWVvJzkJzde',
+};
+
+test('workload identity federation is preferred over the API key, and a half-set rule is an error, not a fallback', () => {
+  const base = { CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5' };
+  const fed = readConfig({ ...base, ...FED, ANTHROPIC_API_KEY: '' });
+  assert.deepEqual(fed.errors, []);
+  assert.equal(fed.config.auth, 'federation');
+  assert.deepEqual(fed.config.federation, { ruleId: FED.ANTHROPIC_FEDERATION_RULE_ID, organizationId: FED.ANTHROPIC_ORGANIZATION_ID, serviceAccountId: FED.ANTHROPIC_SERVICE_ACCOUNT_ID, workspaceId: FED.ANTHROPIC_WORKSPACE_ID });
+  assert.equal(readConfig({ ...base, ...FED, ANTHROPIC_API_KEY: 'k' }).config.auth, 'federation', 'federation wins when both are set');
+  assert.equal(readConfig({ ...base, ANTHROPIC_API_KEY: 'k' }).config.auth, 'api_key');
+  const half = readConfig({ ...base, ANTHROPIC_FEDERATION_RULE_ID: FED.ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_API_KEY: 'k' });
+  assert.ok(half.errors.some((e) => /ANTHROPIC_ORGANIZATION_ID is not/.test(e)));
+  assert.equal(half.config.auth, 'api_key', 'the config names the key, but the error stops the run');
+  assert.ok(readConfig({ ...base, ...FED, ANTHROPIC_SERVICE_ACCOUNT_ID: 'admin' }).errors.some((e) => /service account id/.test(e)));
+  assert.ok(readConfig({ ...base, ...FED, ANTHROPIC_ORGANIZATION_ID: 'not-a-uuid' }).errors.length);
+  assert.equal(readConfig({ ...base, ...FED, ANTHROPIC_SERVICE_ACCOUNT_ID: '', ANTHROPIC_WORKSPACE_ID: '' }).config.federation.serviceAccountId, null, 'service account and workspace are optional to the exchange');
 });
 
 // --- which pull requests ------------------------------------------------------
@@ -372,7 +395,7 @@ test('run: a missing secret is a clear configuration error, non-blocking unless 
   const r = await runReview(deps);
   assert.equal(r.outcome, 'configuration_error');
   assert.equal(r.exitCode, 0);
-  assert.match(plain(r.summary), /ANTHROPIC_API_KEY is not set/);
+  assert.match(plain(r.summary), /no Anthropic credential/);
   assert.doesNotMatch(plain(r.summary), /test-key/);
   assert.equal(calls.create.length, 0);
   const strict = harness({ env: { ANTHROPIC_API_KEY: '', CLAUDE_REVIEW_FAIL_ON_ERROR: 'true' } });
@@ -436,7 +459,7 @@ test('run: the spending limits refuse before any call, and an unreadable ledger 
 });
 
 test('run: authentication, rate-limit and billing failures are reported plainly, with a zero-cost record', async () => {
-  for (const [kind, status, text] of [['authentication', 401, /API key was rejected/], ['rate_limit', 429, /rate limit/], ['billing', 402, /credit balance may be exhausted/], ['not_found', 404, /ANTHROPIC_MODEL names a current model/]]) {
+  for (const [kind, status, text] of [['authentication', 401, /credential was rejected/], ['federation', 401, /identity token could not be exchanged.*id-token: write/], ['rate_limit', 429, /rate limit/], ['billing', 402, /credit balance may be exhausted/], ['not_found', 404, /ANTHROPIC_MODEL names a current model/]]) {
     const { deps } = harness({ create: () => apiError(kind, status) });
     const r = await runReview(deps);
     assert.equal(r.outcome, 'api_error');
@@ -494,6 +517,7 @@ test('run: a good answer is validated, summarised with its usage, annotated only
   assert.match(req.messages[0].content, /<diff_beef>/);
   assert.match(plain(r.summary), /Estimated cost: \*\*\$0\.0180\*\*/);
   assert.match(plain(r.summary), /request id: req_1/);
+  assert.match(plain(r.summary), /credential: API key/);
   const rec = JSON.parse(r.record.body);
   assert.equal(rec.outcome, 'reviewed');
   assert.equal(rec.review_status, 'issues_found');
@@ -508,6 +532,14 @@ test('run: a good answer is validated, summarised with its usage, annotated only
   assert.equal((await runReview(failed.deps)).findingsFile, null, 'no findings file without a validated review');
   assert.equal(harness().deps.env.CLAUDE_REVIEW_ANNOTATIONS, undefined);
   assert.deepEqual((await runReview(harness().deps)).annotations, [], 'annotations are off by default');
+});
+
+test('run: a federation-only setup runs, and its summary names the credential', async () => {
+  const { deps, calls } = harness({ env: { ...FED, ANTHROPIC_API_KEY: '' } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.equal(calls.create.length, 1);
+  assert.match(plain(r.summary), /credential: workload identity federation/);
 });
 
 test('run: a sensitive path uses the high-risk model when one is set, and token counting falls back to an estimate', async () => {

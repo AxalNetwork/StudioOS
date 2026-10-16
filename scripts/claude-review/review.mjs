@@ -6,7 +6,11 @@
  * `../lib/claudeReview.mjs` and `../lib/claudeReviewRun.mjs`.
  *
  * Environment (set by the workflow):
- *   ANTHROPIC_API_KEY        repository secret; read by the SDK, never printed
+ *   ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID, ANTHROPIC_SERVICE_ACCOUNT_ID,
+ *   ANTHROPIC_WORKSPACE_ID   repository variables: workload identity federation, preferred.
+ *                            GitHub's OIDC token (audience https://api.anthropic.com) is
+ *                            exchanged for a short-lived Anthropic token; needs id-token: write
+ *   ANTHROPIC_API_KEY        repository secret, the fallback; read by the SDK, never printed
  *   ANTHROPIC_MODEL, ANTHROPIC_MODEL_HIGH_RISK, CLAUDE_REVIEW_*  repository variables
  *   GITHUB_TOKEN             the job's read-only token (contents, pull-requests, actions)
  *   GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT
@@ -23,6 +27,8 @@ import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, writeF
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
+import { oidcFederationProvider } from '@anthropic-ai/sdk/lib/credentials/oidc-federation';
+import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
 import { parseRates, readConfig } from '../lib/claudeReview.mjs';
 import { runReview } from '../lib/claudeReviewRun.mjs';
 
@@ -31,12 +37,49 @@ const SHA = /^[0-9a-f]{40}$/;
 const RECORD_PREFIX = 'claude-review_v1_';
 const MAX_FILE_BYTES = 2_000_000;
 
+/** The audience Anthropic's token exchange expects on GitHub's identity token. */
+export const OIDC_AUDIENCE = 'https://api.anthropic.com';
+
+/** GitHub could not issue its identity token (the job lacks `id-token: write`, or the request failed). */
+export class GithubIdentityError extends Error {}
+
+/**
+ * GitHub's OIDC token for this job, fetched fresh on every call, for the SDK's
+ * federation exchange. It is never logged or written to disk; the runner only
+ * hands it to the exchange.
+ */
+export function githubIdentityToken(env, fetchImpl = fetch) {
+  return async () => {
+    const url = env.ACTIONS_ID_TOKEN_REQUEST_URL;
+    const bearer = env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+    if (!url || !bearer) throw new GithubIdentityError('GitHub issued no identity token: the job needs `permissions: id-token: write`');
+    const u = new URL(url);
+    u.searchParams.set('audience', OIDC_AUDIENCE);
+    const res = await fetchImpl(u, { headers: { Authorization: `bearer ${bearer}` }, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new GithubIdentityError(`GitHub's identity token request failed (HTTP ${res.status})`);
+    const body = await res.json().catch(() => null);
+    if (typeof body?.value !== 'string' || !body.value) throw new GithubIdentityError('GitHub returned no identity token');
+    return body.value;
+  };
+}
+
+const isFederationError = (e) => {
+  for (let c = e, depth = 0; c && depth < 4; c = c.cause, depth += 1) {
+    if (c instanceof WorkloadIdentityError || c instanceof GithubIdentityError) return c;
+  }
+  return null;
+};
+
 /** Map an SDK error to the runner's kinds, most specific class first. */
 export function classifyError(e, sdk = Anthropic) {
   const requestId = e?.requestID || e?.request_id || undefined;
-  const status = typeof e?.status === 'number' ? e.status : undefined;
+  let status = typeof e?.status === 'number' ? e.status : undefined;
   let kind = 'unknown';
-  if (e instanceof sdk.AuthenticationError) kind = 'authentication';
+  const fed = isFederationError(e);
+  if (fed) {
+    kind = 'federation';
+    if (typeof fed.statusCode === 'number') status = fed.statusCode;
+  } else if (e instanceof sdk.AuthenticationError) kind = 'authentication';
   else if (e instanceof sdk.PermissionDeniedError) kind = 'permission';
   else if (e instanceof sdk.NotFoundError) kind = 'not_found';
   else if (e instanceof sdk.RateLimitError) kind = 'rate_limit';
@@ -46,16 +89,35 @@ export function classifyError(e, sdk = Anthropic) {
   else if (e instanceof sdk.InternalServerError) kind = status === 529 ? 'overloaded' : 'server';
   else if (e instanceof sdk.APIError) kind = status === 402 ? 'billing' : status === 529 ? 'overloaded' : 'unknown';
   const out = new Error(`Anthropic API error: ${kind}`);
-  Object.assign(out, { kind, status, requestId });
+  Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined });
   return out;
 }
 
-/** The SDK behind the runner's two calls. */
-export function anthropicClient({ apiKey, maxRetries, timeoutSeconds, sdk = Anthropic }) {
-  // Built on first use: the constructor throws without a key, and a missing key
-  // is the runner's configuration error to report, not a crash before it runs.
+/**
+ * The SDK behind the runner's two calls, authenticated by workload identity
+ * federation when `federation` is given, else by the API key. Under
+ * federation `apiKey` and `authToken` are passed as null, because an API key
+ * (even one read from the environment) outranks `credentials`.
+ */
+export function anthropicClient({ apiKey, federation = null, identityToken = null, maxRetries, timeoutSeconds, sdk = Anthropic, makeProvider = oidcFederationProvider }) {
+  // Built on first use: a run that never calls the API never builds a client,
+  // and a credential problem is the runner's error to report, not a crash.
   let client = null;
-  const get = () => (client ||= new sdk({ apiKey, maxRetries, timeout: timeoutSeconds * 1000 }));
+  const build = () => {
+    const base = { maxRetries, timeout: timeoutSeconds * 1000 };
+    if (!federation) return new sdk({ ...base, apiKey });
+    const credentials = makeProvider({
+      identityTokenProvider: identityToken,
+      federationRuleId: federation.ruleId,
+      organizationId: federation.organizationId,
+      serviceAccountId: federation.serviceAccountId || undefined,
+      workspaceId: federation.workspaceId || undefined,
+      baseURL: 'https://api.anthropic.com',
+      fetch: globalThis.fetch,
+    });
+    return new sdk({ ...base, apiKey: null, authToken: null, credentials });
+  };
+  const get = () => (client ||= build());
   const wrap = async (fn) => {
     try { return await fn(get()); } catch (e) { throw classifyError(e, sdk); }
   };
@@ -63,6 +125,19 @@ export function anthropicClient({ apiKey, maxRetries, timeoutSeconds, sdk = Anth
     countTokens: (p) => wrap((c) => c.messages.countTokens({ model: p.model, system: p.system, messages: p.messages })),
     create: (p) => wrap((c) => (p.betas ? c.beta.messages.create(p) : c.messages.create(p))),
   };
+}
+
+/** The client the run uses: federation when the variables configure it, else the API key. */
+export function clientFor(env, overrides = {}) {
+  const { config } = readConfig(env);
+  return anthropicClient({
+    apiKey: env.ANTHROPIC_API_KEY,
+    federation: config.auth === 'federation' ? config.federation : null,
+    identityToken: githubIdentityToken(env),
+    maxRetries: config.maxRetries,
+    timeoutSeconds: config.timeoutSeconds,
+    ...overrides,
+  });
 }
 
 /** A path inside the pull request checkout, or null for anything that would leave it. */
@@ -163,8 +238,7 @@ export async function main(env = process.env) {
     },
     anthropic: null,
   };
-  const { config } = readConfig(env);
-  deps.anthropic = anthropicClient({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: config.maxRetries, timeoutSeconds: config.timeoutSeconds });
+  deps.anthropic = clientFor(env);
 
   let result;
   try {
